@@ -1,0 +1,27 @@
+# Data and large binary outputs
+data/
+pdfs/
+*.pdf
+*.Rout
+
+# Images and thumbnails
+qupath/*.png
+qupath/*.jpg
+qupath/*.jpeg
+qupath/*.tif
+qupath/*.tiff
+
+# Virtual environments and caches
+.venv*/
+venv*/
+__pycache__/
+*.pyc
+
+# Excel and other large source data
+*.xlsx
+*.xls
+*.xlsm
+
+# IDE and local configs
+.vscode/
+.DS_Store
