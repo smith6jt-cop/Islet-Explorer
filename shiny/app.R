@@ -98,6 +98,40 @@ bin_islet_sizes <- function(df, diam_col, width) {
   df
 }
 
+# Compute ND -> Aab+ -> T1D trajectory pseudotime using islet size within each group
+compute_traj_pseudotime <- function(df, group_col = "donor_status", size_col = "islet_diam_um",
+                                    traj_order = c("ND", "Aab+", "T1D")) {
+  if (is.null(df) || nrow(df) == 0) return(numeric(0))
+  g <- as.character(df[[group_col]])
+  x <- suppressWarnings(as.numeric(df[[size_col]]))
+  # Only keep trajectory groups present in data, in specified order
+  present <- traj_order[traj_order %in% unique(g)]
+  K <- length(present)
+  if (K == 0) {
+    # Fallback: size continuum
+    lo <- suppressWarnings(min(x, na.rm = TRUE)); hi <- suppressWarnings(max(x, na.rm = TRUE)); rng <- hi - lo
+    return(if (!is.finite(rng) || rng <= 0) rep(0, length(x)) else pmin(1, pmax(0, (x - lo) / rng)))
+  }
+  pt <- rep(NA_real_, length(x))
+  for (i in seq_along(present)) {
+    grp <- present[i]
+    idx <- which(g == grp)
+    if (length(idx) == 0) next
+    xi <- x[idx]
+    # Fractional rank within group; if only one islet, set to 0
+    n_i <- sum(is.finite(xi))
+    frac <- rep(0, length(idx))
+    if (n_i > 1) {
+      r <- rank(xi, ties.method = "average", na.last = "keep")
+      frac <- ifelse(is.finite(r), (r - 1) / (n_i - 1), 0)
+    }
+    pt[idx] <- (i - 1 + frac) / K
+  }
+  # Clamp and replace any remaining NAs with segment starts
+  pt[!is.finite(pt)] <- 0
+  pmin(1, pmax(0, pt))
+}
+
 summary_stats <- function(df, group_cols, value_col, stat = c("mean_se","mean_sd","median_iqr")) {
   stat <- match.arg(stat)
   df %>% group_by(across(all_of(group_cols))) %>%
@@ -614,15 +648,10 @@ server <- function(input, output, session) {
     if (!show) return(NULL)
     rdf <- raw_df()
     req(nrow(rdf) > 0)
-    # Continuous pseudotime in [0,1] from islet size (diameter)
-    lo <- suppressWarnings(min(rdf$islet_diam_um, na.rm = TRUE))
-    hi <- suppressWarnings(max(rdf$islet_diam_um, na.rm = TRUE))
-    rng <- hi - lo
-    if (!is.finite(rng) || rng <= 0) {
-      rdf$pseudotime <- 0
-    } else {
-      rdf$pseudotime <- pmin(1, pmax(0, (rdf$islet_diam_um - lo) / rng))
-    }
+    # Trajectory pseudotime ND -> Aab+ -> T1D: size-ranked within each group, groups in disease order
+    rdf$donor_status <- factor(rdf$donor_status, levels = c("ND","Aab+","T1D"))
+    rdf$pseudotime <- compute_traj_pseudotime(rdf, group_col = "donor_status", size_col = "islet_diam_um",
+                                              traj_order = c("ND","Aab+","T1D"))
     # scale counts (z-score)
     v <- suppressWarnings(as.numeric(rdf$value))
     mu <- mean(v, na.rm = TRUE)
@@ -636,20 +665,32 @@ server <- function(input, output, session) {
     if (identical(col_by, "marker") || identical(col_by, "class")) {
       plt <- ggplot(rdf, aes(x = pseudotime, y = scaled, color = value)) +
         geom_point(alpha = input$pt_alpha, size = input$pt_size, position = position_jitter(width = 0.01, height = 0)) +
-        scale_x_continuous(limits = c(0,1), breaks = c(0,0.25,0.5,0.75,1), labels = c("0","0.25","0.5","0.75","1")) +
-        labs(x = "Pseudotime (0 → 1)", y = "Scaled counts (z)", color = "Count") +
+        scale_x_continuous(limits = c(0,1)) +
+        labs(x = "Pseudotime (ND → Aab+ → T1D)", y = "Scaled counts (z)", color = "Count") +
         theme_minimal(base_size = 14) +
         ggplot2::scale_color_viridis_c(option = "viridis", end = 0.95) +
         guides(color = guide_colorbar(title = "Count"))
     } else {
       plt <- ggplot(rdf, aes(x = pseudotime, y = scaled, color = .data[[col_by]])) +
         geom_point(alpha = input$pt_alpha, size = input$pt_size, position = position_jitter(width = 0.01, height = 0)) +
-        scale_x_continuous(limits = c(0,1), breaks = c(0,0.25,0.5,0.75,1), labels = c("0","0.25","0.5","0.75","1")) +
-        labs(x = "Pseudotime (0 → 1)", y = "Scaled counts (z)", color = "Color by") +
+        scale_x_continuous(limits = c(0,1)) +
+        labs(x = "Pseudotime (ND → Aab+ → T1D)", y = "Scaled counts (z)", color = "Color by") +
         theme_minimal(base_size = 14)
       # Optional: consistent donor_status palette
       if (identical(col_by, "donor_status")) {
         plt <- plt + scale_color_manual(values = c("ND" = "#1f77b4", "Aab+" = "#ff7f0e", "T1D" = "#d62728"))
+      }
+    }
+    # Set group-aware x breaks/labels and boundary guides
+    present <- c("ND","Aab+","T1D")[c("ND","Aab+","T1D") %in% unique(as.character(rdf$donor_status))]
+    K <- length(present)
+    if (K >= 1) {
+      mids <- (seq_len(K) - 0.5) / K
+      plt <- plt + scale_x_continuous(limits = c(0,1), breaks = mids, labels = present)
+      bounds <- seq(0, 1, length.out = K + 1)
+      bounds <- bounds[bounds > 0 & bounds < 1]
+      if (length(bounds)) {
+        plt <- plt + geom_vline(xintercept = bounds, linetype = "dashed", color = "#aaaaaa", alpha = 0.6)
       }
     }
     # optional LOESS smoothing overlay (single global trend)
@@ -681,11 +722,10 @@ server <- function(input, output, session) {
     if (is.null(method) || identical(method, "None")) return(NULL)
     rdf <- raw_df()
     if (is.null(rdf) || !nrow(rdf)) return(NULL)
-    # compute pseudotime same as in the plot
-    lo <- suppressWarnings(min(rdf$islet_diam_um, na.rm = TRUE))
-    hi <- suppressWarnings(max(rdf$islet_diam_um, na.rm = TRUE))
-    rng <- hi - lo
-    pt <- if (!is.finite(rng) || rng <= 0) rep(0, nrow(rdf)) else pmin(1, pmax(0, (rdf$islet_diam_um - lo) / rng))
+    # compute trajectory pseudotime same as in the plot (group-ordered)
+    rdf$donor_status <- factor(rdf$donor_status, levels = c("ND","Aab+","T1D"))
+    pt <- compute_traj_pseudotime(rdf, group_col = "donor_status", size_col = "islet_diam_um",
+                                  traj_order = c("ND","Aab+","T1D"))
     v <- suppressWarnings(as.numeric(rdf$value))
     # choose method
     m <- if (identical(method, "Spearman")) "spearman" else "kendall"
