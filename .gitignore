@@ -25,3 +25,6 @@ __pycache__/
 # IDE and local configs
 .vscode/
 .DS_Store
+
+# Tool downloads (large jars)
+scripts/tools/
