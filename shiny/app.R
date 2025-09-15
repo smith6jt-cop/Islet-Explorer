@@ -348,7 +348,13 @@ ui <- fluidPage(
       tabsetPanel(id = "tabs",
         tabPanel("Plot", plotlyOutput("plt", height = 650), br(), uiOutput("pseudo_ui"), plotlyOutput("pseudo", height = 400)),
         tabPanel("Statistics", tableOutput("stats_tbl")),
-        tabPanel("Data Preview", tableOutput("preview"))
+        tabPanel("Vitessce",
+          div(style = "max-width: 1200px;",
+              textInput("vit_url", "Vitessce URL", value = "", placeholder = "https://vitessce.io/?url=..."),
+              helpText("Enter a Vitessce viewer URL with a publicly accessible config. The viewer will be embedded below."),
+              uiOutput("vit_view")
+          )
+        )
       )
     )
   )
@@ -633,9 +639,23 @@ server <- function(input, output, session) {
       raw <- plot_df()
       raw$donor_status <- factor(raw$donor_status, levels = grp_levels)
       jw <- max(1, as.numeric(input$binwidth) * 0.35)
+      # Add slight vertical jitter to avoid rows when plotting counts
+      yr <- suppressWarnings(range(raw$value, na.rm = TRUE))
+      ydiff <- if (all(is.finite(yr))) diff(yr) else 0
+      is_counts <- (identical(input$mode, "Targets") && !is.null(input$target_metric) && input$target_metric == "Counts") ||
+                   (identical(input$mode, "Markers") && !is.null(input$marker_metric) && input$marker_metric == "Counts")
+      jh <- if (is_counts) {
+        # 2% of range or at least 0.5 in data units
+        mx <- max(0.02 * ydiff, 0.5)
+        if (!is.finite(mx) || mx <= 0) 0.5 else mx
+      } else {
+        # 1% of range
+        mx <- 0.01 * ydiff
+        if (!is.finite(mx) || mx < 0) 0 else mx
+      }
       p <- p +
         geom_point(data = raw, aes(x = diam_mid, y = value, color = donor_status),
-                   position = position_jitter(width = jw, height = 0), size = input$pt_size, alpha = input$pt_alpha, inherit.aes = FALSE)
+                   position = position_jitter(width = jw, height = jh), size = input$pt_size, alpha = input$pt_alpha, inherit.aes = FALSE)
     }
 
     # Axis breaks and minor ticks
@@ -735,8 +755,17 @@ server <- function(input, output, session) {
     st
   })
 
-  output$preview <- renderTable({
-    head(plot_df(), 15)
+  # Vitessce embed
+  output$vit_view <- renderUI({
+    url <- input$vit_url
+    if (is.null(url) || !nzchar(url)) {
+      return(tags$div(style = "color:#666;", "Provide a Vitessce URL to load the viewer (e.g., https://vitessce.io/?url=...)."))
+    }
+    # Basic validation to avoid embedding non-http(s) URLs
+    if (!grepl('^https?://', url)) {
+      return(tags$div(style = "color:#b00;", "Invalid URL. Please enter a full http(s) URL."))
+    }
+    tags$iframe(src = url, width = "100%", height = "700", frameBorder = 0, allowfullscreen = NA)
   })
 
   # Pseudotime scatter when counts are selected (scaled counts vs pseudotime)
