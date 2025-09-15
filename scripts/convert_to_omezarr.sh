@@ -17,20 +17,27 @@ EXTRA_ARGS=("$@")
 if [[ ! -f "$IN" ]]; then
   echo "Input not found: $IN" >&2; exit 1
 fi
+shopt -s nocasematch
+if [[ ! "$OUT" =~ \.zarr$ ]]; then
+  echo "Output path '$OUT' does not end with .zarr; appending .ome.zarr"
+  OUT="${OUT}.ome.zarr"
+fi
+shopt -u nocasematch
+
 OUT_DIR="$(dirname "$OUT")"
 mkdir -p "$OUT_DIR"
 
 # Try Docker container (recommended)
 if command -v docker >/dev/null 2>&1; then
-  echo "Using Docker: ghcr.io/glencoesoftware/bioformats2raw"
-  docker pull ghcr.io/glencoesoftware/bioformats2raw:latest >/dev/null 2>&1 || true
+  echo "Using Docker: bioformats2raw"
+ 
   docker run --rm \
     -u "$(id -u):$(id -g)" \
     -v "$(readlink -f "$(dirname "$IN")")":/in \
     -v "$(readlink -f "$OUT_DIR")":/out \
-    ghcr.io/glencoesoftware/bioformats2raw:latest \
+    openmicroscopy/bioformats2raw:latest \
     /in/"$(basename "$IN")" /out/"$(basename "$OUT")" \
-    --file_type=ome-zarr "${EXTRA_ARGS[@]}"
+    "${EXTRA_ARGS[@]}"
   echo "Created: $OUT"
   exit 0
 fi
@@ -48,6 +55,5 @@ if ! command -v java >/dev/null 2>&1; then
   exit 1
 fi
 echo "Using local JAR: $JAR"
-java -Xms2g -Xmx8g -jar "$JAR" "$IN" "$OUT" --file_type=ome-zarr "${EXTRA_ARGS[@]}"
+java -Xms2g -Xmx8g -jar "$JAR" "$IN" "$OUT" "${EXTRA_ARGS[@]}"
 echo "Created: $OUT"
-
