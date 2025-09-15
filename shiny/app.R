@@ -322,6 +322,11 @@ ui <- fluidPage(
       helpText("Default: all Aab+ donors are included. Selecting one or more autoantibodies restricts only the Aab+ group to donors matching the selection (Any = at least one selected AAb, All = all selected AAbs). ND and T1D groups are unaffected."),
       checkboxGroupInput("groups", "Donor Status", choices = c("ND", "Aab+", "T1D"), selected = c("ND", "Aab+", "T1D")),
       sliderInput("binwidth", "Diameter bin width (µm)", min = 10, max = 100, value = 50, step = 5),
+      selectInput("curve_norm", "Normalization (plot)",
+                  choices = c("None (raw)" = "none", "Global z-score" = "global", "Robust per-donor" = "robust"),
+                  selected = "none"),
+      checkboxInput("exclude_zero", "Exclude zero values", value = FALSE),
+      sliderInput("diam_max", "Max islet diameter (µm)", min = 50, max = 1000, value = 1000, step = 10),
       radioButtons("stat", "Statistic",
                    choices = c("Mean±SE" = "mean_se",
                                "Mean±SD" = "mean_sd",
@@ -400,6 +405,13 @@ server <- function(input, output, session) {
       df <- df %>% dplyr::mutate(value = ifelse(is.finite(num) & is.finite(den) & den > 0, 100.0 * num / den, NA_real_))
     }
     out <- df %>% dplyr::mutate(donor_status = `Donor Status`) %>% dplyr::filter(!is.na(value))
+    # Optional global filters
+    if (isTRUE(input$exclude_zero)) {
+      out <- out %>% dplyr::filter(value != 0)
+    }
+    if (!is.null(input$diam_max) && is.finite(as.numeric(input$diam_max))) {
+      out <- out %>% dplyr::filter(is.finite(islet_diam_um) & islet_diam_um <= as.numeric(input$diam_max))
+    }
     # Apply AAb filters (only within the Aab+ donor group) if selected
     flags <- input$aab_flags
     if (!is.null(flags) && length(flags) > 0 && all(flags %in% colnames(out))) {
@@ -537,6 +549,13 @@ server <- function(input, output, session) {
 
     # Apply AAb filters (only within the Aab+ donor group) if requested
     out <- df %>% mutate(donor_status = `Donor Status`) %>% filter(!is.na(value))
+    # Optional global filters
+    if (isTRUE(input$exclude_zero)) {
+      out <- out %>% dplyr::filter(value != 0)
+    }
+    if (!is.null(input$diam_max) && is.finite(as.numeric(input$diam_max))) {
+      out <- out %>% dplyr::filter(is.finite(islet_diam_um) & islet_diam_um <= as.numeric(input$diam_max))
+    }
     flags <- input$aab_flags
     if (!is.null(flags) && length(flags) > 0 && all(flags %in% colnames(out))) {
       others <- out %>% dplyr::filter(donor_status != "Aab+")
@@ -549,6 +568,21 @@ server <- function(input, output, session) {
         aabp <- aabp[keep, , drop = FALSE]
       }
       out <- dplyr::bind_rows(others, aabp)
+    }
+    # Apply normalization for main plot if requested
+    norm_mode <- input$curve_norm
+    if (identical(norm_mode, "robust") && all(c("Case ID") %in% colnames(out))) {
+      out <- out %>% dplyr::group_by(`Case ID`) %>% dplyr::mutate(
+        .med = suppressWarnings(stats::median(value, na.rm = TRUE)),
+        .mad = suppressWarnings(stats::mad(value, center = .med, constant = 1, na.rm = TRUE)),
+        .r_sd = ifelse(is.finite(.mad) & .mad > 0, .mad * 1.4826, NA_real_),
+        value = ifelse(is.finite(.r_sd) & .r_sd > 0, (value - .med) / .r_sd, value)
+      ) %>% dplyr::ungroup() %>% dplyr::select(-.med, -.mad, -`.r_sd`)
+    } else if (identical(norm_mode, "global")) {
+      mu <- mean(out$value, na.rm = TRUE)
+      sdv <- sd(out$value, na.rm = TRUE)
+      if (!is.finite(sdv) || sdv == 0) sdv <- 1
+      out$value <- (out$value - mu) / sdv
     }
     out
   })
@@ -569,18 +603,26 @@ server <- function(input, output, session) {
     sm$donor_status <- factor(sm$donor_status, levels = grp_levels)
     color_map <- c("ND" = "#1f77b4", "Aab+" = "#ff7f0e", "T1D" = "#d62728")
 
+    # Build y-label reflecting normalization choice
+    ylab_base <- if (identical(input$mode, "Targets")) {
+      if (!is.null(input$target_metric) && input$target_metric == "Counts") "Target count" else "Target density (per µm²)"
+    } else if (identical(input$mode, "Markers")) {
+      if (!is.null(input$marker_metric) && input$marker_metric == "Counts") "Positive cell count" else "n positive / total (%)"
+    } else {
+      "% composition"
+    }
+    ylab <- switch(input$curve_norm,
+                   none = ylab_base,
+                   global = paste0(ylab_base, " (scaled z)"),
+                   robust = paste0(ylab_base, " (robust z)"),
+                   ylab_base)
+
     p <- ggplot(sm, aes(x = diam_mid, y = y, color = donor_status, group = donor_status)) +
       geom_line(alpha = ifelse(!is.null(input$add_smooth) && input$add_smooth == "LOESS", 0, 1)) +
       geom_point() +
       geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0) +
       labs(x = "Islet diameter (µm)",
-           y = if (identical(input$mode, "Targets")) {
-                 if (!is.null(input$target_metric) && input$target_metric == "Counts") "Target count" else "Target density (per µm²)"
-               } else if (identical(input$mode, "Markers")) {
-                 if (!is.null(input$marker_metric) && input$marker_metric == "Counts") "Positive cell count" else "n positive / total (%)"
-               } else {
-                 "% composition"
-               },
+           y = ylab,
            color = "Donor Status",
            title = paste0(if (identical(input$mode, "Targets")) input$which else if (identical(input$mode, "Markers")) input$which else input$which,
                           " vs islet size")) +
