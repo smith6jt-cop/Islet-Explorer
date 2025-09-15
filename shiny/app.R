@@ -132,6 +132,73 @@ compute_traj_pseudotime <- function(df, group_col = "donor_status", size_col = "
   pmin(1, pmax(0, pt))
 }
 
+# Unbiased pseudotime from features (no group labels). Tries DiffusionMap -> principal curve -> PC1.
+compute_unbiased_pseudotime <- function(df) {
+  if (is.null(df) || nrow(df) == 0) return(numeric(0))
+  # Candidate numeric feature columns if present
+  cand <- c("value", "islet_diam_um", "pos_count", "n_cells", "pos_frac", "mean", "SD",
+            "threshold", "count", "area_density", "cells_total", "Ins_any", "Glu_any", "Stt_any")
+  present <- intersect(cand, colnames(df))
+  if (length(present) == 0) {
+    v <- suppressWarnings(as.numeric(df$islet_diam_um))
+    v[!is.finite(v)] <- 0
+    r <- range(v, na.rm = TRUE); d <- r[2] - r[1]
+    return(if (!is.finite(d) || d <= 0) rep(0, length(v)) else (v - r[1]) / d)
+  }
+  X <- as.data.frame(lapply(present, function(nm) suppressWarnings(as.numeric(df[[nm]]))))
+  colnames(X) <- present
+  # Drop columns with all NA or zero variance
+  good <- vapply(X, function(x) {
+    x <- as.numeric(x)
+    any(is.finite(x)) && (suppressWarnings(stats::sd(x, na.rm = TRUE)) > 0)
+  }, logical(1))
+  X <- X[, good, drop = FALSE]
+  if (ncol(X) == 0) {
+    v <- suppressWarnings(as.numeric(df$islet_diam_um))
+    v[!is.finite(v)] <- 0
+    r <- range(v, na.rm = TRUE); d <- r[2] - r[1]
+    return(if (!is.finite(d) || d <= 0) rep(0, length(v)) else (v - r[1]) / d)
+  }
+  # Simple impute NAs with column medians, then scale
+  for (j in seq_len(ncol(X))) {
+    x <- as.numeric(X[[j]])
+    med <- suppressWarnings(stats::median(x, na.rm = TRUE))
+    if (!is.finite(med)) med <- 0
+    x[!is.finite(x)] <- med
+    X[[j]] <- x
+  }
+  Xs <- scale(as.matrix(X))
+  pt <- NULL
+  # Try Diffusion Map if available
+  if (requireNamespace("destiny", quietly = TRUE)) {
+    pt <- tryCatch({
+      dm <- destiny::DiffusionMap(Xs)
+      ev <- destiny::eigenvectors(dm)
+      as.numeric(ev[, 1])
+    }, error = function(e) NULL)
+  }
+  # Try principal curve on top-2 PCs
+  if (is.null(pt) && requireNamespace("princurve", quietly = TRUE)) {
+    pc <- tryCatch(stats::prcomp(Xs, center = TRUE, scale. = TRUE), error = function(e) NULL)
+    if (!is.null(pc) && ncol(pc$x) >= 2) {
+      pt <- tryCatch({
+        fit <- princurve::principal_curve(as.matrix(pc$x[, 1:2, drop = FALSE]))
+        as.numeric(fit$lambda)
+      }, error = function(e) NULL)
+    }
+  }
+  # Fallback: PC1
+  if (is.null(pt)) {
+    pc <- tryCatch(stats::prcomp(Xs, center = TRUE, scale. = TRUE), error = function(e) NULL)
+    if (!is.null(pc)) pt <- as.numeric(pc$x[, 1])
+  }
+  if (is.null(pt)) pt <- rep(0, nrow(df))
+  # Normalize to [0,1]
+  r <- range(pt, na.rm = TRUE); d <- r[2] - r[1]
+  if (!is.finite(d) || d <= 0) return(rep(0, length(pt)))
+  pmin(1, pmax(0, (pt - r[1]) / d))
+}
+
 summary_stats <- function(df, group_cols, value_col, stat = c("mean_se","mean_sd","median_iqr")) {
   stat <- match.arg(stat)
   df %>% group_by(across(all_of(group_cols))) %>%
@@ -630,6 +697,7 @@ server <- function(input, output, session) {
     if (!show) return(NULL)
     tagList(
       tags$h4("Pseudotime scatter (scaled counts)"),
+      helpText("Unbiased pseudotime is inferred from available islet features (no group labels), using diffusion map or principal curve when available, else PC1."),
       fluidRow(
         column(6,
           checkboxInput("pseudo_smooth", "Add LOESS smooth", value = TRUE)
@@ -648,10 +716,8 @@ server <- function(input, output, session) {
     if (!show) return(NULL)
     rdf <- raw_df()
     req(nrow(rdf) > 0)
-    # Trajectory pseudotime ND -> Aab+ -> T1D: size-ranked within each group, groups in disease order
-    rdf$donor_status <- factor(rdf$donor_status, levels = c("ND","Aab+","T1D"))
-    rdf$pseudotime <- compute_traj_pseudotime(rdf, group_col = "donor_status", size_col = "islet_diam_um",
-                                              traj_order = c("ND","Aab+","T1D"))
+    # Unbiased pseudotime from features (no group labels)
+    rdf$pseudotime <- compute_unbiased_pseudotime(rdf)
     # scale counts (z-score)
     v <- suppressWarnings(as.numeric(rdf$value))
     mu <- mean(v, na.rm = TRUE)
@@ -666,7 +732,7 @@ server <- function(input, output, session) {
       plt <- ggplot(rdf, aes(x = pseudotime, y = scaled, color = value)) +
         geom_point(alpha = input$pt_alpha, size = input$pt_size, position = position_jitter(width = 0.01, height = 0)) +
         scale_x_continuous(limits = c(0,1)) +
-        labs(x = "Pseudotime (ND → Aab+ → T1D)", y = "Scaled counts (z)", color = "Count") +
+        labs(x = "Pseudotime", y = "Scaled counts (z)", color = "Count") +
         theme_minimal(base_size = 14) +
         ggplot2::scale_color_viridis_c(option = "viridis", end = 0.95) +
         guides(color = guide_colorbar(title = "Count"))
@@ -674,25 +740,14 @@ server <- function(input, output, session) {
       plt <- ggplot(rdf, aes(x = pseudotime, y = scaled, color = .data[[col_by]])) +
         geom_point(alpha = input$pt_alpha, size = input$pt_size, position = position_jitter(width = 0.01, height = 0)) +
         scale_x_continuous(limits = c(0,1)) +
-        labs(x = "Pseudotime (ND → Aab+ → T1D)", y = "Scaled counts (z)", color = "Color by") +
+        labs(x = "Pseudotime", y = "Scaled counts (z)", color = "Color by") +
         theme_minimal(base_size = 14)
       # Optional: consistent donor_status palette
       if (identical(col_by, "donor_status")) {
         plt <- plt + scale_color_manual(values = c("ND" = "#1f77b4", "Aab+" = "#ff7f0e", "T1D" = "#d62728"))
       }
     }
-    # Set group-aware x breaks/labels and boundary guides
-    present <- c("ND","Aab+","T1D")[c("ND","Aab+","T1D") %in% unique(as.character(rdf$donor_status))]
-    K <- length(present)
-    if (K >= 1) {
-      mids <- (seq_len(K) - 0.5) / K
-      plt <- plt + scale_x_continuous(limits = c(0,1), breaks = mids, labels = present)
-      bounds <- seq(0, 1, length.out = K + 1)
-      bounds <- bounds[bounds > 0 & bounds < 1]
-      if (length(bounds)) {
-        plt <- plt + geom_vline(xintercept = bounds, linetype = "dashed", color = "#aaaaaa", alpha = 0.6)
-      }
-    }
+    # Keep a simple 0..1 axis for unbiased pseudotime
     # optional LOESS smoothing overlay (single global trend)
     if (isTRUE(input$pseudo_smooth)) {
       plt <- plt + geom_smooth(se = FALSE, method = "loess", span = 0.6, color = "#444444")
@@ -722,10 +777,8 @@ server <- function(input, output, session) {
     if (is.null(method) || identical(method, "None")) return(NULL)
     rdf <- raw_df()
     if (is.null(rdf) || !nrow(rdf)) return(NULL)
-    # compute trajectory pseudotime same as in the plot (group-ordered)
-    rdf$donor_status <- factor(rdf$donor_status, levels = c("ND","Aab+","T1D"))
-    pt <- compute_traj_pseudotime(rdf, group_col = "donor_status", size_col = "islet_diam_um",
-                                  traj_order = c("ND","Aab+","T1D"))
+    # compute unbiased pseudotime same as in the plot
+    pt <- compute_unbiased_pseudotime(rdf)
     v <- suppressWarnings(as.numeric(rdf$value))
     # choose method
     m <- if (identical(method, "Spearman")) "spearman" else "kendall"
