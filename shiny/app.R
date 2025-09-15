@@ -9,6 +9,19 @@ library(broom)
 
 master_path <- file.path("..", "data", "master_results.xlsx")
 
+# Expose local image directory (one level up) at /local_images for embedding
+local_images_env <- Sys.getenv("LOCAL_IMAGE_ROOT", unset = "")
+local_images_root <- NULL
+if (nzchar(local_images_env)) {
+  local_images_root <- tryCatch(normalizePath(local_images_env, mustWork = TRUE), error = function(e) NULL)
+}
+if (is.null(local_images_root)) {
+  local_images_root <- tryCatch(normalizePath(file.path("..",".."), mustWork = FALSE), error = function(e) NULL)
+}
+if (!is.null(local_images_root)) {
+  try({ shiny::addResourcePath("local_images", local_images_root) }, silent = TRUE)
+}
+
 # ---------- Data loading and wrangling ----------
 
 safe_read_sheet <- function(path, sheet) {
@@ -350,8 +363,12 @@ ui <- fluidPage(
         tabPanel("Statistics", tableOutput("stats_tbl")),
         tabPanel("Vitessce",
           div(style = "max-width: 1200px;",
+              h4("Local images (TIFF)"),
+              uiOutput("local_image_picker"),
+              hr(),
+              h4("External Vitessce URL (optional)"),
               textInput("vit_url", "Vitessce URL", value = "", placeholder = "https://vitessce.io/?url=..."),
-              helpText("Enter a Vitessce viewer URL with a publicly accessible config. The viewer will be embedded below."),
+              helpText("Provide either a local .tif selection (uses an embedded Avivator viewer) or a Vitessce URL. Local images are served from /local_images."),
               uiOutput("vit_view")
           )
         )
@@ -756,16 +773,48 @@ server <- function(input, output, session) {
   })
 
   # Vitessce embed
+  output$local_image_picker <- renderUI({
+    root <- local_images_root
+    if (is.null(root) || !dir.exists(root)) {
+      return(tags$div(style = "color:#b00;", "Local images root not found. Expected one level up from app directory."))
+    }
+    # List relative .tif/.tiff under the root
+    rel <- tryCatch(list.files(root, pattern = "\\.tif(f)?$", recursive = TRUE, full.names = FALSE, ignore.case = TRUE), error = function(e) character(0))
+    if (length(rel) == 0) {
+      return(tags$div(style = "color:#666;", "No .tif/.tiff images found under ", root))
+    }
+    tagList(
+      selectizeInput("local_tif", "Select local TIFF", choices = rel, selected = rel[1], options = list(placeholder = "Choose an image")),
+      helpText("Images are served via /local_images. Ensure large files are pyramidal OME-TIFF for best performance.")
+    )
+  })
+
   output$vit_view <- renderUI({
     url <- input$vit_url
-    if (is.null(url) || !nzchar(url)) {
-      return(tags$div(style = "color:#666;", "Provide a Vitessce URL to load the viewer (e.g., https://vitessce.io/?url=...)."))
+    # Prefer local TIFF selection if provided
+    lt <- input$local_tif
+    has_local_viewer <- file.exists(file.path("www","avivator","index.html")) || file.exists(file.path("avivator","index.html"))
+    if (!is.null(lt) && nzchar(lt)) {
+      img_url <- paste0("/local_images/", lt)
+      if (has_local_viewer) {
+        # Use local avivator served under /avivator (best: same-origin, avoids CORS)
+        return(tags$iframe(src = paste0("/avivator/?image_url=", utils::URLencode(img_url, reserved = TRUE)), width = "100%", height = "800", frameBorder = 0, allowfullscreen = NA))
+      } else {
+        # Fallback to remote Avivator (may be limited by CORS depending on server setup)
+        return(tagList(
+          tags$div(style = "color:#b58900;", "Local Avivator is not installed. Using remote viewer; if the image fails to load due to CORS, install local viewer (see scripts/install_avivator.sh)."),
+          tags$iframe(src = paste0("https://viv.gehlenborglab.org/avivator/?image_url=", utils::URLencode(paste0(session$clientData$url_protocol, "//", session$clientData$url_hostname, ifelse(nzchar(session$clientData$url_port), paste0(":", session$clientData$url_port), ""), img_url), reserved = TRUE)), width = "100%", height = "800", frameBorder = 0, allowfullscreen = NA)
+        ))
+      }
     }
-    # Basic validation to avoid embedding non-http(s) URLs
-    if (!grepl('^https?://', url)) {
-      return(tags$div(style = "color:#b00;", "Invalid URL. Please enter a full http(s) URL."))
+    # If a Vitessce URL is provided, embed it
+    if (!is.null(url) && nzchar(url)) {
+      if (!grepl('^https?://', url)) {
+        return(tags$div(style = "color:#b00;", "Invalid URL. Please enter a full http(s) URL."))
+      }
+      return(tags$iframe(src = url, width = "100%", height = "800", frameBorder = 0, allowfullscreen = NA))
     }
-    tags$iframe(src = url, width = "100%", height = "700", frameBorder = 0, allowfullscreen = NA)
+    tags$div(style = "color:#666;", "Select a local TIFF or provide a Vitessce URL.")
   })
 
   # Pseudotime scatter when counts are selected (scaled counts vs pseudotime)
