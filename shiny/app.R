@@ -594,7 +594,18 @@ server <- function(input, output, session) {
     show <- (identical(input$mode, "Targets") && !is.null(input$target_metric) && input$target_metric == "Counts") ||
             (identical(input$mode, "Markers") && !is.null(input$marker_metric) && input$marker_metric == "Counts")
     if (!show) return(NULL)
-    tags$h4("Pseudotime scatter (scaled counts)")
+    tagList(
+      tags$h4("Pseudotime scatter (scaled counts)"),
+      fluidRow(
+        column(6,
+          checkboxInput("pseudo_smooth", "Add LOESS smooth", value = TRUE)
+        ),
+        column(6,
+          selectInput("pseudo_corr", "Correlation vs pseudotime", choices = c("Kendall", "Spearman", "None"), selected = "Kendall")
+        )
+      ),
+      tableOutput("pseudo_stats")
+    )
   })
 
   output$pseudo <- renderPlotly({
@@ -641,6 +652,10 @@ server <- function(input, output, session) {
         plt <- plt + scale_color_manual(values = c("ND" = "#1f77b4", "Aab+" = "#ff7f0e", "T1D" = "#d62728"))
       }
     }
+    # optional LOESS smoothing overlay (single global trend)
+    if (isTRUE(input$pseudo_smooth)) {
+      plt <- plt + geom_smooth(se = FALSE, method = "loess", span = 0.6, color = "#444444")
+    }
     if (!is.null(input$theme_bg) && input$theme_bg == "Dark") {
       plt <- plt + theme(
         plot.background = element_rect(fill = "#000000", colour = NA),
@@ -655,6 +670,35 @@ server <- function(input, output, session) {
       )
     }
     ggplotly(plt)
+  })
+
+  # Correlation summary vs pseudotime for the current subset
+  output$pseudo_stats <- renderTable({
+    show <- (identical(input$mode, "Targets") && !is.null(input$target_metric) && input$target_metric == "Counts") ||
+            (identical(input$mode, "Markers") && !is.null(input$marker_metric) && input$marker_metric == "Counts")
+    if (!show) return(NULL)
+    method <- input$pseudo_corr
+    if (is.null(method) || identical(method, "None")) return(NULL)
+    rdf <- raw_df()
+    if (is.null(rdf) || !nrow(rdf)) return(NULL)
+    # compute pseudotime same as in the plot
+    lo <- suppressWarnings(min(rdf$islet_diam_um, na.rm = TRUE))
+    hi <- suppressWarnings(max(rdf$islet_diam_um, na.rm = TRUE))
+    rng <- hi - lo
+    pt <- if (!is.finite(rng) || rng <= 0) rep(0, nrow(rdf)) else pmin(1, pmax(0, (rdf$islet_diam_um - lo) / rng))
+    v <- suppressWarnings(as.numeric(rdf$value))
+    # choose method
+    m <- if (identical(method, "Spearman")) "spearman" else "kendall"
+    ct <- tryCatch(cor.test(pt, v, method = m, exact = FALSE), error = function(e) NULL)
+    if (is.null(ct)) return(NULL)
+    stat_name <- if (identical(method, "Spearman")) "rho" else "tau"
+    data.frame(
+      method = method,
+      estimate = unname(ct$estimate),
+      statistic = stat_name,
+      p_value = unname(ct$p.value),
+      stringsAsFactors = FALSE
+    )
   })
 
   output$dl_summary <- downloadHandler(
