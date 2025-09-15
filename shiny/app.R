@@ -363,12 +363,8 @@ ui <- fluidPage(
         tabPanel("Statistics", tableOutput("stats_tbl")),
         tabPanel("Vitessce",
           div(style = "max-width: 1200px;",
-              h4("Local images (TIFF)"),
+              h4("Local images"),
               uiOutput("local_image_picker"),
-              hr(),
-              h4("External Vitessce URL (optional)"),
-              textInput("vit_url", "Vitessce URL", value = "", placeholder = "https://vitessce.io/?url=..."),
-              helpText("Provide either a local .tif selection (uses an embedded Avivator viewer) or a Vitessce URL. Local images are served from /local_images."),
               uiOutput("vit_view")
           )
         )
@@ -778,43 +774,32 @@ server <- function(input, output, session) {
     if (is.null(root) || !dir.exists(root)) {
       return(tags$div(style = "color:#b00;", "Local images root not found. Expected one level up from app directory."))
     }
-    # List relative .tif/.tiff under the root
-    rel <- tryCatch(list.files(root, pattern = "\\.tif(f)?$", recursive = TRUE, full.names = FALSE, ignore.case = TRUE), error = function(e) character(0))
-    if (length(rel) == 0) {
-      return(tags$div(style = "color:#666;", "No .tif/.tiff images found under ", root))
-    }
+    # List relative .tif/.tiff and .zarr directories under the root
+    tifs <- tryCatch(list.files(root, pattern = "\\.tif(f)?$", recursive = TRUE, full.names = FALSE, ignore.case = TRUE), error = function(e) character(0))
+    zarrs <- tryCatch({
+      all <- list.dirs(root, recursive = TRUE, full.names = FALSE)
+      all[grepl("\\.zarr/?$", all, ignore.case = TRUE)]
+    }, error = function(e) character(0))
     tagList(
-      selectizeInput("local_tif", "Select local TIFF", choices = rel, selected = rel[1], options = list(placeholder = "Choose an image")),
-      helpText("Images are served via /local_images. Ensure large files are pyramidal OME-TIFF for best performance.")
+      if (length(tifs) > 0) selectizeInput("local_tif", "Select local TIFF", choices = tifs, selected = tifs[1], options = list(placeholder = "Choose a TIFF")) else tags$div(style = "color:#666;", "No TIFF files found under ", root),
+      if (length(zarrs) > 0) selectizeInput("local_zarr", "Select local OME-Zarr", choices = zarrs, selected = zarrs[1], options = list(placeholder = "Choose an OME-Zarr")) else tags$div(style = "color:#666;", "No OME-Zarr datasets found under ", root),
+      helpText("Local files are served via /local_images. TIFF and OME-Zarr open in the embedded Avivator viewer.")
     )
   })
 
   output$vit_view <- renderUI({
-    url <- input$vit_url
-    # Prefer local TIFF selection if provided
+    # Prefer local selection (TIFF or Zarr). Always embed local Avivator from www/avivator.
     lt <- input$local_tif
-    has_local_viewer <- file.exists(file.path("www","avivator","index.html")) || file.exists(file.path("avivator","index.html"))
+    lz <- input$local_zarr
     if (!is.null(lt) && nzchar(lt)) {
       img_url <- paste0("/local_images/", lt)
-      if (has_local_viewer) {
-        # Use local avivator served under /avivator (best: same-origin, avoids CORS)
-        return(tags$iframe(src = paste0("/avivator/?image_url=", utils::URLencode(img_url, reserved = TRUE)), width = "100%", height = "800", frameBorder = 0, allowfullscreen = NA))
-      } else {
-        # Fallback to remote Avivator (may be limited by CORS depending on server setup)
-        return(tagList(
-          tags$div(style = "color:#b58900;", "Local Avivator is not installed. Using remote viewer; if the image fails to load due to CORS, install local viewer (see scripts/install_avivator.sh)."),
-          tags$iframe(src = paste0("https://viv.gehlenborglab.org/avivator/?image_url=", utils::URLencode(paste0(session$clientData$url_protocol, "//", session$clientData$url_hostname, ifelse(nzchar(session$clientData$url_port), paste0(":", session$clientData$url_port), ""), img_url), reserved = TRUE)), width = "100%", height = "800", frameBorder = 0, allowfullscreen = NA)
-        ))
-      }
+      return(tags$iframe(src = paste0("/avivator/?image_url=", utils::URLencode(img_url, reserved = TRUE)), width = "100%", height = "800", frameBorder = 0, allowfullscreen = NA))
     }
-    # If a Vitessce URL is provided, embed it
-    if (!is.null(url) && nzchar(url)) {
-      if (!grepl('^https?://', url)) {
-        return(tags$div(style = "color:#b00;", "Invalid URL. Please enter a full http(s) URL."))
-      }
-      return(tags$iframe(src = url, width = "100%", height = "800", frameBorder = 0, allowfullscreen = NA))
+    if (!is.null(lz) && nzchar(lz)) {
+      z_url <- paste0("/local_images/", sub('/+$','', lz))
+      return(tags$iframe(src = paste0("/avivator/?image_url=", utils::URLencode(z_url, reserved = TRUE), "&source=zarr"), width = "100%", height = "800", frameBorder = 0, allowfullscreen = NA))
     }
-    tags$div(style = "color:#666;", "Select a local TIFF or provide a Vitessce URL.")
+    tags$div(style = "color:#666;", "Select a local TIFF or OME-Zarr dataset to view.")
   })
 
   # Pseudotime scatter when counts are selected (scaled counts vs pseudotime)
