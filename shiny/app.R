@@ -46,18 +46,25 @@ compute_diameter_um <- function(area_um2) {
 }
 
 prep_data <- function(master) {
-  # Core area per islet (used as the islet area proxy)
+  # Islet size proxy per islet (prefer core; fallback to union) for diameter
   targets <- master$targets %>% add_islet_key()
   core_area <- targets %>%
     filter(tolower(type) == "islet_core") %>%
     select(`Case ID`, `Donor Status`, islet_key, core_region_um2 = region_um2) %>%
     distinct()
-  core_area <- core_area %>% mutate(islet_diam_um = compute_diameter_um(core_region_um2))
+  union_area <- targets %>%
+    filter(tolower(type) == "islet_union") %>%
+    select(`Case ID`, `Donor Status`, islet_key, union_region_um2 = region_um2) %>%
+    distinct()
+  size_area <- full_join(core_area, union_area, by = c("Case ID", "Donor Status", "islet_key")) %>%
+    mutate(size_um2 = dplyr::coalesce(core_region_um2, union_region_um2),
+           islet_diam_um = compute_diameter_um(size_um2)) %>%
+    select(`Case ID`, `Donor Status`, islet_key, islet_diam_um)
 
   # Targets: keep all region types and later filter by user selection
   targets_all <- targets %>%
     select(`Case ID`, `Donor Status`, islet_key, type, class, area_um2, region_um2, area_density, count) %>%
-    left_join(core_area, by = c("Case ID", "Donor Status", "islet_key"))
+    left_join(size_area, by = c("Case ID", "Donor Status", "islet_key"))
 
   # Markers with fraction positive / mean intensity (include LGALS3 sheet)
   markers <- master$markers %>% add_islet_key()
@@ -72,15 +79,15 @@ prep_data <- function(master) {
       markers_all <- bind_rows(markers_all, g3)
     }
   }
-  markers_all <- markers_all %>% left_join(core_area, by = c("Case ID", "Donor Status", "islet_key"))
+  markers_all <- markers_all %>% left_join(size_area, by = c("Case ID", "Donor Status", "islet_key"))
 
   # Composition by islet
   comp <- master$comp %>% add_islet_key()
   comp <- comp %>% select(`Case ID`, `Donor Status`, islet_key, cells_total, Ins_single, Glu_single, Stt_single,
                           Multi_Pos, Triple_Neg, Ins_any, Glu_any, Stt_any)
-  comp <- comp %>% left_join(core_area, by = c("Case ID", "Donor Status", "islet_key"))
+  comp <- comp %>% left_join(size_area, by = c("Case ID", "Donor Status", "islet_key"))
 
-  list(core_area = core_area, targets_all = targets_all, markers_all = markers_all, comp = comp)
+  list(core_area = size_area, targets_all = targets_all, markers_all = markers_all, comp = comp)
 }
 
 bin_islet_sizes <- function(df, diam_col, width) {
@@ -699,9 +706,17 @@ server <- function(input, output, session) {
       tags$h4("Pseudotime scatter (scaled counts)"),
       helpText("Unbiased pseudotime is inferred from available islet features (no group labels), using diffusion map or principal curve when available, else PC1."),
       fluidRow(
-        column(6,
+        column(4,
           checkboxInput("pseudo_smooth", "Add LOESS smooth", value = TRUE)
         ),
+        column(4,
+          checkboxInput("pseudo_norm_robust", "Robust per-donor normalization", value = TRUE)
+        ),
+        column(4,
+          checkboxInput("pseudo_clip", "Clip color range (2–98%)", value = TRUE)
+        )
+      ),
+      fluidRow(
         column(6,
           selectInput("pseudo_corr", "Correlation vs pseudotime", choices = c("Kendall", "Spearman", "None"), selected = "Kendall")
         )
@@ -718,12 +733,39 @@ server <- function(input, output, session) {
     req(nrow(rdf) > 0)
     # Unbiased pseudotime from features (no group labels)
     rdf$pseudotime <- compute_unbiased_pseudotime(rdf)
-    # scale counts (z-score)
-    v <- suppressWarnings(as.numeric(rdf$value))
-    mu <- mean(v, na.rm = TRUE)
-    sdv <- sd(v, na.rm = TRUE)
-    if (!is.finite(sdv) || sdv == 0) sdv <- 1
-    rdf$scaled <- (v - mu) / sdv
+    # Scale values: robust per-donor normalization (median/MAD) to reduce single-donor outlier impact
+    # Use the same scaling as the plot for correlation
+    v_raw <- suppressWarnings(as.numeric(rdf$value))
+    if (isTRUE(input$pseudo_norm_robust) && all(c("Case ID") %in% colnames(rdf))) {
+      rdf$scaled <- v_raw
+      rdf <- rdf %>% dplyr::group_by(`Case ID`) %>% dplyr::mutate(
+        .med = suppressWarnings(stats::median(scaled, na.rm = TRUE)),
+        .mad = suppressWarnings(stats::mad(scaled, center = .med, constant = 1, na.rm = TRUE)),
+        .r_sd = ifelse(is.finite(.mad) & .mad > 0, .mad * 1.4826, NA_real_),
+        scaled = ifelse(is.finite(.r_sd) & .r_sd > 0, (scaled - .med) / .r_sd, scaled)
+      ) %>% dplyr::ungroup() %>% dplyr::select(-.med, -.mad, -`.r_sd`)
+      v <- rdf$scaled
+    } else {
+      mu <- mean(v_raw, na.rm = TRUE)
+      sdv <- sd(v_raw, na.rm = TRUE)
+      if (!is.finite(sdv) || sdv == 0) sdv <- 1
+      v <- (v_raw - mu) / sdv
+    }
+    if (isTRUE(input$pseudo_norm_robust) && all(c("Case ID") %in% colnames(rdf))) {
+      rdf$scaled <- v
+      # compute per-donor robust z
+      rdf <- rdf %>% dplyr::group_by(`Case ID`) %>% dplyr::mutate(
+        .med = suppressWarnings(stats::median(scaled, na.rm = TRUE)),
+        .mad = suppressWarnings(stats::mad(scaled, center = .med, constant = 1, na.rm = TRUE)),
+        .r_sd = ifelse(is.finite(.mad) & .mad > 0, .mad * 1.4826, NA_real_),
+        scaled = ifelse(is.finite(.r_sd) & .r_sd > 0, (scaled - .med) / .r_sd, scaled)
+      ) %>% dplyr::ungroup() %>% dplyr::select(-.med, -.mad, -`.r_sd`)
+    } else {
+      mu <- mean(v, na.rm = TRUE)
+      sdv <- sd(v, na.rm = TRUE)
+      if (!is.finite(sdv) || sdv == 0) sdv <- 1
+      rdf$scaled <- (v - mu) / sdv
+    }
     # color mapping
     col_by <- input$color_by
     if (is.null(col_by) || !(col_by %in% colnames(rdf))) col_by <- "donor_status"
@@ -732,9 +774,17 @@ server <- function(input, output, session) {
       plt <- ggplot(rdf, aes(x = pseudotime, y = scaled, color = value)) +
         geom_point(alpha = input$pt_alpha, size = input$pt_size, position = position_jitter(width = 0.01, height = 0)) +
         scale_x_continuous(limits = c(0,1)) +
-        labs(x = "Pseudotime", y = "Scaled counts (z)", color = "Count") +
+        labs(x = "Pseudotime", y = if (isTRUE(input$pseudo_norm_robust)) "Scaled (robust z)" else "Scaled (z)", color = "Count") +
         theme_minimal(base_size = 14) +
-        ggplot2::scale_color_viridis_c(option = "viridis", end = 0.95) +
+        {
+          # Apply percentile clipping if requested
+          if (isTRUE(input$pseudo_clip)) {
+            lim <- stats::quantile(rdf$value, probs = c(0.02, 0.98), na.rm = TRUE)
+            ggplot2::scale_color_viridis_c(option = "viridis", end = 0.95, limits = lim, oob = scales::squish)
+          } else {
+            ggplot2::scale_color_viridis_c(option = "viridis", end = 0.95)
+          }
+        } +
         guides(color = guide_colorbar(title = "Count"))
     } else {
       plt <- ggplot(rdf, aes(x = pseudotime, y = scaled, color = .data[[col_by]])) +
