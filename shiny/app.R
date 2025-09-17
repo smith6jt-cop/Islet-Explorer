@@ -7,6 +7,7 @@ library(tidyr)
 library(ggplot2)
 library(plotly)
 library(broom)
+library(jsonlite)
 
 master_path <- file.path("..", "data", "master_results.xlsx")
 
@@ -50,7 +51,6 @@ parse_channel_names_file <- function(path) {
 
 build_channel_config <- function(names_vec) {
   if (is.null(names_vec) || length(names_vec) == 0) return(NULL)
-  if (!requireNamespace("jsonlite", quietly = TRUE)) return(NULL)
   preferred <- c(INS = "#EF4444", GCG = "#3B82F6", SST = "#F59E0B", DAPI = "#9CA3AF")
   primary <- lapply(names(preferred), function(nm) {
     idx <- which(names_vec == nm)[1]
