@@ -1,4 +1,5 @@
 library(shiny)
+library(shinyjs)
 library(readxl)
 library(dplyr)
 library(stringr)
@@ -9,6 +10,83 @@ library(broom)
 
 master_path <- file.path("..", "data", "master_results.xlsx")
 
+project_root <- tryCatch(normalizePath(file.path(".."), mustWork = FALSE), error = function(e) NULL)
+
+# Resolve default local image (prefer OME-TIFF before OME-Zarr) and build viewer channel config
+resolve_default_local_image <- function(root) {
+  if (is.null(root) || !dir.exists(root)) return(NULL)
+  files <- list.files(root, pattern = "(?i)\\.ome\\.(tiff?|zarr)$", full.names = FALSE, include.dirs = TRUE)
+  if (length(files) == 0) return(NULL)
+  ord <- data.frame(name = files, stringsAsFactors = FALSE)
+  ord$lower <- tolower(ord$name)
+  ord$tier <- ifelse(grepl("\\.ome\\.tiff?", ord$lower), 0L,
+                     ifelse(grepl("\\.ome\\.zarr/?$", ord$lower), 1L, 2L))
+  ord <- ord[order(ord$tier, ord$lower), , drop = FALSE]
+  chosen <- ord$name[1]
+  abs_path <- file.path(root, chosen)
+  if (dir.exists(abs_path) && !endsWith(chosen, "/")) {
+    chosen <- paste0(chosen, "/")
+  }
+  encoded <- utils::URLencode(chosen, reserved = TRUE)
+  encoded <- gsub("%2F", "/", encoded, fixed = TRUE)
+  paste0("/local_images/", encoded)
+}
+
+parse_channel_names_file <- function(path) {
+  if (is.null(path) || !file.exists(path)) return(NULL)
+  lines <- readLines(path, warn = FALSE)
+  rx <- "^\\s*(.*?)\\s*\\(C(\\d+)\\)\\s*$"
+  matched <- stringr::str_match(lines, rx)
+  matched <- matched[!is.na(matched[, 1]), , drop = FALSE]
+  if (nrow(matched) == 0) return(NULL)
+  idx <- as.integer(matched[, 3])
+  nm <- matched[, 2]
+  order_df <- dplyr::arrange(data.frame(idx = idx, name = nm, stringsAsFactors = FALSE), idx)
+  max_idx <- max(order_df$idx, na.rm = TRUE)
+  names_vec <- rep(NA_character_, max_idx)
+  names_vec[order_df$idx] <- order_df$name
+  names_vec
+}
+
+build_channel_config <- function(names_vec) {
+  if (is.null(names_vec) || length(names_vec) == 0) return(NULL)
+  if (!requireNamespace("jsonlite", quietly = TRUE)) return(NULL)
+  preferred <- c(INS = "#EF4444", GCG = "#3B82F6", SST = "#F59E0B", DAPI = "#9CA3AF")
+  primary <- lapply(names(preferred), function(nm) {
+    idx <- which(names_vec == nm)[1]
+    if (length(idx) == 0 || is.na(idx)) return(NULL)
+    list(
+      name = nm,
+      index = jsonlite::unbox(idx - 1L),
+      color = jsonlite::unbox(preferred[[nm]]),
+      visible = jsonlite::unbox(TRUE)
+    )
+  })
+  primary <- Filter(Negate(is.null), primary)
+  list(channelNames = names_vec, primaryChannels = primary)
+}
+
+channel_names_path <- if (!is.null(project_root)) file.path(project_root, "shiny", "Channel_names") else NULL
+channel_names_vec <- parse_channel_names_file(channel_names_path)
+channel_config <- build_channel_config(channel_names_vec)
+channel_config_encoded <- NULL
+if (!is.null(channel_config) && requireNamespace("jsonlite", quietly = TRUE)) {
+  channel_config_json <- jsonlite::toJSON(channel_config, auto_unbox = TRUE, null = "null")
+  channel_config_encoded <- gsub("\\s+", "", jsonlite::base64_enc(channel_config_json))
+}
+
+resolve_avivator_base <- function() {
+  candidates <- list(
+    list(path = file.path("www", "avivator", "index.html"), base = "/avivator/index.html"),
+    list(path = file.path("www", "avivator", "dist", "index.html"), base = "/avivator/dist/index.html"),
+    list(path = file.path("www", "avivator", "sites", "avivator", "dist", "index.html"), base = "/avivator/sites/avivator/dist/index.html")
+  )
+  for (cand in candidates) {
+    if (file.exists(cand$path)) return(cand$base)
+  }
+  NULL
+}
+
 # Expose local image directory (one level up) at /local_images for embedding
 local_images_env <- Sys.getenv("LOCAL_IMAGE_ROOT", unset = "")
 local_images_root <- NULL
@@ -16,11 +94,18 @@ if (nzchar(local_images_env)) {
   local_images_root <- tryCatch(normalizePath(local_images_env, mustWork = TRUE), error = function(e) NULL)
 }
 if (is.null(local_images_root)) {
-  local_images_root <- tryCatch(normalizePath(file.path("..",".."), mustWork = FALSE), error = function(e) NULL)
+  candidate <- if (!is.null(project_root)) file.path(project_root, "local_images") else NULL
+  if (!is.null(candidate) && dir.exists(candidate)) {
+    local_images_root <- candidate
+  } else {
+    local_images_root <- tryCatch(normalizePath(file.path("..",".."), mustWork = FALSE), error = function(e) NULL)
+  }
 }
 if (!is.null(local_images_root)) {
   try({ shiny::addResourcePath("local_images", local_images_root) }, silent = TRUE)
 }
+
+default_image_url <- resolve_default_local_image(local_images_root)
 
 # ---------- Data loading and wrangling ----------
 
@@ -311,6 +396,8 @@ per_bin_kendall <- function(df, bin_col, group_col, value_col, mid_col = "diam_m
 # ---------- UI ----------
 
 ui <- fluidPage(
+  useShinyjs(),
+  tags$head(tags$style(HTML("\n    body.viewer-mode div.col-sm-4,\n    body.viewer-mode div.col-sm-3,\n    body.viewer-mode div.col-lg-3 {\n      display: none !important;\n    }\n    body.viewer-mode div.col-sm-8,\n    body.viewer-mode div.col-lg-9 {\n      width: 100% !important;\n      max-width: 100% !important;\n      flex: 0 0 100%;\n    }\n    body.viewer-mode .tab-content {\n      padding-left: 0 !important;\n      padding-right: 0 !important;\n    }\n  "))),
   titlePanel("Islet Area Distributions"),
   uiOutput("theme_css"),
   sidebarLayout(
@@ -359,11 +446,16 @@ ui <- fluidPage(
     ),
     mainPanel(
       tabsetPanel(id = "tabs",
-        tabPanel("Plot", plotlyOutput("plt", height = 650), br(), uiOutput("pseudo_ui"), plotlyOutput("pseudo", height = 400)),
-        tabPanel("Statistics", tableOutput("stats_tbl")),
-        tabPanel("Vitessce",
+        tabPanel("Plot", plotlyOutput("plt", height = 650), br(), uiOutput("pseudo_ui"), plotlyOutput("pseudo", height = 640)),
+        tabPanel("Statistics",
+                 tableOutput("stats_tbl"),
+                 br(),
+                 plotlyOutput("stats_plot", height = 320),
+                 br(),
+                 plotlyOutput("pairwise_plot", height = 320)
+        ),
+        tabPanel("Viewer",
           div(style = "max-width: 1200px;",
-              h4("Local images"),
               uiOutput("local_image_picker"),
               uiOutput("vit_view")
           )
@@ -390,8 +482,42 @@ server <- function(input, output, session) {
     prep_data(master())
   })
 
+  viewer_info <- reactive({
+    base <- resolve_avivator_base()
+    info <- list(base = base, selection = NULL, mode = "picker", ok = FALSE,
+                 iframe_src = NULL, image_url = NULL)
+    if (is.null(base)) return(info)
+    params <- list()
+    if (!is.null(default_image_url)) {
+      params[["image_url"]] <- utils::URLencode(default_image_url, reserved = TRUE)
+      info$image_url <- default_image_url
+    }
+    if (!is.null(channel_config_encoded)) {
+      params[["channel_config"]] <- utils::URLencode(channel_config_encoded, reserved = TRUE)
+    }
+    query <- NULL
+    if (length(params)) {
+      parts <- vapply(names(params), function(nm) sprintf("%s=%s", nm, params[[nm]]), character(1))
+      query <- paste(parts, collapse = "&")
+    }
+    info$iframe_src <- if (!is.null(query)) paste0(base, "?", query) else base
+    info$ok <- TRUE
+    info
+  })
+
+  observe({
+    if (!is.null(input$tabs) && identical(input$tabs, "Viewer")) {
+      shinyjs::runjs("document.body.classList.add('viewer-mode');")
+    } else {
+      shinyjs::runjs("document.body.classList.remove('viewer-mode');")
+    }
+  })
+
   # Raw per-islet dataset (no binning), aligned with current selections
   raw_df <- reactive({
+    if (!is.null(input$tabs) && identical(input$tabs, "Viewer")) {
+      return(prepared()$targets_all[FALSE, , drop = FALSE])
+    }
     pd <- prepared()
     groups <- input$groups
     w <- input$which
@@ -608,6 +734,9 @@ server <- function(input, output, session) {
 
   # Summary with mean and SE per bin per group
   summary_df <- reactive({
+    if (!is.null(input$tabs) && identical(input$tabs, "Viewer")) {
+      return(data.frame())
+    }
     df <- plot_df()
     req(nrow(df) > 0)
     summary_stats(df, group_cols = c("donor_status", "diam_bin", "diam_mid"), value_col = "value", stat = input$stat)
@@ -754,11 +883,11 @@ server <- function(input, output, session) {
     out
   }, ignoreInit = TRUE)
 
-  output$stats_tbl <- renderTable({
+  stats_data <- reactive({
+    if (!is.null(input$tabs) && identical(input$tabs, "Viewer")) return(NULL)
     st <- stats_run()
     if (is.null(st) || nrow(st) == 0) return(NULL)
     alpha_num <- as.numeric(input$alpha)
-    # Adjust only pairwise; keep global unadjusted
     st$p_adj <- NA_real_
     if (any(st$type == "pairwise")) {
       idx <- which(st$type == "pairwise")
@@ -768,39 +897,83 @@ server <- function(input, output, session) {
     st
   })
 
-  # Vitessce embed
-  output$local_image_picker <- renderUI({
-    root <- local_images_root
-    if (is.null(root) || !dir.exists(root)) {
-      return(tags$div(style = "color:#b00;", "Local images root not found. Expected one level up from app directory."))
-    }
-    # List relative .tif/.tiff and .zarr directories under the root
-    tifs <- tryCatch(list.files(root, pattern = "\\.tif(f)?$", recursive = TRUE, full.names = FALSE, ignore.case = TRUE), error = function(e) character(0))
-    zarrs <- tryCatch({
-      all <- list.dirs(root, recursive = TRUE, full.names = FALSE)
-      all[grepl("\\.zarr/?$", all, ignore.case = TRUE)]
-    }, error = function(e) character(0))
-    tagList(
-      if (length(tifs) > 0) selectizeInput("local_tif", "Select local TIFF", choices = tifs, selected = tifs[1], options = list(placeholder = "Choose a TIFF")) else tags$div(style = "color:#666;", "No TIFF files found under ", root),
-      if (length(zarrs) > 0) selectizeInput("local_zarr", "Select local OME-Zarr", choices = zarrs, selected = zarrs[1], options = list(placeholder = "Choose an OME-Zarr")) else tags$div(style = "color:#666;", "No OME-Zarr datasets found under ", root),
-      helpText("Local files are served via /local_images. TIFF and OME-Zarr open in the embedded Avivator viewer.")
-    )
+  output$stats_tbl <- renderTable({
+    if (!is.null(input$tabs) && identical(input$tabs, "Viewer")) return(NULL)
+    st <- stats_data()
+    if (is.null(st) || nrow(st) == 0) return(NULL)
+    fmt <- function(x) ifelse(is.na(x), NA_character_, formatC(x, format = "e", digits = 2))
+    display <- st
+    display$p_value <- fmt(display$p_value)
+    display$p_adj <- fmt(display$p_adj)
+    display
+  }, striped = TRUE, bordered = TRUE, spacing = "s")
+
+  output$stats_plot <- renderPlotly({
+    if (!is.null(input$tabs) && identical(input$tabs, "Viewer")) return(NULL)
+    st <- stats_data()
+    req(st, nrow(st) > 0)
+    alpha_num <- as.numeric(input$alpha)
+    df <- st %>%
+      mutate(neglog = ifelse(!is.na(p_value) & p_value > 0, -log10(p_value), NA_real_)) %>%
+      filter(!is.na(neglog))
+    if (nrow(df) == 0) return(NULL)
+    thresh <- -log10(alpha_num)
+    g <- ggplot(df, aes(x = reorder(contrast, neglog), y = neglog, fill = type)) +
+      geom_col(show.legend = TRUE) +
+      geom_hline(yintercept = thresh, linetype = "dashed", color = "#444444") +
+      coord_flip() +
+      labs(x = "Contrast", y = expression(-log[10](p)), fill = "Test type",
+           title = "Test significance overview") +
+      theme_minimal(base_size = 14)
+    ggplotly(g)
   })
 
-  output$vit_view <- renderUI({
-    # Prefer local selection (TIFF or Zarr). Always embed local Avivator from www/avivator.
-    lt <- input$local_tif
-    lz <- input$local_zarr
-    if (!is.null(lt) && nzchar(lt)) {
-      img_url <- paste0("/local_images/", lt)
-      return(tags$iframe(src = paste0("/avivator/?image_url=", utils::URLencode(img_url, reserved = TRUE)), width = "100%", height = "800", frameBorder = 0, allowfullscreen = NA))
-    }
-    if (!is.null(lz) && nzchar(lz)) {
-      z_url <- paste0("/local_images/", sub('/+$','', lz))
-      return(tags$iframe(src = paste0("/avivator/?image_url=", utils::URLencode(z_url, reserved = TRUE), "&source=zarr"), width = "100%", height = "800", frameBorder = 0, allowfullscreen = NA))
-    }
-    tags$div(style = "color:#666;", "Select a local TIFF or OME-Zarr dataset to view.")
+  output$pairwise_plot <- renderPlotly({
+    if (!is.null(input$tabs) && identical(input$tabs, "Viewer")) return(NULL)
+    st <- stats_data()
+    req(st, nrow(st) > 0)
+    df <- st %>% filter(type == "pairwise" & !is.na(p_value))
+    if (nrow(df) == 0) return(NULL)
+    alpha_num <- as.numeric(input$alpha)
+    df <- df %>% mutate(sig = ifelse(is.na(p_adj), p_value <= alpha_num, p_adj <= alpha_num))
+    g <- ggplot(df, aes(x = reorder(contrast, p_value), y = p_value, color = sig)) +
+      geom_point(size = 3) +
+      geom_hline(yintercept = alpha_num, linetype = "dashed", color = "#444444") +
+      scale_y_log10() +
+      scale_color_manual(values = c(`FALSE` = "#1f77b4", `TRUE` = "#d62728"),
+                         labels = c(`FALSE` = "NS", `TRUE` = "Significant")) +
+      coord_flip() +
+      labs(x = "Pairwise contrast", y = "p-value (log scale)", color = "", title = "Pairwise comparison p-values") +
+      theme_minimal(base_size = 14)
+    ggplotly(g)
   })
+
+  # Vitessce embed
+  output$local_image_picker <- renderUI({
+    vi <- viewer_info()
+    if (is.null(vi$base)) {
+      return(tagList(
+        tags$div(style = "color:#b00;", "Local Avivator static build not found under shiny/www/avivator."),
+        tags$div(style = "color:#666; font-size:90%;", "Run scripts/install_avivator.sh (Node ≥ 18) or place a prebuilt bundle under shiny/www/avivator.")
+      ))
+    }
+    NULL
+  })
+
+output$vit_view <- renderUI({
+  vi <- viewer_info()
+  if (is.null(vi$base)) {
+    return(tagList(
+      tags$div(style = "color:#b00;", "Local Avivator static build not found under shiny/www/avivator."),
+      tags$div(style = "color:#666; font-size:90%;", "To install: run scripts/install_avivator.sh (requires Node ≥ 18) or place a prebuilt bundle under shiny/www/avivator.")
+    ))
+  }
+  tags$iframe(src = vi$iframe_src,
+              width = "100%",
+              frameBorder = 0,
+              allowfullscreen = NA,
+              style = "width:100%; height:calc(100vh - 140px); border:0;")
+})
 
   # Pseudotime scatter when counts are selected (scaled counts vs pseudotime)
   output$pseudo_ui <- renderUI({
@@ -862,13 +1035,45 @@ server <- function(input, output, session) {
       rdf$scaled <- v_raw
       y_lab <- "Count"
     }
-    # color mapping
+    # color mapping and jitter settings
+    rdf$donor_status <- factor(rdf$donor_status, levels = c("ND", "Aab+", "T1D"))
+    if ("Case ID" %in% colnames(rdf)) {
+      rdf$Case_ID_factor <- factor(rdf$`Case ID`)
+    }
+    finite_scaled <- rdf$scaled[is.finite(rdf$scaled)]
+    if (length(finite_scaled) >= 2) {
+      y_trim <- stats::quantile(finite_scaled, probs = c(0.01, 0.99), na.rm = TRUE, type = 7)
+      if (!all(is.finite(y_trim))) {
+        rng <- range(finite_scaled, na.rm = TRUE)
+        y_trim <- if (all(is.finite(rng))) rng else c(0, 0)
+      }
+    } else if (length(finite_scaled) == 1) {
+      val <- finite_scaled[1]
+      y_trim <- c(val - 0.5, val + 0.5)
+    } else {
+      y_trim <- c(0, 0)
+    }
+    spread <- diff(y_trim)
+    if (!is.finite(spread) || spread <= 0) spread <- 1
+    jitter_width <- 0.035
+    jitter_height <- max(spread * 0.06, 0.25)
+    pt_position <- position_jitter(width = jitter_width, height = jitter_height)
+    y_limits <- y_trim + c(-1, 1) * spread * 0.1
+
     col_by <- input$color_by
     if (is.null(col_by) || !(col_by %in% colnames(rdf))) col_by <- "donor_status"
+    color_label <- "Color by"
+    color_col <- col_by
+    if (identical(col_by, "Case ID") && "Case_ID_factor" %in% colnames(rdf)) {
+      color_col <- "Case_ID_factor"
+      color_label <- "Donor (Case ID)"
+    } else if (identical(col_by, "donor_status")) {
+      color_label <- "Donor Status"
+    }
     # When 'Marker' or 'Target class' is chosen, color by count magnitude (continuous)
     if (identical(col_by, "marker") || identical(col_by, "class")) {
       plt <- ggplot(rdf, aes(x = pseudotime, y = scaled, color = value)) +
-        geom_point(alpha = input$pt_alpha, size = input$pt_size, position = position_jitter(width = 0.01, height = 0)) +
+        geom_point(alpha = input$pt_alpha, size = input$pt_size, position = pt_position) +
         scale_x_continuous(limits = c(0,1)) +
         labs(x = "Pseudotime", y = y_lab, color = "Count") +
         theme_minimal(base_size = 14) +
@@ -883,15 +1088,23 @@ server <- function(input, output, session) {
         } +
         guides(color = guide_colorbar(title = "Count"))
     } else {
-      plt <- ggplot(rdf, aes(x = pseudotime, y = scaled, color = .data[[col_by]])) +
-        geom_point(alpha = input$pt_alpha, size = input$pt_size, position = position_jitter(width = 0.01, height = 0)) +
+      plt <- ggplot(rdf, aes(x = pseudotime, y = scaled, color = .data[[color_col]])) +
+        geom_point(alpha = input$pt_alpha, size = input$pt_size, position = pt_position) +
         scale_x_continuous(limits = c(0,1)) +
-        labs(x = "Pseudotime", y = y_lab, color = "Color by") +
+        labs(x = "Pseudotime", y = y_lab, color = color_label) +
         theme_minimal(base_size = 14)
-      # Optional: consistent donor_status palette
-      if (identical(col_by, "donor_status")) {
-        plt <- plt + scale_color_manual(values = c("ND" = "#1f77b4", "Aab+" = "#ff7f0e", "T1D" = "#d62728"))
+      if (identical(color_col, "donor_status")) {
+        plt <- plt + scale_color_manual(values = c("ND" = "#1f77b4", "Aab+" = "#ff7f0e", "T1D" = "#d62728"),
+                                        drop = FALSE) +
+          guides(color = guide_legend(order = 1))
+      } else if (is.factor(rdf[[color_col]])) {
+        levs <- levels(rdf[[color_col]])
+        pal <- setNames(scales::hue_pal()(length(levs)), levs)
+        plt <- plt + scale_color_manual(values = pal, na.translate = FALSE)
       }
+    }
+    if (all(is.finite(y_limits))) {
+      plt <- plt + scale_y_continuous(limits = y_limits, oob = scales::squish)
     }
     # Keep a simple 0..1 axis for unbiased pseudotime
     # optional LOESS smoothing overlay (single global trend)
@@ -975,7 +1188,7 @@ server <- function(input, output, session) {
       paste0("stats_", gsub("[^0-9A-Za-z]+","_", Sys.time()), ".csv")
     },
     content = function(file) {
-      st <- stats_run()
+      st <- stats_data()
       if (is.null(st) || nrow(st) == 0) st <- data.frame()
       write.csv(st, file, row.names = FALSE)
     }
