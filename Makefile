@@ -1,4 +1,4 @@
-ENV_NAME=panc-codex-streamlit
+ENV_NAME=panc-codex-shiny
 
 .PHONY: env create update run
 
@@ -12,5 +12,4 @@ update:
 	conda env update -f environment.yml --prune
 
 run:
-	conda run -n $(ENV_NAME) streamlit run app_v2.py --server.address 0.0.0.0 --server.port $${PORT:-8501}
-
+	conda run -n $(ENV_NAME) ./run_shiny.sh

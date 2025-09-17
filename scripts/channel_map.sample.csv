@@ -1,0 +1,4 @@
+filename,channel_index,channel_name,color_hex
+PANT_6516.ome.tiff,0,CD45,#00FF00
+PANT_6516.ome.tiff,1,Insulin,#FF0000
+PANT_6516.ome.tiff,2,Glucagon,#0000FF

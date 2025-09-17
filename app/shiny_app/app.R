@@ -9,9 +9,9 @@ library(plotly)
 library(broom)
 library(jsonlite)
 
-master_path <- file.path("..", "data", "master_results.xlsx")
+master_path <- file.path("..", "..", "data", "master_results.xlsx")
 
-project_root <- tryCatch(normalizePath(file.path(".."), mustWork = FALSE), error = function(e) NULL)
+project_root <- tryCatch(normalizePath(file.path("..", ".."), mustWork = FALSE), error = function(e) NULL)
 
 # Resolve default local image (prefer OME-TIFF before OME-Zarr) and build viewer channel config
 resolve_default_local_image <- function(root) {
@@ -98,7 +98,7 @@ if (is.null(local_images_root)) {
   if (!is.null(candidate) && dir.exists(candidate)) {
     local_images_root <- candidate
   } else {
-    local_images_root <- tryCatch(normalizePath(file.path("..",".."), mustWork = FALSE), error = function(e) NULL)
+    local_images_root <- tryCatch(normalizePath(file.path("..","..","local_images"), mustWork = FALSE), error = function(e) NULL)
   }
 }
 if (!is.null(local_images_root)) {
