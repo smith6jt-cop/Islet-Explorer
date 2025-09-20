@@ -4,12 +4,7 @@ pdfs/
 *.pdf
 *.Rout
 
-# Images and thumbnails
-qupath/*.png
-qupath/*.jpg
-qupath/*.jpeg
-qupath/*.tif
-qupath/*.tiff
+/local_images
 
 # Virtual environments and caches
 .venv*/
