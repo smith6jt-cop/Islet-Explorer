@@ -9,85 +9,33 @@ library(plotly)
 library(broom)
 library(jsonlite)
 
+
 master_path <- file.path("..", "..", "data", "master_results.xlsx")
 
 project_root <- tryCatch(normalizePath(file.path("..", ".."), mustWork = FALSE), error = function(e) NULL)
 
-# Resolve default local image (prefer OME-TIFF before OME-Zarr) and build viewer channel config
-resolve_default_local_image <- function(root) {
-  if (is.null(root) || !dir.exists(root)) return(NULL)
-  files <- list.files(root, pattern = "(?i)\\.ome\\.(tiff?|zarr)$", full.names = FALSE, include.dirs = TRUE)
-  if (length(files) == 0) return(NULL)
-  ord <- data.frame(name = files, stringsAsFactors = FALSE)
-  ord$lower <- tolower(ord$name)
-  ord$tier <- ifelse(grepl("\\.ome\\.tiff?", ord$lower), 0L,
-                     ifelse(grepl("\\.ome\\.zarr/?$", ord$lower), 1L, 2L))
-  ord <- ord[order(ord$tier, ord$lower), , drop = FALSE]
-  chosen <- ord$name[1]
-  abs_path <- file.path(root, chosen)
-  if (dir.exists(abs_path) && !endsWith(chosen, "/")) {
-    chosen <- paste0(chosen, "/")
-  }
-  encoded <- utils::URLencode(chosen, reserved = TRUE)
-  encoded <- gsub("%2F", "/", encoded, fixed = TRUE)
-  paste0("/local_images/", encoded)
+# Restore basic viewer components needed for Avivator
+channel_names_path <- file.path("Channel_names")
+if (file.exists(channel_names_path)) {
+  channel_names_vec <- tryCatch({
+    lines <- readLines(channel_names_path, warn = FALSE)
+    rx <- "^\\s*(.*?)\\s*\\(C(\\d+)\\)\\s*$"
+    matched <- stringr::str_match(lines, rx)
+    matched <- matched[!is.na(matched[, 1]), , drop = FALSE]
+    if (nrow(matched) == 0) return(NULL)
+    idx <- as.integer(matched[, 3])
+    nm <- matched[, 2]
+    order_df <- dplyr::arrange(data.frame(idx = idx, name = nm, stringsAsFactors = FALSE), idx)
+    max_idx <- max(order_df$idx, na.rm = TRUE)
+    names_vec <- rep(NA_character_, max_idx)
+    names_vec[order_df$idx] <- order_df$name
+    names_vec
+  }, error = function(e) NULL)
+} else {
+  channel_names_vec <- NULL
 }
 
-parse_channel_names_file <- function(path) {
-  if (is.null(path) || !file.exists(path)) return(NULL)
-  lines <- readLines(path, warn = FALSE)
-  rx <- "^\\s*(.*?)\\s*\\(C(\\d+)\\)\\s*$"
-  matched <- stringr::str_match(lines, rx)
-  matched <- matched[!is.na(matched[, 1]), , drop = FALSE]
-  if (nrow(matched) == 0) return(NULL)
-  idx <- as.integer(matched[, 3])
-  nm <- matched[, 2]
-  order_df <- dplyr::arrange(data.frame(idx = idx, name = nm, stringsAsFactors = FALSE), idx)
-  max_idx <- max(order_df$idx, na.rm = TRUE)
-  names_vec <- rep(NA_character_, max_idx)
-  names_vec[order_df$idx] <- order_df$name
-  names_vec
-}
-
-build_channel_config <- function(names_vec) {
-  if (is.null(names_vec) || length(names_vec) == 0) return(NULL)
-  preferred <- c(INS = "#EF4444", GCG = "#3B82F6", SST = "#F59E0B", DAPI = "#9CA3AF")
-  primary <- lapply(names(preferred), function(nm) {
-    idx <- which(names_vec == nm)[1]
-    if (length(idx) == 0 || is.na(idx)) return(NULL)
-    list(
-      name = nm,
-      index = jsonlite::unbox(idx - 1L),
-      color = jsonlite::unbox(preferred[[nm]]),
-      visible = jsonlite::unbox(TRUE)
-    )
-  })
-  primary <- Filter(Negate(is.null), primary)
-  list(channelNames = names_vec, primaryChannels = primary)
-}
-
-channel_names_path <- if (!is.null(project_root)) file.path(project_root, "shiny", "Channel_names") else NULL
-channel_names_vec <- parse_channel_names_file(channel_names_path)
-channel_config <- build_channel_config(channel_names_vec)
-channel_config_encoded <- NULL
-if (!is.null(channel_config) && requireNamespace("jsonlite", quietly = TRUE)) {
-  channel_config_json <- jsonlite::toJSON(channel_config, auto_unbox = TRUE, null = "null")
-  channel_config_encoded <- gsub("\\s+", "", jsonlite::base64_enc(channel_config_json))
-}
-
-resolve_avivator_base <- function() {
-  candidates <- list(
-    list(path = file.path("www", "avivator", "index.html"), base = "/avivator/index.html"),
-    list(path = file.path("www", "avivator", "dist", "index.html"), base = "/avivator/dist/index.html"),
-    list(path = file.path("www", "avivator", "sites", "avivator", "dist", "index.html"), base = "/avivator/sites/avivator/dist/index.html")
-  )
-  for (cand in candidates) {
-    if (file.exists(cand$path)) return(cand$base)
-  }
-  NULL
-}
-
-# Expose local image directory (one level up) at /local_images for embedding
+# Local images setup
 local_images_env <- Sys.getenv("LOCAL_IMAGE_ROOT", unset = "")
 local_images_root <- NULL
 if (nzchar(local_images_env)) {
@@ -105,8 +53,6 @@ if (!is.null(local_images_root)) {
   try({ shiny::addResourcePath("local_images", local_images_root) }, silent = TRUE)
 }
 
-default_image_url <- resolve_default_local_image(local_images_root)
-
 # ---------- Data loading and wrangling ----------
 
 safe_read_sheet <- function(path, sheet) {
@@ -115,7 +61,6 @@ safe_read_sheet <- function(path, sheet) {
 }
 
 load_master <- function(path = master_path) {
-  sheets <- readxl::excel_sheets(path)
   list(
     markers = safe_read_sheet(path, "Islet_Markers"),
     targets = safe_read_sheet(path, "Islet_Targets"),
@@ -126,15 +71,32 @@ load_master <- function(path = master_path) {
 
 add_islet_key <- function(df) {
   if (is.null(df) || nrow(df) == 0) return(df)
+
+  # Start with an existing islet_key column if present; otherwise create NA placeholder
+  if (!"islet_key" %in% names(df)) df$islet_key <- NA_character_
+
+  # 1) Derive from 'region' if available, e.g., "Islet_200_union" -> "Islet_200"
   if ("region" %in% names(df)) {
-    df <- df %>% mutate(
-      islet_key = str_extract(region, "Islet_\\d+")
-    )
+    key_from_region <- stringr::str_extract(df$region, "Islet_\\d+")
+    df$islet_key <- dplyr::coalesce(df$islet_key, key_from_region)
   }
-  if (!"islet_key" %in% names(df) && all(c("name", "islet_id") %in% names(df))) {
-    df <- df %>% mutate(islet_key = ifelse(str_detect(name, "^Islet_\\\
-\\d+$"), name, paste0("Islet_", islet_id)))
+
+  # 2) Derive from 'name' if available, e.g., "Islet_200" or any text containing digits
+  if ("name" %in% names(df)) {
+    key_from_name <- stringr::str_extract(df$name, "Islet_\\d+")
+    only_digits  <- stringr::str_extract(df$name, "\\d+")
+    fallback_name <- ifelse(!is.na(only_digits), paste0("Islet_", only_digits), NA_character_)
+    df$islet_key <- dplyr::coalesce(df$islet_key, key_from_name, fallback_name)
   }
+
+  # 3) Fallback from numeric/string 'islet_id' if present
+  if ("islet_id" %in% names(df)) {
+    id_str <- suppressWarnings(as.character(df$islet_id))
+    id_digits <- stringr::str_extract(id_str, "\\d+")
+    fallback_id <- ifelse(!is.na(id_digits), paste0("Islet_", id_digits), NA_character_)
+    df$islet_key <- dplyr::coalesce(df$islet_key, fallback_id)
+  }
+
   df
 }
 
@@ -144,48 +106,191 @@ compute_diameter_um <- function(area_um2) {
 }
 
 prep_data <- function(master) {
-  # Islet size proxy per islet (prefer core; fallback to union) for diameter
-  targets <- master$targets %>% add_islet_key()
+  # Determine which autoantibody columns are available
+  aab_cols_targets <- intersect(c("AAb_GADA","AAb_IA2A","AAb_ZnT8A","AAb_IAA","AAb_mIAA"), colnames(master$targets))
+  aab_cols_markers <- intersect(c("AAb_GADA","AAb_IA2A","AAb_ZnT8A","AAb_IAA","AAb_mIAA"), colnames(master$markers))
+  aab_cols_comp    <- intersect(c("AAb_GADA","AAb_IA2A","AAb_ZnT8A","AAb_IAA","AAb_mIAA"), colnames(master$comp))
+  aab_cols_all     <- unique(c(aab_cols_targets, aab_cols_markers, aab_cols_comp))
+  # Donor-level metadata table to backfill AAb flags on synthetic rows
+  donors_meta <- NULL
+  if (!is.null(master$comp) && nrow(master$comp) > 0) {
+    donors_meta <- master$comp %>% dplyr::select(dplyr::all_of(c("Case ID","Donor Status", aab_cols_comp))) %>% dplyr::distinct()
+  } else if (!is.null(master$targets) && nrow(master$targets) > 0) {
+    donors_meta <- master$targets %>% dplyr::select(dplyr::all_of(c("Case ID","Donor Status", aab_cols_targets))) %>% dplyr::distinct()
+  } else if (!is.null(master$markers) && nrow(master$markers) > 0) {
+    donors_meta <- master$markers %>% dplyr::select(dplyr::all_of(c("Case ID","Donor Status", aab_cols_markers))) %>% dplyr::distinct()
+  }
+  # Islet size proxy per islet corefor diameter
+  targets <- master$targets %>% add_islet_key() %>% dplyr::filter(!is.na(islet_key))
   core_area <- targets %>%
-    filter(tolower(type) == "islet_core") %>%
-    select(`Case ID`, `Donor Status`, islet_key, core_region_um2 = region_um2) %>%
-    distinct()
-  union_area <- targets %>%
-    filter(tolower(type) == "islet_union") %>%
-    select(`Case ID`, `Donor Status`, islet_key, union_region_um2 = region_um2) %>%
-    distinct()
-  size_area <- full_join(core_area, union_area, by = c("Case ID", "Donor Status", "islet_key")) %>%
-    mutate(size_um2 = dplyr::coalesce(core_region_um2, union_region_um2),
-           islet_diam_um = compute_diameter_um(size_um2)) %>%
-    select(`Case ID`, `Donor Status`, islet_key, islet_diam_um)
+    dplyr::filter(tolower(type) == "islet_core") %>%
+    dplyr::select(`Case ID`, `Donor Status`, islet_key, core_region_um2 = region_um2) %>%
+    dplyr::distinct()
+  # Diameter is computed ONLY from core area; if no core exists, diameter is NA
+  size_area <- core_area %>%
+    dplyr::mutate(islet_diam_um = compute_diameter_um(core_region_um2)) %>%
+    dplyr::select(`Case ID`, `Donor Status`, islet_key, islet_diam_um)
 
   # Targets: keep all region types and later filter by user selection
   targets_all <- targets %>%
-    select(`Case ID`, `Donor Status`, islet_key, type, class, area_um2, region_um2, area_density, count) %>%
-    left_join(size_area, by = c("Case ID", "Donor Status", "islet_key"))
+    dplyr::select(dplyr::all_of(c("Case ID", "Donor Status")), dplyr::all_of(aab_cols_targets), islet_key, type, class, area_um2, region_um2, area_density, count) %>%
+    dplyr::mutate(
+      # normalize type values to expected tags used throughout
+      type = dplyr::case_when(
+        tolower(type) %in% c("islet_core", "core") ~ "islet_core",
+        tolower(type) %in% c("islet_band", "band", "peri-islet", "peri_islet") ~ "islet_band",
+        tolower(type) %in% c("islet_union", "union", "islet+20um", "islet_20um") ~ "islet_union",
+        TRUE ~ tolower(type)
+      )
+    ) %>%
+    dplyr::left_join(size_area, by = c("Case ID", "Donor Status", "islet_key"))
+
+  # Synthesize missing union rows for counts by summing core + band (do NOT fabricate union area)
+  if (nrow(targets_all) > 0) {
+    keys <- c("Case ID", "Donor Status", "islet_key", "class")
+    # Identify which key combos already have a union row
+    have_union <- targets_all %>%
+      dplyr::filter(type == "islet_union") %>%
+      dplyr::select(dplyr::all_of(keys)) %>%
+      dplyr::distinct() %>%
+      dplyr::mutate(.has_union = TRUE)
+
+    core_rows <- targets_all %>% dplyr::filter(type == "islet_core") %>% dplyr::select(dplyr::all_of(c(keys, "count"))) %>% dplyr::rename(count_core = count)
+    band_rows <- targets_all %>% dplyr::filter(type == "islet_band") %>% dplyr::select(dplyr::all_of(c(keys, "count"))) %>% dplyr::rename(count_band = count)
+    union_missing <- core_rows %>%
+      dplyr::inner_join(band_rows, by = keys) %>%
+      dplyr::left_join(have_union, by = keys) %>%
+      dplyr::filter(is.na(.has_union))
+    if (nrow(union_missing) > 0) {
+      synth <- union_missing %>%
+        dplyr::transmute(`Case ID`, `Donor Status`, islet_key, type = "islet_union", class,
+                          area_um2 = NA_real_, region_um2 = NA_real_,
+                          area_density = NA_real_,
+                          count = suppressWarnings(as.numeric(count_core)) + suppressWarnings(as.numeric(count_band)))
+      # Attach diameter via size_area
+      synth <- synth %>% dplyr::left_join(size_area, by = c("Case ID", "Donor Status", "islet_key"))
+      # Bind synthetic union rows to targets_all
+      targets_all <- dplyr::bind_rows(targets_all, synth)
+    }
+  }
+  # Ensure AAb flags are present for all rows, including synthetic ones
+  if (!is.null(donors_meta)) {
+    targets_all <- targets_all %>% dplyr::select(-dplyr::any_of(aab_cols_all)) %>%
+      dplyr::left_join(donors_meta, by = c("Case ID","Donor Status"))
+  }
 
   # Markers with fraction positive / mean intensity (include LGALS3 sheet)
-  markers <- master$markers %>% add_islet_key()
+  markers <- master$markers %>% add_islet_key() %>% dplyr::filter(!is.na(islet_key))
   markers_all <- markers %>%
-    select(`Case ID`, `Donor Status`, islet_key, region_type, marker, n_cells, mean, SD, threshold, pos_count, pos_frac)
+    dplyr::select(dplyr::all_of(c("Case ID", "Donor Status")), dplyr::all_of(aab_cols_markers), islet_key, region_type, marker, n_cells, pos_count, pos_frac) %>%
+    dplyr::mutate(
+      region_type = dplyr::case_when(
+        tolower(region_type) %in% c("islet_core", "core") ~ "islet_core",
+        tolower(region_type) %in% c("islet_band", "band", "peri-islet", "peri_islet") ~ "islet_band",
+        tolower(region_type) %in% c("islet_union", "union", "islet+20um", "islet_20um") ~ "islet_union",
+        TRUE ~ tolower(region_type)
+      )
+    )
   # Add LGALS3 rows if available
   if (!is.null(master$lgals3) && nrow(master$lgals3) > 0) {
-    g3 <- master$lgals3 %>% add_islet_key() %>%
+    g3 <- master$lgals3 %>% add_islet_key() %>% dplyr::filter(!is.na(islet_key)) %>%
       mutate(marker = as.character(marker)) %>%
-      select(`Case ID`, `Donor Status`, islet_key, region_type, marker, n_cells, mean, SD, threshold, pos_count, pos_frac)
+      dplyr::select(dplyr::all_of(c("Case ID", "Donor Status")), dplyr::all_of(intersect(colnames(master$lgals3), c("AAb_GADA","AAb_IA2A","AAb_ZnT8A","AAb_IAA","AAb_mIAA"))), islet_key, region_type, marker, n_cells, pos_count, pos_frac)
     if (!is.null(g3) && nrow(g3) > 0) {
       markers_all <- bind_rows(markers_all, g3)
     }
   }
+  # Ensure AAb flags are present for all rows, including synthetic ones (markers)
+  if (!is.null(donors_meta)) {
+    markers_all <- markers_all %>% dplyr::select(-dplyr::any_of(aab_cols_all)) %>%
+      dplyr::left_join(donors_meta, by = c("Case ID","Donor Status"))
+  }
   markers_all <- markers_all %>% left_join(size_area, by = c("Case ID", "Donor Status", "islet_key"))
 
+  # Synthesize missing union rows for markers by summing core + band counts (do NOT fabricate area)
+  if (nrow(markers_all) > 0) {
+    mkeys <- c("Case ID", "Donor Status", "islet_key", "marker")
+    have_union_m <- markers_all %>%
+      dplyr::filter(region_type == "islet_union") %>%
+      dplyr::select(dplyr::all_of(mkeys)) %>%
+      dplyr::distinct() %>%
+      dplyr::mutate(.has_union = TRUE)
+
+    core_m <- markers_all %>% dplyr::filter(region_type == "islet_core") %>% dplyr::select(dplyr::all_of(c(mkeys, "n_cells", "pos_count"))) %>% dplyr::rename(n_core = n_cells, pos_core = pos_count)
+    band_m <- markers_all %>% dplyr::filter(region_type == "islet_band") %>% dplyr::select(dplyr::all_of(c(mkeys, "n_cells", "pos_count"))) %>% dplyr::rename(n_band = n_cells, pos_band = pos_count)
+    union_m <- markers_all %>% dplyr::filter(region_type == "islet_union") %>% dplyr::select(dplyr::all_of(c(mkeys, "n_cells", "pos_count"))) %>% dplyr::rename(n_union = n_cells, pos_union = pos_count)
+    union_missing_m <- core_m %>%
+      dplyr::inner_join(band_m, by = mkeys) %>%
+      dplyr::left_join(have_union_m, by = mkeys) %>%
+      dplyr::filter(is.na(.has_union))
+    if (nrow(union_missing_m) > 0) {
+      synth_m <- union_missing_m %>%
+        dplyr::transmute(`Case ID`, `Donor Status`, islet_key, region_type = "islet_union", marker,
+                          n_cells = suppressWarnings(as.numeric(n_core)) + suppressWarnings(as.numeric(n_band)),
+                          pos_count = suppressWarnings(as.numeric(pos_core)) + suppressWarnings(as.numeric(pos_band))) %>%
+        dplyr::mutate(pos_frac = ifelse(is.finite(n_cells) & n_cells > 0,
+                                        suppressWarnings(as.numeric(pos_count)) / suppressWarnings(as.numeric(n_cells)),
+                                        NA_real_)) %>%
+        dplyr::left_join(size_area, by = c("Case ID", "Donor Status", "islet_key"))
+      markers_all <- dplyr::bind_rows(markers_all, synth_m)
+    }
+
+    # Backfill missing band rows when core and union exist but band is missing: band = union - core (counts only)
+    have_band_m <- markers_all %>%
+      dplyr::filter(region_type == "islet_band") %>%
+      dplyr::select(dplyr::all_of(mkeys)) %>%
+      dplyr::distinct() %>%
+      dplyr::mutate(.has_band = TRUE)
+    band_missing_m <- core_m %>%
+      dplyr::inner_join(union_m, by = mkeys) %>%
+      dplyr::left_join(have_band_m, by = mkeys) %>%
+      dplyr::filter(is.na(.has_band))
+    if (nrow(band_missing_m) > 0) {
+      synth_band <- band_missing_m %>%
+        dplyr::transmute(`Case ID`, `Donor Status`, islet_key, region_type = "islet_band", marker,
+                          n_cells = suppressWarnings(as.numeric(n_union)) - suppressWarnings(as.numeric(n_core)),
+                          pos_count = suppressWarnings(as.numeric(pos_union)) - suppressWarnings(as.numeric(pos_core))) %>%
+        dplyr::mutate(
+          n_cells = ifelse(is.finite(n_cells), n_cells, 0),
+          pos_count = ifelse(is.finite(pos_count), pos_count, 0),
+          n_cells = pmax(0, n_cells),
+          pos_count = pmax(0, pos_count),
+          pos_frac = ifelse(n_cells > 0, pos_count / n_cells, NA_real_)
+        ) %>%
+        dplyr::left_join(size_area, by = c("Case ID", "Donor Status", "islet_key"))
+      markers_all <- dplyr::bind_rows(markers_all, synth_band)
+    }
+  }
+
+  # Fill pos_frac when n_cells and pos_count are present but pos_frac is NA; also compute pos_pct (0..100)
+  if (nrow(markers_all) > 0) {
+    markers_all <- markers_all %>%
+      dplyr::mutate(
+        .n = suppressWarnings(as.numeric(n_cells)),
+        .p = suppressWarnings(as.numeric(pos_count)),
+        pos_frac = dplyr::coalesce(pos_frac, ifelse(is.finite(.n) & .n > 0 & is.finite(.p), .p/.n, NA_real_)),
+        pos_pct = ifelse(is.finite(pos_frac), 100.0 * pos_frac, NA_real_)
+      ) %>%
+      dplyr::select(-.n, -.p)
+  }
+
   # Composition by islet
-  comp <- master$comp %>% add_islet_key()
-  comp <- comp %>% select(`Case ID`, `Donor Status`, islet_key, cells_total, Ins_single, Glu_single, Stt_single,
+  comp <- master$comp %>% add_islet_key() %>% dplyr::filter(!is.na(islet_key))
+  comp <- comp %>% dplyr::select(dplyr::all_of(c("Case ID", "Donor Status")), dplyr::all_of(aab_cols_comp), islet_key, cells_total, Ins_single, Glu_single, Stt_single,
                           Multi_Pos, Triple_Neg, Ins_any, Glu_any, Stt_any)
   comp <- comp %>% left_join(size_area, by = c("Case ID", "Donor Status", "islet_key"))
 
   list(core_area = size_area, targets_all = targets_all, markers_all = markers_all, comp = comp)
+}
+
+# Simple NA audit
+audit_na <- function(df, label) {
+  if (is.null(df) || !nrow(df)) return(invisible(NULL))
+  na_cnt <- vapply(df, function(x) sum(is.na(x)), integer(1))
+  total <- nrow(df)
+  pct <- ifelse(total > 0, round(100 * na_cnt / total, 2), 0)
+  msg <- paste0("[NA audit] ", label, ": ", paste(names(na_cnt), paste0(na_cnt, " (", pct, "%)"), sep = "=", collapse = "; "))
+  message(msg)
 }
 
 bin_islet_sizes <- function(df, diam_col, width) {
@@ -203,46 +308,12 @@ bin_islet_sizes <- function(df, diam_col, width) {
   df
 }
 
-# Compute ND -> Aab+ -> T1D trajectory pseudotime using islet size within each group
-compute_traj_pseudotime <- function(df, group_col = "donor_status", size_col = "islet_diam_um",
-                                    traj_order = c("ND", "Aab+", "T1D")) {
-  if (is.null(df) || nrow(df) == 0) return(numeric(0))
-  g <- as.character(df[[group_col]])
-  x <- suppressWarnings(as.numeric(df[[size_col]]))
-  # Only keep trajectory groups present in data, in specified order
-  present <- traj_order[traj_order %in% unique(g)]
-  K <- length(present)
-  if (K == 0) {
-    # Fallback: size continuum
-    lo <- suppressWarnings(min(x, na.rm = TRUE)); hi <- suppressWarnings(max(x, na.rm = TRUE)); rng <- hi - lo
-    return(if (!is.finite(rng) || rng <= 0) rep(0, length(x)) else pmin(1, pmax(0, (x - lo) / rng)))
-  }
-  pt <- rep(NA_real_, length(x))
-  for (i in seq_along(present)) {
-    grp <- present[i]
-    idx <- which(g == grp)
-    if (length(idx) == 0) next
-    xi <- x[idx]
-    # Fractional rank within group; if only one islet, set to 0
-    n_i <- sum(is.finite(xi))
-    frac <- rep(0, length(idx))
-    if (n_i > 1) {
-      r <- rank(xi, ties.method = "average", na.last = "keep")
-      frac <- ifelse(is.finite(r), (r - 1) / (n_i - 1), 0)
-    }
-    pt[idx] <- (i - 1 + frac) / K
-  }
-  # Clamp and replace any remaining NAs with segment starts
-  pt[!is.finite(pt)] <- 0
-  pmin(1, pmax(0, pt))
-}
-
 # Unbiased pseudotime from features (no group labels). Tries DiffusionMap -> principal curve -> PC1.
 compute_unbiased_pseudotime <- function(df) {
   if (is.null(df) || nrow(df) == 0) return(numeric(0))
   # Candidate numeric feature columns if present
-  cand <- c("value", "islet_diam_um", "pos_count", "n_cells", "pos_frac", "mean", "SD",
-            "threshold", "count", "area_density", "cells_total", "Ins_any", "Glu_any", "Stt_any")
+  cand <- c("islet_diam_um", "pos_frac",
+            "area_density")
   present <- intersect(cand, colnames(df))
   if (length(present) == 0) {
     v <- suppressWarnings(as.numeric(df$islet_diam_um))
@@ -454,6 +525,14 @@ ui <- fluidPage(
                  br(),
                  plotlyOutput("pairwise_plot", height = 320)
         ),
+        tabPanel("Data QA",
+                 h4("Per-donor data integrity checks"),
+                 p("Each donor should have: (i) the same number of islets across comp/markers/targets, and (ii) 3× as many distinct region rows in markers and targets (core, band, union) as in composition."),
+                 tableOutput("qa_table"),
+                 br(),
+                 h4("Mismatches only"),
+                 tableOutput("qa_mismatch")
+        ),
         tabPanel("Viewer",
           div(style = "max-width: 1200px;",
               uiOutput("local_image_picker"),
@@ -469,7 +548,7 @@ ui <- fluidPage(
 
 server <- function(input, output, session) {
   validate_file <- reactive({
-    validate(need(file.exists(master_path), paste("Not found:", master_path)))
+    shiny::validate(shiny::need(file.exists(master_path), paste("Not found:", master_path)))
     master_path
   })
 
@@ -479,8 +558,48 @@ server <- function(input, output, session) {
   })
 
   prepared <- reactive({
-    prep_data(master())
+    pd <- prep_data(master())
+    # NA audits (console)
+    try({
+      audit_na(pd$targets_all, "targets_all")
+      audit_na(pd$markers_all, "markers_all")
+      audit_na(pd$comp, "comp")
+    }, silent = TRUE)
+    pd
   })
+
+  # QA summary per donor: comp islets vs markers/targets distinct region rows
+  qa_summary <- reactive({
+    pd <- prepared()
+    if (is.null(pd)) return(NULL)
+    comp_islets <- pd$comp %>% dplyr::distinct(`Case ID`, `Donor Status`, islet_key)
+    n_islets <- comp_islets %>% dplyr::count(`Case ID`, `Donor Status`, name = "n_islets")
+    mk_regions <- pd$markers_all %>% dplyr::distinct(`Case ID`, `Donor Status`, islet_key, region_type) %>%
+      dplyr::count(`Case ID`, `Donor Status`, name = "n_mk_regions")
+    tg_regions <- pd$targets_all %>% dplyr::distinct(`Case ID`, `Donor Status`, islet_key, type) %>%
+      dplyr::count(`Case ID`, `Donor Status`, name = "n_tg_regions")
+    dd <- n_islets %>% dplyr::left_join(mk_regions, by = c("Case ID","Donor Status")) %>%
+      dplyr::left_join(tg_regions, by = c("Case ID","Donor Status")) %>%
+      dplyr::mutate(expected = 3 * n_islets,
+                    ok_markers = (n_mk_regions == expected),
+                    ok_targets = (n_tg_regions == expected)) %>%
+      dplyr::arrange(`Donor Status`, `Case ID`)
+    dd
+  })
+
+  output$qa_table <- renderTable({
+    qs <- qa_summary()
+    if (is.null(qs) || nrow(qs) == 0) return(NULL)
+    qs
+  }, striped = TRUE, bordered = TRUE, spacing = "s")
+
+  output$qa_mismatch <- renderTable({
+    qs <- qa_summary()
+    if (is.null(qs) || nrow(qs) == 0) return(NULL)
+    mm <- qs %>% dplyr::filter(!(ok_markers & ok_targets))
+    if (nrow(mm) == 0) return(data.frame(message = "No mismatches: all donors satisfy 3× rule for markers and targets."))
+    mm
+  }, striped = TRUE, bordered = TRUE, spacing = "s")
 
   viewer_info <- reactive({
     base <- resolve_avivator_base()
@@ -559,18 +678,21 @@ server <- function(input, output, session) {
     }
     # Apply AAb filters (only within the Aab+ donor group) if selected
     flags <- input$aab_flags
-    if (!is.null(flags) && length(flags) > 0 && all(flags %in% colnames(out))) {
+    if (!is.null(flags) && length(flags) > 0) {
+      avail <- intersect(flags, colnames(out))
+      if (length(avail) > 0) {
       # Keep ND and T1D unchanged; restrict Aab+ by selected AAbs
       others <- out %>% dplyr::filter(donor_status != "Aab+")
       aabp   <- out %>% dplyr::filter(donor_status == "Aab+")
       if (nrow(aabp) > 0) {
-        mat <- as.data.frame(aabp[, flags, drop = FALSE])
+        mat <- as.data.frame(aabp[, avail, drop = FALSE])
         for (cc in colnames(mat)) mat[[cc]] <- as.logical(mat[[cc]])
         hits <- rowSums(mat, na.rm = TRUE)
-        keep <- if (identical(input$aab_logic, "All")) hits >= length(flags) else hits >= 1
+        keep <- if (identical(input$aab_logic, "All")) hits >= length(avail) else hits >= 1
         aabp <- aabp[keep, , drop = FALSE]
       }
       out <- dplyr::bind_rows(others, aabp)
+      }
     }
     out
   })
@@ -586,21 +708,18 @@ server <- function(input, output, session) {
 
   output$dynamic_selector <- renderUI({
     if (identical(input$mode, "Targets")) {
-      req(input$region)
-      region_tag <- paste0("islet_", tolower(input$region))
-      classes <- prepared()$targets_all %>%
-        filter(tolower(type) == region_tag) %>%
-        pull(class) %>% unique() %>% na.omit() %>% sort()
+      # Choices should be independent of Region to preserve selection when switching regions
+      classes <- prepared()$targets_all %>% pull(class) %>% unique() %>% na.omit() %>% sort()
       if (length(classes) == 0) classes <- character(0)
-      selectInput("which", "Target class", choices = classes, selected = if (length(classes)>0) classes[1] else NULL)
+      # Preserve current selection if still valid
+      sel <- if (!is.null(input$which) && input$which %in% classes) input$which else if (length(classes)>0) classes[1] else NULL
+      selectInput("which", "Target class", choices = classes, selected = sel)
     } else if (identical(input$mode, "Markers")) {
-      req(input$region)
-      region_tag <- paste0("islet_", tolower(input$region))
-      markers <- prepared()$markers_all %>%
-        filter(tolower(region_type) == region_tag) %>%
-        pull(marker) %>% unique() %>% na.omit() %>% sort()
+      # Choices should be independent of Region to preserve selection when switching regions
+      markers <- prepared()$markers_all %>% pull(marker) %>% unique() %>% na.omit() %>% sort()
       if (length(markers) == 0) markers <- character(0)
-      selectInput("which", "Marker", choices = markers, selected = if (length(markers)>0) markers[1] else NULL)
+      sel <- if (!is.null(input$which) && input$which %in% markers) input$which else if (length(markers)>0) markers[1] else NULL
+      selectInput("which", "Marker", choices = markers, selected = sel)
     } else {
       selectInput("which", "Composition measure", choices = c("Ins_frac" = "Ins_any", "Glu_frac" = "Glu_any", "Stt_frac" = "Stt_any"), selected = "Ins_any")
     }
@@ -702,17 +821,20 @@ server <- function(input, output, session) {
       out <- out %>% dplyr::filter(is.finite(islet_diam_um) & islet_diam_um <= as.numeric(input$diam_max))
     }
     flags <- input$aab_flags
-    if (!is.null(flags) && length(flags) > 0 && all(flags %in% colnames(out))) {
+    if (!is.null(flags) && length(flags) > 0) {
+      avail <- intersect(flags, colnames(out))
+      if (length(avail) > 0) {
       others <- out %>% dplyr::filter(donor_status != "Aab+")
       aabp   <- out %>% dplyr::filter(donor_status == "Aab+")
       if (nrow(aabp) > 0) {
-        mat <- as.data.frame(aabp[, flags, drop = FALSE])
+        mat <- as.data.frame(aabp[, avail, drop = FALSE])
         for (cc in colnames(mat)) mat[[cc]] <- as.logical(mat[[cc]])
         hits <- rowSums(mat, na.rm = TRUE)
-        keep <- if (identical(input$aab_logic, "All")) hits >= length(flags) else hits >= 1
+        keep <- if (identical(input$aab_logic, "All")) hits >= length(avail) else hits >= 1
         aabp <- aabp[keep, , drop = FALSE]
       }
       out <- dplyr::bind_rows(others, aabp)
+      }
     }
     # Apply normalization for main plot if requested
     norm_mode <- input$curve_norm
