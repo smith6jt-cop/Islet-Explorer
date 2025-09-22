@@ -8,6 +8,13 @@ library(ggplot2)
 library(plotly)
 library(broom)
 library(jsonlite)
+## for base64 encoding channel_config payload to Avivator
+## (installed by scripts/install_shiny_deps.R)
+suppressPackageStartupMessages({
+  if (!requireNamespace("base64enc", quietly = TRUE)) {
+    stop("Package 'base64enc' is required. Run scripts/install_shiny_deps.R to install dependencies.")
+  }
+})
 
 
 master_path <- file.path("..", "..", "data", "master_results.xlsx")
@@ -15,8 +22,12 @@ master_path <- file.path("..", "..", "data", "master_results.xlsx")
 project_root <- tryCatch(normalizePath(file.path("..", ".."), mustWork = FALSE), error = function(e) NULL)
 
 # Restore basic viewer components needed for Avivator
-channel_names_path <- file.path("Channel_names")
-if (file.exists(channel_names_path)) {
+# Support either 'Channel_names' or 'Channel_names.txt'
+channel_names_path <- NULL
+for (cand in c(file.path("Channel_names"), file.path("Channel_names.txt"))) {
+  if (file.exists(cand)) { channel_names_path <- cand; break }
+}
+if (!is.null(channel_names_path)) {
   channel_names_vec <- tryCatch({
     lines <- readLines(channel_names_path, warn = FALSE)
     rx <- "^\\s*(.*?)\\s*\\(C(\\d+)\\)\\s*$"
@@ -51,6 +62,69 @@ if (is.null(local_images_root)) {
 }
 if (!is.null(local_images_root)) {
   try({ shiny::addResourcePath("local_images", local_images_root) }, silent = TRUE)
+}
+
+# ---- Viewer helpers/defaults (Avivator) ----
+# Optional default image URL; if NULL, we'll auto-pick the first available under /local_images
+default_image_url <- NULL
+
+resolve_avivator_base <- function() {
+  # Return the URL path to the local avivator build under www/, or NULL if missing
+  local_index <- file.path("www", "avivator", "index.html")
+  if (file.exists(local_index)) return("avivator/index.html")
+  NULL
+}
+
+# Build a base64-encoded channel configuration understood by embedded Avivator.
+# Expected shape (before base64):
+#   {
+#     channelNames: ["DAPI", "CD31", ...],
+#     primaryChannels: [
+#       { index: 0, name: "DAPI", color: "#7F7F7F", visible: true },
+#       { index: 25, name: "INS",  color: "#E41A1C", visible: true },
+#       { index: 19, name: "GCG",  color: "#377EB8", visible: true },
+#       { index: 13, name: "SST",  color: "#FFCC00", visible: true }
+#     ]
+#   }
+build_channel_config_b64 <- function(names_vec) {
+  if (is.null(names_vec) || length(names_vec) == 0) return(NULL)
+
+  # Helper: RGB ints (0..255) to hex string
+  rgb_hex <- function(r, g, b) sprintf("#%02X%02X%02X", as.integer(r), as.integer(g), as.integer(b))
+  # Palette for key channels
+  hex_red    <- rgb_hex(228,  26,  28)  # INS
+  hex_blue   <- rgb_hex( 55, 126, 184)  # GCG
+  hex_yellow <- rgb_hex(255, 204,   0)  # SST
+  hex_grey   <- rgb_hex(127, 127, 127)  # DAPI
+
+  # Locate indices for the key channels (names_vec is 1-based by channel number)
+  find_idx0 <- function(tag) {
+    hit <- which(toupper(names_vec) == tag)
+    if (length(hit) == 0) return(NA_integer_)
+    (hit[[1]] - 1L) # zero-based for viewer
+  }
+  idx0_dapi <- find_idx0("DAPI")
+  idx0_ins  <- find_idx0("INS")
+  idx0_gcg  <- find_idx0("GCG")
+  idx0_sst  <- find_idx0("SST")
+
+  prim <- list()
+  add_pc <- function(idx0, name, hex) {
+    if (!is.na(idx0) && idx0 >= 0) prim[[length(prim)+1]] <<- list(index = idx0, name = name, color = hex, visible = TRUE)
+  }
+  # Order: INS (red), GCG (blue), SST (yellow), DAPI (grey)
+  add_pc(idx0_ins,  "INS",  hex_red)
+  add_pc(idx0_gcg,  "GCG",  hex_blue)
+  add_pc(idx0_sst,  "SST",  hex_yellow)
+  add_pc(idx0_dapi, "DAPI", hex_grey)
+
+  # Build config
+  cfg <- list(
+    channelNames = as.list(as.character(names_vec)),
+    primaryChannels = prim
+  )
+  js <- jsonlite::toJSON(cfg, auto_unbox = TRUE)
+  base64enc::base64encode(charToRaw(js))
 }
 
 # ---------- Data loading and wrangling ----------
@@ -309,71 +383,7 @@ bin_islet_sizes <- function(df, diam_col, width) {
 }
 
 # Unbiased pseudotime from features (no group labels). Tries DiffusionMap -> principal curve -> PC1.
-compute_unbiased_pseudotime <- function(df) {
-  if (is.null(df) || nrow(df) == 0) return(numeric(0))
-  # Candidate numeric feature columns if present
-  cand <- c("islet_diam_um", "pos_frac",
-            "area_density")
-  present <- intersect(cand, colnames(df))
-  if (length(present) == 0) {
-    v <- suppressWarnings(as.numeric(df$islet_diam_um))
-    v[!is.finite(v)] <- 0
-    r <- range(v, na.rm = TRUE); d <- r[2] - r[1]
-    return(if (!is.finite(d) || d <= 0) rep(0, length(v)) else (v - r[1]) / d)
-  }
-  X <- as.data.frame(lapply(present, function(nm) suppressWarnings(as.numeric(df[[nm]]))))
-  colnames(X) <- present
-  # Drop columns with all NA or zero variance
-  good <- vapply(X, function(x) {
-    x <- as.numeric(x)
-    any(is.finite(x)) && (suppressWarnings(stats::sd(x, na.rm = TRUE)) > 0)
-  }, logical(1))
-  X <- X[, good, drop = FALSE]
-  if (ncol(X) == 0) {
-    v <- suppressWarnings(as.numeric(df$islet_diam_um))
-    v[!is.finite(v)] <- 0
-    r <- range(v, na.rm = TRUE); d <- r[2] - r[1]
-    return(if (!is.finite(d) || d <= 0) rep(0, length(v)) else (v - r[1]) / d)
-  }
-  # Simple impute NAs with column medians, then scale
-  for (j in seq_len(ncol(X))) {
-    x <- as.numeric(X[[j]])
-    med <- suppressWarnings(stats::median(x, na.rm = TRUE))
-    if (!is.finite(med)) med <- 0
-    x[!is.finite(x)] <- med
-    X[[j]] <- x
-  }
-  Xs <- scale(as.matrix(X))
-  pt <- NULL
-  # Try Diffusion Map if available
-  if (requireNamespace("destiny", quietly = TRUE)) {
-    pt <- tryCatch({
-      dm <- destiny::DiffusionMap(Xs)
-      ev <- destiny::eigenvectors(dm)
-      as.numeric(ev[, 1])
-    }, error = function(e) NULL)
-  }
-  # Try principal curve on top-2 PCs
-  if (is.null(pt) && requireNamespace("princurve", quietly = TRUE)) {
-    pc <- tryCatch(stats::prcomp(Xs, center = TRUE, scale. = TRUE), error = function(e) NULL)
-    if (!is.null(pc) && ncol(pc$x) >= 2) {
-      pt <- tryCatch({
-        fit <- princurve::principal_curve(as.matrix(pc$x[, 1:2, drop = FALSE]))
-        as.numeric(fit$lambda)
-      }, error = function(e) NULL)
-    }
-  }
-  # Fallback: PC1
-  if (is.null(pt)) {
-    pc <- tryCatch(stats::prcomp(Xs, center = TRUE, scale. = TRUE), error = function(e) NULL)
-    if (!is.null(pc)) pt <- as.numeric(pc$x[, 1])
-  }
-  if (is.null(pt)) pt <- rep(0, nrow(df))
-  # Normalize to [0,1]
-  r <- range(pt, na.rm = TRUE); d <- r[2] - r[1]
-  if (!is.finite(d) || d <= 0) return(rep(0, length(pt)))
-  pmin(1, pmax(0, (pt - r[1]) / d))
-}
+## pseudotime removed
 
 summary_stats <- function(df, group_cols, value_col, stat = c("mean_se","mean_sd","median_iqr")) {
   stat <- match.arg(stat)
@@ -479,7 +489,7 @@ ui <- fluidPage(
       uiOutput("region_selector"),
       uiOutput("dynamic_selector"),
       uiOutput("metric_selector"),
-      uiOutput("color_selector"),
+  # color selector removed (pseudotime removed)
       hr(),
       h5("Autoantibody filter (Aab+ donors only)"),
       checkboxGroupInput("aab_flags", NULL,
@@ -490,35 +500,49 @@ ui <- fluidPage(
                                      "mIAA" = "AAb_mIAA"),
                          selected = character(0)),
       radioButtons("aab_logic", "Match (within Aab+)", choices = c("Any", "All"), selected = "Any", inline = TRUE),
-      helpText("Default: all Aab+ donors are included. Selecting one or more autoantibodies restricts only the Aab+ group to donors matching the selection (Any = at least one selected AAb, All = all selected AAbs). ND and T1D groups are unaffected."),
+    helpText("Default: all Aab+ donors are included. Selecting one or more autoantibodies restricts only the Aab+ group to donors matching the selection (Any = at least one selected AAb, All = all selected AAbs). ND and T1D groups are unaffected."),
       checkboxGroupInput("groups", "Donor Status", choices = c("ND", "Aab+", "T1D"), selected = c("ND", "Aab+", "T1D")),
-      sliderInput("binwidth", "Diameter bin width (µm)", min = 10, max = 100, value = 50, step = 5),
       selectInput("curve_norm", "Normalization (plot)",
                   choices = c("None (raw)" = "none", "Global z-score" = "global", "Robust per-donor" = "robust"),
                   selected = "none"),
-      checkboxInput("exclude_zero", "Exclude zero values", value = FALSE),
-      sliderInput("diam_max", "Max islet diameter (µm)", min = 50, max = 1000, value = 1000, step = 10),
       radioButtons("stat", "Statistic",
                    choices = c("Mean±SE" = "mean_se",
                                "Mean±SD" = "mean_sd",
                                "Median + IQR" = "median_iqr"),
                    selected = "mean_se"),
-      selectInput("alpha", "Significance level (alpha)", choices = c("0.05","0.01","0.001"), selected = "0.05"),
-      checkboxInput("show_points", "Show individual points", value = FALSE),
-      sliderInput("pt_size", "Point size", min = 0.3, max = 4.0, value = 0.8, step = 0.1),
-      sliderInput("pt_alpha", "Point transparency", min = 0.05, max = 1.0, value = 0.25, step = 0.05),
+  # moved plot-specific controls below the main plot
       radioButtons("add_smooth", "Trend line", choices = c("None", "LOESS"), selected = "None", inline = TRUE),
       radioButtons("theme_bg", "Background", choices = c("Light","Dark"), selected = "Light", inline = TRUE),
       hr(),
       h5("Export"),
       downloadButton("dl_summary", "Download summary CSV"),
-      downloadButton("dl_stats", "Download stats CSV"),
-      actionButton("run_tests", "Run statistics")
+    downloadButton("dl_stats", "Download stats CSV")
     ),
     mainPanel(
       tabsetPanel(id = "tabs",
-        tabPanel("Plot", plotlyOutput("plt", height = 650), br(), uiOutput("pseudo_ui"), plotlyOutput("pseudo", height = 640)),
+        tabPanel("Plot", 
+                 plotlyOutput("plt", height = 650),
+                 br(),
+                 fluidRow(
+                   column(3, sliderInput("binwidth", "Diameter bin width (µm)", min = 10, max = 100, value = 50, step = 5)),
+                   column(3, sliderInput("diam_max", "Max islet diameter (µm)", min = 50, max = 1000, value = 1000, step = 10)),
+                   column(2, checkboxInput("exclude_zero_top", "Exclude zero values", value = FALSE)),
+                   column(2, checkboxInput("show_points", "Show individual points", value = FALSE)),
+                   column(1, sliderInput("pt_size", "Point size", min = 0.3, max = 4.0, value = 0.8, step = 0.1)),
+                   column(1, sliderInput("pt_alpha", "Point transparency", min = 0.05, max = 1.0, value = 0.25, step = 0.05))
+                 ),
+                 tags$br(),
+                 tags$hr(),
+                 fluidRow(column(3, checkboxInput("exclude_zero_dist", "Exclude zero values (distribution)", value = FALSE))),
+                 uiOutput("dist_ui"),
+                 plotlyOutput("dist", height = 500)
+        ),
         tabPanel("Statistics",
+                 fluidRow(
+                   column(4, selectInput("alpha", "Significance level (alpha)", choices = c("0.05","0.01","0.001"), selected = "0.05")),
+                   column(3, br(), actionButton("run_tests", "Run statistics"))
+                 ),
+                 br(),
                  tableOutput("stats_tbl"),
                  br(),
                  plotlyOutput("stats_plot", height = 320),
@@ -607,12 +631,20 @@ server <- function(input, output, session) {
                  iframe_src = NULL, image_url = NULL)
     if (is.null(base)) return(info)
     params <- list()
-    if (!is.null(default_image_url)) {
-      params[["image_url"]] <- utils::URLencode(default_image_url, reserved = TRUE)
-      info$image_url <- default_image_url
+    # Select image: Use explicit default only; otherwise let Avivator use its packaged default demos
+    sel_url <- NULL
+    if (!is.null(default_image_url) && nzchar(default_image_url)) {
+      sel_url <- default_image_url
     }
-    if (!is.null(channel_config_encoded)) {
-      params[["channel_config"]] <- utils::URLencode(channel_config_encoded, reserved = TRUE)
+    if (!is.null(sel_url)) {
+      params[["image_url"]] <- utils::URLencode(sel_url, reserved = TRUE)
+      info$image_url <- sel_url
+    }
+    # Channel config based on Channel_names mapping (base64-encoded per viewer expectation)
+    ch_b64 <- tryCatch(build_channel_config_b64(channel_names_vec), error = function(e) NULL)
+    if (!is.null(ch_b64) && nzchar(ch_b64)) {
+      # URL-encode to be safe; the viewer will decodeURIComponent before atob as needed
+      params[["channel_config"]] <- utils::URLencode(ch_b64, reserved = TRUE)
     }
     query <- NULL
     if (length(params)) {
@@ -632,8 +664,8 @@ server <- function(input, output, session) {
     }
   })
 
-  # Raw per-islet dataset (no binning), aligned with current selections
-  raw_df <- reactive({
+  # Base per-islet dataset (no binning), aligned with current selections, without zero filtering
+  raw_df_base <- reactive({
     if (!is.null(input$tabs) && identical(input$tabs, "Viewer")) {
       return(prepared()$targets_all[FALSE, , drop = FALSE])
     }
@@ -669,10 +701,6 @@ server <- function(input, output, session) {
       df <- df %>% dplyr::mutate(value = ifelse(is.finite(num) & is.finite(den) & den > 0, 100.0 * num / den, NA_real_))
     }
     out <- df %>% dplyr::mutate(donor_status = `Donor Status`) %>% dplyr::filter(!is.na(value))
-    # Optional global filters
-    if (isTRUE(input$exclude_zero)) {
-      out <- out %>% dplyr::filter(value != 0)
-    }
     if (!is.null(input$diam_max) && is.finite(as.numeric(input$diam_max))) {
       out <- out %>% dplyr::filter(is.finite(islet_diam_um) & islet_diam_um <= as.numeric(input$diam_max))
     }
@@ -693,6 +721,15 @@ server <- function(input, output, session) {
       }
       out <- dplyr::bind_rows(others, aabp)
       }
+    }
+    out
+  })
+
+  # Raw per-islet dataset, with top-plot zero filtering applied if selected
+  raw_df <- reactive({
+    out <- raw_df_base()
+    if (isTRUE(input$exclude_zero_top)) {
+      out <- out %>% dplyr::filter(value != 0)
     }
     out
   })
@@ -745,113 +782,30 @@ server <- function(input, output, session) {
     }
   })
 
-  output$color_selector <- renderUI({
-    # Only relevant when counts are selected (for pseudotime scatter)
-    show <- (identical(input$mode, "Targets") && !is.null(input$target_metric) && input$target_metric == "Counts") ||
-            (identical(input$mode, "Markers") && !is.null(input$marker_metric) && input$marker_metric == "Counts")
-    if (!show) return(NULL)
-    if (identical(input$mode, "Targets")) {
-      selectInput("color_by", "Color by", choices = c("Donor Status" = "donor_status", "Target class" = "class", "Case ID" = "Case ID"), selected = "donor_status")
-    } else if (identical(input$mode, "Markers")) {
-      selectInput("color_by", "Color by", choices = c("Donor Status" = "donor_status", "Marker" = "marker", "Case ID" = "Case ID"), selected = "donor_status")
-    } else {
-      NULL
-    }
-  })
+  # color selector removed
 
-  # Dataset for plotting given mode
+  # Dataset for plotting: build from raw_df then bin and normalize
   plot_df <- reactive({
-    pd <- prepared()
-    groups <- input$groups
-    w <- input$which
-    bw <- input$binwidth
-    # Ensure a selection is made for modes that require a variable
-    if (identical(input$mode, "Targets") || identical(input$mode, "Markers")) {
-      req(!is.null(w), length(w) > 0)
-    }
-    # Provide a safe default for Composition before input$which initializes
-    if (identical(input$mode, "Composition")) {
-      if (is.null(w) || !(w %in% c("Ins_any","Glu_any","Stt_any"))) {
-        w <- "Ins_any"
-      }
-    }
-
-    if (identical(input$mode, "Targets")) {
-      req(input$region)
-      region_tag <- paste0("islet_", tolower(input$region))
-      df <- pd$targets_all %>% filter(`Donor Status` %in% groups, class == w, tolower(type) == region_tag)
-      df <- df %>% filter(is.finite(islet_diam_um))
-      df <- bin_islet_sizes(df, "islet_diam_um", bw)
-      if (!is.null(input$target_metric) && input$target_metric == "Counts") {
-        df <- df %>% mutate(value = as.numeric(count))
-      } else {
-        df <- df %>% mutate(value = as.numeric(area_density))
-      }
-    } else if (identical(input$mode, "Markers")) {
-      req(input$region)
-      region_tag <- paste0("islet_", tolower(input$region))
-      df <- pd$markers_all %>% filter(`Donor Status` %in% groups, marker == w, tolower(region_type) == region_tag)
-      df <- df %>% filter(is.finite(islet_diam_um))
-      df <- bin_islet_sizes(df, "islet_diam_um", bw)
-      # Markers metric: counts or % positive (n positive / total * 100)
-      if (!is.null(input$marker_metric) && input$marker_metric == "Counts") {
-        df <- df %>% mutate(value = suppressWarnings(as.numeric(pos_count)))
-      } else {
-        num <- suppressWarnings(as.numeric(df$pos_count))
-        den <- suppressWarnings(as.numeric(df$n_cells))
-        df <- df %>% mutate(value = ifelse(is.finite(num) & is.finite(den) & den > 0, 100.0 * num / den, NA_real_))
-      }
-    } else {
-      df <- pd$comp %>% filter(`Donor Status` %in% groups)
-      df <- df %>% filter(is.finite(islet_diam_um))
-      df <- bin_islet_sizes(df, "islet_diam_um", bw)
-      # Composition fraction as percent of total cells
-      num <- suppressWarnings(as.numeric(df[[w]]))
-      den <- suppressWarnings(as.numeric(df$cells_total))
-      df <- df %>% mutate(value = ifelse(is.finite(num) & is.finite(den) & den > 0, 100.0 * num / den, NA_real_))
-    }
-
-    # Apply AAb filters (only within the Aab+ donor group) if requested
-    out <- df %>% mutate(donor_status = `Donor Status`) %>% filter(!is.na(value))
-    # Optional global filters
-    if (isTRUE(input$exclude_zero)) {
-      out <- out %>% dplyr::filter(value != 0)
-    }
-    if (!is.null(input$diam_max) && is.finite(as.numeric(input$diam_max))) {
-      out <- out %>% dplyr::filter(is.finite(islet_diam_um) & islet_diam_um <= as.numeric(input$diam_max))
-    }
-    flags <- input$aab_flags
-    if (!is.null(flags) && length(flags) > 0) {
-      avail <- intersect(flags, colnames(out))
-      if (length(avail) > 0) {
-      others <- out %>% dplyr::filter(donor_status != "Aab+")
-      aabp   <- out %>% dplyr::filter(donor_status == "Aab+")
-      if (nrow(aabp) > 0) {
-        mat <- as.data.frame(aabp[, avail, drop = FALSE])
-        for (cc in colnames(mat)) mat[[cc]] <- as.logical(mat[[cc]])
-        hits <- rowSums(mat, na.rm = TRUE)
-        keep <- if (identical(input$aab_logic, "All")) hits >= length(avail) else hits >= 1
-        aabp <- aabp[keep, , drop = FALSE]
-      }
-      out <- dplyr::bind_rows(others, aabp)
-      }
-    }
+    df <- raw_df()
+    req(nrow(df) > 0)
+    # attach bins on the fly
+    df <- bin_islet_sizes(df, "islet_diam_um", input$binwidth)
     # Apply normalization for main plot if requested
     norm_mode <- input$curve_norm
-    if (identical(norm_mode, "robust") && all(c("Case ID") %in% colnames(out))) {
-      out <- out %>% dplyr::group_by(`Case ID`) %>% dplyr::mutate(
+    if (identical(norm_mode, "robust") && all(c("Case ID") %in% colnames(df))) {
+      df <- df %>% dplyr::group_by(`Case ID`) %>% dplyr::mutate(
         .med = suppressWarnings(stats::median(value, na.rm = TRUE)),
         .mad = suppressWarnings(stats::mad(value, center = .med, constant = 1, na.rm = TRUE)),
         .r_sd = ifelse(is.finite(.mad) & .mad > 0, .mad * 1.4826, NA_real_),
         value = ifelse(is.finite(.r_sd) & .r_sd > 0, (value - .med) / .r_sd, value)
       ) %>% dplyr::ungroup() %>% dplyr::select(-.med, -.mad, -`.r_sd`)
     } else if (identical(norm_mode, "global")) {
-      mu <- mean(out$value, na.rm = TRUE)
-      sdv <- sd(out$value, na.rm = TRUE)
+      mu <- mean(df$value, na.rm = TRUE)
+      sdv <- sd(df$value, na.rm = TRUE)
       if (!is.finite(sdv) || sdv == 0) sdv <- 1
-      out$value <- (out$value - mu) / sdv
+      df$value <- (df$value - mu) / sdv
     }
-    out
+    df
   })
 
   # Summary with mean and SE per bin per group
@@ -887,15 +841,28 @@ server <- function(input, output, session) {
                    robust = paste0(ylab_base, " (robust z)"),
                    ylab_base)
 
+    # Build title reflecting selection; for Composition, indicate fraction (%)
+    title_text <- if (identical(input$mode, "Targets")) {
+      paste0(input$which, " vs islet size")
+    } else if (identical(input$mode, "Markers")) {
+      paste0(input$which, " vs islet size")
+    } else {
+      nm <- switch(input$which,
+                   Ins_any = "Insulin+ fraction",
+                   Glu_any = "Glucagon+ fraction",
+                   Stt_any = "Somatostatin+ fraction",
+                   input$which)
+      paste0(nm, " vs islet size")
+    }
+
     p <- ggplot(sm, aes(x = diam_mid, y = y, color = donor_status, group = donor_status)) +
       geom_line(alpha = ifelse(!is.null(input$add_smooth) && input$add_smooth == "LOESS", 0, 1)) +
       geom_point() +
       geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0) +
-      labs(x = "Islet diameter (µm)",
-           y = ylab,
-           color = "Donor Status",
-           title = paste0(if (identical(input$mode, "Targets")) input$which else if (identical(input$mode, "Markers")) input$which else input$which,
-                          " vs islet size")) +
+   labs(x = "Islet diameter (µm)",
+     y = ylab,
+     color = "Donor Status",
+     title = title_text) +
       scale_color_manual(values = color_map, breaks = grp_levels, drop = FALSE) +
       theme_minimal(base_size = 14)
 
@@ -1076,9 +1043,10 @@ server <- function(input, output, session) {
     if (is.null(vi$base)) {
       return(tagList(
         tags$div(style = "color:#b00;", "Local Avivator static build not found under shiny/www/avivator."),
-        tags$div(style = "color:#666; font-size:90%;", "Run scripts/install_avivator.sh (Node ≥ 18) or place a prebuilt bundle under shiny/www/avivator.")
+        tags$div(style = "color:#666; font-size:90%;", "To install: run scripts/install_avivator.sh (requires Node ≥ 18) or place a prebuilt bundle under shiny/www/avivator.")
       ))
     }
+    # Suppress any 'Viewing:' text by default
     NULL
   })
 
@@ -1090,155 +1058,97 @@ output$vit_view <- renderUI({
       tags$div(style = "color:#666; font-size:90%;", "To install: run scripts/install_avivator.sh (requires Node ≥ 18) or place a prebuilt bundle under shiny/www/avivator.")
     ))
   }
-  tags$iframe(src = vi$iframe_src,
+  tagList(
+    tags$iframe(src = vi$iframe_src,
               width = "100%",
               frameBorder = 0,
               allowfullscreen = NA,
-              style = "width:100%; height:calc(100vh - 140px); border:0;")
+              style = "width:100%; height:calc(100vh - 140px); border:0;"),
+    tags$div(style = "margin-top:6px;",
+      tags$a(href = vi$iframe_src, target = "_blank", rel = "noopener", "Open viewer in a new tab")
+    )
+  )
 })
 
   # Pseudotime scatter when counts are selected (scaled counts vs pseudotime)
-  output$pseudo_ui <- renderUI({
-    show <- (identical(input$mode, "Targets") && !is.null(input$target_metric) && input$target_metric == "Counts") ||
-            (identical(input$mode, "Markers") && !is.null(input$marker_metric) && input$marker_metric == "Counts")
-    if (!show) return(NULL)
+  # Distribution plot UI (violin/box)
+  output$dist_ui <- renderUI({
     tagList(
-      tags$h4("Pseudotime scatter (scaled counts)"),
-      helpText("Unbiased pseudotime is inferred from available islet features (no group labels), using diffusion map or principal curve when available, else PC1."),
+      tags$h4("Distribution by donor status"),
       fluidRow(
         column(4,
-          checkboxInput("pseudo_smooth", "Add LOESS smooth", value = TRUE)
+          radioButtons("dist_type", "Plot type", choices = c("Violin", "Box"), selected = "Violin", inline = TRUE)
         ),
         column(4,
-          selectInput("pseudo_norm", "Normalization",
-                      choices = c("None (raw)" = "none", "Global z-score" = "global", "Robust per-donor" = "robust"),
-                      selected = "robust")
+          checkboxInput("dist_show_points", "Show jittered points", value = TRUE)
         ),
         column(4,
-          checkboxInput("pseudo_clip", "Clip color range (2–98%)", value = TRUE)
+          sliderInput("dist_pt_alpha", "Point transparency", min = 0.05, max = 1.0, value = 0.25, step = 0.05)
         )
       ),
       fluidRow(
-        column(6,
-          selectInput("pseudo_corr", "Correlation vs pseudotime", choices = c("Kendall", "Spearman", "None"), selected = "Kendall")
+        column(4,
+          sliderInput("dist_pt_size", "Point size", min = 0.3, max = 4.0, value = 0.7, step = 0.1)
         )
-      ),
-      tableOutput("pseudo_stats")
+      )
     )
   })
 
-  output$pseudo <- renderPlotly({
-    show <- (identical(input$mode, "Targets") && !is.null(input$target_metric) && input$target_metric == "Counts") ||
-            (identical(input$mode, "Markers") && !is.null(input$marker_metric) && input$marker_metric == "Counts")
-    if (!show) return(NULL)
-    rdf <- raw_df()
-    req(nrow(rdf) > 0)
-    # Unbiased pseudotime from features (no group labels)
-    rdf$pseudotime <- compute_unbiased_pseudotime(rdf)
-    # Normalization selection for y-values
-    v_raw <- suppressWarnings(as.numeric(rdf$value))
-    norm_mode <- input$pseudo_norm
+  # Distribution plot: violin/box per donor group for current raw_df()
+  output$dist <- renderPlotly({
+    rdf <- raw_df_base()
+    if (is.null(rdf) || nrow(rdf) == 0) return(NULL)
+    if (isTRUE(input$exclude_zero_dist)) {
+      rdf <- rdf %>% dplyr::filter(value != 0)
+    }
+    # Apply normalization consistent with main plot
+    norm_mode <- input$curve_norm
     if (identical(norm_mode, "robust") && all(c("Case ID") %in% colnames(rdf))) {
-      rdf$scaled <- v_raw
       rdf <- rdf %>% dplyr::group_by(`Case ID`) %>% dplyr::mutate(
-        .med = suppressWarnings(stats::median(scaled, na.rm = TRUE)),
-        .mad = suppressWarnings(stats::mad(scaled, center = .med, constant = 1, na.rm = TRUE)),
+        .med = suppressWarnings(stats::median(value, na.rm = TRUE)),
+        .mad = suppressWarnings(stats::mad(value, center = .med, constant = 1, na.rm = TRUE)),
         .r_sd = ifelse(is.finite(.mad) & .mad > 0, .mad * 1.4826, NA_real_),
-        scaled = ifelse(is.finite(.r_sd) & .r_sd > 0, (scaled - .med) / .r_sd, scaled)
+        value = ifelse(is.finite(.r_sd) & .r_sd > 0, (value - .med) / .r_sd, value)
       ) %>% dplyr::ungroup() %>% dplyr::select(-.med, -.mad, -`.r_sd`)
-      y_lab <- "Scaled (robust z)"
     } else if (identical(norm_mode, "global")) {
-      mu <- mean(v_raw, na.rm = TRUE)
-      sdv <- sd(v_raw, na.rm = TRUE)
+      mu <- mean(rdf$value, na.rm = TRUE)
+      sdv <- sd(rdf$value, na.rm = TRUE)
       if (!is.finite(sdv) || sdv == 0) sdv <- 1
-      rdf$scaled <- (v_raw - mu) / sdv
-      y_lab <- "Scaled (z)"
+      rdf$value <- (rdf$value - mu) / sdv
+    }
+    # Ensure factor order
+    rdf$donor_status <- factor(rdf$donor_status, levels = c("ND","Aab+","T1D"))
+    ylab_base <- if (identical(input$mode, "Targets")) {
+      if (!is.null(input$target_metric) && input$target_metric == "Counts") "Target count" else "Target density (per µm²)"
+    } else if (identical(input$mode, "Markers")) {
+      if (!is.null(input$marker_metric) && input$marker_metric == "Counts") "Positive cell count" else "n positive / total (%)"
     } else {
-      rdf$scaled <- v_raw
-      y_lab <- "Count"
+      "% composition"
     }
-    # color mapping and jitter settings
-    rdf$donor_status <- factor(rdf$donor_status, levels = c("ND", "Aab+", "T1D"))
-    if ("Case ID" %in% colnames(rdf)) {
-      rdf$Case_ID_factor <- factor(rdf$`Case ID`)
-    }
-    finite_scaled <- rdf$scaled[is.finite(rdf$scaled)]
-    if (length(finite_scaled) >= 2) {
-      y_trim <- stats::quantile(finite_scaled, probs = c(0.01, 0.99), na.rm = TRUE, type = 7)
-      if (!all(is.finite(y_trim))) {
-        rng <- range(finite_scaled, na.rm = TRUE)
-        y_trim <- if (all(is.finite(rng))) rng else c(0, 0)
-      }
-    } else if (length(finite_scaled) == 1) {
-      val <- finite_scaled[1]
-      y_trim <- c(val - 0.5, val + 0.5)
+    ylab <- switch(input$curve_norm,
+                   none = ylab_base,
+                   global = paste0(ylab_base, " (scaled z)"),
+                   robust = paste0(ylab_base, " (robust z)"),
+                   ylab_base)
+    g <- ggplot(rdf, aes(x = donor_status, y = value, fill = donor_status))
+    if (!is.null(input$dist_type) && input$dist_type == "Box") {
+      g <- g + geom_boxplot(outlier.shape = NA, alpha = 0.8)
     } else {
-      y_trim <- c(0, 0)
+      g <- g + geom_violin(trim = FALSE, alpha = 0.8)
     }
-    spread <- diff(y_trim)
-    if (!is.finite(spread) || spread <= 0) spread <- 1
-    jitter_width <- 0.035
-    jitter_height <- max(spread * 0.06, 0.25)
-    pt_position <- position_jitter(width = jitter_width, height = jitter_height)
-    y_limits <- y_trim + c(-1, 1) * spread * 0.1
-
-    col_by <- input$color_by
-    if (is.null(col_by) || !(col_by %in% colnames(rdf))) col_by <- "donor_status"
-    color_label <- "Color by"
-    color_col <- col_by
-    if (identical(col_by, "Case ID") && "Case_ID_factor" %in% colnames(rdf)) {
-      color_col <- "Case_ID_factor"
-      color_label <- "Donor (Case ID)"
-    } else if (identical(col_by, "donor_status")) {
-      color_label <- "Donor Status"
+    if (isTRUE(input$dist_show_points)) {
+      g <- g + geom_jitter(width = 0.18,
+                           alpha = ifelse(is.null(input$dist_pt_alpha), 0.25, input$dist_pt_alpha),
+                           size = ifelse(is.null(input$dist_pt_size), 0.7, input$dist_pt_size))
     }
-    # When 'Marker' or 'Target class' is chosen, color by count magnitude (continuous)
-    if (identical(col_by, "marker") || identical(col_by, "class")) {
-      plt <- ggplot(rdf, aes(x = pseudotime, y = scaled, color = value)) +
-        geom_point(alpha = input$pt_alpha, size = input$pt_size, position = pt_position) +
-        scale_x_continuous(limits = c(0,1)) +
-        labs(x = "Pseudotime", y = y_lab, color = "Count") +
-        theme_minimal(base_size = 14) +
-        {
-          # Apply percentile clipping if requested
-          if (isTRUE(input$pseudo_clip)) {
-            lim <- stats::quantile(rdf$value, probs = c(0.02, 0.98), na.rm = TRUE)
-            ggplot2::scale_color_viridis_c(option = "viridis", end = 0.95, limits = lim, oob = scales::squish)
-          } else {
-            ggplot2::scale_color_viridis_c(option = "viridis", end = 0.95)
-          }
-        } +
-        guides(color = guide_colorbar(title = "Count"))
-    } else {
-      plt <- ggplot(rdf, aes(x = pseudotime, y = scaled, color = .data[[color_col]])) +
-        geom_point(alpha = input$pt_alpha, size = input$pt_size, position = pt_position) +
-        scale_x_continuous(limits = c(0,1)) +
-        labs(x = "Pseudotime", y = y_lab, color = color_label) +
-        theme_minimal(base_size = 14)
-      if (identical(color_col, "donor_status")) {
-        plt <- plt + scale_color_manual(values = c("ND" = "#1f77b4", "Aab+" = "#ff7f0e", "T1D" = "#d62728"),
-                                        drop = FALSE) +
-          guides(color = guide_legend(order = 1))
-      } else if (is.factor(rdf[[color_col]])) {
-        levs <- levels(rdf[[color_col]])
-        pal <- setNames(scales::hue_pal()(length(levs)), levs)
-        plt <- plt + scale_color_manual(values = pal, na.translate = FALSE)
-      }
-    }
-    if (all(is.finite(y_limits))) {
-      plt <- plt + scale_y_continuous(limits = y_limits, oob = scales::squish)
-    }
-    # Keep a simple 0..1 axis for unbiased pseudotime
-    # optional LOESS smoothing overlay (single global trend)
-    if (isTRUE(input$pseudo_smooth)) {
-      plt <- plt + geom_smooth(se = FALSE, method = "loess", span = 0.6, color = "#444444")
-    }
+    g <- g + scale_fill_manual(values = c("ND" = "#1f77b4", "Aab+" = "#ff7f0e", "T1D" = "#d62728"), guide = "none") +
+      labs(x = "Donor Status", y = ylab, title = "Distribution across donor groups") +
+      theme_minimal(base_size = 14)
     if (!is.null(input$theme_bg) && input$theme_bg == "Dark") {
-      plt <- plt + theme(
+      g <- g + theme(
         plot.background = element_rect(fill = "#000000", colour = NA),
         panel.background = element_rect(fill = "#000000", colour = NA),
         panel.grid.major = element_line(color = "#333333"),
-        panel.grid.minor = element_line(color = "#222222"),
         axis.text = element_text(color = "#e6e6e6"),
         axis.title = element_text(color = "#f0f0f0"),
         plot.title = element_text(color = "#f0f0f0"),
@@ -1246,53 +1156,10 @@ output$vit_view <- renderUI({
         legend.title = element_text(color = "#f0f0f0")
       )
     }
-    ggplotly(plt)
+    ggplotly(g)
   })
 
-  # Correlation summary vs pseudotime for the current subset
-  output$pseudo_stats <- renderTable({
-    show <- (identical(input$mode, "Targets") && !is.null(input$target_metric) && input$target_metric == "Counts") ||
-            (identical(input$mode, "Markers") && !is.null(input$marker_metric) && input$marker_metric == "Counts")
-    if (!show) return(NULL)
-    method <- input$pseudo_corr
-    if (is.null(method) || identical(method, "None")) return(NULL)
-    rdf <- raw_df()
-    if (is.null(rdf) || !nrow(rdf)) return(NULL)
-    # compute unbiased pseudotime same as in the plot
-    pt <- compute_unbiased_pseudotime(rdf)
-    # Use same normalization choice as the plot
-    v_raw <- suppressWarnings(as.numeric(rdf$value))
-    norm_mode <- input$pseudo_norm
-    if (identical(norm_mode, "robust") && all(c("Case ID") %in% colnames(rdf))) {
-      rdf$scaled <- v_raw
-      rdf <- rdf %>% dplyr::group_by(`Case ID`) %>% dplyr::mutate(
-        .med = suppressWarnings(stats::median(scaled, na.rm = TRUE)),
-        .mad = suppressWarnings(stats::mad(scaled, center = .med, constant = 1, na.rm = TRUE)),
-        .r_sd = ifelse(is.finite(.mad) & .mad > 0, .mad * 1.4826, NA_real_),
-        scaled = ifelse(is.finite(.r_sd) & .r_sd > 0, (scaled - .med) / .r_sd, scaled)
-      ) %>% dplyr::ungroup() %>% dplyr::select(-.med, -.mad, -`.r_sd`)
-      v <- rdf$scaled
-    } else if (identical(norm_mode, "global")) {
-      mu <- mean(v_raw, na.rm = TRUE)
-      sdv <- sd(v_raw, na.rm = TRUE)
-      if (!is.finite(sdv) || sdv == 0) sdv <- 1
-      v <- (v_raw - mu) / sdv
-    } else {
-      v <- v_raw
-    }
-    # choose method
-    m <- if (identical(method, "Spearman")) "spearman" else "kendall"
-    ct <- tryCatch(cor.test(pt, v, method = m, exact = FALSE), error = function(e) NULL)
-    if (is.null(ct)) return(NULL)
-    stat_name <- if (identical(method, "Spearman")) "rho" else "tau"
-    data.frame(
-      method = method,
-      estimate = unname(ct$estimate),
-      statistic = stat_name,
-      p_value = unname(ct$p.value),
-      stringsAsFactors = FALSE
-    )
-  })
+  # pseudotime stats removed
 
   output$dl_summary <- downloadHandler(
     filename = function() {
