@@ -25,7 +25,7 @@ R -q -e 'shiny::runApp("shiny", launch.browser=TRUE)'
 
 ## Notes
 
-- Islet area is derived from `Islet_Targets` rows where `type == "islet_union"` (`region_um2`). Diameter = `2 * sqrt(area/pi)`.
+- Islet diameter is standardized to CORE area: derived from `Islet_Targets` rows where `type == "islet_core"` (core `region_um2`). Diameter = `2 * sqrt(core_area/pi)`.
 - Band-region rows are used for markers (`region_type == "islet_band"`) and targets (`type == "islet_band"`).
 - Binning is by diameter (µm); default bin width = 50 µm. Adjust in the sidebar.
 - Markers use `% positive` (100 × `pos_frac`). Targets use `area_density` by class.

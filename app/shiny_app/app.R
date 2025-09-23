@@ -8,12 +8,14 @@ library(ggplot2)
 library(plotly)
 library(broom)
 library(jsonlite)
-## for base64 encoding channel_config payload to Avivator
 ## (installed by scripts/install_shiny_deps.R)
 suppressPackageStartupMessages({
   if (!requireNamespace("base64enc", quietly = TRUE)) {
     stop("Package 'base64enc' is required. Run scripts/install_shiny_deps.R to install dependencies.")
   }
+  # Optional: trajectory inference deps (installed by scripts/install_shiny_deps.R)
+  traj_pkgs <- c("slingshot","SingleCellExperiment","destiny")
+  .traj_available <<- all(vapply(traj_pkgs, requireNamespace, quietly = TRUE, FUN.VALUE = logical(1)))
 })
 
 
@@ -478,8 +480,12 @@ per_bin_kendall <- function(df, bin_col, group_col, value_col, mid_col = "diam_m
 
 ui <- fluidPage(
   useShinyjs(),
-  tags$head(tags$style(HTML("\n    body.viewer-mode div.col-sm-4,\n    body.viewer-mode div.col-sm-3,\n    body.viewer-mode div.col-lg-3 {\n      display: none !important;\n    }\n    body.viewer-mode div.col-sm-8,\n    body.viewer-mode div.col-lg-9 {\n      width: 100% !important;\n      max-width: 100% !important;\n      flex: 0 0 100%;\n    }\n    body.viewer-mode .tab-content {\n      padding-left: 0 !important;\n      padding-right: 0 !important;\n    }\n  "))),
+  tags$head(tags$style(HTML("\n    body.viewer-mode div.col-sm-4,\n    body.viewer-mode div.col-sm-3,\n    body.viewer-mode div.col-lg-3 {\n      display: none !important;\n    }\n    body.viewer-mode div.col-sm-8,\n    body.viewer-mode div.col-lg-9 {\n      width: 100% !important;\n      max-width: 100% !important;\n      flex: 0 0 100%;\n    }\n    body.viewer-mode .tab-content {\n      padding-left: 0 !important;\n      padding-right: 0 !important;\n    }\n    #bg_selector .radio-inline { margin-right:8px; }\n    #bg_selector { font-size: 13px; }\n  "))),
   titlePanel("Islet Area Distributions"),
+  # Global background selector (top-right)
+  tags$div(id = "bg_selector", style = "position:absolute; top:10px; right:20px; z-index:1000; background:rgba(255,255,255,0.8); padding:4px 10px; border-radius:4px;",
+           radioButtons("theme_bg", label = NULL, choices = c("Light","Dark"), selected = "Light", inline = TRUE)
+  ),
   uiOutput("theme_css"),
   sidebarLayout(
     sidebarPanel(
@@ -491,51 +497,97 @@ ui <- fluidPage(
       uiOutput("metric_selector"),
   # color selector removed (pseudotime removed)
       hr(),
-      h5("Autoantibody filter (Aab+ donors only)"),
-      checkboxGroupInput("aab_flags", NULL,
-                         choices = c("GADA" = "AAb_GADA",
-                                     "IA2A" = "AAb_IA2A",
-                                     "ZnT8A" = "AAb_ZnT8A",
-                                     "IAA" = "AAb_IAA",
-                                     "mIAA" = "AAb_mIAA"),
-                         selected = character(0)),
-      radioButtons("aab_logic", "Match (within Aab+)", choices = c("Any", "All"), selected = "Any", inline = TRUE),
-    helpText("Default: all Aab+ donors are included. Selecting one or more autoantibodies restricts only the Aab+ group to donors matching the selection (Any = at least one selected AAb, All = all selected AAbs). ND and T1D groups are unaffected."),
-      checkboxGroupInput("groups", "Donor Status", choices = c("ND", "Aab+", "T1D"), selected = c("ND", "Aab+", "T1D")),
-      selectInput("curve_norm", "Normalization (plot)",
-                  choices = c("None (raw)" = "none", "Global z-score" = "global", "Robust per-donor" = "robust"),
-                  selected = "none"),
-      radioButtons("stat", "Statistic",
-                   choices = c("Mean±SE" = "mean_se",
-                               "Mean±SD" = "mean_sd",
-                               "Median + IQR" = "median_iqr"),
-                   selected = "mean_se"),
+      conditionalPanel(
+        condition = "input.tabs != 'Trajectory'",
+        h5("Autoantibody filter (Aab+ donors only)"),
+        checkboxGroupInput("aab_flags", NULL,
+                           choices = c("GADA" = "AAb_GADA",
+                                       "IA2A" = "AAb_IA2A",
+                                       "ZnT8A" = "AAb_ZnT8A",
+                                       "IAA" = "AAb_IAA",
+                                       "mIAA" = "AAb_mIAA"),
+                           selected = character(0)),
+        radioButtons("aab_logic", "Match (within Aab+)", choices = c("Any", "All"), selected = "Any", inline = TRUE),
+        helpText("Default: all Aab+ donors are included. Selecting one or more autoantibodies restricts only the Aab+ group to donors matching the selection (Any = at least one selected AAb, All = all selected AAbs). ND and T1D groups are unaffected.")
+      ),
+      conditionalPanel(
+        condition = "input.tabs != 'Trajectory'",
+        checkboxGroupInput("groups", "Donor Status", choices = c("ND", "Aab+", "T1D"), selected = c("ND", "Aab+", "T1D"))
+      ),
+      conditionalPanel(
+        condition = "input.tabs != 'Trajectory'",
+        selectInput("curve_norm", "Normalization (plot)",
+                    choices = c("None (raw)" = "none", "Global z-score" = "global", "Robust per-donor" = "robust"),
+                    selected = "none"),
+        radioButtons("stat", "Statistic",
+                     choices = c("Mean±SE" = "mean_se",
+                                 "Mean±SD" = "mean_sd",
+                                 "Median + IQR" = "median_iqr"),
+                     selected = "mean_se")
+      ),
   # moved plot-specific controls below the main plot
-      radioButtons("add_smooth", "Trend line", choices = c("None", "LOESS"), selected = "None", inline = TRUE),
-      radioButtons("theme_bg", "Background", choices = c("Light","Dark"), selected = "Light", inline = TRUE),
+      conditionalPanel(
+        condition = "input.tabs != 'Trajectory'",
+        radioButtons("add_smooth", "Trend line", choices = c("None", "LOESS"), selected = "None", inline = TRUE)
+      ),
       hr(),
-      h5("Export"),
-      downloadButton("dl_summary", "Download summary CSV"),
-    downloadButton("dl_stats", "Download stats CSV")
+      conditionalPanel(
+        condition = "input.tabs != 'Trajectory'",
+        h5("Export"),
+        downloadButton("dl_summary", "Download summary CSV"),
+        downloadButton("dl_stats", "Download stats CSV")
+      )
     ),
     mainPanel(
       tabsetPanel(id = "tabs",
         tabPanel("Plot", 
                  plotlyOutput("plt", height = 650),
                  br(),
-                 fluidRow(
-                   column(3, sliderInput("binwidth", "Diameter bin width (µm)", min = 10, max = 100, value = 50, step = 5)),
-                   column(3, sliderInput("diam_max", "Max islet diameter (µm)", min = 50, max = 1000, value = 1000, step = 10)),
-                   column(2, checkboxInput("exclude_zero_top", "Exclude zero values", value = FALSE)),
-                   column(2, checkboxInput("show_points", "Show individual points", value = FALSE)),
-                   column(1, sliderInput("pt_size", "Point size", min = 0.3, max = 4.0, value = 0.8, step = 0.1)),
-                   column(1, sliderInput("pt_alpha", "Point transparency", min = 0.05, max = 1.0, value = 0.25, step = 0.05))
-                 ),
+       fluidRow(
+         column(4,
+           sliderInput("binwidth", "Diameter bin width (µm)", min = 10, max = 100, value = 50, step = 5),
+           sliderInput("diam_max", "Max islet diameter (µm)", min = 50, max = 1000, value = 1000, step = 10)
+         ),
+         column(4,
+           checkboxInput("exclude_zero_top", "Exclude zero values", value = FALSE),
+           checkboxInput("show_points", "Show individual points", value = FALSE)
+         ),
+         column(4,
+           sliderInput("pt_size", "Point size", min = 0.3, max = 4.0, value = 0.8, step = 0.1),
+           sliderInput("pt_alpha", "Point transparency", min = 0.05, max = 1.0, value = 0.25, step = 0.05)
+         )
+       ),
                  tags$br(),
                  tags$hr(),
                  fluidRow(column(3, checkboxInput("exclude_zero_dist", "Exclude zero values (distribution)", value = FALSE))),
                  uiOutput("dist_ui"),
                  plotlyOutput("dist", height = 500)
+        ),
+        tabPanel("Trajectory",
+                 h4("Precomputed pseudotime (DiffusionMap + Slingshot)"),
+                 uiOutput("traj_pkg_warn"),
+                 fluidRow(
+                   column(3, selectInput("traj_view", "View",
+                                         choices = c("Global", "[0,10)", "[10,20)", "[20,35)", "[35,50)", "[50,100)", "[100,200)", ">200"),
+                                         selected = "Global")),
+                   column(4, htmlOutput("traj_color_caption")),
+                   column(5,
+                          selectInput("traj_transform", "Pseudotime transform (Global)",
+                                      choices = c("Raw" = "raw",
+                                                  "Tail compress" = "tail",
+                                                  "Monotone spline" = "mono",
+                                                  "Soft rank" = "soft_rank"),
+                                      selected = "raw")
+                   )
+                 ),
+                 br(),
+                 plotlyOutput("traj_scatter", height = 420),
+                 plotlyOutput("traj_status_heat", height = 140),
+                 br(),
+                 h4("Feature associations with pseudotime (view-specific)"),
+                 tableOutput("traj_assoc"),
+                 br(),
+                 downloadButton("dl_pseudotime", "Download pseudotime CSV")
         ),
         tabPanel("Statistics",
                  fluidRow(
@@ -548,14 +600,6 @@ ui <- fluidPage(
                  plotlyOutput("stats_plot", height = 320),
                  br(),
                  plotlyOutput("pairwise_plot", height = 320)
-        ),
-        tabPanel("Data QA",
-                 h4("Per-donor data integrity checks"),
-                 p("Each donor should have: (i) the same number of islets across comp/markers/targets, and (ii) 3× as many distinct region rows in markers and targets (core, band, union) as in composition."),
-                 tableOutput("qa_table"),
-                 br(),
-                 h4("Mismatches only"),
-                 tableOutput("qa_mismatch")
         ),
         tabPanel("Viewer",
           div(style = "max-width: 1200px;",
@@ -571,6 +615,12 @@ ui <- fluidPage(
 # ---------- Server ----------
 
 server <- function(input, output, session) {
+  # Reactive trigger to force heatmap redraw whenever core selections change
+  traj_refresh <- reactiveVal(0)
+  observeEvent(list(input$mode, input$region, input$which, input$marker_metric, input$target_metric,
+                    input$traj_view, input$groups, input$aab_flags, input$aab_logic), {
+    isolate(traj_refresh(traj_refresh() + 1))
+  }, ignoreNULL = FALSE)
   validate_file <- reactive({
     shiny::validate(shiny::need(file.exists(master_path), paste("Not found:", master_path)))
     master_path
@@ -835,23 +885,23 @@ server <- function(input, output, session) {
     } else {
       "% composition"
     }
-    ylab <- switch(input$curve_norm,
-                   none = ylab_base,
-                   global = paste0(ylab_base, " (scaled z)"),
-                   robust = paste0(ylab_base, " (robust z)"),
-                   ylab_base)
+  nm_mode <- if (!is.null(input$curve_norm) && length(input$curve_norm) == 1) input$curve_norm else "none"
+  ylab <- switch(nm_mode,
+           none = ylab_base,
+           global = paste0(ylab_base, " (scaled z)"),
+           robust = paste0(ylab_base, " (robust z)"),
+           ylab_base)
 
     # Build title reflecting selection; for Composition, indicate fraction (%)
     title_text <- if (identical(input$mode, "Targets")) {
-      paste0(input$which, " vs islet size")
+      paste0(as.character(input$which)[1], " vs islet size")
     } else if (identical(input$mode, "Markers")) {
-      paste0(input$which, " vs islet size")
+      paste0(as.character(input$which)[1], " vs islet size")
     } else {
-      nm <- switch(input$which,
-                   Ins_any = "Insulin+ fraction",
-                   Glu_any = "Glucagon+ fraction",
-                   Stt_any = "Somatostatin+ fraction",
-                   input$which)
+      sel <- as.character(input$which)
+      sel <- if (length(sel) >= 1) sel[1] else NA_character_
+      labels_map <- c(Ins_any = "Insulin+ fraction", Glu_any = "Glucagon+ fraction", Stt_any = "Somatostatin+ fraction")
+      nm <- if (!is.na(sel) && sel %in% names(labels_map)) labels_map[[sel]] else if (!is.na(sel)) sel else "selection"
       paste0(nm, " vs islet size")
     }
 
@@ -931,7 +981,7 @@ server <- function(input, output, session) {
     }
 
     gg <- ggplotly(p)
-    gg <- gg %>% layout(legend = list(orientation = "h", x = 0, y = -0.15))
+    gg <- gg %>% layout(legend = list(orientation = "h", y = 1.08, yanchor = "bottom", x = 0.5, xanchor = "center"))
     gg
   })
 
@@ -990,7 +1040,7 @@ server <- function(input, output, session) {
     if (!is.null(input$tabs) && identical(input$tabs, "Viewer")) return(NULL)
     st <- stats_data()
     if (is.null(st) || nrow(st) == 0) return(NULL)
-    fmt <- function(x) ifelse(is.na(x), NA_character_, formatC(x, format = "e", digits = 2))
+  fmt <- function(x) ifelse(is.na(x), NA_character_, formatC(x, format = "e", digits = 6))
     display <- st
     display$p_value <- fmt(display$p_value)
     display$p_adj <- fmt(display$p_adj)
@@ -1014,7 +1064,24 @@ server <- function(input, output, session) {
       labs(x = "Contrast", y = expression(-log[10](p)), fill = "Test type",
            title = "Test significance overview") +
       theme_minimal(base_size = 14)
-    ggplotly(g)
+    p <- ggplotly(g)
+    # In Plotly, box traces may still render outlier points regardless of ggplot2 outlier.shape=NA.
+    # Explicitly disable boxpoints for all box traces so only our jitter points are shown and controlled by sliders.
+    if (!is.null(input$dist_type) && input$dist_type == "Box") {
+      try({
+        for (i in seq_along(p$x$data)) {
+          tr <- p$x$data[[i]]
+          if (!is.null(tr$type) && identical(tr$type, "box")) {
+            p$x$data[[i]]$boxpoints <- FALSE
+            # Also ensure any outlier styling is effectively invisible
+            if (is.null(p$x$data[[i]]$marker)) p$x$data[[i]]$marker <- list()
+            p$x$data[[i]]$marker$outliercolor <- "rgba(0,0,0,0)"
+            p$x$data[[i]]$marker$size <- 0
+          }
+        }
+      }, silent = TRUE)
+    }
+    p
   })
 
   output$pairwise_plot <- renderPlotly({
@@ -1034,7 +1101,7 @@ server <- function(input, output, session) {
       coord_flip() +
       labs(x = "Pairwise contrast", y = "p-value (log scale)", color = "", title = "Pairwise comparison p-values") +
       theme_minimal(base_size = 14)
-    ggplotly(g)
+  ggplotly(g)
   })
 
   # Vitessce embed
@@ -1125,11 +1192,12 @@ output$vit_view <- renderUI({
     } else {
       "% composition"
     }
-    ylab <- switch(input$curve_norm,
-                   none = ylab_base,
-                   global = paste0(ylab_base, " (scaled z)"),
-                   robust = paste0(ylab_base, " (robust z)"),
-                   ylab_base)
+  nm_mode <- if (!is.null(input$curve_norm) && length(input$curve_norm) == 1) input$curve_norm else "none"
+  ylab <- switch(nm_mode,
+           none = ylab_base,
+           global = paste0(ylab_base, " (scaled z)"),
+           robust = paste0(ylab_base, " (robust z)"),
+           ylab_base)
     g <- ggplot(rdf, aes(x = donor_status, y = value, fill = donor_status))
     if (!is.null(input$dist_type) && input$dist_type == "Box") {
       g <- g + geom_boxplot(outlier.shape = NA, alpha = 0.8)
@@ -1137,11 +1205,13 @@ output$vit_view <- renderUI({
       g <- g + geom_violin(trim = FALSE, alpha = 0.8)
     }
     if (isTRUE(input$dist_show_points)) {
-      g <- g + geom_jitter(width = 0.18,
+      g <- g + geom_jitter(aes(color = donor_status),
+                           width = 0.18,
                            alpha = ifelse(is.null(input$dist_pt_alpha), 0.25, input$dist_pt_alpha),
                            size = ifelse(is.null(input$dist_pt_size), 0.7, input$dist_pt_size))
     }
     g <- g + scale_fill_manual(values = c("ND" = "#1f77b4", "Aab+" = "#ff7f0e", "T1D" = "#d62728"), guide = "none") +
+      scale_color_manual(values = c("ND" = "#1f77b4", "Aab+" = "#ff7f0e", "T1D" = "#d62728"), guide = "none") +
       labs(x = "Donor Status", y = ylab, title = "Distribution across donor groups") +
       theme_minimal(base_size = 14)
     if (!is.null(input$theme_bg) && input$theme_bg == "Dark") {
@@ -1158,6 +1228,568 @@ output$vit_view <- renderUI({
     }
     ggplotly(g)
   })
+
+  # ---------- Trajectory (DiffusionMap + Slingshot) ----------
+  output$traj_pkg_warn <- renderUI({ NULL })
+
+  # Define fixed diameter bins per request
+  fixed_bins <- function(x_um) {
+    brks <- c(0,10,20,35,50,100,200, Inf)
+    labs <- c("[0,10)", "[10,20)", "[20,35)", "[35,50)", "[50,100)", "[100,200)", ">200")
+    cut(as.numeric(x_um), breaks = brks, labels = labs, include.lowest = TRUE, right = FALSE)
+  }
+
+  # Build wide feature matrix per islet
+  build_islet_features <- reactive({
+    pd <- prepared()
+    if (is.null(pd)) return(NULL)
+    # Base keys and diameter
+    base <- pd$comp %>% dplyr::select(`Case ID`, `Donor Status`, islet_key, islet_diam_um, cells_total,
+                                      Ins_any, Glu_any, Stt_any)
+    if (nrow(base) == 0) return(NULL)
+    # Composition (CORE): fractions 0..1
+    base <- base %>% dplyr::mutate(
+      comp_frac_INS = ifelse(cells_total > 0, as.numeric(Ins_any)/as.numeric(cells_total), NA_real_),
+      comp_frac_GCG = ifelse(cells_total > 0, as.numeric(Glu_any)/as.numeric(cells_total), NA_real_),
+      comp_frac_SST = ifelse(cells_total > 0, as.numeric(Stt_any)/as.numeric(cells_total), NA_real_)
+    ) %>% dplyr::select(-Ins_any, -Glu_any, -Stt_any)
+
+    # Markers (UNION): use pos_frac (0..1); pivot wider
+    mk <- pd$markers_all %>% dplyr::filter(tolower(region_type) == "islet_union") %>%
+      dplyr::select(`Case ID`, `Donor Status`, islet_key, marker, pos_frac)
+    mk_w <- NULL
+    if (nrow(mk) > 0) {
+      mk_w <- tidyr::pivot_wider(mk, id_cols = c(`Case ID`, `Donor Status`, islet_key),
+                                 names_from = marker, values_from = pos_frac, values_fn = list(pos_frac = mean))
+      colnames(mk_w) <- c(colnames(mk_w)[1:3], paste0("mk_frac_", make.names(colnames(mk_w)[-(1:3)], unique = TRUE)))
+    }
+
+    # Targets (UNION): use area_density; pivot wider
+    tg <- pd$targets_all %>% dplyr::filter(tolower(type) == "islet_union") %>%
+      dplyr::select(`Case ID`, `Donor Status`, islet_key, class, area_density)
+    tg_w <- NULL
+    if (nrow(tg) > 0) {
+      tg_w <- tidyr::pivot_wider(tg, id_cols = c(`Case ID`, `Donor Status`, islet_key),
+                                 names_from = class, values_from = area_density, values_fn = list(area_density = mean))
+      colnames(tg_w) <- c(colnames(tg_w)[1:3], paste0("tg_dens_", make.names(colnames(tg_w)[-(1:3)], unique = TRUE)))
+    }
+
+    # Merge features
+    ff <- base
+    if (!is.null(mk_w)) ff <- dplyr::left_join(ff, mk_w, by = c("Case ID","Donor Status","islet_key"))
+    if (!is.null(tg_w)) ff <- dplyr::left_join(ff, tg_w, by = c("Case ID","Donor Status","islet_key"))
+
+    # Attach demographics if present in master sheets
+    donors_meta <- NULL
+    m <- master()
+    for (s in c("comp","targets","markers","lgals3")) {
+      df <- m[[s]]
+      if (!is.null(df) && nrow(df) > 0) {
+        cols <- intersect(colnames(df), c("Case ID","Donor Status","Age","Gender"))
+        if (length(cols) >= 2) {
+          dm <- df[, cols, drop = FALSE] %>% dplyr::distinct()
+          donors_meta <- if (is.null(donors_meta)) dm else dplyr::bind_rows(donors_meta, dm)
+        }
+      }
+    }
+    if (!is.null(donors_meta)) donors_meta <- donors_meta %>% dplyr::distinct()
+    if (!is.null(donors_meta)) ff <- ff %>% dplyr::left_join(donors_meta, by = c("Case ID","Donor Status"))
+
+    # Final labels
+    ff$diam_bin_fixed <- fixed_bins(ff$islet_diam_um)
+    ff
+  })
+
+  # ---- Trajectory helpers: robust bin view resolution ----
+  parse_bin_name <- function(nm) {
+    # Return c(lo, hi) numeric bounds for a bin label like "[0,10)" or ">200"; hi can be Inf
+    nm_trim <- trimws(as.character(nm))
+    # Handle ">X"
+    m_gt <- regexec("^>\\s*([0-9]+(?:\\.[0-9]+)?)$", nm_trim)
+    reg <- regmatches(nm_trim, m_gt)[[1]]
+    if (length(reg) >= 2) {
+      lo <- suppressWarnings(as.numeric(reg[2])); hi <- Inf
+      return(c(lo, hi))
+    }
+    # Handle "[lo, hi)" with optional spaces and hi possibly Inf or 0
+    m_rng <- regexec("^\\[\\s*([^,]+)\\s*,\\s*([^\\)]+)\\)\\s*$", nm_trim)
+    reg <- regmatches(nm_trim, m_rng)[[1]]
+    if (length(reg) >= 3) {
+      lo_txt <- trimws(reg[2]); hi_txt <- trimws(reg[3])
+      lo <- suppressWarnings(as.numeric(lo_txt))
+      hi <- if (grepl("^(Inf|\\u221E)$", hi_txt)) Inf else suppressWarnings(as.numeric(hi_txt))
+      return(c(lo, hi))
+    }
+    c(NA_real_, NA_real_)
+  }
+
+  resolve_traj_view <- function(tr, view_label) {
+    if (is.null(tr)) return(list(name = NULL, res = NULL))
+    if (is.null(view_label) || identical(view_label, "Global")) {
+      return(list(name = "Global", res = tr$global))
+    }
+    # Build a map of available bins with numeric bounds
+    keys <- names(tr$bins)
+    if (is.null(keys) || !length(keys)) return(list(name = view_label, res = NULL))
+    bounds <- t(vapply(keys, parse_bin_name, numeric(2)))
+    colnames(bounds) <- c("lo","hi")
+    # Desired bounds from UI label
+    want <- parse_bin_name(view_label)
+    # Special-case UI label ">200" which may correspond to "[200, Inf)"
+    if (is.na(want[1]) && startsWith(view_label, ">")) {
+      vnum <- suppressWarnings(as.numeric(sub("^>\\s*", "", view_label)))
+      if (is.finite(vnum)) want <- c(vnum, Inf)
+    }
+    # Try exact match
+    tol <- 1e-9
+    match_idx <- which(
+      is.finite(bounds[,1]) & is.finite(want[1]) & abs(bounds[,1] - want[1]) < tol &
+      (
+        (is.infinite(bounds[,2]) & is.infinite(want[2])) |
+        (is.finite(bounds[,2]) & is.finite(want[2]) & abs(bounds[,2] - want[2]) < tol)
+      )
+    )
+    if (length(match_idx) >= 1) {
+      k <- keys[match_idx[1]]
+      return(list(name = k, res = tr$bins[[k]]))
+    }
+    # Fallbacks: choose first (min lo) or last (max lo) to accommodate label differences
+    if (is.finite(want[1]) && want[1] == min(bounds[,1], na.rm = TRUE)) {
+      k <- keys[which.min(bounds[,1])]
+      return(list(name = k, res = tr$bins[[k]]))
+    }
+    if (is.infinite(want[2])) {
+      k <- keys[which.max(bounds[,1])]
+      return(list(name = k, res = tr$bins[[k]]))
+    }
+    list(name = view_label, res = NULL)
+  }
+
+  # Helper to compute pseudotime with DiffusionMap + Slingshot
+  compute_pseudotime <- function(df_feat, scale_features = TRUE, exclude_zero = TRUE) {
+    # Select numeric feature columns (exclude keys/meta)
+    key_cols <- c("Case ID","Donor Status","islet_key","islet_diam_um","diam_bin_fixed","cells_total","Age")
+    num_cols <- setdiff(colnames(df_feat)[vapply(df_feat, is.numeric, logical(1))], key_cols)
+    if (length(num_cols) == 0) return(NULL)
+    X <- as.matrix(df_feat[, num_cols, drop = FALSE])
+    # Optional: drop all-zero columns
+    keep_col <- rep(TRUE, ncol(X))
+    if (isTRUE(exclude_zero)) keep_col <- colSums(abs(X), na.rm = TRUE) > 0
+    X <- X[, keep_col, drop = FALSE]
+    if (!ncol(X)) return(NULL)
+    # Impute col medians
+    for (j in seq_len(ncol(X))) {
+      v <- X[, j]
+      if (anyNA(v)) {
+        med <- suppressWarnings(stats::median(v, na.rm = TRUE))
+        v[!is.finite(v)] <- NA
+        v[is.na(v)] <- med
+        X[, j] <- v
+      }
+    }
+    # Scale features if requested
+    if (isTRUE(scale_features)) {
+      X <- scale(X)
+    }
+    # Remove rows with any NA/Inf after scaling
+    row_ok <- apply(X, 1, function(r) all(is.finite(r)))
+    X <- X[row_ok, , drop = FALSE]
+    meta <- df_feat[row_ok, c("Case ID","Donor Status","islet_key","islet_diam_um","diam_bin_fixed","Age","Gender"), drop = FALSE]
+    if (nrow(X) < 10) return(NULL)
+    # Diffusion map embedding (use default destiny parameters)
+    dmap <- destiny::DiffusionMap(X)
+    emb <- destiny::eigenvectors(dmap)
+    ncomp <- min(ncol(emb), 10)
+    emb_use <- as.matrix(emb[, seq_len(ncomp), drop = FALSE])
+    # Build SCE with reduced dim
+    sce <- SingleCellExperiment::SingleCellExperiment()
+    SingleCellExperiment::reducedDims(sce)$DM <- emb_use
+    # Unsupervised clusters (kmeans with k=3 by default; unbiased wrt labels)
+    set.seed(1)
+    km <- stats::kmeans(emb_use, centers = 3)
+    colData <- data.frame(cluster = as.factor(km$cluster))
+    S4Vectors::colData(sce) <- S4Vectors::DataFrame(colData)
+    # Slingshot with default params
+    ss <- slingshot::slingshot(sce, clusterLabels = 'cluster', reducedDim = 'DM')
+    # Combine pseudotime across lineages (min)
+    ptime_mat <- slingshot::slingPseudotime(ss)
+    ptime <- apply(as.matrix(ptime_mat), 1, function(x) suppressWarnings(min(x, na.rm = TRUE)))
+    # Normalize pseudotime to [0,1]
+    pmin <- min(ptime, na.rm = TRUE); pmax <- max(ptime, na.rm = TRUE)
+    if (is.finite(pmin) && is.finite(pmax) && pmax > pmin) ptime <- (ptime - pmin)/(pmax - pmin)
+    list(embedding = emb_use, meta = meta, pseudotime = ptime, sce = ss)
+  }
+
+  traj_results <- reactive({
+    pth <- file.path("..","..","data","pseudotime_results.rds")
+    if (!file.exists(pth)) return(NULL)
+    readRDS(pth)
+  })
+
+  # Build a descriptive label for the Y-axis mapping and compute Y values per islet_key
+  traj_color_info <- reactive({
+    pd <- prepared(); if (is.null(pd)) return(list(label = NULL, values = NULL))
+    mode <- input$mode
+    # Defaults to ensure initial render
+    region <- if (!is.null(input$region)) tolower(as.character(input$region)[1]) else "band"
+    which_sel <- if (!is.null(input$which)) as.character(input$which)[1] else NULL
+    if (is.null(which_sel)) {
+      if (identical(mode, "Markers")) {
+        mk_all <- pd$markers_all %>% dplyr::pull(marker) %>% unique() %>% na.omit() %>% sort()
+        which_sel <- if (length(mk_all) > 0) mk_all[1] else NULL
+      } else if (identical(mode, "Targets")) {
+        tg_all <- pd$targets_all %>% dplyr::pull(class) %>% unique() %>% na.omit() %>% sort()
+        which_sel <- if (length(tg_all) > 0) tg_all[1] else NULL
+      } else {
+        which_sel <- "Ins_any"
+      }
+    }
+    # Region display mapping
+    region_label_map <- c(core = "Islet", band = "Peri-Islet", union = "Islet+20um")
+    # Default output
+    label <- NULL
+    compute_values <- function(keys_df) rep(NA_real_, nrow(keys_df))
+    if (identical(mode, "Markers") && !is.null(which_sel) && !is.null(region)) {
+      # Build label and values from markers_all
+      metric <- if (!is.null(input$marker_metric) && input$marker_metric == "Counts") "Counts" else "% positive"
+      label <- paste0("Y: Marker ", which_sel, " — ", region_label_map[[region]], " (", metric, ")")
+      compute_values <- function(keys_df) {
+        region_tag <- paste0("islet_", region)
+        dd <- pd$markers_all %>% dplyr::filter(tolower(region_type) == region_tag, marker == which_sel) %>%
+          dplyr::transmute(islet_key,
+                           value = if (!is.null(input$marker_metric) && input$marker_metric == "Counts") suppressWarnings(as.numeric(pos_count)) else suppressWarnings(100.0 * as.numeric(pos_frac))) %>%
+          dplyr::group_by(islet_key) %>% dplyr::summarise(value = suppressWarnings(mean(value, na.rm = TRUE)), .groups = 'drop') %>%
+          dplyr::mutate(value = ifelse(is.nan(value), NA_real_, value))
+        dplyr::left_join(keys_df %>% dplyr::select(islet_key), dd, by = "islet_key")$value
+      }
+    } else if (identical(mode, "Targets") && !is.null(which_sel) && !is.null(region)) {
+      metric <- if (!is.null(input$target_metric) && input$target_metric == "Counts") "Counts" else "Density"
+      label <- paste0("Y: Target ", which_sel, " — ", region_label_map[[region]], " (", metric, ")")
+      compute_values <- function(keys_df) {
+        region_tag <- paste0("islet_", region)
+        dd <- pd$targets_all %>% dplyr::filter(tolower(type) == region_tag, class == which_sel) %>%
+          dplyr::transmute(islet_key,
+                           value = if (!is.null(input$target_metric) && input$target_metric == "Counts") suppressWarnings(as.numeric(count)) else suppressWarnings(as.numeric(area_density))) %>%
+          dplyr::group_by(islet_key) %>% dplyr::summarise(value = suppressWarnings(mean(value, na.rm = TRUE)), .groups = 'drop') %>%
+          dplyr::mutate(value = ifelse(is.nan(value), NA_real_, value))
+        dplyr::left_join(keys_df %>% dplyr::select(islet_key), dd, by = "islet_key")$value
+      }
+    } else if (identical(mode, "Composition")) {
+      w <- which_sel
+      if (is.null(w) || !(w %in% c("Ins_any","Glu_any","Stt_any"))) w <- "Ins_any"
+      comp_label_map <- c(Ins_any = "Insulin+ fraction (%)", Glu_any = "Glucagon+ fraction (%)", Stt_any = "Somatostatin+ fraction (%)")
+      pretty <- if (w %in% names(comp_label_map)) comp_label_map[[w]] else w
+      label <- paste0("Y: ", pretty)
+      compute_values <- function(keys_df) {
+        dd <- pd$comp %>% dplyr::transmute(islet_key,
+                           value = ifelse(is.finite(as.numeric(cells_total)) & as.numeric(cells_total) > 0,
+                                           100.0 * suppressWarnings(as.numeric(.data[[w]])) / suppressWarnings(as.numeric(cells_total)), NA_real_)) %>%
+          dplyr::group_by(islet_key) %>% dplyr::summarise(value = suppressWarnings(mean(value, na.rm = TRUE)), .groups = 'drop') %>%
+          dplyr::mutate(value = ifelse(is.nan(value), NA_real_, value))
+        dplyr::left_join(keys_df %>% dplyr::select(islet_key), dd, by = "islet_key")$value
+      }
+    } else {
+      label <- "Y: (select Focus/Marker/Target above)"
+    }
+    list(label = label, compute = compute_values)
+  })
+
+  output$traj_color_caption <- renderUI({
+    info <- traj_color_info(); if (is.null(info$label)) return(NULL)
+    HTML(sprintf("<div style='margin-top:8px;'>%s</div>", info$label))
+  })
+
+  # Shared reactive: compute trajectory points used for plotting (ensures heatmap respawns with plot)
+  traj_points <- reactive({
+    # Force reactivity on all relevant selection inputs
+    dummy <- list(
+      input$mode, input$region, input$which, input$marker_metric, input$target_metric,
+      input$traj_view, input$traj_transform, input$groups, input$curve_norm, input$stat,
+      input$aab_flags, input$aab_logic
+    )
+    tr <- traj_results()
+    if (is.null(tr)) return(NULL)
+    view <- input$traj_view
+    vv <- resolve_traj_view(tr, view)
+    res <- vv$res
+    if (is.null(res)) return(list(df = NULL, note = NULL, view = view, has_data = FALSE))
+    meta <- res$meta; pt <- as.numeric(res$pseudotime)
+    keys_df <- data.frame(islet_key = meta$islet_key, stringsAsFactors = FALSE)
+    info <- traj_color_info(); y_vals <- try(info$compute(keys_df), silent = TRUE)
+    if (inherits(y_vals, 'try-error')) y_vals <- rep(NA_real_, nrow(keys_df))
+    ynum <- suppressWarnings(as.numeric(y_vals))
+    keep <- is.finite(ynum) & is.finite(pt)
+    combined_note <- NULL
+    # If no finite points and current view is the first diameter bin, combine first two bins
+    if (sum(keep) == 0 && !is.null(vv$name)) {
+      keys <- names(tr$bins)
+      if (!is.null(keys) && length(keys) >= 2) {
+        bounds <- t(vapply(keys, parse_bin_name, numeric(2)))
+        ord <- order(bounds[,1], na.last = NA)
+        first_key <- keys[ord[1]]; second_key <- keys[ord[2]]
+        if (identical(vv$name, first_key) && !is.null(tr$bins[[second_key]])) {
+          r1 <- tr$bins[[first_key]]; r2 <- tr$bins[[second_key]]
+          meta <- dplyr::bind_rows(r1$meta, r2$meta)
+          pt <- c(as.numeric(r1$pseudotime), as.numeric(r2$pseudotime))
+          keys_df <- data.frame(islet_key = meta$islet_key, stringsAsFactors = FALSE)
+          y_vals <- try(info$compute(keys_df), silent = TRUE)
+          if (inherits(y_vals, 'try-error')) y_vals <- rep(NA_real_, nrow(keys_df))
+          ynum <- suppressWarnings(as.numeric(y_vals))
+          keep <- is.finite(ynum) & is.finite(pt)
+          combined_note <- " (first two bins combined)"
+          message("[Trajectory] No finite values in first bin; combined the first two bins for display.")
+        }
+      }
+    } else if (sum(keep) == 0 && !is.null(vv$name)) {
+      message("[Trajectory] No finite values in selected bin for current feature; points may be present but values are NA.")
+    }
+    # Apply selected pseudotime transform ONLY for Global view
+    is_global <- is.null(input$traj_view) || identical(input$traj_view, 'Global')
+    method <- if (!is.null(input$traj_transform)) input$traj_transform else 'raw'
+    if (is_global) {
+      n_keep <- sum(keep)
+      if (n_keep > 1) {
+        pt_sub <- pt[keep]
+        # All methods expect pt_sub in [0,1]; precomputed already normalized
+        r_uniform <- (rank(pt_sub, ties.method = 'first') - 0.5) / n_keep
+        if (method == 'soft_rank') {
+          # Blend original with uniform (50% each)
+          pt_sub_new <- 0.5 * pt_sub + 0.5 * r_uniform
+        } else if (method == 'tail') {
+          # Compress upper tail only: shrink (q,1] interval toward q
+            q <- 0.85; factor <- 0.5
+            pt_sub_new <- pt_sub
+            hi_idx <- which(pt_sub > q)
+            if (length(hi_idx)) {
+              pt_sub_new[hi_idx] <- q + (pt_sub[hi_idx] - q) * factor
+            }
+            # Re-normalize to [0,1]
+            rmin <- min(pt_sub_new); rmax <- max(pt_sub_new)
+            if (is.finite(rmin) && is.finite(rmax) && rmax > rmin) {
+              pt_sub_new <- (pt_sub_new - rmin)/(rmax - rmin)
+            }
+        } else if (method == 'mono') {
+          # Monotone spline (isotonic regression mapping original -> uniform)
+          iso <- try(isoreg(pt_sub, r_uniform), silent = TRUE)
+          if (!inherits(iso, 'try-error')) {
+            # iso$yf already monotone; scale to [0,1] just in case
+            yfit <- iso$yf
+            ymin <- min(yfit); ymax <- max(yfit)
+            if (is.finite(ymin) && is.finite(ymax) && ymax > ymin) {
+              pt_sub_new <- (yfit - ymin)/(ymax - ymin)
+            } else {
+              pt_sub_new <- yfit
+            }
+          } else {
+            pt_sub_new <- pt_sub
+          }
+        } else {
+          # Raw (no change)
+          pt_sub_new <- pt_sub
+        }
+        pt[keep] <- pt_sub_new
+      }
+    }
+    df <- data.frame(
+      pt = pt[keep],
+      y = ynum[keep],
+      donor_status = as.character(meta$`Donor Status`[keep]),
+      color_value = suppressWarnings(as.numeric(meta$islet_diam_um[keep])),
+      stringsAsFactors = FALSE
+    )
+    list(df = df, note = combined_note, view = ifelse(is.null(view), 'Global', view), has_data = nrow(df) > 0)
+  })
+
+  output$traj_scatter <- renderPlotly({
+    tp <- traj_points()
+    if (is.null(tp) || identical(tp$has_data, FALSE)) {
+      msg <- paste0('No data available for view: ', ifelse(is.null(input$traj_view), 'Global', input$traj_view))
+      return(plot_ly() %>% layout(
+        xaxis = list(title = ''), yaxis = list(title = ''),
+        annotations = list(list(text = msg, x = 0.5, y = 0.5, xref = 'paper', yref = 'paper', showarrow = FALSE))
+      ))
+    }
+    info <- traj_color_info()
+    ylab <- info$label; if (!is.null(ylab)) ylab <- sub('^Y:\\s*', '', ylab)
+    df <- tp$df
+    cmin <- suppressWarnings(min(df$color_value, na.rm = TRUE)); if (!is.finite(cmin)) cmin <- NULL
+    cmax <- suppressWarnings(max(df$color_value, na.rm = TRUE)); if (!is.finite(cmax)) cmax <- NULL
+    # Quartile-based diameter color bins
+    di <- df$color_value
+    qs <- suppressWarnings(quantile(di, probs = c(0,0.25,0.5,0.75,1), na.rm = TRUE, type = 7))
+    if (any(!is.finite(qs))) {
+      qs <- c(min(di, na.rm = TRUE), min(di, na.rm = TRUE), median(di, na.rm = TRUE), max(di, na.rm = TRUE), max(di, na.rm = TRUE))
+    }
+    # Ensure strictly increasing breaks by jittering duplicates minimally
+    for (i in 2:length(qs)) {
+      if (qs[i] <= qs[i-1]) qs[i] <- qs[i-1] + 1e-9
+    }
+    brk_lab <- c(
+      sprintf("[%.0f, %.0f]", qs[1], qs[2]),
+      sprintf("(%.0f, %.0f]", qs[2], qs[3]),
+      sprintf("(%.0f, %.0f]", qs[3], qs[4]),
+      sprintf("(%.0f, %.0f]", qs[4], qs[5])
+    )
+    grp <- cut(di, breaks = qs, include.lowest = TRUE, labels = brk_lab)
+    df$diam_q <- grp
+    pal <- c('#440154','#31688e','#35b779','#fde725')  # Viridis-inspired 4-color
+    # Map groups to numeric 0..3 for a custom discrete legend rendered as colorbar-like
+    df$color_num <- as.numeric(df$diam_q) - 1
+    colorbar_ticks <- seq(0,3)
+    ticktext <- brk_lab
+    p <- plot_ly(
+      data = df,
+      x = ~pt, y = ~y,
+      type = 'scatter', mode = 'markers',
+      marker = list(
+        color = ~color_num,
+        colorscale = list(
+          list(0/3, pal[1]),
+          list(1/3, pal[2]),
+          list(2/3, pal[3]),
+          list(1,    pal[4])
+        ),
+        showscale = TRUE,
+        cmin = 0, cmax = 3,
+        opacity = 0.85,
+        size = 6,
+        colorbar = list(
+          title = list(text = 'Diameter quartiles (µm)'),
+          orientation = 'h',
+            tickmode = 'array', tickvals = colorbar_ticks, ticktext = ticktext,
+          x = 0.5, xanchor = 'center',
+          y = 1.12, yanchor = 'bottom',
+          thickness = 18, len = 0.9
+        )
+      ),
+      hoverinfo = 'text',
+      text = ~paste('Pseudotime:', sprintf('%.3f', pt), '<br>Y:', sprintf('%.3f', y), '<br>Diameter bin:', diam_q)
+    )
+    p <- p %>% layout(
+      title = paste('Pseudotime vs feature —', tp$view, ifelse(is.null(tp$note), '', tp$note)),
+      xaxis = list(title = 'Pseudotime', range = c(0,1), constrain = 'domain', showline = TRUE, mirror = TRUE,
+                   ticks = 'outside', ticklen = 4, zeroline = FALSE),
+      yaxis = list(title = ylab, showline = TRUE, mirror = TRUE, ticks = 'outside', ticklen = 4, zeroline = FALSE),
+      showlegend = FALSE,
+      margin = list(l = 45, r = 5, t = 80, b = 40)
+    )
+    p
+  })
+
+  output$traj_status_heat <- renderPlotly({
+    # Force dependency to redraw when selections change
+    traj_refresh()
+    tp <- traj_points(); if (is.null(tp) || identical(tp$has_data, FALSE)) {
+      msg <- paste0('No data available for view: ', ifelse(is.null(input$traj_view), 'Global', input$traj_view))
+      return(plot_ly() %>% layout(
+        xaxis = list(title = ''), yaxis = list(title = ''),
+        annotations = list(list(text = msg, x = 0.5, y = 0.5, xref = 'paper', yref = 'paper', showarrow = FALSE))
+      ))
+    }
+    pt_keep <- tp$df$pt
+    status_keep <- tp$df$donor_status
+    # Define bins of width 0.01 over [0,1]
+  bw <- 0.01
+    brks <- seq(0, 1, by = bw)
+    if (abs(tail(brks,1) - 1) > 1e-9) brks <- c(brks, 1 + 1e-9)
+    centers <- (brks[-length(brks)] + brks[-1]) / 2
+    # Build a donor-status spectrum score: ND=0, Aab+=0.5, T1D=1 using per-bin proportions
+    K <- length(centers)
+    score <- rep(NA_real_, K)
+    for (i in seq_len(K)) {
+      lo <- brks[i]; hi <- brks[i+1]
+      idx <- which(pt_keep >= lo & pt_keep < hi)
+      if (length(idx) > 0) {
+        s <- status_keep[idx]
+        p_nd <- mean(s == 'ND')
+        p_aab <- mean(s == 'Aab+')
+        p_t1d <- mean(s == 'T1D')
+        score[i] <- p_aab * 0.5 + p_t1d * 1.0
+      } else {
+        score[i] <- NA_real_
+      }
+    }
+    zvals <- matrix(score, nrow = 1)
+    # Continuous colorscale across the spectrum with a horizontal colorbar
+    # Blue (ND), Green (Aab+), Magenta (T1D)
+    cs <- list(list(0, '#1f77b4'), list(0.5, '#2ca02c'), list(1, '#ff00ff'))
+    plot_ly(x = centers, z = zvals, type = 'heatmap', showscale = TRUE,
+            zmin = 0, zmax = 1, colorscale = cs,
+            colorbar = list(title = list(text = 'Donor-status spectrum'),
+                            orientation = 'h',
+                            tickmode = 'array', tickvals = c(0, 0.5, 1), ticktext = c('ND','Aab+','T1D'),
+                            tickfont = list(size = 12), thickness = 16, len = 0.9,
+                            y = 1.18, yanchor = 'bottom', x = 0.5, xanchor = 'center')) %>%
+      layout(
+        xaxis = list(title = '', showticklabels = FALSE, ticks = '', showgrid = FALSE, zeroline = FALSE, range = c(0,1), constrain = 'domain'),
+        yaxis = list(title = '', showticklabels = FALSE, ticks = '', showgrid = FALSE, zeroline = FALSE),
+        margin = list(l = 45, r = 5, t = 40, b = 10)
+      )
+  })
+
+  # Keep trajectory view options to bins with data; always include Global
+  observe({
+    tr <- traj_results(); if (is.null(tr)) return()
+    keys <- names(tr$bins)
+    avail <- c('Global')
+    info <- traj_color_info()
+    if (!is.null(keys) && length(keys) > 0 && !is.null(info$compute)) {
+      keep <- vapply(keys, function(k) {
+        b <- tr$bins[[k]]
+        if (is.null(b) || is.null(b$meta) || nrow(b$meta) == 0 || is.null(b$pseudotime)) return(FALSE)
+        # Compute y-values for this bin and check if any finite points exist
+        keys_df <- data.frame(islet_key = b$meta$islet_key, stringsAsFactors = FALSE)
+        y_vals <- try(info$compute(keys_df), silent = TRUE)
+        if (inherits(y_vals, 'try-error')) return(FALSE)
+        ynum <- suppressWarnings(as.numeric(y_vals))
+        pt <- suppressWarnings(as.numeric(b$pseudotime))
+        any(is.finite(ynum) & is.finite(pt))
+      }, logical(1))
+      avail <- c(avail, keys[keep])
+    }
+    cur <- isolate(input$traj_view)
+    if (is.null(cur) || !(cur %in% avail)) {
+      updateSelectInput(session, 'traj_view', choices = avail, selected = 'Global')
+    } else {
+      updateSelectInput(session, 'traj_view', choices = avail, selected = cur)
+    }
+  })
+
+  # Associations between features and pseudotime (precomputed; respect selected view)
+  output$traj_assoc <- renderTable({
+    tr <- traj_results()
+    if (is.null(tr)) return(NULL)
+    view <- input$traj_view
+    if (is.null(view) || view == 'Global') {
+      df <- tr$assoc$global
+    } else {
+      vv <- resolve_traj_view(tr, view)
+      df <- tr$assoc$bins[[vv$name]]
+    }
+    if (is.null(df) || nrow(df) == 0) return(NULL)
+    num_cols <- intersect(colnames(df), c('stat','p_value','p_adj'))
+    for (cc in num_cols) {
+      if (is.numeric(df[[cc]])) df[[cc]] <- formatC(df[[cc]], format = 'e', digits = 6)
+    }
+    df
+  }, striped = TRUE, bordered = TRUE, spacing = 's')
+
+  output$dl_pseudotime <- downloadHandler(
+    filename = function() paste0('pseudotime_', gsub('[^0-9A-Za-z]+','_', Sys.time()), '.csv'),
+    content = function(file) {
+      tr <- traj_results(); if (is.null(tr)) { write.csv(data.frame(), file, row.names = FALSE); return() }
+      rows <- list()
+      if (!is.null(tr$global)) {
+        rows[[length(rows)+1]] <- data.frame(scope = 'Global', tr$global$meta, pseudotime = tr$global$pseudotime)
+      }
+      for (nm in names(tr$bins)) {
+        b <- tr$bins[[nm]]; if (is.null(b)) next
+        rows[[length(rows)+1]] <- data.frame(scope = nm, b$meta, pseudotime = b$pseudotime)
+      }
+      out <- dplyr::bind_rows(rows)
+      write.csv(out, file, row.names = FALSE)
+    }
+  )
 
   # pseudotime stats removed
 
