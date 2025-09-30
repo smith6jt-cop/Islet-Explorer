@@ -23,3 +23,7 @@ __pycache__/
 
 # Tool downloads (large jars)
 scripts/tools/
+
+# Large package files
+*.deb
+*.rpm
