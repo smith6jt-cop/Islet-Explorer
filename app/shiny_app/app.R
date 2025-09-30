@@ -17,7 +17,7 @@ suppressPackageStartupMessages({
 })
 
 # ---- Runtime diagnostics (temporary) ----
-APP_VERSION <- "traj-baseR-fix-v7"
+APP_VERSION <- "remote-viewer-restored-v10"
 try({
   message("[APP LOAD] Version=", APP_VERSION, " time=", Sys.time())
   message("[APP LOAD] getwd=", tryCatch(getwd(), error=function(e) NA))
@@ -118,14 +118,78 @@ if (is.null(local_images_root)) {
 www_local_images_dir <- file.path("www", "local_images")
 has_www_local_images <- dir.exists(www_local_images_dir)
 
-# Only register /local_images if there is no static folder under www
-if (!has_www_local_images && !is.null(local_images_root)) {
-  try({ shiny::addResourcePath("local_images", local_images_root) }, silent = TRUE)
+# Register /images resource path for backup access (avoid conflict with www/local_images)
+# This provides redundancy even if www/local_images exists
+if (!is.null(local_images_root) && dir.exists(local_images_root)) {
+  try({ 
+    shiny::addResourcePath("images", local_images_root) 
+    cat("[SETUP] Registered resource path /images ->", local_images_root, "\n")
+  }, silent = TRUE)
+}
+
+# Register resource paths for viewer URLs
+if (has_www_local_images) {
+  try({
+    # Register both paths: local_images for remote compatibility, viewer_images for local
+    shiny::addResourcePath("local_images", file.path("www", "local_images"))
+    shiny::addResourcePath("viewer_images", file.path("www", "local_images"))
+    cat("[SETUP] Registered /local_images and /viewer_images -> www/local_images\n")
+  }, silent = TRUE)
+}
+
+# Log the setup for debugging
+cat("[SETUP] www/local_images exists:", has_www_local_images, "\n")
+if (has_www_local_images) {
+  local_files <- list.files(www_local_images_dir, pattern = "\\.(ome\\.)?tiff?$", ignore.case = TRUE)
+  cat("[SETUP] Found", length(local_files), "images in www/local_images\n")
 }
 
 # ---- Viewer helpers/defaults (Avivator) ----
 # Optional default image URL; if NULL, we'll auto-pick the first available under /local_images
 default_image_url <- NULL
+
+# Environment detection for viewer configuration
+detect_environment <- function(session = NULL) {
+  # Check various indicators to determine if we're in a reverse proxy setup
+  
+  # Method 1: Check environment variables commonly set in reverse proxy setups
+  proxy_indicators <- c(
+    "HTTP_X_FORWARDED_FOR",
+    "HTTP_X_FORWARDED_HOST", 
+    "HTTP_X_FORWARDED_PROTO",
+    "HTTP_X_REAL_IP",
+    "SHINY_SERVER_VERSION"
+  )
+  
+  has_proxy_env <- any(sapply(proxy_indicators, function(x) nzchar(Sys.getenv(x, ""))))
+  
+  # Method 2: Check if we're running on a non-localhost host
+  is_remote_host <- FALSE
+  if (!is.null(session) && !is.null(session$clientData$url_hostname)) {
+    hostname <- session$clientData$url_hostname
+    is_remote_host <- !(hostname %in% c("localhost", "127.0.0.1", "0.0.0.0"))
+  }
+  
+  # Method 3: Check URL path structure (reverse proxy often has subpaths)
+  has_subpath <- FALSE
+  if (!is.null(session) && !is.null(session$clientData$url_pathname)) {
+    pathname <- session$clientData$url_pathname
+    # If pathname is not just "/" or "/app/", likely in a reverse proxy
+    has_subpath <- !pathname %in% c("/", "/app/")
+  }
+  
+  # Return environment info
+  list(
+    is_reverse_proxy = has_proxy_env || is_remote_host || has_subpath,
+    hostname = if (!is.null(session)) session$clientData$url_hostname else "unknown",
+    pathname = if (!is.null(session)) session$clientData$url_pathname else "/",
+    indicators = list(
+      proxy_env = has_proxy_env,
+      remote_host = is_remote_host,
+      subpath = has_subpath
+    )
+  )
+}
 
 resolve_avivator_base <- function() {
   # Return the URL path to the local avivator build under www/, or NULL if missing
@@ -648,6 +712,9 @@ ui <- fluidPage(
             ),
             plotlyOutput("traj_scatter", height = 420),
             br(),
+            # Interactive islet selection info
+            uiOutput("selected_islet_info"),
+            br(),
             fluidRow(
               column(6, h5("Donor Status Progression")),
               column(6, checkboxInput("traj_show_bins", "Show binned average", value = TRUE))
@@ -699,6 +766,24 @@ server <- function(input, output, session) {
       audit_na(pd$comp, "comp")
     }, silent = TRUE)
     pd
+  })
+
+  # ---------- Spatial Lookup Data ----------
+  spatial_lookup <- reactive({
+    lookup_path <- file.path("..", "..", "data", "islet_spatial_lookup.csv")
+    if (file.exists(lookup_path)) {
+      tryCatch({
+        df <- read.csv(lookup_path, stringsAsFactors = FALSE)
+        cat("[SPATIAL] Loaded", nrow(df), "islet spatial coordinates from", lookup_path, "\n")
+        df
+      }, error = function(e) {
+        cat("[SPATIAL] Error loading spatial lookup:", e$message, "\n")
+        NULL
+      })
+    } else {
+      cat("[SPATIAL] Lookup file not found:", lookup_path, "\n")
+      NULL
+    }
   })
 
   # ---------- Trajectory (AnnData) ----------
@@ -953,11 +1038,10 @@ server <- function(input, output, session) {
     # Get expression values
     expression_vals <- X_matrix[, feature_idx]
     
-    # Convert donor status using base R
-    donor_raw <- as.character(obs_df$donor_status)
-    donor_clean <- ifelse(donor_raw == "0", "ND",
-                         ifelse(donor_raw == "1", "Aab+", 
-                               ifelse(donor_raw == "2", "T1D", donor_raw)))
+    # Extract donor status directly (AnnData already contains correct string values)
+    donor_clean <- as.character(obs_df$donor_status)
+    
+    message("[DATA] Using donor_status directly from AnnData: ", paste(unique(donor_clean), collapse=", "))
     
     # Extract UMAP coordinates if available
     umap_coords <- NULL
@@ -1169,8 +1253,34 @@ server <- function(input, output, session) {
       )
     }
     
-    ggplotly(g, tooltip = c("x", "y", "colour")) %>%
-      layout(showlegend = TRUE)
+    # Create plotly with custom data for reliable click handling
+    p <- ggplotly(g, tooltip = c("x", "y", "colour"), source = "traj_scatter")
+    
+    # ALTERNATIVE APPROACH: Instead of trying to match plot order, 
+    # let's modify our click handler to use coordinates for matching
+    # This avoids the ggplot ordering issues entirely
+    
+    # Just set some basic custom data for debugging
+    if ("combined_islet_id" %in% colnames(df) && "case_id" %in% colnames(df)) {
+      # Store the original dataframe in a global variable for coordinate-based lookup
+      traj_coord_lookup <<- data.frame(
+        pt = df$pt,
+        value = df$value,
+        case_id = df$case_id,
+        islet_key = df$islet_key,
+        combined_islet_id = df$combined_islet_id,
+        donor_status = df$donor_status
+      )
+      
+      cat("[PLOT] Stored coordinate lookup table with", nrow(traj_coord_lookup), "entries\n")
+      cat("[PLOT] Sample coordinates - first point: pt=", df$pt[1], "value=", df$value[1], 
+          "case=", df$case_id[1], "\n")
+    }
+    
+    # Register click events and apply layout
+    p %>% 
+      layout(showlegend = TRUE) %>%
+      event_register("plotly_click")
   })
   
   # UMAP plot colored by donor status
@@ -1357,24 +1467,220 @@ server <- function(input, output, session) {
     }
   })
 
+  # ---------- Interactive Islet Lookup ----------
   
+  # Reactive to store the selected islet from plot clicks
+  selected_islet <- reactiveVal(NULL)
+  
+  # Handle trajectory plot clicks
+  observe({
+    click_data <- event_data("plotly_click", source = "traj_scatter")
+    if (!is.null(click_data)) {
+      cat("[CLICK] Raw event data structure:\n")
+      cat("  pointNumber:", click_data$pointNumber, "\n")
+      cat("  has customdata:", !is.null(click_data$customdata), "\n")
+      if (!is.null(click_data$customdata)) {
+        cat("  customdata length:", length(click_data$customdata), "\n")
+        cat("  customdata content:", paste(click_data$customdata, collapse=" | "), "\n")
+      }
+      
+      # Try to get islet information from custom data first
+      if (!is.null(click_data$customdata)) {
+        # Extract from custom data (more reliable)
+        customdata <- click_data$customdata
+        cat("[CLICK] Using customdata method\n")
+        if (length(customdata) >= 4) {
+          islet_info <- list(
+            case_id = as.character(customdata[1]),
+            islet_key = as.character(customdata[2]),
+            combined_islet_id = as.character(customdata[3]),
+            donor_status = as.character(customdata[4])
+          )
+          cat("[CLICK] Extracted from customdata - case:", islet_info$case_id, "islet:", islet_info$combined_islet_id, "status:", islet_info$donor_status, "\n")
+        } else {
+          cat("[CLICK] Custom data incomplete (length:", length(customdata), "), falling back to index method\n")
+          islet_info <- NULL
+        }
+      } else {
+        # Use coordinate-based lookup instead of index-based (more reliable)
+        if (exists("traj_coord_lookup") && !is.null(click_data$x) && !is.null(click_data$y)) {
+          cat("[CLICK] Using coordinate-based lookup - x:", click_data$x, "y:", click_data$y, "\n")
+          
+          # Find closest point by coordinates
+          tolerance <- 1e-8
+          x_match <- abs(traj_coord_lookup$pt - click_data$x) < tolerance
+          y_match <- abs(traj_coord_lookup$value - click_data$y) < tolerance
+          matching_rows <- which(x_match & y_match)
+          
+          if (length(matching_rows) > 0) {
+            match_idx <- matching_rows[1]  # Take first match
+            islet_info <- list(
+              case_id = as.character(traj_coord_lookup$case_id[match_idx]),
+              islet_key = as.character(traj_coord_lookup$islet_key[match_idx]),
+              combined_islet_id = as.character(traj_coord_lookup$combined_islet_id[match_idx]),
+              donor_status = as.character(traj_coord_lookup$donor_status[match_idx])
+            )
+            cat("[CLICK] Coordinate method - matched row", match_idx, "case:", islet_info$case_id, "islet:", islet_info$islet_key, "status:", islet_info$donor_status, "\n")
+          } else {
+            # If exact match fails, try nearest neighbor
+            distances <- sqrt((traj_coord_lookup$pt - click_data$x)^2 + (traj_coord_lookup$value - click_data$y)^2)
+            nearest_idx <- which.min(distances)
+            min_distance <- distances[nearest_idx]
+            
+            if (min_distance < 0.1) {  # Reasonable threshold
+              islet_info <- list(
+                case_id = as.character(traj_coord_lookup$case_id[nearest_idx]),
+                islet_key = as.character(traj_coord_lookup$islet_key[nearest_idx]),
+                combined_islet_id = as.character(traj_coord_lookup$combined_islet_id[nearest_idx]),
+                donor_status = as.character(traj_coord_lookup$donor_status[nearest_idx])
+              )
+              cat("[CLICK] Nearest neighbor method - row", nearest_idx, "distance:", min_distance, "case:", islet_info$case_id, "status:", islet_info$donor_status, "\n")
+            } else {
+              cat("[CLICK] No close coordinate match found, min distance:", min_distance, "\n")
+              islet_info <- NULL
+            }
+          }
+        } else {
+          cat("[CLICK] No coordinate lookup table or click coordinates available\n")
+          islet_info <- NULL
+        }
+      }
+      
+      if (!is.null(islet_info)) {
+        # Get spatial coordinates if available
+        lookup <- spatial_lookup()
+        if (!is.null(lookup)) {
+          spatial_match <- lookup[lookup$combined_islet_id == islet_info$combined_islet_id, ]
+          if (nrow(spatial_match) > 0) {
+            islet_info$centroid_x_um <- spatial_match$centroid_x_um[1]
+            islet_info$centroid_y_um <- spatial_match$centroid_y_um[1]
+            islet_info$has_spatial <- TRUE
+          } else {
+            islet_info$has_spatial <- FALSE
+          }
+        } else {
+          islet_info$has_spatial <- FALSE
+        }
+        
+        selected_islet(islet_info)
+        cat("[CLICK] Selected islet:", islet_info$combined_islet_id, 
+            "at coordinates:", ifelse(islet_info$has_spatial, paste(islet_info$centroid_x_um, islet_info$centroid_y_um), "N/A"), "\n")
+      }
+    }
+  })
+  
+  # Output to show selected islet info
+  output$selected_islet_info <- renderUI({
+    islet <- selected_islet()
+    if (is.null(islet)) {
+      return(tags$div(style = "color:#666; font-style:italic;", 
+                     "Click on a point in the trajectory plot to view islet details"))
+    }
+    
+    tagList(
+      tags$div(style = "background:#f8f9fa; padding:8px; border-radius:4px; margin:5px 0;",
+        tags$strong("Selected Islet: ", islet$combined_islet_id),
+        tags$br(),
+        tags$span("Donor Status: ", tags$strong(islet$donor_status)),
+        tags$br(),
+        if (islet$has_spatial) {
+          tagList(
+            tags$span("Coordinates: ", sprintf("(%.1f, %.1f) µm", islet$centroid_x_um, islet$centroid_y_um)),
+            tags$br(),
+            actionButton("jump_to_islet", "Jump to Islet in Viewer", 
+                        class = "btn-primary btn-sm", style = "margin-top:5px;")
+          )
+        } else {
+          tags$span("Spatial coordinates not available", style = "color:#999;")
+        }
+      )
+    )
+  })
+  
+  # Handle jump to islet in viewer
+  observeEvent(input$jump_to_islet, {
+    islet <- selected_islet()
+    if (!is.null(islet) && islet$has_spatial) {
+      # Switch to Viewer tab
+      updateTabsetPanel(session, "tabs", selected = "Viewer")
+      
+      # Update the image selection to match the islet's case
+      case_id <- sprintf("%04d", as.numeric(islet$case_id))
+      
+      # Find available images and select the matching one
+      available_images <- list.files(path = "www/local_images", pattern = ".*\\.(ome\\.)?tiff?$", ignore.case = TRUE)
+      if (length(available_images) == 0) {
+        # Try fallback location
+        local_root <- Sys.getenv("LOCAL_IMAGE_ROOT", "../../local_images")
+        if (dir.exists(local_root)) {
+          available_images <- list.files(path = local_root, pattern = ".*\\.(ome\\.)?tiff?$", ignore.case = TRUE)
+        }
+      }
+      
+      # Look for image with matching case ID
+      matching_image <- available_images[grepl(paste0("_?", case_id, "\\.(ome\\.)?tiff?$"), available_images, ignore.case = TRUE)]
+      
+      if (length(matching_image) > 0) {
+        # Update the image selector
+        updateSelectInput(session, "selected_image", selected = matching_image[1])
+        
+        # Show feedback to user
+        showNotification(
+          paste("Jumped to image", matching_image[1], "for islet", islet$combined_islet_id),
+          type = "message",
+          duration = 3
+        )
+        
+        cat("[JUMP] Switched to image:", matching_image[1], 
+            "for islet:", islet$combined_islet_id, "\n")
+      } else {
+        showNotification(
+          paste("Image not found for case", case_id),
+          type = "warning",
+          duration = 5
+        )
+      }
+    }
+  })
 
-viewer_info <- reactive({
+  viewer_info <- reactive({
     base <- resolve_avivator_base()
     info <- list(base = base, selection = NULL, mode = "picker", ok = FALSE,
                  iframe_src = NULL, image_url = NULL)
     if (is.null(base)) return(info)
+    
+    # Detect environment to determine URL construction strategy
+    env_info <- detect_environment(session)
+    cat("[VIEWER] Environment detection - reverse_proxy:", env_info$is_reverse_proxy, 
+        "hostname:", env_info$hostname, "pathname:", env_info$pathname, "\n")
+    
     params <- list()
     # Select image: prefer user selection from www/local_images when available; else use explicit default if set
     sel_url <- NULL
     # Selection from UI (basename only)
     sel_basename <- tryCatch(input$selected_image, silent = TRUE)
     if (!is.null(sel_basename) && nzchar(sel_basename)) {
-      # Build an absolute, same-origin URL for the image to avoid any relative path resolution issues inside the iframe
-      appPath <- session$clientData$url_pathname
-      if (is.null(appPath) || !nzchar(appPath)) appPath <- "/"
-      if (!grepl("/$", appPath)) appPath <- paste0(appPath, "/")
-      sel_url <- paste0(appPath, "local_images/", sel_basename)
+      # Build URL based on environment
+      if (env_info$is_reverse_proxy) {
+        # Reverse proxy setup: use full pathname
+        appPath <- session$clientData$url_pathname
+        if (is.null(appPath) || !nzchar(appPath)) appPath <- "/"
+        if (!grepl("/$", appPath)) appPath <- paste0(appPath, "/")
+        sel_url <- paste0(appPath, "local_images/", sel_basename)
+        cat("[VIEWER] Using reverse proxy URL:", sel_url, "\n")
+      } else {
+        # Local setup: Check if we have www/local_images or need resource path
+        www_local_images_dir <- file.path("www", "local_images")
+        if (dir.exists(www_local_images_dir)) {
+          # Images are in www/local_images, use same path as remote for consistency
+          sel_url <- paste0("local_images/", sel_basename)
+          cat("[VIEWER] Using local www URL:", sel_url, "\n")
+        } else {
+          # Fall back to resource path with different name to avoid conflict
+          sel_url <- paste0("images/", sel_basename)
+          cat("[VIEWER] Using resource path URL:", sel_url, "\n")
+        }
+      }
     } else if (!is.null(default_image_url) && nzchar(default_image_url)) {
       sel_url <- default_image_url
     }
@@ -1816,6 +2122,12 @@ viewer_info <- reactive({
       # show only basenames; these will be addressed via /local_images when no www folder
       files <- basefiles
     }
+    
+    # Set names for the dropdown choices - names are display labels, values are filenames
+    if (length(files) > 0) {
+      names(files) <- files  # Use filenames as both labels and values
+    }
+    
     if (length(files) == 0) {
       return(tagList(
         tags$div(style = "margin-bottom:6px;", "No local images found under www/local_images or LOCAL_IMAGE_ROOT."),
@@ -1824,16 +2136,16 @@ viewer_info <- reactive({
     }
     # Preserve selection
     sel <- if (!is.null(input$selected_image) && input$selected_image %in% files) input$selected_image else files[[1]]
+    
     # Build an absolute URL for range check from the main app page
     appPath <- session$clientData$url_pathname
     if (is.null(appPath) || !nzchar(appPath)) appPath <- "/"
     if (!grepl("/$", appPath)) appPath <- paste0(appPath, "/")
-    check_url <- if (has_www_local_images) paste0(appPath, "local_images/", sel) else paste0("/local_images/", sel)
-
+    check_url <- if (has_www_local_images) paste0(appPath, "local_images/", sel) else paste0("/images/", sel)
     tagList(
       div(style = "display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap;",
         div(style = "min-width:280px;", selectInput("selected_image", "Select OME-TIFF", choices = files, selected = sel)),
-        div(style = "color:#666; font-size:90%; padding-bottom:8px;", "Images are served from ", if (has_www_local_images) "www/local_images (static)" else "/local_images (dynamic)" )
+        div(style = "color:#666; font-size:90%; padding-bottom:8px;", "Images are served from ", if (has_www_local_images) "www/local_images" else "/images (dynamic)" )
       )
       , tags$div(id = "range-check", style = "margin-top:6px; font-family:monospace; color:#555;", "Checking Range support...")
       , tags$script(HTML(paste0(
@@ -1860,12 +2172,34 @@ output$vit_view <- renderUI({
   }
   
   vi <- viewer_info()
+  cat("[VIEWER RENDER] Base:", vi$base, "Image URL:", vi$image_url, "\n")
+  cat("[VIEWER RENDER] Full iframe src:", vi$iframe_src, "\n")
+  
   if (is.null(vi$base)) {
     return(tagList(
       tags$div(style = "color:#b00;", "Local Avivator static build not found under shiny/www/avivator."),
       tags$div(style = "color:#666; font-size:90%;", "To install: run scripts/install_avivator.sh (requires Node ≥ 18) or place a prebuilt bundle under shiny/www/avivator.")
     ))
   }
+  
+  # Check if image is accessible and not too large for web serving
+  if (!is.null(vi$image_url)) {
+    image_basename <- basename(vi$image_url)
+    local_image_path <- file.path("www", "local_images", image_basename)
+    file_exists <- file.exists(local_image_path)
+    
+    cat("[VIEWER DEBUG] Looking for image file:", local_image_path, "Exists:", file_exists, "\n")
+    
+    if (file_exists) {
+      # Log file size for debugging
+      file_size <- file.info(local_image_path)$size
+      file_size_gb <- round(file_size / (1024^3), 2)
+      cat("[VIEWER DEBUG] Image size:", file_size_gb, "GB\n")
+    }
+  }
+  
+  # No size warnings needed - Avivator is designed for large images
+  
   tagList(
     tags$iframe(src = vi$iframe_src,
               width = "100%",
@@ -1873,7 +2207,14 @@ output$vit_view <- renderUI({
               allowfullscreen = NA,
               style = "width:100%; height:calc(100vh - 140px); border:0;"),
     tags$div(style = "margin-top:6px;",
-      tags$a(href = vi$iframe_src, target = "_blank", rel = "noopener", "Open viewer in a new tab")
+      tags$a(href = vi$iframe_src, target = "_blank", rel = "noopener", "Open viewer in a new tab"),
+      tagList(
+        tags$br(),
+        tags$small(style = "color: #666;", 
+          "Tip: For local development, you can also access images directly at: ",
+          tags$code(paste0(getwd(), "/www/local_images/"))
+        )
+      )
     )
   )
 })
