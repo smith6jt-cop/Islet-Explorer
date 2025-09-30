@@ -4,8 +4,8 @@ pdfs/
 *.pdf
 *.Rout
 
-/local_images
-
+app/shiny_app/www/local_images/
+/local_images/
 # Virtual environments and caches
 .venv*/
 venv*/
