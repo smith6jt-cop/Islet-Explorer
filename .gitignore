@@ -4,7 +4,9 @@ pdfs/
 *.pdf
 *.Rout
 gson/
-
+docs_env/
+docs/build/
+docs/doctrees/
 app/shiny_app/www/local_images/
 local_images/
 # Virtual environments and caches

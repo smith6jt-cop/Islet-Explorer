@@ -17,7 +17,7 @@ suppressPackageStartupMessages({
 })
 
 # ---- Runtime diagnostics (temporary) ----
-APP_VERSION <- "remote-viewer-restored-v10"
+APP_VERSION <- "canvas-overlay-v16"
 try({
   message("[APP LOAD] Version=", APP_VERSION, " time=", Sys.time())
   message("[APP LOAD] getwd=", tryCatch(getwd(), error=function(e) NA))
@@ -127,15 +127,16 @@ if (!is.null(local_images_root) && dir.exists(local_images_root)) {
   }, silent = TRUE)
 }
 
-# Register resource paths for viewer URLs
+# Register resource path for viewer URLs  
 if (has_www_local_images) {
   try({
-    # Register both paths: local_images for remote compatibility, viewer_images for local
+    # Register local_images path for both local and remote compatibility
     shiny::addResourcePath("local_images", file.path("www", "local_images"))
-    shiny::addResourcePath("viewer_images", file.path("www", "local_images"))
-    cat("[SETUP] Registered /local_images and /viewer_images -> www/local_images\n")
+    cat("[SETUP] Registered /local_images -> www/local_images\n")
   }, silent = TRUE)
 }
+
+# GeoJSON resource path registration will be done after geojson_available is defined
 
 # Log the setup for debugging
 cat("[SETUP] www/local_images exists:", has_www_local_images, "\n")
@@ -144,9 +145,103 @@ if (has_www_local_images) {
   cat("[SETUP] Found", length(local_files), "images in www/local_images\n")
 }
 
+# Load annotation data for enhanced islet information
+annotations_path <- "../../data/annotations.tsv"
+annotations_data <- NULL
+if (file.exists(annotations_path)) {
+  cat("[SETUP] Loading annotations from", annotations_path, "\n")
+  annotations_data <- tryCatch({
+    read.delim(annotations_path, stringsAsFactors = FALSE)
+  }, error = function(e) {
+    cat("[WARNING] Could not load annotations:", e$message, "\n")
+    NULL
+  })
+  if (!is.null(annotations_data)) {
+    cat("[SETUP] Loaded", nrow(annotations_data), "annotation records\n")
+  }
+} else {
+  cat("[SETUP] Annotations file not found at", annotations_path, "\n")
+}
+
 # ---- Viewer helpers/defaults (Avivator) ----
 # Optional default image URL; if NULL, we'll auto-pick the first available under /local_images
 default_image_url <- NULL
+
+# GeoJSON overlay configuration
+geojson_dir <- "../../gson"
+geojson_available <- dir.exists(geojson_dir) && length(list.files(geojson_dir, pattern = "\\.geojson(\\.gz)?$")) > 0
+if (geojson_available) {
+  cat("[SETUP] Found GeoJSON files in", geojson_dir, "\n")
+  # Register GeoJSON resource path
+  try({
+    shiny::addResourcePath("gson", geojson_dir)
+    cat("[SETUP] Registered /gson ->", geojson_dir, "\n")
+  }, silent = TRUE)
+} else {
+  cat("[SETUP] No GeoJSON files found in", geojson_dir, "\n")
+}
+
+# GeoJSON cache directory (preprocessed for efficient streaming)
+gson_cache_dir <- file.path("..", "..", "data", "gson_cache")
+gson_cache_available <- dir.exists(gson_cache_dir) && 
+                        length(list.files(gson_cache_dir, pattern = "_simplified\\.pkl$")) > 0
+
+if (gson_cache_available) {
+  cat("[SETUP] Found", length(list.files(gson_cache_dir, pattern = "_simplified\\.pkl$")), 
+      "preprocessed GeoJSON cache files\\n")
+  # Load helper functions
+  source(file.path("..", "..", "scripts", "geojson_cache_helpers.R"))
+} else {
+  cat("[SETUP] No GeoJSON cache found. Run scripts/preprocess_all_geojson.sh to enable efficient overlays\\n")
+}
+
+# Query function for GeoJSON features (viewport-based streaming)
+query_geojson_features <- function(case_id, xmin = NULL, ymin = NULL, xmax = NULL, ymax = NULL, max_features = 5000) {
+  if (!gson_cache_available) {
+    return(list(error = "GeoJSON cache not available", features = list()))
+  }
+  
+  pkl_file <- file.path(gson_cache_dir, paste0(case_id, "_simplified.pkl"))
+  
+  if (!file.exists(pkl_file)) {
+    return(list(error = paste("No overlay data for case", case_id), features = list()))
+  }
+  
+  tryCatch({
+    data <- load_geojson_cache(pkl_file)
+    
+    # If viewport specified, query spatial index
+    if (!is.null(xmin) && !is.null(xmax) && !is.null(ymin) && !is.null(ymax)) {
+      result <- query_geojson_bbox(data, xmin, ymin, xmax, ymax, max_features)
+    } else {
+      # No viewport - return sampled features
+      n_sample <- min(max_features, data$n_features)
+      sample_ids <- seq_len(n_sample)
+      
+      features <- lapply(sample_ids, function(i) {
+        f <- data$features[[i]]
+        list(
+          type = "Feature",
+          id = f$id,
+          geometry = list(type = "Polygon", coordinates = f$geometry),
+          properties = f$properties
+        )
+      })
+      
+      result <- list(
+        type = "FeatureCollection",
+        features = features,
+        n_total = data$n_features,
+        n_returned = length(features)
+      )
+    }
+    
+    return(result)
+    
+  }, error = function(e) {
+    list(error = as.character(e), features = list())
+  })
+}
 
 # Environment detection for viewer configuration
 detect_environment <- function(session = NULL) {
@@ -189,6 +284,44 @@ detect_environment <- function(session = NULL) {
       subpath = has_subpath
     )
   )
+}
+
+# Helper function to get annotation info for an islet
+get_islet_annotations <- function(case_id, islet_key) {
+  if (is.null(annotations_data)) return(NULL)
+  
+  # Extract numeric islet ID from islet_key (e.g., "Islet_200_core" -> 200)
+  islet_numeric <- as.numeric(gsub(".*_(\\d+)_.*", "\\1", islet_key))
+  if (is.na(islet_numeric)) return(NULL)
+  
+  # Convert case_id to character for matching
+  case_id_char <- as.character(case_id)
+  
+  # Look for matching annotations
+  matches <- annotations_data[
+    as.character(annotations_data$Image) == case_id_char & 
+    grepl(paste0("Islet_", islet_numeric), annotations_data$Name, ignore.case = TRUE),
+  ]
+  
+  if (nrow(matches) > 0) {
+    # Use safe numeric conversion to avoid coercion warnings
+    safe_numeric <- function(x) {
+      result <- suppressWarnings(as.numeric(as.character(x)))
+      if (is.na(result)) 0 else result
+    }
+    
+    return(list(
+      centroid_x = safe_numeric(matches$`Centroid X µm`[1]),
+      centroid_y = safe_numeric(matches$`Centroid Y µm`[1]), 
+      area = safe_numeric(matches$`Area µm^2`[1]),
+      perimeter = safe_numeric(matches$`Perimeter µm`[1]),
+      detections = safe_numeric(matches$`Num Detections`[1]),
+      ins_pos = safe_numeric(matches$`Num INS_pos`[1]),
+      gcg_pos = safe_numeric(matches$`Num GCG_pos`[1]),
+      sst_pos = safe_numeric(matches$`Num SST_pos`[1])
+    ))
+  }
+  return(NULL)
 }
 
 resolve_avivator_base <- function() {
@@ -604,13 +737,22 @@ per_bin_kendall <- function(df, bin_col, group_col, value_col, mid_col = "diam_m
 
 ui <- fluidPage(
   useShinyjs(),
-  tags$head(tags$style(HTML("\n    body.viewer-mode div.col-sm-4,\n    body.viewer-mode div.col-sm-3,\n    body.viewer-mode div.col-lg-3 {\n      display: none !important;\n    }\n    body.viewer-mode div.col-sm-8,\n    body.viewer-mode div.col-lg-9 {\n      width: 100% !important;\n      max-width: 100% !important;\n      flex: 0 0 100%;\n    }\n    body.viewer-mode .tab-content {\n      padding-left: 0 !important;\n      padding-right: 0 !important;\n    }\n    body.trajectory-mode .container-fluid > .row > .col-sm-3 {\n      display: none !important;\n    }\n    body.trajectory-mode .container-fluid > .row > .col-sm-9 {\n      width: 100% !important;\n      max-width: 100% !important;\n      flex: 0 0 100%;\n    }\n  "))),
-  titlePanel("Islet Area Distributions"),
+  tags$head(tags$style(HTML("\n    /* Viewer and trajectory mode styles - fix tab positioning */\n    body.viewer-mode .col-sm-2 {\n      display: none !important;\n    }\n    body.viewer-mode .col-sm-10 {\n      width: 100% !important;\n      max-width: 100% !important;\n      flex: 0 0 100%;\n    }\n    body.viewer-mode .nav-tabs {\n      position: static !important;\n      width: 100% !important;\n    }\n    body.trajectory-mode .container-fluid > .row > .col-sm-3 {\n      display: none !important;\n    }\n    body.trajectory-mode .container-fluid > .row > .col-sm-9 {\n      width: 100% !important;\n      max-width: 100% !important;\n      flex: 0 0 100%;\n    }\n    \n    /* Global biomedical theme styling */\n    body {\n      background-color: #f8f9fa;\n      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;\n      padding-top: 0;\n    }\n    \n    .container-fluid {\n      background-color: #ffffff;\n      border-radius: 12px;\n      box-shadow: 0 4px 12px rgba(0,0,0,0.08);\n      margin: 10px;\n      padding: 20px;\n    }\n    \n    /* Logo header styling */\n    .logo-header {\n      display: flex;\n      justify-content: flex-end;\n      align-items: center;\n      padding: 10px 0;\n      margin-bottom: 10px;\n      background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);\n      border-bottom: 2px solid #e3f2fd;\n    }\n    \n    /* Enhanced card styling with biomedical color scheme */\n    .card {\n      background: linear-gradient(145deg, #ffffff 0%, #f8f9fa 100%);\n      border: 1px solid #e3f2fd;\n      box-shadow: 0 4px 12px rgba(44, 90, 160, 0.08);\n      transition: all 0.3s ease;\n      border-radius: 12px;\n    }\n    .card:hover {\n      box-shadow: 0 8px 20px rgba(44, 90, 160, 0.15);\n      transform: translateY(-2px);\n    }\n    \n    .card h5 {\n      color: #2c5aa0;\n      font-weight: 600;\n      border-bottom: 2px solid #e3f2fd;\n      padding-bottom: 8px;\n      margin-bottom: 15px;\n    }\n    \n    /* Sidebar styling with scientific theme */\n    .sidebar {\n      background: linear-gradient(180deg, #2c5aa0 0%, #1e3a72 100%);\n      color: white;\n      border-radius: 12px;\n      padding: 20px;\n      font-size: 14px;\n      box-shadow: 0 4px 12px rgba(44, 90, 160, 0.2);\n    }\n    \n    .sidebar h4, .sidebar h5 {\n      color: #ffffff;\n      font-weight: 600;\n      border-bottom: 1px solid rgba(255,255,255,0.2);\n      padding-bottom: 8px;\n    }\n    \n    .sidebar .form-group {\n      margin-bottom: 18px;\n    }\n    \n    .sidebar label {\n      color: #e3f2fd;\n      font-size: 13px;\n      font-weight: 600;\n    }\n    \n    .sidebar .form-control {\n      background-color: rgba(255,255,255,0.9);\n      border: 1px solid #b3d9ff;\n      border-radius: 6px;\n      color: #2c5aa0;\n    }\n    \n    .sidebar .form-control:focus {\n      background-color: #ffffff;\n      border-color: #66b3ff;\n      box-shadow: 0 0 0 0.2rem rgba(44, 90, 160, 0.25);\n    }\n    \n    .sidebar .btn {\n      background: linear-gradient(145deg, #66b3ff 0%, #4da6ff 100%);\n      border: none;\n      border-radius: 6px;\n      color: white;\n      font-weight: 500;\n    }\n    \n    .sidebar .btn:hover {\n      background: linear-gradient(145deg, #4da6ff 0%, #3399ff 100%);\n      transform: translateY(-1px);\n    }\n    \n    /* Tab styling */\n    .nav-tabs {\n      border-bottom: 2px solid #e3f2fd;\n    }\n    \n    .nav-tabs .nav-link {\n      color: #2c5aa0;\n      font-weight: 500;\n      border: none;\n      border-radius: 8px 8px 0 0;\n      margin-right: 4px;\n      background-color: #f8f9fa;\n    }\n    \n    .nav-tabs .nav-link.active {\n      background: linear-gradient(145deg, #2c5aa0 0%, #1e3a72 100%);\n      color: white;\n      border-bottom: 3px solid #66b3ff;\n    }\n    \n    .nav-tabs .nav-link:hover {\n      background-color: #e3f2fd;\n      color: #1e3a72;\n    }\n    \n    /* Form controls styling */\n    .form-control {\n      border: 2px solid #e3f2fd;\n      border-radius: 6px;\n      transition: all 0.2s ease;\n    }\n    \n    .form-control:focus {\n      border-color: #66b3ff;\n      box-shadow: 0 0 0 0.2rem rgba(44, 90, 160, 0.15);\n    }\n    \n    /* Button styling */\n    .btn-primary {\n      background: linear-gradient(145deg, #2c5aa0 0%, #1e3a72 100%);\n      border: none;\n      border-radius: 8px;\n      font-weight: 500;\n      padding: 8px 16px;\n      transition: all 0.2s ease;\n    }\n    \n    .btn-primary:hover {\n      background: linear-gradient(145deg, #1e3a72 0%, #0f1f3d 100%);\n      transform: translateY(-2px);\n      box-shadow: 0 4px 12px rgba(44, 90, 160, 0.3);\n    }\n    \n    /* Checkbox and radio button styling */\n    input[type='checkbox'], input[type='radio'] {\n      accent-color: #2c5aa0;\n    }\n    \n    /* Slider styling */\n    .irs--shiny {\n      color: #2c5aa0;\n    }\n    \n    .irs--shiny .irs-bar {\n      background: linear-gradient(90deg, #66b3ff 0%, #2c5aa0 100%);\n    }\n    \n    .irs--shiny .irs-handle {\n      background: #2c5aa0;\n      border: 3px solid #ffffff;\n    }\n    \n    /* Help text styling */\n    .help-block {\n      color: #b3d9ff;\n      font-size: 12px;\n      font-style: italic;\n    }\n    \n    /* Well and panel styling */\n    .well {\n      background: linear-gradient(145deg, #f8f9fa 0%, #e3f2fd 100%);\n      border: 1px solid #b3d9ff;\n      border-radius: 8px;\n    }\n  "))),
   uiOutput("theme_css"),
+  # Logo positioned to align with content
+  fluidRow(
+    column(12, 
+      div(style = "display: flex; justify-content: flex-start; padding: 10px 0; margin-bottom: 10px; border-bottom: 2px solid #e3f2fd;",
+        tags$img(src = "logo.png", height = "80px", style = "max-width: 300px; height: auto;")
+      )
+    )
+  ),
   sidebarLayout(
-    sidebarPanel(
-      h4("Data & Filters"),
-      width = 3,
+    conditionalPanel(
+      condition = "input.tabs != 'Trajectory'",
+      sidebarPanel(
+        h4("Data & Filters"),
+        width = 2,
       selectInput("mode", "Focus", choices = c("Markers", "Targets", "Composition"), selected = "Composition"),
       uiOutput("region_selector"),
       uiOutput("dynamic_selector"),
@@ -626,8 +768,7 @@ ui <- fluidPage(
                                      "mIAA" = "AAb_mIAA"),
                          selected = character(0)),
       radioButtons("aab_logic", "Match (within Aab+)", choices = c("Any", "All"), selected = "Any", inline = TRUE),
-    helpText("Default: all Aab+ donors are included. Selecting one or more autoantibodies restricts only the Aab+ group to donors matching the selection (Any = at least one selected AAb, All = all selected AAbs). ND and T1D groups are unaffected."),
-      checkboxGroupInput("groups", "Donor Status", choices = c("ND", "Aab+", "T1D"), selected = c("ND", "Aab+", "T1D")),
+      checkboxGroupInput("groups", "Donor Status", choices = c("ND", "Aab+", "T1D"), selected = c("ND", "Aab+", "T1D"), inline = TRUE),
       selectInput("curve_norm", "Normalization (plot)",
                   choices = c("None (raw)" = "none", "Global z-score" = "global", "Robust per-donor" = "robust"),
                   selected = "none"),
@@ -636,32 +777,45 @@ ui <- fluidPage(
                                "Mean±SD" = "mean_sd",
                                "Median + IQR" = "median_iqr"),
                    selected = "mean_se"),
-  # moved plot-specific controls below the main plot
-      radioButtons("add_smooth", "Trend line", choices = c("None", "LOESS"), selected = "None", inline = TRUE),
-      radioButtons("theme_bg", "Background", choices = c("Light","Dark"), selected = "Light", inline = TRUE),
       hr(),
       h5("Export"),
       downloadButton("dl_summary", "Download summary CSV"),
     downloadButton("dl_stats", "Download stats CSV")
+      )
     ),
     mainPanel(
       tabsetPanel(id = "tabs",
         tabPanel("Plot", 
-                 plotlyOutput("plt", height = 650),
-                 br(),
-                 fluidRow(
-                   column(3, sliderInput("binwidth", "Diameter bin width (µm)", min = 10, max = 100, value = 50, step = 5)),
-                   column(3, sliderInput("diam_max", "Max islet diameter (µm)", min = 50, max = 1000, value = 1000, step = 10)),
-                   column(2, checkboxInput("exclude_zero_top", "Exclude zero values", value = FALSE)),
-                   column(2, checkboxInput("show_points", "Show individual points", value = FALSE)),
-                   column(1, sliderInput("pt_size", "Point size", min = 0.3, max = 4.0, value = 0.8, step = 0.1)),
-                   column(1, sliderInput("pt_alpha", "Point transparency", min = 0.05, max = 1.0, value = 0.25, step = 0.05))
+                 # Main plot card
+                 div(class = "card", style = "margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px;",
+                   h5("Main Distribution Plot", style = "margin-top: 0; color: #333;"),
+                   plotlyOutput("plt", height = 650),
+                   br(),
+                   # Reorganized controls with better spacing
+                   fluidRow(
+                     column(3, 
+                       sliderInput("binwidth", "Diameter bin width (µm)", min = 10, max = 100, value = 50, step = 5),
+                       sliderInput("diam_max", "Max islet diameter (µm)", min = 50, max = 1000, value = 350, step = 10)
+                     ),
+                     column(3,
+                       checkboxInput("exclude_zero_top", "Exclude zero values", value = FALSE),
+                       checkboxInput("show_points", "Show individual points", value = FALSE),
+                       radioButtons("add_smooth", "Trend line", choices = c("None", "LOESS"), selected = "None", inline = TRUE)
+                     ),
+                     column(3,
+                       sliderInput("pt_size", "Point size", min = 0.3, max = 4.0, value = 0.8, step = 0.1),
+                       sliderInput("pt_alpha", "Point transparency", min = 0.05, max = 1.0, value = 0.25, step = 0.05)
+                     )
+                   )
                  ),
-                 tags$br(),
-                 tags$hr(),
-                 fluidRow(column(3, checkboxInput("exclude_zero_dist", "Exclude zero values (distribution)", value = FALSE))),
-                 uiOutput("dist_ui"),
-                 plotlyOutput("dist", height = 500)
+                 # Distribution plot card
+                 div(class = "card", style = "padding: 15px; border: 1px solid #ddd; border-radius: 8px;",
+                   h5("Distribution Comparison", style = "margin-top: 0; color: #333;"),
+                   plotlyOutput("dist", height = 500),
+                   br(),
+                   # Distribution controls below the plot
+                   uiOutput("dist_ui")
+                 )
         ),
         tabPanel("Statistics",
                  fluidRow(
@@ -679,33 +833,37 @@ ui <- fluidPage(
           tagList(
             uiOutput("traj_status"),
             fluidRow(
-              column(3,
-                uiOutput("traj_feature_selector")
-              ),
-              column(3,
-                selectInput("traj_color_by", "Color points by:",
-                           choices = c("Donor Status" = "donor_status", 
-                                     "Donor ID" = "donor_id"),
-                           selected = "donor_status")
-              ),
-              column(3,
-                selectInput("traj_point_size", "Point size by:",
-                           choices = c("Uniform" = "uniform",
-                                     "Islet Diameter" = "islet_diam_um"),
-                           selected = "uniform")
-              ),
-              column(3,
-                selectInput("traj_show_trend", "Trend lines:",
-                           choices = c("None" = "none", 
-                                     "Overall" = "overall",
-                                     "By Donor Status" = "by_donor"),
-                           selected = "by_donor")
+              column(12,
+                fluidRow(
+                  column(3,
+                    uiOutput("traj_feature_selector")
+                  ),
+                  column(3,
+                    selectInput("traj_color_by", "Color points by:",
+                               choices = c("Donor Status" = "donor_status", 
+                                         "Donor ID" = "donor_id"),
+                               selected = "donor_status")
+                  ),
+                  column(3,
+                    selectInput("traj_point_size", "Point size by:",
+                               choices = c("Uniform" = "uniform",
+                                         "Islet Diameter" = "islet_diam_um"),
+                               selected = "islet_diam_um")
+                  ),
+                  column(3,
+                    selectInput("traj_show_trend", "Trend lines:",
+                               choices = c("None" = "none", 
+                                         "Overall" = "overall",
+                                         "By Donor Status" = "by_donor"),
+                               selected = "by_donor")
+                  )
+                )
               )
             ),
             fluidRow(
               column(4,
                 sliderInput("traj_alpha", "Point transparency:",
-                           min = 0.1, max = 1.0, value = 0.7, step = 0.1)
+                           min = 0.1, max = 1.0, value = 0.2, step = 0.1)
               ),
               column(4),
               column(4)
@@ -736,7 +894,8 @@ ui <- fluidPage(
         tabPanel("Viewer",
           div(style = "max-width: 1200px;",
               uiOutput("local_image_picker"),
-              uiOutput("vit_view")
+              uiOutput("vit_view"),
+              tags$script(src = "geojson_streaming.js")
           )
         )
       )  # Close tabsetPanel
@@ -747,6 +906,9 @@ ui <- fluidPage(
 # ---------- Server ----------
 
 server <- function(input, output, session) {
+  # Variable to store forced image selection
+  forced_image <- reactiveVal(NULL)
+  
   validate_file <- reactive({
     shiny::validate(shiny::need(file.exists(master_path), paste("Not found:", master_path)))
     master_path
@@ -1218,14 +1380,18 @@ server <- function(input, output, session) {
       }
     }
     
-    # Add trend lines based on selection
+    # Get data range for constraining trend lines
+    pt_range <- range(df$pt, na.rm = TRUE)
+    
+    # Add trend lines based on selection - use geom_smooth with explicit x limits
     if (trend_type == "overall") {
-      g <- g + geom_smooth(method = "loess", se = TRUE, alpha = 0.2, color = "black", size = 1)
+      g <- g + geom_smooth(method = "loess", se = TRUE, alpha = 0.2, color = "black", 
+                          size = 1, fullrange = FALSE, span = 0.75)
     } else if (trend_type == "by_donor") {
-      # Add separate trendlines for each donor status
-      g <- g + geom_smooth(aes(group = donor_status, color = donor_status), 
-                          method = "loess", se = TRUE, alpha = 0.15, size = 0.8, 
-                          show.legend = FALSE)  # Don't show in legend since color already shows donor status
+      # Add separate trendlines for each donor status using the same factor levels as points
+      # This ensures proper matching between point colors and trend line colors
+      g <- g + geom_smooth(aes(color = donor_status), method = "loess", se = TRUE, alpha = 0.15, 
+                          size = 0.8, show.legend = FALSE, fullrange = FALSE, span = 0.75)
     }
     
     # Get current selection context for labels
@@ -1236,7 +1402,8 @@ server <- function(input, output, session) {
       x = "Pseudotime (PAGA trajectory, INS-rooted)",
       y = paste(selected_feature, metric_label),
       title = paste("Trajectory Analysis:", selected_feature, "vs Pseudotime")
-    )
+    ) + 
+    coord_cartesian(xlim = pt_range)  # Zoom to data range without clipping
     
     # Apply dark theme if selected
     if (!is.null(input$theme_bg) && input$theme_bg == "Dark") {
@@ -1414,9 +1581,9 @@ server <- function(input, output, session) {
       
       if (nrow(hm) == 0) return(NULL)
       
-      # Calculate bin midpoints
+      # Calculate bin midpoints in actual pseudotime range
       mids <- head(brks, -1) + diff(brks)[1]/2
-      hm$x <- mids[as.integer(hm$pt_bin)]
+      hm$x <- mids * (pt_range[2] - pt_range[1]) + pt_range[1]
       
       # Create heatmap
       g <- ggplot(hm, aes(x = x, y = 1, fill = avg_donor_status)) +
@@ -1429,8 +1596,7 @@ server <- function(input, output, session) {
           breaks = c(0, 1, 2),
           labels = c("ND", "Aab+", "T1D")
         ) +
-        scale_x_continuous(limits = c(0, 1), expand = c(0, 0), 
-                          labels = function(x) sprintf("%.2f", x * (pt_range[2] - pt_range[1]) + pt_range[1])) +
+        scale_x_continuous(limits = c(pt_range[1], pt_range[2]), expand = c(0, 0)) +
         labs(x = "Pseudotime", y = "", title = "Donor Status Progression Along Pseudotime") +
         theme_minimal() +
         theme(
@@ -1577,25 +1743,92 @@ server <- function(input, output, session) {
                      "Click on a point in the trajectory plot to view islet details"))
     }
     
+    # Get enhanced annotation data
+    annotation_info <- get_islet_annotations(islet$case_id, islet$islet_key)
+    
     tagList(
-      tags$div(style = "background:#f8f9fa; padding:8px; border-radius:4px; margin:5px 0;",
-        tags$strong("Selected Islet: ", islet$combined_islet_id),
-        tags$br(),
-        tags$span("Donor Status: ", tags$strong(islet$donor_status)),
-        tags$br(),
+      tags$div(style = "background:#f8f9fa; padding:12px; border-radius:6px; margin:5px 0;",
+        tags$h5("🔬 Selected Islet", style = "margin-bottom:10px; color:#495057;"),
+        
+        # Basic Identity
+        tags$div(style = "margin-bottom:8px;",
+          tags$strong("Islet ID: "), islet$combined_islet_id, tags$br(),
+          tags$strong("Case ID: "), islet$case_id, tags$br(),
+          tags$strong("Donor Status: "), 
+          tags$span(islet$donor_status, 
+                   style = paste0("color: ", 
+                                 switch(islet$donor_status,
+                                       "ND" = "#1f77b4",
+                                       "Aab+" = "#ff7f0e", 
+                                       "T1D" = "#d62728",
+                                       "#666"), "; font-weight:bold;"))
+        ),
+        
+        # Enhanced annotation data if available
+        if (!is.null(annotation_info)) {
+          tagList(
+            tags$hr(style = "margin:8px 0;"),
+            tags$div(style = "display:flex; gap:15px; flex-wrap:wrap;",
+              tags$div(style = "flex:1; min-width:120px;",
+                tags$strong("📐 Morphometry"), tags$br(),
+                tags$small("Area: ", sprintf("%.0f µm²", annotation_info$area)), tags$br(),
+                tags$small("Perimeter: ", sprintf("%.1f µm", annotation_info$perimeter))
+              ),
+              tags$div(style = "flex:1; min-width:120px;",
+                tags$strong("🧬 Cell Counts"), tags$br(),
+                tags$small(style = "color:#e41a1c;", "INS+: ", annotation_info$ins_pos), tags$br(),
+                tags$small(style = "color:#377eb8;", "GCG+: ", annotation_info$gcg_pos), tags$br(),
+                tags$small(style = "color:#ffcc00;", "SST+: ", annotation_info$sst_pos)
+              )
+            )
+          )
+        },
+        
+        # Spatial info and actions
+        tags$hr(style = "margin:8px 0;"),
         if (islet$has_spatial) {
           tagList(
             tags$span("Coordinates: ", sprintf("(%.1f, %.1f) µm", islet$centroid_x_um, islet$centroid_y_um)),
             tags$br(),
-            actionButton("jump_to_islet", "Jump to Islet in Viewer", 
-                        class = "btn-primary btn-sm", style = "margin-top:5px;")
+            actionButton("jump_to_islet", "🎯 Jump to Image", 
+                        class = "btn-primary btn-sm", style = "margin-top:8px;")
           )
         } else {
-          tags$span("Spatial coordinates not available", style = "color:#999;")
+          tagList(
+            tags$span("Spatial coordinates not available", style = "color:#999;"),
+            tags$br(),
+            actionButton("jump_to_islet", "🎯 Jump to Image", 
+                        class = "btn-primary btn-sm", style = "margin-top:8px;")
+          )
         }
       )
     )
   })
+  
+  # Observe overlay toggle changes
+  observeEvent(input$show_geojson_overlay, {
+    cat("[OVERLAY] Toggle changed to:", input$show_geojson_overlay, "\n")
+    # Use JavaScript to toggle overlay visibility without reloading iframe
+    overlay_js <- sprintf("
+      var iframe = document.getElementById('avivator_viewer');
+      if (iframe && iframe.contentWindow) {
+        try {
+          iframe.contentWindow.postMessage({
+            type: 'toggleOverlay',
+            enabled: %s
+          }, '*');
+        } catch(e) {
+          console.log('Could not send message to iframe:', e);
+        }
+      }
+      // Also show status indicator
+      if (window.showOverlayStatus) {
+        window.showOverlayStatus(%s);
+      }
+    ", tolower(as.character(input$show_geojson_overlay)), tolower(as.character(input$show_geojson_overlay)))
+    
+    shinyjs::runjs(overlay_js)
+  }, ignoreInit = TRUE)
   
   # Handle jump to islet in viewer
   observeEvent(input$jump_to_islet, {
@@ -1605,7 +1838,7 @@ server <- function(input, output, session) {
       updateTabsetPanel(session, "tabs", selected = "Viewer")
       
       # Update the image selection to match the islet's case
-      case_id <- sprintf("%04d", as.numeric(islet$case_id))
+      case_id <- as.character(islet$case_id)  # Use case_id as-is, don't pad with zeros
       
       # Find available images and select the matching one
       available_images <- list.files(path = "www/local_images", pattern = ".*\\.(ome\\.)?tiff?$", ignore.case = TRUE)
@@ -1617,12 +1850,39 @@ server <- function(input, output, session) {
         }
       }
       
-      # Look for image with matching case ID
-      matching_image <- available_images[grepl(paste0("_?", case_id, "\\.(ome\\.)?tiff?$"), available_images, ignore.case = TRUE)]
+      # Look for image with matching donor status and case ID
+      # Images are named like: Aab_6450.ome.tiff, ND_6356.ome.tiff, T1D_6533.ome.tiff
+      donor_prefix <- case_when(
+        islet$donor_status == "Aab+" ~ "Aab_",
+        islet$donor_status == "ND" ~ "ND_", 
+        islet$donor_status == "T1D" ~ "T1D_",
+        TRUE ~ ".*_"  # fallback pattern
+      )
+      image_pattern <- paste0(donor_prefix, case_id, "\\.(ome\\.)?tiff?$")
+      matching_image <- available_images[grepl(image_pattern, available_images, ignore.case = TRUE)]
+      
+      cat("[JUMP DEBUG] Looking for pattern:", image_pattern, "in", length(available_images), "images\n")
+      cat("[JUMP DEBUG] Found matches:", paste(matching_image, collapse=", "), "\n")
       
       if (length(matching_image) > 0) {
-        # Update the image selector
-        updateSelectInput(session, "selected_image", selected = matching_image[1])
+        # Use a more reliable approach: set forced image first, then update UI
+        cat("[JUMP] === Setting forced image ===\n")
+        forced_image(matching_image[1])
+        cat("[JUMP] forced_image() is now:", if(is.null(forced_image())) "NULL" else paste0("'", forced_image(), "'"), "\n")
+        
+        # Use shinyjs delay to ensure the reactive fires
+        shinyjs::delay(100, {
+          updateSelectInput(session, "selected_image", selected = matching_image[1])
+          cat("[JUMP] Updated selectInput to:", matching_image[1], "\n")
+        })
+        
+        # Clear forced image after sufficient delay to allow viewer to update
+        shinyjs::delay(2000, {
+          forced_image(NULL)
+          cat("[JUMP] Cleared forced image after viewer update\n")
+        })
+        
+        cat("[JUMP] Set forced image to:", matching_image[1], "\n")
         
         # Show feedback to user
         showNotification(
@@ -1644,6 +1904,12 @@ server <- function(input, output, session) {
   })
 
   viewer_info <- reactive({
+    # React to overlay toggle changes
+    input$show_geojson_overlay
+    
+    # Explicitly depend on forced_image to ensure reactive chain
+    forced_img <- forced_image()
+    
     base <- resolve_avivator_base()
     info <- list(base = base, selection = NULL, mode = "picker", ok = FALSE,
                  iframe_src = NULL, image_url = NULL)
@@ -1655,10 +1921,22 @@ server <- function(input, output, session) {
         "hostname:", env_info$hostname, "pathname:", env_info$pathname, "\n")
     
     params <- list()
-    # Select image: prefer user selection from www/local_images when available; else use explicit default if set
+    # Select image: prefer forced image first, then user selection
     sel_url <- NULL
-    # Selection from UI (basename only)
-    sel_basename <- tryCatch(input$selected_image, silent = TRUE)
+    
+    # Check for forced image first (use stored value to ensure consistency)
+    sel_basename <- forced_img
+    if (is.null(sel_basename)) {
+      # Fall back to input selection
+      sel_basename <- input$selected_image
+    }
+    
+    cat("[VIEWER] === Image Selection Debug ===\n")
+    cat("[VIEWER] Forced image:", if(is.null(forced_img)) "NULL" else paste0("'", forced_img, "'"), "\n")
+    cat("[VIEWER] Input image:", if(is.null(input$selected_image)) "NULL" else paste0("'", input$selected_image, "'"), "\n")
+    cat("[VIEWER] Selected basename:", if(is.null(sel_basename)) "NULL" else paste0("'", sel_basename, "'"), "\n")
+    cat("[VIEWER] === End Selection Debug ===\n")
+    
     if (!is.null(sel_basename) && nzchar(sel_basename)) {
       # Build URL based on environment
       if (env_info$is_reverse_proxy) {
@@ -1693,6 +1971,29 @@ server <- function(input, output, session) {
     if (!is.null(ch_b64) && nzchar(ch_b64)) {
       # URL-encode to be safe; the viewer will decodeURIComponent before atob as needed
       params[["channel_config"]] <- utils::URLencode(ch_b64, reserved = TRUE)
+    }
+    
+    # Add GeoJSON overlay URL if available and enabled
+    show_overlay <- tryCatch(input$show_geojson_overlay, silent = TRUE)
+    if (is.null(show_overlay)) show_overlay <- TRUE  # Default to TRUE
+    
+    # Note: Overlay handling moved to client-side to avoid viewer flashing
+    if (geojson_available && !is.null(sel_basename)) {
+      # Extract case ID from image filename (e.g., "T1D_6563.ome.tiff" -> "6563")
+      case_id <- gsub("^[^_]*_([0-9]+)\\.(ome\\.)?tiff?$", "\\1", sel_basename)
+      geojson_file <- paste0(case_id, ".geojson.gz")
+      geojson_path <- file.path(geojson_dir, geojson_file)
+      
+      if (file.exists(geojson_path)) {
+        # Only pass geojson_url, let client-side handle visibility
+        geojson_url <- paste0("gson/", geojson_file)
+        params[["geojson_url"]] <- utils::URLencode(geojson_url, reserved = TRUE)
+        # Add overlay script to be loaded by the viewer
+        params[["overlay_script"]] <- utils::URLencode("geojson_overlay.js", reserved = TRUE)
+        cat("[GEOJSON] Available overlay for case", case_id, ":", geojson_url, "\n")
+      } else {
+        cat("[GEOJSON] No overlay found for case", case_id, "\n")
+      }
     }
     query <- NULL
     if (length(params)) {
@@ -2144,8 +2445,7 @@ server <- function(input, output, session) {
     check_url <- if (has_www_local_images) paste0(appPath, "local_images/", sel) else paste0("/images/", sel)
     tagList(
       div(style = "display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap;",
-        div(style = "min-width:280px;", selectInput("selected_image", "Select OME-TIFF", choices = files, selected = sel)),
-        div(style = "color:#666; font-size:90%; padding-bottom:8px;", "Images are served from ", if (has_www_local_images) "www/local_images" else "/images (dynamic)" )
+        div(style = "min-width:280px;", selectInput("selected_image", "Select OME-TIFF", choices = files, selected = sel))
       )
       , tags$div(id = "range-check", style = "margin-top:6px; font-family:monospace; color:#555;", "Checking Range support...")
       , tags$script(HTML(paste0(
@@ -2205,39 +2505,84 @@ output$vit_view <- renderUI({
               width = "100%",
               frameBorder = 0,
               allowfullscreen = NA,
-              style = "width:100%; height:calc(100vh - 140px); border:0;"),
-    tags$div(style = "margin-top:6px;",
-      tags$a(href = vi$iframe_src, target = "_blank", rel = "noopener", "Open viewer in a new tab"),
-      tagList(
-        tags$br(),
-        tags$small(style = "color: #666;", 
-          "Tip: For local development, you can also access images directly at: ",
-          tags$code(paste0(getwd(), "/www/local_images/"))
-        )
-      )
-    )
+              style = "width:100%; height:calc(100vh - 80px); border:0;"),
+    # Viewer embedded above
   )
 })
 
+  # ---- GeoJSON Overlay Handlers (Streaming) ----
+  
+  # Handle overlay toggle
+  observeEvent(input$show_geojson_overlay, {
+    if (gson_cache_available) {
+      session$sendCustomMessage('toggleGeoJSONOverlay', list(
+        enabled = isTRUE(input$show_geojson_overlay)
+      ))
+    }
+  }, ignoreNULL = FALSE, ignoreInit = TRUE)
+  
+  # Load overlays when image changes
+  observeEvent(input$selected_image, {
+    if (!is.null(input$selected_image) && gson_cache_available && isTRUE(input$show_geojson_overlay)) {
+      # Extract case ID from filename
+      case_id <- gsub("^[^_]*_([0-9]+)\\.(ome\\.)?tiff?$", "\\1", input$selected_image)
+      
+      # Check if cache file exists
+      pkl_file <- file.path(gson_cache_dir, paste0(case_id, "_simplified.pkl"))
+      if (file.exists(pkl_file)) {
+        cat("[OVERLAY] Loading overlay for case", case_id, "\n")
+        session$sendCustomMessage('loadGeoJSONOverlay', list(
+          case_id = case_id,
+          viewport = NULL  # Load initial view
+        ))
+      } else {
+        cat("[OVERLAY] No cache file for case", case_id, "\n")
+      }
+    }
+  }, ignoreNULL = TRUE, ignoreInit = TRUE)
+  
+  # GeoJSON query endpoint (called by client-side JS)
+  observe({
+    query <- parseQueryString(session$clientData$url_search)
+    
+    # Check if this is a geojson query request
+    if (!is.null(query$geojson_query) && query$geojson_query == "1") {
+      case_id <- query$case_id
+      xmin <- if (!is.null(query$xmin)) as.numeric(query$xmin) else NULL
+      ymin <- if (!is.null(query$ymin)) as.numeric(query$ymin) else NULL
+      xmax <- if (!is.null(query$xmax)) as.numeric(query$xmax) else NULL
+      ymax <- if (!is.null(query$ymax)) as.numeric(query$ymax) else NULL
+      max_features <- if (!is.null(query$max_features)) as.integer(query$max_features) else 5000
+      
+      if (!is.null(case_id)) {
+        result <- query_geojson_features(case_id, xmin, ymin, xmax, ymax, max_features)
+        
+        # Send response as JSON
+        session$sendCustomMessage('geojsonQueryResponse', list(
+          query_id = query$query_id,
+          data = result
+        ))
+      }
+    }
+  })
+  
+  # ---- End GeoJSON Overlay Handlers ----
+  
   # Pseudotime scatter when counts are selected (scaled counts vs pseudotime)
   # Distribution plot UI (violin/box)
   output$dist_ui <- renderUI({
     tagList(
-      tags$h4("Distribution by donor status"),
       fluidRow(
-        column(4,
+        column(3,
           radioButtons("dist_type", "Plot type", choices = c("Violin", "Box"), selected = "Violin", inline = TRUE)
         ),
-        column(4,
-          checkboxInput("dist_show_points", "Show jittered points", value = TRUE)
+        column(3,
+          checkboxInput("dist_show_points", "Show jittered points", value = TRUE),
+          checkboxInput("exclude_zero_dist", "Exclude zero values", value = FALSE)
         ),
-        column(4,
+        column(3,
+          sliderInput("dist_pt_size", "Point size", min = 0.3, max = 4.0, value = 0.7, step = 0.1),
           sliderInput("dist_pt_alpha", "Point transparency", min = 0.05, max = 1.0, value = 0.25, step = 0.05)
-        )
-      ),
-      fluidRow(
-        column(4,
-          sliderInput("dist_pt_size", "Point size", min = 0.3, max = 4.0, value = 0.7, step = 0.1)
         )
       )
     )
@@ -2308,6 +2653,32 @@ output$vit_view <- renderUI({
     ggplotly(g)
   })
 
+  # Helper function to create selection descriptions for CSV export
+  get_selection_description <- function() {
+    desc <- c()
+    desc <- c(desc, paste("Generated:", Sys.time()))
+    desc <- c(desc, paste("Focus:", input$mode %||% "Unknown"))
+    desc <- c(desc, paste("Region:", input$region %||% "Unknown"))
+    
+    if (!is.null(input$dynamic_metric)) {
+      desc <- c(desc, paste("Metric:", input$dynamic_metric))
+    }
+    
+    desc <- c(desc, paste("Donor Groups:", paste(input$groups %||% c(), collapse = ", ")))
+    
+    if (length(input$aab_flags) > 0) {
+      aab_desc <- paste("AAb Filter:", paste(input$aab_flags, collapse = ", "), "(", input$aab_logic %||% "Any", ")")
+      desc <- c(desc, aab_desc)
+    }
+    
+    desc <- c(desc, paste("Normalization:", input$curve_norm %||% "none"))
+    desc <- c(desc, paste("Statistic:", input$stat %||% "mean_se"))
+    desc <- c(desc, paste("Bin Width:", input$binwidth %||% "50", "µm"))
+    desc <- c(desc, paste("Max Diameter:", input$diam_max %||% "350", "µm"))
+    
+    return(desc)
+  }
+
   # pseudotime stats removed
 
   output$dl_summary <- downloadHandler(
@@ -2317,7 +2688,16 @@ output$vit_view <- renderUI({
     content = function(file) {
       df <- summary_df()
       if (is.null(df) || nrow(df) == 0) df <- data.frame()
-      write.csv(df, file, row.names = FALSE)
+      
+      # Add selection descriptions as comments at the top
+      descriptions <- get_selection_description()
+      
+      # Write descriptions as comments first
+      writeLines(paste("#", descriptions), file)
+      writeLines("", file, sep = "\n")
+      
+      # Append the actual data
+      write.table(df, file, append = TRUE, sep = ",", row.names = FALSE)
     }
   )
 
@@ -2328,7 +2708,16 @@ output$vit_view <- renderUI({
     content = function(file) {
       st <- stats_data()
       if (is.null(st) || nrow(st) == 0) st <- data.frame()
-      write.csv(st, file, row.names = FALSE)
+      
+      # Add selection descriptions as comments at the top
+      descriptions <- get_selection_description()
+      
+      # Write descriptions as comments first
+      writeLines(paste("#", descriptions), file)
+      writeLines("", file, sep = "\n")
+      
+      # Append the actual data
+      write.table(st, file, append = TRUE, sep = ",", row.names = FALSE)
     }
   )
 }
