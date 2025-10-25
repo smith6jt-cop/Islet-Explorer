@@ -23,6 +23,25 @@ Or from the shell:
 R -q -e 'shiny::runApp("shiny", launch.browser=TRUE)'
 ```
 
+If you are missing packages, install them via:
+
+```r
+source("scripts/install_shiny_deps.R")
+```
+
+## Segmentation Viewer (Vitessce)
+
+The Trajectory tab embeds a Vitessce-based OME-TIFF viewer which overlays one or more segmentation label rasters on the base image.
+
+- Base images live under `app/shiny_app/www/local_images/`, named like: `<anything>_<YYYY>.ome.tiff` (YYYY is a 4-digit sample ID)
+- Segmentation label images live under `app/shiny_app/www/LabelExports/`, named like: `YYYY_<label>.ome.tiff` (e.g., `6505_Islet_42.ome.tiff`)
+- Multiple segmentations per sample are supported; they're auto-detected and shown as toggleable layers.
+
+Tips:
+- Ensure both base and segmentation files are OME-TIFFs. Non-OME TIFFs won’t load.
+- Click a point in the trajectory scatter to load the corresponding case image; if an islet ID is present in the filename, matching segmentations are preferred.
+- Channel names can be optionally provided via `app/shiny_app/Channel_names` or `Channel_names.txt` to color INS/GCG/SST/DAPI by default.
+
 ## Notes
 
 - Islet diameter is standardized to CORE area: derived from `Islet_Targets` rows where `type == "islet_core"` (core `region_um2`). Diameter = `2 * sqrt(core_area/pi)`.

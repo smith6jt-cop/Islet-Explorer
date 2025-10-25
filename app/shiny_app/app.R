@@ -9,6 +9,12 @@ library(plotly)
 library(broom)
 library(jsonlite)
 
+# Check for httr2 package (required for AI assistant)
+httr2_available <- requireNamespace("httr2", quietly = TRUE)
+if (!httr2_available) {
+  message("Package 'httr2' not found. The AI assistant will be disabled until you install it (install.packages('httr2')).")
+}
+
 # Load anndata package for trajectory analysis (install with BiocManager::install('anndata'))
 suppressPackageStartupMessages({
   if (!requireNamespace("anndata", quietly = TRUE)) {
@@ -16,8 +22,49 @@ suppressPackageStartupMessages({
   }
 })
 
+# Load vitessceR for embedded image viewer (GitHub v0.1.0 required)
+VITESSCE_AVAILABLE <- FALSE
+suppressPackageStartupMessages({
+  if (!requireNamespace("vitessceR", quietly = TRUE)) {
+    message("Package 'vitessceR' not found. Install with: remotes::install_github('vitessce/vitessceR')")
+    message("Version required: >= 0.1.0")
+  } else {
+    # Verify we have the GitHub version with required features
+    tryCatch({
+      pkg_version <- packageVersion("vitessceR")
+      if (pkg_version < "0.1.0") {
+        warning("vitessceR version ", pkg_version, " detected. Please upgrade to >= 0.1.0 from GitHub")
+      }
+      test_vc <- vitessceR::VitessceConfig$new(schema_version = "1.0.16", name = "Test")
+      message("[VITESSCE] Package verified working (version ", pkg_version, ")")
+      VITESSCE_AVAILABLE <<- TRUE
+    }, error = function(e) {
+      warning("[VITESSCE] Package installed but failed basic test: ", conditionMessage(e))
+    })
+
+    # CRITICAL FIX: Ensure all child routes from MultiImageWrapper are registered
+    # This fixes segmentation layers not loading properly and appearing at wrong sizes
+    if (VITESSCE_AVAILABLE) {
+      tryCatch({
+        vitessceR::MultiImageWrapper$set("public", "get_routes", function() {
+          routes <- list()
+          if (length(self$image_wrappers) == 0L) return(routes)
+          for (w in self$image_wrappers) {
+            wr <- w$get_routes()
+            if (length(wr) > 0L) routes <- c(routes, wr)
+          }
+          routes
+        }, overwrite = TRUE)
+        message("[VITESSCE] Applied MultiImageWrapper get_routes fix for segmentation layer routing")
+      }, error = function(e) {
+        warning("[VITESSCE] Failed to apply get_routes fix: ", conditionMessage(e))
+      })
+    }
+  }
+})
+
 # ---- Runtime diagnostics (temporary) ----
-APP_VERSION <- "canvas-overlay-v16"
+APP_VERSION <- "vitessce-trajectory-v1"
 try({
   message("[APP LOAD] Version=", APP_VERSION, " time=", Sys.time())
   message("[APP LOAD] getwd=", tryCatch(getwd(), error=function(e) NA))
@@ -40,23 +87,27 @@ try({
 }, silent = TRUE)
 
 
-# Diagnostic-safe wrapper around dplyr::left_join to catch non-data.frame inputs early.
-safe_left_join <- function(x, y, by, context) {
-  cx <- paste(class(x), collapse = "/"); cy <- paste(class(y), collapse = "/")
-  okx <- inherits(x, "data.frame"); oky <- inherits(y, "data.frame")
-  if (!okx || !oky) {
-    message(sprintf("[safe_left_join] %s: coercing inputs (lhs=%s rhs=%s)", context, cx, cy))
-    x <- tryCatch(as.data.frame(x), error = function(e) { message("[safe_left_join] lhs coercion failed: ", e$message); x })
-    y <- tryCatch(as.data.frame(y), error = function(e) { message("[safe_left_join] rhs coercion failed: ", e$message); y })
+# Safe wrapper around dplyr::left_join to handle non-data.frame inputs
+safe_left_join <- function(x, y, by, context = "join") {
+  # Ensure inputs are data.frames
+  if (!inherits(x, "data.frame")) {
+    x <- tryCatch(as.data.frame(x), error = function(e) {
+      stop(sprintf("[safe_left_join] %s: Cannot coerce LHS to data.frame (class: %s)",
+                   context, paste(class(x), collapse = "/")))
+    })
   }
-  if (!inherits(x, "data.frame") || !inherits(y, "data.frame")) {
-    stop(sprintf("[safe_left_join] %s: cannot join; lhs class=%s rhs class=%s", context, paste(class(x), collapse='/'), paste(class(y), collapse='/')))
+  if (!inherits(y, "data.frame")) {
+    y <- tryCatch(as.data.frame(y), error = function(e) {
+      stop(sprintf("[safe_left_join] %s: Cannot coerce RHS to data.frame (class: %s)",
+                   context, paste(class(y), collapse = "/")))
+    })
   }
+
+  # Perform join with error context
   tryCatch(
     dplyr::left_join(x, y, by = by),
     error = function(e) {
-      message(sprintf("[safe_left_join] %s: left_join error: %s", context, e$message))
-      stop(e)
+      stop(sprintf("[safe_left_join] %s: %s", context, e$message))
     }
   )
 }
@@ -73,30 +124,630 @@ master_path <- file.path("..", "..", "data", "master_results.xlsx")
 
 project_root <- tryCatch(normalizePath(file.path("..", ".."), mustWork = FALSE), error = function(e) NULL)
 
+AI_SYSTEM_PROMPT <- paste(
+  "You are an AI assistant embedded in the Islet Explorer Shiny app.",
+  "Help users interpret plots, statistics, and data preparation steps without hallucinating.",
+  "Favor concise, actionable answers rooted in the app's current state and available controls."
+)
+
+# ===== Credential Loading =====
+# Set DEBUG_CREDENTIALS=1 to enable verbose logging
+DEBUG_CREDS <- isTRUE(as.logical(Sys.getenv("DEBUG_CREDENTIALS", "0")))
+
+if (DEBUG_CREDS) {
+  cat("\n=== CREDENTIAL LOADING DEBUG ===\n")
+  cat("Current working directory:", getwd(), "\n")
+  cat("Home directory:", Sys.getenv("HOME"), "\n")
+  cat("User:", Sys.getenv("USER"), "\n")
+}
+
+# Check if .Renviron exists - prioritize app directory for deployment
+renviron_paths <- c(
+  ".Renviron",  # App directory (for deployment)
+  file.path(dirname(sys.frame(1)$ofile %||% "."), ".Renviron"),  # Script directory
+  Sys.getenv("R_ENVIRON_USER", unset = ""),
+  "~/.Renviron",
+  "~/.Renviron.local",
+  file.path(Sys.getenv("HOME"), ".Renviron")
+)
+renviron_paths <- unique(path.expand(renviron_paths[nzchar(renviron_paths)]))
+
+if (DEBUG_CREDS) {
+  cat("\nSearching for .Renviron files:\n")
+  for (path in renviron_paths) {
+    exists <- file.exists(path)
+    cat("  ", path, ":", if(exists) "EXISTS" else "NOT FOUND", "\n")
+    if (exists) {
+      cat("    File size:", file.size(path), "bytes\n")
+      cat("    Readable:", file.access(path, 4) == 0, "\n")
+    }
+  }
+}
+
+# Credential loader with optional debug output
+load_user_env_credentials <- function() {
+  if (DEBUG_CREDS) cat("\n[CREDENTIAL LOADER] Starting...\n")
+
+  for (env_path in renviron_paths) {
+    if (!file.exists(env_path)) next
+
+    if (DEBUG_CREDS) cat("[CREDENTIAL LOADER] Attempting to load:", env_path, "\n")
+
+    result <- tryCatch({
+      readRenviron(env_path)
+
+      if (DEBUG_CREDS) {
+        lines <- readLines(env_path, warn = FALSE)
+        key_line <- grep("^KEY\\s*=", lines, value = TRUE)
+        base_line <- grep("^BASE\\s*=", lines, value = TRUE)
+        cat("[CREDENTIAL LOADER] File contains", length(lines), "lines\n")
+        cat("[CREDENTIAL LOADER] KEY line found:", length(key_line) > 0, "\n")
+        cat("[CREDENTIAL LOADER] BASE line found:", length(base_line) > 0, "\n")
+
+        key_after <- Sys.getenv("KEY", unset = "")
+        base_after <- Sys.getenv("BASE", unset = "")
+        cat("[CREDENTIAL LOADER] After loading:\n")
+        cat("  KEY present:", nzchar(key_after), "\n")
+        cat("  KEY length:", nchar(key_after), "\n")
+        cat("  BASE present:", nzchar(base_after), "\n")
+        cat("  BASE value:", base_after, "\n")
+      }
+
+      TRUE
+    }, error = function(e) {
+      if (DEBUG_CREDS) cat("[CREDENTIAL LOADER] ERROR loading", env_path, ":", conditionMessage(e), "\n")
+      FALSE
+    })
+
+    if (result) {
+      if (DEBUG_CREDS) cat("[CREDENTIAL LOADER] Successfully loaded from:", env_path, "\n")
+      return(invisible(TRUE))
+    }
+  }
+
+  if (DEBUG_CREDS) cat("[CREDENTIAL LOADER] No valid .Renviron file found\n")
+  invisible(FALSE)
+}
+
+# Load credentials immediately
+load_user_env_credentials()
+
+# Simplified credential getters
+get_llm_api_key <- function() {
+  key_val <- Sys.getenv("KEY", unset = "")
+  key_val <- stringr::str_trim(key_val)
+  key_val <- stringr::str_replace_all(key_val, "\\s+", "")
+
+  if (nzchar(key_val)) {
+    if (DEBUG_CREDS) cat("[API KEY] Found key of length", nchar(key_val), "\n")
+    return(key_val)
+  }
+
+  if (DEBUG_CREDS) cat("[API KEY] No key found in environment\n")
+  return("")
+}
+
+get_llm_api_base <- function() {
+  base_val <- Sys.getenv("BASE", unset = "")
+  base_val <- stringr::str_trim(base_val)
+
+  if (!nzchar(base_val)) {
+    if (DEBUG_CREDS) cat("[API BASE] No BASE found, using default OpenAI endpoint\n")
+    return("https://api.openai.com/v1")
+  }
+
+  # Remove trailing slashes
+  base_val <- sub("/+\\z", "", base_val, perl = TRUE)
+
+  # Add /v1 suffix if not present
+  if (!grepl("/v[0-9]+$", base_val) && !grepl("/v[0-9]+/", base_val)) {
+    base_val <- paste0(base_val, "/v1")
+  }
+
+  if (DEBUG_CREDS) cat("[API BASE] Using custom endpoint:", base_val, "\n")
+  Sys.setenv(BASE = base_val)
+  return(base_val)
+}
+
+# Initialize and verify
+LLM_API_BASE <- get_llm_api_base()
+test_key <- get_llm_api_key()
+
+if (DEBUG_CREDS) {
+  cat("\n=== FINAL CREDENTIAL CHECK ===\n")
+  cat("API Base:", LLM_API_BASE, "\n")
+  cat("API Key configured:", nzchar(test_key), "\n")
+  cat("================================\n\n")
+}
+
+sanitize_openai_content <- function(text, max_chars = 4000) {
+  if (is.null(text)) return("")
+  trimmed <- stringr::str_trim(as.character(text))
+  if (!nzchar(trimmed)) return("")
+  if (nchar(trimmed, type = "chars") > max_chars) {
+    return(paste0(substr(trimmed, 1, max_chars - 1), "…"))
+  }
+  trimmed
+}
+
+build_openai_messages <- function(history, system_prompt = AI_SYSTEM_PROMPT, max_turns = 6) {
+  msgs <- list(list(role = "system", content = sanitize_openai_content(system_prompt)))
+  if (!length(history)) return(msgs)
+  filtered <- Filter(function(entry) entry$role %in% c("user", "assistant"), history)
+  if (length(filtered) > max_turns * 2) {
+    filtered <- filtered[(length(filtered) - max_turns * 2 + 1):length(filtered)]
+  }
+  for (entry in filtered) {
+    sanitized <- sanitize_openai_content(entry$content)
+    if (!nzchar(sanitized)) next
+    msgs[[length(msgs) + 1]] <- list(role = entry$role, content = sanitized)
+  }
+  msgs
+}
+
+select_openai_models <- function(requested_model = "auto", history) {
+  default_model <- Sys.getenv("OPENAI_DEFAULT_MODEL", unset = "gpt-oss-120b")
+  fast_model <- Sys.getenv("OPENAI_FAST_MODEL", unset = "gpt-oss-20b")
+
+  if (!identical(requested_model, "auto")) {
+    return(unique(c(requested_model, default_model)))
+  }
+
+  last_user <- NULL
+  if (length(history)) {
+    user_entries <- rev(Filter(function(entry) identical(entry$role, "user"), history))
+    if (length(user_entries)) {
+      last_user <- user_entries[[1]]$content %||% ""
+    }
+  }
+
+  convo_len <- sum(vapply(history, function(entry) !identical(entry$role, "system"), logical(1)))
+  use_fast <- !is.null(last_user) && nchar(last_user, type = "chars") <= 600 && convo_len <= 6
+  if (use_fast && nzchar(fast_model)) {
+    return(unique(c(fast_model, default_model)))
+  }
+  unique(c(default_model))
+}
+
+call_openai_chat <- function(history, system_prompt = AI_SYSTEM_PROMPT,
+                             model = "auto", temperature = 0.3,
+                             max_output_tokens = 512,
+                             stream = FALSE, stream_callback = NULL) {
+  api_key <- get_llm_api_key()
+  if (!nzchar(api_key)) {
+    stop("OpenAI API key not configured.", call. = FALSE)
+  }
+  if (!httr2_available) {
+    stop("OpenAI assistant requires the 'httr2' package. Install with install.packages('httr2').", call. = FALSE)
+  }
+
+  max_output_tokens <- suppressWarnings(as.integer(max_output_tokens))
+  if (is.na(max_output_tokens) || max_output_tokens <= 0L) {
+    max_output_tokens <- 512L
+  } else if (max_output_tokens < 16L) {
+    max_output_tokens <- 16L
+  }
+
+  messages <- build_openai_messages(history, system_prompt)
+  input_messages <- lapply(messages, function(entry) {
+    list(
+      role = entry$role,
+      content = list(list(type = "input_text", text = entry$content %||% ""))
+    )
+  })
+  chat_messages <- lapply(messages, function(entry) {
+    list(
+      role = entry$role,
+      content = entry$content %||% ""
+    )
+  })
+
+  model_candidates <- select_openai_models(model, messages)
+  fallback_model <- utils::tail(model_candidates, 1)
+  last_error_message <- NULL
+
+  base_candidate <- tryCatch(LLM_API_BASE, error = function(e) NULL)
+  if (is.null(base_candidate) || !nzchar(base_candidate)) {
+    base_candidate <- "https://api.openai.com/v1"
+  }
+  base_candidate <- sub("/+\\z", "", base_candidate, perl = TRUE)
+  
+  # UF Navigator uses standard OpenAI-compatible chat API, not /responses
+  use_chat_api_only <- grepl("api\\.ai\\.it\\.ufl\\.edu", base_candidate, ignore.case = TRUE)
+  
+  responses_url <- paste0(base_candidate, "/responses")
+  chat_url <- paste0(base_candidate, "/chat/completions")
+
+  parse_usage <- function(body) {
+    usage <- body$usage %||% NULL
+    if (is.null(usage)) return(NULL)
+    usage
+  }
+
+  stream_error <- function(message, fallback = FALSE) {
+    err <- simpleError(message)
+    attr(err, "fallback_to_nonstream") <- fallback
+    err
+  }
+
+  try_stream_chat <- function(mdl) {
+    message("[OPENAI] Streaming model '", mdl, "' via ", chat_url)
+    chat_payload <- list(
+      model = mdl,
+      messages = chat_messages,
+      temperature = temperature,
+      max_tokens = max_output_tokens,
+      stream = TRUE
+    )
+  payload_json <- jsonlite::toJSON(chat_payload, auto_unbox = TRUE, digits = NA)
+  payload_raw <- charToRaw(payload_json)
+    chunk_buffer <- ""
+    accumulated <- ""
+    usage_capture <- NULL
+
+    append_segment <- function(segment) {
+      lines <- strsplit(segment, "\n", fixed = TRUE)[[1]]
+      if (!length(lines)) return()
+      data_lines <- lines[startsWith(lines, "data:")]
+      if (!length(data_lines)) return()
+      for (line in data_lines) {
+        data <- sub("^data:\\s*", "", line)
+        if (identical(data, "[DONE]")) next
+        if (!nzchar(data)) next
+        parsed <- tryCatch(jsonlite::fromJSON(data, simplifyVector = FALSE), error = function(e) NULL)
+        if (is.null(parsed)) next
+        if (!is.null(parsed$usage)) {
+          usage_capture <<- parsed$usage
+          if (is.function(stream_callback)) {
+            stream_callback(accumulated, usage_capture)
+          }
+        }
+        if (!is.null(parsed$choices) && length(parsed$choices) > 0) {
+          delta <- parsed$choices[[1]]$delta %||% list()
+          piece <- delta$content
+          if (!is.null(piece)) {
+            piece <- paste(piece, collapse = "")
+            accumulated <<- paste0(accumulated, piece)
+            if (is.function(stream_callback)) {
+              stream_callback(accumulated, usage_capture)
+            }
+          } else if (!is.null(delta$role) && is.function(stream_callback)) {
+            stream_callback(accumulated, usage_capture)
+          }
+        }
+      }
+    }
+
+    req_chat_stream <- httr2::request(chat_url) |>
+      httr2::req_headers(
+        Authorization = paste("Bearer", api_key),
+        `Content-Type` = "application/json"
+      ) |>
+  httr2::req_body_raw(payload_raw, type = "application/json") |>
+      httr2::req_timeout(60) |>
+      httr2::req_retry(
+        max_tries = 3,
+        is_transient = function(resp) {
+          status <- httr2::resp_status(resp)
+          status == 429 || (status >= 500 && status < 600)
+        }
+      )
+
+    resp_stream <- tryCatch(
+      httr2::req_stream(req_chat_stream, function(chunk, ...) {
+        chunk_buffer <<- paste0(chunk_buffer, rawToChar(chunk))
+        repeat {
+          split_pos <- regexpr("\n\n", chunk_buffer, fixed = TRUE)
+          if (split_pos[1] == -1) break
+          segment <- substr(chunk_buffer, 1, split_pos[1] - 1)
+          chunk_buffer <<- substr(chunk_buffer, split_pos[1] + 2, nchar(chunk_buffer))
+          append_segment(segment)
+        }
+        invisible(NULL)
+      }),
+      error = identity
+    )
+
+    if (inherits(resp_stream, "error")) {
+      attr(resp_stream, "fallback_to_nonstream") <- TRUE
+      return(resp_stream)
+    }
+
+    if (nzchar(chunk_buffer)) {
+      append_segment(chunk_buffer)
+      chunk_buffer <<- ""
+    }
+
+    status_chat <- httr2::resp_status(resp_stream)
+    if (status_chat >= 300) {
+      err_body_chat <- tryCatch(httr2::resp_body_json(resp_stream, simplifyVector = TRUE), error = function(e) NULL)
+      status_reason_chat <- tryCatch(httr2::resp_status_desc(resp_stream), error = function(e) NULL)
+      detail_chat <- if (!is.null(err_body_chat) && !is.null(err_body_chat$error) && !is.null(err_body_chat$error$message)) {
+        err_body_chat$error$message
+      } else if (!is.null(status_reason_chat) && nzchar(status_reason_chat)) {
+        paste(status_chat, status_reason_chat)
+      } else {
+        paste("HTTP", status_chat)
+      }
+      return(stream_error(detail_chat, fallback = status_chat %in% c(404, 405)))
+    }
+
+    if (!nzchar(accumulated)) {
+      return(stream_error("Empty completion returned from chat API.", fallback = TRUE))
+    }
+
+    list(
+      text = stringr::str_trim(accumulated),
+      usage = usage_capture
+    )
+  }
+
+  for (mdl in model_candidates) {
+    if (isTRUE(stream)) {
+      stream_result <- try_stream_chat(mdl)
+      if (!inherits(stream_result, "error")) {
+        return(stream_result)
+      }
+      last_error_message <- conditionMessage(stream_result)
+      if (!isTRUE(attr(stream_result, "fallback_to_nonstream"))) {
+        next
+      }
+    }
+
+    # For UF Navigator, skip /responses and use /chat/completions directly
+    use_chat_api <- use_chat_api_only
+
+    if (!use_chat_api) {
+      payload <- list(
+        model = mdl,
+        input = input_messages,
+        temperature = temperature,
+        max_output_tokens = max_output_tokens,
+        metadata = list(app = "Islet Explorer AI Assistant")
+      )
+
+      message("[OPENAI] Attempting model '", mdl, "' via ", responses_url)
+      req <- httr2::request(responses_url) |>
+        httr2::req_headers(
+          Authorization = paste("Bearer", api_key),
+          `Content-Type` = "application/json"
+        ) |>
+        httr2::req_body_json(payload, auto_unbox = TRUE) |>
+        httr2::req_timeout(30) |>
+        httr2::req_retry(
+          max_tries = 3,
+          is_transient = function(resp) {
+            status <- httr2::resp_status(resp)
+            status == 429 || (status >= 500 && status < 600)
+          }
+        )
+
+      resp <- tryCatch(httr2::req_perform(req), error = identity)
+
+      if (inherits(resp, "httr2_http")) {
+        last_error_message <- conditionMessage(resp)
+        if (!is.null(resp$resp)) {
+          resp <- resp$resp
+        } else {
+          next
+        }
+      } else if (inherits(resp, "error")) {
+        last_error_message <- conditionMessage(resp)
+        next
+      }
+
+      status_code <- httr2::resp_status(resp)
+      if (status_code >= 300) {
+        err_body <- tryCatch(httr2::resp_body_json(resp, simplifyVector = TRUE), error = function(e) NULL)
+        status_reason <- tryCatch(httr2::resp_status_desc(resp), error = function(e) NULL)
+        detail <- if (!is.null(err_body) && !is.null(err_body$error) && !is.null(err_body$error$message)) {
+          err_body$error$message
+        } else if (!is.null(status_reason) && nzchar(status_reason)) {
+          paste(status_code, status_reason)
+        } else {
+          paste("HTTP", status_code)
+        }
+
+        fallback_due_to_model <- status_code %in% c(400, 404) &&
+          grepl("model", detail, ignore.case = TRUE) && !identical(mdl, fallback_model)
+        fallback_to_chat <- status_code %in% c(404, 405) ||
+          grepl("ResponsesAPIResponse|/responses|no-default-models", detail, ignore.case = TRUE)
+
+        if (fallback_due_to_model) {
+          message("[OPENAI] Falling back from model '", mdl, "' after error: ", detail)
+          last_error_message <- detail
+          next
+        }
+
+        if (fallback_to_chat) {
+          use_chat_api <- TRUE
+        } else {
+          stop(detail, call. = FALSE)
+        }
+      } else {
+        body <- httr2::resp_body_json(resp, simplifyVector = FALSE)
+
+        extract_output_text <- function(x) {
+          if (is.null(x) || !length(x)) return(NULL)
+          pieces <- unlist(lapply(x, function(item) {
+            if (!is.list(item)) return(if (is.character(item)) item else NULL)
+            content <- item$content %||% list()
+            unlist(lapply(content, function(chunk) {
+              if (is.list(chunk)) {
+                chunk$text %||% NULL
+              } else if (is.character(chunk)) {
+                chunk
+              } else {
+                NULL
+              }
+            }), use.names = FALSE)
+          }), use.names = FALSE)
+          pieces <- pieces[nzchar(pieces)]
+          if (!length(pieces)) return(NULL)
+          paste(pieces, collapse = "\n")
+        }
+
+        text <- NULL
+        if (!is.null(body$output_text)) {
+          if (is.character(body$output_text)) {
+            text <- paste(body$output_text[nzchar(body$output_text)], collapse = "\n")
+          } else if (is.list(body$output_text)) {
+            text <- paste(unlist(body$output_text, use.names = FALSE), collapse = "\n")
+          }
+        }
+        if (is.null(text) || !nzchar(text)) {
+          text <- extract_output_text(body$output)
+        }
+
+        if (is.null(text) || !nzchar(text)) {
+          stop("Empty completion returned from API.", call. = FALSE)
+        }
+
+        usage <- parse_usage(body)
+        return(list(
+          text = stringr::str_trim(as.character(text)),
+          usage = usage
+        ))
+      }
+    } # end if (!use_chat_api)
+    
+    if (use_chat_api) {
+      message("[OPENAI] Retrying model '", mdl, "' via ", chat_url)
+      chat_payload <- list(
+        model = mdl,
+        messages = chat_messages,
+        temperature = temperature,
+        max_tokens = max_output_tokens
+      )
+
+      req_chat <- httr2::request(chat_url) |>
+        httr2::req_headers(
+          Authorization = paste("Bearer", api_key),
+          `Content-Type` = "application/json"
+        ) |>
+        httr2::req_body_json(chat_payload, auto_unbox = TRUE) |>
+        httr2::req_timeout(30) |>
+        httr2::req_retry(
+          max_tries = 3,
+          is_transient = function(resp) {
+            status <- httr2::resp_status(resp)
+            status == 429 || (status >= 500 && status < 600)
+          }
+        )
+
+      resp_chat <- tryCatch(httr2::req_perform(req_chat), error = identity)
+
+      if (inherits(resp_chat, "httr2_http")) {
+        last_error_message <- conditionMessage(resp_chat)
+        if (!is.null(resp_chat$resp)) {
+          resp_chat <- resp_chat$resp
+        } else {
+          next
+        }
+      } else if (inherits(resp_chat, "error")) {
+        last_error_message <- conditionMessage(resp_chat)
+        next
+      }
+
+      status_chat <- httr2::resp_status(resp_chat)
+      if (status_chat >= 300) {
+        err_body_chat <- tryCatch(httr2::resp_body_json(resp_chat, simplifyVector = TRUE), error = function(e) NULL)
+        status_reason_chat <- tryCatch(httr2::resp_status_desc(resp_chat), error = function(e) NULL)
+        detail_chat <- if (!is.null(err_body_chat) && !is.null(err_body_chat$error) && !is.null(err_body_chat$error$message)) {
+          err_body_chat$error$message
+        } else if (!is.null(status_reason_chat) && nzchar(status_reason_chat)) {
+          paste(status_chat, status_reason_chat)
+        } else {
+          paste("HTTP", status_chat)
+        }
+
+        fallback_due_to_model_chat <- status_chat %in% c(400, 404) &&
+          grepl("model", detail_chat, ignore.case = TRUE) && !identical(mdl, fallback_model)
+
+        if (fallback_due_to_model_chat) {
+          message("[OPENAI] Falling back from model '", mdl, "' after chat error: ", detail_chat)
+          last_error_message <- detail_chat
+          next
+        }
+
+        stop(detail_chat, call. = FALSE)
+      }
+
+      body_chat <- httr2::resp_body_json(resp_chat, simplifyVector = FALSE)
+      text_chat <- NULL
+      if (!is.null(body_chat$choices) && length(body_chat$choices) > 0) {
+        choice <- body_chat$choices[[1]]
+        if (!is.null(choice$message) && !is.null(choice$message$content)) {
+          msg_content <- choice$message$content
+          if (is.character(msg_content)) {
+            text_chat <- paste(msg_content[nzchar(msg_content)], collapse = "\n")
+          } else if (is.list(msg_content)) {
+            text_chat <- paste(unlist(lapply(msg_content, function(x) {
+              if (is.list(x)) {
+                x$text %||% NULL
+              } else if (is.character(x)) {
+                x
+              } else {
+                NULL
+              }
+            }), use.names = FALSE), collapse = "\n")
+          }
+        }
+      }
+
+      if (is.null(text_chat) || !nzchar(text_chat)) {
+        stop("Empty completion returned from chat API.", call. = FALSE)
+      }
+
+      usage_chat <- parse_usage(body_chat)
+      return(list(
+        text = stringr::str_trim(as.character(text_chat)),
+        usage = usage_chat
+      ))
+    }
+  }
+
+  stop(last_error_message %||% "OpenAI request failed after retries.", call. = FALSE)
+}
+
 # Restore basic viewer components needed for Avivator
-# Support either 'Channel_names' or 'Channel_names.txt'
-channel_names_path <- NULL
-for (cand in c(file.path("Channel_names"), file.path("Channel_names.txt"))) {
-  if (file.exists(cand)) { channel_names_path <- cand; break }
+load_channel_names <- function() {
+  candidates <- unique(c(
+    "Channel_names.txt",
+    "Channel_names",
+    file.path("..", "Channel_names.txt"),
+    file.path("..", "Channel_names")
+  ))
+
+  for (cand in candidates) {
+    if (!file.exists(cand)) next
+
+    lines <- readLines(cand, warn = FALSE)
+    lines <- lines[nzchar(trimws(lines))]
+    if (!length(lines)) next
+
+    parsed <- stringr::str_match(lines, "^\\s*(.*?)\\s*(?:\\(C(\\d+)\\))?\\s*$")
+    labels <- parsed[, 2]
+    idx <- suppressWarnings(as.integer(parsed[, 3]))
+
+    if (all(is.na(idx))) {
+      idx <- seq_along(labels)
+    }
+
+    ord <- order(idx, na.last = TRUE)
+    labels <- labels[ord]
+    labels <- labels[nzchar(labels)]
+    if (!length(labels)) next
+
+    message(sprintf("[CHANNELS] Loaded %d channel names from %s", length(labels), cand))
+    return(labels)
+  }
+
+  message("[CHANNELS] Channel names not found. Embed names with: tiffcomment -set \"ChannelNames=<comma-separated>\" <file.ome.tif>")
+  NULL
 }
-if (!is.null(channel_names_path)) {
-  channel_names_vec <- tryCatch({
-    lines <- readLines(channel_names_path, warn = FALSE)
-    rx <- "^\\s*(.*?)\\s*\\(C(\\d+)\\)\\s*$"
-    matched <- stringr::str_match(lines, rx)
-    matched <- matched[!is.na(matched[, 1]), , drop = FALSE]
-    if (nrow(matched) == 0) return(NULL)
-    idx <- as.integer(matched[, 3])
-    nm <- matched[, 2]
-    order_df <- dplyr::arrange(data.frame(idx = idx, name = nm, stringsAsFactors = FALSE), idx)
-    max_idx <- max(order_df$idx, na.rm = TRUE)
-    names_vec <- rep(NA_character_, max_idx)
-    names_vec[order_df$idx] <- order_df$name
-    names_vec
-  }, error = function(e) NULL)
-} else {
-  channel_names_vec <- NULL
-}
+
+channel_names_vec <- load_channel_names()
 
 # Local images setup
 # Prefer static www/local_images so shiny-server can serve large OME-TIFFs with HTTP Range support.
@@ -111,7 +762,7 @@ if (is.null(local_images_root)) {
   if (!is.null(candidate) && dir.exists(candidate)) {
     local_images_root <- candidate
   } else {
-    local_images_root <- tryCatch(normalizePath(file.path("..","..","local_images"), mustWork = FALSE), error = function(e) NULL)
+    local_images_root <- tryCatch(normalizePath(file.path("..", "..", "local_images"), mustWork = FALSE), error = function(e) NULL)
   }
 }
 
@@ -131,12 +782,23 @@ if (!is.null(local_images_root) && dir.exists(local_images_root)) {
 if (has_www_local_images) {
   try({
     # Register local_images path for both local and remote compatibility
-    shiny::addResourcePath("local_images", file.path("www", "local_images"))
-    cat("[SETUP] Registered /local_images -> www/local_images\n")
+    # Use 'img_data' to avoid conflict warning with www/local_images subdirectory
+    shiny::addResourcePath("img_data", file.path("www", "local_images"))
+    cat("[SETUP] Registered /img_data -> www/local_images\n")
   }, silent = TRUE)
 }
 
-# GeoJSON resource path registration will be done after geojson_available is defined
+label_exports_dir <- file.path("www", "LabelExports")
+if (dir.exists(label_exports_dir)) {
+  try({
+    shiny::addResourcePath("label_exports", label_exports_dir)
+    cat("[SETUP] Registered /label_exports ->", label_exports_dir, "\n")
+    seg_files <- list.files(label_exports_dir, pattern = "\\.ome\\.tiff?$", ignore.case = TRUE)
+    cat("[SETUP] Found", length(seg_files), "segmentation OME-TIFF files\n")
+  }, silent = TRUE)
+} else {
+  cat("[SETUP] LabelExports directory not found at", label_exports_dir, "\n")
+}
 
 # Log the setup for debugging
 cat("[SETUP] www/local_images exists:", has_www_local_images, "\n")
@@ -145,103 +807,433 @@ if (has_www_local_images) {
   cat("[SETUP] Found", length(local_files), "images in www/local_images\n")
 }
 
-# Load annotation data for enhanced islet information
-annotations_path <- "../../data/annotations.tsv"
-annotations_data <- NULL
-if (file.exists(annotations_path)) {
-  cat("[SETUP] Loading annotations from", annotations_path, "\n")
-  annotations_data <- tryCatch({
-    read.delim(annotations_path, stringsAsFactors = FALSE)
+# Load segmentation annotations from data directory
+load_segmentation_data <- function() {
+  seg_path <- file.path("..", "..", "data", "annotations.tsv")
+  if (!file.exists(seg_path)) {
+    cat("[SEGMENTATION] Annotations file not found at", seg_path, "\n")
+    return(NULL)
+  }
+  
+  tryCatch({
+    df <- read.delim(seg_path, stringsAsFactors = FALSE)
+    cat("[SEGMENTATION] Loaded", nrow(df), "segmentation records\n")
+    
+    # Validate required columns
+    required_cols <- c("Image", "Name", "Class", "Centroid X µm", "Centroid Y µm")
+    if (!all(required_cols %in% colnames(df))) {
+      warning("[SEGMENTATION] Missing required columns: ", 
+              paste(setdiff(required_cols, colnames(df)), collapse = ", "))
+      return(NULL)
+    }
+    
+    # Filter for islet-related classes
+    df <- df[df$Class %in% c("Islet", "ExpandedIslet", "Nerve", "Lymphatic", "Capillary"), ]
+    cat("[SEGMENTATION] Found", nrow(df), "annotations across classes:", 
+        paste(unique(df$Class), collapse = ", "), "\n")
+    
+    df
   }, error = function(e) {
-    cat("[WARNING] Could not load annotations:", e$message, "\n")
+    cat("[SEGMENTATION] Error loading annotations:", e$message, "\n")
     NULL
   })
-  if (!is.null(annotations_data)) {
-    cat("[SETUP] Loaded", nrow(annotations_data), "annotation records\n")
-  }
-} else {
-  cat("[SETUP] Annotations file not found at", annotations_path, "\n")
 }
+
+# Load spatial lookup for trajectory zoom-to-islet
+load_islet_spatial_lookup <- function() {
+  lookup_path <- file.path("..", "..", "data", "islet_spatial_lookup.csv")
+  if (!file.exists(lookup_path)) {
+    cat("[SPATIAL] islet_spatial_lookup.csv not found at", lookup_path, "\n")
+    return(NULL)
+  }
+  
+  tryCatch({
+    df <- read.csv(lookup_path, stringsAsFactors = FALSE)
+    cat("[SPATIAL] Loaded", nrow(df), "islet spatial records\n")
+    
+    # Validate required columns
+    required_cols <- c("case_id", "islet_key", "centroid_x_um", "centroid_y_um")
+    if (!all(required_cols %in% colnames(df))) {
+      warning("[SPATIAL] Missing required columns: ", 
+              paste(setdiff(required_cols, colnames(df)), collapse = ", "))
+      return(NULL)
+    }
+    
+    df
+  }, error = function(e) {
+    cat("[SPATIAL] Error loading spatial lookup:", e$message, "\n")
+    NULL
+  })
+}
+
+discover_islet_assets <- function(image_dir = file.path("www", "local_images"),
+                                  seg_dir = file.path("www", "LabelExports")) {
+  # Discover base images
+  if (!dir.exists(image_dir)) return(data.frame())
+  image_files <- list.files(image_dir, pattern = "\\.ome\\.tiff?$", ignore.case = TRUE,
+                            full.names = TRUE)
+  if (!length(image_files)) return(data.frame())
+
+  # Helper to extract the 4-digit sample id from image filename: ..._YYYY.ome.tiff
+  extract_image_id <- function(fn) {
+    b <- basename(fn)
+    id <- sub(".*_([0-9]{4})\\.ome\\.tiff?$", "\\1", b, perl = TRUE, ignore.case = TRUE)
+    if (!nzchar(id) || is.na(suppressWarnings(as.integer(id)))) {
+      # Fallback to any 3-5 digit run in the name
+      id <- stringr::str_extract(b, "[0-9]{3,5}")
+    }
+    if (is.na(id)) id <- NA_character_
+    id
+  }
+
+  # Discover segmentation files once
+  seg_df <- data.frame()
+  if (dir.exists(seg_dir)) {
+    seg_files <- list.files(seg_dir, pattern = "\\.ome\\.tiff?$", ignore.case = TRUE,
+                            full.names = TRUE)
+    if (length(seg_files)) {
+      seg_bases <- basename(seg_files)
+      # Sample id is first 4 digits at start of filename; label is after the first underscore
+      seg_sid <- sub("^([0-9]{4}).*$", "\\1", seg_bases, perl = TRUE)
+      seg_label_raw <- sub("^[0-9]{4}_", "", seg_bases, perl = TRUE)
+      seg_label_raw <- sub("\\.ome\\.tif{1,2}f?$", "", seg_label_raw, perl = TRUE, ignore.case = TRUE)
+      seg_label_disp <- gsub("_", " ", seg_label_raw)
+      seg_label_disp <- gsub("([a-z])([A-Z])", "\\1 \\2", seg_label_disp, perl = TRUE)
+
+      seg_df <- data.frame(
+        seg_abs = seg_files,
+        seg_rel = file.path("LabelExports", seg_bases),
+        seg_base = seg_bases,
+        seg_sample_id = seg_sid,
+        seg_islet = stringr::str_extract(seg_bases, "Islet_[0-9]+"),
+        seg_label = seg_label_raw,
+        seg_display = seg_label_disp,
+        stringsAsFactors = FALSE
+      )
+    }
+  }
+
+  # Build asset rows; include list-columns of segmentation rel paths and labels
+  res <- lapply(image_files, function(img_abs) {
+    img_base <- basename(img_abs)
+    img_sample_id <- extract_image_id(img_base)
+    # Derive case id (zero-padded when numeric)
+    img_case_raw <- stringr::str_extract(img_base, "[0-9]{3,5}")
+    img_case_num <- suppressWarnings(as.integer(img_case_raw))
+    img_case <- if (!is.na(img_case_num)) sprintf("%04d", img_case_num) else (img_sample_id %||% img_case_raw)
+    img_islet <- stringr::str_extract(img_base, "Islet_[0-9]+")
+
+    seg_rel_list <- character(0)
+    seg_label_list <- character(0)
+    if (nrow(seg_df)) {
+      cand <- seg_df
+      # First filter by the stricter 4-digit sample id if available
+      if (!is.na(img_sample_id) && nzchar(img_sample_id)) {
+        cand <- cand[cand$seg_sample_id == img_sample_id, , drop = FALSE]
+      }
+      # If islet token present, prefer those matching it
+      if (nrow(cand) && !is.na(img_islet) && nzchar(img_islet)) {
+        iso <- cand[!is.na(cand$seg_islet) & cand$seg_islet == img_islet, , drop = FALSE]
+        if (nrow(iso)) cand <- iso
+      }
+      if (nrow(cand)) {
+        seg_rel_list <- cand$seg_rel
+        seg_label_list <- cand$seg_display
+      }
+    }
+
+    # Back-compat single seg columns: choose first if any
+    seg_abs_first <- if (length(seg_rel_list)) file.path(seg_dir, basename(seg_rel_list[[1]])) else NA_character_
+    seg_rel_first <- if (length(seg_rel_list)) seg_rel_list[[1]] else NA_character_
+
+    # Return asset row with list columns
+    data.frame(
+      case_id = if (nzchar(img_case)) img_case else NA_character_,
+      image_abs = img_abs,
+      image_rel = file.path("local_images", img_base),
+      image_name = img_base,
+      islet_token = if (nzchar(img_islet)) img_islet else NA_character_,
+      seg_abs = seg_abs_first,
+      seg_rel = seg_rel_first,
+      stringsAsFactors = FALSE
+    ) -> row
+
+    # Attach list-cols
+    row$seg_rel_list <- I(list(seg_rel_list))
+    row$seg_label_list <- I(list(seg_label_list))
+    row
+  })
+
+  assets <- do.call(rbind, res)
+  unique(assets)
+}
+
+choose_islet_asset <- function(assets, case_id, islet_key = NULL) {
+  if (is.null(assets) || !nrow(assets)) return(NULL)
+  if (is.null(case_id) || !nzchar(case_id)) return(assets[1, , drop = FALSE])
+
+  case_vec <- unique(c(case_id, suppressWarnings(sprintf("%04d", as.integer(case_id)))))
+  case_vec <- case_vec[nzchar(case_vec)]
+  subset_assets <- assets[assets$case_id %in% case_vec, , drop = FALSE]
+
+  if (!nrow(subset_assets)) {
+    subset_assets <- assets[grepl(case_id, assets$image_name, fixed = TRUE), , drop = FALSE]
+  }
+
+  if (!is.null(islet_key) && nzchar(islet_key) && nrow(subset_assets)) {
+    match_islet <- subset_assets[!is.na(subset_assets$islet_token) & subset_assets$islet_token == islet_key, , drop = FALSE]
+    if (nrow(match_islet)) subset_assets <- match_islet
+  }
+
+  if (!nrow(subset_assets) && !is.null(islet_key) && nzchar(islet_key)) {
+    subset_assets <- assets[grepl(islet_key, assets$image_name, fixed = TRUE) |
+                              grepl(islet_key, assets$seg_rel, fixed = TRUE), , drop = FALSE]
+  }
+
+  if (!nrow(subset_assets)) return(NULL)
+  subset_assets[1, , drop = FALSE]
+}
+
+# Build a working vitessce viewer with proper segmentation layer control
+build_islet_vitessce <- function(image_rel, seg_rel = NULL, title = "Islet Viewer",
+                                 channels = NULL, center = NULL, case_id = NULL,
+                                 seg_labels = NULL, use_physical_size_scaling = FALSE) {
+  tryCatch({
+    # Create config
+    vc <- vitessceR::VitessceConfig$new(schema_version = "1.0.16", name = title)
+    dataset <- vc$add_dataset("Islet")
+    
+    # Convert relative paths to absolute paths for proper loading
+    # The key fix: use img_path with full normalized paths, not img_url with relative paths
+    image_abs <- tryCatch({
+      # Try to resolve relative path from www directory
+      if (file.exists(file.path("www", image_rel))) {
+        normalizePath(file.path("www", image_rel), mustWork = TRUE)
+      } else if (file.exists(image_rel)) {
+        normalizePath(image_rel, mustWork = TRUE)
+      } else {
+        stop("Image file not found: ", image_rel)
+      }
+    }, error = function(e) {
+      warning("[VITESSCE] Could not resolve image path: ", image_rel, " - ", e$message)
+      image_rel  # fallback to relative path
+    })
+    
+    message(sprintf("[VITESSCE] Primary image: %s", image_abs))
+    base_dims <- get_image_dims(image_abs)
+    if (!is.null(base_dims)) {
+      message(sprintf("[VITESSCE] Base dimensions: %dx%d px", base_dims$width, base_dims$height))
+    } else {
+      message("[VITESSCE] Base dimensions: unknown (magick not available)")
+    }
+    
+    # Build image wrappers list with absolute paths
+    # CRITICAL: Set unique UIDs for stable route registration
+    wrapper_idx <- 1L
+    primary_wrapper <- vitessceR::OmeTiffWrapper$new(
+      img_path = image_abs,
+      name = "Multiplex",
+      is_bitmask = FALSE
+    )
+    # Set unique identifier for route stability
+    if ("set_uid" %in% names(primary_wrapper)) {
+      primary_wrapper$set_uid(sprintf("wr_%03d", wrapper_idx))
+    } else if ("uid" %in% names(primary_wrapper)) {
+      primary_wrapper$uid <- sprintf("wr_%03d", wrapper_idx)
+    }
+    
+    image_wrappers <- list(primary_wrapper)
+    wrapper_idx <- wrapper_idx + 1L
+    
+  # Add segmentation layer(s) if available (vector input supported)
+    if (!is.null(seg_rel) && length(seg_rel) > 0) {
+      seg_vec <- as.character(seg_rel)
+      lab_vec <- if (!is.null(seg_labels) && length(seg_labels) == length(seg_vec)) as.character(seg_labels) else rep("Segmentation", length(seg_vec))
+      for (i in seq_along(seg_vec)) {
+        sr <- seg_vec[[i]]
+        if (!nzchar(sr)) next
+        seg_abs <- tryCatch({
+          if (file.exists(file.path("www", sr))) {
+            normalizePath(file.path("www", sr), mustWork = TRUE)
+          } else if (file.exists(sr)) {
+            normalizePath(sr, mustWork = TRUE)
+          } else {
+            stop("Segmentation file not found: ", sr)
+          }
+        }, error = function(e) {
+          warning("[VITESSCE] Could not resolve segmentation path: ", sr, " - ", e$message)
+          NULL
+        })
+        if (is.null(seg_abs)) next
+        # Optional: filter segmentation if dimensions don't match base (prevents obvious mis-scale)
+        if (!is.null(base_dims)) {
+          seg_dims <- get_image_dims(seg_abs)
+          if (!is.null(seg_dims)) {
+            if (seg_dims$width != base_dims$width || seg_dims$height != base_dims$height) {
+              message(sprintf("[VITESSCE] Skipping segmentation (dimension mismatch): %s (%dx%d vs base %dx%d)",
+                              seg_abs, seg_dims$width, seg_dims$height, base_dims$width, base_dims$height))
+              next
+            }
+          }
+        }
+        message(sprintf("[VITESSCE] Adding segmentation layer: %s", seg_abs))
+        seg_wrapper <- vitessceR::OmeTiffWrapper$new(
+          img_path = seg_abs,
+          name = lab_vec[[i]],
+          is_bitmask = TRUE
+        )
+        # Debug: log dimensions if available (will show once routes are active)
+        try({
+          if (!is.null(primary_wrapper$img_path) && !is.null(seg_wrapper$img_path)) {
+            message(sprintf("[VITESSCE DEBUG] base=%s seg=%s", primary_wrapper$img_path, seg_wrapper$img_path))
+          }
+        }, silent = TRUE)
+        if ("set_uid" %in% names(seg_wrapper)) {
+          seg_wrapper$set_uid(sprintf("wr_%03d", wrapper_idx))
+        } else if ("uid" %in% names(seg_wrapper)) {
+          seg_wrapper$uid <- sprintf("wr_%03d", wrapper_idx)
+        }
+        image_wrappers <- append(image_wrappers, list(seg_wrapper))
+        wrapper_idx <- wrapper_idx + 1L
+      }
+    }
+    
+    # Add multi-image wrapper to dataset
+    message(sprintf("[VITESSCE] Scaling mode: %s", if (isTRUE(use_physical_size_scaling)) "physical-size (µm)" else "pixel-based"))
+    if (isTRUE(use_physical_size_scaling) && is.null(base_dims)) {
+      message("[VITESSCE] Note: physical-size scaling requested but base pixel size metadata is unavailable in this context; visual alignment may still rely on pixel sizes.")
+    }
+    dataset$add_object(
+      vitessceR::MultiImageWrapper$new(
+        image_wrappers = image_wrappers,
+        use_physical_size_scaling = isTRUE(use_physical_size_scaling)
+      )
+    )
+    
+  # Create views: spatial view (9) + layer controller (3) — removed STATUS per request
+  spatial <- vc$add_view(dataset, vitessceR::Component$SPATIAL, x = 0, y = 0, w = 9, h = 12)
+  layer_ctrl <- vc$add_view(dataset, vitessceR::Component$LAYER_CONTROLLER, x = 9, y = 0, w = 3, h = 12)
+
+    # If center provided, always convert µm to px (robust even when layers disagree on physical-size)
+    if (!is.null(center)) {
+      px_size <- get_pixel_size_um(image_abs)
+      if (!is.null(px_size)) {
+        cx <- center$x / px_size$x_um_per_px
+        cy <- center$y / px_size$y_um_per_px
+        message(sprintf("[VITESSCE] Applying initial center/zoom (px): x=%.1f y=%.1f z=%s (µm/px: %.4f, %.4f)",
+                        cx, cy, ifelse(is.null(center$zoom), "NA", sprintf("%.2f", center$zoom)), px_size$x_um_per_px, px_size$y_um_per_px))
+        coord <- vc$add_coordination(c("spatialTargetX", "spatialTargetY", "spatialZoom"))
+        coord[[1]]$set_value(cx)
+        coord[[2]]$set_value(cy)
+        if (!is.null(center$zoom)) coord[[3]]$set_value(center$zoom)
+        spatial$use_coordination(coord)
+      } else {
+        message("[VITESSCE] Pixel centering skipped: base PhysicalSizeX/Y unavailable; user can pan/zoom manually.")
+      }
+    }
+    # Note: Do not add non-standard coordination keys like 'usePhysicalSizeScaling'.
+    # Scaling mode is controlled via MultiImageWrapper$use_physical_size_scaling above.
+    
+    # Do not set spatialTarget when using pixel-based alignment; avoid unit mismatches across layers
+    
+  # Layout with spatial view and layer controller only
+  vc$layout(vitessceR::hconcat(spatial, layer_ctrl))
+    
+    # Use the standard widget method to ensure proper Shiny integration
+    # This is CRITICAL - it registers the HTTP routes for serving image tiles
+    widget <- vc$widget(theme = "light", width = "100%", height = "80vh")
+
+    # Post-process: reduce default visible segmentation layers and inject channel names when possible
+    try({
+      cfg <- widget$x$config
+      # Inject channelNames into base image entries when available
+      if (!is.null(channels) && length(channels) > 0 && !is.null(cfg$datasets)) {
+        for (ds_name in names(cfg$datasets)) {
+          ds <- cfg$datasets[[ds_name]]
+          if (!is.null(ds$files)) {
+            for (fi in seq_along(ds$files)) {
+              f <- ds$files[[fi]]
+              if (!is.null(f$options) && !is.null(f$options$images)) {
+                for (im in seq_along(f$options$images)) {
+                  img <- f$options$images[[im]]
+                  if (is.null(img$name) || identical(img$name, "Multiplex") || im == 1L) {
+                    f$options$images[[im]]$channelNames <- as.list(as.character(channels))
+                  }
+                }
+                ds$files[[fi]] <- f
+              }
+            }
+          }
+          cfg$datasets[[ds_name]] <- ds
+        }
+      }
+      # Turn off all but first two raster layers by default, if coordination exists
+      if (!is.null(cfg$coordinationSpace) && !is.null(cfg$coordinationSpace$spatialRasterLayers)) {
+        scs <- cfg$coordinationSpace$spatialRasterLayers
+        for (scope in names(scs)) {
+          layers <- scs[[scope]]
+          if (is.list(layers) && length(layers) > 0) {
+            for (i in seq_along(layers)) {
+              if (is.null(layers[[i]]$visible)) layers[[i]]$visible <- TRUE
+              if (i > 2L) layers[[i]]$visible <- FALSE
+            }
+            scs[[scope]] <- layers
+          }
+        }
+        cfg$coordinationSpace$spatialRasterLayers <- scs
+      }
+      widget$x$config <- cfg
+    }, silent = TRUE)
+
+    # Only apply the legacy 'dataset' coordination removal for older vitessceR versions
+    # Newer versions (>= 0.1.0) should not require this and removing it can break the config
+    do_dataset_fix <- FALSE
+    vv <- tryCatch(packageVersion("vitessceR"), error = function(e) NULL)
+    if (!is.null(vv)) do_dataset_fix <- isTRUE(vv < "0.1.0")
+    if (isTRUE(do_dataset_fix)) {
+      if (!is.null(widget$x$config$coordinationSpace) && "dataset" %in% names(widget$x$config$coordinationSpace)) {
+        widget$x$config$coordinationSpace$dataset <- NULL
+        message("[VITESSCE FIX] Removed invalid 'dataset' coordination from coordinationSpace")
+      }
+      if (!is.null(widget$x$config$layout)) {
+        for (i in seq_along(widget$x$config$layout)) {
+          if (!is.null(widget$x$config$layout[[i]]$coordinationScopes)) {
+            if ("dataset" %in% names(widget$x$config$layout[[i]]$coordinationScopes)) {
+              widget$x$config$layout[[i]]$coordinationScopes$dataset <- NULL
+              message("[VITESSCE FIX] Removed 'dataset' from layout component coordinationScopes")
+            }
+          }
+        }
+      }
+    }
+    
+    # Set element ID if case_id provided (for debugging)
+    if (!is.null(case_id) && is.null(widget$elementId)) {
+      widget$elementId <- paste0("vitessce_", gsub("\\W", "_", case_id))
+    }
+    
+    widget
+    
+  }, error = function(e) {
+    message(sprintf("[VITESSCE ERROR] %s", e$message))
+    message(sprintf("[VITESSCE ERROR] image_rel=%s, seg_rel=%s", image_rel, seg_rel %||% "NULL"))
+    
+    # Return minimal fallback config
+    vc_fallback <- vitessceR::VitessceConfig$new(schema_version = "1.0.16", name = "Error")
+    vitessceR::vitessce_widget(vc_fallback, theme = "light", height = 800)
+  })
+}
+
+# Load at startup
+segmentation_data <- load_segmentation_data()
+islet_spatial_lookup <- load_islet_spatial_lookup()
+
+# Keep legacy annotations_data for backward compatibility
+annotations_data <- segmentation_data
 
 # ---- Viewer helpers/defaults (Avivator) ----
 # Optional default image URL; if NULL, we'll auto-pick the first available under /local_images
 default_image_url <- NULL
-
-# GeoJSON overlay configuration
-geojson_dir <- "../../gson"
-geojson_available <- dir.exists(geojson_dir) && length(list.files(geojson_dir, pattern = "\\.geojson(\\.gz)?$")) > 0
-if (geojson_available) {
-  cat("[SETUP] Found GeoJSON files in", geojson_dir, "\n")
-  # Register GeoJSON resource path
-  try({
-    shiny::addResourcePath("gson", geojson_dir)
-    cat("[SETUP] Registered /gson ->", geojson_dir, "\n")
-  }, silent = TRUE)
-} else {
-  cat("[SETUP] No GeoJSON files found in", geojson_dir, "\n")
-}
-
-# GeoJSON cache directory (preprocessed for efficient streaming)
-gson_cache_dir <- file.path("..", "..", "data", "gson_cache")
-gson_cache_available <- dir.exists(gson_cache_dir) && 
-                        length(list.files(gson_cache_dir, pattern = "_simplified\\.pkl$")) > 0
-
-if (gson_cache_available) {
-  cat("[SETUP] Found", length(list.files(gson_cache_dir, pattern = "_simplified\\.pkl$")), 
-      "preprocessed GeoJSON cache files\\n")
-  # Load helper functions
-  source(file.path("..", "..", "scripts", "geojson_cache_helpers.R"))
-} else {
-  cat("[SETUP] No GeoJSON cache found. Run scripts/preprocess_all_geojson.sh to enable efficient overlays\\n")
-}
-
-# Query function for GeoJSON features (viewport-based streaming)
-query_geojson_features <- function(case_id, xmin = NULL, ymin = NULL, xmax = NULL, ymax = NULL, max_features = 5000) {
-  if (!gson_cache_available) {
-    return(list(error = "GeoJSON cache not available", features = list()))
-  }
-  
-  pkl_file <- file.path(gson_cache_dir, paste0(case_id, "_simplified.pkl"))
-  
-  if (!file.exists(pkl_file)) {
-    return(list(error = paste("No overlay data for case", case_id), features = list()))
-  }
-  
-  tryCatch({
-    data <- load_geojson_cache(pkl_file)
-    
-    # If viewport specified, query spatial index
-    if (!is.null(xmin) && !is.null(xmax) && !is.null(ymin) && !is.null(ymax)) {
-      result <- query_geojson_bbox(data, xmin, ymin, xmax, ymax, max_features)
-    } else {
-      # No viewport - return sampled features
-      n_sample <- min(max_features, data$n_features)
-      sample_ids <- seq_len(n_sample)
-      
-      features <- lapply(sample_ids, function(i) {
-        f <- data$features[[i]]
-        list(
-          type = "Feature",
-          id = f$id,
-          geometry = list(type = "Polygon", coordinates = f$geometry),
-          properties = f$properties
-        )
-      })
-      
-      result <- list(
-        type = "FeatureCollection",
-        features = features,
-        n_total = data$n_features,
-        n_returned = length(features)
-      )
-    }
-    
-    return(result)
-    
-  }, error = function(e) {
-    list(error = as.character(e), features = list())
-  })
-}
 
 # Environment detection for viewer configuration
 detect_environment <- function(session = NULL) {
@@ -286,42 +1278,142 @@ detect_environment <- function(session = NULL) {
   )
 }
 
-# Helper function to get annotation info for an islet
-get_islet_annotations <- function(case_id, islet_key) {
-  if (is.null(annotations_data)) return(NULL)
+# Lightweight helper to get image dimensions without loading full pixel data.
+# Uses the 'magick' package if available; otherwise returns NULL.
+get_image_dims <- function(path) {
+  if (!file.exists(path)) return(NULL)
+  if (!requireNamespace("magick", quietly = TRUE)) return(NULL)
+  dims <- tryCatch({
+    img <- magick::image_read(path)
+    info <- magick::image_info(img)
+    # 'info' is a data.frame; width/height in pixels
+    list(width = as.integer(info$width[[1]]), height = as.integer(info$height[[1]]))
+  }, error = function(e) NULL)
+  dims
+}
+
+# Extract OME-XML PhysicalSizeX/Y (µm) from TIFF ImageDescription and compute µm per pixel.
+get_pixel_size_um <- function(path) {
+  if (!file.exists(path)) return(NULL)
+  if (!requireNamespace("magick", quietly = TRUE) || !requireNamespace("xml2", quietly = TRUE)) return(NULL)
+  res <- tryCatch({
+    img <- magick::image_read(path)
+    attrs <- magick::image_attributes(img)
+    desc <- NULL
+    # magick attributes may contain TIFF tags; look for ImageDescription
+    if (!is.null(attrs) && "tiff:ImageDescription" %in% names(attrs)) {
+      desc <- attrs[["tiff:ImageDescription"]]
+    } else if (!is.null(attrs) && "exif:ImageDescription" %in% names(attrs)) {
+      desc <- attrs[["exif:ImageDescription"]]
+    }
+    if (is.null(desc) || !nzchar(desc)) return(NULL)
+    # Parse OME-XML
+    doc <- xml2::read_xml(desc)
+    px <- xml2::xml_find_first(doc, "//Pixels")
+    if (is.na(px)) return(NULL)
+    phys_x <- suppressWarnings(as.numeric(xml2::xml_attr(px, "PhysicalSizeX")))
+    phys_y <- suppressWarnings(as.numeric(xml2::xml_attr(px, "PhysicalSizeY")))
+    unit_x <- xml2::xml_attr(px, "PhysicalSizeXUnit") %||% "µm"
+    unit_y <- xml2::xml_attr(px, "PhysicalSizeYUnit") %||% "µm"
+    # Only support µm units here
+    if (is.na(phys_x) || is.na(phys_y)) return(NULL)
+    if (!identical(unit_x, "µm") || !identical(unit_y, "µm")) return(NULL)
+    list(x_um_per_px = phys_x, y_um_per_px = phys_y)
+  }, error = function(e) NULL)
+  res
+}
+
+# Helper function to find image file for case_id
+find_image_for_case <- function(case_id, www_dir, local_root) {
+  pattern <- sprintf(".*%s.*\\.(ome\\.)?tiff?$", case_id)
   
-  # Extract numeric islet ID from islet_key (e.g., "Islet_200_core" -> 200)
-  islet_numeric <- as.numeric(gsub(".*_(\\d+)_.*", "\\1", islet_key))
+  # Try www directory first (preferred for HTTP Range support)
+  if (!is.null(www_dir) && dir.exists(www_dir)) {
+    matches <- list.files(www_dir, pattern = pattern, ignore.case = TRUE, full.names = TRUE)
+    if (length(matches) > 0) {
+      cat("[IMAGE] Found in www:", matches[1], "\n")
+      return(matches[1])
+    }
+  }
+  
+  # Fallback to LOCAL_IMAGE_ROOT
+  if (!is.null(local_root) && dir.exists(local_root)) {
+    matches <- list.files(local_root, pattern = pattern, ignore.case = TRUE, full.names = TRUE)
+    if (length(matches) > 0) {
+      cat("[IMAGE] Found in LOCAL_IMAGE_ROOT:", matches[1], "\n")
+      return(matches[1])
+    }
+  }
+  
+  cat("[IMAGE] Not found for case:", case_id, "\n")
+  return(NULL)
+}
+
+# Improved helper function to get annotation info for an islet with class information
+get_islet_annotations <- function(case_id, islet_key) {
+  # Try spatial lookup first (faster and more reliable)
+  if (!is.null(islet_spatial_lookup)) {
+    case_id_char <- as.character(case_id)
+    matches <- islet_spatial_lookup[
+      as.character(islet_spatial_lookup$case_id) == case_id_char & 
+      islet_spatial_lookup$islet_key == islet_key,
+    ]
+    
+    if (nrow(matches) > 0) {
+      annotations <- list(
+        centroid_x = as.numeric(matches$centroid_x_um[1]),
+        centroid_y = as.numeric(matches$centroid_y_um[1]),
+        area = as.numeric(matches$area_um2[1]),
+        source = "spatial_lookup"
+      )
+      return(annotations)
+    }
+  }
+  
+  # Fallback to segmentation_data
+  if (is.null(segmentation_data)) return(NULL)
+  
+  # Extract numeric islet ID from islet_key
+  islet_numeric <- as.numeric(gsub(".*_(\\d+).*", "\\1", islet_key))
   if (is.na(islet_numeric)) return(NULL)
   
   # Convert case_id to character for matching
   case_id_char <- as.character(case_id)
   
-  # Look for matching annotations
-  matches <- annotations_data[
-    as.character(annotations_data$Image) == case_id_char & 
-    grepl(paste0("Islet_", islet_numeric), annotations_data$Name, ignore.case = TRUE),
+  # Look for matching annotations across all classes
+  matches <- segmentation_data[
+    as.character(segmentation_data$Image) == case_id_char & 
+    grepl(paste0("Islet_", islet_numeric), segmentation_data$Name, ignore.case = TRUE),
   ]
   
-  if (nrow(matches) > 0) {
-    # Use safe numeric conversion to avoid coercion warnings
-    safe_numeric <- function(x) {
-      result <- suppressWarnings(as.numeric(as.character(x)))
-      if (is.na(result)) 0 else result
-    }
-    
-    return(list(
-      centroid_x = safe_numeric(matches$`Centroid X µm`[1]),
-      centroid_y = safe_numeric(matches$`Centroid Y µm`[1]), 
-      area = safe_numeric(matches$`Area µm^2`[1]),
-      perimeter = safe_numeric(matches$`Perimeter µm`[1]),
-      detections = safe_numeric(matches$`Num Detections`[1]),
-      ins_pos = safe_numeric(matches$`Num INS_pos`[1]),
-      gcg_pos = safe_numeric(matches$`Num GCG_pos`[1]),
-      sst_pos = safe_numeric(matches$`Num SST_pos`[1])
-    ))
+  if (nrow(matches) == 0) return(NULL)
+  
+  # Safe numeric conversion
+  safe_numeric <- function(x) {
+    result <- suppressWarnings(as.numeric(as.character(x)))
+    if (is.na(result)) 0 else result
   }
-  return(NULL)
+  
+  # Return all matching annotations by class
+  annotations <- list(
+    centroid_x = safe_numeric(matches$`Centroid X µm`[1]),
+    centroid_y = safe_numeric(matches$`Centroid Y µm`[1]),
+    area = safe_numeric(matches$`Area µm^2`[1]),
+    perimeter = safe_numeric(matches$`Perimeter µm`[1]),
+    classes = unique(matches$Class),
+    source = "annotations"
+  )
+  
+  # Add class-specific counts if available
+  for (cls in c("Islet", "ExpandedIslet", "Nerve", "Lymphatic", "Capillary")) {
+    cls_matches <- matches[matches$Class == cls, ]
+    if (nrow(cls_matches) > 0) {
+      annotations[[paste0("has_", tolower(cls))]] <- TRUE
+      annotations[[paste0(tolower(cls), "_count")]] <- nrow(cls_matches)
+    }
+  }
+  
+  annotations
 }
 
 resolve_avivator_base <- function() {
@@ -435,21 +1527,36 @@ compute_diameter_um <- function(area_um2) {
   ifelse(is.finite(area_um2) & area_um2 > 0, 2 * sqrt(area_um2 / pi), NA_real_)
 }
 
+# OPTIMIZATION: Consolidate donor metadata extraction
+get_donor_metadata <- function(master) {
+  # Priority order: composition > targets > markers
+  for (sheet in c("comp", "targets", "markers")) {
+    df <- master[[sheet]]
+    if (!is.null(df) && nrow(df) > 0) {
+      required_cols <- c("Case ID", "Donor Status")
+      
+      # Determine which AAb columns exist
+      aab_candidates <- c("AAb_GADA", "AAb_IA2A", "AAb_ZnT8A", "AAb_IAA", "AAb_mIAA")
+      aab_cols <- intersect(aab_candidates, names(df))
+      
+      if (all(required_cols %in% names(df))) {
+        return(df %>% 
+          dplyr::select(dplyr::all_of(c(required_cols, aab_cols))) %>% 
+          dplyr::distinct())
+      }
+    }
+  }
+  NULL
+}
+
 prep_data <- function(master) {
   # Determine which autoantibody columns are available
   aab_cols_targets <- intersect(c("AAb_GADA","AAb_IA2A","AAb_ZnT8A","AAb_IAA","AAb_mIAA"), colnames(master$targets))
   aab_cols_markers <- intersect(c("AAb_GADA","AAb_IA2A","AAb_ZnT8A","AAb_IAA","AAb_mIAA"), colnames(master$markers))
   aab_cols_comp    <- intersect(c("AAb_GADA","AAb_IA2A","AAb_ZnT8A","AAb_IAA","AAb_mIAA"), colnames(master$comp))
   aab_cols_all     <- unique(c(aab_cols_targets, aab_cols_markers, aab_cols_comp))
-  # Donor-level metadata table to backfill AAb flags on synthetic rows
-  donors_meta <- NULL
-  if (!is.null(master$comp) && nrow(master$comp) > 0) {
-    donors_meta <- master$comp %>% dplyr::select(dplyr::all_of(c("Case ID","Donor Status", aab_cols_comp))) %>% dplyr::distinct()
-  } else if (!is.null(master$targets) && nrow(master$targets) > 0) {
-    donors_meta <- master$targets %>% dplyr::select(dplyr::all_of(c("Case ID","Donor Status", aab_cols_targets))) %>% dplyr::distinct()
-  } else if (!is.null(master$markers) && nrow(master$markers) > 0) {
-    donors_meta <- master$markers %>% dplyr::select(dplyr::all_of(c("Case ID","Donor Status", aab_cols_markers))) %>% dplyr::distinct()
-  }
+  # Use new consolidated function
+  donors_meta <- get_donor_metadata(master)
   # Islet size proxy per islet corefor diameter
   targets <- master$targets %>% add_islet_key() %>% dplyr::filter(!is.na(islet_key))
   core_area <- targets %>%
@@ -471,6 +1578,7 @@ prep_data <- function(master) {
         tolower(type) %in% c("islet_union", "union", "islet+20um", "islet_20um") ~ "islet_union",
         TRUE ~ tolower(type)
       )
+      # Density is already in µm², no conversion needed
     ) %>%
     { safe_left_join(., size_area, by = c("Case ID", "Donor Status", "islet_key"), context = "targets_all:size_area") }
 
@@ -546,7 +1654,9 @@ prep_data <- function(master) {
       dplyr::mutate(.has_union = TRUE)
 
     core_m <- markers_all %>% dplyr::filter(region_type == "islet_core") %>% dplyr::select(dplyr::all_of(c(mkeys, "n_cells", "pos_count"))) %>% dplyr::rename(n_core = n_cells, pos_core = pos_count)
-    band_m <- markers_all %>% dplyr::filter(region_type == "islet_band") %>% dplyr::select(dplyr::all_of(c(mkeys, "n_cells", "pos_count"))) %>% dplyr::rename(n_band = n_cells, pos_band = pos_count)
+    band_m <- markers_all %>% dplyr::filter(region_type == "islet_band") %>%
+      dplyr::select(dplyr::all_of(c(mkeys, "n_cells", "pos_count"))) %>%
+      dplyr::rename(n_band = n_cells, pos_band = pos_count)
     union_m <- markers_all %>% dplyr::filter(region_type == "islet_union") %>% dplyr::select(dplyr::all_of(c(mkeys, "n_cells", "pos_count"))) %>% dplyr::rename(n_union = n_cells, pos_union = pos_count)
     union_missing_m <- core_m %>%
       dplyr::inner_join(band_m, by = mkeys) %>%
@@ -644,6 +1754,163 @@ bin_islet_sizes <- function(df, diam_col, width) {
 # Unbiased pseudotime from features (no group labels). Tries DiffusionMap -> principal curve -> PC1.
 ## pseudotime removed
 
+#' Compute Lamian-based pseudotime from AnnData
+#' Uses Lamian's infer_tree_structure which accounts for multi-sample design
+#' @param ad AnnData object (from anndata package)
+#' @param features Character vector of feature names to use (NULL = use all)
+#' @return Numeric vector of pseudotime values (same length as cells)
+compute_lamian_pseudotime <- function(ad, features = NULL) {
+  tryCatch({
+    require(Lamian, quietly = TRUE)
+    
+    cat("Computing Lamian pseudotime with infer_tree_structure...\n")
+    
+    # Extract expression matrix (cells × genes)
+    expr_mat <- as.matrix(ad$X)
+    rownames(expr_mat) <- ad$obs_names
+    colnames(expr_mat) <- ad$var_names
+    
+    # Define curated feature set for trajectory inference
+    # Focus on hormones, immune markers, and spatial features that drive disease progression
+    curated_features <- c(
+      # Hormone markers (islet cell types)
+      "INS", "GCG",
+      # Immune infiltration markers
+      "CD8a", "CD4", "HLADR", "CD163", "CD68",
+      # Disease-associated markers
+      "LGALS3", "BCatenin",
+      # Spatial features (microenvironment)
+      "Dist to Closest Lymphatic", "Dist to Closest Capillary", "Dist to Closest Nerve"
+    )
+    
+    # Subset to requested features if provided, otherwise use curated set
+    if (!is.null(features) && length(features) > 0) {
+      available_features <- intersect(features, ad$var_names)
+      if (length(available_features) == 0) {
+        warning("None of the requested features found in AnnData, using curated features")
+        available_features <- intersect(curated_features, ad$var_names)
+      } else {
+        cat(sprintf("Using %d of %d requested features\n", length(available_features), length(features)))
+      }
+    } else {
+      # Use curated feature set by default
+      available_features <- intersect(curated_features, ad$var_names)
+      cat(sprintf("Using curated feature set: %d features\n", length(available_features)))
+      cat(sprintf("  Features: %s\n", paste(available_features, collapse=", ")))
+    }
+    
+    if (length(available_features) > 0) {
+      feature_idx <- match(available_features, ad$var_names)
+      expr_mat <- expr_mat[, feature_idx, drop = FALSE]
+      colnames(expr_mat) <- ad$var_names[feature_idx]
+    } else {
+      stop("No valid features found for trajectory inference")
+    }
+    
+    cat("Running PCA for dimensionality reduction...\n")
+    # Compute PCA (Lamian expects cells × PCs)
+    # Data is already z-scored, so no need for redundant centering/scaling
+    n_pcs <- min(length(available_features) - 1, nrow(expr_mat) - 1)
+    pca_result <- prcomp(expr_mat, rank. = n_pcs, center = FALSE, scale. = FALSE)
+    pca_coords <- pca_result$x
+    
+    # Report variance explained
+    var_explained <- summary(pca_result)$importance[2, ]
+    cumvar <- cumsum(var_explained)
+    n_pcs_80 <- if (any(cumvar >= 0.80)) which(cumvar >= 0.80)[1] else n_pcs
+    cat(sprintf("  Using %d PCs (explains %.1f%% variance, %d PCs for 80%%)\n", 
+                n_pcs, cumvar[n_pcs] * 100, n_pcs_80))
+    
+    cat("Building cell annotation with sample IDs...\n")
+    # Build cell annotation - CRITICAL: column 2 must be sample/donor ID
+    # This allows Lamian to account for multi-sample structure
+    cellanno <- data.frame(
+      cell = ad$obs_names,
+      sample = as.character(ad$obs$imageid),  # Donor/sample ID
+      stringsAsFactors = FALSE
+    )
+    
+    # Add cell type if available (optional)
+    if ("donor_status" %in% colnames(ad$obs)) {
+      cellanno$celltype <- as.character(ad$obs$donor_status)
+    }
+    
+    cat("Running Lamian trajectory inference...\n")
+    cat("  This accounts for donor/sample structure to avoid artificial grouping\n")
+    cat("  Origin marker: INS (clusters with highest mean INS expression)\n")
+    
+    # Use Lamian's infer_tree_structure (designed for multi-sample data)
+    # Transpose expression for Lamian (genes × cells expected)
+    expr_mat_t <- t(expr_mat)
+    
+    # Determine reasonable max cluster number based on data size
+    n_obs <- nrow(ad$obs)
+    n_samples <- length(unique(cellanno$sample))
+    # Use more clusters for better resolution: ~sqrt(n) or n/50, capped at 50
+    max_clusters <- min(50, max(10, ceiling(sqrt(n_obs)), ceiling(n_obs / 50)))
+    
+    cat(sprintf("  Max clusters: %d (based on %d observations, %d samples)\n", 
+                max_clusters, n_obs, n_samples))
+    
+    res <- Lamian::infer_tree_structure(
+      pca = pca_coords,
+      cellanno = cellanno,
+      expression = expr_mat_t,
+      origin.marker = "INS",           # Use insulin as trajectory root - Lamian finds cluster with highest mean INS
+      number.cluster = NA,              # Auto-determine cluster number
+      max.clunum = max_clusters,        # Maximum clusters to consider (adaptive)
+      kmeans.seed = 12345              # Reproducible clustering
+    )
+    
+    # Extract pseudotime from Lamian result
+    pseudotime <- res$pseudotime
+    
+    # Report what Lamian found
+    if (!is.null(res$clusterRes)) {
+      n_clusters <- length(unique(res$clusterRes))
+      cat(sprintf("  Lamian identified %d clusters\n", n_clusters))
+    }
+    
+    # Ensure it's a vector aligned with cells
+    if (is.matrix(pseudotime)) {
+      pseudotime <- as.numeric(pseudotime[, 1])
+    }
+    
+    # Handle names if present
+    if (!is.null(names(pseudotime))) {
+      # Reorder to match ad$obs_names
+      pseudotime <- pseudotime[ad$obs_names]
+    }
+    
+    # Check pseudotime distribution before normalization
+    cat(sprintf("  Raw pseudotime range: %.3f - %.3f (mean: %.3f, sd: %.3f)\n", 
+                min(pseudotime, na.rm = TRUE), max(pseudotime, na.rm = TRUE),
+                mean(pseudotime, na.rm = TRUE), sd(pseudotime, na.rm = TRUE)))
+    
+    # Normalize to 0-1 range for consistency with PAGA
+    pseudotime <- (pseudotime - min(pseudotime, na.rm = TRUE)) / 
+                  (max(pseudotime, na.rm = TRUE) - min(pseudotime, na.rm = TRUE))
+    
+    # REVERSE pseudotime direction (biological progression ND→Aab+→T1D)
+    # Lamian origin.marker='INS' finds high-INS clusters, but trajectory may run backward
+    # Reversal ensures: 0=healthy (high INS), 1=diseased (low INS)
+    pseudotime <- 1 - pseudotime
+    cat("  ✓ Pseudotime reversed for biological progression (0=healthy, 1=diseased)\n")
+    
+    cat(sprintf("✓ Lamian pseudotime computed (range: %.3f - %.3f)\n", 
+                min(pseudotime, na.rm = TRUE), max(pseudotime, na.rm = TRUE)))
+    cat(sprintf("  %d cells across %d samples\n", 
+                length(pseudotime), length(unique(cellanno$sample))))
+    
+    return(pseudotime)
+    
+  }, error = function(e) {
+    warning(sprintf("Lamian pseudotime calculation failed: %s", e$message))
+    cat("Error details:", e$message, "\n")
+    return(rep(NA_real_, nrow(ad$obs)))
+  })
+}
+
 summary_stats <- function(df, group_cols, value_col, stat = c("mean_se","mean_sd","median_iqr")) {
   stat <- match.arg(stat)
   df %>% group_by(across(all_of(group_cols))) %>%
@@ -737,171 +2004,360 @@ per_bin_kendall <- function(df, bin_col, group_col, value_col, mid_col = "diam_m
 
 ui <- fluidPage(
   useShinyjs(),
-  tags$head(tags$style(HTML("\n    /* Viewer and trajectory mode styles - fix tab positioning */\n    body.viewer-mode .col-sm-2 {\n      display: none !important;\n    }\n    body.viewer-mode .col-sm-10 {\n      width: 100% !important;\n      max-width: 100% !important;\n      flex: 0 0 100%;\n    }\n    body.viewer-mode .nav-tabs {\n      position: static !important;\n      width: 100% !important;\n    }\n    body.trajectory-mode .container-fluid > .row > .col-sm-3 {\n      display: none !important;\n    }\n    body.trajectory-mode .container-fluid > .row > .col-sm-9 {\n      width: 100% !important;\n      max-width: 100% !important;\n      flex: 0 0 100%;\n    }\n    \n    /* Global biomedical theme styling */\n    body {\n      background-color: #f8f9fa;\n      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;\n      padding-top: 0;\n    }\n    \n    .container-fluid {\n      background-color: #ffffff;\n      border-radius: 12px;\n      box-shadow: 0 4px 12px rgba(0,0,0,0.08);\n      margin: 10px;\n      padding: 20px;\n    }\n    \n    /* Logo header styling */\n    .logo-header {\n      display: flex;\n      justify-content: flex-end;\n      align-items: center;\n      padding: 10px 0;\n      margin-bottom: 10px;\n      background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);\n      border-bottom: 2px solid #e3f2fd;\n    }\n    \n    /* Enhanced card styling with biomedical color scheme */\n    .card {\n      background: linear-gradient(145deg, #ffffff 0%, #f8f9fa 100%);\n      border: 1px solid #e3f2fd;\n      box-shadow: 0 4px 12px rgba(44, 90, 160, 0.08);\n      transition: all 0.3s ease;\n      border-radius: 12px;\n    }\n    .card:hover {\n      box-shadow: 0 8px 20px rgba(44, 90, 160, 0.15);\n      transform: translateY(-2px);\n    }\n    \n    .card h5 {\n      color: #2c5aa0;\n      font-weight: 600;\n      border-bottom: 2px solid #e3f2fd;\n      padding-bottom: 8px;\n      margin-bottom: 15px;\n    }\n    \n    /* Sidebar styling with scientific theme */\n    .sidebar {\n      background: linear-gradient(180deg, #2c5aa0 0%, #1e3a72 100%);\n      color: white;\n      border-radius: 12px;\n      padding: 20px;\n      font-size: 14px;\n      box-shadow: 0 4px 12px rgba(44, 90, 160, 0.2);\n    }\n    \n    .sidebar h4, .sidebar h5 {\n      color: #ffffff;\n      font-weight: 600;\n      border-bottom: 1px solid rgba(255,255,255,0.2);\n      padding-bottom: 8px;\n    }\n    \n    .sidebar .form-group {\n      margin-bottom: 18px;\n    }\n    \n    .sidebar label {\n      color: #e3f2fd;\n      font-size: 13px;\n      font-weight: 600;\n    }\n    \n    .sidebar .form-control {\n      background-color: rgba(255,255,255,0.9);\n      border: 1px solid #b3d9ff;\n      border-radius: 6px;\n      color: #2c5aa0;\n    }\n    \n    .sidebar .form-control:focus {\n      background-color: #ffffff;\n      border-color: #66b3ff;\n      box-shadow: 0 0 0 0.2rem rgba(44, 90, 160, 0.25);\n    }\n    \n    .sidebar .btn {\n      background: linear-gradient(145deg, #66b3ff 0%, #4da6ff 100%);\n      border: none;\n      border-radius: 6px;\n      color: white;\n      font-weight: 500;\n    }\n    \n    .sidebar .btn:hover {\n      background: linear-gradient(145deg, #4da6ff 0%, #3399ff 100%);\n      transform: translateY(-1px);\n    }\n    \n    /* Tab styling */\n    .nav-tabs {\n      border-bottom: 2px solid #e3f2fd;\n    }\n    \n    .nav-tabs .nav-link {\n      color: #2c5aa0;\n      font-weight: 500;\n      border: none;\n      border-radius: 8px 8px 0 0;\n      margin-right: 4px;\n      background-color: #f8f9fa;\n    }\n    \n    .nav-tabs .nav-link.active {\n      background: linear-gradient(145deg, #2c5aa0 0%, #1e3a72 100%);\n      color: white;\n      border-bottom: 3px solid #66b3ff;\n    }\n    \n    .nav-tabs .nav-link:hover {\n      background-color: #e3f2fd;\n      color: #1e3a72;\n    }\n    \n    /* Form controls styling */\n    .form-control {\n      border: 2px solid #e3f2fd;\n      border-radius: 6px;\n      transition: all 0.2s ease;\n    }\n    \n    .form-control:focus {\n      border-color: #66b3ff;\n      box-shadow: 0 0 0 0.2rem rgba(44, 90, 160, 0.15);\n    }\n    \n    /* Button styling */\n    .btn-primary {\n      background: linear-gradient(145deg, #2c5aa0 0%, #1e3a72 100%);\n      border: none;\n      border-radius: 8px;\n      font-weight: 500;\n      padding: 8px 16px;\n      transition: all 0.2s ease;\n    }\n    \n    .btn-primary:hover {\n      background: linear-gradient(145deg, #1e3a72 0%, #0f1f3d 100%);\n      transform: translateY(-2px);\n      box-shadow: 0 4px 12px rgba(44, 90, 160, 0.3);\n    }\n    \n    /* Checkbox and radio button styling */\n    input[type='checkbox'], input[type='radio'] {\n      accent-color: #2c5aa0;\n    }\n    \n    /* Slider styling */\n    .irs--shiny {\n      color: #2c5aa0;\n    }\n    \n    .irs--shiny .irs-bar {\n      background: linear-gradient(90deg, #66b3ff 0%, #2c5aa0 100%);\n    }\n    \n    .irs--shiny .irs-handle {\n      background: #2c5aa0;\n      border: 3px solid #ffffff;\n    }\n    \n    /* Help text styling */\n    .help-block {\n      color: #b3d9ff;\n      font-size: 12px;\n      font-style: italic;\n    }\n    \n    /* Well and panel styling */\n    .well {\n      background: linear-gradient(145deg, #f8f9fa 0%, #e3f2fd 100%);\n      border: 1px solid #b3d9ff;\n      border-radius: 8px;\n    }\n  "))),
+  tags$head(tags$style(HTML("\n    /* Viewer and trajectory mode styles - fix tab positioning */\n    body.viewer-mode .col-sm-2 {\n      display: none !important;\n    }\n    body.viewer-mode .col-sm-10 {\n      width: 100% !important;\n      max-width: 100% !important;\n      flex: 0 0 100%;\n    }\n    body.viewer-mode .nav-tabs {\n      position: static !important;\n      width: 100% !important;\n    }\n    body.trajectory-mode .container-fluid > .row > .col-sm-3 {\n      display: none !important;\n    }\n    body.trajectory-mode .container-fluid > .row > .col-sm-9 {\n      width: 100% !important;\n      max-width: 100% !important;\n      flex: 0 0 100%;\n    }\n    \n    /* Global biomedical theme styling */\n    body {\n      background-color: #f8f9fa;\n      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;\n      padding-top: 0;\n    }\n    \n    .container-fluid {\n      background-color: #ffffff;\n      border-radius: 12px;\n      box-shadow: 0 4px 12px rgba(0,0,0,0.08);\n      margin: 10px;\n      padding: 20px;\n    }\n    \n    /* Logo header styling */\n    .logo-header {\n      display: flex;\n      justify-content: flex-end;\n      align-items: center;\n      padding: 10px 0;\n      margin-bottom: 10px;\n      background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);\n      border-bottom: 2px solid #e3f2fd;\n    }\n    \n    /* Enhanced card styling with biomedical color scheme */\n    .card {\n      background: linear-gradient(145deg, #ffffff 0%, #f8f9fa 100%);\n      border: 1px solid #e3f2fd;\n      box-shadow: 0 4px 12px rgba(44, 90, 160, 0.08);\n      transition: all 0.3s ease;\n      border-radius: 12px;\n    }\n    .card:hover {\n      box-shadow: 0 8px 20px rgba(44, 90, 160, 0.15);\n      transform: translateY(-2px);\n    }\n    \n    .card h5 {\n      color: #2c5aa0;\n      font-weight: 600;\n      border-bottom: 2px solid #e3f2fd;\n      padding-bottom: 8px;\n      margin-bottom: 15px;\n    }\n    \n    /* Sidebar styling with scientific theme */\n    .sidebar {\n      background: linear-gradient(180deg, #2c5aa0 0%, #1e3a72 100%);\n      color: white;\n      border-radius: 12px;\n      padding: 20px;\n      font-size: 14px;\n      box-shadow: 0 4px 12px rgba(44, 90, 160, 0.2);\n    }\n    \n    .sidebar h4, .sidebar h5 {\n      color: #ffffff;\n      font-weight: 600;\n      border-bottom: 1px solid rgba(255,255,255,0.2);\n      padding-bottom: 8px;\n    }\n    \n    .sidebar .form-group {\n      margin-bottom: 18px;\n    }\n    \n    .sidebar label {\n      color: #e3f2fd;\n      font-size: 13px;\n      font-weight: 600;\n    }\n    \n    .sidebar .form-control {\n      background-color: rgba(255,255,255,0.9);\n      border: 1px solid #b3d9ff;\n      border-radius: 6px;\n      color: #2c5aa0;\n    }\n    \n    .sidebar .form-control:focus {\n      background-color: #ffffff;\n      border-color: #66b3ff;\n      box-shadow: 0 0 0 0.2rem rgba(44, 90, 160, 0.25);\n    }\n    \n    .sidebar .btn {\n      background: linear-gradient(145deg, #66b3ff 0%, #4da6ff 100%);\n      border: none;\n      border-radius: 6px;\n      color: white;\n      font-weight: 500;\n    }\n    \n    .sidebar .btn:hover {\n      background: linear-gradient(145deg, #4da6ff 0%, #3399ff 100%);\n      transform: translateY(-1px);\n    }\n    \n    /* Tab styling */\n    .nav-tabs {\n      border-bottom: 2px solid #e3f2fd;\n    }\n    \n    .nav-tabs .nav-link {\n      color: #2c5aa0;\n      font-weight: 500;\n      border: none;\n      border-radius: 8px 8px 0 0;\n      margin-right: 4px;\n      background-color: #f8f9fa;\n    }\n    \n    .nav-tabs .nav-link.active {\n      background: linear-gradient(145deg, #2c5aa0 0%, #1e3a72 100%);\n      color: white;\n      border-bottom: 3px solid #66b3ff;\n    }\n    \n    .nav-tabs .nav-link:hover {\n      background-color: #e3f2fd;\n      color: #1e3a72;\n    }\n    \n    /* Form controls styling */\n    .form-control {\n      border: 2px solid #e3f2fd;\n      border-radius: 6px;\n      transition: all 0.2s ease;\n    }\n    \n    .form-control:focus {\n      border-color: #66b3ff;\n      box-shadow: 0 0 0 0.2rem rgba(44, 90, 160, 0.15);\n    }\n    \n    /* Button styling */\n    .btn-primary {\n      background: linear-gradient(145deg, #2c5aa0 0%, #1e3a72 100%);\n      border: none;\n      border-radius: 8px;\n      font-weight: 500;\n      padding: 8px 16px;\n      transition: all 0.2s ease;\n    }\n    \n    .btn-primary:hover {\n      background: linear-gradient(145deg, #1e3a72 0%, #0f1f3d 100%);\n      transform: translateY(-2px);\n      box-shadow: 0 4px 12px rgba(44, 90, 160, 0.3);\n    }\n    \n    /* Checkbox and radio button styling */\n    input[type='checkbox'], input[type='radio'] {\n      accent-color: #2c5aa0;\n    }\n    \n    /* Slider styling */\n    .irs--shiny {\n      color: #2c5aa0;\n    }\n    \n    .irs--shiny .irs-bar {\n      background: linear-gradient(90deg, #66b3ff 0%, #2c5aa0 100%);\n    }\n    \n    .irs--shiny .irs-handle {\n      background: #2c5aa0;\n      border: 3px solid #ffffff;\n    }\n    \n    /* Help text styling */\n    .help-block {\n      color: #b3d9ff;\n      font-size: 12px;\n      font-style: italic;\n    }\n    \n    /* Well and panel styling */\n    .well {\n      background: linear-gradient(145deg, #f8f9fa 0%, #e3f2fd 100%);\n      border: 1px solid #b3d9ff;\n      border-radius: 8px;\n    }\n    .ai-chat-panel {
+      background: linear-gradient(145deg, #ffffff 0%, #f8f9fa 100%);\n      border: 1px solid #e3f2fd;\n      border-radius: 12px;\n      box-shadow: 0 4px 12px rgba(44, 90, 160, 0.08);\n      padding: 15px;\n      display: flex;\n      flex-direction: column;\n      gap: 12px;\n    }\n    .ai-chat-logo {\n      display: flex;\n      justify-content: center;\n      align-items: center;\n      padding-bottom: 8px;\n      border-bottom: 1px solid rgba(44, 90, 160, 0.15);\n    }\n    .ai-chat-logo img {\n      max-width: 100%;\n      height: auto;\n      max-height: 90px;\n    }\n    .ai-chat-header {\n      display: flex;\n      justify-content: center;\n      align-items: center;\n      margin-top: 8px;\n      margin-bottom: 4px;\n    }\n    .ai-chat-history {\n      flex: 1;\n      overflow-y: auto;\n      padding: 8px;\n      display: flex;\n      flex-direction: column;\n      gap: 10px;\n    }\n    .ai-chat-message {\n      padding: 10px 12px;\n      border-radius: 8px;\n      margin: 4px 0;\n      max-width: 90%;\n      word-wrap: break-word;\n    }\n    .ai-chat-message.user {\n      background: linear-gradient(145deg, #e3f2fd 0%, #bbdefb 100%);\n      border-left: 4px solid #2c5aa0;\n      align-self: flex-end;\n      margin-left: auto;\n    }\n    .ai-chat-message.assistant {\n      background: linear-gradient(145deg, #f5f5f5 0%, #eeeeee 100%);\n      border-left: 4px solid #66b3ff;\n      align-self: flex-start;\n      margin-right: auto;\n    }\n    .ai-chat-meta {\n      font-weight: 600;\n      font-size: 12px;\n      display: block;\n      margin-bottom: 4px;\n      text-transform: uppercase;\n      letter-spacing: 0.5px;\n    }\n    .ai-chat-message.user .ai-chat-meta {\n      color: #1e3a72;\n    }\n    .ai-chat-message.assistant .ai-chat-meta {\n      color: #2c5aa0;\n    }\n  "))),
+  tags$head(tags$style(HTML("\n    .ai-chat-logo img {\n      max-width: 100%;\n      height: auto;\n      max-height: 120px;\n    }\n    /* Equal height panels */
+    .equal-height-row {\n      display: flex;\n      flex-wrap: nowrap;\n    }\n    .equal-height-panel {\n      height: calc(100vh - 40px);\n      overflow-y: auto;\n    }\n    /* AI chat panel - match card heights */\n    .ai-chat-panel-container {\n      height: calc(100vh - 100px);\n      display: flex;\n      flex-direction: column;\n      overflow-y: auto;\n      margin-top: 20px;\n    }\n  "))),
   uiOutput("theme_css"),
-  # Logo positioned to align with content
-  fluidRow(
-    column(12, 
-      div(style = "display: flex; justify-content: flex-start; padding: 10px 0; margin-bottom: 10px; border-bottom: 2px solid #e3f2fd;",
-        tags$img(src = "logo.png", height = "80px", style = "max-width: 300px; height: auto;")
-      )
-    )
-  ),
-  sidebarLayout(
-    conditionalPanel(
-      condition = "input.tabs != 'Trajectory'",
-      sidebarPanel(
-        h4("Data & Filters"),
-        width = 2,
-      selectInput("mode", "Focus", choices = c("Markers", "Targets", "Composition"), selected = "Composition"),
-      uiOutput("region_selector"),
-      uiOutput("dynamic_selector"),
-      uiOutput("metric_selector"),
-  # color selector removed (pseudotime removed)
-      hr(),
-      h5("Autoantibody filter (Aab+ donors only)"),
-      checkboxGroupInput("aab_flags", NULL,
-                         choices = c("GADA" = "AAb_GADA",
-                                     "IA2A" = "AAb_IA2A",
-                                     "ZnT8A" = "AAb_ZnT8A",
-                                     "IAA" = "AAb_IAA",
-                                     "mIAA" = "AAb_mIAA"),
-                         selected = character(0)),
-      radioButtons("aab_logic", "Match (within Aab+)", choices = c("Any", "All"), selected = "Any", inline = TRUE),
-      checkboxGroupInput("groups", "Donor Status", choices = c("ND", "Aab+", "T1D"), selected = c("ND", "Aab+", "T1D"), inline = TRUE),
-      selectInput("curve_norm", "Normalization (plot)",
-                  choices = c("None (raw)" = "none", "Global z-score" = "global", "Robust per-donor" = "robust"),
-                  selected = "none"),
-      radioButtons("stat", "Statistic",
-                   choices = c("Mean±SE" = "mean_se",
-                               "Mean±SD" = "mean_sd",
-                               "Median + IQR" = "median_iqr"),
-                   selected = "mean_se"),
-      hr(),
-      h5("Export"),
-      downloadButton("dl_summary", "Download summary CSV"),
-    downloadButton("dl_stats", "Download stats CSV")
+  tags$script(HTML("
+    $(document).on('shiny:connected', function() {
+      function adjustLayout() {
+        var activeTab = $('#tabs li.active a').text().trim();
+        var sidebar = $('.equal-height-panel').first();
+        var mainPanel = $('.main-content-panel');
+        
+        // Hide sidebar and expand main panel for non-Plot tabs
+        if (activeTab !== 'Plot') {
+          sidebar.hide();
+          mainPanel.css({
+            'width': '100%',
+            'max-width': '100%',
+            'flex': '0 0 100%'
+          });
+        } else {
+          sidebar.show();
+          mainPanel.css({
+            'width': '88.33333333%',
+            'max-width': '88.33333333%',
+            'flex': '0 0 88.33333333%'
+          });
+        }
+      }
+      
+      // Adjust on initial load
+      setTimeout(adjustLayout, 100);
+      
+      // Adjust when tabs change
+      $('a[data-toggle=\"tab\"]').on('shown.bs.tab', function() {
+        adjustLayout();
+      });
+    });
+  ")),
+  fluidRow(class = "equal-height-row",
+    # Left Sidebar Panel
+    column(width = 1.4, class = "equal-height-panel",
+      conditionalPanel(
+        condition = "input.tabs == 'Plot'",
+        div(class = "sidebar", style = "height: 100%;",
+          h4("Data & Filters"),
+          selectInput("mode", "Focus", choices = c("Markers", "Targets", "Composition"), selected = "Composition"),
+          uiOutput("region_selector"),
+          uiOutput("dynamic_selector"),
+          uiOutput("metric_selector"),
+      # color selector removed (pseudotime removed)
+          hr(),
+          h5("Autoantibody filter (Aab+ donors only)"),
+          uiOutput("aab_warning"),
+          checkboxGroupInput("aab_flags", NULL,
+                             choices = c("GADA" = "AAb_GADA",
+                                         "IA2A" = "AAb_IA2A",
+                                         "ZnT8A" = "AAb_ZnT8A",
+                                         "IAA" = "AAb_IAA",
+                                         "mIAA" = "AAb_mIAA"),
+                             selected = c("AAb_GADA", "AAb_IA2A", "AAb_ZnT8A", "AAb_IAA", "AAb_mIAA")),
+          checkboxGroupInput("groups", "Donor Status", choices = c("ND", "Aab+", "T1D"), selected = c("ND", "Aab+", "T1D"), inline = TRUE),
+          radioButtons("stat", "Statistic",
+                       choices = c("Mean±SE" = "mean_se",
+                                   "Mean±SD" = "mean_sd",
+                                   "Median + IQR" = "median_iqr"),
+                       selected = "mean_se"),
+          checkboxInput("show_plot_outlier_table", "Show outlier table (if outliers detected)", value = FALSE),
+          # Outlier table output
+          uiOutput("plot_outlier_info"),
+          hr(),
+          h5("Export"),
+          downloadButton("dl_summary", "Download summary CSV")
+        )
       )
     ),
-    mainPanel(
-      tabsetPanel(id = "tabs",
+    # Main Panel - uses full width when sidebar is hidden
+    column(width = 10.6, class = "equal-height-panel main-content-panel",
+          tabsetPanel(id = "tabs",
         tabPanel("Plot", 
-                 # Main plot card
-                 div(class = "card", style = "margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px;",
-                   h5("Main Distribution Plot", style = "margin-top: 0; color: #333;"),
-                   plotlyOutput("plt", height = 650),
-                   br(),
-                   # Reorganized controls with better spacing
-                   fluidRow(
-                     column(3, 
-                       sliderInput("binwidth", "Diameter bin width (µm)", min = 10, max = 100, value = 50, step = 5),
-                       sliderInput("diam_max", "Max islet diameter (µm)", min = 50, max = 1000, value = 350, step = 10)
-                     ),
-                     column(3,
-                       checkboxInput("exclude_zero_top", "Exclude zero values", value = FALSE),
-                       checkboxInput("show_points", "Show individual points", value = FALSE),
-                       radioButtons("add_smooth", "Trend line", choices = c("None", "LOESS"), selected = "None", inline = TRUE)
-                     ),
-                     column(3,
-                       sliderInput("pt_size", "Point size", min = 0.3, max = 4.0, value = 0.8, step = 0.1),
-                       sliderInput("pt_alpha", "Point transparency", min = 0.05, max = 1.0, value = 0.25, step = 0.05)
+                 fluidRow(
+                   # Left card: Main plot (smaller to align bottom with left panel)
+                   column(4,
+                     div(class = "card", style = "margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; height: calc(100vh - 100px);",
+                       h5("Islet Size Distribution", style = "margin-top: 0; color: #333;"),
+                       plotlyOutput("plt", height = 500),
+                       br(),
+                       # Reorganized controls with better spacing
+                       fluidRow(
+                         column(4, 
+                           sliderInput("binwidth", "Diameter bin width (µm)", min = 1, max = 75, value = 50, step = 1),
+                           sliderInput("diam_range", "Islet diameter range (µm)", min = 0, max = 500, value = c(0, 350), step = 10)
+                         ),
+                         column(4,
+                           sliderInput("pt_size", "Point size", min = 0.3, max = 4.0, value = 0.8, step = 0.1),
+                           sliderInput("pt_alpha", "Point transparency", min = 0.05, max = 1.0, value = 0.25, step = 0.05)
+                         ),
+                         column(4,
+                           selectInput("plot_color_by", "Color points by:",
+                                      choices = c("Donor Status" = "donor_status", 
+                                                "Donor ID" = "donor_id"),
+                                      selected = "donor_status"),
+                           radioButtons("add_smooth", "Trend line", choices = c("None", "LOESS"), selected = "None", inline = TRUE)
+                         )
+                       ),
+                       fluidRow(
+                         column(9),
+                         column(3,
+                           checkboxInput("exclude_zero_top", "Exclude zero values", value = FALSE),
+                           checkboxInput("show_points", "Show individual points", value = FALSE),
+                           checkboxInput("log_scale", "Log scale y-axis", value = FALSE),
+                           checkboxInput("log_scale_x", "Log2 scale x-axis", value = FALSE)
+                         )
+                       )
+                     )
+                   ),
+                   # Middle card: Distribution plot (same height as main plot)
+                   column(4,
+                     div(class = "card", style = "margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; height: calc(100vh - 100px); display: flex; flex-direction: column;",
+                       h5("Distribution Comparison", style = "margin-top: 0; color: #333;"),
+                       div(style = "flex: 1; overflow-y: auto;",
+                         plotlyOutput("dist", height = 400),
+                         br(),
+                         # Distribution controls below the plot
+                         uiOutput("dist_ui")
+                       )
+                     )
+                   ),
+                   # Right card: AI Assistant
+                   column(4,
+                     div(class = "card ai-chat-panel", style = "margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; height: calc(100vh - 100px); display: flex; flex-direction: column;",
+                       div(
+                         class = "ai-chat-header",
+                         style = "display: flex; align-items: center; padding-bottom: 12px; border-bottom: 1px solid rgba(44, 90, 160, 0.15);",
+                         tags$img(src = "logo.png", alt = "Islet Explorer logo", style = "height: 80px; margin-right: 15px;"),
+                         div(
+                           style = "flex: 1;",
+                           span("Powered by Mab Lab and University of Florida Navigator AI Toolkit", 
+                                style = "font-size: 14px; font-weight: bold; color: #333;")
+                         )
+                       ),
+                       uiOutput("chat_status", container = div, class = "ai-chat-status"),
+                       div(style = "flex: 1; overflow-y: auto;",
+                         uiOutput("chat_history", container = div, class = "ai-chat-history")
+                       ),
+                       div(
+                         class = "ai-chat-model-picker",
+                         selectInput(
+                           "chat_model",
+                           label = "Model",
+                           choices = c(
+                             "Navigator Fast (gpt-oss-20b)" = "gpt-oss-20b",
+                             "Navigator Large (gpt-oss-210b)" = "gpt-oss-210b"
+                           ),
+                           selected = "gpt-oss-20b"
+                         )
+                       ),
+                       div(
+                         class = "ai-chat-input",
+                         textAreaInput(
+                           "chat_message",
+                           label = NULL,
+                           value = "",
+                           placeholder = "Ask about donor trends, plots, or troubleshooting…",
+                           height = "110px"
+                         )
+                       ),
+                       div(
+                         class = "ai-chat-controls",
+                         actionButton("chat_send", "Send", class = "btn btn-primary"),
+                         actionButton("chat_reset", "New Conversation", class = "btn btn-outline-secondary")
+                       ),
+                       uiOutput("chat_feedback", container = div, class = "ai-chat-feedback"),
+                       uiOutput("chat_usage", container = div, class = "ai-chat-usage")
                      )
                    )
-                 ),
-                 # Distribution plot card
-                 div(class = "card", style = "padding: 15px; border: 1px solid #ddd; border-radius: 8px;",
-                   h5("Distribution Comparison", style = "margin-top: 0; color: #333;"),
-                   plotlyOutput("dist", height = 500),
-                   br(),
-                   # Distribution controls below the plot
-                   uiOutput("dist_ui")
                  )
-        ),
-        tabPanel("Statistics",
-                 fluidRow(
-                   column(4, selectInput("alpha", "Significance level (alpha)", choices = c("0.05","0.01","0.001"), selected = "0.05")),
-                   column(3, br(), actionButton("run_tests", "Run statistics"))
-                 ),
-                 br(),
-                 tableOutput("stats_tbl"),
-                 br(),
-                 plotlyOutput("stats_plot", height = 320),
-                 br(),
-                 plotlyOutput("pairwise_plot", height = 320)
         ),
         tabPanel("Trajectory",
           tagList(
+            fluidRow(
+              column(6,
+                radioButtons(
+                  "pseudotime_method",
+                  "Pseudotime Calculation Method:",
+                  choices = c("PAGA (Python/Scanpy)" = "paga", "Lamian (R/TSCAN)" = "lamian"),
+                  selected = "paga",
+                  inline = TRUE
+                )
+              ),
+              column(6,
+                checkboxInput(
+                  "show_outlier_table",
+                  "Show outlier table (if outliers detected)",
+                  value = FALSE
+                )
+              )
+            ),
             uiOutput("traj_status"),
             fluidRow(
-              column(12,
-                fluidRow(
-                  column(3,
-                    uiOutput("traj_feature_selector")
+              # Left card: Scatterplot and heatmap
+              column(8,
+                div(class = "card", style = "padding: 15px; margin-bottom: 20px;",
+                  # Four columns of selectors - two rows
+                  fluidRow(
+                    # Column 1: Feature selector and Trend lines
+                    column(3,
+                      uiOutput("traj_feature_selector"),
+                      selectInput("traj_show_trend", "Trend lines:",
+                                 choices = c("None" = "none", 
+                                           "Overall" = "overall",
+                                           "By Donor Status" = "by_donor"),
+                                 selected = "by_donor")
+                    ),
+                    # Column 2: Color points by and Point size by
+                    column(3,
+                      selectInput("traj_color_by", "Color points by:",
+                                 choices = c("Donor Status" = "donor_status", 
+                                           "Donor ID" = "donor_id"),
+                                 selected = "donor_status"),
+                      selectInput("traj_point_size", "Point size by:",
+                                 choices = c("Uniform" = "uniform",
+                                           "Islet Diameter" = "islet_diam_um"),
+                                 selected = "islet_diam_um")
+                    ),
+                    # Column 3: Two sliders stacked
+                    column(3,
+                      sliderInput("traj_alpha", "Point transparency:",
+                                 min = 0.1, max = 1.0, value = 0.3, step = 0.05),
+                      sliderInput("traj_point_size_slider", "Point size:",
+                                 min = 0.5, max = 5.0, value = 2.3, step = 0.1)
+                    ),
+                    # Column 4: Legend display
+                    column(3,
+                      div(style = "border: 1px solid #ddd; padding: 10px; border-radius: 5px; background-color: #f9f9f9; min-height: 100px;",
+                        h6("Legend", style = "margin-top: 0; margin-bottom: 10px; font-weight: bold; color: #333;"),
+                        uiOutput("traj_legend")
+                      )
+                    )
                   ),
-                  column(3,
-                    selectInput("traj_color_by", "Color points by:",
-                               choices = c("Donor Status" = "donor_status", 
-                                         "Donor ID" = "donor_id"),
-                               selected = "donor_status")
+                  plotlyOutput("traj_scatter", height = 600),
+                  br(),
+                  plotOutput("traj_heatmap", height = 120)
+                )
+              ),
+              # Right card: UMAP plots (height matched to left card)
+              column(4,
+                div(class = "card", style = "padding: 15px; margin-bottom: 20px; height: 950px; overflow-y: auto;",
+                  fluidRow(
+                    column(12,
+                      h5("UMAP: Donor Status"),
+                      plotOutput("traj_umap_donor", height = 400)
+                    )
                   ),
-                  column(3,
-                    selectInput("traj_point_size", "Point size by:",
-                               choices = c("Uniform" = "uniform",
-                                         "Islet Diameter" = "islet_diam_um"),
-                               selected = "islet_diam_um")
-                  ),
-                  column(3,
-                    selectInput("traj_show_trend", "Trend lines:",
-                               choices = c("None" = "none", 
-                                         "Overall" = "overall",
-                                         "By Donor Status" = "by_donor"),
-                               selected = "by_donor")
+                  br(),
+                  fluidRow(
+                    column(12,
+                      h5("UMAP: Selected Feature"),
+                      plotOutput("traj_umap_feature", height = 400)
+                    )
                   )
                 )
               )
             ),
-            fluidRow(
-              column(4,
-                sliderInput("traj_alpha", "Point transparency:",
-                           min = 0.1, max = 1.0, value = 0.2, step = 0.1)
-              ),
-              column(4),
-              column(4)
-            ),
-            plotlyOutput("traj_scatter", height = 420),
             br(),
-            # Interactive islet selection info
-            uiOutput("selected_islet_info"),
-            br(),
+            # Embedded vitessce viewer for selected islet
             fluidRow(
-              column(6, h5("Donor Status Progression")),
-              column(6, checkboxInput("traj_show_bins", "Show binned average", value = TRUE))
+              column(12,
+                h3("Selected Islet Viewer", style = "font-weight: bold; margin-top: 20px; margin-bottom: 15px;"),
+                uiOutput("selected_islet_info"),
+                div(id = "vitessce-viewer-container",
+                  if (VITESSCE_AVAILABLE) {
+                    vitessceR::vitessce_output("traj_vitessce_viewer", height = 600)
+                  } else {
+                    uiOutput("traj_vitessce_fallback")
+                  }
+                )
+              )
             ),
-            plotOutput("traj_heatmap", height = 120),
             br(),
+            # Outlier table (moved below viewer)
             fluidRow(
-              column(6, h5("UMAP: Donor Status")),
-              column(6, h5("UMAP: Selected Feature"))
-            ),
-            fluidRow(
-              column(6, plotOutput("traj_umap_donor", height = 350)),
-              column(6, plotOutput("traj_umap_feature", height = 350))
+              column(12,
+                uiOutput("traj_outlier_info")
+              )
             ),
 
           )
         ),
         
         tabPanel("Viewer",
-          div(style = "max-width: 1200px;",
+          div(style = "width: 100%;",
               uiOutput("local_image_picker"),
-              uiOutput("vit_view"),
-              tags$script(src = "geojson_streaming.js")
+              uiOutput("vit_view")
           )
+        ),
+        
+        tabPanel("Statistics",
+                 fluidRow(
+                   column(12,
+                     wellPanel(
+                       h4("Statistical Analysis Controls"),
+                       fluidRow(
+                         column(3, selectInput("alpha", "Significance level (α):", choices = c("0.05","0.01","0.001"), selected = "0.05")),
+                         column(3, checkboxInput("stats_remove_outliers", "Remove outliers (>3 SD)", value = TRUE)),
+                         column(3, br(), actionButton("run_tests", "Run Statistics", class = "btn-primary")),
+                         column(3, br(), downloadButton("download_stats", "Download CSV"))
+                       )
+                     )
+                   )
+                 ),
+                 fluidRow(
+                   column(6,
+                     wellPanel(
+                       h4("Global ANOVA Results"),
+                       tableOutput("stats_tbl")
+                     )
+                   ),
+                   column(6,
+                     wellPanel(
+                       h4("Distribution by Donor Status"),
+                       plotlyOutput("stats_plot", height = 320)
+                     )
+                   )
+                 ),
+                 fluidRow(
+                   column(6,
+                     wellPanel(
+                       h4("Pairwise Comparisons"),
+                       plotlyOutput("pairwise_plot", height = 320)
+                     )
+                   ),
+                   column(6,
+                     wellPanel(
+                       h4("Area Under Curve by Donor Group"),
+                       plotlyOutput("auc_plot", height = 320),
+                       br(),
+                       tableOutput("auc_table")
+                     )
+                   )
+                 ),
+                 fluidRow(
+                   column(12,
+                     wellPanel(
+                       h4("Statistical Test Information"),
+                       uiOutput("stats_explanation")
+                     )
+                   )
+                 )
         )
       )  # Close tabsetPanel
-    )    # Close mainPanel
-  )      # Close sidebarLayout
-)        # Close fluidPage
+    )  # Close Main Panel column
+  )  # Close fluidRow
+)    # Close fluidPage
 
 # ---------- Server ----------
 
@@ -930,11 +2386,298 @@ server <- function(input, output, session) {
     pd
   })
 
+  # No initial greeting - start with empty chat history
+  chat_history <- reactiveVal(list())
+  chat_feedback <- reactiveVal(NULL)
+  token_budget_limit <- {
+    option_limit <- getOption("openai_token_budget", NULL)
+    env_limit_raw <- Sys.getenv("OPENAI_TOKEN_BUDGET", unset = "")
+    limit_candidate <- NA_integer_
+    if (!is.null(option_limit)) {
+      limit_candidate <- suppressWarnings(as.integer(option_limit))
+    }
+    if (nzchar(env_limit_raw)) {
+      limit_candidate <- suppressWarnings(as.integer(env_limit_raw))
+    }
+    if (is.na(limit_candidate) || limit_candidate <= 0L) {
+      NA_integer_
+    } else {
+      limit_candidate
+    }
+  }
+  total_tokens_used <- reactiveVal(0L)
+  streaming_active <- reactiveVal(FALSE)
+
+  trim_history <- function(history, max_entries = 15) {
+    if (length(history) <= max_entries) return(history)
+    first_entry <- history[[1]]
+    rest <- tail(history, max_entries - 1)
+    c(list(first_entry), rest)
+  }
+
+  format_chat_content <- function(text) {
+    if (is.null(text)) return(htmltools::HTML(""))
+    text <- stringr::str_replace_all(text, "\r\n", "\n")
+    htmltools::HTML(gsub("\n", "<br/>", htmltools::htmlEscape(text)))
+  }
+
+  output$chat_status <- renderUI({
+    key_val <- get_llm_api_key()
+    key_available <- nzchar(key_val)
+  base_val <- tryCatch(LLM_API_BASE, error = function(e) NULL)
+    norm_base <- if (!is.null(base_val) && nzchar(base_val)) sub("/+\\z", "", base_val, perl = TRUE) else ""
+    host_label <- if (nzchar(norm_base)) {
+      host <- sub("^https?://", "", norm_base, ignore.case = TRUE)
+      sub("/.*$", "", host)
+    } else {
+      ""
+    }
+    provider_name <- if (nzchar(norm_base) && grepl("navigator", norm_base, ignore.case = TRUE)) {
+      "Navigator Toolkit (UF)"
+    } else {
+      "OpenAI"
+    }
+
+    if (!key_available) {
+      span("LLM key not found. Set KEY (and optionally BASE) in ~/.Renviron to enable assistant responses.")
+    } else {
+      NULL  # Don't show duplicate status text - it's already in the header
+    }
+  })
+
+  output$chat_history <- renderUI({
+    history <- chat_history()
+    if (!length(history)) {
+      return(div(
+        class = "ai-chat-message assistant",
+        span(class = "ai-chat-meta", "PANC FLOYD"),
+        format_chat_content("I'm ready when you are!")
+      ))
+    }
+    message_nodes <- lapply(history, function(entry) {
+      role_label <- if (identical(entry$role, "user")) "You" else "PANC FLOYD"
+      div(
+        class = paste("ai-chat-message", entry$role),
+        span(class = "ai-chat-meta", role_label),
+        format_chat_content(entry$content)
+      )
+    })
+    htmltools::tagList(message_nodes)
+  })
+
+  output$chat_feedback <- renderUI({
+    msg <- chat_feedback()
+    if (is.null(msg) || !nzchar(msg)) return(NULL)
+    span(msg)
+  })
+
+  output$chat_usage <- renderUI({
+    used <- total_tokens_used()
+    limit <- token_budget_limit
+    msg <- if (is.na(limit)) {
+      sprintf("Tokens used: %s", format(used, big.mark = ","))
+    } else {
+      sprintf("Tokens used: %s / %s", format(used, big.mark = ","), format(limit, big.mark = ","))
+    }
+    span(msg)
+  })
+
+  observe({
+    if (!isTRUE(streaming_active())) return()
+    invalidateLater(120, session)
+    session$flushReact()
+  })
+
+  observeEvent(input$chat_reset, {
+    chat_history(list())
+    chat_feedback(NULL)
+    updateTextAreaInput(session, "chat_message", value = "")
+  })
+
+  observeEvent(input$chat_send, {
+    if (!is.na(token_budget_limit) && total_tokens_used() >= token_budget_limit) {
+      chat_feedback(sprintf(
+        "Token budget reached (%s tokens). Adjust OPENAI_TOKEN_BUDGET or restart the session to continue.",
+        format(total_tokens_used(), big.mark = ",")
+      ))
+      return()
+    }
+
+    user_text <- input$chat_message %||% ""
+    user_text <- stringr::str_trim(user_text)
+    if (!nzchar(user_text)) {
+      chat_feedback("Please enter a question before sending.")
+      return()
+    }
+
+    chat_feedback(NULL)
+    updateTextAreaInput(session, "chat_message", value = "")
+
+    history <- chat_history()
+    history <- append(history, list(list(role = "user", content = user_text)))
+    history <- trim_history(history)
+    chat_history(history)
+
+    history_for_api <- history
+
+    if (!nzchar(get_llm_api_key())) {
+      chat_feedback("OpenAI assistant is not configured. Define KEY in your environment (e.g., ~/.Renviron).")
+      return()
+    }
+
+    placeholder_entry <- list(role = "assistant", content = "⏳ …")
+  history_with_placeholder <- append(chat_history(), list(placeholder_entry))
+  chat_index <- length(history_with_placeholder)
+  chat_history(history_with_placeholder)
+
+    final_usage <- NULL
+    final_text <- ""
+
+    stream_callback <- function(partial_text, usage = NULL) {
+      if (!is.null(partial_text)) {
+        final_text <<- partial_text
+      }
+      if (!is.null(usage)) {
+        final_usage <<- usage
+      }
+      isolate({
+        hist <- chat_history()
+        if (length(hist) >= chat_index) {
+          replacement <- if (!is.null(partial_text) && nzchar(partial_text)) partial_text else "⏳ …"
+          hist[[chat_index]]$content <- replacement
+          chat_history(hist)
+        }
+      })
+      session$flushReact()
+      invisible(NULL)
+    }
+
+    shinyjs::disable("chat_send")
+    shinyjs::disable("chat_reset")
+    streaming_active(TRUE)
+    on.exit({
+      shinyjs::enable("chat_send")
+      shinyjs::enable("chat_reset")
+    }, add = TRUE)
+    on.exit(streaming_active(FALSE), add = TRUE)
+
+    response <- withProgress(message = "Assistant is thinking...", value = 0, {
+      tryCatch(
+        call_openai_chat(
+          history_for_api,
+          model = input$chat_model %||% "auto",
+          stream = TRUE,
+          stream_callback = stream_callback
+        ),
+        error = function(e) e
+      )
+    })
+    if (inherits(response, "error")) {
+      err_text <- conditionMessage(response)
+      message("[OPENAI] Assistant request failed: ", err_text)
+      friendly <- "The assistant couldn’t reach the OpenAI service. Please try again shortly."
+  base_val <- tryCatch(LLM_API_BASE, error = function(e) "")
+      norm_base <- if (nzchar(base_val)) sub("/+\\z", "", base_val, perl = TRUE) else ""
+      if (grepl("exceeded your current quota", err_text, ignore.case = TRUE)) {
+        friendly <- paste(
+          "The assistant can’t reply right now because the OpenAI API quota was exceeded.",
+          "Please review plan and billing details at https://platform.openai.com/account/usage before trying again.")
+      } else if (grepl("429", err_text, ignore.case = TRUE)) {
+        friendly <- paste(
+          "The assistant hit the OpenAI rate/usage limit.",
+          "Please wait a moment or adjust your plan before trying again.")
+      } else if (grepl("401", err_text, ignore.case = TRUE) || grepl("invalid api key", err_text, ignore.case = TRUE)) {
+        friendly <- paste(
+          "The assistant can’t authenticate with the LLM provider.",
+          "Double-check the KEY value in your environment (e.g., ~/.Renviron), then reload the app.")
+      } else if (grepl("could not resolve host", err_text, ignore.case = TRUE) ||
+                 grepl("name or service not known", err_text, ignore.case = TRUE)) {
+        endpoint <- if (nzchar(norm_base)) norm_base else "the configured endpoint"
+        friendly <- paste(
+          sprintf("The assistant could not resolve %s.", endpoint),
+          "Confirm the BASE setting in your environment (e.g., ~/.Renviron) and network/DNS access.")
+      } else if (grepl("timed? out", err_text, ignore.case = TRUE) ||
+                 grepl("connection refused", err_text, ignore.case = TRUE)) {
+        endpoint <- if (nzchar(norm_base)) norm_base else "the configured endpoint"
+        friendly <- paste(
+          sprintf("The assistant couldn’t reach %s.", endpoint),
+          "Ensure the service is reachable and not blocking outbound requests.")
+      }
+
+      isolate({
+        hist <- chat_history()
+        if (length(hist) >= chat_index) {
+          hist[[chat_index]]$content <- friendly
+          chat_history(hist)
+        } else {
+          chat_history(append(hist, list(list(role = "assistant", content = friendly))))
+        }
+      })
+      chat_feedback(friendly)
+      return()
+    }
+
+    response_text <- NULL
+    usage_info <- NULL
+    if (is.list(response)) {
+      response_text <- response$text %||% NULL
+      usage_info <- response$usage %||% NULL
+    }
+    if (is.null(response_text)) {
+      response_text <- response
+    }
+    response_text <- stringr::str_trim(paste(response_text, collapse = "\n"))
+    if (!nzchar(response_text)) {
+      response_text <- stringr::str_trim(final_text)
+    }
+    if (!nzchar(response_text)) {
+      chat_feedback("Assistant returned an empty response. Try again.")
+      isolate({
+        hist <- chat_history()
+        if (length(hist) >= chat_index) {
+          hist[[chat_index]]$content <- "(no response)"
+          chat_history(hist)
+        }
+      })
+      return()
+    }
+
+    isolate({
+      hist <- chat_history()
+      if (length(hist) >= chat_index) {
+        hist[[chat_index]]$content <- response_text
+        chat_history(hist)
+      } else {
+        chat_history(append(hist, list(list(role = "assistant", content = response_text))))
+      }
+    })
+    chat_feedback(NULL)
+
+    usage_tokens <- NA_integer_
+    effective_usage <- final_usage
+    if (is.null(effective_usage)) effective_usage <- usage_info
+    if (!is.null(effective_usage) && !is.null(effective_usage$total_tokens)) {
+      usage_tokens <- suppressWarnings(as.integer(effective_usage$total_tokens))
+    }
+    if (!is.na(usage_tokens) && usage_tokens > 0L) {
+      new_total <- total_tokens_used() + usage_tokens
+      total_tokens_used(new_total)
+      if (!is.na(token_budget_limit) && new_total >= token_budget_limit) {
+        chat_feedback(sprintf(
+          "Token budget reached (%s / %s tokens). Start a new session or raise OPENAI_TOKEN_BUDGET to continue.",
+          format(new_total, big.mark = ","), format(token_budget_limit, big.mark = ",")
+        ))
+      }
+    }
+    chat_history(trim_history(chat_history()))
+  })
+
   # ---------- Spatial Lookup Data ----------
   spatial_lookup <- reactive({
     lookup_path <- file.path("..", "..", "data", "islet_spatial_lookup.csv")
     if (file.exists(lookup_path)) {
       tryCatch({
+       
         df <- read.csv(lookup_path, stringsAsFactors = FALSE)
         cat("[SPATIAL] Loaded", nrow(df), "islet spatial coordinates from", lookup_path, "\n")
         df
@@ -963,113 +2706,132 @@ server <- function(input, output, session) {
     NULL
   }
   traj_path <- resolve_traj_path()
+  # OPTIMIZATION: Cache trajectory data with better error handling
   traj <- reactiveVal(NULL)
+  traj_load_attempted <- reactiveVal(FALSE)
+  
   observe({
-    cur <- traj_path; if (is.null(cur) || !file.exists(cur)) cur <- resolve_traj_path()
-    if (is.null(cur) || !file.exists(cur)) return(NULL)
+    if (traj_load_attempted()) return()
     
-    # Use R anndata package instead of reticulate
+    cur <- traj_path
+    if (is.null(cur) || !file.exists(cur)) cur <- resolve_traj_path()
+    if (is.null(cur) || !file.exists(cur)) return()
+    
+    traj_load_attempted(TRUE)
+    
     if (!requireNamespace("anndata", quietly = TRUE)) {
-      traj(list(error = "R package 'anndata' not installed. Install with BiocManager::install('anndata').", error_detail = NULL))
-      return(NULL)
+      traj(list(error = "R package 'anndata' not installed.", error_detail = NULL))
+      return()
     }
     
-    # Read AnnData using R package
-    ad <- NULL; load_err <- NULL
+    ad <- NULL
+    load_err <- NULL
     norm_path <- tryCatch(normalizePath(cur, mustWork = TRUE), error = function(e) cur)
-    ad <- tryCatch(anndata::read_h5ad(norm_path), error = function(e) { load_err <<- conditionMessage(e); NULL })
+    
+    ad <- tryCatch(
+      anndata::read_h5ad(norm_path), 
+      error = function(e) { 
+        load_err <<- conditionMessage(e)
+        NULL 
+      }
+    )
+    
     if (is.null(ad)) {
       traj(list(error = sprintf("Failed to read H5AD: %s", norm_path), error_detail = load_err))
-      return(NULL)
+      return()
     }
     
-    # Extract obs data.frame directly (R anndata package provides this natively)
-    obs <- NULL
-    try({
-      obs <- ad$obs
-      if (!is.null(obs) && !inherits(obs, "data.frame")) {
-        obs <- tryCatch(as.data.frame(obs, stringsAsFactors = FALSE), error = function(e) NULL)
-      }
-    }, silent = TRUE)
-    
-    # Get obsm and uns if available
+    # Extract obs, obsm, uns
+    obs <- tryCatch(ad$obs, error = function(e) NULL)
     obsm <- tryCatch(ad$obsm, error = function(e) NULL)
-    uns  <- tryCatch(ad$uns, error = function(e) NULL)
+    uns <- tryCatch(ad$uns, error = function(e) NULL)
+    var_names <- tryCatch(rownames(ad$var), error = function(e) NULL)
     
     if (is.null(obs)) {
-      traj(list(error = "Could not extract obs data from AnnData object", error_detail = NULL))
-      return(NULL)
+      traj(list(error = "Could not extract obs data from AnnData", error_detail = NULL))
+      return()
     }
-    # Bring along imageid if present (maps to Case ID)
-    cols <- intersect(c("combined_islet_id","base_islet_id","donor_status","Case ID","case_id","imageid","dpt_pseudotime","age","gender","total_cells"), colnames(obs))
+    
+    # Ensure obs is a data.frame
+    if (!inherits(obs, "data.frame")) {
+      obs <- tryCatch(as.data.frame(obs, stringsAsFactors = FALSE), error = function(e) NULL)
+      if (is.null(obs)) {
+        traj(list(error = "Obs coercion failed", error_detail = NULL))
+        return()
+      }
+    }
+    
+    # Extract required columns
+    cols <- intersect(
+      c("combined_islet_id", "base_islet_id", "donor_status", "Case ID", 
+        "case_id", "imageid", "dpt_pseudotime", "age", "gender", "total_cells"),
+      colnames(obs)
+    )
     obs2 <- as.data.frame(obs[, cols, drop = FALSE])
-
-    # --- Robust parsing of combined_islet_id to recover Case ID & islet number ---
+    
+    # Parse combined_islet_id for Case ID and islet_key
     if (!"Case ID" %in% names(obs2)) obs2$`Case ID` <- NA_character_
-    # Primary mapping from imageid if present (preferred authoritative Case ID)
-    if ("imageid" %in% colnames(obs)) {
-      obs2$`Case ID` <- dplyr::coalesce(obs2$`Case ID`, as.character(obs$imageid))
+    
+    if ("imageid" %in% names(obs2)) {
+      obs2$`Case ID` <- dplyr::coalesce(obs2$`Case ID`, as.character(obs2$imageid))
     }
+    
     if ("combined_islet_id" %in% names(obs2)) {
-      # Format provided: ####_Islet_## (digits, underscore, 'Islet_', digits)
       cid <- stringr::str_extract(obs2$combined_islet_id, "^[0-9]{3,4}")
       islet_num <- stringr::str_extract(obs2$combined_islet_id, "(?<=_Islet_)[0-9]{1,3}")
       obs2$`Case ID` <- dplyr::coalesce(obs2$`Case ID`, cid)
       obs2$islet_key <- ifelse(!is.na(islet_num), paste0("Islet_", islet_num), NA_character_)
     }
-    # Incorporate base_islet_id where available
-    if ("base_islet_id" %in% names(obs2)) {
-      # base_islet_id assumed numeric; build standard key
-      base_key <- paste0("Islet_", as.character(obs2$base_islet_id))
-      obs2$islet_key <- dplyr::coalesce(obs2$islet_key, base_key)
-    }
-    # Preserve a secondary key variant (was islet_key_pref) for fallback joins
-    obs2$islet_key_pref <- if ("base_islet_id" %in% names(obs2)) paste0("Islet_", as.character(obs2$base_islet_id)) else obs2$islet_key
-    # Ensure Case ID is character, zero-pad to width 4 if that matches prepared() pattern
-    # (We don't know required width yet; keep as-is but trim whitespace.)
-    obs2$`Case ID` <- trimws(obs2$`Case ID`)
-    # Add padded variant for joining if length < 4
-    obs2$case_id_padded <- ifelse(nchar(obs2$`Case ID`) > 0 & nchar(obs2$`Case ID`) < 4,
-                                  stringr::str_pad(obs2$`Case ID`, width = 4, pad = "0"),
-                                  obs2$`Case ID`)
-
-    # Final coercion safeguard: ensure obs2 is a data.frame before any joins
-    if (!inherits(obs2, "data.frame")) {
-      # Try explicit pandas conversion if available
-      raw_obs <- tryCatch(ad$obs, error = function(e) NULL)
-      if (!is.null(raw_obs) && reticulate::py_available(initialize = FALSE)) {
-        ok_pd <- FALSE
-        if (!is.null(raw_obs) && reticulate::py_has_attr(raw_obs, "to_pandas")) {
-          obs_pd <- tryCatch(reticulate::py_to_r(raw_obs$to_pandas()), error = function(e) NULL)
-          if (!is.null(obs_pd) && inherits(obs_pd, "data.frame")) { obs2 <- obs_pd; ok_pd <- TRUE }
-        }
-        if (!ok_pd && reticulate::py_has_attr(raw_obs, "to_dict")) {
-          od2 <- tryCatch(raw_obs$to_dict(), error = function(e) NULL)
-          if (!is.null(od2)) {
-            odr2 <- tryCatch(reticulate::py_to_r(od2), error = function(e) NULL)
-            if (is.list(odr2)) {
-              lens <- vapply(odr2, length, integer(1)); L <- max(lens)
-              if (L > 0) {
-                tmp <- lapply(odr2, function(v){ if (length(v) < L) v <- c(v, rep(NA, L - length(v))); v })
-                obs_try <- tryCatch(as.data.frame(tmp, stringsAsFactors = FALSE), error = function(e) NULL)
-                if (!is.null(obs_try)) obs2 <- obs_try
-              }
-            }
-          }
-        }
-      }
-      if (!inherits(obs2, "data.frame")) {
-        # Hard failure: cannot proceed
-        traj(list(error = "Obs coercion failed", error_detail = "Could not convert AnnData obs to data.frame"))
-        return()
-      }
-    }
-
-    # Store variable names for feature selection
-    var_names <- tryCatch(rownames(ad$var), error = function(e) NULL)
     
-    # (Removed diameter attachment via left_join to avoid class dispatch issues; diameter will be merged later in traj_data_clean.)
-    traj(list(obs = obs2, obsm = obsm, uns = uns, var_names = var_names))
+    # Normalize donor_status
+    if ("donor_status" %in% names(obs2)) {
+      obs2$donor_status <- stringr::str_trim(obs2$donor_status)
+      obs2$donor_status <- dplyr::case_when(
+        tolower(obs2$donor_status) %in% c("nd", "non-diabetic", "nondiabetic") ~ "ND",
+        tolower(obs2$donor_status) %in% c("aab+", "aab", "autoantibody") ~ "Aab+",
+        tolower(obs2$donor_status) %in% c("t1d", "type1", "diabetic") ~ "T1D",
+        TRUE ~ obs2$donor_status
+      )
+    }
+    
+    # Create generic pseudotime column based on method selection
+    # Default to PAGA (dpt_pseudotime) if available
+    if ("dpt_pseudotime" %in% names(obs2)) {
+      obs2$pseudotime <- obs2$dpt_pseudotime
+    } else {
+      obs2$pseudotime <- NA_real_
+    }
+    
+    traj(list(obs = obs2, obsm = obsm, uns = uns, var_names = var_names, adata = ad))
+  })
+
+  # Reactive to handle pseudotime method changes
+  traj_with_pseudotime <- reactive({
+    tr <- traj()
+    if (is.null(tr) || !is.null(tr$error)) return(tr)
+    
+    method <- input$pseudotime_method
+    if (is.null(method)) method <- "paga"  # default
+    
+    obs <- tr$obs
+    ad <- tr$adata
+    
+    # Compute pseudotime based on selected method
+    if (method == "lamian" && !is.null(ad)) {
+      # Compute Lamian pseudotime
+      lamian_pt <- compute_lamian_pseudotime(ad)
+      if (!all(is.na(lamian_pt))) {
+        obs$pseudotime <- lamian_pt
+      }
+    } else {
+      # Use PAGA (dpt_pseudotime)
+      if ("dpt_pseudotime" %in% names(obs)) {
+        obs$pseudotime <- obs$dpt_pseudotime
+      }
+    }
+    
+    # Return updated trajectory data
+    list(obs = obs, obsm = tr$obsm, uns = tr$uns, var_names = tr$var_names, adata = ad)
   })
 
   # Trajectory feature selector UI
@@ -1163,68 +2925,68 @@ server <- function(input, output, session) {
     return(list(feature = selected_feature, status = "ready"))
   })
 
-  # Pure base R trajectory data function - no dplyr dependencies
+  # FIXED: Optimized trajectory data with spatial coordinates
   traj_data_clean <- reactive({
-    # Validate inputs
     ms <- traj_validate()
     if (is.null(ms)) return(NULL)
     
     selected_feature <- ms$feature
     if (is.null(selected_feature)) return(NULL)
     
-    # Load AnnData with error handling
     adata_path <- resolve_traj_path()
     if (is.null(adata_path) || !file.exists(adata_path)) return(NULL)
     
-    adata <- tryCatch({
-      anndata::read_h5ad(adata_path)
+    tr <- traj_with_pseudotime()
+    if (is.null(tr) || !is.null(tr$error)) return(NULL)
+    
+    # Use cached adata object instead of re-reading
+    adata <- tr$adata
+    if (is.null(adata)) {
+      adata <- tryCatch(anndata::read_h5ad(adata_path), error = function(e) NULL)
+      if (is.null(adata)) return(NULL)
+    }
+    
+    var_names <- rownames(adata$var)
+    if (!selected_feature %in% var_names) return(NULL)
+    
+    obs_df <- tr$obs
+    if (is.null(obs_df)) return(NULL)
+    
+    # Extract expression values
+    expression_vals <- tryCatch({
+      if (selected_feature %in% var_names) {
+        idx <- which(var_names == selected_feature)
+        as.numeric(adata$X[, idx])
+      } else {
+        rep(NA_real_, nrow(obs_df))
+      }
     }, error = function(e) {
-      message("[traj_data_clean] AnnData loading error: ", e$message)
-      return(NULL)
+      message("[traj_data_clean] Error extracting feature: ", e$message)
+      rep(NA_real_, nrow(obs_df))
     })
     
-    if (is.null(adata)) return(NULL)
+    # Get donor_status with proper normalization
+    donor_clean <- obs_df$donor_status
+    if (is.null(donor_clean)) donor_clean <- rep(NA_character_, nrow(obs_df))
     
-    # Validate feature exists
-    var_names <- rownames(adata$var)
-    feature_idx <- match(selected_feature, var_names)
-    if (is.na(feature_idx)) {
-      message("[traj_data_clean] Feature '", selected_feature, "' not found in variables")
-      return(NULL)
-    }
-    
-    # Extract data using base R only
-    X_matrix <- adata$X
-    obs_df <- as.data.frame(adata$obs)
-    
-    # Get expression values
-    expression_vals <- X_matrix[, feature_idx]
-    
-    # Extract donor status directly (AnnData already contains correct string values)
-    donor_clean <- as.character(obs_df$donor_status)
-    
-    message("[DATA] Using donor_status directly from AnnData: ", paste(unique(donor_clean), collapse=", "))
-    
-    # Extract UMAP coordinates if available
+    # Extract UMAP coordinates
     umap_coords <- NULL
-    if (!is.null(adata$obsm) && "X_umap" %in% names(adata$obsm)) {
-      umap_coords <- adata$obsm$X_umap
+    if (!is.null(tr$obsm) && "X_umap" %in% names(tr$obsm)) {
+      umap_coords <- tr$obsm$X_umap
     }
     
-    # Get donor ID (imageid) for coloring
+    # Get donor ID for coloring
     donor_ids <- as.character(obs_df$imageid)
     
-    # Build result using base R data.frame
-    # Note: base_islet_id already contains 'Islet_' prefix, so use as-is
+    # Build result data.frame
     islet_keys <- as.character(obs_df$base_islet_id)
-    # Remove extra 'Islet_' prefix if it was double-added
     islet_keys <- gsub("^Islet_Islet_", "Islet_", islet_keys)
     
     result_df <- data.frame(
       case_id = as.character(obs_df$imageid),
       islet_key = islet_keys,
       combined_islet_id = as.character(obs_df$combined_islet_id),
-      pt = as.numeric(obs_df$dpt_pseudotime),
+      pt = as.numeric(obs_df$pseudotime),
       donor_status = donor_clean,
       donor_id = donor_ids,
       value = as.numeric(expression_vals),
@@ -1232,7 +2994,7 @@ server <- function(input, output, session) {
       stringsAsFactors = FALSE
     )
     
-    # Add UMAP coordinates if available
+    # Add UMAP coordinates
     if (!is.null(umap_coords) && nrow(umap_coords) == nrow(result_df)) {
       result_df$umap_1 <- as.numeric(umap_coords[, 1])
       result_df$umap_2 <- as.numeric(umap_coords[, 2])
@@ -1241,27 +3003,50 @@ server <- function(input, output, session) {
       result_df$umap_2 <- NA_real_
     }
     
-    # Add islet diameter using base R merge with prepared data
+    # OPTIMIZATION: Use data.table-style merge for diameter (faster than dplyr)
     prep_data <- prepared()
     if (!is.null(prep_data) && !is.null(prep_data$comp)) {
       size_lookup <- prep_data$comp[c("Case ID", "Donor Status", "islet_key", "islet_diam_um")]
-      # Convert case_id format to match
       result_df$`Case ID` <- sprintf("%04d", as.numeric(result_df$case_id))
       result_df$`Donor Status` <- result_df$donor_status
       
-      # Merge using base R
-      merged <- merge(result_df, size_lookup, by = c("Case ID", "Donor Status", "islet_key"), all.x = TRUE)
-      if (nrow(merged) > 0 && "islet_diam_um" %in% colnames(merged)) {
-        result_df$islet_diam_um <- merged$islet_diam_um[match(paste(result_df$`Case ID`, result_df$`Donor Status`, result_df$islet_key), 
-                                                              paste(merged$`Case ID`, merged$`Donor Status`, merged$islet_key))]
-      } else {
-        result_df$islet_diam_um <- NA_real_
+      # Base R merge (faster for this use case)
+      merged <- merge(result_df, size_lookup, 
+                     by = c("Case ID", "Donor Status", "islet_key"), 
+                     all.x = TRUE, sort = FALSE)
+      
+      if ("islet_diam_um" %in% colnames(merged)) {
+        result_df$islet_diam_um <- merged$islet_diam_um[match(
+          paste(result_df$`Case ID`, result_df$`Donor Status`, result_df$islet_key),
+          paste(merged$`Case ID`, merged$`Donor Status`, merged$islet_key)
+        )]
       }
-    } else {
+    }
+    
+    if (!"islet_diam_um" %in% colnames(result_df)) {
       result_df$islet_diam_um <- NA_real_
     }
     
-    # Filter valid rows using base R
+    # ENHANCEMENT: Add spatial coordinates from segmentation data
+    if (!is.null(segmentation_data)) {
+      result_df$centroid_x_um <- NA_real_
+      result_df$centroid_y_um <- NA_real_
+      result_df$has_spatial <- FALSE
+      
+      for (i in seq_len(nrow(result_df))) {
+        annot <- get_islet_annotations(result_df$case_id[i], result_df$islet_key[i])
+        if (!is.null(annot)) {
+          result_df$centroid_x_um[i] <- annot$centroid_x
+          result_df$centroid_y_um[i] <- annot$centroid_y
+          result_df$has_spatial[i] <- TRUE
+        }
+      }
+      
+      cat("[traj_data_clean] Added spatial coordinates for", 
+          sum(result_df$has_spatial), "islets\n")
+    }
+    
+    # Filter valid rows
     valid_idx <- which(
       is.finite(result_df$pt) & 
       !is.na(result_df$value) & 
@@ -1276,7 +3061,8 @@ server <- function(input, output, session) {
     
     result_df <- result_df[valid_idx, , drop = FALSE]
     
-    message("[traj_data_clean] Successfully processed ", nrow(result_df), " observations for ", selected_feature)
+    message("[traj_data_clean] Successfully processed ", nrow(result_df), 
+            " observations for ", selected_feature)
     return(result_df)
   })
 
@@ -1284,7 +3070,7 @@ server <- function(input, output, session) {
     cur <- traj_path; if (is.null(cur) || !file.exists(cur)) cur <- resolve_traj_path()
     if (is.null(cur) || !file.exists(cur)) return(tags$div(style = "color:#b00;", "AnnData not found. Place 'adata_ins_root.h5ad' under data/ or scripts/, or set ADATA_PATH."))
     if (!requireNamespace("anndata", quietly = TRUE)) return(tags$div(style = "color:#b00;", "R package 'anndata' not installed. Install with BiocManager::install('anndata')."))
-    tr <- traj(); if (is.null(tr)) return(tags$div(style = "color:#b00;", "AnnData object not available or H5AD failed to load."))
+    tr <- traj_with_pseudotime(); if (is.null(tr)) return(tags$div(style = "color:#b00;", "AnnData object not available or H5AD failed to load."))
     if (!is.null(tr$error)) {
       det <- if (!is.null(tr$error_detail) && nzchar(tr$error_detail)) paste0(" Details: ", tr$error_detail) else ""
       install_hint <- if (grepl("anndata", tr$error, ignore.case = TRUE)) " Install with: BiocManager::install('anndata')" else ""
@@ -1297,28 +3083,16 @@ server <- function(input, output, session) {
     ndist <- if (is.null(jn)) 0 else nrow(dplyr::distinct(jn, case_id, islet_key))
     src <- if (!is.null(traj_path) && file.exists(traj_path)) traj_path else cur
     
-    # Show PAGA trajectory info
-    paga_info <- if (!is.null(tr$obs) && "dpt_pseudotime" %in% colnames(tr$obs)) {
-      pt_range <- range(tr$obs$dpt_pseudotime, na.rm = TRUE)
-      sprintf("PAGA trajectory (INS-rooted): %.3f - %.3f pseudotime range. ", pt_range[1], pt_range[2])
-    } else {
-      "No PAGA pseudotime found. "
-    }
+    # Show pseudotime trajectory info
+    method <- input$pseudotime_method %||% "paga"
+    method_label <- if (method == "lamian") "Lamian (R/TSCAN)" else "PAGA (Python/Scanpy)"
     
-    tags$div(style = "color:#555;", paste0(
-      paga_info,
+    # Just show data info, not trajectory range details
+    tags$div(style = "color:#555;", 
       sprintf("Loaded AnnData (%d obs). Joined %d rows (%d unique islets) of %d islet metrics. Source: %s", 
               nrow(tr$obs), nj, ndist, nm, basename(src))
-    ))
+    )
   })
-
-
-
-
-
-
-
-
 
   output$traj_scatter <- renderPlotly({
     df <- traj_data_clean() 
@@ -1326,11 +3100,54 @@ server <- function(input, output, session) {
       return(plotly_empty() %>% layout(title = "No trajectory data available"))
     }
     
+    # Remove outliers (>3 SD from mean) and store for reporting
+    df_original <- df
+    value_mean <- mean(df$value, na.rm = TRUE)
+    value_sd <- sd(df$value, na.rm = TRUE)
+    outlier_threshold <- 3
+    
+    df$is_outlier <- abs(df$value - value_mean) > (outlier_threshold * value_sd)
+    outliers <- df[df$is_outlier & !is.na(df$is_outlier), ]
+    
+    # Store outliers for display in table
+    traj_outliers <<- if (nrow(outliers) > 0) {
+      data.frame(
+        Feature = outliers$feature_name,
+        Case_ID = outliers$case_id,
+        Islet = outliers$islet_key,
+        Donor_Status = outliers$donor_status,
+        Pseudotime = round(outliers$pt, 3),
+        Value = round(outliers$value, 3),
+        Z_Score = round((outliers$value - value_mean) / value_sd, 2),
+        stringsAsFactors = FALSE
+      )
+    } else {
+      NULL
+    }
+    
+    # Remove outliers from plotting data
+    df <- df[!df$is_outlier | is.na(df$is_outlier), ]
+    
+    cat(sprintf("[TRAJECTORY] Removed %d outliers (>3 SD)\n", nrow(df_original) - nrow(df)))
+    
     # Determine color mapping and aesthetics
     color_by <- input$traj_color_by %||% "donor_status"
     size_by <- input$traj_point_size %||% "uniform"
     trend_type <- input$traj_show_trend %||% "by_donor"
-    alpha_val <- input$traj_alpha %||% 0.7
+    alpha_val <- input$traj_alpha %||% 0.3
+    point_size <- input$traj_point_size_slider %||% 1.0
+    # Always apply jitter (jitter checkbox removed from UI)
+    use_jitter <- TRUE
+    
+    # Apply jitter to reduce overlap if requested
+    if (use_jitter) {
+      # Add small random noise to both x and y
+      set.seed(42)  # Reproducible jitter
+      jitter_amount_x <- diff(range(df$pt, na.rm = TRUE)) * 0.01  # 1% of x range
+      jitter_amount_y <- diff(range(df$value, na.rm = TRUE)) * 0.02  # 2% of y range
+      df$pt <- df$pt + runif(nrow(df), -jitter_amount_x, jitter_amount_x)
+      df$value <- df$value + runif(nrow(df), -jitter_amount_y, jitter_amount_y)
+    }
     
     # Create base aesthetic mapping
     aes_mapping <- aes(x = pt, y = value)
@@ -1341,6 +3158,8 @@ server <- function(input, output, session) {
       aes_mapping$colour <- as.name("donor_status")
       color_title <- "Donor Status"
     } else if (color_by == "donor_id") {
+      # Convert to factor for consistent coloring
+      df$donor_id <- factor(df$donor_id)
       aes_mapping$colour <- as.name("donor_id")
       color_title <- "Donor ID"
     }
@@ -1349,61 +3168,127 @@ server <- function(input, output, session) {
     if (size_by != "uniform") {
       if (size_by == "islet_diam_um" && "islet_diam_um" %in% colnames(df)) {
         # Check if diameter data is available for sizing
-        if (all(is.na(df$islet_diam_um))) {
-          # Use uniform size if no diameter data available
-          size_title <- "Uniform (Diameter N/A)"
-        } else {
+        if (!all(is.na(df$islet_diam_um))) {
           aes_mapping$size <- as.name("islet_diam_um")
           size_title <- "Islet Diameter"
         }
       }
     }
     
-    # Create plot with user-controlled transparency
-    g <- ggplot(df, aes_mapping) +
-      geom_point(alpha = alpha_val, size = if (size_by == "uniform") 1.8 else NULL) +
-      theme_minimal(base_size = 14)
+    # Create plot with user-controlled transparency and size
+    # Smaller default point size for less overlap
+    g <- ggplot(df, aes_mapping)
+    if (size_by == "uniform") {
+      g <- g + geom_point(alpha = alpha_val, size = point_size, stroke = 0)
+    } else {
+      g <- g + geom_point(alpha = alpha_val, stroke = 0)
+    }
+    g <- g +
+      theme_minimal(base_size = 14) +
+      theme(
+        legend.position = "none",  # Legend moved to separate UI output in column 4
+        plot.margin = unit(c(5, 5, 5, 5), "pt"),
+        plot.title = element_text(margin = margin(b = 15))  # Space below title
+      )
     
     # Apply color scales
     if (color_by == "donor_status") {
       g <- g + scale_color_manual(values = c("ND" = "#1f77b4", "Aab+" = "#ff7f0e", "T1D" = "#d62728"),
                                   name = color_title, drop = FALSE)
     } else if (color_by == "donor_id") {
-      # Use a discrete color palette for donor IDs
-      g <- g + scale_color_discrete(name = color_title)
+      # Convert to factor for consistent coloring
+      df$donor_id <- factor(df$donor_id)
+      
+      # Use Paired palette for better discrimination of donors
+      # This gives maximum contrast between adjacent colors
+      n_donors <- length(levels(df$donor_id))
+      if (n_donors <= 12) {
+        # Use Paired palette (max 12 colors, highly distinctive)
+        colors <- RColorBrewer::brewer.pal(min(12, max(3, n_donors)), "Paired")
+        names(colors) <- levels(df$donor_id)[1:length(colors)]
+      } else {
+        # Fall back to rainbow for many donors
+        colors <- rainbow(n_donors, s = 0.8, v = 0.8)
+        names(colors) <- levels(df$donor_id)
+      }
+      g <- g + scale_color_manual(values = colors, name = color_title, drop = FALSE)
     }
     
-    # Add size scale if needed
+    # Add size scale - hide legend for size (only show color legend for Donor Status or ID)
+    # Make the size range proportional to the point_size slider
     if (size_by != "uniform" && size_by == "islet_diam_um" && "islet_diam_um" %in% colnames(df)) {
       if (!all(is.na(df$islet_diam_um))) {
-        g <- g + scale_size_continuous(name = "Islet Diameter (µm)", range = c(0.8, 3.5))
+        # Scale the range based on point_size slider (default 1.0)
+        # Base range is [0.5, 2.5], multiply by point_size to allow proportional scaling
+        size_range <- c(0.5 * point_size, 2.5 * point_size)
+        g <- g + scale_size_continuous(name = "Islet Diameter (µm)", range = size_range, guide = "none")
       }
     }
     
     # Get data range for constraining trend lines
     pt_range <- range(df$pt, na.rm = TRUE)
     
-    # Add trend lines based on selection - use geom_smooth with explicit x limits
+    # Add trend lines - ALWAYS use donor_status colors regardless of point coloring
     if (trend_type == "overall") {
       g <- g + geom_smooth(method = "loess", se = TRUE, alpha = 0.2, color = "black", 
                           size = 1, fullrange = FALSE, span = 0.75)
     } else if (trend_type == "by_donor") {
-      # Add separate trendlines for each donor status using the same factor levels as points
-      # This ensures proper matching between point colors and trend line colors
-      g <- g + geom_smooth(aes(color = donor_status), method = "loess", se = TRUE, alpha = 0.15, 
-                          size = 0.8, show.legend = FALSE, fullrange = FALSE, span = 0.75)
+      # Ensure donor_status factor exists for trend lines
+      if (!"donor_status" %in% names(df) || all(is.na(df$donor_status))) {
+        # Skip trend lines if no donor status
+      } else {
+        df$donor_status <- factor(df$donor_status, levels = c("ND", "Aab+", "T1D"))
+        
+        # Define trend line colors
+        trend_colors <- c("ND" = "#1f77b4", "Aab+" = "#ff7f0e", "T1D" = "#d62728")
+        
+        # When coloring by donor_id, we need to add trend lines with explicit colors
+        # to avoid scale conflicts
+        if (color_by == "donor_id") {
+          # Add separate geom_smooth for each donor_status with explicit color
+          for (status in c("ND", "Aab+", "T1D")) {
+            df_subset <- df[df$donor_status == status & !is.na(df$donor_status), ]
+            if (nrow(df_subset) > 0) {
+              g <- g + geom_smooth(data = df_subset,
+                                  aes(x = pt, y = value),
+                                  method = "loess", se = TRUE, alpha = 0.15,
+                                  size = 0.8, show.legend = FALSE, fullrange = FALSE, span = 0.75,
+                                  color = trend_colors[status])
+            }
+          }
+        } else {
+          # When coloring by donor_status, use the scale approach
+          g <- g + geom_smooth(
+                              method = "loess", se = TRUE, alpha = 0.15, 
+                              size = 0.8, show.legend = FALSE, fullrange = FALSE, span = 0.75,
+                              inherit.aes = FALSE,
+                              mapping = aes(x = pt, y = value, group = donor_status, color = donor_status)) +
+            scale_color_manual(values = trend_colors,
+                             name = if (color_by == "donor_status") color_title else "Trend Lines",
+                             drop = FALSE,
+                             guide = if (color_by == "donor_status") "legend" else "none")
+        }
+      }
     }
     
     # Get current selection context for labels
     selected_feature <- input$traj_feature %||% "Selected feature"
     metric_label <- "Expression Level"
     
+    # Dynamic x-axis label based on pseudotime method
+    method <- input$pseudotime_method %||% "paga"
+    x_label <- if (method == "lamian") {
+      "Pseudotime (Lamian/TSCAN trajectory, INS-rooted)"
+    } else {
+      "Pseudotime (PAGA trajectory, INS-rooted)"
+    }
+    
     g <- g + labs(
-      x = "Pseudotime (PAGA trajectory, INS-rooted)",
+      x = x_label,
       y = paste(selected_feature, metric_label),
-      title = paste("Trajectory Analysis:", selected_feature, "vs Pseudotime")
+      title = NULL
     ) + 
-    coord_cartesian(xlim = pt_range)  # Zoom to data range without clipping
+    coord_cartesian(xlim = c(0, 1))  # Set fixed range from 0 to 1
     
     # Apply dark theme if selected
     if (!is.null(input$theme_bg) && input$theme_bg == "Dark") {
@@ -1422,12 +3307,8 @@ server <- function(input, output, session) {
     
     # Create plotly with custom data for reliable click handling
     p <- ggplotly(g, tooltip = c("x", "y", "colour"), source = "traj_scatter")
-    
-    # ALTERNATIVE APPROACH: Instead of trying to match plot order, 
-    # let's modify our click handler to use coordinates for matching
-    # This avoids the ggplot ordering issues entirely
-    
-    # Just set some basic custom data for debugging
+
+    # CRITICAL FIX: Add customdata to plotly traces for click handling
     if ("combined_islet_id" %in% colnames(df) && "case_id" %in% colnames(df)) {
       # Store the original dataframe in a global variable for coordinate-based lookup
       traj_coord_lookup <<- data.frame(
@@ -1436,20 +3317,164 @@ server <- function(input, output, session) {
         case_id = df$case_id,
         islet_key = df$islet_key,
         combined_islet_id = df$combined_islet_id,
-        donor_status = df$donor_status
+        donor_status = df$donor_status,
+        stringsAsFactors = FALSE
       )
-      
+
+      # FIXED: Match customdata to actual trace data by coordinates
+      # Plotly splits data into separate traces by color groups
+      for (i in seq_along(p$x$data)) {
+        if (!is.null(p$x$data[[i]]$type) && p$x$data[[i]]$type == "scatter") {
+          trace_x <- p$x$data[[i]]$x
+          trace_y <- p$x$data[[i]]$y
+
+          if (length(trace_x) > 0 && length(trace_y) > 0) {
+            # Match each point in this trace to the original dataframe
+            trace_customdata <- matrix(NA, nrow = length(trace_x), ncol = 4)
+
+            for (j in seq_along(trace_x)) {
+              # Find matching point in original data (use tolerance for jittered coordinates)
+              tolerance <- 0.001
+              matches <- which(
+                abs(df$pt - trace_x[j]) < tolerance &
+                abs(df$value - trace_y[j]) < tolerance
+              )
+
+              if (length(matches) > 0) {
+                idx <- matches[1]
+                trace_customdata[j, ] <- c(
+                  as.character(df$case_id[idx]),
+                  as.character(df$islet_key[idx]),
+                  as.character(df$combined_islet_id[idx]),
+                  as.character(df$donor_status[idx])
+                )
+              }
+            }
+
+            p$x$data[[i]]$customdata <- trace_customdata
+            cat("[PLOT] Added customdata to trace", i, "with", length(trace_x), "points\n")
+          }
+        }
+      }
+
       cat("[PLOT] Stored coordinate lookup table with", nrow(traj_coord_lookup), "entries\n")
-      cat("[PLOT] Sample coordinates - first point: pt=", df$pt[1], "value=", df$value[1], 
-          "case=", df$case_id[1], "\n")
     }
-    
-    # Register click events and apply layout
-    p %>% 
-      layout(showlegend = TRUE) %>%
+
+    # Apply layout and register click events (only once)
+    p %>%
+      layout(
+        showlegend = FALSE,  # Legend hidden from plot, displayed in column 4 UI element
+        title = NULL,  # No title
+        margin = list(l = 60, r = 20, t = 20, b = 50, pad = 5),  # Reduced top margin since no title or legend
+        xaxis = list(
+          fixedrange = FALSE,
+          automargin = TRUE,
+          range = c(0, 1)  # Fixed range from 0 to 1
+        ),
+        yaxis = list(fixedrange = FALSE, automargin = TRUE)
+      ) %>%
       event_register("plotly_click")
   })
   
+  # Outlier table display - hidden by default, shown only when checkbox is checked
+  output$traj_outlier_info <- renderUI({
+    # Only show if checkbox is checked AND outliers exist
+    show_table <- isTRUE(input$show_outlier_table)
+    
+    if (show_table && exists("traj_outliers") && !is.null(traj_outliers) && nrow(traj_outliers) > 0) {
+      tagList(
+        div(style = "background-color: #fff3cd; border: 1px solid #ffc107; border-radius: 5px; padding: 10px; margin-top: 10px;",
+          h5(style = "color: #856404; margin-top: 0;", 
+             sprintf("⚠️ %d Outlier%s Removed (>3 SD)", nrow(traj_outliers), ifelse(nrow(traj_outliers) > 1, "s", ""))),
+          p(style = "color: #856404; font-size: 12px; margin-bottom: 10px;",
+            "The following data points were excluded from the plot because they exceed 3 standard deviations from the mean:"),
+          div(style = "max-height: 200px; overflow-y: auto;",
+            renderTable({
+              traj_outliers
+            }, striped = TRUE, hover = TRUE, bordered = TRUE, spacing = 'xs', width = "100%")
+          )
+        )
+      )
+    } else {
+      NULL
+    }
+  })
+
+  # Legend output for trajectory scatterplot
+  output$traj_legend <- renderUI({
+    color_by <- input$traj_color_by %||% "donor_status"
+    
+    if (color_by == "donor_status") {
+      # Donor Status legend
+      tagList(
+        div(style = "display: flex; align-items: center; margin-bottom: 8px;",
+          div(style = "width: 20px; height: 20px; background-color: #1f77b4; border-radius: 3px; margin-right: 8px;"),
+          span("ND", style = "font-size: 13px;")
+        ),
+        div(style = "display: flex; align-items: center; margin-bottom: 8px;",
+          div(style = "width: 20px; height: 20px; background-color: #ff7f0e; border-radius: 3px; margin-right: 8px;"),
+          span("Aab+", style = "font-size: 13px;")
+        ),
+        div(style = "display: flex; align-items: center;",
+          div(style = "width: 20px; height: 20px; background-color: #d62728; border-radius: 3px; margin-right: 8px;"),
+          span("T1D", style = "font-size: 13px;")
+        )
+      )
+    } else if (color_by == "donor_id") {
+      # Get unique donor IDs from the data
+      df <- traj_data_clean()
+      if (!is.null(df) && nrow(df) > 0) {
+        donor_ids <- sort(unique(df$donor_id))
+        n_donors <- length(donor_ids)
+        
+        # Generate colors matching the plot
+        if (n_donors <= 12) {
+          colors <- RColorBrewer::brewer.pal(min(12, max(3, n_donors)), "Paired")
+        } else {
+          colors <- rainbow(n_donors, s = 0.8, v = 0.8)
+        }
+        
+        # Split into two columns
+        mid_point <- ceiling(n_donors / 2)
+        col1_ids <- donor_ids[1:mid_point]
+        col2_ids <- if (n_donors > mid_point) donor_ids[(mid_point + 1):n_donors] else NULL
+        
+        # Create legend items for column 1
+        col1_items <- lapply(seq_along(col1_ids), function(i) {
+          div(style = "display: flex; align-items: center; margin-bottom: 6px;",
+            div(style = sprintf("width: 18px; height: 18px; background-color: %s; border-radius: 3px; margin-right: 6px;", colors[i]),
+            ),
+            span(col1_ids[i], style = "font-size: 12px;")
+          )
+        })
+        
+        # Create legend items for column 2
+        col2_items <- if (!is.null(col2_ids)) {
+          lapply(seq_along(col2_ids), function(i) {
+            idx <- mid_point + i
+            div(style = "display: flex; align-items: center; margin-bottom: 6px;",
+              div(style = sprintf("width: 18px; height: 18px; background-color: %s; border-radius: 3px; margin-right: 6px;", colors[idx]),
+              ),
+              span(col2_ids[i], style = "font-size: 12px;")
+            )
+          })
+        } else {
+          NULL
+        }
+        
+        # Create two-column layout
+        tagList(
+          div(style = "display: flex; gap: 10px;",
+            div(style = "flex: 1;", col1_items),
+            if (!is.null(col2_items)) div(style = "flex: 1;", col2_items)
+          )
+        )
+      } else {
+        p("No data available", style = "font-size: 12px; color: #999;")
+      }
+    }
+  })
+
   # UMAP plot colored by donor status
   output$traj_umap_donor <- renderPlot({
     df <- traj_data_clean()
@@ -1467,8 +3492,7 @@ server <- function(input, output, session) {
     
     g <- ggplot(df, aes(x = umap_1, y = umap_2, color = donor_status)) +
       geom_point(alpha = 0.7, size = 1.2) +
-      scale_color_manual(values = c("ND" = "#1f77b4", "Aab+" = "#ff7f0e", "T1D" = "#d62728"),
-                        name = "Donor Status") +
+      scale_color_manual(values = c("ND" = "#1f77b4", "Aab+" = "#ff7f0e", "T1D" = "#d62728")) +
       labs(x = "UMAP 1", y = "UMAP 2", title = "UMAP: Donor Status") +
       theme_minimal(base_size = 12) +
       theme(aspect.ratio = 1)
@@ -1478,7 +3502,6 @@ server <- function(input, output, session) {
       g <- g + theme(
         plot.background = element_rect(fill = "#000000", colour = NA),
         panel.background = element_rect(fill = "#000000", colour = NA),
-        panel.grid.major = element_line(color = "#333333"),
         axis.text = element_text(color = "#e6e6e6"),
         axis.title = element_text(color = "#f0f0f0"),
         plot.title = element_text(color = "#f0f0f0"),
@@ -1526,7 +3549,6 @@ server <- function(input, output, session) {
       g <- g + theme(
         plot.background = element_rect(fill = "#000000", colour = NA),
         panel.background = element_rect(fill = "#000000", colour = NA),
-        panel.grid.major = element_line(color = "#333333"),
         axis.text = element_text(color = "#e6e6e6"),
         axis.title = element_text(color = "#f0f0f0"),
         plot.title = element_text(color = "#f0f0f0"),
@@ -1543,26 +3565,25 @@ server <- function(input, output, session) {
     df <- traj_data_clean() 
     if (is.null(df) || nrow(df) == 0) return(NULL)
     
-    show_bins <- isTRUE(input$traj_show_bins)
+    # Always show binned average (checkbox removed)
     
-    if (show_bins) {
-      # Create binned analysis
-      enc <- function(s) ifelse(s == "ND", 0, ifelse(s == "Aab+", 1, ifelse(s == "T1D", 2, NA_real_)))
-      df$ds_code <- enc(df$donor_status)
-      
-      # Normalize pseudotime to 0-1 range for binning
-      pt_range <- range(df$pt, na.rm = TRUE)
-      df$pt_norm <- (df$pt - pt_range[1]) / (pt_range[2] - pt_range[1])
-      
-      nb <- 25  # Number of bins
-      brks <- seq(0, 1, length.out = nb + 1)
-      df$pt_bin <- cut(pmax(0, pmin(1, df$pt_norm)), breaks = brks, include.lowest = TRUE, right = FALSE)
-      
-      # Calculate averages per bin using base R
-      bin_levels <- levels(df$pt_bin)
-      hm_list <- list()
-      
-      for (i in seq_along(bin_levels)) {
+    # Create binned analysis
+    enc <- function(s) ifelse(s == "ND", 0, ifelse(s == "Aab+", 1, ifelse(s == "T1D", 2, NA_real_)))
+    df$ds_code <- enc(df$donor_status)
+    
+    # Normalize pseudotime to 0-1 range for binning
+    pt_range <- range(df$pt, na.rm = TRUE)
+    df$pt_norm <- (df$pt - pt_range[1]) / (pt_range[2] - pt_range[1])
+    
+    nb <- 25  # Number of bins
+    brks <- seq(0, 1, length.out = nb + 1)
+    df$pt_bin <- cut(pmax(0, pmin(1, df$pt_norm)), breaks = brks, include.lowest = TRUE, right = FALSE)
+    
+    # Calculate averages per bin using base R
+    bin_levels <- levels(df$pt_bin)
+    hm_list <- list()
+    
+    for (i in seq_along(bin_levels)) {
         bin_name <- bin_levels[i]
         bin_data <- df[!is.na(df$pt_bin) & df$pt_bin == bin_name, ]
         
@@ -1621,16 +3642,6 @@ server <- function(input, output, session) {
       }
       
       return(g)
-    } else {
-      # Show a simple message when binning is disabled
-      return(ggplot() + 
-        annotate("text", x = 0.5, y = 0.5, label = "Enable 'Show binned average' to see donor status progression", 
-                size = 4, color = if (!is.null(input$theme_bg) && input$theme_bg == "Dark") "#e6e6e6" else "#333333") +
-        theme_void() +
-        theme(
-          plot.background = element_rect(fill = if (!is.null(input$theme_bg) && input$theme_bg == "Dark") "#000000" else "#ffffff", colour = NA)
-        ))
-    }
   })
 
   # ---------- Interactive Islet Lookup ----------
@@ -1638,276 +3649,273 @@ server <- function(input, output, session) {
   # Reactive to store the selected islet from plot clicks
   selected_islet <- reactiveVal(NULL)
   
-  # Handle trajectory plot clicks
+  # FIXED: Enhanced click handler with better debugging and UI feedback
   observe({
     click_data <- event_data("plotly_click", source = "traj_scatter")
-    if (!is.null(click_data)) {
-      cat("[CLICK] Raw event data structure:\n")
-      cat("  pointNumber:", click_data$pointNumber, "\n")
-      cat("  has customdata:", !is.null(click_data$customdata), "\n")
-      if (!is.null(click_data$customdata)) {
-        cat("  customdata length:", length(click_data$customdata), "\n")
-        cat("  customdata content:", paste(click_data$customdata, collapse=" | "), "\n")
-      }
+    if (is.null(click_data)) return()
+    
+    cat("[CLICK] ========== NEW CLICK EVENT ==========\n")
+    cat("[CLICK] Timestamp:", as.character(Sys.time()), "\n")
+    cat("[CLICK] Point number:", click_data$pointNumber, "\n")
+    cat("[CLICK] Coordinates: x =", click_data$x, ", y =", click_data$y, "\n")
+    flush.console()
+    
+    # Debug customdata
+    if (!is.null(click_data$customdata)) {
+      cat("[CLICK] customdata available:", length(click_data$customdata), "elements\n")
+      cat("[CLICK] customdata content:", paste(click_data$customdata, collapse=" | "), "\n")
+    } else {
+      cat("[CLICK] WARNING: No customdata available\n")
+    }
+    flush.console()
+    
+    # Method 1: Try customdata (most reliable)
+    islet_info <- NULL
+    if (!is.null(click_data$customdata) && length(click_data$customdata) >= 4) {
+      islet_info <- list(
+        case_id = as.character(click_data$customdata[1]),
+        islet_key = as.character(click_data$customdata[2]),
+        combined_islet_id = as.character(click_data$customdata[3]),
+        donor_status = as.character(click_data$customdata[4])
+      )
+      cat("[CLICK] Method: customdata\n")
+    } else if (exists("traj_coord_lookup")) {
+      # Method 2: Coordinate-based lookup
+      tolerance <- 0.01  # Increased tolerance for floating point comparison
+      x_match <- abs(traj_coord_lookup$pt - click_data$x) < tolerance
+      y_match <- abs(traj_coord_lookup$value - click_data$y) < tolerance
+      matching_rows <- which(x_match & y_match)
       
-      # Try to get islet information from custom data first
-      if (!is.null(click_data$customdata)) {
-        # Extract from custom data (more reliable)
-        customdata <- click_data$customdata
-        cat("[CLICK] Using customdata method\n")
-        if (length(customdata) >= 4) {
-          islet_info <- list(
-            case_id = as.character(customdata[1]),
-            islet_key = as.character(customdata[2]),
-            combined_islet_id = as.character(customdata[3]),
-            donor_status = as.character(customdata[4])
-          )
-          cat("[CLICK] Extracted from customdata - case:", islet_info$case_id, "islet:", islet_info$combined_islet_id, "status:", islet_info$donor_status, "\n")
-        } else {
-          cat("[CLICK] Custom data incomplete (length:", length(customdata), "), falling back to index method\n")
-          islet_info <- NULL
-        }
+      if (length(matching_rows) > 0) {
+        idx <- matching_rows[1]
+        islet_info <- list(
+          case_id = as.character(traj_coord_lookup$case_id[idx]),
+          islet_key = as.character(traj_coord_lookup$islet_key[idx]),
+          combined_islet_id = as.character(traj_coord_lookup$combined_islet_id[idx]),
+          donor_status = as.character(traj_coord_lookup$donor_status[idx])
+        )
+        cat("[CLICK] Method: coordinate match (idx=", idx, ")\n")
       } else {
-        # Use coordinate-based lookup instead of index-based (more reliable)
-        if (exists("traj_coord_lookup") && !is.null(click_data$x) && !is.null(click_data$y)) {
-          cat("[CLICK] Using coordinate-based lookup - x:", click_data$x, "y:", click_data$y, "\n")
-          
-          # Find closest point by coordinates
-          tolerance <- 1e-8
-          x_match <- abs(traj_coord_lookup$pt - click_data$x) < tolerance
-          y_match <- abs(traj_coord_lookup$value - click_data$y) < tolerance
-          matching_rows <- which(x_match & y_match)
-          
-          if (length(matching_rows) > 0) {
-            match_idx <- matching_rows[1]  # Take first match
-            islet_info <- list(
-              case_id = as.character(traj_coord_lookup$case_id[match_idx]),
-              islet_key = as.character(traj_coord_lookup$islet_key[match_idx]),
-              combined_islet_id = as.character(traj_coord_lookup$combined_islet_id[match_idx]),
-              donor_status = as.character(traj_coord_lookup$donor_status[match_idx])
-            )
-            cat("[CLICK] Coordinate method - matched row", match_idx, "case:", islet_info$case_id, "islet:", islet_info$islet_key, "status:", islet_info$donor_status, "\n")
-          } else {
-            # If exact match fails, try nearest neighbor
-            distances <- sqrt((traj_coord_lookup$pt - click_data$x)^2 + (traj_coord_lookup$value - click_data$y)^2)
-            nearest_idx <- which.min(distances)
-            min_distance <- distances[nearest_idx]
-            
-            if (min_distance < 0.1) {  # Reasonable threshold
-              islet_info <- list(
-                case_id = as.character(traj_coord_lookup$case_id[nearest_idx]),
-                islet_key = as.character(traj_coord_lookup$islet_key[nearest_idx]),
-                combined_islet_id = as.character(traj_coord_lookup$combined_islet_id[nearest_idx]),
-                donor_status = as.character(traj_coord_lookup$donor_status[nearest_idx])
-              )
-              cat("[CLICK] Nearest neighbor method - row", nearest_idx, "distance:", min_distance, "case:", islet_info$case_id, "status:", islet_info$donor_status, "\n")
-            } else {
-              cat("[CLICK] No close coordinate match found, min distance:", min_distance, "\n")
-              islet_info <- NULL
-            }
-          }
-        } else {
-          cat("[CLICK] No coordinate lookup table or click coordinates available\n")
-          islet_info <- NULL
+        # Nearest neighbor fallback
+        distances <- sqrt((traj_coord_lookup$pt - click_data$x)^2 + 
+                         (traj_coord_lookup$value - click_data$y)^2)
+        nearest_idx <- which.min(distances)
+        min_distance <- distances[nearest_idx]
+        
+        if (min_distance < 0.1) {  # Reasonable threshold
+          islet_info <- list(
+            case_id = as.character(traj_coord_lookup$case_id[nearest_idx]),
+            islet_key = as.character(traj_coord_lookup$islet_key[nearest_idx]),
+            combined_islet_id = as.character(traj_coord_lookup$combined_islet_id[nearest_idx]),
+            donor_status = as.character(traj_coord_lookup$donor_status[nearest_idx])
+          )
+          cat("[CLICK] Method: nearest neighbor (distance=", min_distance, ")\n")
         }
+      }
+    }
+    
+    if (!is.null(islet_info)) {
+      cat("[CLICK] Selected: case=", islet_info$case_id, 
+          " islet=", islet_info$islet_key, 
+          " status=", islet_info$donor_status, "\n")
+      
+      # Add spatial coordinates if available
+      annot <- get_islet_annotations(islet_info$case_id, islet_info$islet_key)
+      if (!is.null(annot)) {
+        islet_info$centroid_x_um <- annot$centroid_x
+        islet_info$centroid_y_um <- annot$centroid_y
+        islet_info$has_spatial <- TRUE
+        islet_info$annotation_classes <- annot$classes
+        cat("[CLICK] Spatial coords: (", annot$centroid_x, ", ", annot$centroid_y, ")\n")
+        cat("[CLICK] Annotation classes:", paste(annot$classes, collapse = ", "), "\n")
+      } else {
+        islet_info$has_spatial <- FALSE
       }
       
-      if (!is.null(islet_info)) {
-        # Get spatial coordinates if available
-        lookup <- spatial_lookup()
-        if (!is.null(lookup)) {
-          spatial_match <- lookup[lookup$combined_islet_id == islet_info$combined_islet_id, ]
-          if (nrow(spatial_match) > 0) {
-            islet_info$centroid_x_um <- spatial_match$centroid_x_um[1]
-            islet_info$centroid_y_um <- spatial_match$centroid_y_um[1]
-            islet_info$has_spatial <- TRUE
-          } else {
-            islet_info$has_spatial <- FALSE
-          }
-        } else {
-          islet_info$has_spatial <- FALSE
-        }
-        
-        selected_islet(islet_info)
-        cat("[CLICK] Selected islet:", islet_info$combined_islet_id, 
-            "at coordinates:", ifelse(islet_info$has_spatial, paste(islet_info$centroid_x_um, islet_info$centroid_y_um), "N/A"), "\n")
-      }
+      # Update reactive value to trigger viewer update
+      selected_islet(islet_info)
+      cat("[CLICK] ✓ Islet selection updated - viewer should reload\n")
+    } else {
+      cat("[CLICK] Failed to identify islet\n")
     }
   })
   
-  # Output to show selected islet info
+  # Display selected islet information
   output$selected_islet_info <- renderUI({
     islet <- selected_islet()
+    
     if (is.null(islet)) {
-      return(tags$div(style = "color:#666; font-style:italic;", 
-                     "Click on a point in the trajectory plot to view islet details"))
+      return(tags$div(
+        style = "padding: 10px; background: #f0f0f0; border-radius: 4px; margin-bottom: 10px;",
+        tags$em("Click a point in the trajectory plot above to view the islet image")
+      ))
     }
     
-    # Get enhanced annotation data
-    annotation_info <- get_islet_annotations(islet$case_id, islet$islet_key)
+    # Build info display
+    info_parts <- c(
+      paste0("📍 ", islet$combined_islet_id),
+      paste0("Case: ", islet$case_id),
+      paste0("Status: ", islet$donor_status)
+    )
     
-    tagList(
-      tags$div(style = "background:#f8f9fa; padding:12px; border-radius:6px; margin:5px 0;",
-        tags$h5("🔬 Selected Islet", style = "margin-bottom:10px; color:#495057;"),
-        
-        # Basic Identity
-        tags$div(style = "margin-bottom:8px;",
-          tags$strong("Islet ID: "), islet$combined_islet_id, tags$br(),
-          tags$strong("Case ID: "), islet$case_id, tags$br(),
-          tags$strong("Donor Status: "), 
-          tags$span(islet$donor_status, 
-                   style = paste0("color: ", 
-                                 switch(islet$donor_status,
-                                       "ND" = "#1f77b4",
-                                       "Aab+" = "#ff7f0e", 
-                                       "T1D" = "#d62728",
-                                       "#666"), "; font-weight:bold;"))
-        ),
-        
-        # Enhanced annotation data if available
-        if (!is.null(annotation_info)) {
-          tagList(
-            tags$hr(style = "margin:8px 0;"),
-            tags$div(style = "display:flex; gap:15px; flex-wrap:wrap;",
-              tags$div(style = "flex:1; min-width:120px;",
-                tags$strong("📐 Morphometry"), tags$br(),
-                tags$small("Area: ", sprintf("%.0f µm²", annotation_info$area)), tags$br(),
-                tags$small("Perimeter: ", sprintf("%.1f µm", annotation_info$perimeter))
-              ),
-              tags$div(style = "flex:1; min-width:120px;",
-                tags$strong("🧬 Cell Counts"), tags$br(),
-                tags$small(style = "color:#e41a1c;", "INS+: ", annotation_info$ins_pos), tags$br(),
-                tags$small(style = "color:#377eb8;", "GCG+: ", annotation_info$gcg_pos), tags$br(),
-                tags$small(style = "color:#ffcc00;", "SST+: ", annotation_info$sst_pos)
-              )
-            )
-          )
-        },
-        
-        # Spatial info and actions
-        tags$hr(style = "margin:8px 0;"),
-        if (islet$has_spatial) {
-          tagList(
-            tags$span("Coordinates: ", sprintf("(%.1f, %.1f) µm", islet$centroid_x_um, islet$centroid_y_um)),
-            tags$br(),
-            actionButton("jump_to_islet", "🎯 Jump to Image", 
-                        class = "btn-primary btn-sm", style = "margin-top:8px;")
-          )
-        } else {
-          tagList(
-            tags$span("Spatial coordinates not available", style = "color:#999;"),
-            tags$br(),
-            actionButton("jump_to_islet", "🎯 Jump to Image", 
-                        class = "btn-primary btn-sm", style = "margin-top:8px;")
-          )
-        }
+    if (isTRUE(islet$has_spatial)) {
+      info_parts <- c(
+        info_parts,
+        sprintf("Coords: (%.1f, %.1f) µm", islet$centroid_x_um, islet$centroid_y_um)
       )
+      
+      if (!is.null(islet$annotation_classes)) {
+        info_parts <- c(
+          info_parts,
+          paste0("Classes: ", paste(islet$annotation_classes, collapse = ", "))
+        )
+      }
+    }
+    
+    tags$div(
+      style = "padding: 10px; background: #e3f2fd; border-left: 4px solid #2c5aa0; border-radius: 4px; margin-bottom: 10px;",
+      tags$strong("Selected Islet: "),
+      tags$span(paste(info_parts, collapse = " | "))
     )
   })
   
-  # Observe overlay toggle changes
-  observeEvent(input$show_geojson_overlay, {
-    cat("[OVERLAY] Toggle changed to:", input$show_geojson_overlay, "\n")
-    # Use JavaScript to toggle overlay visibility without reloading iframe
-    overlay_js <- sprintf("
-      var iframe = document.getElementById('avivator_viewer');
-      if (iframe && iframe.contentWindow) {
-        try {
-          iframe.contentWindow.postMessage({
-            type: 'toggleOverlay',
-            enabled: %s
-          }, '*');
-        } catch(e) {
-          console.log('Could not send message to iframe:', e);
-        }
-      }
-      // Also show status indicator
-      if (window.showOverlayStatus) {
-        window.showOverlayStatus(%s);
-      }
-    ", tolower(as.character(input$show_geojson_overlay)), tolower(as.character(input$show_geojson_overlay)))
-    
-    shinyjs::runjs(overlay_js)
-  }, ignoreInit = TRUE)
-  
-  # Handle jump to islet in viewer
-  observeEvent(input$jump_to_islet, {
-    islet <- selected_islet()
-    if (!is.null(islet) && islet$has_spatial) {
-      # Switch to Viewer tab
-      updateTabsetPanel(session, "tabs", selected = "Viewer")
-      
-      # Update the image selection to match the islet's case
-      case_id <- as.character(islet$case_id)  # Use case_id as-is, don't pad with zeros
-      
-      # Find available images and select the matching one
-      available_images <- list.files(path = "www/local_images", pattern = ".*\\.(ome\\.)?tiff?$", ignore.case = TRUE)
-      if (length(available_images) == 0) {
-        # Try fallback location
-        local_root <- Sys.getenv("LOCAL_IMAGE_ROOT", "../../local_images")
-        if (dir.exists(local_root)) {
-          available_images <- list.files(path = local_root, pattern = ".*\\.(ome\\.)?tiff?$", ignore.case = TRUE)
-        }
-      }
-      
-      # Look for image with matching donor status and case ID
-      # Images are named like: Aab_6450.ome.tiff, ND_6356.ome.tiff, T1D_6533.ome.tiff
-      donor_prefix <- case_when(
-        islet$donor_status == "Aab+" ~ "Aab_",
-        islet$donor_status == "ND" ~ "ND_", 
-        islet$donor_status == "T1D" ~ "T1D_",
-        TRUE ~ ".*_"  # fallback pattern
+  # Fallback UI when vitessceR not installed
+  if (!VITESSCE_AVAILABLE) {
+    output$traj_vitessce_fallback <- renderUI({
+      tags$div(
+        style = "background:#fff3cd; padding:20px; border-radius:6px; border-left:4px solid #ffc107; margin:20px;",
+        tags$h4("⚠ vitessceR Package Not Installed", style = "margin-top:0;"),
+        tags$p("The vitessceR package is required to display the interactive islet image viewer."),
+        tags$p(tags$strong("To install vitessceR, run one of these commands in R:")),
+        tags$pre(
+          style = "background:#f8f8f8; padding:10px; border-radius:4px; overflow-x:auto;",
+          "# Option 1: Install from GitHub (recommended)\nremotes::install_github('vitessce/vitessceR')\n\n# Option 2: Install from CRAN (if available)\ninstall.packages('vitessceR')"
+        ),
+        tags$p(style = "margin-top:15px; color:#856404;",
+               tags$em("After installation, restart the Shiny app to enable the viewer."))
       )
-      image_pattern <- paste0(donor_prefix, case_id, "\\.(ome\\.)?tiff?$")
-      matching_image <- available_images[grepl(image_pattern, available_images, ignore.case = TRUE)]
-      
-      cat("[JUMP DEBUG] Looking for pattern:", image_pattern, "in", length(available_images), "images\n")
-      cat("[JUMP DEBUG] Found matches:", paste(matching_image, collapse=", "), "\n")
-      
-      if (length(matching_image) > 0) {
-        # Use a more reliable approach: set forced image first, then update UI
-        cat("[JUMP] === Setting forced image ===\n")
-        forced_image(matching_image[1])
-        cat("[JUMP] forced_image() is now:", if(is.null(forced_image())) "NULL" else paste0("'", forced_image(), "'"), "\n")
-        
-        # Use shinyjs delay to ensure the reactive fires
-        shinyjs::delay(100, {
-          updateSelectInput(session, "selected_image", selected = matching_image[1])
-          cat("[JUMP] Updated selectInput to:", matching_image[1], "\n")
-        })
-        
-        # Clear forced image after sufficient delay to allow viewer to update
-        shinyjs::delay(2000, {
-          forced_image(NULL)
-          cat("[JUMP] Cleared forced image after viewer update\n")
-        })
-        
-        cat("[JUMP] Set forced image to:", matching_image[1], "\n")
-        
-        # Show feedback to user
-        showNotification(
-          paste("Jumped to image", matching_image[1], "for islet", islet$combined_islet_id),
-          type = "message",
-          duration = 3
-        )
-        
-        cat("[JUMP] Switched to image:", matching_image[1], 
-            "for islet:", islet$combined_islet_id, "\n")
-      } else {
-        showNotification(
-          paste("Image not found for case", case_id),
-          type = "warning",
-          duration = 5
-        )
-      }
+    })
+  }
+  
+  # Discover available image and segmentation assets at startup
+  vitessce_assets <- reactive({
+    assets_list <- discover_islet_assets(
+      image_dir = file.path("www", "local_images"),
+      seg_dir = file.path("www", "LabelExports")
+    )
+    
+    if (nrow(assets_list) > 0) {
+      cat(sprintf("[ASSETS] Found %d image(s) with potential segmentation pairs\n", nrow(assets_list)))
+      cat(sprintf("[ASSETS] First case_id: %s\n", assets_list$case_id[1]))
+    } else {
+      cat("[ASSETS] No assets found\n")
     }
+    
+    assets_list
   })
 
+  # Render vitessce viewer for trajectory tab
+  if (VITESSCE_AVAILABLE) {
+    output$traj_vitessce_viewer <- vitessceR::render_vitessce({
+      islet <- selected_islet()
+      assets <- vitessce_assets()
+      
+      cat("\n[VITESSCE RENDER] ===== START =====\n")
+      cat(sprintf("[VITESSCE] Islet selected: %s\n", !is.null(islet)))
+      cat(sprintf("[VITESSCE] Assets available: %d\n", if(!is.null(assets)) nrow(assets) else 0))
+
+      # Handle no islet selected
+      if (is.null(islet)) {
+        cat("[VITESSCE] No islet selected, showing placeholder\n")
+        cfg <- vitessceR::VitessceConfig$new(
+          schema_version = "1.0.16",
+          name = "Click a point in the trajectory plot to view islet"
+        )
+        return(vitessceR::vitessce_widget(cfg, theme = "light", height = 600, element_id = "vitessce_placeholder"))
+      }
+
+      # Handle no assets available
+      if (is.null(assets) || !nrow(assets)) {
+        cat("[VITESSCE] No assets available\n")
+        cfg <- vitessceR::VitessceConfig$new(
+          schema_version = "1.0.16",
+          name = "No OME-TIFF images found in www/local_images"
+        )
+        return(vitessceR::vitessce_widget(cfg, theme = "light", height = 600, element_id = "vitessce_no_assets"))
+      }
+
+      # Find matching asset for the selected islet
+      cat(sprintf("[VITESSCE] Looking for case_id=%s, islet_key=%s\n", 
+                  islet$case_id, islet$islet_key %||% "NULL"))
+      
+      asset <- choose_islet_asset(assets, case_id = islet$case_id, islet_key = islet$islet_key)
+      
+      if (is.null(asset)) {
+        cat(sprintf("[VITESSCE] No matching asset found for case %s\n", islet$case_id))
+        cfg <- vitessceR::VitessceConfig$new(
+          schema_version = "1.0.16",
+          name = sprintf("No image found for case %s", islet$case_id)
+        )
+        return(vitessceR::vitessce_widget(cfg, theme = "light", height = 600, element_id = "vitessce_no_match"))
+      }
+
+      cat(sprintf("[VITESSCE] Found asset: %s\n", asset$image_name))
+      cat(sprintf("[VITESSCE] Image path: %s\n", asset$image_rel))
+      
+      # Get segmentation path(s)
+      seg_rel <- NULL
+      seg_labels <- NULL
+      if ("seg_rel_list" %in% names(asset) && length(asset$seg_rel_list[[1]]) > 0) {
+        seg_rel <- asset$seg_rel_list[[1]]
+        seg_labels <- if ("seg_label_list" %in% names(asset)) asset$seg_label_list[[1]] else NULL
+        cat(sprintf("[VITESSCE] %d segmentation layer(s) available\n", length(seg_rel)))
+      } else if (!is.na(asset$seg_rel) && nzchar(asset$seg_rel)) {
+        seg_rel <- asset$seg_rel
+        cat(sprintf("[VITESSCE] Segmentation path: %s\n", seg_rel))
+      } else {
+        cat("[VITESSCE] No segmentation layer available\n")
+      }
+
+      # Get center coordinates if available
+      center <- NULL
+      if (!is.null(islet$centroid_x_um) && !is.null(islet$centroid_y_um)) {
+        center <- list(
+          x = islet$centroid_x_um, 
+          y = islet$centroid_y_um, 
+          zoom = -1.0
+        )
+        cat(sprintf("[VITESSCE] Center: (%.1f, %.1f) zoom=%.1f\n", 
+                    center$x, center$y, center$zoom))
+      }
+
+      # Build title
+      title <- sprintf("Case %s", islet$case_id)
+      if (!is.null(islet$islet_key)) {
+        title <- sprintf("%s - %s", title, islet$islet_key)
+      }
+      if (!is.null(islet$donor_status)) {
+        title <- sprintf("%s (%s)", title, islet$donor_status)
+      }
+      
+      cat(sprintf("[VITESSCE] Building viewer: %s\n", title))
+      cat("[VITESSCE RENDER] ===== END =====\n\n")
+
+      # Build and return the vitessce widget
+      build_islet_vitessce(
+        image_rel = asset$image_rel,
+        seg_rel = seg_rel,
+        title = title,
+        channels = channel_names_vec,
+        center = center,
+        case_id = islet$case_id,
+        seg_labels = seg_labels,
+        use_physical_size_scaling = FALSE
+      )
+    })
+  }
+
   viewer_info <- reactive({
-    # React to overlay toggle changes
-    input$show_geojson_overlay
-    
-    # Explicitly depend on forced_image to ensure reactive chain
+    # Get forced image value if set (for trajectory integration)
     forced_img <- forced_image()
     
     base <- resolve_avivator_base()
@@ -1973,28 +3981,6 @@ server <- function(input, output, session) {
       params[["channel_config"]] <- utils::URLencode(ch_b64, reserved = TRUE)
     }
     
-    # Add GeoJSON overlay URL if available and enabled
-    show_overlay <- tryCatch(input$show_geojson_overlay, silent = TRUE)
-    if (is.null(show_overlay)) show_overlay <- TRUE  # Default to TRUE
-    
-    # Note: Overlay handling moved to client-side to avoid viewer flashing
-    if (geojson_available && !is.null(sel_basename)) {
-      # Extract case ID from image filename (e.g., "T1D_6563.ome.tiff" -> "6563")
-      case_id <- gsub("^[^_]*_([0-9]+)\\.(ome\\.)?tiff?$", "\\1", sel_basename)
-      geojson_file <- paste0(case_id, ".geojson.gz")
-      geojson_path <- file.path(geojson_dir, geojson_file)
-      
-      if (file.exists(geojson_path)) {
-        # Only pass geojson_url, let client-side handle visibility
-        geojson_url <- paste0("gson/", geojson_file)
-        params[["geojson_url"]] <- utils::URLencode(geojson_url, reserved = TRUE)
-        # Add overlay script to be loaded by the viewer
-        params[["overlay_script"]] <- utils::URLencode("geojson_overlay.js", reserved = TRUE)
-        cat("[GEOJSON] Available overlay for case", case_id, ":", geojson_url, "\n")
-      } else {
-        cat("[GEOJSON] No overlay found for case", case_id, "\n")
-      }
-    }
     query <- NULL
     if (length(params)) {
       parts <- vapply(names(params), function(nm) sprintf("%s=%s", nm, params[[nm]]), character(1))
@@ -2057,27 +4043,42 @@ server <- function(input, output, session) {
       df <- df %>% dplyr::mutate(value = ifelse(is.finite(num) & is.finite(den) & den > 0, 100.0 * num / den, NA_real_))
     }
     out <- df %>% dplyr::mutate(donor_status = `Donor Status`) %>% dplyr::filter(!is.na(value))
-    if (!is.null(input$diam_max) && is.finite(as.numeric(input$diam_max))) {
-      out <- out %>% dplyr::filter(is.finite(islet_diam_um) & islet_diam_um <= as.numeric(input$diam_max))
+    # Apply diameter range filter
+    if (!is.null(input$diam_range) && length(input$diam_range) == 2) {
+      diam_min <- as.numeric(input$diam_range[1])
+      diam_max <- as.numeric(input$diam_range[2])
+      if (is.finite(diam_min) && is.finite(diam_max)) {
+        out <- out %>% dplyr::filter(is.finite(islet_diam_um) & islet_diam_um >= diam_min & islet_diam_um <= diam_max)
+      }
     }
     # Apply AAb filters (only within the Aab+ donor group) if selected
+    # Reverse logic: EXCLUDE donors with UNCHECKED antibodies
     flags <- input$aab_flags
-    if (!is.null(flags) && length(flags) > 0) {
-      avail <- intersect(flags, colnames(out))
-      if (length(avail) > 0) {
-      # Keep ND and T1D unchanged; restrict Aab+ by selected AAbs
-      others <- out %>% dplyr::filter(donor_status != "Aab+")
-      aabp   <- out %>% dplyr::filter(donor_status == "Aab+")
-      if (nrow(aabp) > 0) {
-        mat <- as.data.frame(aabp[, avail, drop = FALSE])
-        for (cc in colnames(mat)) mat[[cc]] <- as.logical(mat[[cc]])
-        hits <- rowSums(mat, na.rm = TRUE)
-        keep <- if (identical(input$aab_logic, "All")) hits >= length(avail) else hits >= 1
-        aabp <- aabp[keep, , drop = FALSE]
-      }
-      out <- dplyr::bind_rows(others, aabp)
+    all_aab_cols <- c("AAb_GADA", "AAb_IA2A", "AAb_ZnT8A", "AAb_IAA", "AAb_mIAA")
+    
+    # Keep ND and T1D unchanged; filter Aab+ by EXCLUDING unchecked AAbs
+    others <- out %>% dplyr::filter(donor_status != "Aab+")
+    aabp   <- out %>% dplyr::filter(donor_status == "Aab+")
+    
+    if (nrow(aabp) > 0) {
+      if (is.null(flags) || length(flags) == 0) {
+        # If no flags selected, exclude all Aab+ donors
+        aabp <- aabp[0, , drop = FALSE]  # Empty dataframe
+      } else {
+        # Get unchecked antibodies
+        unchecked <- setdiff(all_aab_cols, flags)
+        unchecked_avail <- intersect(unchecked, colnames(aabp))
+        
+        if (length(unchecked_avail) > 0) {
+          # Exclude donors who have any of the unchecked antibodies
+          exclude_mat <- as.data.frame(aabp[, unchecked_avail, drop = FALSE])
+          for (cc in colnames(exclude_mat)) exclude_mat[[cc]] <- as.logical(exclude_mat[[cc]])
+          has_unchecked <- rowSums(exclude_mat, na.rm = TRUE) > 0
+          aabp <- aabp[!has_unchecked, , drop = FALSE]
+        }
       }
     }
+    out <- dplyr::bind_rows(others, aabp)
     out
   })
 
@@ -2118,6 +4119,22 @@ server <- function(input, output, session) {
     }
   })
 
+  output$aab_warning <- renderUI({
+    # Check if current AAb filter results in no Aab+ donors
+    df <- raw_df_base()
+    if (!is.null(df) && nrow(df) > 0) {
+      aabp_donors <- df %>% dplyr::filter(donor_status == "Aab+")
+      if (nrow(aabp_donors) == 0 && "Aab+" %in% input$groups) {
+        div(style = "color: #d9534f; font-weight: bold; margin-bottom: 10px;", 
+            "⚠ No matching donors.")
+      } else {
+        NULL
+      }
+    } else {
+      NULL
+    }
+  })
+
   output$region_selector <- renderUI({
     if (identical(input$mode, "Composition")) return(NULL)
     # Display labels while preserving underlying values used in code
@@ -2144,17 +4161,59 @@ server <- function(input, output, session) {
   plot_df <- reactive({
     df <- raw_df()
     req(nrow(df) > 0)
+    
+    # Identify outliers (>3 SD from mean) but keep them in data, just mark them
+    df_original <- df
+    value_mean <- mean(df$value, na.rm = TRUE)
+    value_sd <- sd(df$value, na.rm = TRUE)
+    outlier_threshold <- 3
+    
+    df$is_outlier <- abs(df$value - value_mean) > (outlier_threshold * value_sd)
+    outliers <- df[df$is_outlier & !is.na(df$is_outlier), ]
+    
+    # Store outliers for display in table
+    plot_outliers <<- if (nrow(outliers) > 0) {
+      data.frame(
+        Mode = input$mode,
+        Selection = input$which,
+        Case_ID = outliers$`Case ID`,
+        Islet = outliers$islet_key,
+        Donor_Status = outliers$donor_status,
+        Diameter_um = round(outliers$islet_diam_um, 1),
+        Value = round(outliers$value, 3),
+        Z_Score = round((outliers$value - value_mean) / value_sd, 2),
+        stringsAsFactors = FALSE
+      )
+    } else {
+      NULL
+    }
+    
+    # DO NOT remove outliers - keep them for coloring red in the plot
+    cat(sprintf("[PLOT] Identified %d outliers (>3 SD) - will be colored red\n", nrow(outliers)))
+    
     # attach bins on the fly
     df <- bin_islet_sizes(df, "islet_diam_um", input$binwidth)
-    # Apply normalization for main plot if requested
-    norm_mode <- input$curve_norm
+    
+    # Identify the metric column name to group by for normalization
+    metric_col <- if (identical(input$mode, "Targets")) {
+      paste0(input$target_region, "__", input$target_class)
+    } else if (identical(input$mode, "Markers")) {
+      paste0(input$marker_region, "__", input$marker_name)
+    } else {
+      paste0("comp__", input$comp_choice)
+    }
+    
+    # Apply normalization for main plot if requested (default to "none")
+    norm_mode <- "none"  # Normalization selector removed
     if (identical(norm_mode, "robust") && all(c("Case ID") %in% colnames(df))) {
-      df <- df %>% dplyr::group_by(`Case ID`) %>% dplyr::mutate(
-        .med = suppressWarnings(stats::median(value, na.rm = TRUE)),
-        .mad = suppressWarnings(stats::mad(value, center = .med, constant = 1, na.rm = TRUE)),
-        .r_sd = ifelse(is.finite(.mad) & .mad > 0, .mad * 1.4826, NA_real_),
-        value = ifelse(is.finite(.r_sd) & .r_sd > 0, (value - .med) / .r_sd, value)
-      ) %>% dplyr::ungroup() %>% dplyr::select(-.med, -.mad, -`.r_sd`)
+      # Group by BOTH donor AND metric to normalize per-metric per-donor
+      df <- df %>% dplyr::mutate(metric_id = metric_col) %>%
+        dplyr::group_by(`Case ID`, metric_id) %>% dplyr::mutate(
+          .med = suppressWarnings(stats::median(value, na.rm = TRUE)),
+          .mad = suppressWarnings(stats::mad(value, center = .med, constant = 1, na.rm = TRUE)),
+          .r_sd = ifelse(is.finite(.mad) & .mad > 0, .mad * 1.4826, NA_real_),
+          value = ifelse(is.finite(.r_sd) & .r_sd > 0, (value - .med) / .r_sd, value)
+        ) %>% dplyr::ungroup() %>% dplyr::select(-.med, -.mad, -.r_sd, -metric_id)
     } else if (identical(norm_mode, "global")) {
       mu <- mean(df$value, na.rm = TRUE)
       sdv <- sd(df$value, na.rm = TRUE)
@@ -2181,7 +4240,17 @@ server <- function(input, output, session) {
     # Order groups ND, Aab+, T1D and set colors
     grp_levels <- c("ND","Aab+","T1D")
     sm$donor_status <- factor(sm$donor_status, levels = grp_levels)
-    color_map <- c("ND" = "#1f77b4", "Aab+" = "#ff7f0e", "T1D" = "#d62728")
+    
+    # Determine color scheme based on selector
+    color_by <- input$plot_color_by %||% "donor_status"
+    
+    # Build color map based on selection
+    if (color_by == "donor_status") {
+      color_map <- c("ND" = "#1f77b4", "Aab+" = "#ff7f0e", "T1D" = "#d62728")
+    } else {
+      # For donor_id, we'll apply colors to raw points only
+      color_map <- c("ND" = "#1f77b4", "Aab+" = "#ff7f0e", "T1D" = "#d62728")
+    }
 
     # Build y-label reflecting normalization choice
     ylab_base <- if (identical(input$mode, "Targets")) {
@@ -2191,7 +4260,7 @@ server <- function(input, output, session) {
     } else {
       "% composition"
     }
-    cnorm <- if (!is.null(input$curve_norm) && length(input$curve_norm) == 1 && nzchar(input$curve_norm)) input$curve_norm else "none"
+  cnorm <- "none"  # Normalization selector removed, always use "none"
     ylab <- switch(cnorm,
                    none = ylab_base,
                    global = paste0(ylab_base, " (scaled z)"),
@@ -2200,9 +4269,9 @@ server <- function(input, output, session) {
 
     # Build title reflecting selection; for Composition, indicate fraction (%)
     title_text <- if (identical(input$mode, "Targets")) {
-      paste0(input$which, " vs islet size")
+      paste0(input$which, " vs Islet Size")
     } else if (identical(input$mode, "Markers")) {
-      paste0(input$which, " vs islet size")
+      paste0(input$which, " vs Islet Size")
     } else {
       wsel <- input$which
       if (is.null(wsel) || length(wsel) != 1 || !nzchar(wsel)) wsel <- "Ins_any"
@@ -2211,24 +4280,67 @@ server <- function(input, output, session) {
                    Glu_any = "Glucagon+ fraction",
                    Stt_any = "Somatostatin+ fraction",
                    wsel)
-      paste0(nm, " vs islet size")
+      paste0(nm, " vs Islet Size")
     }
 
+    # Create base plot with summary lines/points
+    # When coloring by donor_id, keep summary lines by donor_status
     p <- ggplot(sm, aes(x = diam_mid, y = y, color = donor_status, group = donor_status)) +
       geom_line(alpha = ifelse(!is.null(input$add_smooth) && input$add_smooth == "LOESS", 0, 1)) +
       geom_point() +
       geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0) +
    labs(x = "Islet diameter (µm)",
      y = ylab,
-     color = "Donor Status",
+     color = NULL,
      title = title_text) +
       scale_color_manual(values = color_map, breaks = grp_levels, drop = FALSE) +
-      theme_minimal(base_size = 14)
+      theme_minimal(base_size = 14) +
+      theme(legend.position = c(1, 1), 
+            legend.justification = c(1, 1),
+            legend.direction = "vertical")
+
+    # Apply axis scales BEFORE adding points so transformations are applied correctly
+    # Determine x-axis max for breaks
+    xmax <- suppressWarnings(max(sm$diam_mid, na.rm = TRUE))
+    if (!is.finite(xmax)) xmax <- 300
+    
+    # Apply log2 scale to x-axis if selected
+    if (!is.null(input$log_scale_x) && input$log_scale_x) {
+      # For log2 scale, use powers of 2 as breaks
+      max_pow <- ceiling(log2(xmax))
+      major_breaks <- 2^(0:max_pow)
+      p <- p + scale_x_continuous(trans = "log2", breaks = major_breaks)
+    } else {
+      # Linear scale with standard breaks
+      major_breaks <- seq(0, ceiling(xmax/50)*50, by = 50)
+      minor_breaks <- seq(0, ceiling(xmax/10)*10, by = 10)
+      p <- p + scale_x_continuous(breaks = major_breaks, minor_breaks = minor_breaks)
+    }
+    
+    # Apply log scale to y-axis if selected
+    if (!is.null(input$log_scale) && input$log_scale) {
+      p <- p + scale_y_log10()
+    }
 
     if (isTRUE(input$show_points)) {
       raw <- plot_df()
       raw$donor_status <- factor(raw$donor_status, levels = grp_levels)
-      jw <- max(1, as.numeric(input$binwidth) * 0.35)
+      
+      # Separate normal points from outliers
+      raw_normal <- raw[!raw$is_outlier | is.na(raw$is_outlier), ]
+      raw_outliers <- raw[raw$is_outlier & !is.na(raw$is_outlier), ]
+      
+      # Adjust jitter width based on whether log2 scale is enabled
+      # In log space, jitter should be multiplicative rather than additive
+      if (!is.null(input$log_scale_x) && input$log_scale_x) {
+        # For log2 scale, use a fraction of the value (multiplicative jitter)
+        # This creates proportional jitter that looks consistent across the log scale
+        jw <- 0.15  # 15% multiplicative jitter in log space
+      } else {
+        # For linear scale, use standard additive jitter
+        jw <- max(1, as.numeric(input$binwidth) * 0.35)
+      }
+      
       # Add slight vertical jitter to avoid rows when plotting counts
       yr <- suppressWarnings(range(raw$value, na.rm = TRUE))
       ydiff <- if (all(is.finite(yr))) diff(yr) else 0
@@ -2243,17 +4355,52 @@ server <- function(input, output, session) {
         mx <- 0.01 * ydiff
         if (!is.finite(mx) || mx < 0) 0 else mx
       }
-      p <- p +
-        geom_point(data = raw, aes(x = diam_mid, y = value, color = donor_status),
-                   position = position_jitter(width = jw, height = jh), size = input$pt_size, alpha = input$pt_alpha, inherit.aes = FALSE)
+      
+      # Apply color scheme for NORMAL points
+      if (color_by == "donor_id") {
+        # Color by donor ID
+        if ("Case ID" %in% colnames(raw_normal)) {
+          raw_normal$donor_id <- factor(raw_normal$`Case ID`)
+          n_donors <- length(levels(raw_normal$donor_id))
+          if (n_donors <= 12) {
+            donor_colors <- RColorBrewer::brewer.pal(min(12, max(3, n_donors)), "Paired")
+            names(donor_colors) <- levels(raw_normal$donor_id)
+          } else {
+            donor_colors <- rainbow(n_donors, s = 0.8, v = 0.8)
+            names(donor_colors) <- levels(raw_normal$donor_id)
+          }
+          p <- p +
+            geom_point(data = raw_normal, aes(x = diam_mid, y = value, color = donor_id),
+                       position = position_jitter(width = jw, height = jh), size = input$pt_size, alpha = input$pt_alpha, inherit.aes = FALSE) +
+            scale_color_manual(values = c(color_map, donor_colors), 
+                             breaks = c(grp_levels, levels(raw_normal$donor_id)),
+                             name = "Color")
+        } else {
+          # Fallback to donor_status if Case ID not available
+          p <- p +
+            geom_point(data = raw_normal, aes(x = diam_mid, y = value, color = donor_status),
+                       position = position_jitter(width = jw, height = jh), size = input$pt_size, alpha = input$pt_alpha, inherit.aes = FALSE)
+        }
+      } else {
+        # Color by donor_status (default)
+        p <- p +
+          geom_point(data = raw_normal, aes(x = diam_mid, y = value, color = donor_status),
+                     position = position_jitter(width = jw, height = jh), size = input$pt_size, alpha = input$pt_alpha, inherit.aes = FALSE)
+      }
+      
+      # Add OUTLIERS as red points on top
+      if (nrow(raw_outliers) > 0) {
+        p <- p +
+          geom_point(data = raw_outliers, aes(x = diam_mid, y = value),
+                     position = position_jitter(width = jw, height = jh), 
+                     size = input$pt_size * 1.2, # Slightly larger
+                     alpha = min(1.0, input$pt_alpha * 1.5), # More visible
+                     color = "#d62728", # Red color
+                     inherit.aes = FALSE)
+      }
     }
 
-    # Axis breaks and minor ticks
-    xmax <- suppressWarnings(max(sm$diam_mid, na.rm = TRUE))
-    if (!is.finite(xmax)) xmax <- 300
-    major_breaks <- seq(0, ceiling(xmax/50)*50, by = 50)
-    minor_breaks <- seq(0, ceiling(xmax/10)*10, by = 10)
-    p <- p + scale_x_continuous(breaks = major_breaks, minor_breaks = minor_breaks)
+    # Add theme for grid lines
     p <- p + theme(panel.grid.minor = element_line(size = 0.2, colour = if (!is.null(input$theme_bg) && input$theme_bg == "Dark") "#222222" else "#eeeeee"))
 
     # Highlight significant bins if stats were run
@@ -2298,9 +4445,26 @@ server <- function(input, output, session) {
   stats_run <- eventReactive(input$run_tests, {
     rdf <- raw_df()
     if (is.null(rdf) || !nrow(rdf)) return(NULL)
+    
+    # Remove outliers if requested (same as plot_df)
+    if (isTRUE(input$stats_remove_outliers)) {
+      value_mean <- mean(rdf$value, na.rm = TRUE)
+      value_sd <- sd(rdf$value, na.rm = TRUE)
+      outlier_threshold <- 3
+      
+      rdf$is_outlier <- abs(rdf$value - value_mean) > (outlier_threshold * value_sd)
+      n_outliers <- sum(rdf$is_outlier, na.rm = TRUE)
+      
+      # Remove outliers
+      rdf <- rdf[!rdf$is_outlier | is.na(rdf$is_outlier), ]
+      
+      cat(sprintf("[STATISTICS] Removed %d outliers (>3 SD)\n", n_outliers))
+    }
+    
     # Ensure donor_status factor ordering
     rdf$donor_status <- factor(rdf$donor_status, levels = c("ND","Aab+","T1D"))
     # Global: value ~ donor_status + islet_diam_um (Type I with donor_status first)
+
     fit <- tryCatch(lm(value ~ donor_status + islet_diam_um, data = rdf), error = function(e) NULL)
     p_global <- NA_real_
     if (!is.null(fit)) {
@@ -2345,6 +4509,51 @@ server <- function(input, output, session) {
     st
   })
 
+  # Statistical test explanation
+  output$stats_explanation <- renderUI({
+    st <- stats_data()
+    if (is.null(st) || nrow(st) == 0) {
+      return(tags$div(
+        style = "padding: 15px; color: #666;",
+        tags$p("Click 'Run Statistics' to perform statistical analysis.")
+      ))
+    }
+    
+    alpha_num <- as.numeric(input$alpha)
+    n_total <- nrow(st)
+    n_sig <- sum(st$sig, na.rm = TRUE)
+    
+    tags$div(
+      style = "padding: 15px;",
+      tags$h5("Analysis Method:", style = "margin-top: 0;"),
+      tags$p(
+        style = "margin-bottom: 10px;",
+        tags$strong("Global ANOVA:"), " Tests if there are significant differences in the selected metric across the three donor status groups (ND, Aab+, T1D) while controlling for islet diameter.",
+        tags$br(),
+        tags$em("Model: value ~ donor_status + islet_diam_um")
+      ),
+      tags$p(
+        style = "margin-bottom: 10px;",
+        tags$strong("Pairwise t-tests:"), " Compares each pair of donor status groups (ND vs Aab+, ND vs T1D, Aab+ vs T1D) on residuals from the diameter-adjusted model.",
+        tags$br(),
+        tags$em("Multiple testing correction: Benjamini-Hochberg (FDR) method")
+      ),
+      tags$hr(),
+      tags$h5("Results Summary:"),
+      tags$p(
+        sprintf("Significance threshold: α = %s", input$alpha),
+        tags$br(),
+        sprintf("Significant tests: %d / %d (%.1f%%)", n_sig, n_total, 100 * n_sig / n_total)
+      ),
+      tags$p(
+        style = "font-size: 90%; color: #666;",
+        tags$strong("Interpretation:"),
+        " A significant result (p < α) suggests the selected metric differs between donor status groups after accounting for islet size. ",
+        "Non-significant results may indicate no biological difference or insufficient statistical power."
+      )
+    )
+  })
+
   output$stats_tbl <- renderTable({
     if (!is.null(input$tabs) && identical(input$tabs, "Viewer")) return(NULL)
     st <- stats_data()
@@ -2360,7 +4569,10 @@ server <- function(input, output, session) {
     if (!is.null(input$tabs) && identical(input$tabs, "Viewer")) return(NULL)
     st <- stats_data()
     req(st, nrow(st) > 0)
+    # Force dependency on alpha to trigger re-render
     alpha_num <- as.numeric(input$alpha)
+    req(alpha_num)
+    
     df <- st %>%
       mutate(neglog = ifelse(!is.na(p_value) & p_value > 0, -log10(p_value), NA_real_)) %>%
       filter(!is.na(neglog))
@@ -2380,9 +4592,12 @@ server <- function(input, output, session) {
     if (!is.null(input$tabs) && identical(input$tabs, "Viewer")) return(NULL)
     st <- stats_data()
     req(st, nrow(st) > 0)
+    # Force dependency on alpha to trigger re-render
+    alpha_num <- as.numeric(input$alpha)
+    req(alpha_num)
+    
     df <- st %>% filter(type == "pairwise" & !is.na(p_value))
     if (nrow(df) == 0) return(NULL)
-    alpha_num <- as.numeric(input$alpha)
     df <- df %>% mutate(sig = ifelse(is.na(p_adj), p_value <= alpha_num, p_adj <= alpha_num))
     g <- ggplot(df, aes(x = reorder(contrast, p_value), y = p_value, color = sig)) +
       geom_point(size = 3) +
@@ -2396,6 +4611,102 @@ server <- function(input, output, session) {
     ggplotly(g)
   })
 
+  # Area Under Curve by Donor Group
+  output$auc_plot <- renderPlotly({
+    if (!is.null(input$tabs) && identical(input$tabs, "Viewer")) return(NULL)
+    
+    # Get the summary data (binned by diameter)
+    sdf <- summary_df()
+    if (is.null(sdf) || nrow(sdf) == 0) return(NULL)
+    
+    # Calculate area under each line using trapezoidal rule
+    # summary_df returns columns: donor_status, diam_bin, diam_mid, y, ymin, ymax
+    auc_by_group <- tryCatch({
+      sdf %>%
+        dplyr::group_by(donor_status) %>%
+        dplyr::arrange(diam_mid) %>%
+        dplyr::summarise(
+          auc = if (n() < 2) 0 else sum(diff(diam_mid) * (head(y, -1) + tail(y, -1))) / 2,
+          .groups = "drop"
+        )
+    }, error = function(e) {
+      cat("[AUC ERROR]", conditionMessage(e), "\n")
+      return(NULL)
+    })
+    
+    if (is.null(auc_by_group) || nrow(auc_by_group) == 0) return(NULL)
+    
+    # Create bar plot
+    g <- ggplot(auc_by_group, aes(x = donor_status, y = auc, fill = donor_status)) +
+      geom_col(width = 0.7, color = "black", alpha = 0.8) +
+      scale_fill_manual(values = c("ND" = "#1f77b4", "Aab+" = "#ff7f0e", "T1D" = "#d62728")) +
+      labs(
+        x = "Donor Status",
+        y = "Area Under Curve (AUC)",
+        title = "Integrated Area by Donor Group"
+      ) +
+      theme_minimal(base_size = 14) +
+      theme(legend.position = "none")
+    
+    ggplotly(g)
+  })
+  
+  # AUC summary table with statistical comparisons
+  output$auc_table <- renderTable({
+    if (!is.null(input$tabs) && identical(input$tabs, "Viewer")) return(NULL)
+    
+    sdf <- summary_df()
+    if (is.null(sdf) || nrow(sdf) == 0) return(NULL)
+    
+    # Calculate AUC for each donor group
+    # summary_df returns columns: donor_status, diam_bin, diam_mid, y, ymin, ymax
+    auc_by_group <- tryCatch({
+      result <- sdf %>%
+        dplyr::group_by(donor_status) %>%
+        dplyr::arrange(diam_mid) %>%
+        dplyr::summarise(
+          auc = if (n() < 2) 0 else sum(diff(diam_mid) * (head(y, -1) + tail(y, -1))) / 2,
+          n_bins = n(),
+          .groups = "drop"
+        )
+      # Only return result if it has valid data
+      if (nrow(result) > 0) result else NULL
+    }, error = function(e) {
+      cat("[AUC TABLE ERROR]", conditionMessage(e), "\n")
+      NULL
+    })
+    
+    # Only show error if truly no data
+    if (is.null(auc_by_group)) {
+      return(data.frame(Message = "Insufficient data for AUC calculation"))
+    }
+    
+    # Calculate pairwise percent differences
+    nd_auc <- auc_by_group$auc[auc_by_group$donor_status == "ND"]
+    aab_auc <- auc_by_group$auc[auc_by_group$donor_status == "Aab+"]
+    t1d_auc <- auc_by_group$auc[auc_by_group$donor_status == "T1D"]
+    
+    result <- data.frame(
+      "Donor Group" = auc_by_group$donor_status,
+      "AUC" = sprintf("%.2f", auc_by_group$auc),
+      "N Bins" = auc_by_group$n_bins,
+      check.names = FALSE
+    )
+    
+    # Add comparison row
+    if (length(nd_auc) > 0 && length(t1d_auc) > 0) {
+      pct_change_nd_t1d <- ((t1d_auc - nd_auc) / nd_auc) * 100
+      result <- rbind(result, data.frame(
+        "Donor Group" = "T1D vs ND",
+        "AUC" = sprintf("%.1f%%", pct_change_nd_t1d),
+        "N Bins" = "",
+        check.names = FALSE
+      ))
+    }
+    
+    result
+  }, striped = TRUE, bordered = TRUE)
+
   # Vitessce embed
   # Image picker for local OME-TIFFs under www/local_images (preferred) or LOCAL_IMAGE_ROOT fallback
   output$local_image_picker <- renderUI({
@@ -2405,184 +4716,115 @@ server <- function(input, output, session) {
     }
     
     vi <- viewer_info()
+    cat("[VIEWER RENDER] Base:", vi$base, "Image URL:", vi$image_url, "\n")
+    cat("[VIEWER RENDER] Full iframe src:", vi$iframe_src, "\n")
+    
     if (is.null(vi$base)) {
       return(tagList(
         tags$div(style = "color:#b00;", "Local Avivator static build not found under shiny/www/avivator."),
         tags$div(style = "color:#666; font-size:90%;", "To install: run scripts/install_avivator.sh (requires Node ≥ 18) or place a prebuilt bundle under shiny/www/avivator.")
       ))
     }
-    # List candidate images from www/local_images (static) first
-    pat <- ".*[.](ome[.]tif{1,2}|tif{1,2})$"
-    files <- character(0)
-    if (has_www_local_images) {
-      files <- tryCatch(list.files(www_local_images_dir, pattern = pat, ignore.case = TRUE, recursive = FALSE), error = function(e) character(0))
-    }
-    # Fallback to LOCAL_IMAGE_ROOT if www/local_images is empty or missing
-    if (length(files) == 0 && !is.null(local_images_root) && dir.exists(local_images_root)) {
-      basefiles <- tryCatch(list.files(local_images_root, pattern = pat, ignore.case = TRUE, recursive = FALSE), error = function(e) character(0))
-      # show only basenames; these will be addressed via /local_images when no www folder
-      files <- basefiles
+    
+    # Build list of available images
+    available_images <- character(0)
+    images_dir <- file.path("www", "local_images")
+    if (dir.exists(images_dir)) {
+      image_files <- list.files(images_dir, pattern = "\\.ome\\.tiff?$", ignore.case = TRUE)
+      available_images <- c(available_images, image_files)
     }
     
-    # Set names for the dropdown choices - names are display labels, values are filenames
-    if (length(files) > 0) {
-      names(files) <- files  # Use filenames as both labels and values
+    # Also check LOCAL_IMAGE_ROOT if set
+    local_root <- Sys.getenv("LOCAL_IMAGE_ROOT", unset = "")
+    if (nzchar(local_root) && dir.exists(local_root)) {
+      root_files <- list.files(local_root, pattern = "\\.ome\\.tiff?$", ignore.case = TRUE)
+      available_images <- unique(c(available_images, root_files))
     }
     
-    if (length(files) == 0) {
-      return(tagList(
-        tags$div(style = "margin-bottom:6px;", "No local images found under www/local_images or LOCAL_IMAGE_ROOT."),
-        tags$div(style = "color:#666; font-size:90%;", "Place .ome.tif(f) files under app/shiny_app/www/local_images on the server for best performance (HTTP Range support).")
-      ))
+    # Check if image is accessible and not too large for web serving
+    if (!is.null(vi$image_url)) {
+      image_basename <- basename(vi$image_url)
+      local_image_path <- file.path("www", "local_images", image_basename)
+      file_exists <- file.exists(local_image_path)
+      
+      cat("[VIEWER DEBUG] Looking for image file:", local_image_path, "Exists:", file_exists, "\n")
+      
+      if (file_exists) {
+        # Log file size for debugging
+        file_size <- file.info(local_image_path)$size
+        file_size_gb <- round(file_size / (1024^3), 2)
+        cat("[VIEWER DEBUG] Image size:", file_size_gb, "GB\n")
+      }
     }
-    # Preserve selection
-    sel <- if (!is.null(input$selected_image) && input$selected_image %in% files) input$selected_image else files[[1]]
     
-    # Build an absolute URL for range check from the main app page
-    appPath <- session$clientData$url_pathname
-    if (is.null(appPath) || !nzchar(appPath)) appPath <- "/"
-    if (!grepl("/$", appPath)) appPath <- paste0(appPath, "/")
-    check_url <- if (has_www_local_images) paste0(appPath, "local_images/", sel) else paste0("/images/", sel)
+    # Determine current selection
+    current_selection <- if (!is.null(forced_image())) {
+      forced_image()
+    } else if (!is.null(input$selected_image)) {
+      input$selected_image
+    } else if (length(available_images) > 0) {
+      available_images[1]
+    } else {
+      NULL
+    }
+    
+    # Build UI with dropdown if images are available
     tagList(
-      div(style = "display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap;",
-        div(style = "min-width:280px;", selectInput("selected_image", "Select OME-TIFF", choices = files, selected = sel))
+      if (length(available_images) > 0) {
+        fluidRow(
+          column(12,
+            selectInput(
+              "selected_image",
+              "Select Image:",
+              choices = available_images,
+              selected = current_selection,
+              width = "100%"
+            )
+          )
+        )
+      } else {
+        tags$div(
+          style = "padding: 10px; background-color: #fff3cd; border: 1px solid #ffc107; margin-bottom: 10px;",
+          tags$strong("No images found."),
+          " Place OME-TIFF files in ",
+          tags$code("app/shiny_app/www/local_images/"),
+          " or set ",
+          tags$code("LOCAL_IMAGE_ROOT"),
+          " environment variable."
+        )
+      },
+      tags$iframe(
+        id = "avivator_viewer",
+        src = vi$iframe_src,
+        width = "100%",
+        frameBorder = 0,
+        allowfullscreen = NA,
+        style = "width:100%; height:calc(100vh - 180px); border:0;"
       )
-      , tags$div(id = "range-check", style = "margin-top:6px; font-family:monospace; color:#555;", "Checking Range support...")
-      , tags$script(HTML(paste0(
-        "(function(){\n",
-        "  const el = document.getElementById('range-check');\n",
-        "  if (!el) return;\n",
-        "  el.textContent = 'Checking Range support...';\n",
-        "  fetch('", check_url, "', { headers: { 'Range': 'bytes=0-1' } }).then(r => {\n",
-        "    const cr = r.headers.get('content-range');\n",
-        "    const ar = r.headers.get('accept-ranges');\n",
-        "    el.textContent = 'HTTP ' + r.status + ' | Accept-Ranges=' + ar + ' | Content-Range=' + cr;\n",
-        "  }).catch(e => {\n",
-        "    el.textContent = 'Fetch error: ' + e;\n",
-        "  });\n",
-        "})();"
-      )))
     )
   })
 
-output$vit_view <- renderUI({
-  # Only render when on Viewer tab
-  if (is.null(input$tabs) || input$tabs != "Viewer") {
-    return(NULL)
-  }
-  
-  vi <- viewer_info()
-  cat("[VIEWER RENDER] Base:", vi$base, "Image URL:", vi$image_url, "\n")
-  cat("[VIEWER RENDER] Full iframe src:", vi$iframe_src, "\n")
-  
-  if (is.null(vi$base)) {
-    return(tagList(
-      tags$div(style = "color:#b00;", "Local Avivator static build not found under shiny/www/avivator."),
-      tags$div(style = "color:#666; font-size:90%;", "To install: run scripts/install_avivator.sh (requires Node ≥ 18) or place a prebuilt bundle under shiny/www/avivator.")
-    ))
-  }
-  
-  # Check if image is accessible and not too large for web serving
-  if (!is.null(vi$image_url)) {
-    image_basename <- basename(vi$image_url)
-    local_image_path <- file.path("www", "local_images", image_basename)
-    file_exists <- file.exists(local_image_path)
-    
-    cat("[VIEWER DEBUG] Looking for image file:", local_image_path, "Exists:", file_exists, "\n")
-    
-    if (file_exists) {
-      # Log file size for debugging
-      file_size <- file.info(local_image_path)$size
-      file_size_gb <- round(file_size / (1024^3), 2)
-      cat("[VIEWER DEBUG] Image size:", file_size_gb, "GB\n")
-    }
-  }
-  
-  # No size warnings needed - Avivator is designed for large images
-  
-  tagList(
-    tags$iframe(src = vi$iframe_src,
-              width = "100%",
-              frameBorder = 0,
-              allowfullscreen = NA,
-              style = "width:100%; height:calc(100vh - 80px); border:0;"),
-    # Viewer embedded above
-  )
-})
-
-  # ---- GeoJSON Overlay Handlers (Streaming) ----
-  
-  # Handle overlay toggle
-  observeEvent(input$show_geojson_overlay, {
-    if (gson_cache_available) {
-      session$sendCustomMessage('toggleGeoJSONOverlay', list(
-        enabled = isTRUE(input$show_geojson_overlay)
-      ))
-    }
-  }, ignoreNULL = FALSE, ignoreInit = TRUE)
-  
-  # Load overlays when image changes
-  observeEvent(input$selected_image, {
-    if (!is.null(input$selected_image) && gson_cache_available && isTRUE(input$show_geojson_overlay)) {
-      # Extract case ID from filename
-      case_id <- gsub("^[^_]*_([0-9]+)\\.(ome\\.)?tiff?$", "\\1", input$selected_image)
-      
-      # Check if cache file exists
-      pkl_file <- file.path(gson_cache_dir, paste0(case_id, "_simplified.pkl"))
-      if (file.exists(pkl_file)) {
-        cat("[OVERLAY] Loading overlay for case", case_id, "\n")
-        session$sendCustomMessage('loadGeoJSONOverlay', list(
-          case_id = case_id,
-          viewport = NULL  # Load initial view
-        ))
-      } else {
-        cat("[OVERLAY] No cache file for case", case_id, "\n")
-      }
-    }
-  }, ignoreNULL = TRUE, ignoreInit = TRUE)
-  
-  # GeoJSON query endpoint (called by client-side JS)
-  observe({
-    query <- parseQueryString(session$clientData$url_search)
-    
-    # Check if this is a geojson query request
-    if (!is.null(query$geojson_query) && query$geojson_query == "1") {
-      case_id <- query$case_id
-      xmin <- if (!is.null(query$xmin)) as.numeric(query$xmin) else NULL
-      ymin <- if (!is.null(query$ymin)) as.numeric(query$ymin) else NULL
-      xmax <- if (!is.null(query$xmax)) as.numeric(query$xmax) else NULL
-      ymax <- if (!is.null(query$ymax)) as.numeric(query$ymax) else NULL
-      max_features <- if (!is.null(query$max_features)) as.integer(query$max_features) else 5000
-      
-      if (!is.null(case_id)) {
-        result <- query_geojson_features(case_id, xmin, ymin, xmax, ymax, max_features)
-        
-        # Send response as JSON
-        session$sendCustomMessage('geojsonQueryResponse', list(
-          query_id = query$query_id,
-          data = result
-        ))
-      }
-    }
-  })
-  
-  # ---- End GeoJSON Overlay Handlers ----
   
   # Pseudotime scatter when counts are selected (scaled counts vs pseudotime)
   # Distribution plot UI (violin/box)
   output$dist_ui <- renderUI({
     tagList(
       fluidRow(
-        column(3,
-          radioButtons("dist_type", "Plot type", choices = c("Violin", "Box"), selected = "Violin", inline = TRUE)
-        ),
-        column(3,
-          checkboxInput("dist_show_points", "Show jittered points", value = TRUE),
-          checkboxInput("exclude_zero_dist", "Exclude zero values", value = FALSE)
-        ),
-        column(3,
+        column(4,
           sliderInput("dist_pt_size", "Point size", min = 0.3, max = 4.0, value = 0.7, step = 0.1),
           sliderInput("dist_pt_alpha", "Point transparency", min = 0.05, max = 1.0, value = 0.25, step = 0.05)
+        ),
+        column(4,
+          selectInput("dist_color_by", "Color points by:",
+                     choices = c("Donor Status" = "donor_status", 
+                               "Donor ID" = "donor_id"),
+                     selected = "donor_status"),
+          radioButtons("dist_type", "Plot type", choices = c("Violin", "Box"), selected = "Violin", inline = TRUE)
+        ),
+        column(4,
+          checkboxInput("exclude_zero_dist", "Exclude zero values", value = FALSE),
+          checkboxInput("dist_show_points", "Show individual points", value = TRUE),
+          checkboxInput("dist_log_scale", "Log scale y-axis", value = FALSE)
         )
       )
     )
@@ -2590,28 +4832,64 @@ output$vit_view <- renderUI({
 
   # Distribution plot: violin/box per donor group for current raw_df()
   output$dist <- renderPlotly({
-    rdf <- raw_df_base()
+    # Use the SAME data source as the main plot (respects Statistic selector)
+    rdf <- raw_df()
     if (is.null(rdf) || nrow(rdf) == 0) return(NULL)
-    if (isTRUE(input$exclude_zero_dist)) {
+    
+    # Explicit dependencies to ensure reactivity
+    req(input$mode, input$which)
+    
+    cat(sprintf("[DIST] Rendering with mode=%s, which=%s, region=%s\n", 
+                input$mode %||% "NULL", 
+                input$which %||% "NULL",
+                input$region %||% "NULL"))
+    
+    # Apply exclude_zero_dist separately (since raw_df uses exclude_zero_top)
+    if (isTRUE(input$exclude_zero_dist) && !isTRUE(input$exclude_zero_top)) {
       rdf <- rdf %>% dplyr::filter(value != 0)
     }
-    # Apply normalization consistent with main plot
-    norm_mode <- input$curve_norm
+    
+    # Identify the metric column name to group by for normalization
+    metric_col <- if (identical(input$mode, "Targets")) {
+      paste0(input$region, "__", input$which)
+    } else if (identical(input$mode, "Markers")) {
+      paste0(input$region, "__", input$which)
+    } else {
+      paste0("comp__", input$which)
+    }
+    
+    # Apply normalization consistent with main plot (default to "none")
+    norm_mode <- "none"  # Normalization selector removed
     if (identical(norm_mode, "robust") && all(c("Case ID") %in% colnames(rdf))) {
-      rdf <- rdf %>% dplyr::group_by(`Case ID`) %>% dplyr::mutate(
-        .med = suppressWarnings(stats::median(value, na.rm = TRUE)),
-        .mad = suppressWarnings(stats::mad(value, center = .med, constant = 1, na.rm = TRUE)),
-        .r_sd = ifelse(is.finite(.mad) & .mad > 0, .mad * 1.4826, NA_real_),
-        value = ifelse(is.finite(.r_sd) & .r_sd > 0, (value - .med) / .r_sd, value)
-      ) %>% dplyr::ungroup() %>% dplyr::select(-.med, -.mad, -`.r_sd`)
+      # Group by BOTH donor AND metric to normalize per-metric per-donor
+      rdf <- rdf %>% dplyr::mutate(metric_id = metric_col) %>%
+        dplyr::group_by(`Case ID`, metric_id) %>% dplyr::mutate(
+          .med = suppressWarnings(stats::median(value, na.rm = TRUE)),
+          .mad = suppressWarnings(stats::mad(value, center = .med, constant = 1, na.rm = TRUE)),
+          .r_sd = ifelse(is.finite(.mad) & .mad > 0, .mad * 1.4826, NA_real_),
+          value = ifelse(is.finite(.r_sd) & .r_sd > 0, (value - .med) / .r_sd, value)
+        ) %>% dplyr::ungroup() %>% dplyr::select(-.med, -.mad, -.r_sd, -metric_id)
     } else if (identical(norm_mode, "global")) {
       mu <- mean(rdf$value, na.rm = TRUE)
       sdv <- sd(rdf$value, na.rm = TRUE)
       if (!is.finite(sdv) || sdv == 0) sdv <- 1
       rdf$value <- (rdf$value - mu) / sdv
     }
-    # Ensure factor order
+    
+    # Determine color scheme based on selector
+    color_by <- input$dist_color_by %||% "donor_status"
+    
+    # Ensure factor order for donor_status
     rdf$donor_status <- factor(rdf$donor_status, levels = c("ND","Aab+","T1D"))
+    
+    # Create donor_id column BEFORE using it in aes() to avoid errors
+    if (color_by == "donor_id" && "Case ID" %in% colnames(rdf)) {
+      rdf$donor_id <- factor(rdf$`Case ID`)
+      cat(sprintf("[DIST] Created donor_id with %d levels: %s\n", 
+                  length(levels(rdf$donor_id)), 
+                  paste(levels(rdf$donor_id), collapse=", ")))
+    }
+    
     ylab_base <- if (identical(input$mode, "Targets")) {
       if (!is.null(input$target_metric) && input$target_metric == "Counts") "Target count" else "Target density (per µm²)"
     } else if (identical(input$mode, "Markers")) {
@@ -2619,25 +4897,71 @@ output$vit_view <- renderUI({
     } else {
       "% composition"
     }
-    ylab <- switch(input$curve_norm,
-                   none = ylab_base,
-                   global = paste0(ylab_base, " (scaled z)"),
-                   robust = paste0(ylab_base, " (robust z)"),
-                   ylab_base)
+    ylab <- ylab_base  # Normalization selector removed, always use base label
+    
+    # ALWAYS group and color violin/box by donor_status
     g <- ggplot(rdf, aes(x = donor_status, y = value, fill = donor_status))
+    
     if (!is.null(input$dist_type) && input$dist_type == "Box") {
-      g <- g + geom_boxplot(outlier.shape = NA, alpha = 0.8)
+      # NUCLEAR OPTION: combine ALL outlier suppression methods
+      g <- g + geom_boxplot(
+        outlier.shape = NA,
+        outlier.size = 0,
+        outlier.colour = NA,
+        outlier.fill = NA,
+        outlier.alpha = 0,
+        outlier.stroke = 0,
+        alpha = 0.8
+      )
     } else {
       g <- g + geom_violin(trim = FALSE, alpha = 0.8)
     }
+    
+    # Apply standard donor status colors to violin/box - NO LEGEND
+    g <- g + scale_fill_manual(values = c("ND" = "#1f77b4", "Aab+" = "#ff7f0e", "T1D" = "#d62728"), guide = "none")
+    
+    # Add points with color scheme based on selector
     if (isTRUE(input$dist_show_points)) {
-      g <- g + geom_jitter(width = 0.18,
+      if (color_by == "donor_id" && "donor_id" %in% colnames(rdf)) {
+        # Color points by donor ID with distinct colors
+        n_donors <- length(levels(rdf$donor_id))
+        cat(sprintf("[DIST] Coloring by donor_id: %d donors\n", n_donors))
+        cat(sprintf("[DIST] Donor IDs: %s\n", paste(unique(rdf$donor_id), collapse=", ")))
+        
+        if (n_donors <= 12) {
+          donor_colors <- RColorBrewer::brewer.pal(min(12, max(3, n_donors)), "Paired")
+        } else {
+          donor_colors <- rainbow(n_donors, s = 0.9, v = 0.9)
+        }
+        names(donor_colors) <- levels(rdf$donor_id)
+        
+        cat(sprintf("[DIST] Assigned colors: %s\n", paste(names(donor_colors), "=", donor_colors, collapse="; ")))
+        
+        g <- g + geom_jitter(aes(color = donor_id), width = 0.18,
+                           alpha = ifelse(is.null(input$dist_pt_alpha), 0.5, input$dist_pt_alpha),
+                           size = ifelse(is.null(input$dist_pt_size), 1.5, input$dist_pt_size),
+                           stroke = 0) +
+          scale_color_manual(values = donor_colors, guide = "none")  # NO LEGEND
+      } else {
+        # Color points by donor_status (match violin/box colors)
+        cat("[DIST] Coloring by donor_status\n")
+        g <- g + geom_jitter(aes(color = donor_status), width = 0.18,
                            alpha = ifelse(is.null(input$dist_pt_alpha), 0.25, input$dist_pt_alpha),
-                           size = ifelse(is.null(input$dist_pt_size), 0.7, input$dist_pt_size))
+                           size = ifelse(is.null(input$dist_pt_size), 0.7, input$dist_pt_size),
+                           stroke = 0) +
+          scale_color_manual(values = c("ND" = "#1f77b4", "Aab+" = "#ff7f0e", "T1D" = "#d62728"), guide = "none")
+      }
     }
-    g <- g + scale_fill_manual(values = c("ND" = "#1f77b4", "Aab+" = "#ff7f0e", "T1D" = "#d62728"), guide = "none") +
-      labs(x = "Donor Status", y = ylab, title = "Distribution across donor groups") +
-      theme_minimal(base_size = 14)
+    
+    g <- g + labs(x = "Donor Status", y = ylab, title = "Distribution across donor groups") +
+      theme_minimal(base_size = 14) +
+      theme(legend.position = "none")  # NO LEGEND for Distribution plot
+    
+    # Apply log scale to y-axis if selected (use dist-specific control)
+    if (!is.null(input$dist_log_scale) && input$dist_log_scale) {
+      g <- g + scale_y_log10()
+    }
+    
     if (!is.null(input$theme_bg) && input$theme_bg == "Dark") {
       g <- g + theme(
         plot.background = element_rect(fill = "#000000", colour = NA),
@@ -2646,11 +4970,31 @@ output$vit_view <- renderUI({
         axis.text = element_text(color = "#e6e6e6"),
         axis.title = element_text(color = "#f0f0f0"),
         plot.title = element_text(color = "#f0f0f0"),
-        legend.text = element_text(color = "#e6e6e6"),
-        legend.title = element_text(color = "#f0f0f0")
+        legend.position = "none"
       )
     }
-    ggplotly(g)
+    
+    # Convert to plotly with showlegend=FALSE to completely remove legend
+    p <- ggplotly(g, tooltip = c("x", "y"))
+    
+    # AGGRESSIVELY HIDE boxplot outliers in plotly
+    if (!is.null(input$dist_type) && input$dist_type == "Box") {
+      for (i in seq_along(p$x$data)) {
+        if (!is.null(p$x$data[[i]]$type) && p$x$data[[i]]$type == "box") {
+          # Try multiple ways to hide outliers
+          p$x$data[[i]]$marker$opacity <- 0
+          p$x$data[[i]]$marker$size <- 0
+          p$x$data[[i]]$marker$color <- "rgba(0,0,0,0)"
+          p$x$data[[i]]$marker$outliercolor <- "rgba(0,0,0,0)"
+          p$x$data[[i]]$boxpoints <- FALSE  # This should disable all points
+        }
+      }
+    }
+    
+    # Hide all legend entries in plotly
+    p <- p %>% layout(showlegend = FALSE)
+    
+    p
   })
 
   # Helper function to create selection descriptions for CSV export
@@ -2667,14 +5011,22 @@ output$vit_view <- renderUI({
     desc <- c(desc, paste("Donor Groups:", paste(input$groups %||% c(), collapse = ", ")))
     
     if (length(input$aab_flags) > 0) {
-      aab_desc <- paste("AAb Filter:", paste(input$aab_flags, collapse = ", "), "(", input$aab_logic %||% "Any", ")")
-      desc <- c(desc, aab_desc)
+      # Reverse logic: showing which antibodies are EXCLUDED (unchecked)
+      all_aab <- c("AAb_GADA", "AAb_IA2A", "AAb_ZnT8A", "AAb_IAA", "AAb_mIAA")
+      excluded <- setdiff(all_aab, input$aab_flags)
+      if (length(excluded) > 0) {
+        aab_desc <- paste("AAb Filter: Excluding donors with", paste(excluded, collapse = ", "))
+        desc <- c(desc, aab_desc)
+      } else {
+        desc <- c(desc, "AAb Filter: All Aab+ donors included")
+      }
     }
     
-    desc <- c(desc, paste("Normalization:", input$curve_norm %||% "none"))
     desc <- c(desc, paste("Statistic:", input$stat %||% "mean_se"))
     desc <- c(desc, paste("Bin Width:", input$binwidth %||% "50", "µm"))
-    desc <- c(desc, paste("Max Diameter:", input$diam_max %||% "350", "µm"))
+    if (!is.null(input$diam_range) && length(input$diam_range) == 2) {
+      desc <- c(desc, paste("Diameter Range:", input$diam_range[1], "-", input$diam_range[2], "µm"))
+    }
     
     return(desc)
   }
@@ -2720,6 +5072,49 @@ output$vit_view <- renderUI({
       write.table(st, file, append = TRUE, sep = ",", row.names = FALSE)
     }
   )
+  
+  # Download handler for the new Statistics tab download button
+  output$download_stats <- downloadHandler(
+    filename = function() {
+      paste0("statistics_", gsub("[^0-9A-Za-z]+","_", Sys.time()), ".csv")
+    },
+    content = function(file) {
+      st <- stats_data()
+      if (is.null(st) || nrow(st) == 0) st <- data.frame()
+      
+      # Add selection descriptions as comments at the top
+      descriptions <- get_selection_description()
+      
+      # Write descriptions as comments first
+      writeLines(paste("#", descriptions), file)
+      writeLines("", file, sep = "\n")
+      
+      # Append the actual data
+      write.table(st, file, append = TRUE, sep = ",", row.names = FALSE)
+    }
+  )
+  
+  # Outlier table display for Plot tab - hidden by default, shown only when checkbox is checked
+  output$plot_outlier_info <- renderUI({
+    show_table <- input$show_plot_outlier_table %||% FALSE
+    
+    if (show_table && exists("plot_outliers") && !is.null(plot_outliers) && nrow(plot_outliers) > 0) {
+      tags$div(
+        style = "margin-top: 15px; padding: 10px; background-color: #fff3cd; border: 1px solid #ffc107; border-radius: 5px;",
+        tags$h6(
+          style = "margin-top: 0; color: #856404;",
+          sprintf("⚠️ %d Outlier%s Removed (>3 SD)", nrow(plot_outliers), ifelse(nrow(plot_outliers) > 1, "s", ""))),
+        tags$div(
+          style = "max-height: 200px; overflow-y: auto;",
+          renderTable(
+            plot_outliers
+          )
+        )
+      )
+    } else {
+      NULL
+    }
+  })
 }
 
 shinyApp(ui = ui, server = server)

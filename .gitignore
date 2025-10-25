@@ -1,5 +1,6 @@
 # Data and large binary outputs
 data/
+tmp/
 pdfs/
 *.pdf
 *.Rout
@@ -9,6 +10,9 @@ docs/build/
 docs/doctrees/
 app/shiny_app/www/local_images/
 local_images/
+.RData
+.Rhistory
+
 # Virtual environments and caches
 .venv*/
 venv*/
@@ -25,8 +29,19 @@ __pycache__/
 .DS_Store
 
 # Tool downloads (large jars)
-scripts/tools/
+scripts/Python/
+scripts/R_files/
+scripts/Shell_scripts/
+scripts/*.h5ad
 
 # Large package files
 *.deb
 *.rpm
+
+# Environment files with API keys
+.Renviron
+app/shiny_app/.Renviron
+AI_Markdown/
+analysis_output/
+app/shiny_app/www/LabelExports/
+app/shiny_app/www/vitessce_data/

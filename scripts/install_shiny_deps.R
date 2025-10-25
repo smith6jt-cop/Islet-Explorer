@@ -1,58 +1,40 @@
-pkgs <- c(
-  "shiny","readxl","dplyr","stringr","tidyr","ggplot2","plotly","broom","base64enc","cluster"
+#!/usr/bin/env Rscript
+
+message("Installing Shiny app dependencies…")
+
+install_if_missing <- function(pkgs, repos = getOption("repos")) {
+  inst <- rownames(installed.packages())
+  to_get <- setdiff(pkgs, inst)
+  if (length(to_get)) {
+    install.packages(to_get, repos = repos, dependencies = TRUE)
+  }
+}
+
+# Base CRAN packages
+cran_pkgs <- c(
+  "shiny", "shinyjs", "readxl", "dplyr", "stringr", "tidyr",
+  "ggplot2", "plotly", "broom", "jsonlite", "base64enc", "RColorBrewer"
 )
-to_install <- setdiff(pkgs, rownames(installed.packages()))
-if (length(to_install)) install.packages(to_install, repos = "https://cloud.r-project.org")
-message("Installed/verified: ", paste(pkgs, collapse=", "))
+install_if_missing(cran_pkgs)
 
-# Install Bioconductor packages (slingshot and friends)
-if (!requireNamespace("BiocManager", quietly = TRUE)) {
-  install.packages("BiocManager", repos = "https://cloud.r-project.org")
+# Optional: httr2 for AI assistant
+install_if_missing(c("httr2"))
+
+# vitessceR from GitHub (if not installed or too old)
+if (!requireNamespace("remotes", quietly = TRUE)) install.packages("remotes")
+need_vitessceR <- TRUE
+if (requireNamespace("vitessceR", quietly = TRUE)) {
+  v <- tryCatch(packageVersion("vitessceR"), error = function(e) "0.0.0")
+  need_vitessceR <- isTRUE(v < "0.1.0")
 }
-bioc_pkgs <- c("slingshot", "SingleCellExperiment", "DelayedMatrixStats")
-try({
-  BiocManager::install(bioc_pkgs, ask = FALSE, update = FALSE)
-  message("Installed/verified (Bioconductor): ", paste(bioc_pkgs, collapse=", "))
-}, silent = TRUE)
-
-# destiny (DiffusionMap) and tradeSeq from Bioconductor; lmtest from CRAN
-try({
-  BiocManager::install(c("destiny","tradeSeq"), ask = FALSE, update = FALSE)
-  message("Installed/verified (Bioconductor): destiny, tradeSeq")
-}, silent = TRUE)
-
-if (!requireNamespace("lmtest", quietly = TRUE)) {
-  install.packages("lmtest", repos = "https://cloud.r-project.org")
-  message("Installed/verified: lmtest")
+if (need_vitessceR) {
+  remotes::install_github("vitessce/vitessceR", upgrade = "never", dependencies = TRUE)
 }
 
-# Install vitessceR (from CRAN if available; fallback to GitHub)
-install_vitesscer <- function() {
-  if (requireNamespace("vitessceR", quietly = TRUE)) {
-    message("vitessceR already installed")
-    return(invisible(TRUE))
-  }
-  ok <- FALSE
-  # Try CRAN first
-  try({
-    install.packages("vitessceR", repos = "https://cloud.r-project.org")
-    ok <- requireNamespace("vitessceR", quietly = TRUE)
-  }, silent = TRUE)
-  if (!ok) {
-    # Fallback to GitHub
-    if (!requireNamespace("remotes", quietly = TRUE)) {
-      install.packages("remotes", repos = "https://cloud.r-project.org")
-    }
-    try({
-      remotes::install_github("vitessce/vitessceR")
-      ok <- requireNamespace("vitessceR", quietly = TRUE)
-    }, silent = TRUE)
-  }
-  if (ok) message("Installed/verified: vitessceR") else warning("vitessceR install did not complete; see logs")
-  invisible(ok)
+# Optional: anndata (Bioconductor) for trajectory analysis
+if (!requireNamespace("anndata", quietly = TRUE)) {
+  if (!requireNamespace("BiocManager", quietly = TRUE)) install.packages("BiocManager")
+  try(BiocManager::install("anndata", ask = FALSE, update = FALSE))
 }
 
-# Only install vitessceR if requested explicitly (not required for the embedded viewer)
-if (identical(tolower(Sys.getenv("INSTALL_VITESSCER", "0")), "1")) {
-  install_vitesscer()
-}
+message("Done. Restart R before running the Shiny app if new packages were installed.")
