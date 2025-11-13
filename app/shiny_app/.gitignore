@@ -1,0 +1,5 @@
+# Removed vitessce/AVIVATOR files (replaced with cytoviewer)
+app/shiny_app/www/avivator/
+test_vitessce*.R
+test_vitessce*.html
+TRAJECTORY_VITESSCE_TEST_GUIDE.md

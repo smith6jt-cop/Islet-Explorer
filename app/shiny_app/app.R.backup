@@ -29,12 +29,6 @@ suppressPackageStartupMessages({
   }
 })
 
-# Check for vitessceR package (optional for embedded image viewer)
-VITESSCE_AVAILABLE <- requireNamespace("vitessceR", quietly = TRUE)
-if (!VITESSCE_AVAILABLE) {
-  message("Package 'vitessceR' not found. The embedded Vitessce viewer will be disabled.")
-}
-
 # ---- Runtime diagnostics (temporary) ----
 APP_VERSION <- "cytoviewer-v1"
 try({
@@ -1436,80 +1430,6 @@ build_channel_config_b64 <- function(names_vec) {
 }
 
 # ---------- Data loading and wrangling ----------
-# ===== CytoImageList Loading Functions =====
-
-# Load OME-TIFF images as CytoImageList for cytomapper
-load_cytoimagelist <- function(image_files, names = NULL) {
-  if (!requireNamespace("cytomapper", quietly = TRUE)) {
-    warning("cytomapper package not available")
-    return(NULL)
-  }
-
-  if (length(image_files) == 0) {
-    warning("No image files provided")
-    return(NULL)
-  }
-
-  # Ensure files exist
-  existing_files <- image_files[file.exists(image_files)]
-  if (length(existing_files) == 0) {
-    warning("None of the provided image files exist")
-    return(NULL)
-  }
-
-  tryCatch({
-    # Load images using cytomapper
-    image_list <- cytomapper::loadImages(existing_files, pattern = NULL)
-
-    # Set names if provided
-    if (!is.null(names) && length(names) == length(existing_files)) {
-      names(image_list) <- names
-    } else {
-      # Use case IDs from filenames
-      names(image_list) <- gsub(".*_([0-9]{4})\\..*", "\\1", basename(existing_files))
-    }
-
-    cat(sprintf("[CYTOMAPPER] Loaded %d image(s)\n", length(image_list)))
-    image_list
-  }, error = function(e) {
-    warning(sprintf("Error loading images: %s", e$message))
-    NULL
-  })
-}
-
-# Get available cases from local_images directory
-get_available_cases <- function(image_dir = file.path("www", "local_images")) {
-  if (!dir.exists(image_dir)) {
-    return(character(0))
-  }
-
-  image_files <- list.files(image_dir, pattern = "\\.ome\\.tiff?$",
-                            ignore.case = TRUE, full.names = FALSE)
-
-  # Extract case IDs from filenames
-  case_ids <- gsub(".*_([0-9]{4})\\..*", "\\1", image_files)
-  case_ids <- unique(case_ids[grepl("^[0-9]{4}$", case_ids)])
-
-  sort(case_ids)
-}
-
-# Find image file for a specific case
-find_image_file <- function(case_id, image_dir = file.path("www", "local_images")) {
-  if (!dir.exists(image_dir)) {
-    return(NULL)
-  }
-
-  pattern <- sprintf(".*%s.*\\.ome\\.tiff?$", case_id)
-  image_files <- list.files(image_dir, pattern = pattern,
-                            ignore.case = TRUE, full.names = TRUE)
-
-  if (length(image_files) > 0) {
-    return(image_files[1])
-  }
-  NULL
-}
-
-
 
 safe_read_sheet <- function(path, sheet) {
   # Increase guess_max to reduce type misguesses on sparse columns
@@ -4888,111 +4808,104 @@ server <- function(input, output, session) {
 
   # Vitessce embed
   # Image picker for local OME-TIFFs under www/local_images (preferred) or LOCAL_IMAGE_ROOT fallback
-  # ===== Viewer Tab Server Logic =====
-  
-  # Image picker and channel selector for Viewer tab
   output$local_image_picker <- renderUI({
+    # Only render when on Viewer tab
     if (is.null(input$tabs) || input$tabs != "Viewer") {
       return(NULL)
     }
-
-    cases <- get_available_cases()
-
-    if (length(cases) == 0) {
-      return(div(
-        style = "padding: 20px; background: #ffe0e0; border-left: 4px solid #ff6b6b; border-radius: 5px;",
-        h4("No Images Found"),
-        p("No OME-TIFF images found in www/local_images/")
+    
+    vi <- viewer_info()
+    cat("[VIEWER RENDER] Base:", vi$base, "Image URL:", vi$image_url, "\n")
+    cat("[VIEWER RENDER] Full iframe src:", vi$iframe_src, "\n")
+    
+    if (is.null(vi$base)) {
+      return(tagList(
+        tags$div(style = "color:#b00;", "Local Avivator static build not found under shiny/www/avivator."),
+        tags$div(style = "color:#666; font-size:90%;", "To install: run scripts/install_avivator.sh (requires Node ≥ 18) or place a prebuilt bundle under shiny/www/avivator.")
       ))
     }
-
-    # Default channels to display
-    default_channels <- c("DAPI", "INS", "GCG", "SST", "CD31")
-    available_defaults <- intersect(default_channels, channel_names)
-    if (length(available_defaults) == 0 && length(channel_names) > 0) {
-      available_defaults <- head(channel_names, 3)
+    
+    # Build list of available images
+    available_images <- character(0)
+    images_dir <- file.path("www", "local_images")
+    if (dir.exists(images_dir)) {
+      image_files <- list.files(images_dir, pattern = "\\.ome\\.tiff?$", ignore.case = TRUE)
+      available_images <- c(available_images, image_files)
     }
-
-    wellPanel(
-      h4("Image Selection"),
-      selectInput("viewer_case", "Select Donor Case:",
-                  choices = c("Select a case..." = "", cases),
-                  selected = ""),
-      hr(),
-      h5("Select Channels to Display"),
-      p(style = "font-size: 90%; color: #666;", "(Maximum 6 channels)"),
-      checkboxGroupInput(
-        "viewer_channels",
-        NULL,
-        choices = channel_names,
-        selected = available_defaults
-      ),
-      hr(),
-      actionButton("refresh_viewer", "Refresh Image", class = "btn-primary btn-sm")
+    
+    # Also check LOCAL_IMAGE_ROOT if set
+    local_root <- Sys.getenv("LOCAL_IMAGE_ROOT", unset = "")
+    if (nzchar(local_root) && dir.exists(local_root)) {
+      root_files <- list.files(local_root, pattern = "\\.ome\\.tiff?$", ignore.case = TRUE)
+      available_images <- unique(c(available_images, root_files))
+    }
+    
+    # Check if image is accessible and not too large for web serving
+    if (!is.null(vi$image_url)) {
+      image_basename <- basename(vi$image_url)
+      local_image_path <- file.path("www", "local_images", image_basename)
+      file_exists <- file.exists(local_image_path)
+      
+      cat("[VIEWER DEBUG] Looking for image file:", local_image_path, "Exists:", file_exists, "\n")
+      
+      if (file_exists) {
+        # Log file size for debugging
+        file_size <- file.info(local_image_path)$size
+        file_size_gb <- round(file_size / (1024^3), 2)
+        cat("[VIEWER DEBUG] Image size:", file_size_gb, "GB\n")
+      }
+    }
+    
+    # Determine current selection
+    current_selection <- if (!is.null(forced_image())) {
+      forced_image()
+    } else if (!is.null(input$selected_image)) {
+      input$selected_image
+    } else if (length(available_images) > 0) {
+      available_images[1]
+    } else {
+      NULL
+    }
+    
+    # Build UI with dropdown if images are available
+    tagList(
+      if (length(available_images) > 0) {
+        fluidRow(
+          column(12,
+            selectInput(
+              "selected_image",
+              "Select Image:",
+              choices = available_images,
+              selected = current_selection,
+              width = "100%"
+            )
+          )
+        )
+      } else {
+        tags$div(
+          style = "padding: 10px; background-color: #fff3cd; border: 1px solid #ffc107; margin-bottom: 10px;",
+          tags$strong("No images found."),
+          " Place OME-TIFF files in ",
+          tags$code("app/shiny_app/www/local_images/"),
+          " or set ",
+          tags$code("LOCAL_IMAGE_ROOT"),
+          " environment variable."
+        )
+      },
+      tags$iframe(
+        id = "avivator_viewer",
+        src = vi$iframe_src,
+        width = "100%",
+        frameBorder = 0,
+        allowfullscreen = NA,
+        style = "width:100%; height:calc(100vh - 180px); border:0;"
+      )
     )
   })
+
   
-  # Render cytoviewer plot
-  output$vit_view <- renderPlot({
-    req(input$viewer_case, input$viewer_channels)
-
-    image_file <- find_image_file(input$viewer_case)
-    if (is.null(image_file)) {
-      plot.new()
-      text(0.5, 0.5, sprintf("Image not found for case %s", input$viewer_case),
-           cex = 1.5, col = "red")
-      return()
-    }
-
-    # Load as CytoImageList
-    img_list <- load_cytoimagelist(image_file, names = input$viewer_case)
-
-    if (is.null(img_list)) {
-      plot.new()
-      text(0.5, 0.5, "Error loading image",
-           cex = 1.5, col = "red")
-      return()
-    }
-
-    # Check if cytomapper is available
-    if (!requireNamespace("cytomapper", quietly = TRUE)) {
-      plot.new()
-      text(0.5, 0.5, "cytomapper package not installed\nRun: BiocManager::install('cytomapper')",
-           cex = 1.2, col = "red")
-      return()
-    }
-
-    # Get selected channels
-    selected_chans <- input$viewer_channels
-    if (is.null(selected_chans) || length(selected_chans) == 0) {
-      plot.new()
-      text(0.5, 0.5, "Please select at least one channel to display",
-           cex = 1.2, col = "gray")
-      return()
-    }
-
-    # Limit to 6 channels for display
-    if (length(selected_chans) > 6) {
-      selected_chans <- selected_chans[1:6]
-    }
-
-    tryCatch({
-      # Use plotPixels to display the image
-      cytomapper::plotPixels(
-        image = img_list,
-        colour_by = selected_chans,
-        bcg = lapply(selected_chans, function(x) c(0, 1, 1.5)),
-        legend = list(colour_by.title.cex = 0.7,
-                     colour_by.labels.cex = 0.6),
-        return_plot = FALSE
-      )
-    }, error = function(e) {
-      plot.new()
-      text(0.5, 0.5, sprintf("Error displaying image:\n%s", e$message),
-           cex = 1, col = "red")
-    })
-  }, height = 700, width = 1200)
-
+  # Pseudotime scatter when counts are selected (scaled counts vs pseudotime)
+  # Distribution plot UI (violin/box)
   output$dist_ui <- renderUI({
     tagList(
       fluidRow(
