@@ -45,3 +45,5 @@ AI_Markdown/
 analysis_output/
 app/shiny_app/www/LabelExports/
 app/shiny_app/www/vitessce_data/
+app/shiny_app/www/vitessce_libs/
+app/shiny_app/www/segmentation_data/
