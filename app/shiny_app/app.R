@@ -2326,7 +2326,7 @@ ui <- fluidPage(
         tabPanel("Viewer",
           div(style = "width: 100%;",
               uiOutput("local_image_picker"),
-              uiOutput("vit_view")
+              uiOutput("avivator_view")
           )
         ),
         
@@ -4125,39 +4125,25 @@ server <- function(input, output, session) {
     cat("[VIEWER] === End Selection Debug ===\n")
     
     if (!is.null(sel_basename) && nzchar(sel_basename)) {
-      # Build URL based on environment
-      if (env_info$is_reverse_proxy) {
-        # Reverse proxy setup: use full pathname
-        appPath <- session$clientData$url_pathname
-        if (is.null(appPath) || !nzchar(appPath)) appPath <- "/"
-        if (!grepl("/$", appPath)) appPath <- paste0(appPath, "/")
-        sel_url <- paste0(appPath, "local_images/", sel_basename)
-        cat("[VIEWER] Using reverse proxy URL:", sel_url, "\n")
-      } else {
-        # Local setup: Check if we have www/local_images or need resource path
-        www_local_images_dir <- file.path("www", "local_images")
-        if (dir.exists(www_local_images_dir)) {
-          # Images are in www/local_images, use same path as remote for consistency
-          sel_url <- paste0("local_images/", sel_basename)
-          cat("[VIEWER] Using local www URL:", sel_url, "\n")
-        } else {
-          # Fall back to resource path with different name to avoid conflict
-          sel_url <- paste0("images/", sel_basename)
-          cat("[VIEWER] Using resource path URL:", sel_url, "\n")
-        }
-      }
+      # Always build an app-absolute URL so it works with reverse proxies and locally
+      appPath <- session$clientData$url_pathname
+      if (is.null(appPath) || !nzchar(appPath)) appPath <- "/"
+      if (!grepl("/$", appPath)) appPath <- paste0(appPath, "/")
+      sel_url <- paste0(appPath, "local_images/", sel_basename)
+      cat("[VIEWER] Using app-absolute URL:", sel_url, "\n")
     } else if (!is.null(default_image_url) && nzchar(default_image_url)) {
       sel_url <- default_image_url
     }
     if (!is.null(sel_url)) {
+      # Keep '/' and other reserved chars unencoded so path stays valid
       params[["image_url"]] <- utils::URLencode(sel_url, reserved = TRUE)
       info$image_url <- sel_url
     }
     # Channel config based on Channel_names mapping (base64-encoded per viewer expectation)
     ch_b64 <- tryCatch(build_channel_config_b64(channel_names_vec), error = function(e) NULL)
     if (!is.null(ch_b64) && nzchar(ch_b64)) {
-      # URL-encode to be safe; the viewer will decodeURIComponent before atob as needed
-      params[["channel_config"]] <- utils::URLencode(ch_b64, reserved = TRUE)
+      # Encode reserved chars so '+' '/' '=' are safe inside query parameter
+      params[["channel_config"]] <- utils::URLencode(ch_b64, reserved = FALSE)
     }
     
     query <- NULL
@@ -4168,6 +4154,36 @@ server <- function(input, output, session) {
     info$iframe_src <- if (!is.null(query)) paste0(base, "?", query) else base
     info$ok <- TRUE
     info
+  })
+
+  # Avivator iframe for remote-friendly viewing (uses reverse-proxy-safe URLs)
+  output$avivator_view <- renderUI({
+    if (is.null(input$tabs) || input$tabs != "Viewer") return(NULL)
+
+    vi <- viewer_info()
+    if (is.null(vi$base)) {
+      return(div(
+        style = "padding: 12px; background:#fff3cd; border-left:4px solid #ffc107; border-radius:6px; margin-bottom:10px;",
+        strong("Avivator bundle not found."),
+        p(style = "margin:6px 0 0 0;", "Install the static viewer with scripts/install_avivator.sh to enable browser-based viewing.")
+      ))
+    }
+
+    if (!isTRUE(vi$ok)) return(NULL)
+
+    tagList(
+      div(
+        style = "margin: 10px 0;",
+        tags$label("Avivator (web viewer)"),
+        tags$iframe(
+          src = vi$iframe_src,
+          style = "width: 100%; height: 720px; border: 1px solid #ddd; border-radius: 4px;",
+          allow = "fullscreen"
+        ),
+        if (!is.null(vi$image_url))
+          tags$div(style = "font-size: 11px; color:#666; margin-top:6px;", paste("Image:", vi$image_url))
+      )
+    )
   })
 
   observe({
@@ -4892,13 +4908,10 @@ server <- function(input, output, session) {
   
   # Image picker and channel selector for Viewer tab
   output$local_image_picker <- renderUI({
-    if (is.null(input$tabs) || input$tabs != "Viewer") {
-      return(NULL)
-    }
+    if (is.null(input$tabs) || input$tabs != "Viewer") return(NULL)
 
-    cases <- get_available_cases()
-
-    if (length(cases) == 0) {
+    img_dir <- file.path("www", "local_images")
+    if (!dir.exists(img_dir)) {
       return(div(
         style = "padding: 20px; background: #ffe0e0; border-left: 4px solid #ff6b6b; border-radius: 5px;",
         h4("No Images Found"),
@@ -4906,29 +4919,23 @@ server <- function(input, output, session) {
       ))
     }
 
-    # Default channels to display
-    default_channels <- c("DAPI", "INS", "GCG", "SST", "CD31")
-    available_defaults <- intersect(default_channels, channel_names)
-    if (length(available_defaults) == 0 && length(channel_names) > 0) {
-      available_defaults <- head(channel_names, 3)
+    imgs <- list.files(img_dir, pattern = "\\.ome\\.tiff?$", ignore.case = TRUE, full.names = FALSE)
+    if (!length(imgs)) {
+      return(div(
+        style = "padding: 20px; background: #ffe0e0; border-left: 4px solid #ff6b6b; border-radius: 5px;",
+        h4("No Images Found"),
+        p("No OME-TIFF images found in www/local_images/")
+      ))
     }
 
     wellPanel(
       h4("Image Selection"),
-      selectInput("viewer_case", "Select Donor Case:",
-                  choices = c("Select a case..." = "", cases),
-                  selected = ""),
-      hr(),
-      h5("Select Channels to Display"),
-      p(style = "font-size: 90%; color: #666;", "(Maximum 6 channels)"),
-      checkboxGroupInput(
-        "viewer_channels",
-        NULL,
-        choices = channel_names,
-        selected = available_defaults
-      ),
-      hr(),
-      actionButton("refresh_viewer", "Refresh Image", class = "btn-primary btn-sm")
+      selectInput(
+        "selected_image",
+        "Select Image:",
+        choices = imgs,
+        selected = if (length(imgs)) imgs[[1]] else ""
+      )
     )
   })
   
