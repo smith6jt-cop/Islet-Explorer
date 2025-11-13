@@ -127,13 +127,13 @@ if (!is.null(local_images_root) && dir.exists(local_images_root)) {
   }, silent = TRUE)
 }
 
-# Register resource paths for viewer URLs
-if (has_www_local_images) {
+# Avoid registering resource paths that shadow existing www/ subdirectories.
+# When www/local_images exists, Shiny serves it directly at /local_images,
+# so adding a resource path with the same name triggers a conflict warning.
+if (!has_www_local_images && !is.null(local_images_root) && dir.exists(local_images_root)) {
   try({
-    # Register both paths: local_images for remote compatibility, viewer_images for local
-    shiny::addResourcePath("local_images", file.path("www", "local_images"))
-    shiny::addResourcePath("viewer_images", file.path("www", "local_images"))
-    cat("[SETUP] Registered /local_images and /viewer_images -> www/local_images\n")
+    shiny::addResourcePath("local_images", local_images_root)
+    cat("[SETUP] Registered /local_images ->", local_images_root, "(dynamic)\n")
   }, silent = TRUE)
 }
 
@@ -1660,38 +1660,31 @@ server <- function(input, output, session) {
     # Selection from UI (basename only)
     sel_basename <- tryCatch(input$selected_image, silent = TRUE)
     if (!is.null(sel_basename) && nzchar(sel_basename)) {
-      # Build URL based on environment
-      if (env_info$is_reverse_proxy) {
-        # Reverse proxy setup: use full pathname
-        appPath <- session$clientData$url_pathname
-        if (is.null(appPath) || !nzchar(appPath)) appPath <- "/"
-        if (!grepl("/$", appPath)) appPath <- paste0(appPath, "/")
+      # Build an app-absolute URL so it resolves correctly from /avivator/
+      appPath <- session$clientData$url_pathname
+      if (is.null(appPath) || !nzchar(appPath)) appPath <- "/"
+      if (!grepl("/$", appPath)) appPath <- paste0(appPath, "/")
+      # Prefer static www/local_images when present; else use dynamic /images resource
+      www_local_images_dir <- file.path("www", "local_images")
+      if (dir.exists(www_local_images_dir)) {
         sel_url <- paste0(appPath, "local_images/", sel_basename)
-        cat("[VIEWER] Using reverse proxy URL:", sel_url, "\n")
+        cat("[VIEWER] Using app-absolute www URL:", sel_url, "\n")
       } else {
-        # Local setup: Check if we have www/local_images or need resource path
-        www_local_images_dir <- file.path("www", "local_images")
-        if (dir.exists(www_local_images_dir)) {
-          # Images are in www/local_images, use same path as remote for consistency
-          sel_url <- paste0("local_images/", sel_basename)
-          cat("[VIEWER] Using local www URL:", sel_url, "\n")
-        } else {
-          # Fall back to resource path with different name to avoid conflict
-          sel_url <- paste0("images/", sel_basename)
-          cat("[VIEWER] Using resource path URL:", sel_url, "\n")
-        }
+        sel_url <- paste0(appPath, "images/", sel_basename)
+        cat("[VIEWER] Using app-absolute resource URL:", sel_url, "\n")
       }
     } else if (!is.null(default_image_url) && nzchar(default_image_url)) {
       sel_url <- default_image_url
     }
     if (!is.null(sel_url)) {
-      params[["image_url"]] <- utils::URLencode(sel_url, reserved = TRUE)
+      # Keep slashes unencoded so relative paths stay readable by the viewer
+      params[["image_url"]] <- utils::URLencode(sel_url, reserved = FALSE)
       info$image_url <- sel_url
     }
     # Channel config based on Channel_names mapping (base64-encoded per viewer expectation)
     ch_b64 <- tryCatch(build_channel_config_b64(channel_names_vec), error = function(e) NULL)
     if (!is.null(ch_b64) && nzchar(ch_b64)) {
-      # URL-encode to be safe; the viewer will decodeURIComponent before atob as needed
+      # Encode base64 for transport; viewer decodes via decodeURIComponent + atob
       params[["channel_config"]] <- utils::URLencode(ch_b64, reserved = TRUE)
     }
     query <- NULL
