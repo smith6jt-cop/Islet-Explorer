@@ -7,6 +7,24 @@ gson/
 
 app/shiny_app/www/local_images/
 local_images/
+app/shiny_app/www/segmentation_data/
+AI_Markdown/
+analysis_output/*
+
+# R workspace and environment files
+.RData
+.Rhistory
+app/shiny_app/.Renviron
+.Renviron
+
+# Organized script directories (duplicates for organization)
+scripts/Python/
+scripts/R_files/
+scripts/Shell_scripts/
+
+# Temporary files
+tmp/
+
 # Virtual environments and caches
 .venv*/
 venv*/
