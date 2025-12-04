@@ -302,7 +302,7 @@ Three normalized region types:
 ### Islet Diameter
 Calculated from CORE region area:
 ```
-islet_diam_um = 2 * sqrt(core_region_um2 / π)
+islet_diam_um = 2 * sqrt(core_region_um2 / pi)
 ```
 
 ### Region Synthesis
