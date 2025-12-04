@@ -27,7 +27,7 @@ from utils.plotting import (
 )
 from utils.statistics import StatisticalAnalyzer, create_results_table, format_p_value
 from components.ai_assistant import create_ai_assistant, AIAssistantPanel
-from components.image_viewer import create_image_viewer, ImageViewerPanel
+from components.image_viewer import create_image_viewer, ImageViewerPanel, get_static_dirs
 
 # Initialize Panel extensions
 pn.extension(
@@ -848,6 +848,9 @@ def create_app():
     return app.create_app()
 
 
+# Get static directories for AVIVATOR and images
+STATIC_DIRS = get_static_dirs()
+
 # For panel serve
 if pn.state.served:
     create_app().servable(title="Islet Explorer")
@@ -855,4 +858,11 @@ if pn.state.served:
 # For direct execution
 if __name__ == "__main__":
     app = create_app()
-    pn.serve(app, port=8080, show=True, title="Islet Explorer")
+    pn.serve(
+        app,
+        port=8080,
+        show=True,
+        title="Islet Explorer",
+        static_dirs=STATIC_DIRS,
+        allow_websocket_origin=["*"]
+    )
