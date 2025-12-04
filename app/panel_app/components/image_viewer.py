@@ -240,16 +240,26 @@ class ImageViewerPanel:
 
     def _get_viewer_html(self, image_url: str, use_local_avivator: bool = True) -> str:
         """Get HTML to embed Avivator viewer with image."""
+        from urllib.parse import quote
+
+        # Get base URL for constructing absolute paths
+        try:
+            import panel as pn
+            if hasattr(pn.state, 'location') and pn.state.location:
+                base_url = f"{pn.state.location.protocol}//{pn.state.location.host}"
+            else:
+                base_url = "http://localhost:8080"
+        except:
+            base_url = "http://localhost:8080"
 
         # Determine which AVIVATOR to use
         if use_local_avivator and self._avivator_available:
-            avivator_base = "/avivator/index.html"
+            avivator_base = f"{base_url}/avivator/index.html"
         else:
             # Fall back to public AVIVATOR
             avivator_base = "https://avivator.gehlenborglab.org/"
 
         # Encode the URL properly
-        from urllib.parse import quote
         encoded_url = quote(image_url, safe='')
 
         return f"""
@@ -272,8 +282,21 @@ class ImageViewerPanel:
     def _on_image_select(self, event):
         """Handle local image selection."""
         if event.new and event.new != "-- Select local image --":
-            # Use relative URL for local images
-            image_url = f"/images/{event.new}"
+            # Construct absolute URL for local images
+            # AVIVATOR needs full URL, not relative path
+            try:
+                # Get the current server URL from Panel state
+                import panel as pn
+                if hasattr(pn.state, 'location') and pn.state.location:
+                    base_url = f"{pn.state.location.protocol}//{pn.state.location.host}"
+                else:
+                    # Fallback to localhost
+                    base_url = "http://localhost:8080"
+            except:
+                base_url = "http://localhost:8080"
+
+            image_url = f"{base_url}/images/{event.new}"
+            print(f"[ImageViewer] Loading image: {image_url}")
             self.viewer_pane.object = self._get_viewer_html(image_url, use_local_avivator=True)
             self.url_input.value = ""
         elif not self.url_input.value:

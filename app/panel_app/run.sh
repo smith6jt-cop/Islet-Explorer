@@ -47,6 +47,7 @@ echo "============================================"
 echo "Mode: $MODE"
 echo "Data path: $ISLET_DATA_PATH"
 echo "Server: http://$HOST:$PORT"
+echo "Static args: $STATIC_ARGS"
 echo "============================================"
 
 cd "$SCRIPT_DIR"
