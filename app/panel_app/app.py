@@ -864,18 +864,65 @@ def get_static_dirs():
 
 STATIC_DIRS = get_static_dirs()
 
-# For panel serve
+
+# Custom static handler with CORS support for AVIVATOR
+from tornado.web import StaticFileHandler
+
+class CORSStaticHandler(StaticFileHandler):
+    """Static file handler with CORS headers for AVIVATOR."""
+
+    def set_default_headers(self):
+        self.set_header("Access-Control-Allow-Origin", "*")
+        self.set_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+        self.set_header("Access-Control-Allow-Headers", "Range, Accept-Encoding")
+        self.set_header("Access-Control-Expose-Headers", "Content-Length, Content-Range, Accept-Ranges")
+        self.set_header("Accept-Ranges", "bytes")
+
+    def options(self, *args):
+        self.set_status(204)
+        self.finish()
+
+
+def modify_doc(doc):
+    """Add CORS routes to the Bokeh document."""
+    pass
+
+
+# For panel serve - add CORS routes
 if pn.state.served:
     create_app().servable(title="Islet Explorer")
 
+    # Add CORS static handler for images
+    def add_cors_routes(server):
+        from bokeh.server.tornado import BokehTornado
+        image_dir = STATIC_DIRS.get("/images")
+        if image_dir:
+            server._tornado.add_handlers(
+                r".*",
+                [(r"/images/(.*)", CORSStaticHandler, {"path": image_dir})]
+            )
+            print(f"[CORS] Added CORS handler for /images/ -> {image_dir}")
+
+    pn.state.on_session_created(lambda ctx: None)  # Placeholder
+
 # For direct execution
 if __name__ == "__main__":
+    from bokeh.server.server import Server
+
     app = create_app()
+
+    # Custom server setup with CORS
+    image_dir = STATIC_DIRS.get("/images")
+    extra_patterns = []
+    if image_dir:
+        extra_patterns.append((r"/images/(.*)", CORSStaticHandler, {"path": image_dir}))
+        print(f"[CORS] Serving images with CORS from: {image_dir}")
+
     pn.serve(
         app,
         port=8080,
         show=True,
         title="Islet Explorer",
-        static_dirs=STATIC_DIRS,
+        extra_patterns=extra_patterns,
         allow_websocket_origin=["*"]
     )
