@@ -853,11 +853,17 @@ def get_static_dirs():
     # Check for images directory
     env_root = os.environ.get("LOCAL_IMAGE_ROOT", "")
     if env_root and Path(env_root).exists():
-        static_dirs["/images"] = env_root
+        static_dirs["images"] = env_root
     else:
         local_images = Path(__file__).parent / "local_images"
         if local_images.exists():
-            static_dirs["/images"] = str(local_images)
+            static_dirs["images"] = str(local_images)
+
+    # Check for avivator directory
+    avivator_dir = Path(__file__).parent / "assets" / "avivator"
+    if avivator_dir.exists():
+        static_dirs["avivator"] = str(avivator_dir)
+
     return static_dirs
 
 STATIC_DIRS = get_static_dirs()
@@ -888,15 +894,19 @@ def modify_doc(doc):
 if pn.state.served:
     create_app().servable(title="Islet Explorer")
 
-    # Add CORS static handler for images
-    def add_cors_routes(server):
-        image_dir = STATIC_DIRS.get("/images")
+    # Add static handlers for images and avivator
+    def add_static_routes(server):
+        image_dir = STATIC_DIRS.get("images")
+        avivator_dir = STATIC_DIRS.get("avivator")
+        handlers = []
         if image_dir:
-            server._tornado.add_handlers(
-                r".*",
-                [(r"/images/(.*)", CORSStaticHandler, {"path": image_dir})]
-            )
-            print(f"[CORS] Added CORS handler for /images/ -> {image_dir}")
+            handlers.append((r"/images/(.*)", CORSStaticHandler, {"path": image_dir}))
+            print(f"[CORS] Added handler for /images/ -> {image_dir}")
+        if avivator_dir:
+            handlers.append((r"/avivator/(.*)", StaticFileHandler, {"path": avivator_dir}))
+            print(f"[Static] Added handler for /avivator/ -> {avivator_dir}")
+        if handlers:
+            server._tornado.add_handlers(r".*", handlers)
 
     pn.state.on_session_created(lambda ctx: None)  # Placeholder
 
@@ -905,17 +915,25 @@ if __name__ == "__main__":
 
     app = create_app()
 
-    # Custom server setup with CORS
-    image_dir = STATIC_DIRS.get("/images")
+    # Custom server setup with CORS for images and local AVIVATOR
     extra_patterns = []
+
+    # Serve images with CORS
+    image_dir = STATIC_DIRS.get("images")
     if image_dir:
         extra_patterns.append((r"/images/(.*)", CORSStaticHandler, {"path": image_dir}))
-        print(f"[CORS] Serving images with CORS from: {image_dir}")
+        print(f"[CORS] Serving images from: {image_dir}")
+
+    # Serve local AVIVATOR (same origin = no CORS issues)
+    avivator_dir = STATIC_DIRS.get("avivator")
+    if avivator_dir:
+        extra_patterns.append((r"/avivator/(.*)", StaticFileHandler, {"path": avivator_dir}))
+        print(f"[Static] Serving AVIVATOR from: {avivator_dir}")
 
     pn.serve(
         app,
         port=8080,
-        show=True,
+        show=False,
         title="Islet Explorer",
         extra_patterns=extra_patterns,
         allow_websocket_origin=["*"]

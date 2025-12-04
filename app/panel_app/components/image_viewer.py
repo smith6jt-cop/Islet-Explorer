@@ -12,9 +12,7 @@ import panel as pn
 PANEL_APP_DIR = Path(__file__).parent.parent
 ASSETS_DIR = PANEL_APP_DIR / "assets"
 LOCAL_IMAGES_DIR = PANEL_APP_DIR / "local_images"
-
-# Public AVIVATOR URL
-AVIVATOR_URL = "https://avivator.gehlenborglab.org/"
+AVIVATOR_DIR = ASSETS_DIR / "avivator"
 
 
 def get_local_images(image_dir: Optional[Path] = None) -> List[str]:
@@ -59,6 +57,13 @@ def get_image_dir() -> Optional[Path]:
     return None
 
 
+def get_avivator_dir() -> Optional[Path]:
+    """Get the AVIVATOR directory path."""
+    if AVIVATOR_DIR.exists():
+        return AVIVATOR_DIR
+    return None
+
+
 class ImageViewerPanel:
     """Panel-based image viewer using AVIVATOR."""
 
@@ -66,6 +71,7 @@ class ImageViewerPanel:
         self.available_images = get_local_images()
         self._images_available = len(self.available_images) > 0
         self._image_dir = get_image_dir()
+        self._avivator_dir = get_avivator_dir()
 
         # Create widgets
         self.image_selector = pn.widgets.Select(
@@ -101,10 +107,16 @@ class ImageViewerPanel:
 
     def _get_status_text(self) -> str:
         """Get status text showing available resources."""
-        if self._images_available:
-            return f"Found {len(self.available_images)} images in {self._image_dir}"
+        status = []
+        if self._avivator_dir:
+            status.append("AVIVATOR: Local")
         else:
-            return "No images found. Set LOCAL_IMAGE_ROOT environment variable."
+            status.append("AVIVATOR: Not found")
+        if self._images_available:
+            status.append(f"Images: {len(self.available_images)}")
+        else:
+            status.append("Images: None")
+        return " | ".join(status)
 
     def _get_placeholder_html(self) -> str:
         """Get placeholder HTML when no image is selected."""
@@ -137,12 +149,15 @@ class ImageViewerPanel:
     def _get_viewer_html(self, image_url: str) -> str:
         """Get HTML to embed Avivator viewer with image."""
         from urllib.parse import quote
+
+        # Use LOCAL AVIVATOR served from same origin - no CORS issues
+        avivator_base = "/avivator/index.html"
         encoded_url = quote(image_url, safe='')
 
         return f"""
         <iframe
             id="avivator-frame"
-            src="{AVIVATOR_URL}?url={encoded_url}"
+            src="{avivator_base}?url={encoded_url}"
             style="
                 width: 100%;
                 height: 100%;
@@ -158,21 +173,10 @@ class ImageViewerPanel:
     def _on_image_select(self, event):
         """Handle image selection."""
         if event.new and event.new != "-- Select an image --":
-            # Construct FULL absolute URL for the image
-            # Public AVIVATOR needs complete URL to fetch the image
-            try:
-                if pn.state.location:
-                    protocol = pn.state.location.protocol or "http:"
-                    host = pn.state.location.host or "localhost:8080"
-                    base_url = f"{protocol}//{host}"
-                else:
-                    base_url = "http://localhost:8080"
-            except Exception:
-                base_url = "http://localhost:8080"
-
-            image_url = f"{base_url}/images/{event.new}"
+            # Use relative URL - both AVIVATOR and images served from same origin
+            image_url = f"/images/{event.new}"
             print(f"[ImageViewer] Selected: {event.new}")
-            print(f"[ImageViewer] Full URL: {image_url}")
+            print(f"[ImageViewer] URL: {image_url}")
             self.viewer_pane.object = self._get_viewer_html(image_url)
         else:
             self.viewer_pane.object = self._get_placeholder_html()
