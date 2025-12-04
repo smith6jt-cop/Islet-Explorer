@@ -29,11 +29,17 @@ DEFAULT_CHANNELS = [
     {"name": "SST", "color": "#F59E0B", "visible": True, "index": 13},
 ]
 
+# Paths
+PANEL_APP_DIR = Path(__file__).parent.parent
+SHINY_APP_DIR = PANEL_APP_DIR.parent / "shiny_app"
+AVIVATOR_DIR = SHINY_APP_DIR / "www" / "avivator"
+LOCAL_IMAGES_DIR = SHINY_APP_DIR / "www" / "local_images"
+
 
 def load_channel_names(channel_file: Optional[str] = None) -> Dict[int, str]:
     """Load channel names from file."""
     if channel_file is None:
-        channel_file = Path(__file__).parent.parent.parent / "shiny_app" / "Channel_names"
+        channel_file = SHINY_APP_DIR / "Channel_names"
 
     channel_names = {}
     try:
@@ -57,24 +63,20 @@ def load_channel_names(channel_file: Optional[str] = None) -> Dict[int, str]:
     return channel_names
 
 
-def get_local_images(image_dir: Optional[str] = None) -> List[str]:
+def get_local_images(image_dir: Optional[Path] = None) -> List[str]:
     """Get list of available local OME-TIFF images."""
     if image_dir is None:
         # Check multiple locations
         locations = [
-            Path(__file__).parent.parent.parent / "shiny_app" / "www" / "local_images",
+            LOCAL_IMAGES_DIR,
             Path(os.environ.get("LOCAL_IMAGE_ROOT", "")),
         ]
         for loc in locations:
-            if loc.exists() and loc.is_dir():
+            if loc and loc.exists() and loc.is_dir():
                 image_dir = loc
                 break
 
-    if image_dir is None:
-        return []
-
-    image_dir = Path(image_dir)
-    if not image_dir.exists():
+    if image_dir is None or not image_dir.exists():
         return []
 
     # Find OME-TIFF files
@@ -83,6 +85,26 @@ def get_local_images(image_dir: Optional[str] = None) -> List[str]:
         images.extend(image_dir.glob(ext))
 
     return sorted([img.name for img in images])
+
+
+def get_static_dirs() -> Dict[str, str]:
+    """Get static directory mappings for Panel server."""
+    static_dirs = {}
+
+    # AVIVATOR viewer
+    if AVIVATOR_DIR.exists():
+        static_dirs["/avivator"] = str(AVIVATOR_DIR)
+
+    # Local images
+    if LOCAL_IMAGES_DIR.exists():
+        static_dirs["/images"] = str(LOCAL_IMAGES_DIR)
+
+    # Check environment variable for images
+    env_image_root = os.environ.get("LOCAL_IMAGE_ROOT")
+    if env_image_root and Path(env_image_root).exists():
+        static_dirs["/images"] = env_image_root
+
+    return static_dirs
 
 
 def create_channel_config(channels: List[Dict]) -> str:
@@ -102,23 +124,34 @@ def create_channel_config(channels: List[Dict]) -> str:
 class ImageViewerPanel:
     """Panel-based image viewer using Avivator."""
 
-    def __init__(
-        self,
-        avivator_url: str = "/avivator/",
-        image_base_url: str = "/images/"
-    ):
-        self.avivator_url = avivator_url
-        self.image_base_url = image_base_url
+    def __init__(self):
         self.channel_names = load_channel_names()
         self.available_images = get_local_images()
+        self._avivator_available = AVIVATOR_DIR.exists()
+        self._images_available = len(self.available_images) > 0
+
+        # URL input for external images
+        self.url_input = pn.widgets.TextInput(
+            name="Image URL",
+            placeholder="Enter OME-TIFF URL (http:// or https://)",
+            width=400
+        )
 
         # Create widgets
         self.image_selector = pn.widgets.Select(
-            name="Select Image",
-            options=["-- Select an image --"] + self.available_images,
-            value="-- Select an image --",
-            width=300
+            name="Local Images",
+            options=["-- Select local image --"] + self.available_images,
+            value="-- Select local image --",
+            width=300,
+            disabled=not self._images_available
         )
+
+        self.load_url_button = pn.widgets.Button(
+            name="Load URL",
+            button_type="primary",
+            width=100
+        )
+        self.load_url_button.on_click(self._on_load_url)
 
         self.refresh_button = pn.widgets.Button(
             name="Refresh",
@@ -127,46 +160,36 @@ class ImageViewerPanel:
         )
         self.refresh_button.on_click(self._refresh_images)
 
-        # Channel visibility controls
-        self.channel_controls = self._create_channel_controls()
-
         # Viewer pane
         self.viewer_pane = pn.pane.HTML(
             self._get_placeholder_html(),
             sizing_mode="stretch_both",
-            min_height=600
+            min_height=700
+        )
+
+        # Status indicator
+        self.status_pane = pn.pane.Markdown(
+            self._get_status_text(),
+            styles={"font-size": "12px", "color": "#666"}
         )
 
         # Watch for image selection changes
         self.image_selector.param.watch(self._on_image_select, "value")
 
-    def _create_channel_controls(self) -> pn.Column:
-        """Create channel visibility controls."""
-        controls = []
+    def _get_status_text(self) -> str:
+        """Get status text showing available resources."""
+        status = []
+        if self._avivator_available:
+            status.append("AVIVATOR: Ready")
+        else:
+            status.append("AVIVATOR: Not found (using external)")
 
-        # Add default channels
-        for ch in DEFAULT_CHANNELS:
-            name = ch["name"]
-            color = ch["color"]
+        if self._images_available:
+            status.append(f"Local images: {len(self.available_images)}")
+        else:
+            status.append("Local images: None found")
 
-            checkbox = pn.widgets.Checkbox(
-                name=name,
-                value=ch["visible"],
-                styles={"color": color}
-            )
-            color_picker = pn.widgets.ColorPicker(
-                name="",
-                value=color,
-                width=40
-            )
-            row = pn.Row(checkbox, color_picker, sizing_mode="stretch_width")
-            controls.append(row)
-
-        return pn.Column(
-            pn.pane.Markdown("### Channel Controls"),
-            *controls,
-            width=200
-        )
+        return " | ".join(status)
 
     def _get_placeholder_html(self) -> str:
         """Get placeholder HTML when no image is selected."""
@@ -177,7 +200,7 @@ class ImageViewerPanel:
             align-items: center;
             justify-content: center;
             height: 100%;
-            min-height: 500px;
+            min-height: 600px;
             background: linear-gradient(135deg, #1e3a72 0%, #2c5aa0 100%);
             border-radius: 8px;
             color: white;
@@ -188,68 +211,114 @@ class ImageViewerPanel:
                 <circle cx="8.5" cy="8.5" r="1.5"/>
                 <path d="M21 15l-5-5L5 21"/>
             </svg>
-            <h2 style="margin-top: 20px; margin-bottom: 10px;">Image Viewer</h2>
-            <p style="opacity: 0.8; text-align: center; max-width: 400px;">
-                Select an OME-TIFF image from the dropdown above to visualize<br>
-                multiplex imaging data with channel controls.
+            <h2 style="margin-top: 20px; margin-bottom: 10px;">AVIVATOR Image Viewer</h2>
+            <p style="opacity: 0.8; text-align: center; max-width: 400px; line-height: 1.6;">
+                Select a local OME-TIFF image from the dropdown<br>
+                or enter a URL to an image hosted elsewhere.
+            </p>
+            <p style="opacity: 0.6; font-size: 12px; margin-top: 20px;">
+                Supports OME-TIFF and OME-Zarr formats
             </p>
         </div>
         """
 
-    def _get_viewer_html(self, image_name: str) -> str:
+    def _get_viewer_html(self, image_url: str, use_local_avivator: bool = True) -> str:
         """Get HTML to embed Avivator viewer with image."""
-        image_url = f"{self.image_base_url}{image_name}"
 
-        # Create channel config
-        channel_config = create_channel_config(DEFAULT_CHANNELS)
+        # Determine which AVIVATOR to use
+        if use_local_avivator and self._avivator_available:
+            avivator_base = "/avivator/index.html"
+        else:
+            # Fall back to public AVIVATOR
+            avivator_base = "https://avivator.gehlenborglab.org/"
+
+        # Encode the URL properly
+        from urllib.parse import quote
+        encoded_url = quote(image_url, safe='')
 
         return f"""
         <iframe
             id="avivator-frame"
-            src="{self.avivator_url}?url={image_url}"
+            src="{avivator_base}?url={encoded_url}"
             style="
                 width: 100%;
                 height: 100%;
-                min-height: 600px;
+                min-height: 700px;
                 border: none;
                 border-radius: 8px;
+                background: #000;
             "
             allow="fullscreen"
+            sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
         ></iframe>
         """
 
     def _on_image_select(self, event):
-        """Handle image selection."""
-        if event.new and event.new != "-- Select an image --":
-            self.viewer_pane.object = self._get_viewer_html(event.new)
-        else:
+        """Handle local image selection."""
+        if event.new and event.new != "-- Select local image --":
+            # Use relative URL for local images
+            image_url = f"/images/{event.new}"
+            self.viewer_pane.object = self._get_viewer_html(image_url, use_local_avivator=True)
+            self.url_input.value = ""
+        elif not self.url_input.value:
             self.viewer_pane.object = self._get_placeholder_html()
+
+    def _on_load_url(self, event):
+        """Handle URL load button click."""
+        url = self.url_input.value.strip()
+        if url:
+            # Reset local image selector
+            self.image_selector.value = "-- Select local image --"
+            # Load external URL (use external AVIVATOR for CORS)
+            self.viewer_pane.object = self._get_viewer_html(url, use_local_avivator=False)
 
     def _refresh_images(self, event):
         """Refresh available images list."""
         self.available_images = get_local_images()
-        self.image_selector.options = ["-- Select an image --"] + self.available_images
+        self._images_available = len(self.available_images) > 0
+        self.image_selector.options = ["-- Select local image --"] + self.available_images
+        self.image_selector.disabled = not self._images_available
+        self.status_pane.object = self._get_status_text()
 
     def get_panel(self) -> pn.Column:
         """Return the complete viewer panel."""
-        header = pn.Row(
-            pn.pane.Markdown("## OME-TIFF Viewer"),
-            pn.Spacer(),
-            self.image_selector,
-            self.refresh_button,
-            sizing_mode="stretch_width",
-            align="center"
+        # Header with title
+        header = pn.pane.Markdown(
+            "## OME-TIFF Viewer",
+            styles={"margin": "0 0 10px 0"}
         )
 
-        # Main content with viewer and optional channel controls
-        content = pn.Row(
-            self.viewer_pane,
-            sizing_mode="stretch_both"
+        # Local image controls
+        local_controls = pn.Row(
+            self.image_selector,
+            self.refresh_button,
+            align="end"
+        )
+
+        # URL input controls
+        url_controls = pn.Row(
+            self.url_input,
+            self.load_url_button,
+            align="end"
+        )
+
+        # Combined controls
+        controls = pn.Column(
+            pn.pane.Markdown("**Load from URL:**"),
+            url_controls,
+            pn.Spacer(height=10),
+            pn.pane.Markdown("**Or select local image:**"),
+            local_controls,
+            pn.Spacer(height=5),
+            self.status_pane,
+            sizing_mode="stretch_width"
         )
 
         return pn.Column(
             header,
-            content,
+            controls,
+            pn.Spacer(height=10),
+            self.viewer_pane,
             sizing_mode="stretch_both",
             styles={
                 "background": "#f8f9fa",
@@ -259,76 +328,7 @@ class ImageViewerPanel:
         )
 
 
-class SimpleImageViewer:
-    """Simplified image viewer that embeds external URL or local path."""
-
-    def __init__(self):
-        self.url_input = pn.widgets.TextInput(
-            name="Image URL",
-            placeholder="Enter OME-TIFF URL or select local image...",
-            width=400
-        )
-
-        self.load_button = pn.widgets.Button(
-            name="Load",
-            button_type="primary",
-            width=80
-        )
-        self.load_button.on_click(self._load_image)
-
-        self.viewer_pane = pn.pane.HTML(
-            self._get_placeholder_html(),
-            sizing_mode="stretch_both",
-            min_height=600
-        )
-
-    def _get_placeholder_html(self) -> str:
-        return """
-        <div style="
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            height: 100%;
-            min-height: 500px;
-            background: #e5e7eb;
-            border-radius: 8px;
-            color: #374151;
-        ">
-            <p>Enter an image URL and click Load to view</p>
-        </div>
-        """
-
-    def _load_image(self, event):
-        url = self.url_input.value
-        if url:
-            self.viewer_pane.object = f"""
-            <iframe
-                src="https://avivator.gehlenborglab.org/?url={url}"
-                style="width: 100%; height: 100%; min-height: 600px; border: none;"
-            ></iframe>
-            """
-
-    def get_panel(self) -> pn.Column:
-        controls = pn.Row(
-            self.url_input,
-            self.load_button,
-            sizing_mode="stretch_width"
-        )
-
-        return pn.Column(
-            controls,
-            self.viewer_pane,
-            sizing_mode="stretch_both"
-        )
-
-
-def create_image_viewer(
-    avivator_url: str = "/avivator/",
-    image_base_url: str = "/images/"
-) -> pn.Column:
+def create_image_viewer() -> pn.Column:
     """Create and return image viewer panel."""
-    viewer = ImageViewerPanel(
-        avivator_url=avivator_url,
-        image_base_url=image_base_url
-    )
+    viewer = ImageViewerPanel()
     return viewer.get_panel()
