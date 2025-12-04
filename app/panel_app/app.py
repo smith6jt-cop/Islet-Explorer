@@ -27,7 +27,7 @@ from utils.plotting import (
 )
 from utils.statistics import StatisticalAnalyzer, create_results_table, format_p_value
 from components.ai_assistant import create_ai_assistant, AIAssistantPanel
-from components.image_viewer import create_image_viewer, ImageViewerPanel, get_static_dirs
+from components.image_viewer import create_image_viewer, ImageViewerPanel
 
 # Initialize Panel extensions
 pn.extension(
@@ -848,7 +848,20 @@ def create_app():
     return app.create_app()
 
 
-# Get static directories for AVIVATOR and images
+# Build static directories for image serving
+def get_static_dirs():
+    """Get static directory mappings."""
+    static_dirs = {}
+    # Check for images directory
+    env_root = os.environ.get("LOCAL_IMAGE_ROOT", "")
+    if env_root and Path(env_root).exists():
+        static_dirs["/images"] = env_root
+    else:
+        local_images = Path(__file__).parent / "local_images"
+        if local_images.exists():
+            static_dirs["/images"] = str(local_images)
+    return static_dirs
+
 STATIC_DIRS = get_static_dirs()
 
 # For panel serve
