@@ -393,7 +393,7 @@ INSTALL_VITESSCER=1 Rscript scripts/install_shiny_deps.R
 **Normalization Options:**
 - `none`: Raw values
 - `global z-score`: (value - mean) / sd across all data
-- `robust per-donor`: (value - median) / (MAD × 1.4826) per donor
+- `robust per-donor`: (value - median) / (MAD * 1.4826) per donor
 
 **Donor Colors:**
 - ND: `#1f77b4` (blue)
@@ -411,10 +411,11 @@ Research use only. Contact the repository maintainers for licensing and collabor
 
 ## Citation
 
-If you use Islet Explorer in your research, please cite:
+If you use Islet Explorer in your research, please cite this repository:
 
 ```
-[Citation information to be added]
+Islet Explorer: Interactive web applications for exploring human pancreatic islet measurements
+https://github.com/smith6jt-cop/Islet-Explorer
 ```
 
 ## Acknowledgments
