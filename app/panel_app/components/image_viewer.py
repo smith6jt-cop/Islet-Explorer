@@ -5,7 +5,7 @@ Embeds AVIVATOR viewer for OME-TIFF visualization.
 
 import os
 from pathlib import Path
-from typing import Optional, List, Dict
+from typing import Optional, List
 import panel as pn
 
 # Paths - use panel_app directories (self-contained)
@@ -35,7 +35,7 @@ def get_local_images(image_dir: Optional[Path] = None) -> List[str]:
                 print(f"[ImageViewer] Using default location: {image_dir}")
 
     if image_dir is None or not image_dir.exists():
-        print(f"[ImageViewer] No image directory found. Set LOCAL_IMAGE_ROOT env var.")
+        print("[ImageViewer] No image directory found. Set LOCAL_IMAGE_ROOT env var.")
         return []
 
     # Find OME-TIFF files
@@ -167,7 +167,7 @@ class ImageViewerPanel:
                     base_url = f"{protocol}//{host}"
                 else:
                     base_url = "http://localhost:8080"
-            except:
+            except Exception:
                 base_url = "http://localhost:8080"
 
             image_url = f"{base_url}/images/{event.new}"

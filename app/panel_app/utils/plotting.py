@@ -3,12 +3,10 @@ Plotting utilities for Islet Explorer Panel App.
 Provides interactive plots using Plotly and HoloViews.
 """
 
-import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 # Donor status colors
 DONOR_COLORS = {
