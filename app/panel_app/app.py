@@ -14,20 +14,18 @@ import numpy as np
 import pandas as pd
 import panel as pn
 import param
-import plotly.express as px
-import plotly.graph_objects as go
+from tornado.web import StaticFileHandler
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
-from utils.data_loader import IsletDataLoader, DONOR_STATUS_COLORS, REGION_TYPES, AAB_COLUMNS
+from utils.data_loader import IsletDataLoader, REGION_TYPES
 from utils.plotting import (
-    create_scatter_plot, create_distribution_plot, create_umap_plot,
-    create_heatmap, create_bar_plot, create_islet_size_scatter, DONOR_COLORS
+    create_scatter_plot, create_distribution_plot, create_umap_plot
 )
 from utils.statistics import StatisticalAnalyzer, create_results_table, format_p_value
-from components.ai_assistant import create_ai_assistant, AIAssistantPanel
-from components.image_viewer import create_image_viewer, ImageViewerPanel
+from components.ai_assistant import AIAssistantPanel
+from components.image_viewer import ImageViewerPanel
 
 # Initialize Panel extensions
 pn.extension(
@@ -386,7 +384,7 @@ Current analysis:
             x=y_col,
             group="Donor Status",
             plot_type="box",
-            title=f"Distribution by Donor Status",
+            title="Distribution by Donor Status",
             show_points=True,
             height=400
         )
@@ -671,7 +669,7 @@ Current analysis:
         """Create application header."""
         return pn.Row(
             pn.pane.Markdown(
-                f"# Islet Explorer",
+                "# Islet Explorer",
                 styles={"margin": "0", "color": "white"}
             ),
             pn.Spacer(),
@@ -864,18 +862,61 @@ def get_static_dirs():
 
 STATIC_DIRS = get_static_dirs()
 
-# For panel serve
+
+# Custom static handler with CORS support for AVIVATOR
+class CORSStaticHandler(StaticFileHandler):
+    """Static file handler with CORS headers for AVIVATOR."""
+
+    def set_default_headers(self):
+        self.set_header("Access-Control-Allow-Origin", "*")
+        self.set_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+        self.set_header("Access-Control-Allow-Headers", "Range, Accept-Encoding")
+        self.set_header("Access-Control-Expose-Headers", "Content-Length, Content-Range, Accept-Ranges")
+        self.set_header("Accept-Ranges", "bytes")
+
+    def options(self, *args):
+        self.set_status(204)
+        self.finish()
+
+
+def modify_doc(doc):
+    """Add CORS routes to the Bokeh document."""
+    pass
+
+
+# For panel serve - add CORS routes
 if pn.state.served:
     create_app().servable(title="Islet Explorer")
 
+    # Add CORS static handler for images
+    def add_cors_routes(server):
+        image_dir = STATIC_DIRS.get("/images")
+        if image_dir:
+            server._tornado.add_handlers(
+                r".*",
+                [(r"/images/(.*)", CORSStaticHandler, {"path": image_dir})]
+            )
+            print(f"[CORS] Added CORS handler for /images/ -> {image_dir}")
+
+    pn.state.on_session_created(lambda ctx: None)  # Placeholder
+
 # For direct execution
 if __name__ == "__main__":
+
     app = create_app()
+
+    # Custom server setup with CORS
+    image_dir = STATIC_DIRS.get("/images")
+    extra_patterns = []
+    if image_dir:
+        extra_patterns.append((r"/images/(.*)", CORSStaticHandler, {"path": image_dir}))
+        print(f"[CORS] Serving images with CORS from: {image_dir}")
+
     pn.serve(
         app,
         port=8080,
         show=True,
         title="Islet Explorer",
-        static_dirs=STATIC_DIRS,
+        extra_patterns=extra_patterns,
         allow_websocket_origin=["*"]
     )

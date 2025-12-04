@@ -3,7 +3,6 @@ Data loading utilities for Islet Explorer Panel App.
 Handles loading and preprocessing of master_results.xlsx data.
 """
 
-import os
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -210,7 +209,7 @@ class IsletDataLoader:
             for aab, include in aab_filters.items():
                 if aab in df.columns and not include:
                     # Exclude donors positive for this autoantibody
-                    df = df[~((df["Donor Status"] == "Aab+") & (df[aab] == True))]
+                    df = df[~((df["Donor Status"] == "Aab+") & df[aab])]
 
         return df
 
