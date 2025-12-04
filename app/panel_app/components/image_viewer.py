@@ -29,17 +29,17 @@ DEFAULT_CHANNELS = [
     {"name": "SST", "color": "#F59E0B", "visible": True, "index": 13},
 ]
 
-# Paths
+# Paths - use panel_app directories (self-contained)
 PANEL_APP_DIR = Path(__file__).parent.parent
-SHINY_APP_DIR = PANEL_APP_DIR.parent / "shiny_app"
-AVIVATOR_DIR = SHINY_APP_DIR / "www" / "avivator"
-LOCAL_IMAGES_DIR = SHINY_APP_DIR / "www" / "local_images"
+ASSETS_DIR = PANEL_APP_DIR / "assets"
+AVIVATOR_DIR = ASSETS_DIR / "avivator"
+LOCAL_IMAGES_DIR = PANEL_APP_DIR / "local_images"
 
 
 def load_channel_names(channel_file: Optional[str] = None) -> Dict[int, str]:
     """Load channel names from file."""
     if channel_file is None:
-        channel_file = SHINY_APP_DIR / "Channel_names"
+        channel_file = ASSETS_DIR / "Channel_names"
 
     channel_names = {}
     try:

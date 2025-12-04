@@ -3,7 +3,7 @@
 
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SHINY_WWW="$SCRIPT_DIR/../shiny_app/www"
+ASSETS_DIR="$SCRIPT_DIR/assets"
 
 # Default configuration
 PORT="${PORT:-8080}"
@@ -23,22 +23,22 @@ export ISLET_DATA_PATH="${ISLET_DATA_PATH:-$SCRIPT_DIR/../../data/master_results
 
 # Build static dirs arguments
 STATIC_ARGS=""
-if [ -d "$SHINY_WWW/avivator" ]; then
-    STATIC_ARGS="$STATIC_ARGS --static-dirs avivator=$SHINY_WWW/avivator"
-    echo "AVIVATOR: $SHINY_WWW/avivator"
+if [ -d "$ASSETS_DIR/avivator" ]; then
+    STATIC_ARGS="$STATIC_ARGS --static-dirs avivator=$ASSETS_DIR/avivator"
+    echo "AVIVATOR: $ASSETS_DIR/avivator"
 fi
 
 # Use LOCAL_IMAGE_ROOT if set and exists, otherwise use default
 if [ -n "$LOCAL_IMAGE_ROOT" ] && [ -d "$LOCAL_IMAGE_ROOT" ]; then
     STATIC_ARGS="$STATIC_ARGS --static-dirs images=$LOCAL_IMAGE_ROOT"
     echo "Images: $LOCAL_IMAGE_ROOT (from LOCAL_IMAGE_ROOT)"
-elif [ -d "$SHINY_WWW/local_images" ]; then
-    export LOCAL_IMAGE_ROOT="$SHINY_WWW/local_images"
+elif [ -d "$SCRIPT_DIR/local_images" ]; then
+    export LOCAL_IMAGE_ROOT="$SCRIPT_DIR/local_images"
     STATIC_ARGS="$STATIC_ARGS --static-dirs images=$LOCAL_IMAGE_ROOT"
     echo "Images: $LOCAL_IMAGE_ROOT (default)"
 else
     echo "WARNING: No images directory found!"
-    echo "  Set LOCAL_IMAGE_ROOT=/path/to/images or create $SHINY_WWW/local_images"
+    echo "  Set LOCAL_IMAGE_ROOT=/path/to/images or create $SCRIPT_DIR/local_images"
 fi
 
 echo "============================================"
