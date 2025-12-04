@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 from typing import Dict, List, Optional, Tuple
 from scipy import stats
-from scipy.stats import f_oneway, kruskal, mannwhitneyu, ttest_ind
+from scipy.stats import f_oneway, kruskal, ttest_ind
 from statsmodels.stats.multicomp import pairwise_tukeyhsd
 import warnings
 
