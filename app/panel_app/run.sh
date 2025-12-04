@@ -19,7 +19,7 @@ fi
 
 # Set data path if not already set
 export ISLET_DATA_PATH="${ISLET_DATA_PATH:-$SCRIPT_DIR/../../data/master_results.xlsx}"
-export LOCAL_IMAGE_ROOT="${LOCAL_IMAGE_ROOT:-$SHINY_WWW/local_images}"
+# LOCAL_IMAGE_ROOT can be set by user, don't override if already set
 
 # Build static dirs arguments
 STATIC_ARGS=""
@@ -27,9 +27,18 @@ if [ -d "$SHINY_WWW/avivator" ]; then
     STATIC_ARGS="$STATIC_ARGS --static-dirs avivator=$SHINY_WWW/avivator"
     echo "AVIVATOR: $SHINY_WWW/avivator"
 fi
-if [ -d "$LOCAL_IMAGE_ROOT" ]; then
+
+# Use LOCAL_IMAGE_ROOT if set and exists, otherwise use default
+if [ -n "$LOCAL_IMAGE_ROOT" ] && [ -d "$LOCAL_IMAGE_ROOT" ]; then
     STATIC_ARGS="$STATIC_ARGS --static-dirs images=$LOCAL_IMAGE_ROOT"
-    echo "Images: $LOCAL_IMAGE_ROOT"
+    echo "Images: $LOCAL_IMAGE_ROOT (from LOCAL_IMAGE_ROOT)"
+elif [ -d "$SHINY_WWW/local_images" ]; then
+    export LOCAL_IMAGE_ROOT="$SHINY_WWW/local_images"
+    STATIC_ARGS="$STATIC_ARGS --static-dirs images=$LOCAL_IMAGE_ROOT"
+    echo "Images: $LOCAL_IMAGE_ROOT (default)"
+else
+    echo "WARNING: No images directory found!"
+    echo "  Set LOCAL_IMAGE_ROOT=/path/to/images or create $SHINY_WWW/local_images"
 fi
 
 echo "============================================"

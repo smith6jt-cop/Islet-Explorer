@@ -66,17 +66,28 @@ def load_channel_names(channel_file: Optional[str] = None) -> Dict[int, str]:
 def get_local_images(image_dir: Optional[Path] = None) -> List[str]:
     """Get list of available local OME-TIFF images."""
     if image_dir is None:
-        # Check multiple locations
-        locations = [
-            LOCAL_IMAGES_DIR,
-            Path(os.environ.get("LOCAL_IMAGE_ROOT", "")),
-        ]
-        for loc in locations:
-            if loc and loc.exists() and loc.is_dir():
-                image_dir = loc
-                break
+        # Check environment variable FIRST (user override)
+        env_root = os.environ.get("LOCAL_IMAGE_ROOT", "")
+        if env_root:
+            env_path = Path(env_root)
+            if env_path.exists() and env_path.is_dir():
+                image_dir = env_path
+                print(f"[ImageViewer] Using LOCAL_IMAGE_ROOT: {image_dir}")
+
+        # Fall back to default locations
+        if image_dir is None:
+            locations = [
+                LOCAL_IMAGES_DIR,
+                PANEL_APP_DIR / "local_images",
+            ]
+            for loc in locations:
+                if loc and loc.exists() and loc.is_dir():
+                    image_dir = loc
+                    print(f"[ImageViewer] Using default location: {image_dir}")
+                    break
 
     if image_dir is None or not image_dir.exists():
+        print(f"[ImageViewer] No image directory found. Set LOCAL_IMAGE_ROOT env var.")
         return []
 
     # Find OME-TIFF files
@@ -84,6 +95,7 @@ def get_local_images(image_dir: Optional[Path] = None) -> List[str]:
     for ext in ["*.ome.tif", "*.ome.tiff", "*.OME.TIFF", "*.OME.TIF"]:
         images.extend(image_dir.glob(ext))
 
+    print(f"[ImageViewer] Found {len(images)} images in {image_dir}")
     return sorted([img.name for img in images])
 
 
@@ -94,15 +106,19 @@ def get_static_dirs() -> Dict[str, str]:
     # AVIVATOR viewer
     if AVIVATOR_DIR.exists():
         static_dirs["/avivator"] = str(AVIVATOR_DIR)
+        print(f"[StaticDirs] AVIVATOR: {AVIVATOR_DIR}")
 
-    # Local images
-    if LOCAL_IMAGES_DIR.exists():
-        static_dirs["/images"] = str(LOCAL_IMAGES_DIR)
-
-    # Check environment variable for images
+    # Check environment variable for images FIRST
     env_image_root = os.environ.get("LOCAL_IMAGE_ROOT")
     if env_image_root and Path(env_image_root).exists():
         static_dirs["/images"] = env_image_root
+        print(f"[StaticDirs] Images (from LOCAL_IMAGE_ROOT): {env_image_root}")
+    elif LOCAL_IMAGES_DIR.exists():
+        static_dirs["/images"] = str(LOCAL_IMAGES_DIR)
+        print(f"[StaticDirs] Images (default): {LOCAL_IMAGES_DIR}")
+    else:
+        print(f"[StaticDirs] WARNING: No images directory found!")
+        print(f"[StaticDirs] Set LOCAL_IMAGE_ROOT or create: {LOCAL_IMAGES_DIR}")
 
     return static_dirs
 
