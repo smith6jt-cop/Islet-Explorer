@@ -1,0 +1,102 @@
+# Example nginx configuration for Islet Explorer Panel App
+# Copy to /etc/nginx/sites-available/islet-explorer and customize
+
+upstream panel_app {
+    server 127.0.0.1:8080;
+}
+
+server {
+    listen 80;
+    server_name your-server.example.com;
+
+    # Redirect HTTP to HTTPS (uncomment for production)
+    # return 301 https://$server_name$request_uri;
+
+    # Panel application
+    location /islet-explorer {
+        proxy_pass http://panel_app;
+        proxy_http_version 1.1;
+
+        # WebSocket support (required for Panel)
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+
+        # Standard proxy headers
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Timeouts for long-running operations
+        proxy_read_timeout 86400;
+        proxy_send_timeout 86400;
+        proxy_connect_timeout 60;
+
+        # Buffering settings
+        proxy_buffering off;
+        proxy_cache off;
+    }
+
+    # Static OME-TIFF images with byte-range support
+    location /islet-explorer/images/ {
+        alias /path/to/local_images/;
+
+        # Enable byte-range requests (required for OME-TIFF streaming)
+        add_header Accept-Ranges bytes;
+
+        # CORS headers for AVIVATOR viewer
+        add_header Access-Control-Allow-Origin *;
+        add_header Access-Control-Allow-Methods "GET, HEAD, OPTIONS";
+        add_header Access-Control-Allow-Headers "Range, Accept-Encoding";
+        add_header Access-Control-Expose-Headers "Content-Length, Content-Range";
+
+        # Handle preflight requests
+        if ($request_method = OPTIONS) {
+            return 204;
+        }
+
+        # Caching for large images
+        expires 1d;
+        add_header Cache-Control "public, immutable";
+    }
+
+    # AVIVATOR static viewer (if serving locally)
+    location /islet-explorer/avivator/ {
+        alias /path/to/avivator/dist/;
+        try_files $uri $uri/ /islet-explorer/avivator/index.html;
+
+        # Cache static assets
+        location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {
+            expires 7d;
+            add_header Cache-Control "public, immutable";
+        }
+    }
+
+    # Zarr stores (if using OME-NGFF format)
+    location /islet-explorer/zarr/ {
+        alias /path/to/zarr_stores/;
+
+        # Enable byte-range requests
+        add_header Accept-Ranges bytes;
+
+        # CORS headers
+        add_header Access-Control-Allow-Origin *;
+        add_header Access-Control-Allow-Methods "GET, HEAD, OPTIONS";
+
+        # JSON files
+        location ~* \.json$ {
+            add_header Content-Type application/json;
+        }
+    }
+}
+
+# HTTPS server (uncomment and configure for production)
+# server {
+#     listen 443 ssl http2;
+#     server_name your-server.example.com;
+#
+#     ssl_certificate /path/to/cert.pem;
+#     ssl_certificate_key /path/to/key.pem;
+#
+#     # ... same location blocks as above ...
+# }
