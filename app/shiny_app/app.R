@@ -1903,7 +1903,7 @@ per_bin_kendall <- function(df, bin_col, group_col, value_col, mid_col = "diam_m
 
 ui <- fluidPage(
   useShinyjs(),
-  tags$head(tags$style(HTML("\n    /* Viewer and trajectory mode styles - fix tab positioning */\n    body.viewer-mode .col-sm-2 {\n      display: none !important;\n    }\n    body.viewer-mode .col-sm-10 {\n      width: 100% !important;\n      max-width: 100% !important;\n      flex: 0 0 100%;\n    }\n    body.viewer-mode .nav-tabs {\n      position: static !important;\n      width: 100% !important;\n    }\n    body.trajectory-mode .container-fluid > .row > .col-sm-3 {\n      display: none !important;\n    }\n    body.trajectory-mode .container-fluid > .row > .col-sm-9 {\n      width: 100% !important;\n      max-width: 100% !important;\n      flex: 0 0 100%;\n    }\n    \n    /* Global biomedical theme styling */\n    body {\n      background-color: #f8f9fa;\n      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;\n      padding-top: 0;\n    }\n    \n    .container-fluid {\n      background-color: #ffffff;\n      border-radius: 12px;\n      box-shadow: 0 4px 12px rgba(0,0,0,0.08);\n      margin: 10px;\n      padding: 20px;\n    }\n    \n    /* Logo header styling */\n    .logo-header {\n      display: flex;\n      justify-content: flex-end;\n      align-items: center;\n      padding: 10px 0;\n      margin-bottom: 10px;\n      background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);\n      border-bottom: 2px solid #e3f2fd;\n    }\n    \n    /* Enhanced card styling with biomedical color scheme */\n    .card {\n      background: linear-gradient(145deg, #ffffff 0%, #f8f9fa 100%);\n      border: 1px solid #e3f2fd;\n      box-shadow: 0 4px 12px rgba(44, 90, 160, 0.08);\n      transition: all 0.3s ease;\n      border-radius: 12px;\n    }\n    .card:hover {\n      box-shadow: 0 8px 20px rgba(44, 90, 160, 0.15);\n      transform: translateY(-2px);\n    }\n    \n    .card h5 {\n      color: #2c5aa0;\n      font-weight: 600;\n      border-bottom: 2px solid #e3f2fd;\n      padding-bottom: 8px;\n      margin-bottom: 15px;\n    }\n    \n    /* Sidebar styling with scientific theme */\n    .sidebar {\n      background: linear-gradient(180deg, #2c5aa0 0%, #1e3a72 100%);\n      color: white;\n      border-radius: 12px;\n      padding: 20px;\n      font-size: 14px;\n      box-shadow: 0 4px 12px rgba(44, 90, 160, 0.2);\n    }\n    \n    .sidebar h4, .sidebar h5 {\n      color: #ffffff;\n      font-weight: 600;\n      border-bottom: 1px solid rgba(255,255,255,0.2);\n      padding-bottom: 8px;\n    }\n    \n    .sidebar .form-group {\n      margin-bottom: 18px;\n    }\n    \n    .sidebar label {\n      color: #e3f2fd;\n      font-size: 13px;\n      font-weight: 600;\n    }\n    \n    .sidebar .form-control {\n      background-color: rgba(255,255,255,0.9);\n      border: 1px solid #b3d9ff;\n      border-radius: 6px;\n      color: #2c5aa0;\n    }\n    \n    .sidebar .form-control:focus {\n      background-color: #ffffff;\n      border-color: #66b3ff;\n      box-shadow: 0 0 0 0.2rem rgba(44, 90, 160, 0.25);\n    }\n    \n    .sidebar .btn {\n      background: linear-gradient(145deg, #66b3ff 0%, #4da6ff 100%);\n      border: none;\n      border-radius: 6px;\n      color: white;\n      font-weight: 500;\n    }\n    \n    .sidebar .btn:hover {\n      background: linear-gradient(145deg, #4da6ff 0%, #3399ff 100%);\n      transform: translateY(-1px);\n    }\n    \n    /* Tab styling */\n    .nav-tabs {\n      border-bottom: 2px solid #e3f2fd;\n    }\n    \n    .nav-tabs .nav-link {\n      color: #2c5aa0;\n      font-weight: 500;\n      border: none;\n      border-radius: 8px 8px 0 0;\n      margin-right: 4px;\n      background-color: #f8f9fa;\n    }\n    \n    .nav-tabs .nav-link.active {\n      background: linear-gradient(145deg, #2c5aa0 0%, #1e3a72 100%);\n      color: white;\n      border-bottom: 3px solid #66b3ff;\n    }\n    \n    .nav-tabs .nav-link:hover {\n      background-color: #e3f2fd;\n      color: #1e3a72;\n    }\n    \n    /* Form controls styling */\n    .form-control {\n      border: 2px solid #e3f2fd;\n      border-radius: 6px;\n      transition: all 0.2s ease;\n    }\n    \n    .form-control:focus {\n      border-color: #66b3ff;\n      box-shadow: 0 0 0 0.2rem rgba(44, 90, 160, 0.15);\n    }\n    \n    /* Button styling */\n    .btn-primary {\n      background: linear-gradient(145deg, #2c5aa0 0%, #1e3a72 100%);\n      border: none;\n      border-radius: 8px;\n      font-weight: 500;\n      padding: 8px 16px;\n      transition: all 0.2s ease;\n    }\n    \n    .btn-primary:hover {\n      background: linear-gradient(145deg, #1e3a72 0%, #0f1f3d 100%);\n      transform: translateY(-2px);\n      box-shadow: 0 4px 12px rgba(44, 90, 160, 0.3);\n    }\n    \n    /* Checkbox and radio button styling */\n    input[type='checkbox'], input[type='radio'] {\n      accent-color: #2c5aa0;\n    }\n    \n    /* Slider styling */\n    .irs--shiny {\n      color: #2c5aa0;\n    }\n    \n    .irs--shiny .irs-bar {\n      background: linear-gradient(90deg, #66b3ff 0%, #2c5aa0 100%);\n    }\n    \n    .irs--shiny .irs-handle {\n      background: #2c5aa0;\n      border: 3px solid #ffffff;\n    }\n    \n    /* Help text styling */\n    .help-block {\n      color: #b3d9ff;\n      font-size: 12px;\n      font-style: italic;\n    }\n    \n    /* Well and panel styling */\n    .well {\n      background: linear-gradient(145deg, #f8f9fa 0%, #e3f2fd 100%);\n      border: 1px solid #b3d9ff;\n      border-radius: 8px;\n    }\n    .ai-chat-panel {
+  tags$head(tags$style(HTML("\n    /* Viewer and trajectory mode styles - fix tab positioning */\n    body.viewer-mode .col-sm-2 {\n      display: none !important;\n    }\n    body.viewer-mode .col-sm-10 {\n      width: 100% !important;\n      max-width: 100% !important;\n      flex: 0 0 100%;\n    }\n    body.viewer-mode .nav-tabs {\n      position: static !important;\n      width: 100% !important;\n    }\n    body.trajectory-mode .container-fluid > .row > .col-sm-3 {\n      display: none !important;\n    }\n    body.trajectory-mode .container-fluid > .row > .col-sm-9 {\n      width: 100% !important;\n      max-width: 100% !important;\n      flex: 0 0 100%;\n    }\n    \n    /* Global biomedical theme styling */\n    body {\n      background-color: #f8f9fa;\n      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;\n      padding-top: 0;\n      min-width: 1200px;\n      overflow-x: auto;\n    }\n    \n    .container-fluid {\n      background-color: #ffffff;\n      border-radius: 12px;\n      box-shadow: 0 4px 12px rgba(0,0,0,0.08);\n      margin: 10px;\n      padding: 20px;\n      min-width: 1180px;\n    }\n    \n    /* Logo header styling */\n    .logo-header {\n      display: flex;\n      justify-content: flex-end;\n      align-items: center;\n      padding: 10px 0;\n      margin-bottom: 10px;\n      background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);\n      border-bottom: 2px solid #e3f2fd;\n    }\n    \n    /* Enhanced card styling with biomedical color scheme */\n    .card {\n      background: linear-gradient(145deg, #ffffff 0%, #f8f9fa 100%);\n      border: 1px solid #e3f2fd;\n      box-shadow: 0 4px 12px rgba(44, 90, 160, 0.08);\n      transition: all 0.3s ease;\n      border-radius: 12px;\n    }\n    .card:hover {\n      box-shadow: 0 8px 20px rgba(44, 90, 160, 0.15);\n      transform: translateY(-2px);\n    }\n    \n    .card h5 {\n      color: #2c5aa0;\n      font-weight: 600;\n      border-bottom: 2px solid #e3f2fd;\n      padding-bottom: 8px;\n      margin-bottom: 15px;\n    }\n    \n    /* Sidebar styling with scientific theme */\n    .sidebar {\n      background: linear-gradient(180deg, #2c5aa0 0%, #1e3a72 100%);\n      color: white;\n      border-radius: 12px;\n      padding: 20px;\n      font-size: 14px;\n      box-shadow: 0 4px 12px rgba(44, 90, 160, 0.2);\n    }\n    \n    .sidebar h4, .sidebar h5 {\n      color: #ffffff;\n      font-weight: 600;\n      border-bottom: 1px solid rgba(255,255,255,0.2);\n      padding-bottom: 8px;\n    }\n    \n    .sidebar .form-group {\n      margin-bottom: 18px;\n    }\n    \n    .sidebar label {\n      color: #e3f2fd;\n      font-size: 13px;\n      font-weight: 600;\n    }\n    \n    .sidebar .form-control {\n      background-color: rgba(255,255,255,0.9);\n      border: 1px solid #b3d9ff;\n      border-radius: 6px;\n      color: #2c5aa0;\n    }\n    \n    .sidebar .form-control:focus {\n      background-color: #ffffff;\n      border-color: #66b3ff;\n      box-shadow: 0 0 0 0.2rem rgba(44, 90, 160, 0.25);\n    }\n    \n    .sidebar .btn {\n      background: linear-gradient(145deg, #66b3ff 0%, #4da6ff 100%);\n      border: none;\n      border-radius: 6px;\n      color: white;\n      font-weight: 500;\n    }\n    \n    .sidebar .btn:hover {\n      background: linear-gradient(145deg, #4da6ff 0%, #3399ff 100%);\n      transform: translateY(-1px);\n    }\n    \n    /* Tab styling */\n    .nav-tabs {\n      border-bottom: 2px solid #e3f2fd;\n    }\n    \n    .nav-tabs .nav-link {\n      color: #2c5aa0;\n      font-weight: 500;\n      border: none;\n      border-radius: 8px 8px 0 0;\n      margin-right: 4px;\n      background-color: #f8f9fa;\n    }\n    \n    .nav-tabs .nav-link.active {\n      background: linear-gradient(145deg, #2c5aa0 0%, #1e3a72 100%);\n      color: white;\n      border-bottom: 3px solid #66b3ff;\n    }\n    \n    .nav-tabs .nav-link:hover {\n      background-color: #e3f2fd;\n      color: #1e3a72;\n    }\n    \n    /* Form controls styling */\n    .form-control {\n      border: 2px solid #e3f2fd;\n      border-radius: 6px;\n      transition: all 0.2s ease;\n    }\n    \n    .form-control:focus {\n      border-color: #66b3ff;\n      box-shadow: 0 0 0 0.2rem rgba(44, 90, 160, 0.15);\n    }\n    \n    /* Button styling */\n    .btn-primary {\n      background: linear-gradient(145deg, #2c5aa0 0%, #1e3a72 100%);\n      border: none;\n      border-radius: 8px;\n      font-weight: 500;\n      padding: 8px 16px;\n      transition: all 0.2s ease;\n    }\n    \n    .btn-primary:hover {\n      background: linear-gradient(145deg, #1e3a72 0%, #0f1f3d 100%);\n      transform: translateY(-2px);\n      box-shadow: 0 4px 12px rgba(44, 90, 160, 0.3);\n    }\n    \n    /* Checkbox and radio button styling */\n    input[type='checkbox'], input[type='radio'] {\n      accent-color: #2c5aa0;\n    }\n    \n    /* Slider styling */\n    .irs--shiny {\n      color: #2c5aa0;\n    }\n    \n    .irs--shiny .irs-bar {\n      background: linear-gradient(90deg, #66b3ff 0%, #2c5aa0 100%);\n    }\n    \n    .irs--shiny .irs-handle {\n      background: #2c5aa0;\n      border: 3px solid #ffffff;\n    }\n    \n    /* Help text styling */\n    .help-block {\n      color: #b3d9ff;\n      font-size: 12px;\n      font-style: italic;\n    }\n    \n    /* Well and panel styling */\n    .well {\n      background: linear-gradient(145deg, #f8f9fa 0%, #e3f2fd 100%);\n      border: 1px solid #b3d9ff;\n      border-radius: 8px;\n    }\n    .ai-chat-panel {
       background: linear-gradient(145deg, #ffffff 0%, #f8f9fa 100%);\n      border: 1px solid #e3f2fd;\n      border-radius: 12px;\n      box-shadow: 0 4px 12px rgba(44, 90, 160, 0.08);\n      padding: 15px;\n      display: flex;\n      flex-direction: column;\n      gap: 12px;\n    }\n    .ai-chat-logo {\n      display: flex;\n      justify-content: center;\n      align-items: center;\n      padding-bottom: 8px;\n      border-bottom: 1px solid rgba(44, 90, 160, 0.15);\n    }\n    .ai-chat-logo img {\n      max-width: 100%;\n      height: auto;\n      max-height: 90px;\n    }\n    .ai-chat-header {\n      display: flex;\n      justify-content: center;\n      align-items: center;\n      margin-top: 8px;\n      margin-bottom: 4px;\n    }\n    .ai-chat-history {\n      flex: 1;\n      overflow-y: auto;\n      padding: 8px;\n      display: flex;\n      flex-direction: column;\n      gap: 10px;\n    }\n    .ai-chat-message {\n      padding: 10px 12px;\n      border-radius: 8px;\n      margin: 4px 0;\n      max-width: 90%;\n      word-wrap: break-word;\n    }\n    .ai-chat-message.user {\n      background: linear-gradient(145deg, #e3f2fd 0%, #bbdefb 100%);\n      border-left: 4px solid #2c5aa0;\n      align-self: flex-end;\n      margin-left: auto;\n    }\n    .ai-chat-message.assistant {\n      background: linear-gradient(145deg, #f5f5f5 0%, #eeeeee 100%);\n      border-left: 4px solid #66b3ff;\n      align-self: flex-start;\n      margin-right: auto;\n    }\n    .ai-chat-meta {\n      font-weight: 600;\n      font-size: 12px;\n      display: block;\n      margin-bottom: 4px;\n      text-transform: uppercase;\n      letter-spacing: 0.5px;\n    }\n    .ai-chat-message.user .ai-chat-meta {\n      color: #1e3a72;\n    }\n    .ai-chat-message.assistant .ai-chat-meta {\n      color: #2c5aa0;\n    }\n  "))),
   tags$head(tags$style(HTML("\n    .ai-chat-logo img {\n      max-width: 100%;\n      height: auto;\n      max-height: 120px;\n    }\n    /* Equal height panels */
     .equal-height-row {\n      display: flex;\n      flex-wrap: nowrap;\n    }\n    .equal-height-panel {\n      height: calc(100vh - 40px);\n      overflow-y: auto;\n    }\n    /* AI chat panel - match card heights */\n    .ai-chat-panel-container {\n      height: calc(100vh - 100px);\n      display: flex;\n      flex-direction: column;\n      overflow-y: auto;\n      margin-top: 20px;\n    }\n  "))),
@@ -1982,10 +1982,10 @@ ui <- fluidPage(
     # Main Panel - uses full width when sidebar is hidden
     column(width = 10.6, class = "equal-height-panel main-content-panel",
           tabsetPanel(id = "tabs",
-        tabPanel("Plot", 
+        tabPanel("Plot",
                  fluidRow(
                    # Left card: Main plot (smaller to align bottom with left panel)
-                   column(4,
+                   column(5,
                      div(class = "card", style = "margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; height: calc(100vh - 100px); display: flex; flex-direction: column; gap: 12px;",
                        h5("Islet Size Distribution", style = "margin-top: 0; color: #333;"),
                        div(style = "flex: 1; min-height: 0; display: flex;", 
@@ -2010,20 +2010,17 @@ ui <- fluidPage(
                              radioButtons("add_smooth", "Trend line", choices = c("None", "LOESS"), selected = "None", inline = TRUE)
                            )
                          ),
-                         fluidRow(
-                           column(9),
-                           column(3,
-                             checkboxInput("exclude_zero_top", "Exclude zero values", value = FALSE),
-                             checkboxInput("show_points", "Show individual points", value = FALSE),
-                             checkboxInput("log_scale", "Log scale y-axis", value = FALSE),
-                             checkboxInput("log_scale_x", "Log2 scale x-axis", value = FALSE)
-                           )
+                         div(style = "display: flex; flex-wrap: wrap; gap: 15px; justify-content: flex-end;",
+                           checkboxInput("exclude_zero_top", "Exclude zero values", value = FALSE),
+                           checkboxInput("show_points", "Show individual points", value = FALSE),
+                           checkboxInput("log_scale", "Log scale y-axis", value = FALSE),
+                           checkboxInput("log_scale_x", "Log2 scale x-axis", value = FALSE)
                          )
                        )
                      )
                    ),
                    # Middle card: Distribution plot (same height as main plot)
-                   column(4,
+                   column(5,
                      div(class = "card", style = "margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; height: calc(100vh - 100px); display: flex; flex-direction: column; gap: 12px;",
                        h5("Distribution Comparison", style = "margin-top: 0; color: #333;"),
                        div(style = "flex: 1; overflow-y: auto;",
@@ -2035,7 +2032,7 @@ ui <- fluidPage(
                      )
                    ),
                    # Right card: AI Assistant
-                   column(4,
+                   column(2,
                      div(class = "card ai-chat-panel", style = "margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; height: calc(100vh - 100px); display: flex; flex-direction: column; gap: 12px;",
                        div(
                          class = "ai-chat-header",
@@ -4056,10 +4053,15 @@ server <- function(input, output, session) {
         if ("Case ID" %in% colnames(raw_normal)) {
           raw_normal$donor_id <- factor(raw_normal$`Case ID`)
           donor_colors <- get_donor_palette(levels(raw_normal$donor_id))
+          # Combine donor_status colors (for lines) with donor_id colors (for points)
+          combined_colors <- c(
+            "ND" = "#1f77b4", "Aab+" = "#ff7f0e", "T1D" = "#d62728",
+            donor_colors
+          )
           p <- p +
             geom_point(data = raw_normal, aes(x = diam_mid, y = value, color = donor_id),
                        position = position_jitter(width = jw, height = jh), size = input$pt_size, alpha = input$pt_alpha, inherit.aes = FALSE) +
-            scale_color_manual(values = donor_colors, 
+            scale_color_manual(values = combined_colors,
                              breaks = levels(raw_normal$donor_id),
                              name = "Donor ID")
         } else {
@@ -4559,11 +4561,16 @@ server <- function(input, output, session) {
     
     # Explicit dependencies to ensure reactivity
     req(input$mode, input$which)
-    
-    cat(sprintf("[DIST] Rendering with mode=%s, which=%s, region=%s\n", 
-                input$mode %||% "NULL", 
+
+    # Force reactivity on distribution-specific controls
+    dist_color_by_val <- input$dist_color_by
+    dist_show_points_val <- input$dist_show_points
+
+    cat(sprintf("[DIST] Rendering with mode=%s, which=%s, region=%s, color_by=%s\n",
+                input$mode %||% "NULL",
                 input$which %||% "NULL",
-                input$region %||% "NULL"))
+                input$region %||% "NULL",
+                dist_color_by_val %||% "NULL"))
     
     # Apply exclude_zero_dist separately (since raw_df uses exclude_zero_top)
     if (isTRUE(input$exclude_zero_dist) && !isTRUE(input$exclude_zero_top)) {
@@ -4642,17 +4649,20 @@ server <- function(input, output, session) {
     if (isTRUE(input$dist_show_points)) {
       if (color_by == "donor_id" && "donor_id" %in% colnames(rdf)) {
         donor_colors <- get_donor_palette(levels(rdf$donor_id))
-        g <- g + geom_jitter(aes(color = donor_id), width = 0.18,
+        cat(sprintf("[DIST] Applying donor_id colors for %d donors\n", length(donor_colors)))
+        g <- g + geom_jitter(aes(x = donor_status, y = value, color = donor_id), width = 0.18,
                              alpha = ifelse(is.null(input$dist_pt_alpha), 0.5, input$dist_pt_alpha),
                              size = ifelse(is.null(input$dist_pt_size), 1.5, input$dist_pt_size),
-                             stroke = 0) +
+                             stroke = 0, inherit.aes = FALSE) +
           scale_color_manual(values = donor_colors,
+                             breaks = levels(rdf$donor_id),
+                             name = "Donor ID",
                              guide = guide_legend(override.aes = list(size = 3, alpha = 1)))
       } else {
-        g <- g + geom_jitter(aes(color = donor_status), width = 0.18,
+        g <- g + geom_jitter(aes(x = donor_status, y = value, color = donor_status), width = 0.18,
                              alpha = ifelse(is.null(input$dist_pt_alpha), 0.25, input$dist_pt_alpha),
                              size = ifelse(is.null(input$dist_pt_size), 0.7, input$dist_pt_size),
-                             stroke = 0) +
+                             stroke = 0, inherit.aes = FALSE) +
           scale_color_manual(values = c("ND" = "#1f77b4", "Aab+" = "#ff7f0e", "T1D" = "#d62728"), guide = "none")
       }
     }
