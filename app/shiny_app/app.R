@@ -9,6 +9,23 @@ library(plotly)
 library(broom)
 library(jsonlite)
 
+# Pixel size constant for coordinate conversion (micrometers per pixel)
+# GeoJSON polygons use pixel coordinates, while islet_spatial_lookup.csv uses micrometers
+PIXEL_SIZE_UM <- 0.3774  # micrometers per pixel
+
+# Load sf package for GeoJSON/spatial operations (islet segmentation viewer)
+SF_AVAILABLE <- FALSE
+suppressPackageStartupMessages({
+  if (requireNamespace("sf", quietly = TRUE)) {
+    library(sf)
+    SF_AVAILABLE <- TRUE
+    message("[SF] Package sf loaded for segmentation viewer")
+  } else {
+    message("[SF] Package 'sf' not found. Islet segmentation viewer will be disabled.")
+    message("[SF] Install with: install.packages('sf')")
+  }
+})
+
 # Check for httr2 package (required for AI assistant)
 httr2_available <- requireNamespace("httr2", quietly = TRUE)
 if (!httr2_available) {
@@ -119,6 +136,178 @@ suppressPackageStartupMessages({
   }
 })
 
+
+# ===== Islet Segmentation Viewer Helper Functions =====
+# Cache for loaded GeoJSON data (persists across sessions for performance)
+geojson_cache <- new.env()
+
+# Load islet spatial lookup table (centroids and coordinates)
+islet_spatial_lookup <- tryCatch({
+  lookup_path <- file.path("..", "..", "data", "islet_spatial_lookup.csv")
+  if (file.exists(lookup_path)) {
+    df <- read.csv(lookup_path, stringsAsFactors = FALSE)
+    message("[SEGMENTATION] Loaded islet_spatial_lookup.csv with ", nrow(df), " entries")
+    df
+  } else {
+    message("[SEGMENTATION] islet_spatial_lookup.csv not found at ", lookup_path)
+    NULL
+  }
+}, error = function(e) {
+  message("[SEGMENTATION] Error loading islet_spatial_lookup.csv: ", conditionMessage(e))
+  NULL
+})
+
+# Load GeoJSON for a specific case_id with caching
+load_case_geojson <- function(case_id) {
+  if (!SF_AVAILABLE) return(NULL)
+
+  cache_key <- as.character(case_id)
+  if (exists(cache_key, envir = geojson_cache)) {
+    return(get(cache_key, envir = geojson_cache))
+  }
+
+  # Try uncompressed JSON first
+  json_path <- file.path("..", "..", "data", "json", paste0(case_id, ".geojson"))
+  if (!file.exists(json_path)) {
+    # Try compressed version
+    json_path <- file.path("..", "..", "data", "gson", paste0(case_id, ".geojson.gz"))
+  }
+
+  if (!file.exists(json_path)) {
+    message("[SEGMENTATION] GeoJSON not found for case ", case_id)
+    return(NULL)
+  }
+
+  message("[SEGMENTATION] Loading GeoJSON for case ", case_id, " from ", json_path)
+
+  geojson <- tryCatch({
+    gj <- sf::st_read(json_path, quiet = TRUE)
+    # Remove geographic CRS - these are actually image pixel/micron coordinates, not geographic
+    # The GeoJSON export from QuPath uses pixel coordinates but sf assigns WGS84 by default
+    sf::st_crs(gj) <- NA
+    gj
+  }, error = function(e) {
+    message("[SEGMENTATION] Error reading GeoJSON: ", conditionMessage(e))
+    NULL
+  })
+
+  if (!is.null(geojson)) {
+    assign(cache_key, geojson, envir = geojson_cache)
+    message("[SEGMENTATION] Cached GeoJSON for case ", case_id, " (", nrow(geojson), " features)")
+  }
+
+  return(geojson)
+}
+
+# Extract classification name from GeoJSON properties
+# The classification field may be a JSON string like '{ "name": "Nerve", "color": [...] }'
+get_classification_name <- function(geojson) {
+  if (is.null(geojson) || nrow(geojson) == 0) return(character(0))
+
+  if (!"classification" %in% names(geojson)) {
+    return(rep(NA_character_, nrow(geojson)))
+  }
+
+  cls <- geojson$classification
+
+  # Handle character vector (JSON strings)
+  if (is.character(cls)) {
+    sapply(cls, function(x) {
+      if (is.na(x) || !nzchar(x)) return(NA_character_)
+      parsed <- tryCatch(jsonlite::fromJSON(x), error = function(e) NULL)
+      if (!is.null(parsed) && "name" %in% names(parsed)) {
+        as.character(parsed$name)
+      } else {
+        NA_character_
+      }
+    }, USE.NAMES = FALSE)
+  } else if (is.list(cls)) {
+    # Handle list of classification objects
+    sapply(cls, function(x) {
+      if (is.list(x) && "name" %in% names(x)) x$name else NA_character_
+    }, USE.NAMES = FALSE)
+  } else if (is.data.frame(cls) && "name" %in% names(cls)) {
+    cls$name
+  } else {
+    rep(NA_character_, nrow(geojson))
+  }
+}
+
+# Get polygons within a bounding box around a centroid
+# Input coordinates are in micrometers (from islet_spatial_lookup.csv)
+# GeoJSON polygons are in pixel coordinates, so we convert µm → pixels
+get_islet_region_polygons <- function(geojson, centroid_x_um, centroid_y_um, buffer_um = 200) {
+  if (!SF_AVAILABLE || is.null(geojson) || nrow(geojson) == 0) {
+    return(list(Islet = NULL, IsletExpanded = NULL, Nerve = NULL, Capillary = NULL, Lymphatic = NULL))
+  }
+
+  # Convert micrometers to pixels for GeoJSON query
+  centroid_x_px <- centroid_x_um / PIXEL_SIZE_UM
+  centroid_y_px <- centroid_y_um / PIXEL_SIZE_UM
+  buffer_px <- buffer_um / PIXEL_SIZE_UM
+
+  # Define bounding box limits in pixel coordinates
+  xmin <- centroid_x_px - buffer_px
+  xmax <- centroid_x_px + buffer_px
+  ymin <- centroid_y_px - buffer_px
+  ymax <- centroid_y_px + buffer_px
+
+  # Create a bounding box polygon for filtering
+  # Use st_intersects with a bbox polygon instead of st_crop (which has CRS issues)
+  bbox_polygon <- tryCatch({
+    # Create a simple polygon from bbox coordinates
+    coords <- matrix(c(
+      xmin, ymin,
+      xmax, ymin,
+      xmax, ymax,
+      xmin, ymax,
+      xmin, ymin
+    ), ncol = 2, byrow = TRUE)
+    bbox_sf <- sf::st_sfc(sf::st_polygon(list(coords)))
+    # Match CRS if available, otherwise treat as planar
+    if (!is.na(sf::st_crs(geojson))) {
+      sf::st_set_crs(bbox_sf, sf::st_crs(geojson))
+    }
+    bbox_sf
+  }, error = function(e) {
+    message("[SEGMENTATION] Bbox creation error: ", conditionMessage(e))
+    NULL
+  })
+
+  if (is.null(bbox_polygon)) {
+    return(list(Islet = NULL, IsletExpanded = NULL, Nerve = NULL, Capillary = NULL, Lymphatic = NULL))
+  }
+
+  # Find features that intersect with the bounding box
+  intersects <- tryCatch({
+    suppressWarnings(sf::st_intersects(geojson, bbox_polygon, sparse = FALSE)[, 1])
+  }, error = function(e) {
+    message("[SEGMENTATION] Intersection error: ", conditionMessage(e))
+    rep(FALSE, nrow(geojson))
+  })
+
+  cropped <- geojson[intersects, ]
+
+  if (nrow(cropped) == 0) {
+    return(list(Islet = NULL, IsletExpanded = NULL, Nerve = NULL, Capillary = NULL, Lymphatic = NULL))
+  }
+
+  # Get classification names
+  cls_names <- get_classification_name(cropped)
+
+  # Extract by classification
+  result <- list()
+  for (cls in c("Islet", "IsletExpanded", "Nerve", "Capillary", "Lymphatic")) {
+    matches <- grepl(paste0("^", cls, "$"), cls_names, ignore.case = TRUE)
+    if (any(matches)) {
+      result[[cls]] <- cropped[matches, ]
+    } else {
+      result[[cls]] <- NULL
+    }
+  }
+
+  return(result)
+}
 
 master_path <- file.path("..", "..", "data", "master_results.xlsx")
 
@@ -2161,9 +2350,12 @@ ui <- fluidPage(
               )
             ),
 
+            # Islet Segmentation Viewer - appears when a point is clicked
+            uiOutput("segmentation_viewer_panel")
+
           )
         ),
-        
+
         tabPanel("Viewer",
           div(style = "width: 100%;",
               uiOutput("local_image_picker"),
@@ -3240,7 +3432,289 @@ server <- function(input, output, session) {
       ) %>%
       event_register("plotly_click")
   })
-  
+
+  # ===== Islet Segmentation Viewer =====
+  # Reactive value to store selected islet information
+  selected_islet <- reactiveVal(NULL)
+
+  # Click handler for trajectory scatter plot
+  observeEvent(event_data("plotly_click", source = "traj_scatter"), {
+    click_data <- event_data("plotly_click", source = "traj_scatter")
+    if (is.null(click_data)) return()
+
+    # Check if segmentation viewer is available
+    if (!SF_AVAILABLE) {
+      showNotification("Segmentation viewer requires the 'sf' package. Install with: install.packages('sf')",
+                       type = "warning", duration = 5)
+      return()
+    }
+
+    if (is.null(islet_spatial_lookup)) {
+      showNotification("Islet spatial lookup data not available", type = "warning", duration = 5)
+      return()
+    }
+
+    cat("[SEGMENTATION CLICK] Received click event\n")
+
+    # Get clicked coordinates
+    click_x <- click_data$x
+    click_y <- click_data$y
+
+    # First try to get from customdata
+    custom <- click_data$customdata
+    case_id <- NULL
+    islet_key <- NULL
+
+    if (!is.null(custom) && length(custom) >= 2) {
+      case_id <- custom[[1]]
+      islet_key <- custom[[2]]
+      cat("[SEGMENTATION CLICK] From customdata: case_id=", case_id, ", islet_key=", islet_key, "\n")
+    }
+
+    # If customdata not available, look up from coordinate table
+    if (is.null(case_id) || is.null(islet_key) || is.na(case_id) || is.na(islet_key)) {
+      if (exists("traj_coord_lookup") && !is.null(traj_coord_lookup) && nrow(traj_coord_lookup) > 0) {
+        # Find nearest point in lookup table
+        tolerance <- 0.01
+        matches <- which(
+          abs(traj_coord_lookup$pt - click_x) < tolerance &
+          abs(traj_coord_lookup$value - click_y) < tolerance
+        )
+
+        if (length(matches) > 0) {
+          idx <- matches[1]
+          case_id <- traj_coord_lookup$case_id[idx]
+          islet_key <- traj_coord_lookup$islet_key[idx]
+          cat("[SEGMENTATION CLICK] From coord lookup: case_id=", case_id, ", islet_key=", islet_key, "\n")
+        }
+      }
+    }
+
+    if (is.null(case_id) || is.null(islet_key) || is.na(case_id) || is.na(islet_key)) {
+      showNotification("Could not identify clicked islet", type = "warning", duration = 3)
+      return()
+    }
+
+    # Look up centroid coordinates from spatial lookup
+    spatial_match <- islet_spatial_lookup[
+      islet_spatial_lookup$case_id == case_id & islet_spatial_lookup$islet_key == islet_key,
+    ]
+
+    if (nrow(spatial_match) == 0) {
+      showNotification(paste("Spatial data not found for", islet_key, "in case", case_id),
+                       type = "warning", duration = 3)
+      return()
+    }
+
+    centroid_x <- spatial_match$centroid_x_um[1]
+    centroid_y <- spatial_match$centroid_y_um[1]
+
+    cat("[SEGMENTATION CLICK] Centroid: x=", centroid_x, ", y=", centroid_y, "\n")
+
+    # Store selected islet info - this triggers the embedded viewer to update
+    selected_islet(list(
+      case_id = case_id,
+      islet_key = islet_key,
+      centroid_x = centroid_x,
+      centroid_y = centroid_y
+    ))
+  })
+
+  # Render the embedded segmentation viewer panel (appears when islet is selected)
+  output$segmentation_viewer_panel <- renderUI({
+    info <- selected_islet()
+    if (is.null(info)) return(NULL)
+
+    fluidRow(
+      column(12,
+        div(class = "card", style = "padding: 15px; margin-top: 20px; border: 2px solid #0066CC;",
+          fluidRow(
+            column(8,
+              h4(paste("Islet Segmentation:", info$islet_key, "(Case", info$case_id, ")"),
+                 style = "margin-top: 0; color: #0066CC;")
+            ),
+            column(4, style = "text-align: right;",
+              actionButton("clear_segmentation", "Close", class = "btn btn-sm btn-outline-secondary")
+            )
+          ),
+          fluidRow(
+            # Left: Segmentation plot
+            column(8,
+              plotOutput("islet_segmentation_view", height = "450px")
+            ),
+            # Right: Legend and info
+            column(4,
+              div(style = "padding: 10px; background-color: #f8f9fa; border-radius: 5px; height: 100%;",
+                h5("Legend", style = "margin-top: 0; margin-bottom: 15px;"),
+                div(style = "margin-bottom: 10px;",
+                  div(style = "display: flex; align-items: center; margin-bottom: 8px;",
+                    div(style = "width: 25px; height: 4px; background-color: #0066CC; margin-right: 8px;"),
+                    span("Islet boundary")
+                  ),
+                  div(style = "display: flex; align-items: center; margin-bottom: 8px;",
+                    div(style = "width: 25px; height: 4px; background-color: #00CCCC; margin-right: 8px;"),
+                    span("Expanded (+20\u00b5m)")
+                  ),
+                  div(style = "display: flex; align-items: center; margin-bottom: 8px;",
+                    div(style = "width: 25px; height: 4px; background-color: #CC00CC; margin-right: 8px;"),
+                    span("Nerve")
+                  ),
+                  div(style = "display: flex; align-items: center; margin-bottom: 8px;",
+                    div(style = "width: 25px; height: 4px; background-color: #CC0000; margin-right: 8px;"),
+                    span("Capillary")
+                  ),
+                  div(style = "display: flex; align-items: center; margin-bottom: 8px;",
+                    div(style = "width: 25px; height: 4px; background-color: #00AA00; margin-right: 8px;"),
+                    span("Lymphatic")
+                  ),
+                  div(style = "display: flex; align-items: center; margin-bottom: 8px;",
+                    div(style = "width: 25px; height: 4px; background-color: #FFD700; margin-right: 8px;"),
+                    span("Selected islet", style = "font-weight: bold;")
+                  )
+                ),
+                hr(),
+                h6("Islet Info", style = "margin-bottom: 10px;"),
+                tags$dl(style = "font-size: 13px;",
+                  tags$dt("Case ID:"), tags$dd(info$case_id),
+                  tags$dt("Islet:"), tags$dd(info$islet_key),
+                  tags$dt("Centroid X:"), tags$dd(paste0(round(info$centroid_x, 1), " \u00b5m")),
+                  tags$dt("Centroid Y:"), tags$dd(paste0(round(info$centroid_y, 1), " \u00b5m"))
+                ),
+                hr(),
+                p(style = "font-size: 11px; color: #666; margin-bottom: 0;",
+                  "Click another point to view a different islet, or click Close to hide this panel.")
+              )
+            )
+          )
+        )
+      )
+    )
+  })
+
+  # Clear segmentation viewer when close button is clicked
+  observeEvent(input$clear_segmentation, {
+    selected_islet(NULL)
+  })
+
+  # Render islet segmentation plot
+  output$islet_segmentation_view <- renderPlot({
+    req(selected_islet())
+    info <- selected_islet()
+
+    cat("[SEGMENTATION RENDER] Rendering for case=", info$case_id, ", islet=", info$islet_key, "\n")
+
+    # Load GeoJSON for this case
+    geojson <- load_case_geojson(info$case_id)
+    if (is.null(geojson)) {
+      # Return empty plot with message
+      return(
+        ggplot() +
+          annotate("text", x = 0.5, y = 0.5, label = paste("GeoJSON data not available for case", info$case_id),
+                   size = 5, color = "gray50") +
+          theme_void() +
+          xlim(0, 1) + ylim(0, 1)
+      )
+    }
+
+    # Get polygons in region around islet centroid
+    buffer_um <- 250  # Show 250um around centroid
+    polygons <- get_islet_region_polygons(geojson, info$centroid_x, info$centroid_y, buffer_um)
+
+    # Define colors for each class
+    colors <- c(
+      "Islet" = "#0066CC",
+      "IsletExpanded" = "#00CCCC",
+      "Nerve" = "#CC00CC",
+      "Capillary" = "#CC0000",
+      "Lymphatic" = "#00AA00"
+    )
+
+    # Build plot
+    # Note: scale_y_reverse() flips Y-axis to match image coordinates (Y=0 at top)
+    p <- ggplot() +
+      theme_minimal(base_size = 12) +
+      theme(
+        panel.grid = element_blank(),
+        axis.text = element_text(size = 9),
+        plot.title = element_text(hjust = 0.5, size = 14, face = "bold")
+      ) +
+      coord_fixed() +
+      scale_y_reverse()
+
+    # Track if any polygons were added
+    has_polygons <- FALSE
+
+    # Add each class with appropriate styling
+    # Order: IsletExpanded first (background), then Islet, then vessels/nerves on top
+    layer_order <- c("IsletExpanded", "Islet", "Lymphatic", "Capillary", "Nerve")
+
+    for (cls in layer_order) {
+      if (!is.null(polygons[[cls]]) && nrow(polygons[[cls]]) > 0) {
+        p <- p + geom_sf(data = polygons[[cls]],
+                         fill = NA, color = colors[cls], linewidth = 0.8,
+                         show.legend = FALSE)
+        has_polygons <- TRUE
+      }
+    }
+
+    if (!has_polygons) {
+      # No polygons found in region
+      return(
+        ggplot() +
+          annotate("text", x = 0.5, y = 0.5,
+                   label = paste("No segmentation data found near", info$islet_key),
+                   size = 5, color = "gray50") +
+          theme_void() +
+          xlim(0, 1) + ylim(0, 1)
+      )
+    }
+
+    # Highlight the clicked islet by matching name
+    if (!is.null(polygons$Islet) && nrow(polygons$Islet) > 0) {
+      # Check if there's a "name" column or "id" that matches islet_key
+      islet_names <- if ("name" %in% names(polygons$Islet)) {
+        polygons$Islet$name
+      } else if ("id" %in% names(polygons$Islet)) {
+        polygons$Islet$id
+      } else {
+        NULL
+      }
+
+      if (!is.null(islet_names)) {
+        # Try exact match first
+        clicked_idx <- which(islet_names == info$islet_key)
+        # If no exact match, try pattern match
+        if (length(clicked_idx) == 0) {
+          clicked_idx <- grep(info$islet_key, islet_names, fixed = TRUE)
+        }
+
+        if (length(clicked_idx) > 0) {
+          clicked_islet <- polygons$Islet[clicked_idx[1], ]
+          p <- p + geom_sf(data = clicked_islet, fill = NA,
+                           color = "#FFD700", linewidth = 2.5,
+                           show.legend = FALSE)
+        }
+      }
+    }
+
+    # Add crosshairs at centroid (convert µm to pixels for display)
+    centroid_x_px <- info$centroid_x / PIXEL_SIZE_UM
+    centroid_y_px <- info$centroid_y / PIXEL_SIZE_UM
+    p <- p +
+      geom_vline(xintercept = centroid_x_px, color = "gray50", linetype = "dashed", linewidth = 0.3) +
+      geom_hline(yintercept = centroid_y_px, color = "gray50", linetype = "dashed", linewidth = 0.3)
+
+    # Add labels (coordinates displayed in pixels to match QuPath)
+    p <- p +
+      labs(
+        title = paste(info$islet_key, "- Case", info$case_id),
+        x = "X position (pixels)",
+        y = "Y position (pixels)"
+      )
+
+    p
+  })
+
   # Outlier table display - hidden by default, shown only when checkbox is checked
   output$traj_outlier_info <- renderUI({
     # Only show if checkbox is checked AND outliers exist
