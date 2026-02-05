@@ -1,5 +1,5 @@
 pkgs <- c(
-  "shiny","readxl","dplyr","stringr","tidyr","ggplot2","plotly","broom","base64enc","cluster"
+  "shiny","readxl","dplyr","stringr","tidyr","ggplot2","plotly","broom","base64enc","cluster","sf"
 )
 to_install <- setdiff(pkgs, rownames(installed.packages()))
 if (length(to_install)) install.packages(to_install, repos = "https://cloud.r-project.org")

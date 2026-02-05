@@ -3520,6 +3520,90 @@ server <- function(input, output, session) {
     ))
   })
 
+  # Click handler for Plot tab scatter plot (when "Show individual points" is enabled)
+  observeEvent(event_data("plotly_click", source = "plot_scatter"), {
+    click_data <- event_data("plotly_click", source = "plot_scatter")
+    if (is.null(click_data)) return()
+
+    # Check if segmentation viewer is available
+    if (!SF_AVAILABLE) {
+      showNotification("Segmentation viewer requires the 'sf' package. Install with: install.packages('sf')",
+                       type = "warning", duration = 5)
+      return()
+    }
+
+    if (is.null(islet_spatial_lookup)) {
+      showNotification("Islet spatial lookup data not available", type = "warning", duration = 5)
+      return()
+    }
+
+    # Get the key from click data (format: "case_id|islet_key")
+    click_key <- click_data$key
+    if (is.null(click_key) || is.na(click_key) || !nzchar(click_key)) {
+      showNotification("Click on individual points to view segmentation (enable 'Show individual points')",
+                       type = "message", duration = 3)
+      return()
+    }
+
+    cat("[PLOT CLICK] Received click with key:", click_key, "\n")
+
+    # Parse the key to extract case_id and islet_key
+    key_parts <- strsplit(click_key, "\\|")[[1]]
+    if (length(key_parts) < 2) {
+      showNotification("Could not parse islet identifier", type = "warning", duration = 3)
+      return()
+    }
+
+    case_id <- key_parts[1]
+    islet_key <- key_parts[2]
+
+    cat("[PLOT CLICK] Parsed: case_id=", case_id, ", islet_key=", islet_key, "\n")
+
+    # Look up centroid coordinates from spatial lookup
+    spatial_match <- islet_spatial_lookup[
+      islet_spatial_lookup$case_id == case_id & islet_spatial_lookup$islet_key == islet_key,
+    ]
+
+    if (nrow(spatial_match) == 0) {
+      # Try with numeric case_id conversion
+      case_id_num <- suppressWarnings(as.numeric(case_id))
+      if (!is.na(case_id_num)) {
+        spatial_match <- islet_spatial_lookup[
+          islet_spatial_lookup$case_id == case_id_num & islet_spatial_lookup$islet_key == islet_key,
+        ]
+      }
+    }
+
+    if (nrow(spatial_match) == 0) {
+      showNotification(paste("Spatial data not found for", islet_key, "in case", case_id),
+                       type = "warning", duration = 3)
+      return()
+    }
+
+    centroid_x <- spatial_match$centroid_x_um[1]
+    centroid_y <- spatial_match$centroid_y_um[1]
+
+    cat("[PLOT CLICK] Centroid: x=", centroid_x, ", y=", centroid_y, "\n")
+
+    # Store selected islet info - this triggers the segmentation viewer to update
+    selected_islet(list(
+      case_id = case_id,
+      islet_key = islet_key,
+      centroid_x = centroid_x,
+      centroid_y = centroid_y
+    ))
+
+    # Show modal dialog with segmentation view (Plot tab uses modal instead of embedded panel)
+    # Uses the same islet_segmentation_view output that works for the Trajectory tab
+    showModal(modalDialog(
+      title = paste("Islet Segmentation:", islet_key, "(Case", case_id, ")"),
+      plotOutput("islet_segmentation_view", height = "450px"),
+      size = "l",
+      easyClose = TRUE,
+      footer = modalButton("Close")
+    ))
+  })
+
   # Render the embedded segmentation viewer panel (appears when islet is selected)
   output$segmentation_viewer_panel <- renderUI({
     info <- selected_islet()
@@ -3620,6 +3704,14 @@ server <- function(input, output, session) {
     buffer_um <- 250  # Show 250um around centroid
     polygons <- get_islet_region_polygons(geojson, info$centroid_x, info$centroid_y, buffer_um)
 
+    # Calculate bounding box in pixels for proper axis limits
+    centroid_x_px <- info$centroid_x / PIXEL_SIZE_UM
+    centroid_y_px <- info$centroid_y / PIXEL_SIZE_UM
+    buffer_px <- buffer_um / PIXEL_SIZE_UM
+
+    xlim_range <- c(centroid_x_px - buffer_px, centroid_x_px + buffer_px)
+    ylim_range <- c(centroid_y_px - buffer_px, centroid_y_px + buffer_px)
+
     # Define colors for each class
     colors <- c(
       "Islet" = "#0066CC",
@@ -3629,8 +3721,7 @@ server <- function(input, output, session) {
       "Lymphatic" = "#00AA00"
     )
 
-    # Build plot
-    # Note: scale_y_reverse() flips Y-axis to match image coordinates (Y=0 at top)
+    # Build plot with explicit limits and Y-axis reversed to match image coordinates
     p <- ggplot() +
       theme_minimal(base_size = 12) +
       theme(
@@ -3638,8 +3729,7 @@ server <- function(input, output, session) {
         axis.text = element_text(size = 9),
         plot.title = element_text(hjust = 0.5, size = 14, face = "bold")
       ) +
-      coord_fixed() +
-      scale_y_reverse()
+      coord_sf(xlim = xlim_range, ylim = rev(ylim_range), expand = FALSE)
 
     # Track if any polygons were added
     has_polygons <- FALSE
@@ -3697,9 +3787,7 @@ server <- function(input, output, session) {
       }
     }
 
-    # Add crosshairs at centroid (convert µm to pixels for display)
-    centroid_x_px <- info$centroid_x / PIXEL_SIZE_UM
-    centroid_y_px <- info$centroid_y / PIXEL_SIZE_UM
+    # Add crosshairs at centroid (centroid_x_px and centroid_y_px calculated above)
     p <- p +
       geom_vline(xintercept = centroid_x_px, color = "gray50", linetype = "dashed", linewidth = 0.3) +
       geom_hline(yintercept = centroid_y_px, color = "gray50", linetype = "dashed", linewidth = 0.3)
@@ -4490,7 +4578,15 @@ server <- function(input, output, session) {
     if (isTRUE(input$show_points)) {
       raw <- plot_df()
       raw$donor_status <- factor(raw$donor_status, levels = grp_levels)
-      
+
+      # Add islet_click_key for segmentation viewer click handling
+      # Combines Case ID and islet_key with a separator for parsing in click handler
+      if ("Case ID" %in% names(raw) && "islet_key" %in% names(raw)) {
+        raw$islet_click_key <- paste(raw$`Case ID`, raw$islet_key, sep = "|")
+      } else {
+        raw$islet_click_key <- NA_character_
+      }
+
       # Separate normal points from outliers
       raw_normal <- raw[!raw$is_outlier | is.na(raw$is_outlier), ]
       raw_outliers <- raw[raw$is_outlier & !is.na(raw$is_outlier), ]
@@ -4533,7 +4629,7 @@ server <- function(input, output, session) {
             donor_colors
           )
           p <- p +
-            geom_point(data = raw_normal, aes(x = diam_mid, y = value, color = donor_id),
+            geom_point(data = raw_normal, aes(x = diam_mid, y = value, color = donor_id, key = islet_click_key),
                        position = position_jitter(width = jw, height = jh), size = input$pt_size, alpha = input$pt_alpha, inherit.aes = FALSE) +
             scale_color_manual(values = combined_colors,
                              breaks = levels(raw_normal$donor_id),
@@ -4541,21 +4637,21 @@ server <- function(input, output, session) {
         } else {
           # Fallback to donor_status if Case ID not available
           p <- p +
-            geom_point(data = raw_normal, aes(x = diam_mid, y = value, color = donor_status),
+            geom_point(data = raw_normal, aes(x = diam_mid, y = value, color = donor_status, key = islet_click_key),
                        position = position_jitter(width = jw, height = jh), size = input$pt_size, alpha = input$pt_alpha, inherit.aes = FALSE)
         }
       } else {
         # Color by donor_status (default)
         p <- p +
-          geom_point(data = raw_normal, aes(x = diam_mid, y = value, color = donor_status),
+          geom_point(data = raw_normal, aes(x = diam_mid, y = value, color = donor_status, key = islet_click_key),
                      position = position_jitter(width = jw, height = jh), size = input$pt_size, alpha = input$pt_alpha, inherit.aes = FALSE)
       }
       
       # Add OUTLIERS as red points on top
       if (nrow(raw_outliers) > 0) {
         p <- p +
-          geom_point(data = raw_outliers, aes(x = diam_mid, y = value),
-                     position = position_jitter(width = jw, height = jh), 
+          geom_point(data = raw_outliers, aes(x = diam_mid, y = value, key = islet_click_key),
+                     position = position_jitter(width = jw, height = jh),
                      size = input$pt_size * 1.2, # Slightly larger
                      alpha = min(1.0, input$pt_alpha * 1.5), # More visible
                      color = "#d62728", # Red color
@@ -4599,7 +4695,7 @@ server <- function(input, output, session) {
       )
     }
 
-    gg <- ggplotly(p)
+    gg <- ggplotly(p, source = "plot_scatter")
     gg <- gg %>% layout(legend = list(orientation = "h", x = 0, y = -0.15))
     gg
   })
