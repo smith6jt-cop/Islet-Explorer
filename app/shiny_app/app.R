@@ -4647,14 +4647,13 @@ server <- function(input, output, session) {
                      position = position_jitter(width = jw, height = jh), size = input$pt_size, alpha = input$pt_alpha, inherit.aes = FALSE)
       }
       
-      # Add OUTLIERS as red points on top
+      # Add OUTLIERS on top (colored by donor status, slightly larger/brighter)
       if (nrow(raw_outliers) > 0) {
         p <- p +
-          geom_point(data = raw_outliers, aes(x = diam_mid, y = value, key = islet_click_key),
+          geom_point(data = raw_outliers, aes(x = diam_mid, y = value, color = donor_status, key = islet_click_key),
                      position = position_jitter(width = jw, height = jh),
                      size = input$pt_size * 1.2, # Slightly larger
                      alpha = min(1.0, input$pt_alpha * 1.5), # More visible
-                     color = "#d62728", # Red color
                      inherit.aes = FALSE)
       }
     }
