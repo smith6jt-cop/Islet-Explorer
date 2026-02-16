@@ -1,0 +1,105 @@
+# ---------- Plot module UI ----------
+# Exports: plot_sidebar_ui(id), plot_main_ui(id)
+# All Plot-related inputs are namespaced by this module.
+
+#' Sidebar UI for the Plot tab
+#' Contains data filters, autoantibody filters, statistic selector, and export controls.
+plot_sidebar_ui <- function(id) {
+  ns <- NS(id)
+  div(class = "sidebar", style = "height: 100%;",
+    h4("Data & Filters"),
+    selectInput(ns("mode"), "Focus",
+                choices = c("Markers", "Targets", "Composition"),
+                selected = "Composition"),
+    uiOutput(ns("region_selector")),
+    uiOutput(ns("dynamic_selector")),
+    uiOutput(ns("metric_selector")),
+    hr(),
+    h5("Autoantibody filter (Aab+ donors only)"),
+    uiOutput(ns("aab_warning")),
+    checkboxGroupInput(ns("aab_flags"), NULL,
+                       choices = c("GADA" = "AAb_GADA",
+                                   "IA2A" = "AAb_IA2A",
+                                   "ZnT8A" = "AAb_ZnT8A",
+                                   "IAA" = "AAb_IAA",
+                                   "mIAA" = "AAb_mIAA"),
+                       selected = c("AAb_GADA", "AAb_IA2A", "AAb_ZnT8A", "AAb_IAA", "AAb_mIAA")),
+    checkboxGroupInput(ns("groups"), "Donor Status",
+                       choices = c("ND", "Aab+", "T1D"),
+                       selected = c("ND", "Aab+", "T1D"),
+                       inline = TRUE),
+    radioButtons(ns("stat"), "Statistic",
+                 choices = c("Mean\u00b1SE" = "mean_se",
+                             "Mean\u00b1SD" = "mean_sd",
+                             "Median + IQR" = "median_iqr"),
+                 selected = "mean_se"),
+    checkboxInput(ns("show_plot_outlier_table"),
+                  "Show outlier table (if outliers detected)",
+                  value = FALSE),
+    uiOutput(ns("plot_outlier_info")),
+    hr(),
+    h5("Export"),
+    downloadButton(ns("dl_summary"), "Download summary CSV")
+  )
+}
+
+#' Main content UI for the Plot tab
+#' Left card: scatter plot with controls. Right card: distribution comparison.
+plot_main_ui <- function(id) {
+  ns <- NS(id)
+  tagList(
+    # Left card: Main scatter plot
+    column(5,
+      div(class = "card",
+          style = "margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; height: calc(100vh - 100px); display: flex; flex-direction: column; gap: 12px;",
+        h5("Islet Size Distribution", style = "margin-top: 0; color: #333;"),
+        div(style = "flex: 1; min-height: 0; display: flex;",
+          plotlyOutput(ns("plt"), height = "100%")
+        ),
+        div(style = "flex: 0 0 auto; display: flex; flex-direction: column; gap: 10px;",
+          fluidRow(
+            column(4,
+              sliderInput(ns("binwidth"), "Diameter bin width (\u00b5m)",
+                          min = 1, max = 75, value = 50, step = 1),
+              sliderInput(ns("diam_range"), "Islet diameter range (\u00b5m)",
+                          min = 0, max = 500, value = c(0, 350), step = 10)
+            ),
+            column(4,
+              sliderInput(ns("pt_size"), "Point size",
+                          min = 0.3, max = 4.0, value = 0.8, step = 0.1),
+              sliderInput(ns("pt_alpha"), "Point transparency",
+                          min = 0.05, max = 1.0, value = 0.25, step = 0.05)
+            ),
+            column(4,
+              selectInput(ns("plot_color_by"), "Color points by:",
+                          choices = c("Donor Status" = "donor_status",
+                                      "Donor ID" = "donor_id"),
+                          selected = "donor_status"),
+              radioButtons(ns("add_smooth"), "Trend line",
+                           choices = c("None", "LOESS"),
+                           selected = "None", inline = TRUE)
+            )
+          ),
+          div(style = "display: flex; flex-wrap: wrap; gap: 15px; justify-content: flex-end;",
+            checkboxInput(ns("exclude_zero_top"), "Exclude zero values", value = FALSE),
+            checkboxInput(ns("show_points"), "Show individual points", value = FALSE),
+            checkboxInput(ns("log_scale"), "Log scale y-axis", value = FALSE),
+            checkboxInput(ns("log_scale_x"), "Log2 scale x-axis", value = FALSE)
+          )
+        )
+      )
+    ),
+    # Right card: Distribution comparison
+    column(5,
+      div(class = "card",
+          style = "margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; height: calc(100vh - 100px); display: flex; flex-direction: column; gap: 12px;",
+        h5("Distribution Comparison", style = "margin-top: 0; color: #333;"),
+        div(style = "flex: 1; overflow-y: auto;",
+          plotlyOutput(ns("dist"), height = 400),
+          br(),
+          uiOutput(ns("dist_ui"))
+        )
+      )
+    )
+  )
+}
