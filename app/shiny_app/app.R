@@ -3255,7 +3255,7 @@ server <- function(input, output, session) {
     
     # Apply color scales
     if (color_by == "donor_status") {
-      g <- g + scale_color_manual(values = c("ND" = "#1f77b4", "Aab+" = "#ff7f0e", "T1D" = "#d62728"),
+      g <- g + scale_color_manual(values = c("ND" = "#2ca02c", "Aab+" = "#ffcc00", "T1D" = "#9467bd"),
                                   name = color_title, drop = FALSE)
     } else if (color_by == "donor_id") {
       # Convert to factor for consistent coloring
@@ -3302,7 +3302,7 @@ server <- function(input, output, session) {
         df$donor_status <- factor(df$donor_status, levels = c("ND", "Aab+", "T1D"))
         
         # Define trend line colors
-        trend_colors <- c("ND" = "#1f77b4", "Aab+" = "#ff7f0e", "T1D" = "#d62728")
+        trend_colors <- c("ND" = "#2ca02c", "Aab+" = "#ffcc00", "T1D" = "#9467bd")
         
         # When coloring by donor_id, we need to add trend lines with explicit colors
         # to avoid scale conflicts
@@ -3835,15 +3835,15 @@ server <- function(input, output, session) {
       # Donor Status legend
       tagList(
         div(style = "display: flex; align-items: center; margin-bottom: 8px;",
-          div(style = "width: 20px; height: 20px; background-color: #1f77b4; border-radius: 3px; margin-right: 8px;"),
+          div(style = "width: 20px; height: 20px; background-color: #2ca02c; border-radius: 3px; margin-right: 8px;"),
           span("ND", style = "font-size: 13px;")
         ),
         div(style = "display: flex; align-items: center; margin-bottom: 8px;",
-          div(style = "width: 20px; height: 20px; background-color: #ff7f0e; border-radius: 3px; margin-right: 8px;"),
+          div(style = "width: 20px; height: 20px; background-color: #ffcc00; border-radius: 3px; margin-right: 8px;"),
           span("Aab+", style = "font-size: 13px;")
         ),
         div(style = "display: flex; align-items: center;",
-          div(style = "width: 20px; height: 20px; background-color: #d62728; border-radius: 3px; margin-right: 8px;"),
+          div(style = "width: 20px; height: 20px; background-color: #9467bd; border-radius: 3px; margin-right: 8px;"),
           span("T1D", style = "font-size: 13px;")
         )
       )
@@ -3919,7 +3919,7 @@ server <- function(input, output, session) {
     
     g <- ggplot(df, aes(x = umap_1, y = umap_2, color = donor_status)) +
       geom_point(alpha = 0.7, size = 1.2) +
-      scale_color_manual(values = c("ND" = "#1f77b4", "Aab+" = "#ff7f0e", "T1D" = "#d62728")) +
+      scale_color_manual(values = c("ND" = "#2ca02c", "Aab+" = "#ffcc00", "T1D" = "#9467bd")) +
       labs(x = "UMAP 1", y = "UMAP 2", title = "UMAP: Donor Status") +
       theme_minimal(base_size = 12) +
       theme(aspect.ratio = 1)
@@ -4037,7 +4037,7 @@ server <- function(input, output, session) {
       g <- ggplot(hm, aes(x = x, y = 1, fill = avg_donor_status)) +
         geom_tile(height = 1) +
         scale_fill_gradientn(
-          colors = c("#1f77b4", "#ff7f0e", "#d62728"), 
+          colors = c("#2ca02c", "#ffcc00", "#9467bd"),
           limits = c(0, 2), 
           na.value = "#dddddd",
           name = "Average\nDonor Type",
@@ -4499,10 +4499,10 @@ server <- function(input, output, session) {
     
     # Build color map based on selection
     if (color_by == "donor_status") {
-      color_map <- c("ND" = "#1f77b4", "Aab+" = "#ff7f0e", "T1D" = "#d62728")
+      color_map <- c("ND" = "#2ca02c", "Aab+" = "#ffcc00", "T1D" = "#9467bd")
     } else {
       # For donor_id, we'll apply colors to raw points only
-      color_map <- c("ND" = "#1f77b4", "Aab+" = "#ff7f0e", "T1D" = "#d62728")
+      color_map <- c("ND" = "#2ca02c", "Aab+" = "#ffcc00", "T1D" = "#9467bd")
     }
 
     # Build y-label reflecting normalization choice
@@ -4625,7 +4625,7 @@ server <- function(input, output, session) {
           donor_colors <- get_donor_palette(levels(raw_normal$donor_id))
           # Combine donor_status colors (for lines) with donor_id colors (for points)
           combined_colors <- c(
-            "ND" = "#1f77b4", "Aab+" = "#ff7f0e", "T1D" = "#d62728",
+            "ND" = "#2ca02c", "Aab+" = "#ffcc00", "T1D" = "#9467bd",
             donor_colors
           )
           p <- p +
@@ -4898,7 +4898,7 @@ server <- function(input, output, session) {
     # Create bar plot
     g <- ggplot(auc_by_group, aes(x = donor_status, y = auc, fill = donor_status)) +
       geom_col(width = 0.7, color = "black", alpha = 0.8) +
-      scale_fill_manual(values = c("ND" = "#1f77b4", "Aab+" = "#ff7f0e", "T1D" = "#d62728")) +
+      scale_fill_manual(values = c("ND" = "#2ca02c", "Aab+" = "#ffcc00", "T1D" = "#9467bd")) +
       labs(
         x = "Donor Status",
         y = "Area Under Curve (AUC)",
@@ -5214,7 +5214,7 @@ server <- function(input, output, session) {
       g <- g + geom_violin(trim = FALSE, alpha = 0.8)
     }
     
-    g <- g + scale_fill_manual(values = c("ND" = "#1f77b4", "Aab+" = "#ff7f0e", "T1D" = "#d62728"), guide = "none")
+    g <- g + scale_fill_manual(values = c("ND" = "#2ca02c", "Aab+" = "#ffcc00", "T1D" = "#9467bd"), guide = "none")
     
     if (isTRUE(input$dist_show_points)) {
       if (color_by == "donor_id" && "donor_id" %in% colnames(rdf)) {
@@ -5233,7 +5233,7 @@ server <- function(input, output, session) {
                              alpha = ifelse(is.null(input$dist_pt_alpha), 0.25, input$dist_pt_alpha),
                              size = ifelse(is.null(input$dist_pt_size), 0.7, input$dist_pt_size),
                              stroke = 0, inherit.aes = FALSE) +
-          scale_color_manual(values = c("ND" = "#1f77b4", "Aab+" = "#ff7f0e", "T1D" = "#d62728"), guide = "none")
+          scale_color_manual(values = c("ND" = "#2ca02c", "Aab+" = "#ffcc00", "T1D" = "#9467bd"), guide = "none")
       }
     }
     
