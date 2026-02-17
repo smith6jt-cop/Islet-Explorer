@@ -56,24 +56,24 @@ The `output$islet_segmentation_view` renderPlot is defined in **app.R** at the r
 
 ## Key Data Files
 
-- `data/islet_explorer.h5ad` - **Primary app data** (enriched H5AD with groovy + trajectory + donor metadata)
+- `data/islet_explorer.h5ad` - **Primary app data** (47 MB, 1,015 islets, groovy + trajectory + donor metadata)
 - `data/master_results.xlsx` - Aggregated islet-level data (composition, markers, targets) — Excel fallback
-- `data/adata_ins_root.h5ad` - Trajectory h5ad (DPT pseudotime, UMAP, rebuilt from fixed pipeline)
+- `data/adata_ins_root.h5ad` - Trajectory h5ad (1,015 islets, 31 vars, DPT pseudotime, UMAP, rebuilt 2026-02-17)
 - `data/islet_spatial_lookup.csv` - Centroid coordinates for segmentation viewer
 - `data/json/*.geojson` / `data/gson/*.geojson.gz` - QuPath segmentation boundaries
 - `data/DATA_PROVENANCE.md` - Documents canonical H5AD lineage and data sources
 
-## Data Pipeline (Phase 2 - Feb 2026)
+## Data Pipeline (Phases 2-3, executed Feb 2026)
 
 Canonical H5AD lineage:
 ```
 single_cell_analysis/CODEX_scvi_BioCov_phenotyped_newDuctal.h5ad  (2.6M cells)
   ↓ islet_analysis/fixed_islet_aggregation.py (core only, min_cells=20)
-islet_analysis/islets_core_fixed.h5ad  (≈949 islets, proteins in .X, scVI means in .obsm)
+islet_analysis/islets_core_fixed.h5ad  (1,015 islets, proteins in .X, scVI means in .obsm)
   ↓ notebooks/rebuild_trajectory.ipynb (scVI neighbors n=15 cosine, PAGA→UMAP, DPT)
-data/adata_ins_root.h5ad  (+ pseudotime + UMAP)
-  ↓ scripts/build_h5ad_for_app.py (+ groovy TSV data + donor metadata)
-data/islet_explorer.h5ad  (all app data in one file)
+data/adata_ins_root.h5ad  (1,015 islets + pseudotime + UMAP)
+  ↓ scripts/build_h5ad_for_app.py (+ groovy TSV data + donor metadata from h5ad obs)
+data/islet_explorer.h5ad  (all app data in one file, 47 MB)
 ```
 
 ### Pipeline Scripts & Notebooks
@@ -98,6 +98,8 @@ conda activate scvi-env  # scanpy, anndata, scvi-tools, sklearn, scib-metrics
 - Expression z-scores in UMAP use diverging colormap (blue-white-red, clamped to +/-3 SD)
 - Donor status colors: ND = green (#2ca02c), Aab+ = yellow (#ffcc00), T1D = purple (#9467bd)
 - Phenotyping uses Rules1 (`data/phenotype_rules.csv`) - 19 phenotypes, 18 markers
+- **Donor metadata**: Comes from `islets_core_fixed.h5ad` obs, NOT from `CODEX_Pancreas_Donors.xlsx` (different cohort)
+- **H5AD obs index**: `islets_core_fixed.h5ad` index name is `islet_id` — same as column, use `reset_index(drop=True)`
 
 ## Running the App
 

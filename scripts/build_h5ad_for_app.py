@@ -69,6 +69,8 @@ def parse_aab_flags(aabs_value):
 def load_donor_key(key_path):
     """Load donor metadata from CODEX_Pancreas_Donors.xlsx."""
     key = pd.read_excel(key_path, sheet_name=0)
+    # Drop trailing empty columns (Unnamed: N)
+    key = key.loc[:, ~key.columns.str.startswith('Unnamed')]
     key['Case ID'] = key['Case ID'].astype(str).str.zfill(4)
     if 'Aabs' in key.columns:
         flags_df = key['Aabs'].apply(parse_aab_flags).apply(pd.Series)
@@ -187,41 +189,45 @@ def build_enriched_h5ad(trajectory_path, groovy_dir, donor_key_path, output_path
     print(f"   Obs columns: {list(adata.obs.columns)}")
     print(f"   Obsm keys: {list(adata.obsm.keys())}")
 
-    # Load donor key
-    print(f"\n2. Loading donor key: {donor_key_path}")
-    donor_key = load_donor_key(donor_key_path)
-    print(f"   Donors: {len(donor_key)}")
-
-    # Extract case ID from imageid for joining
-    # imageid format varies — could be just a number like "6479"
+    # Build donor key from the h5ad's own obs data (imageid -> donor_status, age, gender, AAb flags)
+    # The external CODEX_Pancreas_Donors.xlsx has a different donor cohort and cannot be used here.
+    print(f"\n2. Building donor key from h5ad obs")
     adata.obs['case_id_str'] = adata.obs['imageid'].astype(str).str.extract(r'(\d+)')[0].str.zfill(4)
 
-    # Merge donor metadata into adata.obs
-    donor_cols_to_add = ['Age', 'Gender', 'Aabs', 'AAb_GADA', 'AAb_IA2A', 'AAb_ZnT8A', 'AAb_IAA', 'AAb_mIAA']
-    existing_in_obs = [c for c in donor_cols_to_add if c in adata.obs.columns]
-    new_cols = [c for c in donor_cols_to_add if c not in adata.obs.columns]
+    # Build per-donor metadata from h5ad obs (one row per donor)
+    donor_key_cols = ['case_id_str', 'donor_status', 'age', 'gender']
+    aab_cols = ['GADA', 'ZnT8A', 'IA2A', 'mIAA']
+    donor_key_cols += [c for c in aab_cols if c in adata.obs.columns]
+    donor_key_df = adata.obs[donor_key_cols].drop_duplicates(subset=['case_id_str']).copy()
 
-    if new_cols:
-        donor_merge = donor_key[['Case ID'] + [c for c in new_cols if c in donor_key.columns]].copy()
-        donor_merge = donor_merge.rename(columns={'Case ID': 'case_id_str'})
-        obs_df = adata.obs.reset_index()
-        obs_df = obs_df.merge(donor_merge, on='case_id_str', how='left')
-        obs_df = obs_df.set_index(obs_df.columns[0])
-        for col in new_cols:
-            if col in obs_df.columns:
-                adata.obs[col] = obs_df[col].values
-        print(f"   Added donor metadata: {new_cols}")
+    # Rename to match Excel conventions
+    donor_key_df = donor_key_df.rename(columns={
+        'case_id_str': 'Case ID',
+        'donor_status': 'Donor Status',
+        'age': 'Age',
+        'gender': 'Gender',
+    })
+    # Create AAb flag columns matching Excel format
+    for aab in aab_cols:
+        if aab in adata.obs.columns:
+            donor_key_df[f'AAb_{aab}'] = donor_key_df[aab].apply(
+                lambda x: bool(x) if not pd.isna(x) else False
+            )
+            donor_key_df.drop(columns=[aab], inplace=True)
 
-    # Load groovy data
+    print(f"   Donors: {len(donor_key_df)}")
+    print(f"   Donor Status: {dict(donor_key_df['Donor Status'].value_counts())}")
+
+    # Load groovy data with h5ad-derived donor key
     print(f"\n3. Loading groovy exports: {groovy_dir}")
 
-    targets_df = load_groovy_targets(groovy_dir, donor_key)
+    targets_df = load_groovy_targets(groovy_dir, donor_key_df)
     print(f"   Targets: {len(targets_df)} rows")
 
-    markers_df = load_groovy_markers(groovy_dir, donor_key)
+    markers_df = load_groovy_markers(groovy_dir, donor_key_df)
     print(f"   Markers: {len(markers_df)} rows")
 
-    comp_df = load_groovy_composition(groovy_dir, donor_key)
+    comp_df = load_groovy_composition(groovy_dir, donor_key_df)
     print(f"   Composition: {len(comp_df)} rows")
 
     # Build mapping from h5ad islet_id to groovy data
@@ -326,6 +332,13 @@ def build_enriched_h5ad(trajectory_path, groovy_dir, donor_key_path, output_path
 
     # Store case_to_imageid mapping for the R app
     adata.uns['case_to_imageid'] = case_to_imageid
+
+    # Ensure string/categorical columns have no NaN (h5py can't write mixed str/NaN)
+    for col in adata.obs.columns:
+        if isinstance(adata.obs[col].dtype, pd.CategoricalDtype):
+            adata.obs[col] = adata.obs[col].astype(str).fillna('')
+        elif adata.obs[col].dtype == object:
+            adata.obs[col] = adata.obs[col].fillna('').astype(str)
 
     # Write output
     print(f"\n5. Writing output: {output_path}")

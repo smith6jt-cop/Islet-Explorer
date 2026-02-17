@@ -24,6 +24,14 @@ scripts/Python/
 scripts/R_files/
 scripts/Shell_scripts/
 
+# Notebook execution outputs
+notebooks/*_executed.ipynb
+notebooks/*.png
+
+# App runtime flags
+app/shiny_app/APP_LOADED_FLAG
+app/shiny_app/R/APP_LOADED_FLAG
+
 # Temporary files
 tmp/
 
