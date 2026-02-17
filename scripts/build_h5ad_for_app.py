@@ -1,0 +1,385 @@
+#!/usr/bin/env python3
+"""
+Build enriched H5AD for Islet Explorer app.
+
+Takes the validated trajectory h5ad (data/adata_ins_root.h5ad) and enriches it with:
+1. QuPath-derived data from groovy exports (markers, targets, composition)
+2. Donor metadata from CODEX_Pancreas_Donors.xlsx
+
+Output: data/islet_explorer.h5ad — single file containing all app data.
+
+Canonical lineage:
+    CODEX_scvi_BioCov_phenotyped_newDuctal.h5ad  (2.6M cells, single-cell)
+      ↓ fixed_islet_aggregation.py
+    islets_core_fixed.h5ad  (islet-level, core only)
+      ↓ rebuild_trajectory.ipynb
+    data/adata_ins_root.h5ad  (+ pseudotime + UMAP)
+      ↓ THIS SCRIPT
+    data/islet_explorer.h5ad  (+ groovy data + donor metadata)
+
+Usage:
+    python scripts/build_h5ad_for_app.py
+    python scripts/build_h5ad_for_app.py --trajectory data/adata_ins_root.h5ad --output data/islet_explorer.h5ad
+"""
+
+import argparse
+import os
+import re
+import sys
+from pathlib import Path
+
+import anndata as ad
+import numpy as np
+import pandas as pd
+
+
+# ── Constants ──────────────────────────────────────────────────────────────
+
+GROOVY_DIR = os.path.join(os.path.dirname(__file__), '..', '..', 'results', 'groovy_exports')
+DONOR_KEY_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'results', 'CODEX_Pancreas_Donors.xlsx')
+DEFAULT_TRAJECTORY = os.path.join(os.path.dirname(__file__), '..', 'data', 'adata_ins_root.h5ad')
+DEFAULT_OUTPUT = os.path.join(os.path.dirname(__file__), '..', 'data', 'islet_explorer.h5ad')
+
+
+# ── Donor metadata loading ────────────────────────────────────────────────
+
+def parse_aab_flags(aabs_value):
+    """Parse autoantibody string into boolean flags."""
+    flags = {
+        'AAb_GADA': False, 'AAb_IA2A': False, 'AAb_ZnT8A': False,
+        'AAb_IAA': False, 'AAb_mIAA': False,
+    }
+    if not isinstance(aabs_value, str) or not aabs_value.strip():
+        return flags
+    tokens = {re.sub(r'[^A-Za-z0-9]', '', p).upper()
+              for p in aabs_value.split(',') if p.strip()}
+    if 'GADA' in tokens:
+        flags['AAb_GADA'] = True
+    if 'IA2A' in tokens:
+        flags['AAb_IA2A'] = True
+    if 'ZNT8A' in tokens or 'ZNT8' in tokens:
+        flags['AAb_ZnT8A'] = True
+    if 'MIAA' in tokens:
+        flags['AAb_mIAA'] = True
+    if 'IAA' in tokens:
+        flags['AAb_IAA'] = True
+    return flags
+
+
+def load_donor_key(key_path):
+    """Load donor metadata from CODEX_Pancreas_Donors.xlsx."""
+    key = pd.read_excel(key_path, sheet_name=0)
+    key['Case ID'] = key['Case ID'].astype(str).str.zfill(4)
+    if 'Aabs' in key.columns:
+        flags_df = key['Aabs'].apply(parse_aab_flags).apply(pd.Series)
+        for c in flags_df.columns:
+            key[c] = flags_df[c].astype(bool)
+    return key
+
+
+# ── Groovy TSV loading ────────────────────────────────────────────────────
+
+def parse_case_id(filename):
+    """Extract case ID from filename like islet_targets_6479.tsv."""
+    m = re.search(r'_(\d+)\.tsv$', filename)
+    if m:
+        return m.group(1).zfill(4)
+    return None
+
+
+def load_groovy_targets(groovy_dir, donor_key):
+    """Load all islet_targets_*.tsv files into a single DataFrame."""
+    frames = []
+    for f in sorted(Path(groovy_dir).glob('islet_targets_*.tsv')):
+        df = pd.read_csv(f, sep='\t')
+        case_id = parse_case_id(f.name)
+        df.insert(0, 'Case ID', case_id)
+        df.insert(1, 'source_file', f.name)
+        frames.append(df)
+
+    if not frames:
+        return pd.DataFrame()
+
+    combined = pd.concat(frames, ignore_index=True)
+    combined = combined.merge(donor_key, on='Case ID', how='left')
+    return combined
+
+
+def load_groovy_markers(groovy_dir, donor_key):
+    """Load all islet_markers_*.tsv and LGALS3_*.tsv files."""
+    frames = []
+    for pattern in ['islet_markers_*.tsv', 'LGALS3_*.tsv']:
+        for f in sorted(Path(groovy_dir).glob(pattern)):
+            df = pd.read_csv(f, sep='\t')
+            case_id = parse_case_id(f.name)
+            df.insert(0, 'Case ID', case_id)
+            df.insert(1, 'source_file', f.name)
+            frames.append(df)
+
+    if not frames:
+        return pd.DataFrame()
+
+    combined = pd.concat(frames, ignore_index=True)
+    combined = combined.merge(donor_key, on='Case ID', how='left')
+    return combined
+
+
+def load_groovy_composition(groovy_dir, donor_key):
+    """Load all islet_composition_*.tsv files."""
+    frames = []
+    for f in sorted(Path(groovy_dir).glob('islet_composition_*.tsv')):
+        df = pd.read_csv(f, sep='\t')
+        case_id = parse_case_id(f.name)
+        df.insert(0, 'Case ID', case_id)
+        df.insert(1, 'source_file', f.name)
+        frames.append(df)
+
+    if not frames:
+        return pd.DataFrame()
+
+    combined = pd.concat(frames, ignore_index=True)
+    combined = combined.merge(donor_key, on='Case ID', how='left')
+    return combined
+
+
+# ── Build islet key mapping ───────────────────────────────────────────────
+
+def extract_islet_key_from_region(region_str):
+    """Extract islet key from region string like 'Islet_156_core' or 'Islet_156_band'.
+
+    Returns (islet_name, region_type) e.g. ('Islet_156', 'islet_core').
+    """
+    if not isinstance(region_str, str):
+        return None, None
+
+    s = region_str.strip()
+    # Match patterns like Islet_156_core, Islet_156_band
+    m = re.match(r'^(Islet_\d+)_(core|band)$', s)
+    if m:
+        islet_name = m.group(1)
+        region_type = f'islet_{m.group(2)}'
+        return islet_name, region_type
+    return None, None
+
+
+def build_islet_key(case_id, imageid, islet_name):
+    """Build a unique islet key compatible with the h5ad islet_id format.
+
+    The h5ad uses: imageid_Islet_N (e.g., '6479_Islet_156')
+    Groovy data uses: Case ID + region name
+    """
+    return f"{imageid}_{islet_name}"
+
+
+# ── Main build function ──────────────────────────────────────────────────
+
+def build_enriched_h5ad(trajectory_path, groovy_dir, donor_key_path, output_path):
+    """Build enriched H5AD by merging trajectory data with groovy exports."""
+
+    print("=" * 60)
+    print("Building enriched H5AD for Islet Explorer")
+    print("=" * 60)
+
+    # Load trajectory h5ad
+    print(f"\n1. Loading trajectory: {trajectory_path}")
+    adata = ad.read_h5ad(trajectory_path)
+    print(f"   Shape: {adata.shape}")
+    print(f"   Obs columns: {list(adata.obs.columns)}")
+    print(f"   Obsm keys: {list(adata.obsm.keys())}")
+
+    # Load donor key
+    print(f"\n2. Loading donor key: {donor_key_path}")
+    donor_key = load_donor_key(donor_key_path)
+    print(f"   Donors: {len(donor_key)}")
+
+    # Extract case ID from imageid for joining
+    # imageid format varies — could be just a number like "6479"
+    adata.obs['case_id_str'] = adata.obs['imageid'].astype(str).str.extract(r'(\d+)')[0].str.zfill(4)
+
+    # Merge donor metadata into adata.obs
+    donor_cols_to_add = ['Age', 'Gender', 'Aabs', 'AAb_GADA', 'AAb_IA2A', 'AAb_ZnT8A', 'AAb_IAA', 'AAb_mIAA']
+    existing_in_obs = [c for c in donor_cols_to_add if c in adata.obs.columns]
+    new_cols = [c for c in donor_cols_to_add if c not in adata.obs.columns]
+
+    if new_cols:
+        donor_merge = donor_key[['Case ID'] + [c for c in new_cols if c in donor_key.columns]].copy()
+        donor_merge = donor_merge.rename(columns={'Case ID': 'case_id_str'})
+        obs_df = adata.obs.reset_index()
+        obs_df = obs_df.merge(donor_merge, on='case_id_str', how='left')
+        obs_df = obs_df.set_index(obs_df.columns[0])
+        for col in new_cols:
+            if col in obs_df.columns:
+                adata.obs[col] = obs_df[col].values
+        print(f"   Added donor metadata: {new_cols}")
+
+    # Load groovy data
+    print(f"\n3. Loading groovy exports: {groovy_dir}")
+
+    targets_df = load_groovy_targets(groovy_dir, donor_key)
+    print(f"   Targets: {len(targets_df)} rows")
+
+    markers_df = load_groovy_markers(groovy_dir, donor_key)
+    print(f"   Markers: {len(markers_df)} rows")
+
+    comp_df = load_groovy_composition(groovy_dir, donor_key)
+    print(f"   Composition: {len(comp_df)} rows")
+
+    # Build mapping from h5ad islet_id to groovy data
+    # h5ad islet_id format: "imageid_Islet_N" (e.g., "6479_Islet_156")
+    # Groovy region format: "Islet_N_core" or "Islet_N_band"
+
+    # We need to map Case ID (from donor key) to imageid (in h5ad)
+    # Build case_id -> imageid lookup from adata
+    case_to_imageid = dict(zip(
+        adata.obs['case_id_str'].values,
+        adata.obs['imageid'].astype(str).values
+    ))
+    print(f"\n   Case ID -> imageid mapping: {case_to_imageid}")
+
+    # Store groovy DataFrames in adata.uns for the Shiny app to extract
+    # This allows the R app to reconstruct the same data frames as prep_data()
+    print(f"\n4. Storing groovy data in adata.uns")
+
+    # Convert to serializable format for h5ad storage
+    # h5ad supports storing DataFrames in .uns as dict-of-arrays
+
+    def df_to_uns_dict(df, name):
+        """Convert DataFrame to a dict suitable for h5ad .uns storage."""
+        result = {}
+        for col in df.columns:
+            vals = df[col].values
+            # Convert to appropriate types
+            if pd.api.types.is_bool_dtype(vals):
+                result[col] = vals.astype(bool)
+            elif pd.api.types.is_numeric_dtype(vals):
+                result[col] = vals.astype(float)
+            else:
+                result[col] = vals.astype(str)
+        return result
+
+    # Store targets (core region only for density, all regions for counts)
+    if len(targets_df) > 0:
+        # Add islet_key for matching
+        targets_df['_islet_name'] = targets_df['region'].apply(
+            lambda x: extract_islet_key_from_region(x)[0] if isinstance(x, str) else None
+        )
+        targets_df['_region_type'] = targets_df['region'].apply(
+            lambda x: extract_islet_key_from_region(x)[1] if isinstance(x, str) else None
+        )
+        adata.uns['groovy_targets_columns'] = list(targets_df.columns)
+        adata.uns['groovy_targets_n_rows'] = len(targets_df)
+        # Store as compressed arrays
+        for col in targets_df.columns:
+            vals = targets_df[col].values
+            key = f'groovy_targets_{col}'
+            if pd.api.types.is_bool_dtype(vals):
+                adata.uns[key] = vals.astype(bool)
+            elif pd.api.types.is_numeric_dtype(vals):
+                adata.uns[key] = np.array(vals, dtype=float)
+            else:
+                adata.uns[key] = np.array(vals, dtype=str)
+
+    # Store markers
+    if len(markers_df) > 0:
+        markers_df['_islet_name'] = markers_df['region'].apply(
+            lambda x: extract_islet_key_from_region(x)[0] if isinstance(x, str) else None
+        )
+        markers_df['_region_type'] = markers_df['region'].apply(
+            lambda x: extract_islet_key_from_region(x)[1] if isinstance(x, str) else None
+        )
+        adata.uns['groovy_markers_columns'] = list(markers_df.columns)
+        adata.uns['groovy_markers_n_rows'] = len(markers_df)
+        for col in markers_df.columns:
+            vals = markers_df[col].values
+            key = f'groovy_markers_{col}'
+            if pd.api.types.is_bool_dtype(vals):
+                adata.uns[key] = vals.astype(bool)
+            elif pd.api.types.is_numeric_dtype(vals):
+                adata.uns[key] = np.array(vals, dtype=float)
+            else:
+                adata.uns[key] = np.array(vals, dtype=str)
+
+    # Store composition
+    if len(comp_df) > 0:
+        adata.uns['groovy_composition_columns'] = list(comp_df.columns)
+        adata.uns['groovy_composition_n_rows'] = len(comp_df)
+        for col in comp_df.columns:
+            vals = comp_df[col].values
+            key = f'groovy_composition_{col}'
+            if pd.api.types.is_bool_dtype(vals):
+                adata.uns[key] = vals.astype(bool)
+            elif pd.api.types.is_numeric_dtype(vals):
+                adata.uns[key] = np.array(vals, dtype=float)
+            else:
+                adata.uns[key] = np.array(vals, dtype=str)
+
+    # Store provenance metadata
+    adata.uns['data_provenance'] = {
+        'pipeline': 'Phase 2: Data Audit, QC Validation & Pipeline Formalization',
+        'trajectory_source': os.path.basename(trajectory_path),
+        'groovy_source': os.path.basename(groovy_dir),
+        'donor_key_source': os.path.basename(donor_key_path),
+        'n_target_rows': len(targets_df),
+        'n_marker_rows': len(markers_df),
+        'n_composition_rows': len(comp_df),
+    }
+
+    # Store case_to_imageid mapping for the R app
+    adata.uns['case_to_imageid'] = case_to_imageid
+
+    # Write output
+    print(f"\n5. Writing output: {output_path}")
+    adata.write_h5ad(output_path)
+
+    file_size = os.path.getsize(output_path) / (1024 * 1024)
+    print(f"   Size: {file_size:.1f} MB")
+    print(f"   Shape: {adata.shape}")
+    print(f"   Obs columns: {list(adata.obs.columns)}")
+    print(f"   Obsm keys: {list(adata.obsm.keys())}")
+    print(f"   Uns keys: {[k for k in adata.uns.keys() if not k.startswith('groovy_')]}")
+
+    print(f"\n{'='*60}")
+    print(f"SUCCESS: {output_path}")
+    print(f"{'='*60}")
+
+    return adata
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Build enriched H5AD for Islet Explorer app')
+    parser.add_argument('--trajectory', default=DEFAULT_TRAJECTORY,
+                        help='Path to validated trajectory h5ad')
+    parser.add_argument('--groovy-dir', default=GROOVY_DIR,
+                        help='Path to groovy_exports directory')
+    parser.add_argument('--donor-key', default=DONOR_KEY_PATH,
+                        help='Path to CODEX_Pancreas_Donors.xlsx')
+    parser.add_argument('--output', default=DEFAULT_OUTPUT,
+                        help='Output path for enriched h5ad')
+    args = parser.parse_args()
+
+    # Resolve paths relative to script location
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+
+    trajectory = args.trajectory
+    if not os.path.isabs(trajectory):
+        trajectory = os.path.join(script_dir, trajectory)
+
+    groovy_dir = args.groovy_dir
+    if not os.path.isabs(groovy_dir):
+        groovy_dir = os.path.join(script_dir, groovy_dir)
+
+    donor_key = args.donor_key
+    if not os.path.isabs(donor_key):
+        donor_key = os.path.join(script_dir, donor_key)
+
+    output = args.output
+    if not os.path.isabs(output):
+        output = os.path.join(script_dir, output)
+
+    # Verify inputs exist
+    for path, label in [(trajectory, 'trajectory h5ad'), (groovy_dir, 'groovy exports'), (donor_key, 'donor key')]:
+        if not os.path.exists(path):
+            print(f"ERROR: {label} not found: {path}")
+            sys.exit(1)
+
+    build_enriched_h5ad(trajectory, groovy_dir, donor_key, output)

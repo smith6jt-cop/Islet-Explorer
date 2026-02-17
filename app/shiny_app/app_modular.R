@@ -383,18 +383,15 @@ server <- function(input, output, session) {
   selected_islet <- reactiveVal(NULL)
 
   # ---- Data loading chain ----
-  # Priority: H5AD (islet_explorer.h5ad) > Excel (master_results.xlsx)
   validate_file <- reactive({
-    has_h5ad <- !is.null(h5ad_path) && file.exists(h5ad_path)
-    has_excel <- file.exists(master_path)
-    shiny::validate(shiny::need(has_h5ad || has_excel,
-                                paste("No data found. Checked:", h5ad_path, "and", master_path)))
-    TRUE
+    shiny::validate(shiny::need(file.exists(master_path),
+                                paste("Not found:", master_path)))
+    master_path
   })
 
   master <- reactive({
     req(validate_file())
-    load_master_auto(h5ad_path = h5ad_path, excel_path = master_path)
+    load_master(master_path)
   })
 
   prepared <- reactive({
@@ -436,23 +433,6 @@ server <- function(input, output, session) {
 
   # AI Assistant module (self-contained)
   ai_assistant_server("ai")
-
-  # ---- Shared segmentation plot (root-level, used by both Plot modal and Trajectory panel) ----
-  output$islet_segmentation_view <- renderPlot({
-    req(selected_islet())
-    info <- selected_islet()
-    tryCatch(
-      render_islet_segmentation_plot(info),
-      error = function(e) {
-        cat("[SEGMENTATION ERROR]", conditionMessage(e), "\n")
-        ggplot2::ggplot() +
-          ggplot2::annotate("text", x = 0.5, y = 0.5,
-                            label = paste("Render error:", conditionMessage(e)),
-                            size = 4, color = "red") +
-          ggplot2::theme_void() + ggplot2::xlim(0, 1) + ggplot2::ylim(0, 1)
-      }
-    )
-  })
 }
 
 shinyApp(ui, server)

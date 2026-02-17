@@ -14,8 +14,8 @@ The Shiny app lives in `app/shiny_app/` and uses a modular architecture:
 app/shiny_app/
   app.R                        # Thin entrypoint (~455 lines): UI layout, CSS, server wiring
   R/
-    00_globals.R               # Package loads, constants, feature flags (auto-sourced first)
-    data_loading.R             # load_master(), prep_data(), bin_islet_sizes()
+    00_globals.R               # Package loads, constants, feature flags, paths (h5ad_path, master_path)
+    data_loading.R             # load_master_auto(), prep_data(), bin_islet_sizes(), H5AD loading
     utils_stats.R              # summary_stats(), per_bin_anova(), per_bin_kendall()
     utils_safe_join.R          # safe_left_join(), add_islet_key(), compute_diameter_um()
     segmentation_helpers.R     # GeoJSON cache, load_case_geojson(), render_islet_segmentation_plot()
@@ -30,9 +30,17 @@ app/shiny_app/
   app_original.R               # Backup of pre-modularization monolithic app (5,397 lines)
 ```
 
+### Data Loading (H5AD with Excel Fallback)
+
+The app uses `load_master_auto()` which tries H5AD first, falls back to Excel:
+- `h5ad_path` → `data/islet_explorer.h5ad` (built by `scripts/build_h5ad_for_app.py`)
+- `master_path` → `data/master_results.xlsx` (built by `scripts/build_master_excel.py`)
+
+Both produce the same `list(markers, targets, comp, lgals3)` structure consumed by `prep_data()`.
+
 ### Shared Reactive State (wired in app.R server)
 
-- `prepared()` - core data reactive from master_results.xlsx, consumed by Plot, Trajectory, Statistics
+- `prepared()` - core data reactive from H5AD or Excel, consumed by Plot, Trajectory, Statistics
 - `selected_islet` - reactiveVal, written by Plot and Trajectory click handlers
 - `forced_image` - reactiveVal, written by Trajectory, read by Viewer
 
@@ -48,12 +56,40 @@ The `output$islet_segmentation_view` renderPlot is defined in **app.R** at the r
 
 ## Key Data Files
 
-- `data/master_results.xlsx` - Aggregated islet-level data (composition, markers, targets)
-- `data/pseudotime_results.rds` - R slingshot trajectory output
-- `data/adata_ins_root.h5ad` - Python DPT trajectory output (loaded by Trajectory tab)
+- `data/islet_explorer.h5ad` - **Primary app data** (enriched H5AD with groovy + trajectory + donor metadata)
+- `data/master_results.xlsx` - Aggregated islet-level data (composition, markers, targets) — Excel fallback
+- `data/adata_ins_root.h5ad` - Trajectory h5ad (DPT pseudotime, UMAP, rebuilt from fixed pipeline)
 - `data/islet_spatial_lookup.csv` - Centroid coordinates for segmentation viewer
 - `data/json/*.geojson` / `data/gson/*.geojson.gz` - QuPath segmentation boundaries
-- `data/CODEX_Pancreas_Donors.xlsx` - Donor metadata key
+- `data/DATA_PROVENANCE.md` - Documents canonical H5AD lineage and data sources
+
+## Data Pipeline (Phase 2 - Feb 2026)
+
+Canonical H5AD lineage:
+```
+single_cell_analysis/CODEX_scvi_BioCov_phenotyped_newDuctal.h5ad  (2.6M cells)
+  ↓ islet_analysis/fixed_islet_aggregation.py (core only, min_cells=20)
+islet_analysis/islets_core_fixed.h5ad  (≈949 islets, proteins in .X, scVI means in .obsm)
+  ↓ notebooks/rebuild_trajectory.ipynb (scVI neighbors n=15 cosine, PAGA→UMAP, DPT)
+data/adata_ins_root.h5ad  (+ pseudotime + UMAP)
+  ↓ scripts/build_h5ad_for_app.py (+ groovy TSV data + donor metadata)
+data/islet_explorer.h5ad  (all app data in one file)
+```
+
+### Pipeline Scripts & Notebooks
+
+- `notebooks/scvi_qc_validation.ipynb` - Validates scVI batch correction (silhouette, LISI, UMAP)
+- `notebooks/rebuild_trajectory.ipynb` - Regenerates trajectory from fixed pipeline
+- `scripts/build_h5ad_for_app.py` - Builds enriched H5AD for app from trajectory + groovy exports
+- `scripts/build_master_excel.py` - Builds master_results.xlsx from groovy TSV exports
+- `islet_analysis/fixed_islet_aggregation.py` - Core aggregation module (islet-level from single-cell)
+
+### Python Environment
+
+Pipeline notebooks use the `scvi-env` conda environment:
+```bash
+conda activate scvi-env  # scanpy, anndata, scvi-tools, sklearn, scib-metrics
+```
 
 ## Important Conventions
 
@@ -73,6 +109,15 @@ Rscript -e 'shiny::runApp(".", port = 7777)'
 ## Analysis Pipeline
 
 See `islet_analysis/CLAUDE.md` for the Python analysis pipeline (phenotyping, aggregation, trajectory).
+See `data/DATA_PROVENANCE.md` for full data lineage documentation.
+
+## Skills Registry
+
+The `Skills_Registry/` submodule contains cross-session development knowledge. Custom slash commands:
+- `/advise` — search registry for relevant experiments before starting new work
+- `/retrospective` — save session learnings as a new skill
+
+Skills are registered in `.claude/skills/<name>/SKILL.md` (NOT in Skills_Registry/CLAUDE.md).
 
 ## R Dependencies
 

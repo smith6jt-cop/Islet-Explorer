@@ -99,6 +99,7 @@ try({
 
 # Path constants
 master_path <- file.path("..", "..", "data", "master_results.xlsx")
+h5ad_path   <- file.path("..", "..", "data", "islet_explorer.h5ad")
 project_root <- tryCatch(normalizePath(file.path("..", ".."), mustWork = FALSE), error = function(e) NULL)
 
 # Ensure reticulate/anndata can discover a Python binary when RETICULATE_PYTHON

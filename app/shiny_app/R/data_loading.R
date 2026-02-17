@@ -1,7 +1,10 @@
 # ---------- Data loading and wrangling ----------
 # Extracted from app.R
 # Dependencies: safe_left_join, add_islet_key, compute_diameter_um (from R/utils_safe_join.R)
-#               master_path (from global.R)
+#               master_path, h5ad_path (from 00_globals.R)
+#
+# Data loading priority: H5AD (islet_explorer.h5ad) > Excel (master_results.xlsx)
+# H5AD contains groovy-derived data stored in .uns by scripts/build_h5ad_for_app.py
 
 safe_read_sheet <- function(path, sheet) {
   # Increase guess_max to reduce type misguesses on sparse columns
@@ -239,6 +242,107 @@ bin_islet_sizes <- function(df, diam_col, width) {
   df$diam_bin <- factor(diam_bin, levels = unique(diam_bin[order(bin_lo)]), ordered = TRUE)
   df$diam_mid <- diam_mid
   df
+}
+
+# ---------- H5AD-based data loading ----------
+# Reconstructs the same data frames as load_master() + prep_data() from the
+# enriched H5AD built by scripts/build_h5ad_for_app.py
+
+#' Load data from enriched H5AD file (islet_explorer.h5ad)
+#' Returns the same list structure as load_master(): list(markers, targets, comp, lgals3)
+#' @param path Path to the enriched H5AD file
+#' @return list with targets, markers, comp, lgals3 DataFrames, or NULL on failure
+load_master_h5ad <- function(path) {
+  if (!requireNamespace("anndata", quietly = TRUE)) {
+    message("[H5AD] anndata package not available, falling back to Excel")
+    return(NULL)
+  }
+
+  tryCatch({
+    message("[H5AD] Loading enriched H5AD: ", path)
+    ad <- anndata::read_h5ad(path)
+
+    # Reconstruct targets DataFrame from .uns arrays
+    targets <- reconstruct_groovy_df(ad, "targets")
+    markers <- reconstruct_groovy_df(ad, "markers")
+    comp    <- reconstruct_groovy_df(ad, "composition")
+
+    # Split LGALS3 rows from markers (they share the same groovy storage)
+    lgals3 <- NULL
+    if (!is.null(markers) && "marker" %in% names(markers)) {
+      lgals3_mask <- markers$marker == "LGALS3"
+      if (any(lgals3_mask)) {
+        lgals3 <- markers[lgals3_mask, , drop = FALSE]
+        markers <- markers[!lgals3_mask, , drop = FALSE]
+      }
+    }
+
+    message("[H5AD] Loaded: targets=", if (!is.null(targets)) nrow(targets) else 0,
+            " markers=", if (!is.null(markers)) nrow(markers) else 0,
+            " comp=", if (!is.null(comp)) nrow(comp) else 0,
+            " lgals3=", if (!is.null(lgals3)) nrow(lgals3) else 0)
+
+    list(markers = markers, targets = targets, comp = comp, lgals3 = lgals3)
+  }, error = function(e) {
+    message("[H5AD] Failed to load: ", conditionMessage(e))
+    NULL
+  })
+}
+
+#' Reconstruct a groovy DataFrame from .uns arrays stored by build_h5ad_for_app.py
+#' @param ad AnnData object
+#' @param sheet One of "targets", "markers", "composition"
+#' @return data.frame or NULL
+reconstruct_groovy_df <- function(ad, sheet) {
+  prefix <- paste0("groovy_", sheet, "_")
+  cols_key <- paste0("groovy_", sheet, "_columns")
+  nrows_key <- paste0("groovy_", sheet, "_n_rows")
+
+  if (is.null(ad$uns[[cols_key]])) return(NULL)
+
+  col_names <- ad$uns[[cols_key]]
+  n_rows <- as.integer(ad$uns[[nrows_key]])
+
+  if (n_rows == 0) return(NULL)
+
+  df <- data.frame(row.names = seq_len(n_rows))
+  for (col in col_names) {
+    key <- paste0(prefix, col)
+    vals <- ad$uns[[key]]
+    if (!is.null(vals)) {
+      df[[col]] <- vals
+    }
+  }
+
+  # Standardize Case ID to match Excel format (integer-like)
+  if ("Case ID" %in% names(df)) {
+    df[["Case ID"]] <- suppressWarnings(as.integer(df[["Case ID"]]))
+  }
+
+  df
+}
+
+#' Try loading from H5AD first, fall back to Excel
+#' @param h5ad_path Path to enriched H5AD (or NULL to skip)
+#' @param excel_path Path to master_results.xlsx
+#' @return list(markers, targets, comp, lgals3) — same structure as load_master()
+load_master_auto <- function(h5ad_path = NULL, excel_path = master_path) {
+  # Try H5AD first
+  if (!is.null(h5ad_path) && file.exists(h5ad_path)) {
+    result <- load_master_h5ad(h5ad_path)
+    if (!is.null(result)) {
+      message("[DATA] Using H5AD source: ", h5ad_path)
+      return(result)
+    }
+  }
+
+  # Fall back to Excel
+  if (file.exists(excel_path)) {
+    message("[DATA] Using Excel source: ", excel_path)
+    return(load_master(excel_path))
+  }
+
+  stop("No data source found. Checked:\n  H5AD: ", h5ad_path, "\n  Excel: ", excel_path)
 }
 
 #' Compute Lamian-based pseudotime from AnnData
