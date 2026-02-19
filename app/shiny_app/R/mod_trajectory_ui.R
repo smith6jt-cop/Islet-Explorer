@@ -1,6 +1,9 @@
 trajectory_ui <- function(id) {
   ns <- NS(id)
   tagList(
+    div(style = "background-color: #e8f4fd; border: 1px solid #b8daff; border-radius: 5px; padding: 10px 15px; margin-bottom: 15px; color: #004085; font-size: 13px;",
+      tags$strong("Tip:"), " Click any point on the pseudotime scatter plot to view the segmentation map for that islet."
+    ),
     checkboxInput(ns("show_outlier_table"), "Show outlier table (if outliers detected)", value = FALSE),
     uiOutput(ns("traj_status")),
     fluidRow(
@@ -41,7 +44,14 @@ trajectory_ui <- function(id) {
           ),
           plotlyOutput(ns("traj_scatter"), height = 600),
           br(),
-          plotOutput(ns("traj_heatmap"), height = 120)
+          plotOutput(ns("traj_heatmap"), height = 120),
+          hr(),
+          h5("Multi-Feature Heatmap", style = "color: #2c5aa0;"),
+          fluidRow(
+            column(8, uiOutput(ns("multi_heatmap_marker_selector"))),
+            column(4, sliderInput(ns("multi_heatmap_nbins"), "Number of bins:", min = 10, max = 40, value = 20, step = 5))
+          ),
+          plotOutput(ns("traj_multi_heatmap"), height = "auto")
         )
       ),
       # Right card: UMAP plots

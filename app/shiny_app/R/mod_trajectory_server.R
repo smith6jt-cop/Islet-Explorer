@@ -874,8 +874,10 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image) {
       df$donor_status <- factor(df$donor_status, levels = c("ND", "Aab+", "T1D"))
 
       ggplot(df, aes(x = umap_1, y = umap_2, color = donor_status)) +
-        geom_point(alpha = 0.7, size = 1.2) +
+        geom_point(alpha = 0.7, size = 2.5) +
         scale_color_manual(values = c("ND" = "#2ca02c", "Aab+" = "#ffcc00", "T1D" = "#9467bd")) +
+        scale_x_continuous(expand = expansion(mult = 0.02)) +
+        scale_y_continuous(expand = expansion(mult = 0.02)) +
         labs(x = "UMAP 1", y = "UMAP 2", title = "UMAP: Donor Status") +
         theme_minimal(base_size = 12) +
         theme(aspect.ratio = 1)
@@ -895,17 +897,19 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image) {
       selected_feature <- input$traj_feature %||% "Selected feature"
 
       g <- ggplot(df, aes(x = umap_1, y = umap_2, color = value)) +
-        geom_point(alpha = 0.7, size = 1.2) +
+        geom_point(alpha = 0.7, size = 2.5) +
+        scale_x_continuous(expand = expansion(mult = 0.02)) +
+        scale_y_continuous(expand = expansion(mult = 0.02)) +
         labs(x = "UMAP 1", y = "UMAP 2",
              title = paste("UMAP:", selected_feature),
              color = "Expression") +
         theme_minimal(base_size = 12) +
         theme(aspect.ratio = 1)
 
-      # Diverging colormap for zero-centered expression values, clamp to +/-3 SD
-      g <- g + scale_color_gradient2(low = "#2166AC", mid = "white", high = "#B2182B",
-                                     midpoint = 0, limits = c(-3, 3),
-                                     oob = scales::squish, na.value = "#bbbbbb")
+      # Continuous colormap scaled to data min/max
+      val_range <- range(df$value, na.rm = TRUE)
+      g <- g + scale_color_viridis_c(option = "inferno", limits = val_range,
+                                      na.value = "#bbbbbb")
 
       g
     })
@@ -950,8 +954,9 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image) {
       if (nrow(hm) == 0) return(NULL)
 
       # Calculate bin midpoints in actual pseudotime range
-      mids <- head(brks, -1) + diff(brks)[1] / 2
-      hm$x <- mids * (pt_range[2] - pt_range[1]) + pt_range[1]
+      all_mids <- head(brks, -1) + diff(brks)[1] / 2
+      bin_idx  <- match(as.character(hm$pt_bin), bin_levels)
+      hm$x     <- all_mids[bin_idx] * (pt_range[2] - pt_range[1]) + pt_range[1]
 
       ggplot(hm, aes(x = x, y = 1, fill = avg_donor_status)) +
         geom_tile(height = 1) +
@@ -972,6 +977,114 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image) {
           panel.grid   = element_blank(),
           plot.title   = element_text(size = 12, hjust = 0.5)
         )
+    })
+
+    # ---------- Multi-Feature Heatmap ----------
+
+    # Marker selector UI
+    output$multi_heatmap_marker_selector <- renderUI({
+      tr <- traj()
+      if (is.null(tr) || !is.null(tr$error) || is.null(tr$var_names)) return(NULL)
+      defaults <- intersect(c("INS", "GCG", "SST", "CD3e", "CD8a", "CD68", "CD45", "HLADR"), tr$var_names)
+      checkboxGroupInput(ns("multi_heatmap_markers"), "Select markers:",
+                         choices = tr$var_names, selected = defaults, inline = TRUE)
+    })
+
+    # Multi-feature data reactive
+    traj_multi_feature_data <- reactive({
+      markers <- input$multi_heatmap_markers
+      if (is.null(markers) || length(markers) == 0) return(NULL)
+      tr <- traj_with_pseudotime()
+      if (is.null(tr) || !is.null(tr$error) || is.null(tr$adata)) return(NULL)
+      valid <- intersect(markers, tr$var_names)
+      if (length(valid) == 0) return(NULL)
+      idx <- match(valid, tr$var_names)
+      expr <- tryCatch(as.matrix(tr$adata$X[, idx, drop = FALSE]), error = function(e) NULL)
+      if (is.null(expr)) return(NULL)
+      colnames(expr) <- valid
+      result <- data.frame(pt = as.numeric(tr$obs$pseudotime), stringsAsFactors = FALSE)
+      result <- cbind(result, as.data.frame(expr))
+      result <- result[is.finite(result$pt), , drop = FALSE]
+      list(data = result, markers = valid)
+    })
+
+    # Multi-row heatmap renderPlot
+    output$traj_multi_heatmap <- renderPlot({
+      mfd <- traj_multi_feature_data()
+      if (is.null(mfd)) return(NULL)
+
+      df <- mfd$data
+      markers <- mfd$markers
+      nb <- input$multi_heatmap_nbins %||% 20
+
+      # Bin pseudotime
+      pt_range <- range(df$pt, na.rm = TRUE)
+      df$pt_norm <- (df$pt - pt_range[1]) / (pt_range[2] - pt_range[1])
+      brks <- seq(0, 1, length.out = nb + 1)
+      df$pt_bin <- cut(pmax(0, pmin(1, df$pt_norm)), breaks = brks, include.lowest = TRUE, right = FALSE)
+      bin_levels <- levels(df$pt_bin)
+
+      # Compute per-bin mean for each marker, then z-score
+      all_mids <- head(brks, -1) + diff(brks)[1] / 2
+      hm_rows <- list()
+
+      for (mk in markers) {
+        bin_means <- numeric(length(bin_levels))
+        bin_counts <- integer(length(bin_levels))
+        for (i in seq_along(bin_levels)) {
+          bin_data <- df[!is.na(df$pt_bin) & df$pt_bin == bin_levels[i], mk]
+          bin_counts[i] <- length(bin_data)
+          bin_means[i] <- if (length(bin_data) >= 3) mean(bin_data, na.rm = TRUE) else NA_real_
+        }
+        # Z-score across bins
+        valid_means <- bin_means[is.finite(bin_means)]
+        if (length(valid_means) < 2) next
+        mu <- mean(valid_means)
+        sd_val <- sd(valid_means)
+        if (!is.finite(sd_val) || sd_val == 0) sd_val <- 1
+        z <- (bin_means - mu) / sd_val
+        z <- pmax(-2.5, pmin(2.5, z))  # clamp
+
+        for (i in seq_along(bin_levels)) {
+          if (is.finite(z[i])) {
+            hm_rows[[length(hm_rows) + 1]] <- data.frame(
+              marker = mk,
+              x = all_mids[i] * (pt_range[2] - pt_range[1]) + pt_range[1],
+              z = z[i],
+              stringsAsFactors = FALSE
+            )
+          }
+        }
+      }
+
+      if (length(hm_rows) == 0) return(NULL)
+      hm <- do.call(rbind, hm_rows)
+
+      # Order markers: hormones first, then immune, then others
+      hormone_order <- intersect(c("INS", "GCG", "SST"), markers)
+      immune_order <- intersect(c("CD3e", "CD4", "CD8a", "CD20", "CD45", "CD68", "CD163", "HLADR"), markers)
+      other_order <- setdiff(markers, c(hormone_order, immune_order))
+      marker_order <- c(hormone_order, immune_order, other_order)
+      hm$marker <- factor(hm$marker, levels = rev(marker_order))
+
+      n_markers <- length(marker_order)
+
+      ggplot(hm, aes(x = x, y = marker, fill = z)) +
+        geom_tile() +
+        scale_fill_gradient2(low = "#2166ac", mid = "#f7f7f7", high = "#b2182b",
+                             midpoint = 0, limits = c(-2.5, 2.5),
+                             name = "Z-score") +
+        scale_x_continuous(limits = c(pt_range[1], pt_range[2]), expand = c(0, 0)) +
+        labs(x = "Pseudotime", y = "", title = "Multi-Feature Expression Along Pseudotime") +
+        theme_minimal() +
+        theme(
+          panel.grid = element_blank(),
+          plot.title = element_text(size = 12, hjust = 0.5),
+          axis.text.y = element_text(size = 11)
+        )
+    }, height = function() {
+      n <- length(input$multi_heatmap_markers %||% character(0))
+      max(150, 40 + n * 30)
     })
 
   })

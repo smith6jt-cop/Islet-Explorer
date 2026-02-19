@@ -74,11 +74,19 @@ plot_server <- function(id, prepared, selected_islet) {
         }
         selectInput(ns("which"), "Marker", choices = markers, selected = sel)
       } else {
-        selectInput(ns("which"), "Composition measure",
-                    choices = c("Ins_frac" = "Ins_any",
-                                "Glu_frac" = "Glu_any",
-                                "Stt_frac" = "Stt_any"),
-                    selected = "Ins_any")
+        base_choices <- c("Ins_frac" = "Ins_any", "Glu_frac" = "Glu_any", "Stt_frac" = "Stt_any")
+        prop_cols <- grep("^prop_", colnames(prepared()$comp), value = TRUE)
+        if (length(prop_cols) > 0) {
+          prop_labels <- gsub("^prop_", "", prop_cols)
+          choices <- list(
+            "Hormone Fractions" = base_choices,
+            "Cell Type Proportions" = setNames(prop_cols, prop_labels)
+          )
+        } else {
+          choices <- base_choices
+        }
+        selectInput(ns("which"), "Composition measure", choices = choices,
+                    selected = if (!is.null(input$which) && input$which %in% unlist(choices)) input$which else "Ins_any")
       }
     })
 
@@ -111,6 +119,26 @@ plot_server <- function(id, prepared, selected_islet) {
       }
     })
 
+    # ---- Age & Gender filter UIs (visible only when demographics available) ----
+    output$age_filter_ui <- renderUI({
+      pd <- prepared()
+      if (is.null(pd$comp) || !("age" %in% colnames(pd$comp))) return(NULL)
+      age_vals <- as.numeric(pd$comp$age)
+      age_vals <- age_vals[is.finite(age_vals)]
+      if (length(age_vals) == 0) return(NULL)
+      sliderInput(ns("age_range"), "Donor Age (years)",
+                  min = floor(min(age_vals)), max = ceiling(max(age_vals)),
+                  value = c(floor(min(age_vals)), ceiling(max(age_vals))), step = 1)
+    })
+
+    output$gender_filter_ui <- renderUI({
+      pd <- prepared()
+      if (is.null(pd$comp) || !("gender" %in% colnames(pd$comp))) return(NULL)
+      genders <- sort(unique(na.omit(as.character(pd$comp$gender))))
+      if (length(genders) == 0) return(NULL)
+      checkboxGroupInput(ns("gender_filter"), "Gender", choices = genders, selected = genders, inline = TRUE)
+    })
+
     # ===========================================================================
     # Reactive data chain:  raw_df_base -> raw_df -> plot_df -> summary_df
     # ===========================================================================
@@ -128,8 +156,9 @@ plot_server <- function(id, prepared, selected_islet) {
 
       # Resolve defaults before branching so initial renders don't error
       if (identical(mode, "Composition")) {
+        valid_comp <- c("Ins_any", "Glu_any", "Stt_any", grep("^prop_", colnames(pd$comp), value = TRUE))
         if (!is.character(w) || length(w) != 1 || !nzchar(w) ||
-            !(w %in% c("Ins_any", "Glu_any", "Stt_any"))) {
+            !(w %in% valid_comp)) {
           w <- "Ins_any"
         }
       } else if (identical(mode, "Targets")) {
@@ -183,11 +212,17 @@ plot_server <- function(id, prepared, selected_islet) {
         df <- pd$comp %>%
           dplyr::filter(`Donor Status` %in% groups) %>%
           dplyr::filter(is.finite(islet_diam_um))
-        num <- suppressWarnings(as.numeric(df[[w]]))
-        den <- suppressWarnings(as.numeric(df$cells_total))
-        df <- df %>%
-          dplyr::mutate(value = ifelse(is.finite(num) & is.finite(den) & den > 0,
-                                       100.0 * num / den, NA_real_))
+        if (startsWith(w, "prop_")) {
+          # Phenotype proportions are already 0-1, scale to percentage
+          df <- df %>% dplyr::mutate(value = suppressWarnings(as.numeric(.data[[w]])) * 100.0)
+        } else {
+          # Original hormone fractions: count / cells_total * 100
+          num <- suppressWarnings(as.numeric(df[[w]]))
+          den <- suppressWarnings(as.numeric(df$cells_total))
+          df <- df %>%
+            dplyr::mutate(value = ifelse(is.finite(num) & is.finite(den) & den > 0,
+                                         100.0 * num / den, NA_real_))
+        }
       }
 
       out <- df %>%
@@ -204,6 +239,17 @@ plot_server <- function(id, prepared, selected_islet) {
                           islet_diam_um >= diam_min &
                           islet_diam_um <= diam_max)
         }
+      }
+
+      # Age filter
+      if (!is.null(input$age_range) && length(input$age_range) == 2 && "age" %in% colnames(out)) {
+        out <- out[is.finite(as.numeric(out$age)) &
+                   as.numeric(out$age) >= input$age_range[1] &
+                   as.numeric(out$age) <= input$age_range[2], , drop = FALSE]
+      }
+      # Gender filter
+      if (!is.null(input$gender_filter) && "gender" %in% colnames(out)) {
+        out <- out[as.character(out$gender) %in% input$gender_filter, , drop = FALSE]
       }
 
       # Apply AAb filters (only within Aab+ donor group)
@@ -356,11 +402,15 @@ plot_server <- function(id, prepared, selected_islet) {
       } else {
         wsel <- input$which
         if (is.null(wsel) || length(wsel) != 1 || !nzchar(wsel)) wsel <- "Ins_any"
-        nm <- switch(wsel,
-                     Ins_any = "Insulin+ fraction",
-                     Glu_any = "Glucagon+ fraction",
-                     Stt_any = "Somatostatin+ fraction",
-                     wsel)
+        if (startsWith(wsel, "prop_")) {
+          nm <- paste0(gsub("^prop_", "", wsel), " proportion")
+        } else {
+          nm <- switch(wsel,
+                       Ins_any = "Insulin+ fraction",
+                       Glu_any = "Glucagon+ fraction",
+                       Stt_any = "Somatostatin+ fraction",
+                       wsel)
+        }
         paste0(nm, " vs Islet Size")
       }
 
@@ -676,7 +726,7 @@ plot_server <- function(id, prepared, selected_islet) {
     })
 
     # ===========================================================================
-    # Click handler: scatter plot -> segmentation modal
+    # Click handler: scatter plot -> embedded segmentation panel
     # ===========================================================================
 
     observeEvent(event_data("plotly_click", source = ns("plot_scatter")), {
@@ -734,22 +784,83 @@ plot_server <- function(id, prepared, selected_islet) {
       centroid_x <- spatial_match$centroid_x_um[1]
       centroid_y <- spatial_match$centroid_y_um[1]
 
-      # Update shared reactiveVal for cross-module communication
+      # Update shared reactiveVal — triggers embedded segmentation panel below
       selected_islet(list(
         case_id    = case_id,
         islet_key  = islet_key,
         centroid_x = centroid_x,
         centroid_y = centroid_y
       ))
+    })
 
-      # Show modal with segmentation view (root-level output, same pattern as original app)
-      showModal(modalDialog(
-        title = paste("Islet Segmentation:", islet_key, "(Case", case_id, ")"),
-        plotOutput("islet_segmentation_view", height = "450px"),
-        size = "l",
-        easyClose = TRUE,
-        footer = modalButton("Close")
-      ))
+    # ---- Embedded segmentation viewer panel (below Distribution card) ----
+    output$segmentation_viewer_panel <- renderUI({
+      info <- selected_islet()
+      if (is.null(info)) return(NULL)
+
+      div(class = "card", style = "padding: 15px; margin-bottom: 20px; border: 2px solid #0066CC;",
+        fluidRow(
+          column(8,
+            h4(paste("Islet Segmentation:", info$islet_key, "(Case", info$case_id, ")"),
+               style = "margin-top: 0; color: #0066CC;")
+          ),
+          column(4, style = "text-align: right;",
+            actionButton(ns("clear_segmentation"), "Close", class = "btn btn-sm btn-outline-secondary")
+          )
+        ),
+        fluidRow(
+          column(8,
+            plotOutput("islet_segmentation_view", height = "450px")
+          ),
+          column(4,
+            div(style = "padding: 10px; background-color: #f8f9fa; border-radius: 5px; height: 100%;",
+              h5("Legend", style = "margin-top: 0; margin-bottom: 15px;"),
+              div(style = "margin-bottom: 10px;",
+                div(style = "display: flex; align-items: center; margin-bottom: 8px;",
+                  div(style = "width: 25px; height: 4px; background-color: #0066CC; margin-right: 8px;"),
+                  span("Islet boundary")
+                ),
+                div(style = "display: flex; align-items: center; margin-bottom: 8px;",
+                  div(style = "width: 25px; height: 4px; background-color: #00CCCC; margin-right: 8px;"),
+                  span("Expanded (+20\u00b5m)")
+                ),
+                div(style = "display: flex; align-items: center; margin-bottom: 8px;",
+                  div(style = "width: 25px; height: 4px; background-color: #CC00CC; margin-right: 8px;"),
+                  span("Nerve")
+                ),
+                div(style = "display: flex; align-items: center; margin-bottom: 8px;",
+                  div(style = "width: 25px; height: 4px; background-color: #CC0000; margin-right: 8px;"),
+                  span("Capillary")
+                ),
+                div(style = "display: flex; align-items: center; margin-bottom: 8px;",
+                  div(style = "width: 25px; height: 4px; background-color: #00AA00; margin-right: 8px;"),
+                  span("Lymphatic")
+                ),
+                div(style = "display: flex; align-items: center; margin-bottom: 8px;",
+                  div(style = "width: 25px; height: 4px; background-color: #FFD700; margin-right: 8px;"),
+                  span("Selected islet", style = "font-weight: bold;")
+                )
+              ),
+              hr(),
+              h6("Islet Info", style = "margin-bottom: 10px;"),
+              tags$dl(style = "font-size: 13px;",
+                tags$dt("Case ID:"), tags$dd(info$case_id),
+                tags$dt("Islet:"), tags$dd(info$islet_key),
+                tags$dt("Centroid X:"), tags$dd(paste0(round(info$centroid_x, 1), " \u00b5m")),
+                tags$dt("Centroid Y:"), tags$dd(paste0(round(info$centroid_y, 1), " \u00b5m"))
+              ),
+              hr(),
+              p(style = "font-size: 11px; color: #666; margin-bottom: 0;",
+                "Click another point to view a different islet, or click Close to hide this panel.")
+            )
+          )
+        )
+      )
+    })
+
+    # ---- Clear segmentation viewer ----
+    observeEvent(input$clear_segmentation, {
+      selected_islet(NULL)
     })
 
     # ===========================================================================

@@ -28,6 +28,8 @@ plot_sidebar_ui <- function(id) {
                        choices = c("ND", "Aab+", "T1D"),
                        selected = c("ND", "Aab+", "T1D"),
                        inline = TRUE),
+    uiOutput(ns("age_filter_ui")),
+    uiOutput(ns("gender_filter_ui")),
     radioButtons(ns("stat"), "Statistic",
                  choices = c("Mean\u00b1SE" = "mean_se",
                              "Mean\u00b1SD" = "mean_sd",
@@ -48,6 +50,11 @@ plot_sidebar_ui <- function(id) {
 plot_main_ui <- function(id) {
   ns <- NS(id)
   tagList(
+    column(10,
+      div(style = "background-color: #e8f4fd; border: 1px solid #b8daff; border-radius: 5px; padding: 10px 15px; margin-bottom: 15px; color: #004085; font-size: 13px;",
+        tags$strong("Tip:"), " Enable \"Show individual points\" then click any point on the ", tags$strong("Islet Size Distribution"), " scatter plot to view its segmentation map below."
+      )
+    ),
     # Left card: Main scatter plot
     column(5,
       div(class = "card",
@@ -89,17 +96,18 @@ plot_main_ui <- function(id) {
         )
       )
     ),
-    # Right card: Distribution comparison
+    # Right card: Distribution comparison + embedded segmentation viewer
     column(5,
       div(class = "card",
-          style = "margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; height: calc(100vh - 100px); display: flex; flex-direction: column; gap: 12px;",
+          style = "margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; display: flex; flex-direction: column; gap: 12px;",
         h5("Distribution Comparison", style = "margin-top: 0; color: #333;"),
-        div(style = "flex: 1; overflow-y: auto;",
+        div(style = "overflow-y: auto;",
           plotlyOutput(ns("dist"), height = 400),
           br(),
           uiOutput(ns("dist_ui"))
         )
-      )
+      ),
+      uiOutput(ns("segmentation_viewer_panel"))
     )
   )
 }

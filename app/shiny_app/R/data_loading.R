@@ -212,6 +212,22 @@ prep_data <- function(master) {
                           Multi_Pos, Triple_Neg, Ins_any, Glu_any, Stt_any)
   comp <- comp %>% { safe_left_join(., size_area, by = c("Case ID", "Donor Status", "islet_key"), context = "comp:size_area") }
 
+  # Merge phenotype proportions into comp (H5AD only; NULL from Excel path)
+  if (!is.null(master$phenotypes) && nrow(master$phenotypes) > 0) {
+    comp <- safe_left_join(comp, master$phenotypes,
+                           by = c("Case ID", "islet_key"),
+                           context = "comp:phenotypes")
+    message("[prep-data] Merged ", ncol(master$phenotypes) - 2, " phenotype columns into comp")
+  }
+
+  # Merge donor demographics into all dataframes (H5AD only; NULL from Excel path)
+  if (!is.null(master$donor_demographics) && nrow(master$donor_demographics) > 0) {
+    targets_all <- safe_left_join(targets_all, master$donor_demographics, by = "Case ID", context = "targets_all:demographics")
+    markers_all <- safe_left_join(markers_all, master$donor_demographics, by = "Case ID", context = "markers_all:demographics")
+    comp <- safe_left_join(comp, master$donor_demographics, by = "Case ID", context = "comp:demographics")
+    message("[prep-data] Merged donor demographics (age, gender)")
+  }
+
   message("[prep-final] size_area=", paste(class(size_area), collapse='/'),
     " targets_all=", paste(class(targets_all), collapse='/'),
     " markers_all=", paste(class(markers_all), collapse='/'),
@@ -277,12 +293,41 @@ load_master_h5ad <- function(path) {
       }
     }
 
+    # Extract phenotype proportions from .obs
+    phenotype_df <- tryCatch({
+      obs <- as.data.frame(ad$obs)
+      prop_cols <- grep("^prop_", colnames(obs), value = TRUE)
+      if (length(prop_cols) > 0 && "imageid" %in% colnames(obs) && "base_islet_id" %in% colnames(obs)) {
+        phen <- obs[, c("imageid", "base_islet_id", prop_cols), drop = FALSE]
+        phen$`Case ID` <- as.integer(as.character(phen$imageid))
+        phen$islet_key <- gsub("^Islet_Islet_", "Islet_", as.character(phen$base_islet_id))
+        phen[, c("Case ID", "islet_key", prop_cols), drop = FALSE]
+      } else NULL
+    }, error = function(e) { message("[H5AD] phenotype extraction failed: ", e$message); NULL })
+
+    # Extract donor demographics (one row per donor)
+    donor_demographics <- tryCatch({
+      obs <- as.data.frame(ad$obs)
+      if (all(c("imageid", "age", "gender") %in% colnames(obs))) {
+        demo <- data.frame(
+          `Case ID` = as.integer(as.character(obs$imageid)),
+          age = as.numeric(obs$age),
+          gender = as.character(obs$gender),
+          check.names = FALSE, stringsAsFactors = FALSE
+        )
+        demo[!duplicated(demo$`Case ID`), , drop = FALSE]
+      } else NULL
+    }, error = function(e) { message("[H5AD] demographics extraction failed: ", e$message); NULL })
+
     message("[H5AD] Loaded: targets=", if (!is.null(targets)) nrow(targets) else 0,
             " markers=", if (!is.null(markers)) nrow(markers) else 0,
             " comp=", if (!is.null(comp)) nrow(comp) else 0,
-            " lgals3=", if (!is.null(lgals3)) nrow(lgals3) else 0)
+            " lgals3=", if (!is.null(lgals3)) nrow(lgals3) else 0,
+            " phenotypes=", if (!is.null(phenotype_df)) ncol(phenotype_df) - 2 else 0,
+            " demographics=", if (!is.null(donor_demographics)) nrow(donor_demographics) else 0)
 
-    list(markers = markers, targets = targets, comp = comp, lgals3 = lgals3)
+    list(markers = markers, targets = targets, comp = comp, lgals3 = lgals3,
+         phenotypes = phenotype_df, donor_demographics = donor_demographics)
   }, error = function(e) {
     message("[H5AD] Failed to load: ", conditionMessage(e))
     NULL
