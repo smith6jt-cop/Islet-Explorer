@@ -7,8 +7,8 @@ trajectory_ui <- function(id) {
     checkboxInput(ns("show_outlier_table"), "Show outlier table (if outliers detected)", value = FALSE),
     uiOutput(ns("traj_status")),
     fluidRow(
-      # Left card: Scatterplot and heatmap
-      column(8,
+      # Left card: Scatterplot and heatmaps (narrowed from col-8)
+      column(7,
         div(class = "card", style = "padding: 15px; margin-bottom: 20px;",
           fluidRow(
             column(3,
@@ -42,9 +42,9 @@ trajectory_ui <- function(id) {
               )
             )
           ),
-          plotlyOutput(ns("traj_scatter"), height = 600),
+          plotlyOutput(ns("traj_scatter"), height = 450),
           br(),
-          plotOutput(ns("traj_heatmap"), height = 120),
+          plotOutput(ns("traj_heatmap"), height = 100),
           hr(),
           h5("Multi-Feature Heatmap", style = "color: #2c5aa0;"),
           fluidRow(
@@ -54,16 +54,23 @@ trajectory_ui <- function(id) {
           plotOutput(ns("traj_multi_heatmap"), height = "auto")
         )
       ),
-      # Right card: UMAP plots
-      column(4,
-        div(class = "card", style = "padding: 15px; margin-bottom: 20px; height: 950px; overflow-y: auto;",
-          fluidRow(column(12, h5("UMAP: Donor Status"), plotOutput(ns("traj_umap_donor"), height = 400))),
-          br(),
-          fluidRow(column(12, h5("UMAP: Selected Feature"), plotOutput(ns("traj_umap_feature"), height = 400)))
-        )
+      # Right column: UMAPs side by side + segmentation viewer below
+      column(5,
+        div(class = "card", style = "padding: 15px; margin-bottom: 20px;",
+          fluidRow(
+            column(6,
+              h5("UMAP: Donor Status", style = "font-size: 13px; margin-top: 0;"),
+              plotOutput(ns("traj_umap_donor"), height = 300)
+            ),
+            column(6,
+              h5("UMAP: Selected Feature", style = "font-size: 13px; margin-top: 0;"),
+              plotOutput(ns("traj_umap_feature"), height = 300)
+            )
+          )
+        ),
+        uiOutput(ns("segmentation_viewer_panel"))
       )
     ),
-    fluidRow(column(12, uiOutput(ns("traj_outlier_info")))),
-    uiOutput(ns("segmentation_viewer_panel"))
+    fluidRow(column(12, uiOutput(ns("traj_outlier_info"))))
   )
 }
