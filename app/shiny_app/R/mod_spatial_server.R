@@ -363,8 +363,8 @@ spatial_server <- function(id, prepared) {
 
           rows[[length(rows) + 1]] <- data.frame(
             Test = "Wilcoxon (pairwise)", Comparison = paste(g1, "vs", g2),
-            Statistic = round(pairs$statistic[i], 1),
-            `p-value` = formatC(pairs$p.adj[i], format = "e", digits = 2),
+            Statistic = NA_real_,
+            `p-value` = formatC(pairs$p_value[i], format = "e", digits = 2),
             `Effect Size` = if (!is.na(cd$d)) sprintf("d=%.2f [%.2f,%.2f]", cd$d, cd$ci_lower, cd$ci_upper) else "",
             check.names = FALSE, stringsAsFactors = FALSE
           )

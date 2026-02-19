@@ -421,8 +421,8 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image) {
       color_by   <- input$traj_color_by %||% "donor_status"
       size_by    <- input$traj_point_size %||% "uniform"
       trend_type <- input$traj_show_trend %||% "by_donor"
-      alpha_val  <- input$traj_alpha %||% 0.3
-      point_size <- input$traj_point_size_slider %||% 1.0
+      alpha_val  <- input$traj_alpha %||% 0.6
+      point_size <- input$traj_point_size_slider %||% 3.0
 
       # Always apply jitter
       set.seed(42)
@@ -945,7 +945,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image) {
       df$donor_status <- factor(df$donor_status, levels = c("ND", "Aab+", "T1D"))
 
       ggplot(df, aes(x = umap_1, y = umap_2, color = donor_status)) +
-        geom_point(alpha = 0.7, size = 2.5) +
+        geom_point(alpha = 0.6, size = 3.0) +
         scale_color_manual(values = c("ND" = "#2ca02c", "Aab+" = "#ffcc00", "T1D" = "#9467bd")) +
         scale_x_continuous(expand = expansion(mult = 0.02)) +
         scale_y_continuous(expand = expansion(mult = 0.02)) +
@@ -968,7 +968,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image) {
       selected_feature <- input$traj_feature %||% "Selected feature"
 
       g <- ggplot(df, aes(x = umap_1, y = umap_2, color = value)) +
-        geom_point(alpha = 0.7, size = 2.5) +
+        geom_point(alpha = 0.6, size = 3.0) +
         scale_x_continuous(expand = expansion(mult = 0.02)) +
         scale_y_continuous(expand = expansion(mult = 0.02)) +
         labs(x = "UMAP 1", y = "UMAP 2",
