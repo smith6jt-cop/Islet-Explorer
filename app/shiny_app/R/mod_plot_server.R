@@ -32,6 +32,18 @@ plot_server <- function(id, prepared, selected_islet) {
       cols
     }
 
+    # ---- Pseudo-log break points (includes 0 + powers of 10) ----
+    pseudo_log_breaks <- function(base = 10) {
+      function(limits) {
+        max_val <- max(limits)
+        if (max_val <= 0) return(0)
+        max_pow <- ceiling(log(max_val, base))
+        min_pow <- if (max_val < 1) floor(log(max_val, base)) else 0
+        brks <- c(0, base^seq(min_pow, max_pow))
+        sort(unique(brks[brks <= max_val * 1.1]))
+      }
+    }
+
     # ---- Reactive storage for outlier table (replaces global <<- assignment) ----
     plot_outliers <- reactiveVal(NULL)
 
@@ -440,9 +452,10 @@ plot_server <- function(id, prepared, selected_islet) {
         p <- p + scale_x_continuous(breaks = major_breaks, minor_breaks = minor_breaks)
       }
 
-      # Y-axis log scale
+      # Y-axis log scale (pseudo-log keeps zeros visible)
       if (!is.null(input$log_scale) && input$log_scale) {
-        p <- p + scale_y_log10()
+        p <- p + scale_y_continuous(trans = scales::pseudo_log_trans(base = 10),
+                                    breaks = pseudo_log_breaks(10))
       }
 
       # Individual points layer
@@ -680,7 +693,8 @@ plot_server <- function(id, prepared, selected_islet) {
         theme(legend.position = if (color_by == "donor_id") "right" else "none")
 
       if (!is.null(input$dist_log_scale) && input$dist_log_scale) {
-        g <- g + scale_y_log10()
+        g <- g + scale_y_continuous(trans = scales::pseudo_log_trans(base = 10),
+                                    breaks = pseudo_log_breaks(10))
       }
 
       p <- ggplotly(g, tooltip = c("x", "y", "colour"))
@@ -767,11 +781,14 @@ plot_server <- function(id, prepared, selected_islet) {
           islet_spatial_lookup$islet_key == islet_key, ]
 
       if (nrow(spatial_match) == 0) {
-        case_id_num <- suppressWarnings(as.numeric(case_id))
+        # Try zero-padded variant (e.g. "112" -> "0112")
+        case_id_num <- suppressWarnings(as.integer(case_id))
         if (!is.na(case_id_num)) {
+          case_id_padded <- sprintf("%04d", case_id_num)
           spatial_match <- islet_spatial_lookup[
-            islet_spatial_lookup$case_id == case_id_num &
+            islet_spatial_lookup$case_id == case_id_padded &
               islet_spatial_lookup$islet_key == islet_key, ]
+          if (nrow(spatial_match) > 0) case_id <- case_id_padded
         }
       }
 

@@ -316,20 +316,20 @@ ui <- fluidPage(
         var sidebar = $('.equal-height-panel').first();
         var mainPanel = $('.main-content-panel');
 
-        // Hide sidebar and expand main panel for non-Plot tabs
-        if (activeTab !== 'Plot') {
-          sidebar.hide();
-          mainPanel.css({
-            'width': '100%',
-            'max-width': '100%',
-            'flex': '0 0 100%'
-          });
-        } else {
+        // Show sidebar on Plot and Statistics tabs, hide on others
+        if (activeTab === 'Plot' || activeTab === 'Statistics') {
           sidebar.show();
           mainPanel.css({
             'width': '88.33333333%',
             'max-width': '88.33333333%',
             'flex': '0 0 88.33333333%'
+          });
+        } else {
+          sidebar.hide();
+          mainPanel.css({
+            'width': '100%',
+            'max-width': '100%',
+            'flex': '0 0 100%'
           });
         }
       }
@@ -347,7 +347,7 @@ ui <- fluidPage(
     # Left Sidebar Panel (Plot controls, hidden on other tabs via JS)
     column(width = 1.4, class = "equal-height-panel",
       conditionalPanel(
-        condition = "input.tabs == 'Plot'",
+        condition = "input.tabs == 'Plot' || input.tabs == 'Statistics'",
         plot_sidebar_ui("plot")
       )
     ),

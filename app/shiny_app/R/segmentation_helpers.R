@@ -16,15 +16,26 @@ load_case_geojson <- function(case_id) {
     return(get(cache_key, envir = geojson_cache))
   }
 
-  # Try uncompressed JSON first
-  json_path <- file.path("..", "..", "data", "json", paste0(case_id, ".geojson"))
-  if (!file.exists(json_path)) {
-    # Try compressed version
-    json_path <- file.path("..", "..", "data", "gson", paste0(case_id, ".geojson.gz"))
+  # Build candidate IDs: original + zero-padded variant for short numeric IDs (e.g. "112" -> "0112")
+  candidate_ids <- case_id
+  case_num <- suppressWarnings(as.integer(case_id))
+  if (!is.na(case_num)) {
+    padded <- sprintf("%04d", case_num)
+    if (padded != case_id) candidate_ids <- c(candidate_ids, padded)
   }
 
-  if (!file.exists(json_path)) {
-    message("[SEGMENTATION] GeoJSON not found for case ", case_id)
+  # Try each candidate: uncompressed first, then compressed
+  json_path <- NULL
+  for (cid in candidate_ids) {
+    p <- file.path("..", "..", "data", "json", paste0(cid, ".geojson"))
+    if (file.exists(p)) { json_path <- p; break }
+    p <- file.path("..", "..", "data", "gson", paste0(cid, ".geojson.gz"))
+    if (file.exists(p)) { json_path <- p; break }
+  }
+
+  if (is.null(json_path)) {
+    message("[SEGMENTATION] GeoJSON not found for case ", case_id,
+            " (tried: ", paste(candidate_ids, collapse = ", "), ")")
     return(NULL)
   }
 

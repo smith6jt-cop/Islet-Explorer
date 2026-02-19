@@ -1,0 +1,906 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+  <script type="application/shiny-singletons">add739c82ab207ed2c80be4b7e4b181525eb7a75</script>
+  <script type="application/html-dependencies">jquery[3.7.1];shiny-css[1.12.1];shiny-busy-indicators[1.12.1];shiny-javascript[1.12.1];selectize[0.15.2];font-awesome[6.5.2];htmltools-fill[0.5.9];htmlwidgets[1.6.4];plotly-binding[4.12.0];ionrangeslider-javascript[2.3.1];strftime[0.9.2];ionrangeslider-css[2.3.1];bootstrap[3.4.1]</script>
+<script src="jquery-3.7.1/jquery.min.js"></script>
+<link href="shiny-css-1.12.1/shiny.min.css" rel="stylesheet" />
+<link href="shiny-busy-indicators-1.12.1/busy-indicators.css" rel="stylesheet" />
+<script src="shiny-javascript-1.12.1/shiny.min.js"></script>
+<link href="selectize-0.15.2/css/selectize.bootstrap3.css" rel="stylesheet" />
+<script src="selectize-0.15.2/js/selectize.min.js"></script>
+<script src="selectize-0.15.2/accessibility/js/selectize-plugin-a11y.min.js"></script>
+<link href="font-awesome-6.5.2/css/all.min.css" rel="stylesheet" />
+<link href="font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet" />
+<link href="htmltools-fill-0.5.9/fill.css" rel="stylesheet" />
+<script src="htmlwidgets-1.6.4/htmlwidgets.js"></script>
+<script src="plotly-binding-4.12.0/plotly.js"></script>
+<script src="ionrangeslider-javascript-2.3.1/js/ion.rangeSlider.min.js"></script>
+<script src="strftime-0.9.2/strftime-min.js"></script>
+<link href="ionrangeslider-css-2.3.1/css/ion.rangeSlider.css" rel="stylesheet" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="bootstrap-3.4.1/css/bootstrap.min.css" rel="stylesheet" />
+<link href="bootstrap-3.4.1/accessibility/css/bootstrap-accessibility.min.css" rel="stylesheet" />
+<script src="bootstrap-3.4.1/js/bootstrap.min.js"></script>
+<script src="bootstrap-3.4.1/accessibility/js/bootstrap-accessibility.min.js"></script>  <style>.shinyjs-hide { display: none !important; }</style>
+  <script>Shiny.addCustomMessageHandler('shinyjs-show', function(params) { shinyjs.debugMessage('shinyjs: calling function "show" with parameters:'); shinyjs.debugMessage(params); shinyjs.show(params);});
+Shiny.addCustomMessageHandler('shinyjs-hide', function(params) { shinyjs.debugMessage('shinyjs: calling function "hide" with parameters:'); shinyjs.debugMessage(params); shinyjs.hide(params);});
+Shiny.addCustomMessageHandler('shinyjs-toggle', function(params) { shinyjs.debugMessage('shinyjs: calling function "toggle" with parameters:'); shinyjs.debugMessage(params); shinyjs.toggle(params);});
+Shiny.addCustomMessageHandler('shinyjs-enable', function(params) { shinyjs.debugMessage('shinyjs: calling function "enable" with parameters:'); shinyjs.debugMessage(params); shinyjs.enable(params);});
+Shiny.addCustomMessageHandler('shinyjs-disable', function(params) { shinyjs.debugMessage('shinyjs: calling function "disable" with parameters:'); shinyjs.debugMessage(params); shinyjs.disable(params);});
+Shiny.addCustomMessageHandler('shinyjs-toggleState', function(params) { shinyjs.debugMessage('shinyjs: calling function "toggleState" with parameters:'); shinyjs.debugMessage(params); shinyjs.toggleState(params);});
+Shiny.addCustomMessageHandler('shinyjs-addClass', function(params) { shinyjs.debugMessage('shinyjs: calling function "addClass" with parameters:'); shinyjs.debugMessage(params); shinyjs.addClass(params);});
+Shiny.addCustomMessageHandler('shinyjs-removeClass', function(params) { shinyjs.debugMessage('shinyjs: calling function "removeClass" with parameters:'); shinyjs.debugMessage(params); shinyjs.removeClass(params);});
+Shiny.addCustomMessageHandler('shinyjs-toggleClass', function(params) { shinyjs.debugMessage('shinyjs: calling function "toggleClass" with parameters:'); shinyjs.debugMessage(params); shinyjs.toggleClass(params);});
+Shiny.addCustomMessageHandler('shinyjs-html', function(params) { shinyjs.debugMessage('shinyjs: calling function "html" with parameters:'); shinyjs.debugMessage(params); shinyjs.html(params);});
+Shiny.addCustomMessageHandler('shinyjs-onevent', function(params) { shinyjs.debugMessage('shinyjs: calling function "onevent" with parameters:'); shinyjs.debugMessage(params); shinyjs.onevent(params);});
+Shiny.addCustomMessageHandler('shinyjs-removeEvent', function(params) { shinyjs.debugMessage('shinyjs: calling function "removeEvent" with parameters:'); shinyjs.debugMessage(params); shinyjs.removeEvent(params);});
+Shiny.addCustomMessageHandler('shinyjs-alert', function(params) { shinyjs.debugMessage('shinyjs: calling function "alert" with parameters:'); shinyjs.debugMessage(params); shinyjs.alert(params);});
+Shiny.addCustomMessageHandler('shinyjs-logjs', function(params) { shinyjs.debugMessage('shinyjs: calling function "logjs" with parameters:'); shinyjs.debugMessage(params); shinyjs.logjs(params);});
+Shiny.addCustomMessageHandler('shinyjs-runjs', function(params) { shinyjs.debugMessage('shinyjs: calling function "runjs" with parameters:'); shinyjs.debugMessage(params); shinyjs.runjs(params);});
+Shiny.addCustomMessageHandler('shinyjs-reset', function(params) { shinyjs.debugMessage('shinyjs: calling function "reset" with parameters:'); shinyjs.debugMessage(params); shinyjs.reset(params);});
+Shiny.addCustomMessageHandler('shinyjs-delay', function(params) { shinyjs.debugMessage('shinyjs: calling function "delay" with parameters:'); shinyjs.debugMessage(params); shinyjs.delay(params);});
+Shiny.addCustomMessageHandler('shinyjs-click', function(params) { shinyjs.debugMessage('shinyjs: calling function "click" with parameters:'); shinyjs.debugMessage(params); shinyjs.click(params);});
+Shiny.addCustomMessageHandler('shinyjs-refresh', function(params) { shinyjs.debugMessage('shinyjs: calling function "refresh" with parameters:'); shinyjs.debugMessage(params); shinyjs.refresh(params);});</script>
+  <script src="shinyjs/shinyjs-default-funcs.js"></script>
+  <script>shinyjs.debug = false;</script>
+  <style>
+    /* Viewer and trajectory mode styles - fix tab positioning */
+    body.viewer-mode .col-sm-2 {
+      display: none !important;
+    }
+    body.viewer-mode .col-sm-10 {
+      width: 100% !important;
+      max-width: 100% !important;
+      flex: 0 0 100%;
+    }
+    body.trajectory-mode .container-fluid > .row > .col-sm-3 {
+      display: none !important;
+    }
+    body.trajectory-mode .container-fluid > .row > .col-sm-9 {
+      width: 100% !important;
+      max-width: 100% !important;
+      flex: 0 0 100%;
+    }
+
+    /* Global biomedical theme styling */
+    body {
+      background-color: #f8f9fa;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      padding-top: 0;
+      min-width: 1200px;
+      overflow-x: auto;
+    }
+
+    .container-fluid {
+      background-color: #ffffff;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+      margin: 10px;
+      padding: 20px;
+      min-width: 1180px;
+    }
+
+    /* Logo header styling */
+    .logo-header {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      padding: 10px 0;
+      margin-bottom: 10px;
+      background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+      border-bottom: 2px solid #e3f2fd;
+    }
+
+    /* Enhanced card styling with biomedical color scheme */
+    .card {
+      background: linear-gradient(145deg, #ffffff 0%, #f8f9fa 100%);
+      border: 1px solid #e3f2fd;
+      box-shadow: 0 4px 12px rgba(44, 90, 160, 0.08);
+      transition: all 0.3s ease;
+      border-radius: 12px;
+    }
+    .card:hover {
+      box-shadow: 0 8px 20px rgba(44, 90, 160, 0.15);
+      transform: translateY(-2px);
+    }
+
+    .card h5 {
+      color: #2c5aa0;
+      font-weight: 600;
+      border-bottom: 2px solid #e3f2fd;
+      padding-bottom: 8px;
+      margin-bottom: 15px;
+    }
+
+    /* Sidebar styling with scientific theme */
+    .sidebar {
+      background: linear-gradient(180deg, #2c5aa0 0%, #1e3a72 100%);
+      color: white;
+      border-radius: 12px;
+      padding: 20px;
+      font-size: 14px;
+      box-shadow: 0 4px 12px rgba(44, 90, 160, 0.2);
+    }
+
+    .sidebar h4, .sidebar h5 {
+      color: #ffffff;
+      font-weight: 600;
+      border-bottom: 1px solid rgba(255,255,255,0.2);
+      padding-bottom: 8px;
+    }
+
+    .sidebar .form-group {
+      margin-bottom: 18px;
+    }
+
+    .sidebar label {
+      color: #e3f2fd;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .sidebar .form-control {
+      background-color: rgba(255,255,255,0.9);
+      border: 1px solid #b3d9ff;
+      border-radius: 6px;
+      color: #2c5aa0;
+    }
+
+    .sidebar .form-control:focus {
+      background-color: #ffffff;
+      border-color: #66b3ff;
+      box-shadow: 0 0 0 0.2rem rgba(44, 90, 160, 0.25);
+    }
+
+    .sidebar .btn {
+      background: linear-gradient(145deg, #66b3ff 0%, #4da6ff 100%);
+      border: none;
+      border-radius: 6px;
+      color: white;
+      font-weight: 500;
+    }
+
+    .sidebar .btn:hover {
+      background: linear-gradient(145deg, #4da6ff 0%, #3399ff 100%);
+      transform: translateY(-1px);
+    }
+
+    /* Tab styling */
+    .nav-tabs {
+      border-bottom: 2px solid #e3f2fd;
+    }
+
+    .nav-tabs .nav-link {
+      color: #2c5aa0;
+      font-weight: 500;
+      border: none;
+      border-radius: 8px 8px 0 0;
+      margin-right: 4px;
+      background-color: #f8f9fa;
+    }
+
+    .nav-tabs .nav-link.active {
+      background: linear-gradient(145deg, #2c5aa0 0%, #1e3a72 100%);
+      color: white;
+      border-bottom: 3px solid #66b3ff;
+    }
+
+    .nav-tabs .nav-link:hover {
+      background-color: #e3f2fd;
+      color: #1e3a72;
+    }
+
+    /* Form controls styling */
+    .form-control {
+      border: 2px solid #e3f2fd;
+      border-radius: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .form-control:focus {
+      border-color: #66b3ff;
+      box-shadow: 0 0 0 0.2rem rgba(44, 90, 160, 0.15);
+    }
+
+    /* Button styling */
+    .btn-primary {
+      background: linear-gradient(145deg, #2c5aa0 0%, #1e3a72 100%);
+      border: none;
+      border-radius: 8px;
+      font-weight: 500;
+      padding: 8px 16px;
+      transition: all 0.2s ease;
+    }
+
+    .btn-primary:hover {
+      background: linear-gradient(145deg, #1e3a72 0%, #0f1f3d 100%);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(44, 90, 160, 0.3);
+    }
+
+    /* Checkbox and radio button styling */
+    input[type='checkbox'], input[type='radio'] {
+      accent-color: #2c5aa0;
+    }
+
+    /* Slider styling */
+    .irs--shiny {
+      color: #2c5aa0;
+    }
+
+    .irs--shiny .irs-bar {
+      background: linear-gradient(90deg, #66b3ff 0%, #2c5aa0 100%);
+    }
+
+    .irs--shiny .irs-handle {
+      background: #2c5aa0;
+      border: 3px solid #ffffff;
+    }
+
+    /* Help text styling */
+    .help-block {
+      color: #b3d9ff;
+      font-size: 12px;
+      font-style: italic;
+    }
+
+    /* Well and panel styling */
+    .well {
+      background: linear-gradient(145deg, #f8f9fa 0%, #e3f2fd 100%);
+      border: 1px solid #b3d9ff;
+      border-radius: 8px;
+    }
+    .ai-chat-panel {
+      background: linear-gradient(145deg, #ffffff 0%, #f8f9fa 100%);
+      border: 1px solid #e3f2fd;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(44, 90, 160, 0.08);
+      padding: 15px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .ai-chat-logo {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding-bottom: 8px;
+      border-bottom: 1px solid rgba(44, 90, 160, 0.15);
+    }
+    .ai-chat-logo img {
+      max-width: 100%;
+      height: auto;
+      max-height: 90px;
+    }
+    .ai-chat-header {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin-top: 8px;
+      margin-bottom: 4px;
+    }
+    .ai-chat-history {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .ai-chat-message {
+      padding: 10px 12px;
+      border-radius: 8px;
+      margin: 4px 0;
+      max-width: 90%;
+      word-wrap: break-word;
+    }
+    .ai-chat-message.user {
+      background: linear-gradient(145deg, #e3f2fd 0%, #bbdefb 100%);
+      border-left: 4px solid #2c5aa0;
+      align-self: flex-end;
+      margin-left: auto;
+    }
+    .ai-chat-message.assistant {
+      background: linear-gradient(145deg, #f5f5f5 0%, #eeeeee 100%);
+      border-left: 4px solid #66b3ff;
+      align-self: flex-start;
+      margin-right: auto;
+    }
+    .ai-chat-meta {
+      font-weight: 600;
+      font-size: 12px;
+      display: block;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .ai-chat-message.user .ai-chat-meta {
+      color: #1e3a72;
+    }
+    .ai-chat-message.assistant .ai-chat-meta {
+      color: #2c5aa0;
+    }
+  </style>
+  <style>
+    .ai-chat-logo img {
+      max-width: 100%;
+      height: auto;
+      max-height: 120px;
+    }
+    /* Equal height panels */
+    .equal-height-row {
+      display: flex;
+      flex-wrap: nowrap;
+    }
+    .equal-height-panel {
+      height: calc(100vh - 40px);
+      overflow-y: auto;
+    }
+    /* AI chat panel - match card heights */
+    .ai-chat-panel-container {
+      height: calc(100vh - 100px);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container-fluid">
+    <div id="theme_css" class="shiny-html-output"></div>
+    <script>
+    $(document).on('shiny:connected', function() {
+      function adjustLayout() {
+        var activeTab = $('#tabs li.active a').text().trim();
+        var sidebar = $('.equal-height-panel').first();
+        var mainPanel = $('.main-content-panel');
+
+        // Show sidebar on Plot and Statistics tabs, hide on others
+        if (activeTab === 'Plot' || activeTab === 'Statistics') {
+          sidebar.show();
+          mainPanel.css({
+            'width': '88.33333333%',
+            'max-width': '88.33333333%',
+            'flex': '0 0 88.33333333%'
+          });
+        } else {
+          sidebar.hide();
+          mainPanel.css({
+            'width': '100%',
+            'max-width': '100%',
+            'flex': '0 0 100%'
+          });
+        }
+      }
+
+      // Adjust on initial load
+      setTimeout(adjustLayout, 100);
+
+      // Adjust when tabs change
+      $('a[data-toggle="tab"]').on('shown.bs.tab', function() {
+        adjustLayout();
+      });
+    });
+  </script>
+    <div class="row equal-height-row">
+      <div class="col-sm-1.4 equal-height-panel">
+        <div class="shiny-panel-conditional" data-display-if="input.tabs == &#39;Plot&#39; || input.tabs == &#39;Statistics&#39;" data-ns-prefix="">
+          <div class="sidebar" style="height: 100%;">
+            <h4>Data &amp; Filters</h4>
+            <div class="form-group shiny-input-container">
+              <label class="control-label" id="plot-mode-label" for="plot-mode">Focus</label>
+              <div>
+                <select id="plot-mode" class="shiny-input-select"><option value="Markers">Markers</option>
+<option value="Targets">Targets</option>
+<option value="Composition" selected>Composition</option></select>
+                <script type="application/json" data-for="plot-mode" data-nonempty="">{"plugins":["selectize-plugin-a11y"]}</script>
+              </div>
+            </div>
+            <div id="plot-region_selector" class="shiny-html-output"></div>
+            <div id="plot-dynamic_selector" class="shiny-html-output"></div>
+            <div id="plot-metric_selector" class="shiny-html-output"></div>
+            <hr/>
+            <h5>Autoantibody filter (Aab+ donors only)</h5>
+            <div id="plot-aab_warning" class="shiny-html-output"></div>
+            <div id="plot-aab_flags" class="form-group shiny-input-checkboxgroup shiny-input-container" role="group" aria-labelledby="plot-aab_flags-label">
+              <label class="control-label shiny-label-null" for="plot-aab_flags" id="plot-aab_flags-label"></label>
+              <div class="shiny-options-group">
+                <div class="checkbox">
+                  <label>
+                    <input type="checkbox" name="plot-aab_flags" value="AAb_GADA" checked="checked"/>
+                    <span>GADA</span>
+                  </label>
+                </div>
+                <div class="checkbox">
+                  <label>
+                    <input type="checkbox" name="plot-aab_flags" value="AAb_IA2A" checked="checked"/>
+                    <span>IA2A</span>
+                  </label>
+                </div>
+                <div class="checkbox">
+                  <label>
+                    <input type="checkbox" name="plot-aab_flags" value="AAb_ZnT8A" checked="checked"/>
+                    <span>ZnT8A</span>
+                  </label>
+                </div>
+                <div class="checkbox">
+                  <label>
+                    <input type="checkbox" name="plot-aab_flags" value="AAb_IAA" checked="checked"/>
+                    <span>IAA</span>
+                  </label>
+                </div>
+                <div class="checkbox">
+                  <label>
+                    <input type="checkbox" name="plot-aab_flags" value="AAb_mIAA" checked="checked"/>
+                    <span>mIAA</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+            <div id="plot-groups" class="form-group shiny-input-checkboxgroup shiny-input-container shiny-input-container-inline" role="group" aria-labelledby="plot-groups-label">
+              <label class="control-label" id="plot-groups-label" for="plot-groups">Donor Status</label>
+              <div class="shiny-options-group">
+                <label class="checkbox-inline">
+                  <input type="checkbox" name="plot-groups" value="ND" checked="checked"/>
+                  <span>ND</span>
+                </label>
+                <label class="checkbox-inline">
+                  <input type="checkbox" name="plot-groups" value="Aab+" checked="checked"/>
+                  <span>Aab+</span>
+                </label>
+                <label class="checkbox-inline">
+                  <input type="checkbox" name="plot-groups" value="T1D" checked="checked"/>
+                  <span>T1D</span>
+                </label>
+              </div>
+            </div>
+            <div id="plot-age_filter_ui" class="shiny-html-output"></div>
+            <div id="plot-gender_filter_ui" class="shiny-html-output"></div>
+            <div id="plot-stat" class="form-group shiny-input-radiogroup shiny-input-container" role="radiogroup" aria-labelledby="plot-stat-label">
+              <label class="control-label" id="plot-stat-label" for="plot-stat">Statistic</label>
+              <div class="shiny-options-group">
+                <div class="radio">
+                  <label>
+                    <input type="radio" name="plot-stat" value="mean_se" checked="checked"/>
+                    <span>Mean±SE</span>
+                  </label>
+                </div>
+                <div class="radio">
+                  <label>
+                    <input type="radio" name="plot-stat" value="mean_sd"/>
+                    <span>Mean±SD</span>
+                  </label>
+                </div>
+                <div class="radio">
+                  <label>
+                    <input type="radio" name="plot-stat" value="median_iqr"/>
+                    <span>Median + IQR</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+            <div class="form-group shiny-input-container">
+              <div class="checkbox">
+                <label>
+                  <input id="plot-show_plot_outlier_table" type="checkbox" class="shiny-input-checkbox"/>
+                  <span>Show outlier table (if outliers detected)</span>
+                </label>
+              </div>
+            </div>
+            <div id="plot-plot_outlier_info" class="shiny-html-output"></div>
+            <hr/>
+            <h5>Export</h5>
+            <a id="plot-dl_summary" class="btn btn-default shiny-download-link disabled" href="" target="_blank" download aria-disabled="true" tabindex="-1">
+              <i class="fas fa-download" role="presentation" aria-label="download icon"></i>
+              Download summary CSV
+            </a>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-10.6 equal-height-panel main-content-panel">
+        <div class="tabbable">
+          <ul class="nav nav-tabs shiny-tab-input" id="tabs" data-tabsetid="8317">
+            <li class="active">
+              <a href="#tab-8317-1" data-toggle="tab" data-bs-toggle="tab" data-value="Plot">Plot</a>
+            </li>
+            <li>
+              <a href="#tab-8317-2" data-toggle="tab" data-bs-toggle="tab" data-value="Trajectory">Trajectory</a>
+            </li>
+            <li>
+              <a href="#tab-8317-3" data-toggle="tab" data-bs-toggle="tab" data-value="Viewer">Viewer</a>
+            </li>
+            <li>
+              <a href="#tab-8317-4" data-toggle="tab" data-bs-toggle="tab" data-value="Statistics">Statistics</a>
+            </li>
+          </ul>
+          <div class="tab-content" data-tabsetid="8317">
+            <div class="tab-pane active" data-value="Plot" id="tab-8317-1">
+              <div class="row">
+                <div class="col-sm-10">
+                  <div style="background-color: #e8f4fd; border: 1px solid #b8daff; border-radius: 5px; padding: 10px 15px; margin-bottom: 15px; color: #004085; font-size: 13px;">
+                    <strong>Tip:</strong>
+                     Enable "Show individual points" then click any point on the 
+                    <strong>Islet Size Distribution</strong>
+                     scatter plot to view its segmentation map below.
+                  </div>
+                </div>
+                <div class="col-sm-5">
+                  <div class="card" style="margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; height: calc(100vh - 100px); display: flex; flex-direction: column; gap: 12px;">
+                    <h5 style="margin-top: 0; color: #333;">Islet Size Distribution</h5>
+                    <div style="flex: 1; min-height: 0; display: flex;">
+                      <div class="plotly html-widget html-widget-output shiny-report-size shiny-report-theme html-fill-item" id="plot-plt" style="width:100%;height:100%;"></div>
+                    </div>
+                    <div style="flex: 0 0 auto; display: flex; flex-direction: column; gap: 10px;">
+                      <div class="row">
+                        <div class="col-sm-4">
+                          <div class="form-group shiny-input-container">
+                            <label class="control-label" id="plot-binwidth-label" for="plot-binwidth">Diameter bin width (µm)</label>
+                            <input class="js-range-slider" id="plot-binwidth" data-skin="shiny" data-min="1" data-max="75" data-from="50" data-step="1" data-grid="true" data-grid-num="9.25" data-grid-snap="false" data-prettify-separator="," data-prettify-enabled="true" data-keyboard="true" data-data-type="number"/>
+                          </div>
+                          <div class="form-group shiny-input-container">
+                            <label class="control-label" id="plot-diam_range-label" for="plot-diam_range">Islet diameter range (µm)</label>
+                            <input class="js-range-slider" id="plot-diam_range" data-skin="shiny" data-type="double" data-min="0" data-max="500" data-from="0" data-to="350" data-step="10" data-grid="true" data-grid-num="10" data-grid-snap="false" data-prettify-separator="," data-prettify-enabled="true" data-keyboard="true" data-drag-interval="true" data-data-type="number"/>
+                          </div>
+                        </div>
+                        <div class="col-sm-4">
+                          <div class="form-group shiny-input-container">
+                            <label class="control-label" id="plot-pt_size-label" for="plot-pt_size">Point size</label>
+                            <input class="js-range-slider" id="plot-pt_size" data-skin="shiny" data-min="0.3" data-max="4" data-from="3" data-step="0.1" data-grid="true" data-grid-num="9.25" data-grid-snap="false" data-prettify-separator="," data-prettify-enabled="true" data-keyboard="true" data-data-type="number"/>
+                          </div>
+                          <div class="form-group shiny-input-container">
+                            <label class="control-label" id="plot-pt_alpha-label" for="plot-pt_alpha">Point transparency</label>
+                            <input class="js-range-slider" id="plot-pt_alpha" data-skin="shiny" data-min="0.05" data-max="1" data-from="0.6" data-step="0.05" data-grid="true" data-grid-num="9.5" data-grid-snap="false" data-prettify-separator="," data-prettify-enabled="true" data-keyboard="true" data-data-type="number"/>
+                          </div>
+                        </div>
+                        <div class="col-sm-4">
+                          <div class="form-group shiny-input-container">
+                            <label class="control-label" id="plot-plot_color_by-label" for="plot-plot_color_by">Color points by:</label>
+                            <div>
+                              <select id="plot-plot_color_by" class="shiny-input-select"><option value="donor_status" selected>Donor Status</option>
+<option value="donor_id">Donor ID</option></select>
+                              <script type="application/json" data-for="plot-plot_color_by" data-nonempty="">{"plugins":["selectize-plugin-a11y"]}</script>
+                            </div>
+                          </div>
+                          <div id="plot-add_smooth" class="form-group shiny-input-radiogroup shiny-input-container shiny-input-container-inline" role="radiogroup" aria-labelledby="plot-add_smooth-label">
+                            <label class="control-label" id="plot-add_smooth-label" for="plot-add_smooth">Trend line</label>
+                            <div class="shiny-options-group">
+                              <label class="radio-inline">
+                                <input type="radio" name="plot-add_smooth" value="None" checked="checked"/>
+                                <span>None</span>
+                              </label>
+                              <label class="radio-inline">
+                                <input type="radio" name="plot-add_smooth" value="LOESS"/>
+                                <span>LOESS</span>
+                              </label>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div style="display: flex; flex-wrap: wrap; gap: 15px; justify-content: flex-end;">
+                        <div class="form-group shiny-input-container">
+                          <div class="checkbox">
+                            <label>
+                              <input id="plot-exclude_zero_top" type="checkbox" class="shiny-input-checkbox"/>
+                              <span>Exclude zero values</span>
+                            </label>
+                          </div>
+                        </div>
+                        <div class="form-group shiny-input-container">
+                          <div class="checkbox">
+                            <label>
+                              <input id="plot-show_points" type="checkbox" class="shiny-input-checkbox"/>
+                              <span>Show individual points</span>
+                            </label>
+                          </div>
+                        </div>
+                        <div class="form-group shiny-input-container">
+                          <div class="checkbox">
+                            <label>
+                              <input id="plot-log_scale" type="checkbox" class="shiny-input-checkbox"/>
+                              <span>Log scale y-axis</span>
+                            </label>
+                          </div>
+                        </div>
+                        <div class="form-group shiny-input-container">
+                          <div class="checkbox">
+                            <label>
+                              <input id="plot-log_scale_x" type="checkbox" class="shiny-input-checkbox"/>
+                              <span>Log2 scale x-axis</span>
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-sm-5">
+                  <div class="card" style="margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; display: flex; flex-direction: column; gap: 12px;">
+                    <h5 style="margin-top: 0; color: #333;">Distribution Comparison</h5>
+                    <div style="overflow-y: auto;">
+                      <div class="plotly html-widget html-widget-output shiny-report-size shiny-report-theme html-fill-item" id="plot-dist" style="width:100%;height:400px;"></div>
+                      <br/>
+                      <div id="plot-dist_ui" class="shiny-html-output"></div>
+                    </div>
+                  </div>
+                  <div id="plot-segmentation_viewer_panel" class="shiny-html-output"></div>
+                </div>
+                <div class="col-sm-2">
+                  <div class="card ai-chat-panel" style="margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; height: calc(100vh - 100px); display: flex; flex-direction: column; gap: 12px;">
+                    <div class="ai-chat-header" style="display: flex; align-items: center; padding-bottom: 12px; border-bottom: 1px solid rgba(44, 90, 160, 0.15);">
+                      <img src="logo.png" alt="Islet Explorer logo" style="height: 80px; margin-right: 15px;"/>
+                      <div style="flex: 1;">
+                        <span style="font-size: 14px; font-weight: bold; color: #333;">Powered by Mab Lab and University of Florida Navigator AI Toolkit</span>
+                      </div>
+                    </div>
+                    <div class="shiny-html-output ai-chat-status" id="ai-chat_status"></div>
+                    <div style="flex: 1; overflow-y: auto;">
+                      <div class="shiny-html-output ai-chat-history" id="ai-chat_history"></div>
+                    </div>
+                    <div class="ai-chat-model-picker">
+                      <div class="form-group shiny-input-container">
+                        <label class="control-label" id="ai-chat_model-label" for="ai-chat_model">Model</label>
+                        <div>
+                          <select id="ai-chat_model" class="shiny-input-select"><option value="gpt-oss-20b" selected>Navigator Fast (gpt-oss-20b)</option>
+<option value="gpt-oss-210b">Navigator Large (gpt-oss-210b)</option></select>
+                          <script type="application/json" data-for="ai-chat_model" data-nonempty="">{"plugins":["selectize-plugin-a11y"]}</script>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="ai-chat-input">
+                      <div class="shiny-input-textarea form-group shiny-input-container">
+                        <label class="control-label shiny-label-null" for="ai-chat_message" id="ai-chat_message-label"></label>
+                        <textarea id="ai-chat_message" class="form-control" placeholder="Ask about donor trends, plots, or troubleshooting…" style="height:110px;" data-update-on="change"></textarea>
+                      </div>
+                    </div>
+                    <div class="ai-chat-controls">
+                      <button class="btn btn-default action-button btn btn-primary" id="ai-chat_send" type="button">
+                        <span class="action-label">Send</span>
+                      </button>
+                      <button class="btn btn-default action-button btn btn-outline-secondary" id="ai-chat_reset" type="button">
+                        <span class="action-label">New Conversation</span>
+                      </button>
+                    </div>
+                    <div class="shiny-html-output ai-chat-feedback" id="ai-chat_feedback"></div>
+                    <div class="shiny-html-output ai-chat-usage" id="ai-chat_usage"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="tab-pane" data-value="Trajectory" id="tab-8317-2">
+              <div style="background-color: #e8f4fd; border: 1px solid #b8daff; border-radius: 5px; padding: 10px 15px; margin-bottom: 15px; color: #004085; font-size: 13px;">
+                <strong>Tip:</strong>
+                 Click any point on the pseudotime scatter plot to view the segmentation map for that islet.
+              </div>
+              <div class="form-group shiny-input-container">
+                <div class="checkbox">
+                  <label>
+                    <input id="traj-show_outlier_table" type="checkbox" class="shiny-input-checkbox"/>
+                    <span>Show outlier table (if outliers detected)</span>
+                  </label>
+                </div>
+              </div>
+              <div id="traj-traj_status" class="shiny-html-output"></div>
+              <div class="row">
+                <div class="col-sm-8">
+                  <div class="card" style="padding: 15px; margin-bottom: 20px;">
+                    <div class="row">
+                      <div class="col-sm-3">
+                        <div id="traj-traj_feature_selector" class="shiny-html-output"></div>
+                        <div class="form-group shiny-input-container">
+                          <label class="control-label" id="traj-traj_show_trend-label" for="traj-traj_show_trend">Trend lines:</label>
+                          <div>
+                            <select id="traj-traj_show_trend" class="shiny-input-select"><option value="none">None</option>
+<option value="overall">Overall</option>
+<option value="by_donor" selected>By Donor Status</option></select>
+                            <script type="application/json" data-for="traj-traj_show_trend" data-nonempty="">{"plugins":["selectize-plugin-a11y"]}</script>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="col-sm-3">
+                        <div class="form-group shiny-input-container">
+                          <label class="control-label" id="traj-traj_color_by-label" for="traj-traj_color_by">Color points by:</label>
+                          <div>
+                            <select id="traj-traj_color_by" class="shiny-input-select"><option value="donor_status" selected>Donor Status</option>
+<option value="donor_id">Donor ID</option></select>
+                            <script type="application/json" data-for="traj-traj_color_by" data-nonempty="">{"plugins":["selectize-plugin-a11y"]}</script>
+                          </div>
+                        </div>
+                        <div class="form-group shiny-input-container">
+                          <label class="control-label" id="traj-traj_point_size-label" for="traj-traj_point_size">Point size by:</label>
+                          <div>
+                            <select id="traj-traj_point_size" class="shiny-input-select"><option value="uniform">Uniform</option>
+<option value="islet_diam_um" selected>Islet Diameter</option></select>
+                            <script type="application/json" data-for="traj-traj_point_size" data-nonempty="">{"plugins":["selectize-plugin-a11y"]}</script>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="col-sm-3">
+                        <div class="form-group shiny-input-container">
+                          <label class="control-label" id="traj-traj_alpha-label" for="traj-traj_alpha">Point transparency:</label>
+                          <input class="js-range-slider" id="traj-traj_alpha" data-skin="shiny" data-min="0.1" data-max="1" data-from="0.3" data-step="0.05" data-grid="true" data-grid-num="9" data-grid-snap="false" data-prettify-separator="," data-prettify-enabled="true" data-keyboard="true" data-data-type="number"/>
+                        </div>
+                        <div class="form-group shiny-input-container">
+                          <label class="control-label" id="traj-traj_point_size_slider-label" for="traj-traj_point_size_slider">Point size:</label>
+                          <input class="js-range-slider" id="traj-traj_point_size_slider" data-skin="shiny" data-min="0.5" data-max="5" data-from="2.3" data-step="0.1" data-grid="true" data-grid-num="9" data-grid-snap="false" data-prettify-separator="," data-prettify-enabled="true" data-keyboard="true" data-data-type="number"/>
+                        </div>
+                      </div>
+                      <div class="col-sm-3">
+                        <div style="border: 1px solid #ddd; padding: 10px; border-radius: 5px; background-color: #f9f9f9; min-height: 100px;">
+                          <h6 style="margin-top: 0; margin-bottom: 10px; font-weight: bold; color: #333;">Legend</h6>
+                          <div id="traj-traj_legend" class="shiny-html-output"></div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="plotly html-widget html-widget-output shiny-report-size shiny-report-theme html-fill-item" id="traj-traj_scatter" style="width:100%;height:600px;"></div>
+                    <br/>
+                    <div class="shiny-plot-output html-fill-item" id="traj-traj_heatmap" style="width:100%;height:120px;"></div>
+                    <hr/>
+                    <h5 style="color: #2c5aa0;">Multi-Feature Heatmap</h5>
+                    <div class="row">
+                      <div class="col-sm-8">
+                        <div id="traj-multi_heatmap_marker_selector" class="shiny-html-output"></div>
+                      </div>
+                      <div class="col-sm-4">
+                        <div class="form-group shiny-input-container">
+                          <label class="control-label" id="traj-multi_heatmap_nbins-label" for="traj-multi_heatmap_nbins">Number of bins:</label>
+                          <input class="js-range-slider" id="traj-multi_heatmap_nbins" data-skin="shiny" data-min="10" data-max="40" data-from="20" data-step="5" data-grid="true" data-grid-num="6" data-grid-snap="false" data-prettify-separator="," data-prettify-enabled="true" data-keyboard="true" data-data-type="number"/>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="shiny-plot-output html-fill-item" id="traj-traj_multi_heatmap" style="width:100%;height:auto;"></div>
+                  </div>
+                </div>
+                <div class="col-sm-4">
+                  <div class="card" style="padding: 15px; margin-bottom: 20px; height: 950px; overflow-y: auto;">
+                    <div class="row">
+                      <div class="col-sm-12">
+                        <h5>UMAP: Donor Status</h5>
+                        <div class="shiny-plot-output html-fill-item" id="traj-traj_umap_donor" style="width:100%;height:400px;"></div>
+                      </div>
+                    </div>
+                    <br/>
+                    <div class="row">
+                      <div class="col-sm-12">
+                        <h5>UMAP: Selected Feature</h5>
+                        <div class="shiny-plot-output html-fill-item" id="traj-traj_umap_feature" style="width:100%;height:400px;"></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="row">
+                <div class="col-sm-12">
+                  <div id="traj-traj_outlier_info" class="shiny-html-output"></div>
+                </div>
+              </div>
+              <div id="traj-segmentation_viewer_panel" class="shiny-html-output"></div>
+            </div>
+            <div class="tab-pane" data-value="Viewer" id="tab-8317-3">
+              <div style="width: 100%;">
+                <div id="viewer-local_image_picker" class="shiny-html-output"></div>
+              </div>
+            </div>
+            <div class="tab-pane" data-value="Statistics" id="tab-8317-4">
+              <div class="row">
+                <div class="col-sm-12">
+                  <div class="card" style="padding: 15px; margin-bottom: 15px;">
+                    <div class="row">
+                      <div class="col-sm-8">
+                        <h5 style="margin-top: 0;">Statistical Analysis</h5>
+                        <div id="stats-overview_banner" class="shiny-html-output"></div>
+                      </div>
+                      <div class="col-sm-4" style="text-align: right; padding-top: 5px;">
+                        <button class="btn btn-default action-button btn-primary" id="stats-run_tests" style="margin-right: 8px;" type="button">
+                          <span class="action-label">Run Statistics</span>
+                        </button>
+                        <a id="stats-download_stats" class="btn btn-default shiny-download-link disabled" href="" target="_blank" download aria-disabled="true" tabindex="-1" style="margin-top: 0;">
+                          <i class="fas fa-download" role="presentation" aria-label="download icon"></i>
+                          Download CSV
+                        </a>
+                      </div>
+                    </div>
+                    <hr style="margin: 10px 0;"/>
+                    <div class="row">
+                      <div class="col-sm-2">
+                        <div id="stats-test_type" class="form-group shiny-input-radiogroup shiny-input-container" role="radiogroup" aria-labelledby="stats-test_type-label">
+                          <label class="control-label" id="stats-test_type-label" for="stats-test_type">Test Type</label>
+                          <div class="shiny-options-group">
+                            <div class="radio">
+                              <label>
+                                <input type="radio" name="stats-test_type" value="Parametric" checked="checked"/>
+                                <span>Parametric</span>
+                              </label>
+                            </div>
+                            <div class="radio">
+                              <label>
+                                <input type="radio" name="stats-test_type" value="Non-parametric"/>
+                                <span>Non-parametric</span>
+                              </label>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="col-sm-2">
+                        <div class="form-group shiny-input-container">
+                          <label class="control-label" id="stats-alpha-label" for="stats-alpha">Significance (α)</label>
+                          <div>
+                            <select id="stats-alpha" class="shiny-input-select"><option value="0.05" selected>0.05</option>
+<option value="0.01">0.01</option>
+<option value="0.001">0.001</option></select>
+                            <script type="application/json" data-for="stats-alpha" data-nonempty="">{"plugins":["selectize-plugin-a11y"]}</script>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="col-sm-2">
+                        <div class="form-group shiny-input-container">
+                          <div class="checkbox">
+                            <label>
+                              <input id="stats-stats_remove_outliers" type="checkbox" class="shiny-input-checkbox" checked="checked"/>
+                              <span>Remove outliers (&gt;3 SD)</span>
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="col-sm-3">
+                        <div class="form-group shiny-input-container">
+                          <label class="control-label" id="stats-bin_width-label" for="stats-bin_width">Per-bin width (µm)</label>
+                          <input class="js-range-slider" id="stats-bin_width" data-skin="shiny" data-min="1" data-max="75" data-from="50" data-step="1" data-grid="true" data-grid-num="9.25" data-grid-snap="false" data-prettify-separator="," data-prettify-enabled="true" data-keyboard="true" data-data-type="number"/>
+                        </div>
+                      </div>
+                      <div class="col-sm-3">
+                        <div class="form-group shiny-input-container">
+                          <label class="control-label" id="stats-stats_diam_range-label" for="stats-stats_diam_range">Diameter range (µm)</label>
+                          <input class="js-range-slider" id="stats-stats_diam_range" data-skin="shiny" data-type="double" data-min="0" data-max="500" data-from="0" data-to="350" data-step="10" data-grid="true" data-grid-num="10" data-grid-snap="false" data-prettify-separator="," data-prettify-enabled="true" data-keyboard="true" data-drag-interval="true" data-data-type="number"/>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="row">
+                <div class="col-sm-6">
+                  <div class="card" style="padding: 15px; margin-bottom: 15px;">
+                    <h5>Hypothesis Testing</h5>
+                    <div id="stats-test_results_table" class="shiny-html-output shiny-table-output"></div>
+                    <hr style="margin: 8px 0;"/>
+                    <h6 style="color: #555;">Effect Size Forest Plot</h6>
+                    <div class="plotly html-widget html-widget-output shiny-report-size shiny-report-theme html-fill-item" id="stats-forest_plot" style="width:100%;height:320px;"></div>
+                  </div>
+                </div>
+                <div class="col-sm-6">
+                  <div class="card" style="padding: 15px; margin-bottom: 15px;">
+                    <h5>Per-Bin Significance Heatmap</h5>
+                    <div class="plotly html-widget html-widget-output shiny-report-size shiny-report-theme html-fill-item" id="stats-bin_heatmap" style="width:100%;height:360px;"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="row">
+                <div class="col-sm-6">
+                  <div class="card" style="padding: 15px; margin-bottom: 15px;">
+                    <h5>Trend Analysis (Kendall τ)</h5>
+                    <div class="plotly html-widget html-widget-output shiny-report-size shiny-report-theme html-fill-item" id="stats-trend_plot" style="width:100%;height:360px;"></div>
+                  </div>
+                </div>
+                <div class="col-sm-6">
+                  <div id="stats-demographics_card" class="shiny-html-output"></div>
+                </div>
+              </div>
+              <div class="row">
+                <div class="col-sm-12">
+                  <div class="card" style="padding: 15px; margin-bottom: 15px;">
+                    <h5>Methods &amp; Interpretation</h5>
+                    <div id="stats-stats_explanation" class="shiny-html-output"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

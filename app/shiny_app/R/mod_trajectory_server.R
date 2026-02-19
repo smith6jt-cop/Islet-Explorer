@@ -668,6 +668,18 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image) {
         islet_spatial_lookup$case_id == case_id & islet_spatial_lookup$islet_key == islet_key,
       ]
 
+      # Try zero-padded variant (e.g. "112" -> "0112")
+      if (nrow(spatial_match) == 0) {
+        case_id_num <- suppressWarnings(as.integer(case_id))
+        if (!is.na(case_id_num)) {
+          case_id_padded <- sprintf("%04d", case_id_num)
+          spatial_match <- islet_spatial_lookup[
+            islet_spatial_lookup$case_id == case_id_padded & islet_spatial_lookup$islet_key == islet_key,
+          ]
+          if (nrow(spatial_match) > 0) case_id <- case_id_padded
+        }
+      }
+
       if (nrow(spatial_match) == 0) {
         showNotification(paste("Spatial data not found for", islet_key, "in case", case_id),
                          type = "warning", duration = 3)

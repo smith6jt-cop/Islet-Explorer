@@ -73,9 +73,9 @@ plot_main_ui <- function(id) {
             ),
             column(4,
               sliderInput(ns("pt_size"), "Point size",
-                          min = 0.3, max = 4.0, value = 0.8, step = 0.1),
+                          min = 0.3, max = 4.0, value = 3.0, step = 0.1),
               sliderInput(ns("pt_alpha"), "Point transparency",
-                          min = 0.05, max = 1.0, value = 0.25, step = 0.05)
+                          min = 0.05, max = 1.0, value = 0.6, step = 0.05)
             ),
             column(4,
               selectInput(ns("plot_color_by"), "Color points by:",

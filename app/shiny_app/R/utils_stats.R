@@ -79,3 +79,43 @@ per_bin_kendall <- function(df, bin_col, group_col, value_col, mid_col = "diam_m
   if (nrow(out) == 0) return(out)
   arrange(out, mid)
 }
+
+# ---------- Effect size utilities (Statistics tab) ----------
+
+#' Cohen's d for two-sample comparison with 95% CI (normal approximation)
+cohens_d <- function(x, y) {
+  x <- x[is.finite(x)]
+  y <- y[is.finite(y)]
+  n1 <- length(x); n2 <- length(y)
+  if (n1 < 2 || n2 < 2) return(list(d = NA_real_, ci_lo = NA_real_, ci_hi = NA_real_))
+  pooled_sd <- sqrt(((n1 - 1) * var(x) + (n2 - 1) * var(y)) / (n1 + n2 - 2))
+  if (!is.finite(pooled_sd) || pooled_sd == 0) return(list(d = NA_real_, ci_lo = NA_real_, ci_hi = NA_real_))
+  d <- (mean(x) - mean(y)) / pooled_sd
+  se_d <- sqrt((n1 + n2) / (n1 * n2) + d^2 / (2 * (n1 + n2)))
+  list(d = d, ci_lo = d - 1.96 * se_d, ci_hi = d + 1.96 * se_d)
+}
+
+#' Eta-squared from anova() output: SS_effect / SS_total for the first factor
+eta_squared <- function(fit) {
+  at <- tryCatch(anova(fit), error = function(e) NULL)
+  if (is.null(at)) return(NA_real_)
+  ss <- at[["Sum Sq"]]
+  if (length(ss) < 2) return(NA_real_)
+  ss[1] / sum(ss)
+}
+
+#' Non-parametric pairwise Wilcoxon tests with BH correction
+#' Returns data.frame with group1, group2, p_value columns
+pairwise_wilcox <- function(df, group_col, value_col) {
+  pw <- tryCatch(
+    pairwise.wilcox.test(df[[value_col]], df[[group_col]], p.adjust.method = "BH", exact = FALSE),
+    error = function(e) NULL
+  )
+  if (is.null(pw)) return(data.frame(group1 = character(), group2 = character(), p_value = numeric(), stringsAsFactors = FALSE))
+  mat <- as.data.frame(as.table(pw$p.value))
+  colnames(mat) <- c("group1", "group2", "p_value")
+  mat <- mat[!is.na(mat$p_value), , drop = FALSE]
+  mat$group1 <- as.character(mat$group1)
+  mat$group2 <- as.character(mat$group2)
+  mat
+}
