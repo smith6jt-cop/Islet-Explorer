@@ -16,7 +16,7 @@ app/shiny_app/
   R/
     00_globals.R               # Package loads, constants, feature flags, paths (h5ad_path, master_path)
     data_loading.R             # load_master_auto(), prep_data(), bin_islet_sizes(), H5AD loading
-    utils_stats.R              # summary_stats(), per_bin_anova(), per_bin_kendall()
+    utils_stats.R              # summary_stats(), per_bin_anova(), per_bin_kendall(), cohens_d(), eta_squared(), pairwise_wilcox()
     utils_safe_join.R          # safe_left_join(), add_islet_key(), compute_diameter_um()
     segmentation_helpers.R     # GeoJSON cache, load_case_geojson(), render_islet_segmentation_plot()
     viewer_helpers.R           # Avivator URL builders, channel config, environment detection
@@ -24,7 +24,7 @@ app/shiny_app/
     mod_plot_ui.R / mod_plot_server.R           # Plot tab (scatter, distribution, outliers)
     mod_trajectory_ui.R / mod_trajectory_server.R  # Trajectory tab (UMAP, heatmap, pseudotime)
     mod_viewer_ui.R / mod_viewer_server.R       # Viewer tab (OME-TIFF, Avivator iframe)
-    mod_statistics_ui.R / mod_statistics_server.R  # Statistics tab (ANOVA, pairwise, AUC)
+    mod_statistics_ui.R / mod_statistics_server.R  # Statistics tab (7-card: hypothesis, heatmap, trend, demographics, AUC)
     mod_ai_assistant_ui.R / mod_ai_assistant_server.R  # AI chat panel
   www/                         # Static assets (images, logos)
   app_original.R               # Backup of pre-modularization monolithic app (5,397 lines)
@@ -91,6 +91,32 @@ Pipeline notebooks use the `scvi-env` conda environment:
 conda activate scvi-env  # scanpy, anndata, scvi-tools, sklearn, scib-metrics
 ```
 
+## Statistics Tab (Phase 6, Feb 2026)
+
+### Shared Sidebar Architecture
+The Plot sidebar (mode, feature, region, donor status, AAb, age, gender filters) is visible on both the Plot and Statistics tabs. Achieved via `conditionalPanel` condition `"input.tabs == 'Plot' || input.tabs == 'Statistics'"` and matching JS `adjustLayout()` logic in `app.R`. The Statistics module consumes `plot_returns$raw_df` and `plot_returns$summary_df` directly — no data duplication.
+
+### 7-Card Layout
+1. **Overview Banner** — N islets, global p-value, effect size η², inline controls (test type, α, outlier removal, bin width, diameter range)
+2. **Hypothesis Testing** — Global test (ANOVA or Kruskal-Wallis) + pairwise table with Cohen's d + forest plot
+3. **Per-Bin Significance Heatmap** — `plot_ly(type="heatmap")` with x=bin midpoints, y=test type, z=-log10(p)
+4. **Trend Analysis** — Kendall τ per bin, line plot with significance coloring
+5. **Demographics** — Conditional on H5AD (hidden for Excel fallback). Age scatter with regression, gender-stratified tests, covariate-adjusted model
+6. **AUC Analysis** — Trapezoidal AUC by donor group with percentage change interpretation
+7. **Methods & Interpretation** — Dynamic text describing all tests, corrections, assumptions
+
+### Effect Size Utilities (`utils_stats.R`)
+- `cohens_d(x, y)` — two-sample with pooled SD, 95% CI
+- `eta_squared(fit)` — from `anova()` output
+- `pairwise_wilcox(df, group_col, value_col)` — BH-corrected Wilcoxon
+
+### Deployment Architecture
+- **Production URL**: `http://10.15.152.7:8080/islet-explorer/`
+- nginx (port 8080) reverse-proxies `/islet-explorer/` → shiny-server (port 3838)
+- shiny-server serves from symlink: `/srv/shiny-server/islet-explorer` → `app/shiny_app/`
+- Changes take effect when shiny-server spawns a fresh R worker (no restart needed for code changes; kill stale workers if needed)
+- Dev server (`Rscript -e 'shiny::runApp(".", port=7777)'`) is for local testing only
+
 ## Interactive Features (Phase 5, Feb 2026)
 
 ### Phenotype Composition Explorer
@@ -114,9 +140,18 @@ Both Plot and Trajectory tabs use **embedded panels** (not modals) for segmentat
 - Phenotyping uses Rules1 (`data/phenotype_rules.csv`) - 19 phenotypes, 18 markers
 - **Donor metadata**: Comes from `islets_core_fixed.h5ad` obs, NOT from `CODEX_Pancreas_Donors.xlsx` (different cohort)
 - **H5AD obs index**: `islets_core_fixed.h5ad` index name is `islet_id` — same as column, use `reset_index(drop=True)`
+- **Case ID zero-padding**: GeoJSON files use `0112.geojson` (4-digit padded), data uses `112` (unpadded). `load_case_geojson()` and click handlers use `sprintf("%04d", ...)` fallback
+- **Log-scale with zeros**: Use `scales::pseudo_log_trans(base=10)` instead of `scale_y_log10()` — zeros map to 0 (visible) instead of -Infinity (dropped). Custom `pseudo_log_breaks()` provides clean axis labels (0, 1, 10, 100)
+- **Plot defaults**: Point size = 3.0, transparency = 0.6
 
 ## Running the App
 
+Production (always use this):
+```
+http://10.15.152.7:8080/islet-explorer/
+```
+
+Development only:
 ```bash
 cd app/shiny_app
 Rscript -e 'shiny::runApp(".", port = 7777)'
