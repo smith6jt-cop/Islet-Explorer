@@ -319,6 +319,33 @@ def build_enriched_h5ad(trajectory_path, groovy_dir, donor_key_path, output_path
             else:
                 adata.uns[key] = np.array(vals, dtype=str)
 
+    # Step 4.5: Merge neighborhood metrics into adata.obs
+    nbr_path = os.path.join(os.path.dirname(output_path), 'neighborhood_metrics.csv')
+    if os.path.exists(nbr_path):
+        print(f"\n4.5. Merging neighborhood metrics: {nbr_path}")
+        nbr = pd.read_csv(nbr_path)
+        print(f"     Loaded {len(nbr)} rows, {len(nbr.columns)} columns")
+
+        # Build combined_islet_id in adata.obs for merge
+        adata.obs['_combined_islet_id'] = (
+            adata.obs['imageid'].astype(str) + '_' + adata.obs['base_islet_id'].astype(str)
+        )
+
+        # Merge neighborhood columns (exclude combined_islet_id itself)
+        nbr_cols = [c for c in nbr.columns if c != 'combined_islet_id']
+        nbr_merge = nbr.set_index('combined_islet_id')[nbr_cols]
+
+        before_cols = len(adata.obs.columns)
+        adata.obs = adata.obs.join(nbr_merge, on='_combined_islet_id', how='left')
+        adata.obs.drop(columns=['_combined_islet_id'], inplace=True)
+        after_cols = len(adata.obs.columns)
+        print(f"     Added {after_cols - before_cols} neighborhood columns to .obs")
+
+        n_with_data = adata.obs['total_cells_peri'].notna().sum() if 'total_cells_peri' in adata.obs.columns else 0
+        print(f"     Islets with peri-islet data: {n_with_data}/{len(adata.obs)}")
+    else:
+        print(f"\n4.5. Neighborhood metrics not found at {nbr_path} (skipping)")
+
     # Store provenance metadata
     adata.uns['data_provenance'] = {
         'pipeline': 'Phase 2: Data Audit, QC Validation & Pipeline Formalization',

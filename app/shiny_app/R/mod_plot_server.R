@@ -87,13 +87,37 @@ plot_server <- function(id, prepared, selected_islet) {
         selectInput(ns("which"), "Marker", choices = markers, selected = sel)
       } else {
         base_choices <- c("Ins_frac" = "Ins_any", "Glu_frac" = "Glu_any", "Stt_frac" = "Stt_any")
-        prop_cols <- grep("^prop_", colnames(prepared()$comp), value = TRUE)
-        if (length(prop_cols) > 0) {
-          prop_labels <- gsub("^prop_", "", prop_cols)
-          choices <- list(
-            "Hormone Fractions" = base_choices,
-            "Cell Type Proportions" = setNames(prop_cols, prop_labels)
-          )
+        comp_cols <- colnames(prepared()$comp)
+        prop_cols <- grep("^prop_", comp_cols, value = TRUE)
+        peri_prop_cols <- grep("^peri_prop_", comp_cols, value = TRUE)
+        immune_metric_cols <- intersect(
+          c("immune_frac_peri", "immune_frac_core", "immune_ratio",
+            "cd8_to_macro_ratio", "tcell_density_peri"),
+          comp_cols
+        )
+        if (length(prop_cols) > 0 || length(peri_prop_cols) > 0 || length(immune_metric_cols) > 0) {
+          choices <- list("Hormone Fractions" = base_choices)
+          if (length(prop_cols) > 0) {
+            prop_labels <- gsub("^prop_", "", prop_cols)
+            choices[["Cell Type Proportions"]] <- setNames(prop_cols, prop_labels)
+          }
+          if (length(peri_prop_cols) > 0) {
+            peri_labels <- gsub("^peri_prop_", "", peri_prop_cols)
+            choices[["Peri-Islet Proportions"]] <- setNames(peri_prop_cols, peri_labels)
+          }
+          if (length(immune_metric_cols) > 0) {
+            immune_labels <- c(
+              immune_frac_peri = "Immune fraction (peri)",
+              immune_frac_core = "Immune fraction (core)",
+              immune_ratio = "Peri/core immune ratio",
+              cd8_to_macro_ratio = "CD8/macrophage ratio (peri)",
+              tcell_density_peri = "T-cell density (peri)"
+            )
+            choices[["Immune Metrics"]] <- setNames(
+              immune_metric_cols,
+              immune_labels[immune_metric_cols]
+            )
+          }
         } else {
           choices <- base_choices
         }
@@ -815,60 +839,124 @@ plot_server <- function(id, prepared, selected_islet) {
       info <- selected_islet()
       if (is.null(info)) return(NULL)
 
+      # Check if single-cell drill-down data exists for this islet
+      has_cells <- drilldown_available() &&
+        !is.null(load_islet_cells(info$case_id, info$islet_key))
+
+      # Marker choices for color-by dropdown
+      marker_choices <- c("phenotype" = "phenotype")
+      if (has_cells) {
+        cells <- load_islet_cells(info$case_id, info$islet_key)
+        marker_cols <- setdiff(colnames(cells),
+                               c("X_centroid", "Y_centroid", "phenotype", "cell_region",
+                                 "Cell.Area", "Cell Area", "Nucleus.Area", "Nucleus Area"))
+        if (length(marker_cols) > 0) {
+          marker_choices <- c(marker_choices, setNames(marker_cols, marker_cols))
+        }
+      }
+
       div(class = "card", style = "padding: 15px; margin-bottom: 20px; border: 2px solid #0066CC;",
         fluidRow(
-          column(8,
-            h4(paste("Islet Segmentation:", info$islet_key, "(Case", info$case_id, ")"),
+          column(6,
+            h4(paste("Islet Viewer:", info$islet_key, "(Case", info$case_id, ")"),
                style = "margin-top: 0; color: #0066CC;")
           ),
-          column(4, style = "text-align: right;",
+          column(6, style = "text-align: right;",
+            if (has_cells) {
+              tagList(
+                # Non-namespaced inputs for root-level outputs
+                tags$div(style = "display: inline-block; margin-right: 10px;",
+                  radioButtons("drilldown_view_mode", NULL,
+                               choices = c("Boundaries", "Single Cells"),
+                               selected = "Single Cells", inline = TRUE)
+                )
+              )
+            },
             actionButton(ns("clear_segmentation"), "Close", class = "btn btn-sm btn-outline-secondary")
           )
         ),
+        # Controls row (visible only in Single Cells mode)
+        if (has_cells) {
+          conditionalPanel(
+            condition = "input.drilldown_view_mode == 'Single Cells'",
+            fluidRow(style = "margin-bottom: 10px;",
+              column(4,
+                selectInput("drilldown_color_by", "Color by",
+                            choices = marker_choices, selected = "phenotype")
+              ),
+              column(3,
+                checkboxInput("drilldown_show_peri", "Show peri-islet cells", value = TRUE)
+              )
+            )
+          )
+        },
         fluidRow(
           column(8,
-            plotOutput("islet_segmentation_view", height = "450px")
+            conditionalPanel(
+              condition = if (has_cells) "input.drilldown_view_mode == 'Boundaries'" else "true",
+              plotOutput("islet_segmentation_view", height = "450px")
+            ),
+            if (has_cells) {
+              conditionalPanel(
+                condition = "input.drilldown_view_mode == 'Single Cells'",
+                plotOutput("islet_drilldown_view", height = "450px")
+              )
+            }
           ),
           column(4,
-            div(style = "padding: 10px; background-color: #f8f9fa; border-radius: 5px; height: 100%;",
-              h5("Legend", style = "margin-top: 0; margin-bottom: 15px;"),
-              div(style = "margin-bottom: 10px;",
-                div(style = "display: flex; align-items: center; margin-bottom: 8px;",
-                  div(style = "width: 25px; height: 4px; background-color: #0066CC; margin-right: 8px;"),
-                  span("Islet boundary")
-                ),
-                div(style = "display: flex; align-items: center; margin-bottom: 8px;",
-                  div(style = "width: 25px; height: 4px; background-color: #00CCCC; margin-right: 8px;"),
-                  span("Expanded (+20\u00b5m)")
-                ),
-                div(style = "display: flex; align-items: center; margin-bottom: 8px;",
-                  div(style = "width: 25px; height: 4px; background-color: #CC00CC; margin-right: 8px;"),
-                  span("Nerve")
-                ),
-                div(style = "display: flex; align-items: center; margin-bottom: 8px;",
-                  div(style = "width: 25px; height: 4px; background-color: #CC0000; margin-right: 8px;"),
-                  span("Capillary")
-                ),
-                div(style = "display: flex; align-items: center; margin-bottom: 8px;",
-                  div(style = "width: 25px; height: 4px; background-color: #00AA00; margin-right: 8px;"),
-                  span("Lymphatic")
-                ),
-                div(style = "display: flex; align-items: center; margin-bottom: 8px;",
-                  div(style = "width: 25px; height: 4px; background-color: #FFD700; margin-right: 8px;"),
-                  span("Selected islet", style = "font-weight: bold;")
+            if (has_cells) {
+              conditionalPanel(
+                condition = "input.drilldown_view_mode == 'Single Cells'",
+                div(style = "padding: 10px; background-color: #f8f9fa; border-radius: 5px;",
+                  h5("Cell Composition", style = "margin-top: 0;"),
+                  plotOutput("islet_drilldown_summary", height = "250px"),
+                  hr(),
+                  tableOutput("islet_drilldown_table")
                 )
-              ),
-              hr(),
-              h6("Islet Info", style = "margin-bottom: 10px;"),
-              tags$dl(style = "font-size: 13px;",
-                tags$dt("Case ID:"), tags$dd(info$case_id),
-                tags$dt("Islet:"), tags$dd(info$islet_key),
-                tags$dt("Centroid X:"), tags$dd(paste0(round(info$centroid_x, 1), " \u00b5m")),
-                tags$dt("Centroid Y:"), tags$dd(paste0(round(info$centroid_y, 1), " \u00b5m"))
-              ),
-              hr(),
-              p(style = "font-size: 11px; color: #666; margin-bottom: 0;",
-                "Click another point to view a different islet, or click Close to hide this panel.")
+              )
+            },
+            conditionalPanel(
+              condition = if (has_cells) "input.drilldown_view_mode == 'Boundaries'" else "true",
+              div(style = "padding: 10px; background-color: #f8f9fa; border-radius: 5px; height: 100%;",
+                h5("Legend", style = "margin-top: 0; margin-bottom: 15px;"),
+                div(style = "margin-bottom: 10px;",
+                  div(style = "display: flex; align-items: center; margin-bottom: 8px;",
+                    div(style = "width: 25px; height: 4px; background-color: #0066CC; margin-right: 8px;"),
+                    span("Islet boundary")
+                  ),
+                  div(style = "display: flex; align-items: center; margin-bottom: 8px;",
+                    div(style = "width: 25px; height: 4px; background-color: #00CCCC; margin-right: 8px;"),
+                    span("Expanded (+20\u00b5m)")
+                  ),
+                  div(style = "display: flex; align-items: center; margin-bottom: 8px;",
+                    div(style = "width: 25px; height: 4px; background-color: #CC00CC; margin-right: 8px;"),
+                    span("Nerve")
+                  ),
+                  div(style = "display: flex; align-items: center; margin-bottom: 8px;",
+                    div(style = "width: 25px; height: 4px; background-color: #CC0000; margin-right: 8px;"),
+                    span("Capillary")
+                  ),
+                  div(style = "display: flex; align-items: center; margin-bottom: 8px;",
+                    div(style = "width: 25px; height: 4px; background-color: #00AA00; margin-right: 8px;"),
+                    span("Lymphatic")
+                  ),
+                  div(style = "display: flex; align-items: center; margin-bottom: 8px;",
+                    div(style = "width: 25px; height: 4px; background-color: #FFD700; margin-right: 8px;"),
+                    span("Selected islet", style = "font-weight: bold;")
+                  )
+                ),
+                hr(),
+                h6("Islet Info", style = "margin-bottom: 10px;"),
+                tags$dl(style = "font-size: 13px;",
+                  tags$dt("Case ID:"), tags$dd(info$case_id),
+                  tags$dt("Islet:"), tags$dd(info$islet_key),
+                  tags$dt("Centroid X:"), tags$dd(paste0(round(info$centroid_x, 1), " \u00b5m")),
+                  tags$dt("Centroid Y:"), tags$dd(paste0(round(info$centroid_y, 1), " \u00b5m"))
+                ),
+                hr(),
+                p(style = "font-size: 11px; color: #666; margin-bottom: 0;",
+                  "Click another point to view a different islet, or click Close to hide this panel.")
+              )
             )
           )
         )

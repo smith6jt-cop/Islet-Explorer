@@ -220,6 +220,14 @@ prep_data <- function(master) {
     message("[prep-data] Merged ", ncol(master$phenotypes) - 2, " phenotype columns into comp")
   }
 
+  # Merge neighborhood metrics into comp (H5AD only; NULL from Excel path)
+  if (!is.null(master$neighborhood) && nrow(master$neighborhood) > 0) {
+    comp <- safe_left_join(comp, master$neighborhood,
+                           by = c("Case ID", "islet_key"),
+                           context = "comp:neighborhood")
+    message("[prep-data] Merged ", ncol(master$neighborhood) - 2, " neighborhood columns into comp")
+  }
+
   # Merge donor demographics into all dataframes (H5AD only; NULL from Excel path)
   if (!is.null(master$donor_demographics) && nrow(master$donor_demographics) > 0) {
     targets_all <- safe_left_join(targets_all, master$donor_demographics, by = "Case ID", context = "targets_all:demographics")
@@ -319,15 +327,30 @@ load_master_h5ad <- function(path) {
       } else NULL
     }, error = function(e) { message("[H5AD] demographics extraction failed: ", e$message); NULL })
 
+    # Extract neighborhood metrics from .obs (added by compute_neighborhood_metrics.py → build_h5ad_for_app.py)
+    neighborhood_df <- tryCatch({
+      obs <- as.data.frame(ad$obs)
+      nbr_cols <- grep("^peri_prop_|^peri_count_|^immune_|^cd8_|^tcell_|^enrich_z_|^min_dist_|^total_cells_peri|^total_cells_core|^immune_count_",
+                       colnames(obs), value = TRUE)
+      if (length(nbr_cols) > 0 && "imageid" %in% colnames(obs) && "base_islet_id" %in% colnames(obs)) {
+        nbr <- obs[, c("imageid", "base_islet_id", nbr_cols), drop = FALSE]
+        nbr$`Case ID` <- as.integer(as.character(nbr$imageid))
+        nbr$islet_key <- gsub("^Islet_Islet_", "Islet_", as.character(nbr$base_islet_id))
+        nbr[, c("Case ID", "islet_key", nbr_cols), drop = FALSE]
+      } else NULL
+    }, error = function(e) { message("[H5AD] neighborhood extraction failed: ", e$message); NULL })
+
     message("[H5AD] Loaded: targets=", if (!is.null(targets)) nrow(targets) else 0,
             " markers=", if (!is.null(markers)) nrow(markers) else 0,
             " comp=", if (!is.null(comp)) nrow(comp) else 0,
             " lgals3=", if (!is.null(lgals3)) nrow(lgals3) else 0,
             " phenotypes=", if (!is.null(phenotype_df)) ncol(phenotype_df) - 2 else 0,
-            " demographics=", if (!is.null(donor_demographics)) nrow(donor_demographics) else 0)
+            " demographics=", if (!is.null(donor_demographics)) nrow(donor_demographics) else 0,
+            " neighborhood=", if (!is.null(neighborhood_df)) ncol(neighborhood_df) - 2 else 0)
 
     list(markers = markers, targets = targets, comp = comp, lgals3 = lgals3,
-         phenotypes = phenotype_df, donor_demographics = donor_demographics)
+         phenotypes = phenotype_df, donor_demographics = donor_demographics,
+         neighborhood = neighborhood_df)
   }, error = function(e) {
     message("[H5AD] Failed to load: ", conditionMessage(e))
     NULL

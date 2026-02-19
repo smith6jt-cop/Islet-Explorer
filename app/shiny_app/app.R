@@ -368,6 +368,9 @@ ui <- fluidPage(
         ),
         tabPanel("Statistics",
           statistics_ui("stats")
+        ),
+        tabPanel("Spatial",
+          spatial_ui("spatial")
         )
       )
     )
@@ -434,10 +437,13 @@ server <- function(input, output, session) {
                     summary_df              = plot_returns$summary_df,
                     get_selection_description = plot_returns$get_selection_description)
 
+  # Spatial Neighborhood module
+  spatial_server("spatial", prepared)
+
   # AI Assistant module (self-contained)
   ai_assistant_server("ai")
 
-  # ---- Shared segmentation plot (root-level, used by both Plot modal and Trajectory panel) ----
+  # ---- Shared segmentation plot (root-level, used by both Plot and Trajectory panels) ----
   output$islet_segmentation_view <- renderPlot({
     req(selected_islet())
     info <- selected_islet()
@@ -453,6 +459,58 @@ server <- function(input, output, session) {
       }
     )
   })
+
+  # ---- Single-cell drill-down outputs (root-level, non-namespaced) ----
+  output$islet_drilldown_view <- renderPlot({
+    req(selected_islet())
+    info <- selected_islet()
+    cells <- load_islet_cells(info$case_id, info$islet_key)
+    req(cells)
+    color_by <- input$drilldown_color_by %||% "phenotype"
+    show_peri <- if (!is.null(input$drilldown_show_peri)) input$drilldown_show_peri else TRUE
+    tryCatch(
+      render_islet_drilldown_plot(info, cells, color_by = color_by, show_peri = show_peri),
+      error = function(e) {
+        cat("[DRILLDOWN ERROR]", conditionMessage(e), "\n")
+        ggplot2::ggplot() +
+          ggplot2::annotate("text", x = 0.5, y = 0.5,
+                            label = paste("Render error:", conditionMessage(e)),
+                            size = 4, color = "red") +
+          ggplot2::theme_void() + ggplot2::xlim(0, 1) + ggplot2::ylim(0, 1)
+      }
+    )
+  })
+
+  output$islet_drilldown_summary <- renderPlot({
+    req(selected_islet())
+    info <- selected_islet()
+    cells <- load_islet_cells(info$case_id, info$islet_key)
+    req(cells)
+    show_peri <- if (!is.null(input$drilldown_show_peri)) input$drilldown_show_peri else TRUE
+    if (!show_peri && "cell_region" %in% colnames(cells)) {
+      cells <- cells[cells$cell_region == "core", , drop = FALSE]
+    }
+    tryCatch(render_drilldown_summary(cells), error = function(e) NULL)
+  })
+
+  output$islet_drilldown_table <- renderTable({
+    req(selected_islet())
+    info <- selected_islet()
+    cells <- load_islet_cells(info$case_id, info$islet_key)
+    req(cells)
+    show_peri <- if (!is.null(input$drilldown_show_peri)) input$drilldown_show_peri else TRUE
+    if (!show_peri && "cell_region" %in% colnames(cells)) {
+      cells <- cells[cells$cell_region == "core", , drop = FALSE]
+    }
+    if ("cell_region" %in% colnames(cells)) {
+      counts <- as.data.frame(table(Region = cells$cell_region), stringsAsFactors = FALSE)
+      colnames(counts) <- c("Region", "Cells")
+      counts$Region <- ifelse(counts$Region == "core", "Core", "Peri-islet")
+      rbind(counts, data.frame(Region = "Total", Cells = sum(counts$Cells)))
+    } else {
+      data.frame(Region = "All", Cells = nrow(cells))
+    }
+  }, striped = TRUE, spacing = "s")
 }
 
 shinyApp(ui, server)

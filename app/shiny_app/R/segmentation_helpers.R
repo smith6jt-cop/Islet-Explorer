@@ -431,25 +431,15 @@ islet_spatial_lookup <- load_islet_spatial_lookup()
 # Keep legacy annotations_data for backward compatibility
 annotations_data <- segmentation_data
 
-# Reusable segmentation plot renderer
-# Called by both Trajectory and Plot modules for their respective segmentation outputs
-render_islet_segmentation_plot <- function(info) {
+# Reusable GeoJSON base plot builder
+# Returns a ggplot with polygon layers + coord_sf (no crosshairs or title).
+# Used by both render_islet_segmentation_plot() and render_islet_drilldown_plot().
+build_segmentation_base_plot <- function(info, buffer_um = 250) {
   if (is.null(info)) return(NULL)
-  cat("[SEGMENTATION RENDER] Rendering for case=", info$case_id, ", islet=", info$islet_key, "\n")
 
   geojson <- load_case_geojson(info$case_id)
-  if (is.null(geojson)) {
-    return(
-      ggplot2::ggplot() +
-        ggplot2::annotate("text", x = 0.5, y = 0.5,
-                          label = paste("GeoJSON data not available for case", info$case_id),
-                          size = 5, color = "gray50") +
-        ggplot2::theme_void() +
-        ggplot2::xlim(0, 1) + ggplot2::ylim(0, 1)
-    )
-  }
+  if (is.null(geojson)) return(NULL)
 
-  buffer_um <- 250
   polygons <- get_islet_region_polygons(geojson, info$centroid_x, info$centroid_y, buffer_um)
 
   centroid_x_px <- info$centroid_x / PIXEL_SIZE_UM
@@ -483,16 +473,7 @@ render_islet_segmentation_plot <- function(info) {
     }
   }
 
-  if (!has_polygons) {
-    return(
-      ggplot2::ggplot() +
-        ggplot2::annotate("text", x = 0.5, y = 0.5,
-                          label = paste("No segmentation data found near", info$islet_key),
-                          size = 5, color = "gray50") +
-        ggplot2::theme_void() +
-        ggplot2::xlim(0, 1) + ggplot2::ylim(0, 1)
-    )
-  }
+  if (!has_polygons) return(NULL)
 
   # Highlight the clicked islet
   if (!is.null(polygons$Islet) && nrow(polygons$Islet) > 0) {
@@ -513,7 +494,32 @@ render_islet_segmentation_plot <- function(info) {
     }
   }
 
-  # Crosshairs at centroid
+  p
+}
+
+# Reusable segmentation plot renderer
+# Called by both Trajectory and Plot modules for their respective segmentation outputs
+render_islet_segmentation_plot <- function(info) {
+  if (is.null(info)) return(NULL)
+  cat("[SEGMENTATION RENDER] Rendering for case=", info$case_id, ", islet=", info$islet_key, "\n")
+
+  p <- build_segmentation_base_plot(info)
+  if (is.null(p)) {
+    return(
+      ggplot2::ggplot() +
+        ggplot2::annotate("text", x = 0.5, y = 0.5,
+                          label = paste("No segmentation data found for", info$islet_key,
+                                        "in case", info$case_id),
+                          size = 5, color = "gray50") +
+        ggplot2::theme_void() +
+        ggplot2::xlim(0, 1) + ggplot2::ylim(0, 1)
+    )
+  }
+
+  centroid_x_px <- info$centroid_x / PIXEL_SIZE_UM
+  centroid_y_px <- info$centroid_y / PIXEL_SIZE_UM
+
+  # Add crosshairs and title (not in base plot)
   p <- p +
     ggplot2::geom_vline(xintercept = centroid_x_px, color = "gray50", linetype = "dashed", linewidth = 0.3) +
     ggplot2::geom_hline(yintercept = centroid_y_px, color = "gray50", linetype = "dashed", linewidth = 0.3) +
