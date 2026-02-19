@@ -54,17 +54,17 @@ trajectory_ui <- function(id) {
           plotOutput(ns("traj_multi_heatmap"), height = "auto")
         )
       ),
-      # Right column: UMAPs side by side + segmentation viewer below
+      # Right column: UMAPs stacked + segmentation viewer below
       column(5,
         div(class = "card", style = "padding: 15px; margin-bottom: 20px;",
           fluidRow(
             column(6,
               h5("UMAP: Donor Status", style = "font-size: 13px; margin-top: 0;"),
-              plotOutput(ns("traj_umap_donor"), height = 300)
+              plotOutput(ns("traj_umap_donor"), height = 500)
             ),
             column(6,
               h5("UMAP: Selected Feature", style = "font-size: 13px; margin-top: 0;"),
-              plotOutput(ns("traj_umap_feature"), height = 300)
+              plotOutput(ns("traj_umap_feature"), height = 500)
             )
           )
         ),

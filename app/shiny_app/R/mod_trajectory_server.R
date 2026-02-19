@@ -927,8 +927,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image) {
         scale_x_continuous(expand = expansion(mult = 0.02)) +
         scale_y_continuous(expand = expansion(mult = 0.02)) +
         labs(x = "UMAP 1", y = "UMAP 2", title = "UMAP: Donor Status") +
-        theme_minimal(base_size = 12) +
-        theme(aspect.ratio = 1)
+        theme_minimal(base_size = 12)
     })
 
     # ---------- UMAP: Selected Feature ----------
@@ -951,8 +950,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image) {
         labs(x = "UMAP 1", y = "UMAP 2",
              title = paste("UMAP:", selected_feature),
              color = "Expression") +
-        theme_minimal(base_size = 12) +
-        theme(aspect.ratio = 1)
+        theme_minimal(base_size = 12)
 
       # Continuous colormap scaled to data min/max
       val_range <- range(df$value, na.rm = TRUE)
@@ -1033,9 +1031,8 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image) {
     output$multi_heatmap_marker_selector <- renderUI({
       tr <- traj()
       if (is.null(tr) || !is.null(tr$error) || is.null(tr$var_names)) return(NULL)
-      defaults <- intersect(c("INS", "GCG", "SST", "CD3e", "CD8a", "CD68", "CD45", "HLADR"), tr$var_names)
       checkboxGroupInput(ns("multi_heatmap_markers"), "Select markers:",
-                         choices = tr$var_names, selected = defaults, inline = TRUE)
+                         choices = tr$var_names, selected = tr$var_names, inline = TRUE)
     })
 
     # Multi-feature data reactive
