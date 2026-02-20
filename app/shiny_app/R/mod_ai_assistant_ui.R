@@ -23,7 +23,7 @@ ai_assistant_ui <- function(id) {
         label = "Model",
         choices = c(
           "Navigator Fast (gpt-oss-20b)" = "gpt-oss-20b",
-          "Navigator Large (gpt-oss-210b)" = "gpt-oss-210b"
+          "Navigator Large (gpt-oss-120b)" = "gpt-oss-120b"
         ),
         selected = "gpt-oss-20b"
       )

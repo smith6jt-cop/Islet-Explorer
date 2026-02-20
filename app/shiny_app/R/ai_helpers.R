@@ -264,6 +264,7 @@ call_openai_chat <- function(history, system_prompt = AI_SYSTEM_PROMPT,
   payload_raw <- charToRaw(payload_json)
     chunk_buffer <- ""
     accumulated <- ""
+    is_reasoning <- FALSE
     usage_capture <- NULL
 
     append_segment <- function(segment) {
@@ -288,10 +289,19 @@ call_openai_chat <- function(history, system_prompt = AI_SYSTEM_PROMPT,
           piece <- delta$content
           if (!is.null(piece)) {
             piece <- paste(piece, collapse = "")
+            # If transitioning from reasoning to content, clear the thinking indicator
+            if (is_reasoning) {
+              accumulated <<- ""
+              is_reasoning <<- FALSE
+            }
             accumulated <<- paste0(accumulated, piece)
             if (is.function(stream_callback)) {
               stream_callback(accumulated, usage_capture)
             }
+          } else if (!is.null(delta$reasoning_content) && is.function(stream_callback)) {
+            # Reasoning model: show thinking indicator while reasoning
+            is_reasoning <<- TRUE
+            stream_callback("\u2728 Thinking...", usage_capture)
           } else if (!is.null(delta$role) && is.function(stream_callback)) {
             stream_callback(accumulated, usage_capture)
           }
@@ -350,7 +360,7 @@ call_openai_chat <- function(history, system_prompt = AI_SYSTEM_PROMPT,
       } else {
         paste("HTTP", status_chat)
       }
-      return(stream_error(detail_chat, fallback = status_chat %in% c(404, 405)))
+      return(stream_error(detail_chat, fallback = status_chat %in% c(401, 404, 405)))
     }
 
     if (!nzchar(accumulated)) {
@@ -429,7 +439,7 @@ call_openai_chat <- function(history, system_prompt = AI_SYSTEM_PROMPT,
           paste("HTTP", status_code)
         }
 
-        fallback_due_to_model <- status_code %in% c(400, 404) &&
+        fallback_due_to_model <- status_code %in% c(400, 401, 404) &&
           grepl("model", detail, ignore.case = TRUE) && !identical(mdl, fallback_model)
         fallback_to_chat <- status_code %in% c(404, 405) ||
           grepl("ResponsesAPIResponse|/responses|no-default-models", detail, ignore.case = TRUE)
@@ -542,7 +552,7 @@ call_openai_chat <- function(history, system_prompt = AI_SYSTEM_PROMPT,
           paste("HTTP", status_chat)
         }
 
-        fallback_due_to_model_chat <- status_chat %in% c(400, 404) &&
+        fallback_due_to_model_chat <- status_chat %in% c(400, 401, 404) &&
           grepl("model", detail_chat, ignore.case = TRUE) && !identical(mdl, fallback_model)
 
         if (fallback_due_to_model_chat) {

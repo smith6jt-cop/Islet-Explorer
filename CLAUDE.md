@@ -246,6 +246,60 @@ Z-scored expression along pseudotime. Clamped [-2.5, 2.5], blue-white-red, dynam
 ### Segmentation + Drill-Down Pattern
 Click a point -> `selected_islet()` updates -> embedded panel renders inline with Boundaries/Single Cells toggle. Close button sets `selected_islet(NULL)`.
 
+## AI Assistant (Phase 10, Feb 2026)
+
+### Architecture
+
+The AI chat panel (`mod_ai_assistant_ui/server.R`) uses the University of Florida Navigator AI Toolkit via an OpenAI-compatible API. Wired as `ai_assistant_server("ai_chat")` in `app.R`.
+
+**Key files:**
+- `ai_helpers.R` -- Credential loading, API calls (streaming + non-streaming), model selection, error handling
+- `mod_ai_assistant_ui.R` -- Chat panel UI with model picker, textarea, send/reset buttons
+- `mod_ai_assistant_server.R` -- Chat history management, streaming callback, token budget tracking
+
+### UF Navigator API
+
+- **Endpoint**: `https://api.ai.it.ufl.edu/v1/chat/completions`
+- **Available models** (as of Feb 2026):
+  - `gpt-oss-20b` -- Fast model (default)
+  - `gpt-oss-120b` -- Large reasoning model (chain-of-thought in `reasoning_content`, answer in `content`)
+- **Authentication**: Bearer token from `KEY` env var (loaded from `.Renviron`)
+- **Base URL**: `BASE` env var in `.Renviron` (defaults to `https://api.openai.com/v1` if unset)
+
+### Reasoning Model Behavior (gpt-oss-120b)
+
+The 120b model is a reasoning model (similar to DeepSeek R1). Its API behavior differs from standard models:
+
+- **Non-streaming**: Response has `message.content` (final answer) + `message.reasoning_content` (chain-of-thought). Content may be `null` if `max_tokens` is too low for reasoning + answer.
+- **Streaming**: Chunks first arrive with `delta.reasoning_content` only (no `delta.content`). After reasoning completes, `delta.content` chunks appear with the actual answer. The streaming parser in `ai_helpers.R` shows "Thinking..." during the reasoning phase and displays the answer once content chunks arrive.
+
+### Credential Loading
+
+`ai_helpers.R` searches for `.Renviron` in priority order:
+1. `app/shiny_app/.Renviron` (deployment)
+2. Script directory `.Renviron`
+3. `R_ENVIRON_USER` env var
+4. `~/.Renviron`
+5. `~/.Renviron.local`
+6. `$HOME/.Renviron`
+
+Required env vars: `KEY` (API key), `BASE` (API base URL, optional).
+
+### Model Fallback Logic
+
+`select_openai_models()` returns a candidate list. For each candidate, `call_openai_chat()` tries streaming first, then non-streaming. If a model returns HTTP 400/401/404 with "model" in the error, it falls back to the next candidate. The fallback model defaults to `gpt-oss-120b` (env var `OPENAI_DEFAULT_MODEL`).
+
+**Critical**: UF Navigator returns HTTP **401** (not 404) for model access denied. The fallback logic must include 401 in its status code checks.
+
+### Important AI Conventions
+
+- **Model names must match API**: Query `GET /v1/models` to verify available models. Do NOT hardcode model names without checking.
+- **Reasoning models need sufficient tokens**: `max_output_tokens` must be large enough for reasoning + answer. With `max_tokens=10`, a reasoning model may exhaust budget during chain-of-thought and return `content: null`.
+- **UF Navigator uses `/chat/completions` only**: The code detects `api.ai.it.ufl.edu` in the base URL and skips the `/responses` endpoint.
+- **Streaming parser must handle `reasoning_content`**: Standard delta parsing only checks `delta.content`. For reasoning models, `delta.reasoning_content` chunks arrive first — use a "Thinking..." indicator.
+- **Token budget**: Controlled by `OPENAI_TOKEN_BUDGET` env var. Chat panel shows cumulative usage and blocks requests when budget exhausted.
+- **Debug mode**: Set `DEBUG_CREDENTIALS=1` env var for verbose credential loading logs in the Shiny console.
+
 ## Important Conventions
 
 - `ggplot2::coord_sf()` and `ggplot2::geom_sf()` - these are ggplot2 functions, NOT sf functions
@@ -324,4 +378,4 @@ Skills are registered in `.claude/skills/<name>/SKILL.md` (NOT in Skills_Registr
 
 ## R Dependencies
 
-shiny, shinyjs, plotly, ggplot2, dplyr, tidyr, readxl, sf, jsonlite, RColorBrewer, scales, anndata, reticulate
+shiny, shinyjs, plotly, ggplot2, dplyr, tidyr, readxl, sf, jsonlite, RColorBrewer, scales, anndata, reticulate, httr2, stringr

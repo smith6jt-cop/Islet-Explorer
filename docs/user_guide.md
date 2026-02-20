@@ -15,9 +15,10 @@ Interactive web application for exploring pancreatic islet CODEX multiplexed ima
 5. [Statistics Tab](#statistics-tab)
 6. [Spatial Tab](#spatial-tab)
 7. [Single-Cell Drill-Down](#single-cell-drill-down)
-8. [Data Pipeline](#data-pipeline)
-9. [Deployment & Administration](#deployment--administration)
-10. [Troubleshooting](#troubleshooting)
+8. [AI Assistant](#ai-assistant)
+9. [Data Pipeline](#data-pipeline)
+10. [Deployment & Administration](#deployment--administration)
+11. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -264,6 +265,40 @@ Per-islet cell CSVs in `data/cells/` (949 files, ~111 MB total). Each file conta
 
 ---
 
+## AI Assistant
+
+An embedded AI chat panel powered by the University of Florida Navigator AI Toolkit. Ask questions about your data, plots, statistics, or troubleshooting steps.
+
+### How to Use
+
+1. Type a question in the text area at the bottom of the AI panel (right side of the app)
+2. Select a model:
+   - **Navigator Fast (gpt-oss-20b)** — Quick responses for simple questions (default)
+   - **Navigator Large (gpt-oss-120b)** — More capable reasoning model for complex analysis questions. Shows "Thinking..." while reasoning, then displays the answer.
+3. Click **Send** or press Enter
+4. Use **New Conversation** to clear chat history and start fresh
+
+### Model Selection Tips
+
+- Use **Fast** for quick lookups: "What markers are in the heatmap?", "How many islets are shown?"
+- Use **Large** for analytical questions: "Why does immune infiltration increase in T1D?", "How should I interpret this AUC result?"
+- The Large model takes longer to respond because it reasons through the problem before answering
+
+### Token Budget
+
+The app tracks cumulative token usage. If a budget limit is configured (via `OPENAI_TOKEN_BUDGET`), the chat will notify you when the budget is reached. Start a new browser session to reset.
+
+### Requirements
+
+The AI assistant requires:
+- `KEY` and `BASE` environment variables configured in `.Renviron`
+- The `httr2` R package installed
+- Network access to the UF Navigator API endpoint
+
+If credentials are missing, the chat panel displays a configuration message instead of responding.
+
+---
+
 ## Data Pipeline
 
 ### Rebuilding the App Data
@@ -418,6 +453,15 @@ The Statistics tab uses data from the Plot sidebar. Ensure:
 1. Verify `data/donors/` directory contains 15 CSV files
 2. If missing, regenerate: `python scripts/extract_per_donor_tissue.py`
 3. If Leiden panel says "not available", rebuild the H5AD with Leiden data: `python scripts/build_h5ad_for_app.py` (requires `islet_analysis/islets_core_clustered.h5ad`)
+
+### AI assistant shows error or no response
+
+1. **"LLM key not found"**: Set `KEY=your-api-key` and `BASE=https://api.ai.it.ufl.edu` in `~/.Renviron` or `app/shiny_app/.Renviron`
+2. **"key not allowed to access model"**: The selected model isn't available. Verify available models with `GET /v1/models`. Current models: `gpt-oss-20b` and `gpt-oss-120b`.
+3. **Authentication error (401)**: Confirm the API key is valid and has no extra whitespace
+4. **Timeout or empty response**: The Large model (120b) needs time for reasoning. Try the Fast model (20b) for quicker responses, or increase the timeout.
+5. **"httr2 package required"**: Install with `install.packages('httr2')` and restart the app
+6. **Debug mode**: Set `DEBUG_CREDENTIALS=1` in `.Renviron` and check the R console output for credential loading details
 
 ### Spatial tab enrichment/heatmap is empty
 
