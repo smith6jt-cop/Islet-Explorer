@@ -26,7 +26,8 @@ app/shiny_app/
     mod_trajectory_ui.R / mod_trajectory_server.R  # Trajectory tab (UMAP, heatmap, pseudotime, segmentation+drilldown panel)
     mod_viewer_ui.R / mod_viewer_server.R       # Viewer tab (OME-TIFF, Avivator iframe)
     mod_statistics_ui.R / mod_statistics_server.R  # Statistics tab (7-card: hypothesis, heatmap, trend, demographics, AUC)
-    mod_spatial_ui.R / mod_spatial_server.R     # Spatial tab (7-card: neighborhood metrics, enrichment, pseudotime correlation)
+    spatial_helpers.R           # Per-donor tissue CSV loader with new.env() caching
+    mod_spatial_ui.R / mod_spatial_server.R     # Spatial tab (5-card: tissue scatter, Leiden panel, enrichment, heatmap)
     mod_ai_assistant_ui.R / mod_ai_assistant_server.R  # AI chat panel
   www/                         # Static assets (images, logos)
   app_original.R               # Backup of pre-modularization monolithic app (5,397 lines)
@@ -74,11 +75,12 @@ These are read by the root-level `renderPlot` outputs in `app.R`.
 
 ## Key Data Files
 
-- `data/islet_explorer.h5ad` - **Primary app data** (~48 MB, 1,015 islets, groovy + trajectory + donor + neighborhood metrics)
+- `data/islet_explorer.h5ad` - **Primary app data** (~48 MB, 1,015 islets, groovy + trajectory + donor + neighborhood + Leiden)
 - `data/master_results.xlsx` - Aggregated islet-level data (composition, markers, targets) -- Excel fallback
 - `data/adata_ins_root.h5ad` - Trajectory h5ad (1,015 islets, 31 vars, DPT pseudotime, UMAP)
 - `data/neighborhood_metrics.csv` - Per-islet peri-islet metrics (1,015 rows, 62 columns)
 - `data/cells/*.csv` - Per-islet single-cell CSVs for drill-down (~949 files, ~111 MB total)
+- `data/donors/*.csv` - Per-donor tissue-wide cell CSVs for Spatial tab scatter (15 files, ~78 MB total)
 - `data/islet_spatial_lookup.csv` - Centroid coordinates for segmentation viewer
 - `data/json/*.geojson` / `data/gson/*.geojson.gz` - QuPath segmentation boundaries
 - `data/DATA_PROVENANCE.md` - Documents canonical H5AD lineage and data sources
@@ -102,15 +104,21 @@ single_cell_analysis/CODEX_scvi_BioCov_phenotyped_newDuctal.h5ad  (2.6M cells, 3
   |         +-- scripts/extract_per_islet_cells.py
   |               -> data/cells/*.csv  (949 files, 37 cols: coords, phenotype, region, 31 markers)
   |
-  +-- scripts/build_h5ad_for_app.py (trajectory + groovy + donor + neighborhood)
-        -> data/islet_explorer.h5ad  (all app data in one file)
+  |-- scripts/extract_per_donor_tissue.py
+  |     -> data/donors/*.csv  (15 files, 5 cols: X/Y coords, phenotype, cell_region, islet_name)
+  |
+  +-- scripts/build_h5ad_for_app.py (trajectory + groovy + donor + neighborhood + Leiden)
+        -> data/islet_explorer.h5ad  (all app data in one file, incl. leiden_* + leiden_umap_*)
 ```
+
+Note: `islet_analysis/islets_core_clustered.h5ad` provides Leiden clustering (4 resolutions) + UMAP coords, merged by `build_h5ad_for_app.py` step 4.7.
 
 ### Pipeline Scripts & Notebooks
 
 - `scripts/compute_neighborhood_metrics.py` - Computes per-islet peri-islet metrics from single-cell H5AD
 - `scripts/extract_per_islet_cells.py` - Extracts per-islet cell CSVs for drill-down viewer
-- `scripts/build_h5ad_for_app.py` - Builds enriched H5AD (trajectory + groovy + neighborhood)
+- `scripts/extract_per_donor_tissue.py` - Extracts per-donor tissue CSVs (ALL cells: core+peri+tissue) for Spatial tab scatter
+- `scripts/build_h5ad_for_app.py` - Builds enriched H5AD (trajectory + groovy + neighborhood + Leiden)
 - `scripts/build_master_excel.py` - Builds master_results.xlsx from groovy TSV exports
 - `notebooks/scvi_qc_validation.ipynb` - Validates scVI batch correction (silhouette, LISI, UMAP)
 - `notebooks/rebuild_trajectory.ipynb` - Regenerates trajectory from fixed pipeline
@@ -145,18 +153,31 @@ conda activate scvi-env  # scanpy, anndata, scvi-tools, sklearn, scib-metrics, s
 - Immune signal validated: T1D immune_frac_peri (0.155) > Aab+ (0.106) > ND (0.069)
 - Plot composition selector now has 4 option groups: Hormone Fractions, Cell Type Proportions, Peri-Islet Proportions, Immune Metrics
 
-### Spatial Tab (mod_spatial_ui/server.R)
+### Spatial Tab (Phase 9 overhaul, mod_spatial_ui/server.R)
 
-Dedicated 7-card layout with inline controls:
-1. **Overview + Controls** -- metric category, feature, donor status, diameter range
-2. **Feature Distribution** -- violin/box by disease stage (ND/Aab+/T1D)
-3. **Core vs Peri Comparison** -- immune fraction paired comparison
-4. **Peri-Islet Phenotype Heatmap** -- mean proportion x 21 phenotypes x 3 stages
-5. **Immune Enrichment** -- grouped bar chart of enrichment z-scores by stage
-6. **Pseudotime Correlation** -- scatter with Kendall tau
-7. **Statistical Tests** -- Kruskal-Wallis + pairwise Wilcoxon with Cohen's d
+5-card layout with tissue-wide scatter, Leiden clustering, and neighborhood charts:
+
+1. **Controls** (full-width) -- donor selector, color-by (phenotype/Leiden), Leiden resolution dropdown, region filter (All/Core+Peri/Core), donor status checkboxes
+2. **Tissue Scatter** (col-8) -- ggplot2 `renderPlot` (NOT plotly) showing ~177K cells/donor. Background tissue cells in light grey; foreground (core/peri) colored by phenotype or Leiden cluster. `coord_fixed() + scale_y_reverse()` for spatial orientation. Height: 800px.
+3. **Leiden Panel** (col-4) -- plotly UMAP of 1,015 islets colored by selected Leiden resolution (0.3/0.5/0.8/1.0) + stacked bar chart of mean phenotype composition per cluster
+4. **Enrichment** (col-6) -- grouped bar of Poisson enrichment z-scores by disease stage, with documentation banner explaining peri-islet vs tissue-wide context
+5. **Phenotype Heatmap** (col-6) -- mean peri-islet phenotype proportions x 3 stages, with documentation banner explaining the 20um expansion zone
 
 Wired as `spatial_server("spatial", prepared)` -- no sidebar sharing, inline controls only.
+
+#### Supporting Files
+- `spatial_helpers.R` -- `donor_tissue_available()`, `get_available_donors()`, `load_donor_tissue(imageid)` with `new.env()` caching
+- `data/donors/{imageid}.csv` -- 15 per-donor CSVs (5 cols: X_centroid, Y_centroid, phenotype, cell_region, islet_name), ~78 MB total
+- `islets_core_clustered.h5ad` -- Leiden clustering source (4 resolutions: leiden_0.3/0.5/0.8/1.0)
+
+#### Leiden Data Flow
+`islets_core_clustered.h5ad` (4 leiden_* cols + X_umap) -> `build_h5ad_for_app.py` step 4.7 -> `islet_explorer.h5ad` .obs (leiden_0.3/0.5/0.8/1.0 + leiden_umap_1/2) -> `data_loading.R` `load_master_h5ad()` (regex `^leiden_`) -> `prep_data()` merges into comp -> Spatial tab reads from `prepared()$comp`
+
+#### Tissue Scatter Design
+- Uses `ggplot2::renderPlot` NOT plotly -- 177K points would freeze plotly
+- Foreground/background layering: tissue cells at `size=0.15, alpha=0.3` in grey; core/peri at `size=0.4, alpha=0.6` in color
+- Leiden coloring maps `islet_name -> cluster` via islet-level lookup from `prepared()$comp`
+- Donor 6533 has 0 core/peri cells (no islet annotations in single-cell H5AD) -- shows tissue background only
 
 ## Single-Cell Drill-Down (Phase 8, Feb 2026)
 
@@ -242,6 +263,11 @@ Click a point -> `selected_islet()` updates -> embedded panel renders inline wit
 - **Single-cell Parent column**: `Islet_N` = core cells, `Islet_N_exp20um` = peri-islet cells
 - **CSS overflow for cards with dropdowns**: `selectInput` menus extend below their container. Add `overflow: visible;` to card styles or dropdowns get clipped behind cards.
 - **Font size minimums**: Use `h5` (not `h6`) with explicit `font-size: 15px` for panel headings. Legend items minimum 14-15px.
+- **Large scatter plots (>50K points)**: Use `ggplot2::renderPlot()` NOT `plotlyOutput()` -- plotly cannot handle 100K+ points interactively. Use small `size` (0.3-0.5) and low `alpha` (0.3-0.6).
+- **Tissue scatter coordinate convention**: `coord_fixed() + scale_y_reverse()` matches microscopy convention (y increases downward, spatial proportions preserved)
+- **Leiden cluster mapping for cells**: Islet-level Leiden assignments map to single cells via `islet_name` column lookup. Tissue background cells without an islet get `cluster = "tissue"` (grey).
+- **Per-donor tissue CSVs**: `data/donors/{imageid}.csv` with 5 columns (X_centroid, Y_centroid, phenotype, cell_region, islet_name). `cell_region` = core/peri/tissue. Donor 6533 has 0 core/peri cells.
+- **Leiden in H5AD**: 4 resolution columns (`leiden_0.3/0.5/0.8/1.0`) + 2 UMAP coords (`leiden_umap_1/2`). Extracted via `^leiden_` regex in `data_loading.R`.
 
 ## Deployment Architecture
 
@@ -275,7 +301,10 @@ python scripts/compute_neighborhood_metrics.py
 # Phase 8: Extract per-islet cell CSVs (reads 2.6M-cell H5AD, ~5 min)
 python scripts/extract_per_islet_cells.py
 
-# Rebuild enriched H5AD (merges groovy + trajectory + neighborhood)
+# Phase 9: Extract per-donor tissue CSVs for Spatial tab scatter (~2 min)
+python scripts/extract_per_donor_tissue.py
+
+# Rebuild enriched H5AD (merges groovy + trajectory + neighborhood + Leiden)
 python scripts/build_h5ad_for_app.py
 ```
 
