@@ -313,7 +313,7 @@ spatial_server <- function(id, prepared) {
       plot_ly(plot_df, x = ~pt, y = ~value, color = ~group,
               colors = donor_colors[levels(plot_df$group)],
               type = "scatter", mode = "markers",
-              marker = list(size = 5, opacity = 0.6)) %>%
+              marker = list(size = 10, opacity = 0.6)) %>%
         layout(
           title = list(text = paste0(feat_label, " vs Pseudotime<br><sub>", subtitle, "</sub>"),
                        font = list(size = 14)),
@@ -359,13 +359,13 @@ spatial_server <- function(id, prepared) {
             v1 <- test_df$value[test_df$group == g1]
             v2 <- test_df$value[test_df$group == g2]
             cohens_d(v1, v2)
-          }, error = function(e) list(d = NA, ci_lower = NA, ci_upper = NA))
+          }, error = function(e) list(d = NA, ci_lo = NA, ci_hi = NA))
 
           rows[[length(rows) + 1]] <- data.frame(
             Test = "Wilcoxon (pairwise)", Comparison = paste(g1, "vs", g2),
             Statistic = NA_real_,
             `p-value` = formatC(pairs$p_value[i], format = "e", digits = 2),
-            `Effect Size` = if (!is.na(cd$d)) sprintf("d=%.2f [%.2f,%.2f]", cd$d, cd$ci_lower, cd$ci_upper) else "",
+            `Effect Size` = if (!is.na(cd$d)) sprintf("d=%.2f [%.2f,%.2f]", cd$d, cd$ci_lo, cd$ci_hi) else "",
             check.names = FALSE, stringsAsFactors = FALSE
           )
         }

@@ -1,4 +1,4 @@
-trajectory_server <- function(id, prepared, selected_islet, forced_image) {
+trajectory_server <- function(id, prepared, selected_islet, forced_image, active_tab = reactive("Trajectory")) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
@@ -702,6 +702,8 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image) {
 
     # ---------- Segmentation viewer panel ----------
     output$segmentation_viewer_panel <- renderUI({
+      # Only render when Trajectory tab is active to avoid duplicate non-namespaced output IDs
+      if (active_tab() != "Trajectory") return(NULL)
       info <- selected_islet()
       if (is.null(info)) return(NULL)
 
@@ -764,7 +766,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image) {
             condition = "input.drilldown_view_mode == 'Single Cells'",
             plotOutput("islet_drilldown_view", height = "350px"),
             div(style = "padding: 8px; background-color: #f8f9fa; border-radius: 5px; margin-top: 8px;",
-              h6("Cell Composition", style = "margin-top: 0;"),
+              h5("Cell Composition", style = "margin-top: 0; font-size: 15px;"),
               plotOutput("islet_drilldown_summary", height = "180px"),
               tableOutput("islet_drilldown_table")
             )
@@ -848,15 +850,15 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image) {
         tagList(
           div(style = "display: flex; align-items: center; margin-bottom: 8px;",
             div(style = "width: 20px; height: 20px; background-color: #2ca02c; border-radius: 3px; margin-right: 8px;"),
-            span("ND", style = "font-size: 13px;")
+            span("ND", style = "font-size: 15px;")
           ),
           div(style = "display: flex; align-items: center; margin-bottom: 8px;",
             div(style = "width: 20px; height: 20px; background-color: #ffcc00; border-radius: 3px; margin-right: 8px;"),
-            span("Aab+", style = "font-size: 13px;")
+            span("Aab+", style = "font-size: 15px;")
           ),
           div(style = "display: flex; align-items: center;",
             div(style = "width: 20px; height: 20px; background-color: #9467bd; border-radius: 3px; margin-right: 8px;"),
-            span("T1D", style = "font-size: 13px;")
+            span("T1D", style = "font-size: 15px;")
           )
         )
       } else if (color_by == "donor_id") {
@@ -880,7 +882,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image) {
           col1_items <- lapply(seq_along(col1_ids), function(i) {
             div(style = "display: flex; align-items: center; margin-bottom: 6px;",
               div(style = sprintf("width: 18px; height: 18px; background-color: %s; border-radius: 3px; margin-right: 6px;", colors[i])),
-              span(col1_ids[i], style = "font-size: 12px;")
+              span(col1_ids[i], style = "font-size: 14px;")
             )
           })
 
@@ -889,7 +891,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image) {
               idx <- mid_point + i
               div(style = "display: flex; align-items: center; margin-bottom: 6px;",
                 div(style = sprintf("width: 18px; height: 18px; background-color: %s; border-radius: 3px; margin-right: 6px;", colors[idx])),
-                span(col2_ids[i], style = "font-size: 12px;")
+                span(col2_ids[i], style = "font-size: 14px;")
               )
             })
           } else {

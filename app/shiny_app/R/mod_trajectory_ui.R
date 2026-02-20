@@ -37,7 +37,7 @@ trajectory_ui <- function(id) {
             ),
             column(3,
               div(style = "border: 1px solid #ddd; padding: 10px; border-radius: 5px; background-color: #f9f9f9; min-height: 100px;",
-                h6("Legend", style = "margin-top: 0; margin-bottom: 10px; font-weight: bold; color: #333;"),
+                h5("Legend", style = "margin-top: 0; margin-bottom: 10px; font-weight: bold; color: #333; font-size: 15px;"),
                 uiOutput(ns("traj_legend"))
               )
             )

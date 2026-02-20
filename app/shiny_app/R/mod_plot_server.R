@@ -1,5 +1,5 @@
 # ---------- Plot module server ----------
-# Exports: plot_server(id, prepared, selected_islet)
+# Exports: plot_server(id, prepared, selected_islet, active_tab)
 #
 # Dependencies (from utility files already sourced):
 #   safe_left_join, add_islet_key, compute_diameter_um  -- utils_safe_join.R
@@ -11,8 +11,9 @@
 #   id              -- module namespace id
 #   prepared        -- reactive returning list(targets_all, markers_all, comp)
 #   selected_islet  -- reactiveVal for cross-module click-to-segmentation
+#   active_tab      -- reactive returning current tab name (e.g. "Plot")
 
-plot_server <- function(id, prepared, selected_islet) {
+plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plot")) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
@@ -836,6 +837,8 @@ plot_server <- function(id, prepared, selected_islet) {
 
     # ---- Embedded segmentation viewer panel (below Distribution card) ----
     output$segmentation_viewer_panel <- renderUI({
+      # Only render when Plot tab is active to avoid duplicate non-namespaced output IDs
+      if (active_tab() != "Plot") return(NULL)
       info <- selected_islet()
       if (is.null(info)) return(NULL)
 
@@ -908,7 +911,7 @@ plot_server <- function(id, prepared, selected_islet) {
               conditionalPanel(
                 condition = "input.drilldown_view_mode == 'Single Cells'",
                 div(style = "padding: 10px; background-color: #f8f9fa; border-radius: 5px;",
-                  h5("Cell Composition", style = "margin-top: 0;"),
+                  h5("Cell Composition", style = "margin-top: 0; font-size: 15px;"),
                   plotOutput("islet_drilldown_summary", height = "250px"),
                   hr(),
                   tableOutput("islet_drilldown_table")

@@ -422,11 +422,14 @@ server <- function(input, output, session) {
 
   # ---- Module servers ----
 
+  # Active tab reactive (used to prevent duplicate non-namespaced output IDs)
+  active_tab <- reactive(input$tabs)
+
   # Plot module: returns list(raw_df, summary_df, get_selection_description)
-  plot_returns <- plot_server("plot", prepared, selected_islet)
+  plot_returns <- plot_server("plot", prepared, selected_islet, active_tab)
 
   # Trajectory module
-  trajectory_server("traj", prepared, selected_islet, forced_image)
+  trajectory_server("traj", prepared, selected_islet, forced_image, active_tab)
 
   # Viewer module
   viewer_server("viewer", forced_image, reactive(input$tabs))

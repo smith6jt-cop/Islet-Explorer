@@ -9,7 +9,7 @@ spatial_ui <- function(id) {
     # ---- Card 1: Overview + Controls ----
     fluidRow(
       column(12,
-        div(class = "card", style = "padding: 15px; margin-bottom: 15px;",
+        div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible;",
           fluidRow(
             column(8,
               h5("Spatial Neighborhood Analysis", style = "margin-top: 0;"),
@@ -46,13 +46,13 @@ spatial_ui <- function(id) {
     # ---- Cards 2 & 3: Feature Distribution + Core vs Peri ----
     fluidRow(
       column(6,
-        div(class = "card", style = "padding: 15px; margin-bottom: 15px;",
+        div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible;",
           h5("Feature Distribution by Disease Stage"),
           plotlyOutput(ns("distribution_plot"), height = "380px")
         )
       ),
       column(6,
-        div(class = "card", style = "padding: 15px; margin-bottom: 15px;",
+        div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible;",
           h5("Core vs Peri-Islet Comparison"),
           plotlyOutput(ns("core_peri_plot"), height = "380px")
         )
@@ -62,13 +62,13 @@ spatial_ui <- function(id) {
     # ---- Cards 4 & 5: Peri-islet Heatmap + Immune Enrichment ----
     fluidRow(
       column(6,
-        div(class = "card", style = "padding: 15px; margin-bottom: 15px;",
+        div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible;",
           h5("Peri-Islet Phenotype Heatmap"),
           plotlyOutput(ns("phenotype_heatmap"), height = "420px")
         )
       ),
       column(6,
-        div(class = "card", style = "padding: 15px; margin-bottom: 15px;",
+        div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible;",
           h5("Immune Enrichment by Disease Stage"),
           plotlyOutput(ns("enrichment_plot"), height = "420px")
         )
@@ -78,13 +78,13 @@ spatial_ui <- function(id) {
     # ---- Cards 6 & 7: Pseudotime Correlation + Statistics ----
     fluidRow(
       column(6,
-        div(class = "card", style = "padding: 15px; margin-bottom: 15px;",
+        div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible;",
           h5("Pseudotime Correlation"),
           plotlyOutput(ns("pseudotime_plot"), height = "380px")
         )
       ),
       column(6,
-        div(class = "card", style = "padding: 15px; margin-bottom: 15px;",
+        div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible;",
           h5("Statistical Tests"),
           tableOutput(ns("test_table")),
           hr(style = "margin: 8px 0;"),

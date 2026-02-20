@@ -45,8 +45,9 @@ Both produce the same `list(markers, targets, comp, lgals3, phenotypes, donor_de
 - `prepared()` - core data reactive from H5AD or Excel, consumed by Plot, Trajectory, Statistics, Spatial
 - `selected_islet` - reactiveVal, written by Plot and Trajectory click handlers
 - `forced_image` - reactiveVal, written by Trajectory, read by Viewer
+- `active_tab` - `reactive(input$tabs)`, passed to Plot and Trajectory to prevent duplicate output IDs
 
-### Critical: Root-Level Outputs
+### Critical: Root-Level Outputs + Active Tab Guard
 
 The following render outputs are defined in **app.R** at the root level, NOT inside any module:
 - `output$islet_segmentation_view` - GeoJSON boundary plot (shared by Plot + Trajectory)
@@ -54,7 +55,7 @@ The following render outputs are defined in **app.R** at the root level, NOT ins
 - `output$islet_drilldown_summary` - Cell composition bar chart
 - `output$islet_drilldown_table` - Core/peri cell counts
 
-Both Plot and Trajectory tabs embed these using non-namespaced `plotOutput("islet_segmentation_view")` etc. This works because only one tab is visible at a time.
+Both Plot and Trajectory tabs embed these using non-namespaced `plotOutput("islet_segmentation_view")` etc. **IMPORTANT**: Each module's `segmentation_viewer_panel` renderUI must guard with `if (active_tab() != "Plot") return(NULL)` (or `"Trajectory"` respectively). Without this guard, both renderUIs fire when `selected_islet()` changes, creating duplicate DOM IDs — Shiny can only bind one, causing the other to grey out. Shiny `renderUI` fires based on reactive dependencies, NOT tab visibility.
 
 ### Non-Namespaced Inputs for Root-Level Outputs
 
@@ -206,9 +207,9 @@ The Plot sidebar (mode, feature, region, donor status, AAb, age, gender filters)
 7. **Methods & Interpretation** -- Dynamic text describing all tests, corrections, assumptions
 
 ### Effect Size Utilities (`utils_stats.R`)
-- `cohens_d(x, y)` -- two-sample with pooled SD, 95% CI
+- `cohens_d(x, y)` -- returns `list(d, ci_lo, ci_hi)` (NOT `ci_lower`/`ci_upper`)
 - `eta_squared(fit)` -- from `anova()` output
-- `pairwise_wilcox(df, group_col, value_col)` -- BH-corrected Wilcoxon
+- `pairwise_wilcox(df, group_col, value_col)` -- returns data.frame with columns `group1`, `group2`, `p_value` (NOT `p.adj`/`statistic`)
 
 ## Interactive Features (Phase 5, Feb 2026)
 
@@ -239,6 +240,8 @@ Click a point -> `selected_islet()` updates -> embedded panel renders inline wit
 - **Peri-islet data guard**: Always check `total_cells_peri > 0` before using peri metrics (66 islets have 0 peri cells)
 - **Column name sanitization**: Phenotype names use `_` for spaces, `plus` for `+` in peri-islet columns
 - **Single-cell Parent column**: `Islet_N` = core cells, `Islet_N_exp20um` = peri-islet cells
+- **CSS overflow for cards with dropdowns**: `selectInput` menus extend below their container. Add `overflow: visible;` to card styles or dropdowns get clipped behind cards.
+- **Font size minimums**: Use `h5` (not `h6`) with explicit `font-size: 15px` for panel headings. Legend items minimum 14-15px.
 
 ## Deployment Architecture
 
