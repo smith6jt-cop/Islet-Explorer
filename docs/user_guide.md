@@ -179,44 +179,51 @@ Rigorous statistical analysis of the currently selected feature from the Plot si
 
 ## Spatial Tab
 
-Dedicated analysis of the peri-islet cellular microenvironment (the 20 μm expansion zone around each islet).
+Tissue-wide spatial visualization and peri-islet microenvironment analysis. Combines single-cell tissue scatter plots with Leiden clustering and neighborhood enrichment metrics.
 
-### 7-Card Layout
+### 5-Card Layout
 
-1. **Overview & Controls**
-   - Metric category selector (Peri-Islet Composition, Immune Infiltration, Enrichment, Distance)
-   - Specific metric dropdown (e.g., `peri_prop_Macrophage`, `immune_frac_peri`)
-   - Donor status filter and diameter range
+1. **Controls** (full-width)
+   - Donor selector (15 nPOD donors)
+   - Color by: Phenotype (21 cell types) or Leiden cluster
+   - Leiden resolution dropdown (0.3, 0.5, 0.8, 1.0) — visible when Leiden coloring selected
+   - Region filter: All cells, Core + Peri only, or Core only
+   - Donor status checkboxes (for enrichment/heatmap cards)
 
-2. **Feature Distribution**
-   - Violin + box plot by disease stage (ND/Aab+/T1D)
-   - Shows how the selected neighborhood metric varies across disease groups
+2. **Tissue Scatter** (col-8, 800px height)
+   - Full tissue-wide scatter plot of ~177K cells per donor
+   - Background: tissue cells in light grey (`size=0.15, alpha=0.3`)
+   - Foreground: core/peri cells colored by phenotype or Leiden cluster (`size=0.4, alpha=0.6`)
+   - Spatial coordinate convention: `coord_fixed()` + `scale_y_reverse()` (microscopy standard)
+   - Uses ggplot2 `renderPlot` (not plotly) for performance at >100K points
 
-3. **Core vs Peri Comparison**
-   - Paired comparison of the same cell type in core vs peri-islet zones
-   - Highlights differential enrichment patterns
+3. **Leiden Panel** (col-4)
+   - UMAP scatter of 1,015 islets colored by selected Leiden resolution
+   - Stacked bar chart of mean phenotype composition per cluster
+   - Hidden with message when Leiden data unavailable in H5AD
 
-4. **Peri-Islet Phenotype Heatmap**
-   - Mean proportion of each of 21 phenotypes in the peri-islet zone
-   - Columns = disease stages, rows = phenotypes
-   - Z-scored for cross-phenotype comparison
-
-5. **Immune Enrichment**
-   - Bar chart of Poisson enrichment z-scores by disease stage
+4. **Enrichment** (col-6)
+   - Grouped bar chart of Poisson enrichment z-scores by disease stage (ND/Aab+/T1D)
    - Positive z = enriched relative to tissue-wide baseline
-   - 7 immune cell types: CD8a T cell, Macrophage, CD4 T cell, NK cell, etc.
+   - Documentation banner explaining peri-islet vs tissue-wide context
+   - Responds to donor status filter but not the feature selector
 
-6. **Pseudotime Correlation**
-   - Scatter: neighborhood metric vs DPT pseudotime
-   - Reveals how the microenvironment changes along disease progression
+5. **Phenotype Heatmap** (col-6)
+   - Mean peri-islet phenotype proportions across 21 phenotypes × 3 disease stages
+   - Documentation banner explaining the 20 μm expansion zone
+   - Responds to donor status filter but not the feature selector
 
-7. **Statistical Tests & Methods**
-   - Reuses the same test utilities as the Statistics tab (Cohen's d, η², pairwise Wilcoxon)
+### Data Sources
+
+- **Tissue CSVs**: `data/donors/{imageid}.csv` (15 files, ~78 MB total). Columns: X/Y centroids (μm), phenotype, cell_region (core/peri/tissue), islet_name.
+- **Leiden clustering**: Stored in `islet_explorer.h5ad` .obs as `leiden_0.3`, `leiden_0.5`, `leiden_0.8`, `leiden_1.0` + UMAP coords `leiden_umap_1`, `leiden_umap_2`.
+- **Neighborhood metrics**: 62 columns merged into H5AD .obs (peri-islet composition, immune, enrichment z-scores, distances).
 
 ### Data Coverage
 
 - 949 of 1,015 islets (93.5%) have peri-islet data
 - 66 islets lack peri-islet cells → shown as N/A in plots
+- Donor 6533 has 0 core/peri cells (no islet annotations) — shows tissue background only
 - Biological validation: T1D immune_frac_peri (0.155) > Aab+ (0.106) > ND (0.069)
 
 ---
@@ -275,7 +282,11 @@ python scripts/compute_neighborhood_metrics.py
 python scripts/extract_per_islet_cells.py
 # → data/cells/*.csv (949 files, ~111 MB)
 
-# Step 3: Build enriched H5AD (trajectory + groovy + neighborhood + donor metadata)
+# Step 3: Extract per-donor tissue CSVs (for Spatial tab scatter)
+python scripts/extract_per_donor_tissue.py
+# → data/donors/*.csv (15 files, ~78 MB)
+
+# Step 4: Build enriched H5AD (trajectory + groovy + neighborhood + Leiden + donor metadata)
 python scripts/build_h5ad_for_app.py
 # → data/islet_explorer.h5ad (~48 MB)
 ```
@@ -289,12 +300,14 @@ islets_core_fixed.h5ad  (1,015 islets, proteins + scVI embeddings)
   ↓ notebooks/rebuild_trajectory.ipynb (scVI neighbors, PAGA→UMAP, DPT)
 data/adata_ins_root.h5ad  (+ pseudotime + UMAP)
   ↓ scripts/build_h5ad_for_app.py (+ groovy + neighborhood + donor metadata)
-data/islet_explorer.h5ad  (complete app data)
+data/islet_explorer.h5ad  (complete app data, incl. Leiden clustering)
 ```
 
 Branch pipelines:
 - `scripts/compute_neighborhood_metrics.py` — peri-islet composition, immune metrics, enrichment z-scores, distances
 - `scripts/extract_per_islet_cells.py` — individual cell CSVs for drill-down
+- `scripts/extract_per_donor_tissue.py` — per-donor tissue CSVs for Spatial tab scatter
+- Leiden clustering from `islet_analysis/islets_core_clustered.h5ad` (4 resolutions) — merged by `build_h5ad_for_app.py`
 
 ### Upstream Data Sources
 
@@ -400,7 +413,13 @@ The Statistics tab uses data from the Plot sidebar. Ensure:
 2. At least 2 disease groups are checked
 3. The diameter range includes some islets
 
-### Spatial tab is empty
+### Spatial tab tissue scatter is empty
+
+1. Verify `data/donors/` directory contains 15 CSV files
+2. If missing, regenerate: `python scripts/extract_per_donor_tissue.py`
+3. If Leiden panel says "not available", rebuild the H5AD with Leiden data: `python scripts/build_h5ad_for_app.py` (requires `islet_analysis/islets_core_clustered.h5ad`)
+
+### Spatial tab enrichment/heatmap is empty
 
 1. Verify the H5AD has neighborhood columns: look for `peri_prop_*` in the data
 2. If absent, run `scripts/compute_neighborhood_metrics.py` and rebuild the H5AD
