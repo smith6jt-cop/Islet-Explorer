@@ -52,40 +52,25 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
     # Dynamic UI outputs
     # ===========================================================================
 
-    output$region_selector <- renderUI({
-      if (identical(input$mode, "Composition")) return(NULL)
-      selectInput(
-        ns("region"), "Region",
-        choices = c("Islet" = "core", "Peri-Islet" = "band", "Islet+20\u00b5m" = "union"),
-        selected = "band"
-      )
-    })
-
     output$dynamic_selector <- renderUI({
       if (identical(input$mode, "Targets")) {
         classes <- prepared()$targets_all %>%
           dplyr::pull(class) %>% unique() %>% na.omit() %>% sort()
         if (length(classes) == 0) classes <- character(0)
-        sel <- if (!is.null(input$which) && input$which %in% classes) {
+        choices <- list(
+          "Core" = setNames(paste0(classes, "|islet_core"), classes),
+          "Peri-Islet" = setNames(paste0(classes, "|islet_band"), classes),
+          "Core + Peri" = setNames(paste0(classes, "|islet_union"), classes)
+        )
+        all_vals <- unlist(choices, use.names = FALSE)
+        sel <- if (!is.null(input$which) && input$which %in% all_vals) {
           input$which
-        } else if (length(classes) > 0) {
-          classes[1]
+        } else if (length(all_vals) > 0) {
+          all_vals[1]
         } else {
           NULL
         }
-        selectInput(ns("which"), "Target class", choices = classes, selected = sel)
-      } else if (identical(input$mode, "Markers")) {
-        markers <- prepared()$markers_all %>%
-          dplyr::pull(marker) %>% unique() %>% na.omit() %>% sort()
-        if (length(markers) == 0) markers <- character(0)
-        sel <- if (!is.null(input$which) && input$which %in% markers) {
-          input$which
-        } else if (length(markers) > 0) {
-          markers[1]
-        } else {
-          NULL
-        }
-        selectInput(ns("which"), "Marker", choices = markers, selected = sel)
+        selectInput(ns("which"), "Target class & region", choices = choices, selected = sel)
       } else {
         base_choices <- c("Ins_frac" = "Ins_any", "Glu_frac" = "Glu_any", "Stt_frac" = "Stt_any")
         comp_cols <- colnames(prepared()$comp)
@@ -129,15 +114,14 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
 
     output$metric_selector <- renderUI({
       if (identical(input$mode, "Targets")) {
-        radioButtons(ns("target_metric"), "Targets metric",
+        radioButtons(ns("metric"), "Metric",
                      choices = c("Counts", "Density"),
                      selected = "Density", inline = TRUE)
-      } else if (identical(input$mode, "Markers")) {
-        radioButtons(ns("marker_metric"), "Markers metric",
-                     choices = c("Counts", "% positive"),
-                     selected = "% positive", inline = TRUE)
       } else {
-        NULL
+        # Composition
+        radioButtons(ns("metric"), "Metric",
+                     choices = c("Percentage", "Counts", "Density"),
+                     selected = "Percentage", inline = TRUE)
       }
     })
 
@@ -193,7 +177,10 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
 
       # Resolve defaults before branching so initial renders don't error
       if (identical(mode, "Composition")) {
-        valid_comp <- c("Ins_any", "Glu_any", "Stt_any", grep("^prop_", colnames(pd$comp), value = TRUE))
+        valid_comp <- c("Ins_any", "Glu_any", "Stt_any",
+                         grep("^prop_|^peri_prop_", colnames(pd$comp), value = TRUE),
+                         intersect(c("immune_frac_peri", "immune_frac_core", "immune_ratio",
+                                     "cd8_to_macro_ratio", "tcell_density_peri"), colnames(pd$comp)))
         if (!is.character(w) || length(w) != 1 || !nzchar(w) ||
             !(w %in% valid_comp)) {
           w <- "Ins_any"
@@ -202,63 +189,85 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         if (!is.character(w) || length(w) != 1 || !nzchar(w)) {
           candidate_classes <- pd$targets_all %>%
             dplyr::pull(class) %>% unique() %>% na.omit() %>% sort()
-          if (length(candidate_classes) > 0) w <- candidate_classes[1]
-        }
-      } else if (identical(mode, "Markers")) {
-        if (!is.character(w) || length(w) != 1 || !nzchar(w)) {
-          candidate_markers <- pd$markers_all %>%
-            dplyr::pull(marker) %>% unique() %>% na.omit() %>% sort()
-          if (length(candidate_markers) > 0) w <- candidate_markers[1]
+          if (length(candidate_classes) > 0) w <- paste0(candidate_classes[1], "|islet_core")
         }
       }
 
-      region_val <- input$region %||% "band"
-
       if (identical(mode, "Targets")) {
         req(!is.null(w) && nzchar(w))
-        region_tag <- paste0("islet_", tolower(region_val))
+        # Parse "className|islet_region" encoding
+        parts <- strsplit(w, "\\|")[[1]]
+        target_class <- parts[1]
+        region_tag <- if (length(parts) >= 2) parts[2] else "islet_core"
+
         df <- pd$targets_all %>%
           dplyr::filter(`Donor Status` %in% groups,
-                        class == w,
+                        class == target_class,
                         tolower(type) == region_tag) %>%
           dplyr::filter(is.finite(islet_diam_um))
+        metric <- input$metric %||% "Density"
         df <- df %>%
           dplyr::mutate(value = as.numeric(
-            if (!is.null(input$target_metric) && input$target_metric == "Counts") count
-            else area_density
+            if (metric == "Counts") count else area_density
           ))
-      } else if (identical(mode, "Markers")) {
-        req(!is.null(w) && nzchar(w))
-        region_tag <- paste0("islet_", tolower(region_val))
-        df <- pd$markers_all %>%
-          dplyr::filter(`Donor Status` %in% groups,
-                        marker == w,
-                        tolower(region_type) == region_tag) %>%
-          dplyr::filter(is.finite(islet_diam_um))
-        if (!is.null(input$marker_metric) && input$marker_metric == "Counts") {
-          df <- df %>% dplyr::mutate(value = suppressWarnings(as.numeric(pos_count)))
-        } else {
-          num <- suppressWarnings(as.numeric(df$pos_count))
-          den <- suppressWarnings(as.numeric(df$n_cells))
-          df <- df %>%
-            dplyr::mutate(value = ifelse(is.finite(num) & is.finite(den) & den > 0,
-                                         100.0 * num / den, NA_real_))
-        }
       } else {
         # Composition
+        metric <- input$metric %||% "Percentage"
         df <- pd$comp %>%
           dplyr::filter(`Donor Status` %in% groups) %>%
           dplyr::filter(is.finite(islet_diam_um))
-        if (startsWith(w, "prop_")) {
-          # Phenotype proportions are already 0-1, scale to percentage
-          df <- df %>% dplyr::mutate(value = suppressWarnings(as.numeric(.data[[w]])) * 100.0)
+        if (startsWith(w, "peri_prop_")) {
+          raw_val <- suppressWarnings(as.numeric(df[[w]]))
+          # peri_prop_ are relative to peri-islet cells, use total_cells_peri
+          peri_total <- if ("total_cells_peri" %in% colnames(df)) {
+            suppressWarnings(as.numeric(df$total_cells_peri))
+          } else {
+            suppressWarnings(as.numeric(df$cells_total))
+          }
+          if (metric == "Counts") {
+            df <- df %>% dplyr::mutate(value = round(raw_val * peri_total))
+          } else if (metric == "Density") {
+            area <- pi * (suppressWarnings(as.numeric(df$islet_diam_um)) / 2)^2
+            df <- df %>% dplyr::mutate(value = ifelse(area > 0,
+              raw_val * peri_total / area, NA_real_))
+          } else {
+            df <- df %>% dplyr::mutate(value = raw_val * 100.0)
+          }
+        } else if (startsWith(w, "prop_")) {
+          raw_val <- suppressWarnings(as.numeric(df[[w]]))
+          core_total <- suppressWarnings(as.numeric(df$cells_total))
+          if (metric == "Counts") {
+            df <- df %>% dplyr::mutate(value = round(raw_val * core_total))
+          } else if (metric == "Density") {
+            area <- pi * (suppressWarnings(as.numeric(df$islet_diam_um)) / 2)^2
+            df <- df %>% dplyr::mutate(value = ifelse(area > 0,
+              raw_val * core_total / area, NA_real_))
+          } else {
+            df <- df %>% dplyr::mutate(value = raw_val * 100.0)
+          }
+        } else if (w %in% c("immune_frac_peri", "immune_frac_core", "immune_ratio",
+                             "cd8_to_macro_ratio", "tcell_density_peri")) {
+          # Immune metrics — already ratios/densities, show as-is for Percentage
+          raw_val <- suppressWarnings(as.numeric(df[[w]]))
+          if (metric == "Percentage") {
+            df <- df %>% dplyr::mutate(value = raw_val * 100.0)
+          } else {
+            df <- df %>% dplyr::mutate(value = raw_val)
+          }
         } else {
-          # Original hormone fractions: count / cells_total * 100
+          # Hormone fractions (Ins_any, Glu_any, Stt_any) — raw counts
           num <- suppressWarnings(as.numeric(df[[w]]))
           den <- suppressWarnings(as.numeric(df$cells_total))
-          df <- df %>%
-            dplyr::mutate(value = ifelse(is.finite(num) & is.finite(den) & den > 0,
-                                         100.0 * num / den, NA_real_))
+          if (metric == "Counts") {
+            df <- df %>% dplyr::mutate(value = num)
+          } else if (metric == "Density") {
+            area <- pi * (suppressWarnings(as.numeric(df$islet_diam_um)) / 2)^2
+            df <- df %>% dplyr::mutate(value = ifelse(area > 0, num / area, NA_real_))
+          } else {
+            df <- df %>%
+              dplyr::mutate(value = ifelse(is.finite(num) & is.finite(den) & den > 0,
+                                           100.0 * num / den, NA_real_))
+          }
         }
       }
 
@@ -416,30 +425,29 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
 
       # Y-axis label
       ylab <- if (identical(input$mode, "Targets")) {
-        if (!is.null(input$target_metric) && input$target_metric == "Counts") {
-          "Target count"
-        } else {
-          "Target density (per \u00b5m\u00b2)"
-        }
-      } else if (identical(input$mode, "Markers")) {
-        if (!is.null(input$marker_metric) && input$marker_metric == "Counts") {
-          "Positive cell count"
-        } else {
-          "n positive / total (%)"
-        }
+        metric <- input$metric %||% "Density"
+        if (metric == "Counts") "Target count" else "Target density (per \u00b5m\u00b2)"
       } else {
-        "% composition"
+        metric <- input$metric %||% "Percentage"
+        switch(metric,
+          "Counts"     = "Cell count",
+          "Density"    = "Cell density (per \u00b5m\u00b2)",
+          "Percentage" = "% composition"
+        )
       }
 
       # Title
       title_text <- if (identical(input$mode, "Targets")) {
-        paste0(input$which, " vs Islet Size")
-      } else if (identical(input$mode, "Markers")) {
-        paste0(input$which, " vs Islet Size")
+        # Extract class name from encoded "className|region" value
+        wsel <- input$which %||% ""
+        class_name <- strsplit(wsel, "\\|")[[1]][1]
+        paste0(class_name, " vs Islet Size")
       } else {
         wsel <- input$which
         if (is.null(wsel) || length(wsel) != 1 || !nzchar(wsel)) wsel <- "Ins_any"
-        if (startsWith(wsel, "prop_")) {
+        if (startsWith(wsel, "peri_prop_")) {
+          nm <- paste0(gsub("^peri_prop_", "", wsel), " peri-islet proportion")
+        } else if (startsWith(wsel, "prop_")) {
           nm <- paste0(gsub("^prop_", "", wsel), " proportion")
         } else {
           nm <- switch(wsel,
@@ -451,40 +459,15 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         paste0(nm, " vs Islet Size")
       }
 
-      # Base plot: summary lines + error bars
-      p <- ggplot(sm, aes(x = diam_mid, y = y, color = donor_status, group = donor_status)) +
-        geom_line(alpha = ifelse(!is.null(input$add_smooth) && input$add_smooth == "LOESS", 0, 1)) +
-        geom_point() +
-        geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0) +
-        labs(x = "Islet diameter (\u00b5m)", y = ylab, color = NULL, title = title_text) +
-        scale_color_manual(values = color_map, breaks = grp_levels, drop = FALSE) +
-        theme_minimal(base_size = 14) +
-        theme(legend.position = c(1, 1),
-              legend.justification = c(1, 1),
-              legend.direction = "vertical")
+      # Initialize base plot
+      p <- ggplot(sm, aes(x = diam_mid, y = y, color = donor_status, group = donor_status))
 
-      # X-axis scale
-      xmax <- suppressWarnings(max(sm$diam_mid, na.rm = TRUE))
-      if (!is.finite(xmax)) xmax <- 300
+      # Individual points layer FIRST (drawn underneath summary lines)
+      show_ind_points <- isTRUE(input$show_points)
+      donor_colors <- NULL
+      donor_id_breaks <- NULL
 
-      if (!is.null(input$log_scale_x) && input$log_scale_x) {
-        max_pow <- ceiling(log2(xmax))
-        major_breaks <- 2^(0:max_pow)
-        p <- p + scale_x_continuous(trans = "log2", breaks = major_breaks)
-      } else {
-        major_breaks <- seq(0, ceiling(xmax / 50) * 50, by = 50)
-        minor_breaks <- seq(0, ceiling(xmax / 10) * 10, by = 10)
-        p <- p + scale_x_continuous(breaks = major_breaks, minor_breaks = minor_breaks)
-      }
-
-      # Y-axis log scale (pseudo-log keeps zeros visible)
-      if (!is.null(input$log_scale) && input$log_scale) {
-        p <- p + scale_y_continuous(trans = scales::pseudo_log_trans(base = 10),
-                                    breaks = pseudo_log_breaks(10))
-      }
-
-      # Individual points layer
-      if (isTRUE(input$show_points)) {
+      if (show_ind_points) {
         raw <- plot_df()
         raw$donor_status <- factor(raw$donor_status, levels = grp_levels)
 
@@ -509,10 +492,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         # Vertical jitter
         yr <- suppressWarnings(range(raw$value, na.rm = TRUE))
         ydiff <- if (all(is.finite(yr))) diff(yr) else 0
-        is_counts <- (identical(input$mode, "Targets") &&
-                        !is.null(input$target_metric) && input$target_metric == "Counts") ||
-                     (identical(input$mode, "Markers") &&
-                        !is.null(input$marker_metric) && input$marker_metric == "Counts")
+        is_counts <- !is.null(input$metric) && input$metric == "Counts"
         jh <- if (is_counts) {
           mx <- max(0.02 * ydiff, 0.5)
           if (!is.finite(mx) || mx <= 0) 0.5 else mx
@@ -526,19 +506,13 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
           if ("Case ID" %in% colnames(raw_normal)) {
             raw_normal$donor_id <- factor(raw_normal$`Case ID`)
             donor_colors <- get_donor_palette(levels(raw_normal$donor_id))
-            combined_colors <- c(
-              "ND" = "#2ca02c", "Aab+" = "#ffcc00", "T1D" = "#9467bd",
-              donor_colors
-            )
+            donor_id_breaks <- levels(raw_normal$donor_id)
             p <- p +
               geom_point(data = raw_normal,
                          aes(x = diam_mid, y = value, color = donor_id, key = islet_click_key),
                          position = position_jitter(width = jw, height = jh),
                          size = input$pt_size, alpha = input$pt_alpha,
-                         inherit.aes = FALSE) +
-              scale_color_manual(values = combined_colors,
-                                 breaks = levels(raw_normal$donor_id),
-                                 name = "Donor ID")
+                         inherit.aes = FALSE)
           } else {
             p <- p +
               geom_point(data = raw_normal,
@@ -556,7 +530,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
                        inherit.aes = FALSE)
         }
 
-        # Outliers on top (slightly larger, more visible)
+        # Outliers (slightly larger, more visible)
         if (nrow(raw_outliers) > 0) {
           p <- p +
             geom_point(data = raw_outliers,
@@ -566,6 +540,49 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
                        alpha = min(1.0, input$pt_alpha * 1.5),
                        inherit.aes = FALSE)
         }
+      }
+
+      # Summary lines + error bars ON TOP of individual points
+      p <- p +
+        geom_line(alpha = ifelse(!is.null(input$add_smooth) && input$add_smooth == "LOESS", 0, 1)) +
+        geom_point() +
+        geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0)
+
+      # Color scale (must include donor_id colors when applicable)
+      if (!is.null(donor_colors)) {
+        combined_colors <- c(color_map, donor_colors)
+        p <- p + scale_color_manual(values = combined_colors,
+                                     breaks = donor_id_breaks,
+                                     name = "Donor ID")
+      } else {
+        p <- p + scale_color_manual(values = color_map, breaks = grp_levels, drop = FALSE)
+      }
+
+      p <- p +
+        labs(x = "Islet diameter (\u00b5m)", y = ylab, color = NULL, title = title_text) +
+        theme_minimal(base_size = 14) +
+        theme(legend.position = c(1, 1),
+              legend.justification = c(1, 1),
+              legend.direction = "vertical")
+
+      # X-axis scale
+      xmax <- suppressWarnings(max(sm$diam_mid, na.rm = TRUE))
+      if (!is.finite(xmax)) xmax <- 300
+
+      if (!is.null(input$log_scale_x) && input$log_scale_x) {
+        max_pow <- ceiling(log2(xmax))
+        major_breaks <- 2^(0:max_pow)
+        p <- p + scale_x_continuous(trans = "log2", breaks = major_breaks)
+      } else {
+        major_breaks <- seq(0, ceiling(xmax / 50) * 50, by = 50)
+        minor_breaks <- seq(0, ceiling(xmax / 10) * 10, by = 10)
+        p <- p + scale_x_continuous(breaks = major_breaks, minor_breaks = minor_breaks)
+      }
+
+      # Y-axis log scale (pseudo-log keeps zeros visible)
+      if (!is.null(input$log_scale) && input$log_scale) {
+        p <- p + scale_y_continuous(trans = scales::pseudo_log_trans(base = 10),
+                                    breaks = pseudo_log_breaks(10))
       }
 
       # Minor grid
@@ -623,10 +640,9 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       dist_color_by_val <- input$dist_color_by
       dist_show_points_val <- input$dist_show_points
 
-      cat(sprintf("[DIST] Rendering with mode=%s, which=%s, region=%s, color_by=%s\n",
+      cat(sprintf("[DIST] Rendering with mode=%s, which=%s, color_by=%s\n",
                   input$mode %||% "NULL",
                   input$which %||% "NULL",
-                  input$region %||% "NULL",
                   dist_color_by_val %||% "NULL"))
 
       # Apply exclude_zero_dist separately (raw_df already applies exclude_zero_top)
@@ -649,19 +665,15 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
 
       # Y-axis label
       ylab <- if (identical(input$mode, "Targets")) {
-        if (!is.null(input$target_metric) && input$target_metric == "Counts") {
-          "Target count"
-        } else {
-          "Target density (per \u00b5m\u00b2)"
-        }
-      } else if (identical(input$mode, "Markers")) {
-        if (!is.null(input$marker_metric) && input$marker_metric == "Counts") {
-          "Positive cell count"
-        } else {
-          "n positive / total (%)"
-        }
+        metric <- input$metric %||% "Density"
+        if (metric == "Counts") "Target count" else "Target density (per \u00b5m\u00b2)"
       } else {
-        "% composition"
+        metric <- input$metric %||% "Percentage"
+        switch(metric,
+          "Counts"     = "Cell count",
+          "Density"    = "Cell density (per \u00b5m\u00b2)",
+          "Percentage" = "% composition"
+        )
       }
 
       # Base violin or box
@@ -858,11 +870,11 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         }
       }
 
-      div(class = "card", style = "padding: 15px; margin-bottom: 20px; border: 2px solid #0066CC;",
+      div(class = "card", style = "padding: 20px; margin-bottom: 20px; border: 2px solid #0066CC;",
         fluidRow(
           column(6,
-            h4(paste("Islet Viewer:", info$islet_key, "(Case", info$case_id, ")"),
-               style = "margin-top: 0; color: #0066CC;")
+            h3(paste("Islet Viewer:", info$islet_key, "(Case", info$case_id, ")"),
+               style = "margin-top: 0; color: #0066CC; font-size: 22px;")
           ),
           column(6, style = "text-align: right;",
             if (has_cells) {
@@ -883,7 +895,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
           conditionalPanel(
             condition = "input.drilldown_view_mode == 'Single Cells'",
             fluidRow(style = "margin-bottom: 10px;",
-              column(4,
+              column(3,
                 selectInput("drilldown_color_by", "Color by",
                             choices = marker_choices, selected = "phenotype")
               ),
@@ -897,12 +909,12 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
           column(8,
             conditionalPanel(
               condition = if (has_cells) "input.drilldown_view_mode == 'Boundaries'" else "true",
-              plotOutput("islet_segmentation_view", height = "450px")
+              plotOutput("islet_segmentation_view", height = "650px")
             ),
             if (has_cells) {
               conditionalPanel(
                 condition = "input.drilldown_view_mode == 'Single Cells'",
-                plotOutput("islet_drilldown_view", height = "450px")
+                plotOutput("islet_drilldown_view", height = "650px")
               )
             }
           ),
@@ -910,9 +922,9 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
             if (has_cells) {
               conditionalPanel(
                 condition = "input.drilldown_view_mode == 'Single Cells'",
-                div(style = "padding: 10px; background-color: #f8f9fa; border-radius: 5px;",
-                  h5("Cell Composition", style = "margin-top: 0; font-size: 15px;"),
-                  plotOutput("islet_drilldown_summary", height = "250px"),
+                div(style = "padding: 15px; background-color: #f8f9fa; border-radius: 5px;",
+                  h5("Cell Composition", style = "margin-top: 0; font-size: 17px;"),
+                  plotOutput("islet_drilldown_summary", height = "400px"),
                   hr(),
                   tableOutput("islet_drilldown_table")
                 )
@@ -920,44 +932,44 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
             },
             conditionalPanel(
               condition = if (has_cells) "input.drilldown_view_mode == 'Boundaries'" else "true",
-              div(style = "padding: 10px; background-color: #f8f9fa; border-radius: 5px; height: 100%;",
-                h5("Legend", style = "margin-top: 0; margin-bottom: 15px;"),
+              div(style = "padding: 15px; background-color: #f8f9fa; border-radius: 5px; height: 100%;",
+                h5("Legend", style = "margin-top: 0; margin-bottom: 15px; font-size: 17px;"),
                 div(style = "margin-bottom: 10px;",
-                  div(style = "display: flex; align-items: center; margin-bottom: 8px;",
-                    div(style = "width: 25px; height: 4px; background-color: #0066CC; margin-right: 8px;"),
-                    span("Islet boundary")
+                  div(style = "display: flex; align-items: center; margin-bottom: 10px;",
+                    div(style = "width: 30px; height: 4px; background-color: #0066CC; margin-right: 10px;"),
+                    span("Islet boundary", style = "font-size: 16px;")
                   ),
-                  div(style = "display: flex; align-items: center; margin-bottom: 8px;",
-                    div(style = "width: 25px; height: 4px; background-color: #00CCCC; margin-right: 8px;"),
-                    span("Expanded (+20\u00b5m)")
+                  div(style = "display: flex; align-items: center; margin-bottom: 10px;",
+                    div(style = "width: 30px; height: 4px; background-color: #00CCCC; margin-right: 10px;"),
+                    span("Expanded (+20\u00b5m)", style = "font-size: 16px;")
                   ),
-                  div(style = "display: flex; align-items: center; margin-bottom: 8px;",
-                    div(style = "width: 25px; height: 4px; background-color: #CC00CC; margin-right: 8px;"),
-                    span("Nerve")
+                  div(style = "display: flex; align-items: center; margin-bottom: 10px;",
+                    div(style = "width: 30px; height: 4px; background-color: #CC00CC; margin-right: 10px;"),
+                    span("Nerve", style = "font-size: 16px;")
                   ),
-                  div(style = "display: flex; align-items: center; margin-bottom: 8px;",
-                    div(style = "width: 25px; height: 4px; background-color: #CC0000; margin-right: 8px;"),
-                    span("Capillary")
+                  div(style = "display: flex; align-items: center; margin-bottom: 10px;",
+                    div(style = "width: 30px; height: 4px; background-color: #CC0000; margin-right: 10px;"),
+                    span("Capillary", style = "font-size: 16px;")
                   ),
-                  div(style = "display: flex; align-items: center; margin-bottom: 8px;",
-                    div(style = "width: 25px; height: 4px; background-color: #00AA00; margin-right: 8px;"),
-                    span("Lymphatic")
+                  div(style = "display: flex; align-items: center; margin-bottom: 10px;",
+                    div(style = "width: 30px; height: 4px; background-color: #00AA00; margin-right: 10px;"),
+                    span("Lymphatic", style = "font-size: 16px;")
                   ),
-                  div(style = "display: flex; align-items: center; margin-bottom: 8px;",
-                    div(style = "width: 25px; height: 4px; background-color: #FFD700; margin-right: 8px;"),
-                    span("Selected islet", style = "font-weight: bold;")
+                  div(style = "display: flex; align-items: center; margin-bottom: 10px;",
+                    div(style = "width: 30px; height: 4px; background-color: #FFD700; margin-right: 10px;"),
+                    span("Selected islet", style = "font-weight: bold; font-size: 16px;")
                   )
                 ),
                 hr(),
-                h6("Islet Info", style = "margin-bottom: 10px;"),
-                tags$dl(style = "font-size: 13px;",
+                h5("Islet Info", style = "margin-bottom: 10px; font-size: 17px;"),
+                tags$dl(style = "font-size: 16px;",
                   tags$dt("Case ID:"), tags$dd(info$case_id),
                   tags$dt("Islet:"), tags$dd(info$islet_key),
                   tags$dt("Centroid X:"), tags$dd(paste0(round(info$centroid_x, 1), " \u00b5m")),
                   tags$dt("Centroid Y:"), tags$dd(paste0(round(info$centroid_y, 1), " \u00b5m"))
                 ),
                 hr(),
-                p(style = "font-size: 11px; color: #666; margin-bottom: 0;",
+                p(style = "font-size: 14px; color: #666; margin-bottom: 0;",
                   "Click another point to view a different islet, or click Close to hide this panel.")
               )
             )
@@ -1000,11 +1012,8 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       desc <- c()
       desc <- c(desc, paste("Generated:", Sys.time()))
       desc <- c(desc, paste("Focus:", input$mode %||% "Unknown"))
-      desc <- c(desc, paste("Region:", input$region %||% "Unknown"))
-
-      if (!is.null(input$dynamic_metric)) {
-        desc <- c(desc, paste("Metric:", input$dynamic_metric))
-      }
+      desc <- c(desc, paste("Selection:", input$which %||% "Unknown"))
+      desc <- c(desc, paste("Metric:", input$metric %||% "Unknown"))
 
       desc <- c(desc, paste("Donor Groups:", paste(input$groups %||% c(), collapse = ", ")))
 

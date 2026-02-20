@@ -1,16 +1,26 @@
-# ---------- Spatial Neighborhood module server ----------
+# ---------- Spatial Tab module server ----------
 # Exports: spatial_server(id, prepared)
 #
 # Dependencies:
-#   prepared()$comp — must contain peri_prop_*, immune_*, enrich_z_* columns
-#   cohens_d, eta_squared, pairwise_wilcox — from utils_stats.R
+#   prepared()$comp — must contain peri_prop_*, immune_*, enrich_z_*, leiden_* columns
+#   prepared()$neighborhood — raw neighborhood data with leiden_umap_1/2
+#   PHENOTYPE_COLORS — from drilldown_helpers.R
+#   donor_tissue_available(), get_available_donors(), load_donor_tissue() — from spatial_helpers.R
 
 spatial_server <- function(id, prepared) {
+
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
     # Donor status color palette
     donor_colors <- c("ND" = "#2ca02c", "Aab+" = "#ffcc00", "T1D" = "#9467bd")
+
+    # 14-color qualitative palette for Leiden clusters
+    leiden_palette <- c(
+      "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
+      "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf",
+      "#aec7e8", "#ffbb78", "#98df8a", "#ff9896"
+    )
 
     # ---- Helpers: column identification ----
     get_nbr_columns <- function(comp_cols) {
@@ -20,7 +30,9 @@ spatial_server <- function(id, prepared) {
         immune     = intersect(c("immune_frac_peri", "immune_frac_core", "immune_ratio",
                                  "cd8_to_macro_ratio", "tcell_density_peri"), comp_cols),
         enrich     = grep("^enrich_z_", comp_cols, value = TRUE),
-        distance   = grep("^min_dist_", comp_cols, value = TRUE)
+        distance   = grep("^min_dist_", comp_cols, value = TRUE),
+        leiden     = grep("^leiden_[0-9]", comp_cols, value = TRUE),
+        leiden_umap = intersect(c("leiden_umap_1", "leiden_umap_2"), comp_cols)
       )
     }
 
@@ -31,8 +43,67 @@ spatial_server <- function(id, prepared) {
       length(nbr$peri_prop) > 0
     })
 
-    # ---- Filtered data reactive ----
-    filtered_df <- reactive({
+    has_leiden <- reactive({
+      pd <- prepared()
+      if (is.null(pd$comp)) return(FALSE)
+      nbr <- get_nbr_columns(colnames(pd$comp))
+      length(nbr$leiden) > 0
+    })
+
+    has_tissue <- reactive({
+      donor_tissue_available()
+    })
+
+    # ---- Donor selector ----
+    output$donor_selector <- renderUI({
+      donors <- get_available_donors()
+      if (length(donors) == 0) {
+        return(div(style = "color: #888; font-style: italic; padding-top: 8px;",
+                   "No per-donor tissue data available."))
+      }
+      pd <- prepared()
+      # Build friendly labels: imageid (Donor Status)
+      donor_labels <- sapply(donors, function(d) {
+        if (!is.null(pd$comp) && "Donor Status" %in% colnames(pd$comp) &&
+            "Case ID" %in% colnames(pd$comp)) {
+          ds_match <- pd$comp$`Donor Status`[pd$comp$`Case ID` == as.integer(d)]
+          ds <- if (length(ds_match) > 0) ds_match[1] else "?"
+          paste0(d, " (", ds, ")")
+        } else {
+          d
+        }
+      })
+      choices <- setNames(donors, donor_labels)
+      selectInput(ns("donor"), "Donor", choices = choices, selected = donors[1])
+    })
+
+    # ---- Leiden resolution selector ----
+    output$leiden_res_selector <- renderUI({
+      if (!has_leiden()) return(NULL)
+      nbr <- get_nbr_columns(colnames(prepared()$comp))
+      # Available resolutions (e.g., leiden_0.3 -> "0.3")
+      res_labels <- gsub("^leiden_", "", nbr$leiden)
+      choices <- setNames(nbr$leiden, res_labels)
+      selectInput(ns("leiden_res"), "Leiden Resolution",
+                  choices = choices, selected = nbr$leiden[2] %||% nbr$leiden[1])
+    })
+
+    # ---- Overview banner ----
+    output$overview_banner <- renderUI({
+      n_donors <- length(get_available_donors())
+      if (n_donors == 0) {
+        return(div(style = "color: #888; font-style: italic;",
+          "Per-donor tissue data not available. Run extract_per_donor_tissue.py."))
+      }
+      tags$p(style = "margin: 0; font-size: 14px;",
+        strong(n_donors), " donors with tissue-wide cell data |",
+        if (has_leiden()) " Leiden clustering available" else " Leiden data not available",
+        if (has_neighborhood()) " | Neighborhood metrics available" else ""
+      )
+    })
+
+    # ---- Filtered neighborhood data (for enrichment + heatmap cards) ----
+    filtered_nbr <- reactive({
       req(has_neighborhood())
       pd <- prepared()
       df <- pd$comp
@@ -43,12 +114,6 @@ spatial_server <- function(id, prepared) {
         df <- df[df$`Donor Status` %in% input$groups, , drop = FALSE]
       }
 
-      # Filter by diameter range
-      if (!is.null(input$diam_range) && "islet_diam_um" %in% colnames(df)) {
-        d <- suppressWarnings(as.numeric(df$islet_diam_um))
-        df <- df[!is.na(d) & d >= input$diam_range[1] & d <= input$diam_range[2], , drop = FALSE]
-      }
-
       # Only keep rows with peri-islet data
       if ("total_cells_peri" %in% colnames(df)) {
         df <- df[!is.na(df$total_cells_peri) & df$total_cells_peri > 0, , drop = FALSE]
@@ -57,174 +122,295 @@ spatial_server <- function(id, prepared) {
       df
     })
 
-    # ---- Dynamic feature selector ----
-    output$feature_selector <- renderUI({
-      req(has_neighborhood())
-      comp_cols <- colnames(prepared()$comp)
-      nbr <- get_nbr_columns(comp_cols)
+    # ---- Donor cells reactive (load tissue CSV for selected donor) ----
+    donor_cells <- reactive({
+      req(input$donor)
+      load_donor_tissue(input$donor)
+    })
 
-      choices <- switch(input$metric_category %||% "Peri-Islet Composition",
-        "Peri-Islet Composition" = {
-          labs <- gsub("^peri_prop_", "", nbr$peri_prop)
-          setNames(nbr$peri_prop, labs)
-        },
-        "Immune Infiltration" = {
-          labs <- c(
-            immune_frac_peri = "Immune fraction (peri)",
-            immune_frac_core = "Immune fraction (core)",
-            immune_ratio = "Peri/core immune ratio",
-            cd8_to_macro_ratio = "CD8/macrophage ratio",
-            tcell_density_peri = "T-cell density (peri)"
-          )
-          setNames(nbr$immune, labs[nbr$immune])
-        },
-        "Enrichment Z-scores" = {
-          labs <- gsub("^enrich_z_", "", nbr$enrich)
-          setNames(nbr$enrich, labs)
-        },
-        "Distance Metrics" = {
-          labs <- gsub("^min_dist_", "", nbr$distance)
-          setNames(nbr$distance, labs)
+    # ---- Donor status for selected donor ----
+    donor_status <- reactive({
+      req(input$donor)
+      pd <- prepared()
+      if (!is.null(pd$comp) && "Donor Status" %in% colnames(pd$comp) &&
+          "Case ID" %in% colnames(pd$comp)) {
+        ds <- pd$comp$`Donor Status`[pd$comp$`Case ID` == as.integer(input$donor)]
+        if (length(ds) > 0) return(ds[1])
+      }
+      "?"
+    })
+
+    # Leiden mapping for tissue scatter: map islet_name -> cluster for core/peri cells
+    islet_leiden_map <- reactive({
+      req(has_leiden())
+      pd <- prepared()
+      leiden_col <- input$leiden_res
+      req(leiden_col, leiden_col %in% colnames(pd$comp))
+
+      # Build islet_key -> cluster mapping for the selected donor
+      donor_id <- input$donor
+      req(donor_id)
+
+      comp <- pd$comp
+      donor_mask <- comp$`Case ID` == as.integer(donor_id)
+      if (!any(donor_mask)) return(NULL)
+
+      sub <- comp[donor_mask, c("islet_key", leiden_col), drop = FALSE]
+      setNames(as.character(sub[[leiden_col]]), as.character(sub$islet_key))
+    })
+
+    # ==== Card 2: Tissue Scatter Plot (ggplot2, rasterized) ====
+    output$tissue_scatter <- renderPlot({
+      cells <- donor_cells()
+      req(cells)
+
+      # Copy so we can filter
+      plot_df <- cells
+
+      # Region filter: highlight selected region, dim others
+      region_mode <- input$region_filter %||% "all"
+
+      # Determine coloring mode
+      color_mode <- input$color_by %||% "phenotype"
+      use_leiden <- (color_mode == "leiden") && has_leiden()
+
+      if (use_leiden) {
+        # Map islet_name -> leiden cluster
+        lmap <- islet_leiden_map()
+        if (!is.null(lmap)) {
+          plot_df$cluster <- lmap[plot_df$islet_name]
+          # Tissue cells with no islet get NA cluster
+          plot_df$cluster[is.na(plot_df$cluster)] <- "tissue"
+        } else {
+          plot_df$cluster <- "tissue"
         }
-      )
-
-      if (length(choices) == 0) choices <- c("(none available)" = "")
-
-      selectInput(ns("feature"), "Feature", choices = choices)
-    })
-
-    # ---- Card 1: Overview Banner ----
-    output$overview_banner <- renderUI({
-      if (!has_neighborhood()) {
-        return(div(style = "color: #888; font-style: italic;",
-          "Neighborhood metrics not available. Run compute_neighborhood_metrics.py and rebuild H5AD."))
       }
-      df <- filtered_df()
-      if (is.null(df) || nrow(df) == 0) {
-        return(div("No data matching current filters."))
+
+      # Split into foreground (highlighted) and background (dimmed) layers
+      if (region_mode == "all") {
+        # All cells colored; tissue background slightly dimmed
+        fg <- plot_df[plot_df$cell_region %in% c("core", "peri"), , drop = FALSE]
+        bg <- plot_df[plot_df$cell_region == "tissue", , drop = FALSE]
+      } else if (region_mode == "core_peri") {
+        fg <- plot_df[plot_df$cell_region %in% c("core", "peri"), , drop = FALSE]
+        bg <- plot_df[plot_df$cell_region == "tissue", , drop = FALSE]
+      } else {
+        # Core only
+        fg <- plot_df[plot_df$cell_region == "core", , drop = FALSE]
+        bg <- plot_df[plot_df$cell_region != "core", , drop = FALSE]
       }
-      n_total <- nrow(df)
-      n_by_group <- if ("Donor Status" %in% colnames(df)) {
-        paste(sapply(c("ND", "Aab+", "T1D"), function(g) {
-          n <- sum(df$`Donor Status` == g, na.rm = TRUE)
-          paste0(g, "=", n)
-        }), collapse = ", ")
-      } else ""
 
-      tags$p(style = "margin: 0; font-size: 14px;",
-        strong(n_total), " islets with peri-islet data",
-        if (nzchar(n_by_group)) paste0(" (", n_by_group, ")")
-      )
-    })
+      p <- ggplot2::ggplot()
 
-    # ---- Card 2: Feature Distribution (violin/box by disease stage) ----
-    output$distribution_plot <- renderPlotly({
-      df <- filtered_df()
-      feat <- input$feature
-      req(df, feat, feat %in% colnames(df), "Donor Status" %in% colnames(df))
-
-      vals <- suppressWarnings(as.numeric(df[[feat]]))
-      ds <- as.character(df$`Donor Status`)
-      plot_df <- data.frame(value = vals, group = ds, stringsAsFactors = FALSE)
-      plot_df <- plot_df[is.finite(plot_df$value), , drop = FALSE]
-      if (nrow(plot_df) == 0) return(plotly_empty() %>% layout(title = "No data"))
-
-      plot_df$group <- factor(plot_df$group, levels = c("ND", "Aab+", "T1D"))
-      feat_label <- gsub("^peri_prop_|^enrich_z_|^min_dist_", "", feat)
-      feat_label <- gsub("_", " ", feat_label)
-
-      p <- plot_ly(plot_df, y = ~value, x = ~group, color = ~group,
-                   colors = donor_colors[levels(plot_df$group)],
-                   type = "violin", box = list(visible = TRUE),
-                   meanline = list(visible = TRUE), points = "outliers") %>%
-        layout(
-          title = list(text = feat_label, font = list(size = 14)),
-          xaxis = list(title = ""),
-          yaxis = list(title = feat_label),
-          showlegend = FALSE
+      # Background layer: always grey, small, transparent
+      if (nrow(bg) > 0) {
+        p <- p + ggplot2::geom_point(
+          data = bg,
+          ggplot2::aes(x = X_centroid, y = Y_centroid),
+          color = "#d9d9d9", size = 0.15, alpha = 0.3,
+          inherit.aes = FALSE
         )
-      p
+      }
+
+      # Foreground layer: colored by phenotype or leiden
+      if (nrow(fg) > 0) {
+        if (use_leiden && "cluster" %in% colnames(fg)) {
+          cluster_levels <- sort(unique(fg$cluster[fg$cluster != "tissue"]))
+          fg$cluster <- factor(fg$cluster, levels = c(cluster_levels, "tissue"))
+          n_clusters <- length(cluster_levels)
+          pal <- setNames(leiden_palette[seq_len(min(n_clusters, length(leiden_palette)))],
+                          cluster_levels)
+          pal["tissue"] <- "#d9d9d9"
+
+          p <- p + ggplot2::geom_point(
+            data = fg,
+            ggplot2::aes(x = X_centroid, y = Y_centroid, color = cluster),
+            size = 0.4, alpha = 0.6,
+            inherit.aes = FALSE
+          ) +
+          ggplot2::scale_color_manual(values = pal, name = "Cluster", na.value = "#d9d9d9")
+        } else {
+          # Phenotype coloring
+          pheno_present <- sort(unique(fg$phenotype))
+          pal <- PHENOTYPE_COLORS[pheno_present]
+          pal[is.na(pal)] <- "#CCCCCC"
+
+          p <- p + ggplot2::geom_point(
+            data = fg,
+            ggplot2::aes(x = X_centroid, y = Y_centroid, color = phenotype),
+            size = 0.4, alpha = 0.6,
+            inherit.aes = FALSE
+          ) +
+          ggplot2::scale_color_manual(values = pal, name = "Phenotype", na.value = "#CCCCCC")
+        }
+      }
+
+      ds <- donor_status()
+      p + ggplot2::coord_fixed() +
+        ggplot2::scale_y_reverse() +
+        ggplot2::labs(
+          title = paste0("Donor ", input$donor, " (", ds, ")"),
+          subtitle = paste0(nrow(fg), " foreground cells | ",
+                            nrow(bg), " background cells"),
+          x = expression(paste("X centroid (", mu, "m)")),
+          y = expression(paste("Y centroid (", mu, "m)"))
+        ) +
+        ggplot2::theme_minimal(base_size = 18) +
+        ggplot2::theme(
+          legend.position = "right",
+          legend.key.size = ggplot2::unit(0.7, "cm"),
+          legend.title = ggplot2::element_text(size = 18, face = "bold"),
+          legend.text = ggplot2::element_text(size = 15),
+          plot.title = ggplot2::element_text(size = 22, face = "bold"),
+          plot.subtitle = ggplot2::element_text(size = 16, color = "#555")
+        )
+    }, height = 800)
+
+    # ==== Card 3: Leiden UMAP (plotly, 1015 islets) ====
+    output$leiden_not_available <- renderUI({
+      if (!has_leiden()) {
+        return(div(style = "color: #888; font-style: italic; margin-bottom: 10px;",
+          "Leiden clustering not available in current H5AD. ",
+          "Rebuild with build_h5ad_for_app.py after running Leiden clustering."))
+      }
+      NULL
     })
 
-    # ---- Card 3: Core vs Peri Comparison ----
-    output$core_peri_plot <- renderPlotly({
-      df <- filtered_df()
-      req(df, "Donor Status" %in% colnames(df))
+    output$leiden_umap <- renderPlotly({
+      req(has_leiden())
+      pd <- prepared()
+      comp <- pd$comp
+      req("leiden_umap_1" %in% colnames(comp), "leiden_umap_2" %in% colnames(comp))
 
-      # Find matching core/peri immune fraction columns
-      if (!all(c("immune_frac_peri", "immune_frac_core") %in% colnames(df))) {
-        return(plotly_empty() %>% layout(title = "Core/peri immune data not available"))
+      leiden_col <- input$leiden_res %||% {
+        nbr <- get_nbr_columns(colnames(comp))
+        nbr$leiden[2] %||% nbr$leiden[1]
       }
+      req(leiden_col %in% colnames(comp))
+
+      # Filter by donor status
+      plot_comp <- comp
+      if (!is.null(input$groups) && "Donor Status" %in% colnames(plot_comp)) {
+        plot_comp <- plot_comp[plot_comp$`Donor Status` %in% input$groups, , drop = FALSE]
+      }
+
+      umap1 <- suppressWarnings(as.numeric(plot_comp$leiden_umap_1))
+      umap2 <- suppressWarnings(as.numeric(plot_comp$leiden_umap_2))
+      cluster <- as.character(plot_comp[[leiden_col]])
 
       plot_df <- data.frame(
-        core = suppressWarnings(as.numeric(df$immune_frac_core)),
-        peri = suppressWarnings(as.numeric(df$immune_frac_peri)),
-        group = as.character(df$`Donor Status`),
+        umap1 = umap1, umap2 = umap2, cluster = cluster,
+        donor_status = if ("Donor Status" %in% colnames(plot_comp)) as.character(plot_comp$`Donor Status`) else "",
+        islet_key = if ("islet_key" %in% colnames(plot_comp)) as.character(plot_comp$islet_key) else "",
         stringsAsFactors = FALSE
       )
-      plot_df <- plot_df[is.finite(plot_df$core) & is.finite(plot_df$peri), , drop = FALSE]
-      if (nrow(plot_df) == 0) return(plotly_empty() %>% layout(title = "No data"))
+      plot_df <- plot_df[is.finite(plot_df$umap1) & is.finite(plot_df$umap2), , drop = FALSE]
+      if (nrow(plot_df) == 0) return(plotly_empty() %>% layout(title = "No UMAP data"))
 
-      # Reshape to long format for grouped box plot
-      long_df <- rbind(
-        data.frame(region = "Core", value = plot_df$core, group = plot_df$group),
-        data.frame(region = "Peri-Islet", value = plot_df$peri, group = plot_df$group)
-      )
-      long_df$group <- factor(long_df$group, levels = c("ND", "Aab+", "T1D"))
+      # Sort cluster levels numerically
+      cluster_levels <- sort(unique(plot_df$cluster))
+      plot_df$cluster <- factor(plot_df$cluster, levels = cluster_levels)
+      n_clusters <- length(cluster_levels)
+      pal <- setNames(leiden_palette[seq_len(min(n_clusters, length(leiden_palette)))],
+                      cluster_levels)
 
-      p <- plot_ly(long_df, x = ~group, y = ~value, color = ~region,
-                   type = "box") %>%
+      res_label <- gsub("^leiden_", "", leiden_col)
+
+      plot_ly(plot_df, x = ~umap1, y = ~umap2, color = ~cluster,
+              colors = pal,
+              text = ~paste0("Cluster: ", cluster, "<br>",
+                             "Status: ", donor_status, "<br>",
+                             islet_key),
+              hoverinfo = "text",
+              type = "scatter", mode = "markers",
+              marker = list(size = 7, opacity = 0.7)) %>%
         layout(
-          title = list(text = "Immune Fraction: Core vs Peri-Islet", font = list(size = 14)),
-          xaxis = list(title = ""),
-          yaxis = list(title = "Immune cell fraction"),
-          boxmode = "group"
+          title = list(text = paste0("Leiden ", res_label, " (", nrow(plot_df), " islets)"),
+                       font = list(size = 14)),
+          xaxis = list(title = "UMAP 1", zeroline = FALSE),
+          yaxis = list(title = "UMAP 2", zeroline = FALSE),
+          legend = list(title = list(text = "Cluster"))
         )
-      p
     })
 
-    # ---- Card 4: Peri-Islet Phenotype Heatmap ----
-    output$phenotype_heatmap <- renderPlotly({
-      df <- filtered_df()
-      req(df, "Donor Status" %in% colnames(df))
+    # ==== Card 3 (bottom): Cluster Composition ====
+    output$cluster_composition <- renderPlotly({
+      req(has_leiden())
+      pd <- prepared()
+      comp <- pd$comp
 
-      comp_cols <- colnames(df)
-      peri_prop_cols <- grep("^peri_prop_", comp_cols, value = TRUE)
-      if (length(peri_prop_cols) == 0) {
-        return(plotly_empty() %>% layout(title = "No peri-islet proportion data"))
+      leiden_col <- input$leiden_res %||% {
+        nbr <- get_nbr_columns(colnames(comp))
+        nbr$leiden[2] %||% nbr$leiden[1]
+      }
+      req(leiden_col %in% colnames(comp))
+
+      # Filter by donor status
+      plot_comp <- comp
+      if (!is.null(input$groups) && "Donor Status" %in% colnames(plot_comp)) {
+        plot_comp <- plot_comp[plot_comp$`Donor Status` %in% input$groups, , drop = FALSE]
       }
 
-      # Compute mean proportion per disease stage
-      groups <- c("ND", "Aab+", "T1D")
-      mat <- matrix(NA_real_, nrow = length(peri_prop_cols), ncol = length(groups),
-                    dimnames = list(peri_prop_cols, groups))
-      for (g in groups) {
-        sub <- df[df$`Donor Status` == g, peri_prop_cols, drop = FALSE]
+      # Get phenotype proportion columns (prop_*)
+      prop_cols <- grep("^prop_", colnames(plot_comp), value = TRUE)
+      if (length(prop_cols) == 0) {
+        return(plotly_empty() %>% layout(title = "No phenotype proportion data"))
+      }
+
+      cluster <- as.character(plot_comp[[leiden_col]])
+
+      # Compute mean phenotype proportions per cluster
+      cluster_levels <- sort(unique(cluster))
+      mat <- matrix(NA_real_, nrow = length(prop_cols), ncol = length(cluster_levels),
+                    dimnames = list(prop_cols, cluster_levels))
+      for (cl in cluster_levels) {
+        sub <- plot_comp[cluster == cl, prop_cols, drop = FALSE]
         if (nrow(sub) > 0) {
-          mat[, g] <- colMeans(sub, na.rm = TRUE)
+          mat[, cl] <- colMeans(sub, na.rm = TRUE)
         }
       }
 
-      # Clean labels
-      row_labels <- gsub("^peri_prop_", "", rownames(mat))
-      row_labels <- gsub("_", " ", row_labels)
+      # Build stacked bar data
+      bar_rows <- list()
+      for (i in seq_along(prop_cols)) {
+        for (j in seq_along(cluster_levels)) {
+          bar_rows[[length(bar_rows) + 1]] <- data.frame(
+            phenotype = gsub("^prop_", "", prop_cols[i]),
+            cluster = cluster_levels[j],
+            proportion = mat[i, j],
+            stringsAsFactors = FALSE
+          )
+        }
+      }
+      bar_df <- do.call(rbind, bar_rows)
 
-      plot_ly(
-        z = mat, x = groups, y = row_labels,
-        type = "heatmap",
-        colorscale = list(c(0, "#f7fbff"), c(0.5, "#6baed6"), c(1, "#08306b")),
-        colorbar = list(title = "Mean\nProportion")
-      ) %>%
+      # Only show top phenotypes (>1% in any cluster) to reduce clutter
+      max_per_pheno <- tapply(bar_df$proportion, bar_df$phenotype, max, na.rm = TRUE)
+      keep_phenos <- names(max_per_pheno[max_per_pheno > 0.01])
+      bar_df <- bar_df[bar_df$phenotype %in% keep_phenos, , drop = FALSE]
+
+      # Use PHENOTYPE_COLORS where available
+      pheno_present <- unique(bar_df$phenotype)
+      pal <- PHENOTYPE_COLORS[pheno_present]
+      pal[is.na(pal)] <- "#CCCCCC"
+
+      bar_df$phenotype <- factor(bar_df$phenotype, levels = names(sort(max_per_pheno[keep_phenos], decreasing = TRUE)))
+
+      plot_ly(bar_df, x = ~cluster, y = ~proportion, color = ~phenotype,
+              colors = pal,
+              type = "bar") %>%
         layout(
-          title = list(text = "Mean Peri-Islet Phenotype Proportions", font = list(size = 14)),
-          xaxis = list(title = ""),
-          yaxis = list(title = "", tickfont = list(size = 10))
+          barmode = "stack",
+          title = list(text = "Mean Phenotype Composition by Cluster", font = list(size = 13)),
+          xaxis = list(title = "Cluster"),
+          yaxis = list(title = "Mean Proportion", range = c(0, 1)),
+          legend = list(font = list(size = 9), title = list(text = ""))
         )
     })
 
-    # ---- Card 5: Immune Enrichment ----
+    # ==== Card 4: Enrichment Bar Chart (kept from original, with documentation) ====
     output$enrichment_plot <- renderPlotly({
-      df <- filtered_df()
+      df <- filtered_nbr()
       req(df, "Donor Status" %in% colnames(df))
 
       enrich_cols <- grep("^enrich_z_", colnames(df), value = TRUE)
@@ -273,121 +459,43 @@ spatial_server <- function(id, prepared) {
         )
     })
 
-    # ---- Card 6: Pseudotime Correlation ----
-    output$pseudotime_plot <- renderPlotly({
-      df <- filtered_df()
-      feat <- input$feature
-      req(df, feat, feat %in% colnames(df))
+    # ==== Card 5: Phenotype Heatmap (kept from original, with documentation) ====
+    output$phenotype_heatmap <- renderPlotly({
+      df <- filtered_nbr()
+      req(df, "Donor Status" %in% colnames(df))
 
-      # Check for pseudotime (DPT) — it's in the prepared trajectory data
-      if (!"dpt_pseudotime" %in% colnames(df)) {
-        return(plotly_empty() %>% layout(
-          title = "Pseudotime not available in composition data",
-          annotations = list(list(
-            text = "Pseudotime correlation requires DPT in comp. See Trajectory tab.",
-            xref = "paper", yref = "paper", x = 0.5, y = 0.5, showarrow = FALSE
-          ))
-        ))
+      comp_cols <- colnames(df)
+      peri_prop_cols <- grep("^peri_prop_", comp_cols, value = TRUE)
+      if (length(peri_prop_cols) == 0) {
+        return(plotly_empty() %>% layout(title = "No peri-islet proportion data"))
       }
 
-      pt <- suppressWarnings(as.numeric(df$dpt_pseudotime))
-      vals <- suppressWarnings(as.numeric(df[[feat]]))
-      ds <- as.character(df$`Donor Status`)
-      plot_df <- data.frame(pt = pt, value = vals, group = ds, stringsAsFactors = FALSE)
-      plot_df <- plot_df[is.finite(plot_df$pt) & is.finite(plot_df$value), , drop = FALSE]
-
-      if (nrow(plot_df) == 0) {
-        return(plotly_empty() %>% layout(title = "No data for pseudotime correlation"))
-      }
-
-      feat_label <- gsub("^peri_prop_|^enrich_z_|^min_dist_", "", feat)
-      feat_label <- gsub("_", " ", feat_label)
-      plot_df$group <- factor(plot_df$group, levels = c("ND", "Aab+", "T1D"))
-
-      cor_test <- tryCatch(cor.test(plot_df$pt, plot_df$value, method = "kendall"),
-                           error = function(e) NULL)
-      subtitle <- if (!is.null(cor_test)) {
-        sprintf("Kendall \u03c4 = %.3f, p = %.2e", cor_test$estimate, cor_test$p.value)
-      } else ""
-
-      plot_ly(plot_df, x = ~pt, y = ~value, color = ~group,
-              colors = donor_colors[levels(plot_df$group)],
-              type = "scatter", mode = "markers",
-              marker = list(size = 10, opacity = 0.6)) %>%
-        layout(
-          title = list(text = paste0(feat_label, " vs Pseudotime<br><sub>", subtitle, "</sub>"),
-                       font = list(size = 14)),
-          xaxis = list(title = "DPT Pseudotime"),
-          yaxis = list(title = feat_label),
-          legend = list(title = list(text = ""))
-        )
-    })
-
-    # ---- Card 7: Statistical Tests ----
-    output$test_table <- renderTable({
-      df <- filtered_df()
-      feat <- input$feature
-      req(df, feat, feat %in% colnames(df), "Donor Status" %in% colnames(df))
-
-      vals <- suppressWarnings(as.numeric(df[[feat]]))
-      groups <- as.character(df$`Donor Status`)
-      test_df <- data.frame(value = vals, group = groups, stringsAsFactors = FALSE)
-      test_df <- test_df[is.finite(test_df$value), , drop = FALSE]
-
-      if (nrow(test_df) < 3) return(data.frame(Note = "Insufficient data"))
-
-      # Global test (Kruskal-Wallis)
-      kw <- tryCatch(kruskal.test(value ~ group, data = test_df), error = function(e) NULL)
-
-      # Pairwise tests
-      pairs <- pairwise_wilcox(test_df, "group", "value")
-
-      # Build results table
-      rows <- list()
-      if (!is.null(kw)) {
-        rows[[1]] <- data.frame(
-          Test = "Kruskal-Wallis (global)", Comparison = "All groups",
-          Statistic = round(kw$statistic, 2), `p-value` = formatC(kw$p.value, format = "e", digits = 2),
-          `Effect Size` = "", check.names = FALSE, stringsAsFactors = FALSE
-        )
-      }
-      if (!is.null(pairs) && nrow(pairs) > 0) {
-        for (i in seq_len(nrow(pairs))) {
-          g1 <- as.character(pairs$group1[i])
-          g2 <- as.character(pairs$group2[i])
-          cd <- tryCatch({
-            v1 <- test_df$value[test_df$group == g1]
-            v2 <- test_df$value[test_df$group == g2]
-            cohens_d(v1, v2)
-          }, error = function(e) list(d = NA, ci_lo = NA, ci_hi = NA))
-
-          rows[[length(rows) + 1]] <- data.frame(
-            Test = "Wilcoxon (pairwise)", Comparison = paste(g1, "vs", g2),
-            Statistic = NA_real_,
-            `p-value` = formatC(pairs$p_value[i], format = "e", digits = 2),
-            `Effect Size` = if (!is.na(cd$d)) sprintf("d=%.2f [%.2f,%.2f]", cd$d, cd$ci_lo, cd$ci_hi) else "",
-            check.names = FALSE, stringsAsFactors = FALSE
-          )
+      # Compute mean proportion per disease stage
+      groups <- c("ND", "Aab+", "T1D")
+      mat <- matrix(NA_real_, nrow = length(peri_prop_cols), ncol = length(groups),
+                    dimnames = list(peri_prop_cols, groups))
+      for (g in groups) {
+        sub <- df[df$`Donor Status` == g, peri_prop_cols, drop = FALSE]
+        if (nrow(sub) > 0) {
+          mat[, g] <- colMeans(sub, na.rm = TRUE)
         }
       }
 
-      if (length(rows) == 0) return(data.frame(Note = "Tests could not be computed"))
-      do.call(rbind, rows)
-    }, striped = TRUE, hover = TRUE, spacing = "s")
+      # Clean labels
+      row_labels <- gsub("^peri_prop_", "", rownames(mat))
+      row_labels <- gsub("_", " ", row_labels)
 
-    output$methods_text <- renderUI({
-      tags$div(style = "font-size: 12px; color: #555;",
-        tags$p("Neighborhood metrics quantify the cellular microenvironment in the 20\u00b5m ",
-               "expansion zone around each islet (peri-islet region)."),
-        tags$ul(
-          tags$li("Peri-islet composition: proportion of each phenotype among peri-islet cells"),
-          tags$li("Immune infiltration: fraction of immune cells in peri vs core regions"),
-          tags$li("Enrichment z-scores: Poisson model comparing peri-islet proportion to tissue-wide baseline"),
-          tags$li("Distance metrics: minimum distance from islet centroid to nearest immune cell subtypes")
-        ),
-        tags$p("Statistical tests: Kruskal-Wallis for global comparisons, ",
-               "pairwise Wilcoxon with BH correction. Effect sizes: Cohen's d with 95% CI.")
-      )
+      plot_ly(
+        z = mat, x = groups, y = row_labels,
+        type = "heatmap",
+        colorscale = list(c(0, "#f7fbff"), c(0.5, "#6baed6"), c(1, "#08306b")),
+        colorbar = list(title = "Mean\nProportion")
+      ) %>%
+        layout(
+          title = list(text = "Mean Peri-Islet Phenotype Proportions", font = list(size = 14)),
+          xaxis = list(title = ""),
+          yaxis = list(title = "", tickfont = list(size = 10))
+        )
     })
 
     # ---- Download handler ----
@@ -396,7 +504,7 @@ spatial_server <- function(id, prepared) {
         paste0("spatial_neighborhood_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".csv")
       },
       content = function(file) {
-        df <- filtered_df()
+        df <- filtered_nbr()
         if (is.null(df)) df <- data.frame()
         nbr <- get_nbr_columns(colnames(df))
         keep_cols <- c("Case ID", "Donor Status", "islet_key", "islet_diam_um",

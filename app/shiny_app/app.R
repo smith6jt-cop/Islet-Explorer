@@ -356,8 +356,7 @@ ui <- fluidPage(
       tabsetPanel(id = "tabs",
         tabPanel("Plot",
           fluidRow(
-            plot_main_ui("plot"),
-            column(2, ai_assistant_ui("ai"))
+            plot_main_ui("plot", extra_panel = column(2, ai_assistant_ui("ai")))
           )
         ),
         tabPanel("Trajectory",

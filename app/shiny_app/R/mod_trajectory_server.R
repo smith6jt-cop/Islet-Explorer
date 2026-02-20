@@ -723,11 +723,11 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         }
       }
 
-      div(class = "card", style = "padding: 12px; margin-bottom: 20px; border: 2px solid #0066CC;",
+      div(class = "card", style = "padding: 20px; margin-bottom: 20px; border: 2px solid #0066CC;",
         # Header row: title + view mode toggle + close button
-        div(style = "display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;",
-          h5(paste("Islet:", info$islet_key, "(Case", info$case_id, ")"),
-             style = "margin: 0; color: #0066CC; font-size: 14px;"),
+        div(style = "display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;",
+          h4(paste("Islet:", info$islet_key, "(Case", info$case_id, ")"),
+             style = "margin: 0; color: #0066CC; font-size: 20px;"),
           div(
             if (has_cells) {
               tags$div(style = "display: inline-block; margin-right: 8px;",
@@ -743,31 +743,31 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         if (has_cells) {
           conditionalPanel(
             condition = "input.drilldown_view_mode == 'Single Cells'",
-            div(style = "margin-bottom: 8px;",
+            div(style = "margin-bottom: 10px;",
               fluidRow(
-                column(6,
+                column(4,
                   selectInput("drilldown_color_by", "Color by",
                               choices = marker_choices, selected = "phenotype")
                 ),
-                column(6,
+                column(4,
                   checkboxInput("drilldown_show_peri", "Show peri-islet cells", value = TRUE)
                 )
               )
             )
           )
         },
-        # Main content: plot + sidebar stacked vertically to fit col-5
+        # Main content
         conditionalPanel(
           condition = if (has_cells) "input.drilldown_view_mode == 'Boundaries'" else "true",
-          plotOutput("islet_segmentation_view", height = "350px")
+          plotOutput("islet_segmentation_view", height = "550px")
         ),
         if (has_cells) {
           conditionalPanel(
             condition = "input.drilldown_view_mode == 'Single Cells'",
-            plotOutput("islet_drilldown_view", height = "350px"),
-            div(style = "padding: 8px; background-color: #f8f9fa; border-radius: 5px; margin-top: 8px;",
-              h5("Cell Composition", style = "margin-top: 0; font-size: 15px;"),
-              plotOutput("islet_drilldown_summary", height = "180px"),
+            plotOutput("islet_drilldown_view", height = "550px"),
+            div(style = "padding: 12px; background-color: #f8f9fa; border-radius: 5px; margin-top: 10px;",
+              h5("Cell Composition", style = "margin-top: 0; font-size: 16px;"),
+              plotOutput("islet_drilldown_summary", height = "300px"),
               tableOutput("islet_drilldown_table")
             )
           )
@@ -775,30 +775,30 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         # Compact legend (shown in Boundaries mode)
         conditionalPanel(
           condition = if (has_cells) "input.drilldown_view_mode == 'Boundaries'" else "true",
-          div(style = "padding: 8px; background-color: #f8f9fa; border-radius: 5px; margin-top: 8px; font-size: 12px;",
-            div(style = "display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 6px;",
+          div(style = "padding: 10px; background-color: #f8f9fa; border-radius: 5px; margin-top: 10px; font-size: 16px;",
+            div(style = "display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 8px;",
               div(style = "display: flex; align-items: center;",
-                div(style = "width: 20px; height: 3px; background-color: #0066CC; margin-right: 5px;"),
+                div(style = "width: 24px; height: 3px; background-color: #0066CC; margin-right: 6px;"),
                 span("Islet")
               ),
               div(style = "display: flex; align-items: center;",
-                div(style = "width: 20px; height: 3px; background-color: #00CCCC; margin-right: 5px;"),
+                div(style = "width: 24px; height: 3px; background-color: #00CCCC; margin-right: 6px;"),
                 span("+20\u00b5m")
               ),
               div(style = "display: flex; align-items: center;",
-                div(style = "width: 20px; height: 3px; background-color: #CC00CC; margin-right: 5px;"),
+                div(style = "width: 24px; height: 3px; background-color: #CC00CC; margin-right: 6px;"),
                 span("Nerve")
               ),
               div(style = "display: flex; align-items: center;",
-                div(style = "width: 20px; height: 3px; background-color: #CC0000; margin-right: 5px;"),
+                div(style = "width: 24px; height: 3px; background-color: #CC0000; margin-right: 6px;"),
                 span("Capillary")
               ),
               div(style = "display: flex; align-items: center;",
-                div(style = "width: 20px; height: 3px; background-color: #00AA00; margin-right: 5px;"),
+                div(style = "width: 24px; height: 3px; background-color: #00AA00; margin-right: 6px;"),
                 span("Lymphatic")
               ),
               div(style = "display: flex; align-items: center;",
-                div(style = "width: 20px; height: 3px; background-color: #FFD700; margin-right: 5px;"),
+                div(style = "width: 24px; height: 3px; background-color: #FFD700; margin-right: 6px;"),
                 tags$strong("Selected")
               )
             ),

@@ -1,94 +1,100 @@
-# ---------- Spatial Neighborhood module UI ----------
+# ---------- Spatial Tab module UI ----------
 # Exports: spatial_ui(id)
-# 7-card layout for peri-islet neighborhood analysis
+# 5-card layout: Controls, Tissue Scatter + Leiden Panel, Enrichment + Heatmap
 
 spatial_ui <- function(id) {
   ns <- NS(id)
 
+  doc_style <- "background-color: #fff3cd; border: 1px solid #ffc107; border-radius: 5px; padding: 8px 12px; font-size: 13px; color: #856404; margin-bottom: 10px;"
+
   tagList(
-    # ---- Card 1: Overview + Controls ----
+    # ---- Card 1: Controls (full-width) ----
     fluidRow(
       column(12,
         div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible;",
           fluidRow(
-            column(8,
-              h5("Spatial Neighborhood Analysis", style = "margin-top: 0;"),
+            column(6,
+              h5("Spatial Tissue Map", style = "margin-top: 0;"),
               uiOutput(ns("overview_banner"))
             ),
-            column(4, style = "text-align: right; padding-top: 5px;",
-              downloadButton(ns("download_spatial"), "Download CSV")
+            column(6, style = "text-align: right; padding-top: 5px;",
+              downloadButton(ns("download_spatial"), "Download Neighborhood CSV")
             )
           ),
           hr(style = "margin: 10px 0;"),
           fluidRow(
             column(3,
-              selectInput(ns("metric_category"), "Metric Category",
-                          choices = c("Peri-Islet Composition", "Immune Infiltration",
-                                      "Enrichment Z-scores", "Distance Metrics"))
+              uiOutput(ns("donor_selector"))
             ),
-            column(3,
-              uiOutput(ns("feature_selector"))
+            column(2,
+              selectInput(ns("color_by"), "Color by",
+                          choices = c("Phenotype" = "phenotype",
+                                      "Leiden Cluster" = "leiden"),
+                          selected = "phenotype")
+            ),
+            column(2,
+              uiOutput(ns("leiden_res_selector"))
+            ),
+            column(2,
+              radioButtons(ns("region_filter"), "Show Cells",
+                           choices = c("All" = "all",
+                                       "Core + Peri" = "core_peri",
+                                       "Core Only" = "core"),
+                           selected = "all", inline = TRUE)
             ),
             column(3,
               checkboxGroupInput(ns("groups"), "Donor Status",
                                  choices = c("ND", "Aab+", "T1D"),
                                  selected = c("ND", "Aab+", "T1D"), inline = TRUE)
-            ),
-            column(3,
-              sliderInput(ns("diam_range"), "Diameter range (\u00b5m)",
-                          min = 0, max = 500, value = c(0, 350), step = 10)
             )
           )
         )
       )
     ),
 
-    # ---- Cards 2 & 3: Feature Distribution + Core vs Peri ----
+    # ---- Cards 2 & 3: Tissue Scatter (col-8) + Leiden Panel (col-4) ----
     fluidRow(
-      column(6,
-        div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible;",
-          h5("Feature Distribution by Disease Stage"),
-          plotlyOutput(ns("distribution_plot"), height = "380px")
+      column(8,
+        div(class = "card", style = "padding: 15px; margin-bottom: 15px;",
+          h5("Tissue Scatter Plot"),
+          plotOutput(ns("tissue_scatter"), height = "800px")
         )
       ),
-      column(6,
+      column(4,
         div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible;",
-          h5("Core vs Peri-Islet Comparison"),
-          plotlyOutput(ns("core_peri_plot"), height = "380px")
+          h5("Leiden Clustering (Islet-Level)"),
+          uiOutput(ns("leiden_not_available")),
+          plotlyOutput(ns("leiden_umap"), height = "380px"),
+          hr(style = "margin: 8px 0;"),
+          h5("Cluster Composition", style = "font-size: 15px;"),
+          plotlyOutput(ns("cluster_composition"), height = "350px")
         )
       )
     ),
 
-    # ---- Cards 4 & 5: Peri-islet Heatmap + Immune Enrichment ----
+    # ---- Cards 4 & 5: Enrichment + Phenotype Heatmap ----
     fluidRow(
-      column(6,
-        div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible;",
-          h5("Peri-Islet Phenotype Heatmap"),
-          plotlyOutput(ns("phenotype_heatmap"), height = "420px")
-        )
-      ),
       column(6,
         div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible;",
           h5("Immune Enrichment by Disease Stage"),
-          plotlyOutput(ns("enrichment_plot"), height = "420px")
-        )
-      )
-    ),
-
-    # ---- Cards 6 & 7: Pseudotime Correlation + Statistics ----
-    fluidRow(
-      column(6,
-        div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible;",
-          h5("Pseudotime Correlation"),
-          plotlyOutput(ns("pseudotime_plot"), height = "380px")
+          div(style = doc_style,
+            "These z-scores compare peri-islet immune cell proportions against ",
+            "tissue-wide background using a Poisson model. Higher z indicates ",
+            "local enrichment of that cell type near islets relative to the ",
+            "tissue as a whole."
+          ),
+          plotlyOutput(ns("enrichment_plot"), height = "380px")
         )
       ),
       column(6,
         div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible;",
-          h5("Statistical Tests"),
-          tableOutput(ns("test_table")),
-          hr(style = "margin: 8px 0;"),
-          uiOutput(ns("methods_text"))
+          h5("Peri-Islet Phenotype Heatmap"),
+          div(style = doc_style,
+            "Shows mean proportion of each cell type in the 20\u00b5m peri-islet ",
+            "expansion zone only, NOT core islet composition (shown in the Plot tab). ",
+            "This reveals the cellular microenvironment surrounding each islet."
+          ),
+          plotlyOutput(ns("phenotype_heatmap"), height = "420px")
         )
       )
     )

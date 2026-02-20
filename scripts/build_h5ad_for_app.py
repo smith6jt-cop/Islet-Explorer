@@ -346,6 +346,39 @@ def build_enriched_h5ad(trajectory_path, groovy_dir, donor_key_path, output_path
     else:
         print(f"\n4.5. Neighborhood metrics not found at {nbr_path} (skipping)")
 
+    # Step 4.7: Merge Leiden clustering from islets_core_clustered.h5ad
+    clust_path = os.path.join(os.path.dirname(output_path), '..', 'islet_analysis', 'islets_core_clustered.h5ad')
+    if os.path.exists(clust_path):
+        print(f"\n4.7. Merging Leiden clustering: {clust_path}")
+        clust = ad.read_h5ad(clust_path)
+        leiden_cols = [c for c in clust.obs.columns if c.startswith("leiden_")]
+        print(f"     Leiden columns: {leiden_cols}")
+
+        # Merge Leiden cluster assignments by index alignment (both indexed by islet_id)
+        for col in leiden_cols:
+            adata.obs[col] = clust.obs[col].astype(str).reindex(adata.obs.index)
+
+        # Store UMAP coords from .obsm['X_umap'] as leiden_umap_1/2 in .obs
+        if 'X_umap' in clust.obsm:
+            umap_df = pd.DataFrame(
+                clust.obsm['X_umap'],
+                index=clust.obs.index,
+                columns=['leiden_umap_1', 'leiden_umap_2']
+            )
+            for col in umap_df.columns:
+                adata.obs[col] = umap_df[col].reindex(adata.obs.index)
+            print(f"     Merged {len(leiden_cols)} Leiden columns + 2 UMAP coords")
+        else:
+            # Fallback: check if umap_1/umap_2 are in .obs
+            if all(c in clust.obs.columns for c in ['umap_1', 'umap_2']):
+                adata.obs['leiden_umap_1'] = clust.obs['umap_1'].reindex(adata.obs.index)
+                adata.obs['leiden_umap_2'] = clust.obs['umap_2'].reindex(adata.obs.index)
+                print(f"     Merged {len(leiden_cols)} Leiden columns + 2 UMAP coords (from .obs)")
+            else:
+                print(f"     Merged {len(leiden_cols)} Leiden columns (no UMAP coords found)")
+    else:
+        print(f"\n4.7. Clustered H5AD not found at {clust_path} (skipping Leiden merge)")
+
     # Store provenance metadata
     adata.uns['data_provenance'] = {
         'pipeline': 'Phase 2: Data Audit, QC Validation & Pipeline Formalization',

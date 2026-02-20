@@ -330,7 +330,7 @@ load_master_h5ad <- function(path) {
     # Extract neighborhood metrics from .obs (added by compute_neighborhood_metrics.py → build_h5ad_for_app.py)
     neighborhood_df <- tryCatch({
       obs <- as.data.frame(ad$obs)
-      nbr_cols <- grep("^peri_prop_|^peri_count_|^immune_|^cd8_|^tcell_|^enrich_z_|^min_dist_|^total_cells_peri|^total_cells_core|^immune_count_|^dpt_pseudotime$",
+      nbr_cols <- grep("^peri_prop_|^peri_count_|^immune_|^cd8_|^tcell_|^enrich_z_|^min_dist_|^total_cells_peri|^total_cells_core|^immune_count_|^dpt_pseudotime$|^leiden_",
                        colnames(obs), value = TRUE)
       if (length(nbr_cols) > 0 && "imageid" %in% colnames(obs) && "base_islet_id" %in% colnames(obs)) {
         nbr <- obs[, c("imageid", "base_islet_id", nbr_cols), drop = FALSE]

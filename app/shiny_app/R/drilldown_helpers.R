@@ -115,7 +115,7 @@ render_islet_drilldown_plot <- function(info, cells, color_by = "phenotype", sho
       ggplot2::geom_point(
         data = cells,
         ggplot2::aes(x = x_px, y = y_px, color = phenotype, shape = factor(pt_shape)),
-        size = 1.8, alpha = 0.8,
+        size = 3.0, alpha = 0.8,
         inherit.aes = FALSE
       ) +
       ggplot2::scale_color_manual(values = pal, name = "Phenotype") +
@@ -131,7 +131,7 @@ render_islet_drilldown_plot <- function(info, cells, color_by = "phenotype", sho
       ggplot2::geom_point(
         data = cells,
         ggplot2::aes(x = x_px, y = y_px, color = marker_val, shape = factor(pt_shape)),
-        size = 1.8, alpha = 0.8,
+        size = 3.0, alpha = 0.8,
         inherit.aes = FALSE
       ) +
       ggplot2::scale_color_viridis_c(option = "inferno", name = color_by, na.value = "gray80") +
@@ -145,7 +145,7 @@ render_islet_drilldown_plot <- function(info, cells, color_by = "phenotype", sho
       ggplot2::geom_point(
         data = cells,
         ggplot2::aes(x = x_px, y = y_px),
-        color = "gray40", size = 1.5, alpha = 0.7,
+        color = "gray40", size = 2.5, alpha = 0.7,
         inherit.aes = FALSE
       ) +
       ggplot2::labs(title = paste(info$islet_key, "- Single Cells"))
@@ -154,8 +154,9 @@ render_islet_drilldown_plot <- function(info, cells, color_by = "phenotype", sho
   p +
     ggplot2::theme(
       legend.position = "right",
-      legend.key.size = ggplot2::unit(0.4, "cm"),
-      legend.text = ggplot2::element_text(size = 8)
+      legend.key.size = ggplot2::unit(0.9, "cm"),
+      legend.title = ggplot2::element_text(size = 16, face = "bold"),
+      legend.text = ggplot2::element_text(size = 14)
     )
 }
 
@@ -196,7 +197,7 @@ render_drilldown_summary <- function(cells) {
       ggplot2::scale_alpha_manual(values = c("core" = 1.0, "peri" = 0.5), name = "Region") +
       ggplot2::coord_flip() +
       ggplot2::labs(x = NULL, y = "Cell count") +
-      ggplot2::theme_minimal(base_size = 11) +
+      ggplot2::theme_minimal(base_size = 16) +
       ggplot2::theme(legend.position = "bottom")
   } else {
     ggplot2::ggplot(counts, ggplot2::aes(x = phenotype, y = count, fill = phenotype)) +
@@ -204,6 +205,6 @@ render_drilldown_summary <- function(cells) {
       ggplot2::scale_fill_manual(values = pal, guide = "none") +
       ggplot2::coord_flip() +
       ggplot2::labs(x = NULL, y = "Cell count") +
-      ggplot2::theme_minimal(base_size = 11)
+      ggplot2::theme_minimal(base_size = 16)
   }
 }

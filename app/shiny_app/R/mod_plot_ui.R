@@ -9,9 +9,8 @@ plot_sidebar_ui <- function(id) {
   div(class = "sidebar", style = "height: 100%;",
     h4("Data & Filters"),
     selectInput(ns("mode"), "Focus",
-                choices = c("Markers", "Targets", "Composition"),
+                choices = c("Targets", "Composition"),
                 selected = "Composition"),
-    uiOutput(ns("region_selector")),
     uiOutput(ns("dynamic_selector")),
     uiOutput(ns("metric_selector")),
     hr(),
@@ -47,7 +46,7 @@ plot_sidebar_ui <- function(id) {
 
 #' Main content UI for the Plot tab
 #' Left card: scatter plot with controls. Right card: distribution comparison.
-plot_main_ui <- function(id) {
+plot_main_ui <- function(id, extra_panel = NULL) {
   ns <- NS(id)
   tagList(
     column(10,
@@ -96,7 +95,7 @@ plot_main_ui <- function(id) {
         )
       )
     ),
-    # Right card: Distribution comparison + embedded segmentation viewer
+    # Right card: Distribution comparison
     column(5,
       div(class = "card",
           style = "margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; display: flex; flex-direction: column; gap: 12px;",
@@ -106,7 +105,12 @@ plot_main_ui <- function(id) {
           br(),
           uiOutput(ns("dist_ui"))
         )
-      ),
+      )
+    ),
+    # Extra panel (e.g., AI chat) injected between cards and full-width panels
+    extra_panel,
+    # Full-width card below both plot cards: segmentation/drill-down viewer
+    column(12,
       uiOutput(ns("segmentation_viewer_panel"))
     )
   )
