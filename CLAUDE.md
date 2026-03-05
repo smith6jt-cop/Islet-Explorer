@@ -75,11 +75,11 @@ These are read by the root-level `renderPlot` outputs in `app.R`.
 
 ## Key Data Files
 
-- `data/islet_explorer.h5ad` - **Primary app data** (~70 MB, 5,023 islets, groovy + trajectory + donor + neighborhood + Leiden)
+- `data/islet_explorer.h5ad` - **Primary app data** (~70 MB, 5,214 islets, groovy + trajectory + donor + neighborhood + Leiden)
 - `data/master_results.xlsx` - Aggregated islet-level data (composition, markers, targets) -- Excel fallback
-- `data/adata_ins_root.h5ad` - Trajectory h5ad (5,023 islets, 31 vars, DPT pseudotime, UMAP)
-- `data/neighborhood_metrics.csv` - Per-islet peri-islet metrics (5,023 rows, 62 columns)
-- `data/cells/*.csv` - Per-islet single-cell CSVs for drill-down (~5,023 files, ~203 MB total)
+- `data/adata_ins_root.h5ad` - Trajectory h5ad (5,214 islets, 31 vars, DPT pseudotime, UMAP)
+- `data/neighborhood_metrics.csv` - Per-islet peri-islet metrics (5,214 rows, 62 columns)
+- `data/cells/*.csv` - Per-islet single-cell CSVs for drill-down (~5,214 files, ~203 MB total)
 - `data/donors/*.csv` - Per-donor tissue-wide cell CSVs for Spatial tab scatter (15 files, ~78 MB total)
 - `data/islet_spatial_lookup.csv` - Centroid coordinates for segmentation viewer
 - `data/json/*.geojson` / `data/gson/*.geojson.gz` - QuPath segmentation boundaries
@@ -93,17 +93,17 @@ These are read by the root-level `renderPlot` outputs in `app.R`.
 single_cell_analysis/CODEX_scvi_BioCov_phenotyped_newDuctal.h5ad  (2.6M cells, 31 markers)
   |
   |-- scripts/reaggregate_islets.py  (one-stop: aggregate + trajectory + Leiden)
-  |     -> islet_analysis/islets_core_fixed.h5ad  (5,023 islets, min_cells=0, require_paired=True)
-  |     -> islet_analysis/islets_peri_fixed.h5ad   (5,023 peri-islet)
-  |     -> islet_analysis/islets_merged_fixed.h5ad (5,023 paired core+peri)
+  |     -> islet_analysis/islets_core_fixed.h5ad  (5,214 islets, min_cells=0, require_paired=True)
+  |     -> islet_analysis/islets_peri_fixed.h5ad   (5,214 peri-islet)
+  |     -> islet_analysis/islets_merged_fixed.h5ad (5,214 paired core+peri)
   |     -> data/adata_ins_root.h5ad  (+ pseudotime + UMAP)
   |     -> islet_analysis/islets_core_clustered.h5ad  (+ Leiden at 4 resolutions)
   |
   |-- scripts/compute_neighborhood_metrics.py
-  |     -> data/neighborhood_metrics.csv  (5,023 rows, 62 cols)
+  |     -> data/neighborhood_metrics.csv  (5,214 rows, 62 cols)
   |
   |-- scripts/extract_per_islet_cells.py
-  |     -> data/cells/*.csv  (5,023 files, 37 cols: coords, phenotype, region, 31 markers)
+  |     -> data/cells/*.csv  (5,214 files, 37 cols: coords, phenotype, region, 31 markers)
   |
   |-- scripts/extract_per_donor_tissue.py
   |     -> data/donors/*.csv  (15 files, 5 cols: X/Y coords, phenotype, cell_region, islet_name)
@@ -146,11 +146,11 @@ conda activate scvi-env  # scanpy, anndata, scvi-tools, sklearn, scib-metrics, s
 
 ### Data Flow
 
-`compute_neighborhood_metrics.py` reads single-cell H5AD -> `neighborhood_metrics.csv` (5,023 rows) -> merged into `islet_explorer.h5ad` `.obs` by `build_h5ad_for_app.py` (step 4.5) -> extracted in `data_loading.R` `load_master_h5ad()` -> merged into `comp` by `prep_data()` -> available in Plot composition selector (4 option groups) + Statistics tab + Spatial tab.
+`compute_neighborhood_metrics.py` reads single-cell H5AD -> `neighborhood_metrics.csv` (5,214 rows) -> merged into `islet_explorer.h5ad` `.obs` by `build_h5ad_for_app.py` (step 4.5) -> extracted in `data_loading.R` `load_master_h5ad()` -> merged into `comp` by `prep_data()` -> available in Plot composition selector (4 option groups) + Statistics tab + Spatial tab.
 
 ### Key Details
 
-- All 5,023 islets have peri-islet data (100% coverage with min_cells=0 + require_paired=True)
+- All 5,214 islets have peri-islet data (100% coverage with min_cells=0 + require_paired=True)
 - Column naming sanitizes phenotype names: spaces -> `_`, `+` -> `plus` (e.g., `peri_prop_ECADplus`)
 - Immune signal validated: T1D immune_frac_peri (0.155) > Aab+ (0.106) > ND (0.069)
 - Plot composition selector now has 4 option groups: Hormone Fractions, Cell Type Proportions, Peri-Islet Proportions, Immune Metrics
@@ -161,7 +161,7 @@ conda activate scvi-env  # scanpy, anndata, scvi-tools, sklearn, scib-metrics, s
 
 1. **Controls** (full-width) -- donor selector, color-by (phenotype/Leiden), Leiden resolution dropdown, region filter (All/Core+Peri/Core), donor status checkboxes
 2. **Tissue Scatter** (col-8) -- ggplot2 `renderPlot` (NOT plotly) showing ~177K cells/donor. Background tissue cells in light grey; foreground (core/peri) colored by phenotype or Leiden cluster. `coord_fixed() + scale_y_reverse()` for spatial orientation. Height: 800px.
-3. **Leiden Panel** (col-4) -- plotly UMAP of 5,023 islets colored by selected Leiden resolution (0.3/0.5/0.8/1.0) + stacked bar chart of mean phenotype composition per cluster
+3. **Leiden Panel** (col-4) -- plotly UMAP of 5,214 islets colored by selected Leiden resolution (0.3/0.5/0.8/1.0) + stacked bar chart of mean phenotype composition per cluster
 4. **Enrichment** (col-6) -- grouped bar of Poisson enrichment z-scores by disease stage, with documentation banner explaining peri-islet vs tissue-wide context
 5. **Phenotype Heatmap** (col-6) -- mean peri-islet phenotype proportions x 3 stages, with documentation banner explaining the 20um expansion zone
 
@@ -179,14 +179,14 @@ Wired as `spatial_server("spatial", prepared)` -- no sidebar sharing, inline con
 - Uses `ggplot2::renderPlot` NOT plotly -- 177K points would freeze plotly
 - Foreground/background layering: tissue cells at `size=0.15, alpha=0.3` in grey; core/peri at `size=0.4, alpha=0.6` in color
 - Leiden coloring maps `islet_name -> cluster` via islet-level lookup from `prepared()$comp`
-- Donor 6533 has 0 core/peri cells (no islet annotations in single-cell H5AD) -- shows tissue background only
+- Donor 6533 has 191 islets (9,815 core + 13,840 peri cells) — fully integrated after patching Parent annotations in canonical H5AD
 
 ## Single-Cell Drill-Down (Phase 8, Feb 2026)
 
 ### Per-Islet Cell Data
 
 `extract_per_islet_cells.py` reads single-cell H5AD -> outputs `data/cells/{imageid}_Islet_{N}.csv`:
-- 5,023 files (matching islets with cell data), ~203 MB total
+- 5,214 files (matching islets with cell data), ~203 MB total
 - 37 columns: `X_centroid`, `Y_centroid`, `phenotype`, `cell_region` (core/peri), `Cell Area`, `Nucleus Area`, + 31 protein markers
 - File naming matches `combined_islet_id` from `islet_spatial_lookup.csv`
 
@@ -307,14 +307,14 @@ Required env vars: `KEY` (API key), `BASE` (API base URL, optional).
 - `ggplot2::coord_sf()` and `ggplot2::geom_sf()` - these are ggplot2 functions, NOT sf functions
 - `PIXEL_SIZE_UM = 0.3774` - micrometers per pixel conversion constant
 - UMAP "Selected Feature" uses continuous viridis (inferno) colormap scaled to data min/max
-- Donor status colors: ND = green (#2ca02c), Aab+ = yellow (#ffcc00), T1D = purple (#9467bd)
+- Donor status colors: ND = steel blue (#4477AA), Aab+ = burnt umber (#CC6633), T1D = forest green (#228833) — Paul Tol bright variant, colorblind-safe, centralized as `DONOR_COLORS` in `00_globals.R`
 - Phenotyping uses Rules1 (`data/phenotype_rules.csv`) - 19 phenotypes, 18 markers
 - **Donor metadata**: Comes from `islets_core_fixed.h5ad` obs, NOT from `CODEX_Pancreas_Donors.xlsx` (different cohort)
 - **H5AD obs index**: `islets_core_fixed.h5ad` index name is `islet_id` -- same as column, use `reset_index(drop=True)`
 - **Case ID zero-padding**: GeoJSON files use `0112.geojson` (4-digit padded), data uses `112` (unpadded). `load_case_geojson()` and click handlers use `sprintf("%04d", ...)` fallback
 - **Log-scale with zeros**: Use `scales::pseudo_log_trans(base=10)` instead of `scale_y_log10()` -- zeros map to 0 (visible) instead of -Infinity (dropped)
 - **Plot defaults**: Point size = 3.0, transparency = 0.6
-- **Peri-islet data guard**: Always check `total_cells_peri > 0` before using peri metrics (all 5,023 islets have peri data with require_paired=True, but guard remains for robustness)
+- **Peri-islet data guard**: Always check `total_cells_peri > 0` before using peri metrics (all 5,214 islets have peri data with require_paired=True, but guard remains for robustness)
 - **Column name sanitization**: Phenotype names use `_` for spaces, `plus` for `+` in peri-islet columns
 - **Single-cell Parent column**: `Islet_N` = core cells, `Islet_N_exp20um` = peri-islet cells
 - **CSS overflow for cards with dropdowns**: `selectInput` menus extend below their container. Add `overflow: visible;` to card styles or dropdowns get clipped behind cards.
@@ -322,7 +322,7 @@ Required env vars: `KEY` (API key), `BASE` (API base URL, optional).
 - **Large scatter plots (>50K points)**: Use `ggplot2::renderPlot()` NOT `plotlyOutput()` -- plotly cannot handle 100K+ points interactively. Use small `size` (0.3-0.5) and low `alpha` (0.3-0.6).
 - **Tissue scatter coordinate convention**: `coord_fixed() + scale_y_reverse()` matches microscopy convention (y increases downward, spatial proportions preserved)
 - **Leiden cluster mapping for cells**: Islet-level Leiden assignments map to single cells via `islet_name` column lookup. Tissue background cells without an islet get `cluster = "tissue"` (grey).
-- **Per-donor tissue CSVs**: `data/donors/{imageid}.csv` with 5 columns (X_centroid, Y_centroid, phenotype, cell_region, islet_name). `cell_region` = core/peri/tissue. Donor 6533 has 0 core/peri cells.
+- **Per-donor tissue CSVs**: `data/donors/{imageid}.csv` with 5 columns (X_centroid, Y_centroid, phenotype, cell_region, islet_name). `cell_region` = core/peri/tissue.
 - **Leiden in H5AD**: 4 resolution columns (`leiden_0.3/0.5/0.8/1.0`) + 2 UMAP coords (`leiden_umap_1/2`). Extracted via `^leiden_` regex in `data_loading.R`.
 
 ## Deployment Architecture

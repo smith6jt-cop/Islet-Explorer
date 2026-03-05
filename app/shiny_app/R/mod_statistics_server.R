@@ -21,13 +21,18 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description)
       alpha_num <- as.numeric(input$alpha)
       is_parametric <- identical(input$test_type, "Parametric")
 
-      # ---- Outlier removal ----
+      # ---- Outlier removal (per donor group, >3 SD) ----
       if (isTRUE(input$stats_remove_outliers)) {
-        value_mean <- mean(rdf$value, na.rm = TRUE)
-        value_sd <- sd(rdf$value, na.rm = TRUE)
-        if (is.finite(value_sd) && value_sd > 0) {
-          rdf <- rdf[abs(rdf$value - value_mean) <= (3 * value_sd) | is.na(rdf$value), , drop = FALSE]
+        keep <- rep(TRUE, nrow(rdf))
+        for (grp in unique(rdf$donor_status)) {
+          idx <- which(rdf$donor_status == grp)
+          if (length(idx) < 3) next
+          grp_mean <- mean(rdf$value[idx], na.rm = TRUE)
+          grp_sd   <- sd(rdf$value[idx], na.rm = TRUE)
+          if (!is.finite(grp_sd) || grp_sd == 0) next
+          keep[idx] <- is.na(rdf$value[idx]) | abs(rdf$value[idx] - grp_mean) <= (3 * grp_sd)
         }
+        rdf <- rdf[keep, , drop = FALSE]
       }
 
       # ---- Diameter range filter (from Stats inline controls) ----
@@ -264,7 +269,7 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description)
                       "Select a feature in the sidebar, then click 'Run Statistics'."))
       }
 
-      p_col <- if (is.na(st$global_p)) "#999" else if (st$global_p < st$alpha) "#d62728" else "#2ca02c"
+      p_col <- if (is.na(st$global_p)) "#999" else if (st$global_p < st$alpha) "#d62728" else "#2e7d32"
       eta_label <- if (is.na(st$eta_sq)) "N/A" else sprintf("%.3f", st$eta_sq)
 
       tags$div(style = "display: flex; gap: 15px; align-items: center; flex-wrap: wrap;",
@@ -512,7 +517,7 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description)
       g <- ggplot(rdf, aes(x = age_num, y = value, color = donor_status)) +
         geom_point(alpha = 0.4, size = 1.5) +
         geom_smooth(method = "lm", se = FALSE, linewidth = 0.8) +
-        scale_color_manual(values = c("ND" = "#2ca02c", "Aab+" = "#ffcc00", "T1D" = "#9467bd")) +
+        scale_color_manual(values = DONOR_COLORS) +
         labs(x = "Donor Age (years)", y = st$feature_name, color = NULL,
              title = "Age-Feature Relationship") +
         theme_minimal(base_size = 12) +
@@ -569,7 +574,7 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description)
 
       g <- ggplot(auc_df, aes(x = donor_status, y = auc, fill = donor_status)) +
         geom_col(width = 0.7, color = "black", alpha = 0.8) +
-        scale_fill_manual(values = c("ND" = "#2ca02c", "Aab+" = "#ffcc00", "T1D" = "#9467bd")) +
+        scale_fill_manual(values = DONOR_COLORS) +
         labs(x = "Donor Status", y = "Area Under Curve (AUC)",
              title = "Integrated Area by Donor Group") +
         theme_minimal(base_size = 14) +

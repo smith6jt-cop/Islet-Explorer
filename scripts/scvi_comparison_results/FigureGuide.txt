@@ -1,0 +1,34 @@
+  Figure Guide
+
+  ┌───────┬────────────────────────────────┬─────────────────────────────────────────────────────────────────────────────┐
+  │ Panel │             Shows              │                                 Key Finding                                 │
+  ├───────┼────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────┤
+  │ A     │ PCA colored by donor           │ Original: donors well-mixed. No covariates: clear donor clusters            │
+  ├───────┼────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────┤
+  │ B     │ PCA colored by disease         │ Both retain disease signal, but original is cleaner along PC0               │
+  ├───────┼────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────┤
+  │ C     │ Per-dimension eta²             │ No-covariate model has much higher donor variance (dim 4 = 0.97!)           │
+  ├───────┼────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────┤
+  │ D     │ Donor silhouette distributions │ Original centered near 0 (mixed); no-covariate shifted to +0.25 (clustered) │
+  ├───────┼────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────┤
+  │ E     │ k-NN neighbor mixing           │ Original: 60% same-donor; no covariates: 85% — donors much more isolated    │
+  ├───────┼────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────┤
+  │ F     │ Summary metrics                │ Original wins 4/5 key metrics (starred)                                     │
+  ├───────┼────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────┤
+  │ G     │ Original — pseudotime gradient │ Smooth viridis gradient along PC0 — biology dominates                       │
+  ├───────┼────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────┤
+  │ H     │ No covariates — pseudotime     │ No clear gradient in PC0 — donor effects bury the biology                   │
+  └───────┴────────────────────────────────┴─────────────────────────────────────────────────────────────────────────────┘
+
+  Panels G vs H are the most visually compelling — they directly show that the original model preserves a smooth pseudotime trajectory while removing
+  covariates causes donor identity to dominate the latent space.
+
+  A suggested supplemental figure caption:
+
+  Supplemental Figure X. scVI model comparison: effect of Age/Gender categorical covariates on latent space quality. The original model (blue) included
+  Age and Gender as categorical covariates, which uniquely identify each of the 15 nPOD donors. (A) PCA of the islet-level latent space colored by donor
+  identity shows improved donor mixing in the original model. (B) Disease status (ND/Aab+/T1D) separation is preserved in both models. (C) Per-dimension
+  eta² reveals that the no-covariate model allocates substantially more latent variance to donor identity rather than disease biology. (D) Distribution of
+   per-islet donor silhouette scores; lower values indicate better donor mixing. (E) Fraction of k=15 nearest neighbors from the same donor; dashed line
+  indicates random expectation. (F) Summary of key metrics; asterisk indicates the better model. (G,H) Pseudotime gradient along PCA axes; the original
+  model shows a smooth disease-progression gradient along PC0, while the no-covariate model buries this signal under donor effects.

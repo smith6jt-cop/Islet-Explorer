@@ -8,9 +8,9 @@ plot_sidebar_ui <- function(id) {
   ns <- NS(id)
   div(class = "sidebar", style = "height: 100%;",
     h4("Data & Filters"),
-    selectInput(ns("mode"), "Focus",
-                choices = c("Targets", "Composition"),
-                selected = "Composition"),
+    selectInput(ns("mode"), "Data Layer",
+                choices = c("Microenvironment", "Cell Populations"),
+                selected = "Cell Populations"),
     uiOutput(ns("dynamic_selector")),
     uiOutput(ns("metric_selector")),
     hr(),
@@ -50,37 +50,44 @@ plot_main_ui <- function(id, extra_panel = NULL) {
   ns <- NS(id)
   tagList(
     column(10,
-      div(style = "background-color: #e8f4fd; border: 1px solid #b8daff; border-radius: 5px; padding: 10px 15px; margin-bottom: 15px; color: #004085; font-size: 13px;",
-        tags$strong("Tip:"), " Enable \"Show individual points\" then click any point on the ", tags$strong("Islet Size Distribution"), " scatter plot to view its segmentation map below."
+      div(style = "display: flex; gap: 10px; margin-bottom: 15px;",
+        div(style = "flex: 1; background-color: #e8f4fd; border: 1px solid #b8daff; border-radius: 5px; padding: 10px 12px; color: #004085; font-size: 13px;",
+          "Enable \"Show individual points\" then click any point on the ",
+          tags$strong("Islet Size Distribution"), " scatter to view its segmentation map below."
+        ),
+        div(style = "flex: 1; background-color: #e8f4fd; border: 1px solid #b8daff; border-radius: 5px; padding: 10px 12px; color: #004085; font-size: 13px;",
+          "Enable \"Show individual points\" and set \"Color points by\" to Donor ID, then click a donor in the legend to show/hide it."
+        ),
+        div(style = "flex: 1; background-color: #e8f4fd; border: 1px solid #b8daff; border-radius: 5px; padding: 10px 12px; color: #004085; font-size: 13px;",
+          "Use browser zoom (Ctrl +/\u2212) to resize cards. Scroll within cards to reveal hidden controls."
+        )
       )
     ),
     # Left card: Main scatter plot
     column(5,
       div(class = "card",
-          style = "margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; height: calc(100vh - 100px); display: flex; flex-direction: column; gap: 12px;",
+          style = "margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; height: clamp(550px, 65vh - 75px, 1200px); display: flex; flex-direction: column; gap: 12px;",
         h5("Islet Size Distribution", style = "margin-top: 0; color: #333;"),
         div(style = "flex: 1; min-height: 0; display: flex;",
           plotlyOutput(ns("plt"), height = "100%")
         ),
-        div(style = "flex: 0 0 auto; display: flex; flex-direction: column; gap: 10px;",
+        div(style = "flex: 0 0 auto; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; max-height: 35%; border-top: 1px solid #eee; padding-top: 10px;",
           fluidRow(
-            column(4,
+            column(6,
               sliderInput(ns("binwidth"), "Diameter bin width (\u00b5m)",
                           min = 1, max = 75, value = 50, step = 1),
               sliderInput(ns("diam_range"), "Islet diameter range (\u00b5m)",
-                          min = 0, max = 500, value = c(0, 350), step = 10)
-            ),
-            column(4,
-              sliderInput(ns("pt_size"), "Point size",
-                          min = 0.3, max = 4.0, value = 3.0, step = 0.1),
-              sliderInput(ns("pt_alpha"), "Point transparency",
-                          min = 0.05, max = 1.0, value = 0.6, step = 0.05)
-            ),
-            column(4,
+                          min = 0, max = 500, value = c(0, 350), step = 10),
               selectInput(ns("plot_color_by"), "Color points by:",
                           choices = c("Donor Status" = "donor_status",
                                       "Donor ID" = "donor_id"),
-                          selected = "donor_status"),
+                          selected = "donor_status")
+            ),
+            column(6,
+              sliderInput(ns("pt_size"), "Point size",
+                          min = 0.3, max = 4.0, value = 3.0, step = 0.1),
+              sliderInput(ns("pt_alpha"), "Point transparency",
+                          min = 0.05, max = 1.0, value = 0.6, step = 0.05),
               radioButtons(ns("add_smooth"), "Trend line",
                            choices = c("None", "LOESS"),
                            selected = "None", inline = TRUE)
@@ -98,10 +105,10 @@ plot_main_ui <- function(id, extra_panel = NULL) {
     # Right card: Distribution comparison
     column(5,
       div(class = "card",
-          style = "margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; display: flex; flex-direction: column; gap: 12px;",
+          style = "margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; height: clamp(550px, 65vh - 75px, 1200px); display: flex; flex-direction: column; gap: 12px;",
         h5("Distribution Comparison", style = "margin-top: 0; color: #333;"),
-        div(style = "overflow-y: auto;",
-          plotlyOutput(ns("dist"), height = 400),
+        div(style = "flex: 1; min-height: 0; overflow-y: auto;",
+          plotlyOutput(ns("dist"), height = "100%"),
           br(),
           uiOutput(ns("dist_ui"))
         )

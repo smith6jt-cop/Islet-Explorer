@@ -13,6 +13,9 @@ library(jsonlite)
 # GeoJSON polygons use pixel coordinates, while islet_spatial_lookup.csv uses micrometers
 PIXEL_SIZE_UM <- 0.3774  # micrometers per pixel
 
+# Donor status color palette (Paul Tol bright variant: colorblind-safe triad)
+DONOR_COLORS <- c("ND" = "#4477AA", "Aab+" = "#CC6633", "T1D" = "#228833")
+
 # Load sf package for GeoJSON/spatial operations (islet segmentation viewer)
 SF_AVAILABLE <- FALSE
 suppressPackageStartupMessages({

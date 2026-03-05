@@ -53,7 +53,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
     # ===========================================================================
 
     output$dynamic_selector <- renderUI({
-      if (identical(input$mode, "Targets")) {
+      if (identical(input$mode, "Microenvironment")) {
         classes <- prepared()$targets_all %>%
           dplyr::pull(class) %>% unique() %>% na.omit() %>% sort()
         if (length(classes) == 0) classes <- character(0)
@@ -70,7 +70,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         } else {
           NULL
         }
-        selectInput(ns("which"), "Target class & region", choices = choices, selected = sel)
+        selectInput(ns("which"), "Structure & Region", choices = choices, selected = sel)
       } else {
         base_choices <- c("Ins_frac" = "Ins_any", "Glu_frac" = "Glu_any", "Stt_frac" = "Stt_any")
         comp_cols <- colnames(prepared()$comp)
@@ -82,10 +82,10 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
           comp_cols
         )
         if (length(prop_cols) > 0 || length(peri_prop_cols) > 0 || length(immune_metric_cols) > 0) {
-          choices <- list("Hormone Fractions" = base_choices)
+          choices <- list("Hormone Positivity (single-marker)" = base_choices)
           if (length(prop_cols) > 0) {
             prop_labels <- gsub("^prop_", "", prop_cols)
-            choices[["Cell Type Proportions"]] <- setNames(prop_cols, prop_labels)
+            choices[["Phenotype Proportions (multi-marker)"]] <- setNames(prop_cols, prop_labels)
           }
           if (length(peri_prop_cols) > 0) {
             peri_labels <- gsub("^peri_prop_", "", peri_prop_cols)
@@ -107,13 +107,13 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         } else {
           choices <- base_choices
         }
-        selectInput(ns("which"), "Composition measure", choices = choices,
+        selectInput(ns("which"), "Population Measure", choices = choices,
                     selected = if (!is.null(input$which) && input$which %in% unlist(choices)) input$which else "Ins_any")
       }
     })
 
     output$metric_selector <- renderUI({
-      if (identical(input$mode, "Targets")) {
+      if (identical(input$mode, "Microenvironment")) {
         radioButtons(ns("metric"), "Metric",
                      choices = c("Counts", "Density"),
                      selected = "Density", inline = TRUE)
@@ -167,7 +167,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
     # ---- raw_df_base: per-islet dataset aligned with current selections ----
     raw_df_base <- reactive({
       pd <- prepared()
-      mode <- input$mode %||% "Composition"
+      mode <- input$mode %||% "Cell Populations"
       groups <- input$groups
       if (is.null(groups) || !length(groups)) {
         groups <- c("ND", "Aab+", "T1D")
@@ -176,7 +176,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       if (is.null(w) || length(w) == 0) w <- NA_character_
 
       # Resolve defaults before branching so initial renders don't error
-      if (identical(mode, "Composition")) {
+      if (identical(mode, "Cell Populations")) {
         valid_comp <- c("Ins_any", "Glu_any", "Stt_any",
                          grep("^prop_|^peri_prop_", colnames(pd$comp), value = TRUE),
                          intersect(c("immune_frac_peri", "immune_frac_core", "immune_ratio",
@@ -185,7 +185,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
             !(w %in% valid_comp)) {
           w <- "Ins_any"
         }
-      } else if (identical(mode, "Targets")) {
+      } else if (identical(mode, "Microenvironment")) {
         if (!is.character(w) || length(w) != 1 || !nzchar(w)) {
           candidate_classes <- pd$targets_all %>%
             dplyr::pull(class) %>% unique() %>% na.omit() %>% sort()
@@ -193,7 +193,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         }
       }
 
-      if (identical(mode, "Targets")) {
+      if (identical(mode, "Microenvironment")) {
         req(!is.null(w) && nzchar(w))
         # Parse "className|islet_region" encoding
         parts <- strsplit(w, "\\|")[[1]]
@@ -345,24 +345,34 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       if (is.null(df) || !nrow(df)) {
         return(df %||% data.frame())
       }
-      mode <- attr(df, "mode_used") %||% (input$mode %||% "Composition")
+      mode <- attr(df, "mode_used") %||% (input$mode %||% "Cell Populations")
       selection_label <- attr(df, "selection_used") %||% input$which
       if (is.null(selection_label) || length(selection_label) == 0 ||
           is.na(selection_label[1]) || !nzchar(selection_label[1])) {
-        selection_label <- if (identical(mode, "Composition")) "Ins_any" else ""
+        selection_label <- if (identical(mode, "Cell Populations")) "Ins_any" else ""
       }
       selection_label <- selection_label[1]
 
       bw <- suppressWarnings(as.numeric(input$binwidth))
       if (length(bw) != 1 || !is.finite(bw) || bw <= 0) bw <- 50
 
-      # Identify outliers (>3 SD) -- mark but do NOT remove
-      value_mean <- mean(df$value, na.rm = TRUE)
-      value_sd   <- sd(df$value, na.rm = TRUE)
+      # Identify outliers (>3 SD per donor group) -- mark but do NOT remove
       outlier_threshold <- 3
+      df$is_outlier <- FALSE
+      df$z_score <- NA_real_
 
-      df$is_outlier <- abs(df$value - value_mean) > (outlier_threshold * value_sd)
-      outliers <- df[df$is_outlier & !is.na(df$is_outlier), ]
+      for (grp in unique(df$donor_status)) {
+        idx <- which(df$donor_status == grp)
+        if (length(idx) < 3) next
+        grp_mean <- mean(df$value[idx], na.rm = TRUE)
+        grp_sd   <- sd(df$value[idx], na.rm = TRUE)
+        if (!is.finite(grp_sd) || grp_sd == 0) next
+        z <- (df$value[idx] - grp_mean) / grp_sd
+        df$z_score[idx] <- z
+        df$is_outlier[idx] <- !is.na(z) & abs(z) > outlier_threshold
+      }
+
+      outliers <- df[df$is_outlier, ]
 
       # Store outliers for the sidebar table
       plot_outliers(
@@ -375,7 +385,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
             Donor_Status  = outliers$donor_status,
             Diameter_um   = round(outliers$islet_diam_um, 1),
             Value         = round(outliers$value, 3),
-            Z_Score       = round((outliers$value - value_mean) / value_sd, 2),
+            Z_Score       = round(outliers$z_score, 2),
             stringsAsFactors = FALSE
           )
         } else {
@@ -383,7 +393,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         }
       )
 
-      cat(sprintf("[PLOT] Identified %d outliers (>3 SD) - will be colored red\n", nrow(outliers)))
+      cat(sprintf("[PLOT] Identified %d outliers (>3 SD per group) - highlighted in plot\n", nrow(outliers)))
 
       # Attach diameter bins
       df <- bin_islet_sizes(df, "islet_diam_um", bw)
@@ -421,12 +431,12 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       color_by <- input$plot_color_by %||% "donor_status"
 
       # Summary lines always use donor_status colors
-      color_map <- c("ND" = "#2ca02c", "Aab+" = "#ffcc00", "T1D" = "#9467bd")
+      color_map <- DONOR_COLORS
 
       # Y-axis label
-      ylab <- if (identical(input$mode, "Targets")) {
+      ylab <- if (identical(input$mode, "Microenvironment")) {
         metric <- input$metric %||% "Density"
-        if (metric == "Counts") "Target count" else "Target density (per \u00b5m\u00b2)"
+        if (metric == "Counts") "Structure count" else "Structure density (per \u00b5m\u00b2)"
       } else {
         metric <- input$metric %||% "Percentage"
         switch(metric,
@@ -437,7 +447,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       }
 
       # Title
-      title_text <- if (identical(input$mode, "Targets")) {
+      title_text <- if (identical(input$mode, "Microenvironment")) {
         # Extract class name from encoded "className|region" value
         wsel <- input$which %||% ""
         class_name <- strsplit(wsel, "\\|")[[1]][1]
@@ -544,8 +554,9 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
 
       # Summary lines + error bars ON TOP of individual points
       p <- p +
-        geom_line(alpha = ifelse(!is.null(input$add_smooth) && input$add_smooth == "LOESS", 0, 1)) +
-        geom_point() +
+        geom_line(alpha = ifelse(!is.null(input$add_smooth) && input$add_smooth == "LOESS", 0, 1),
+                  linewidth = 1.2) +
+        geom_point(shape = 21, aes(fill = donor_status), color = "black", stroke = 0.4, size = 2.5) +
         geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0)
 
       # Color scale (must include donor_id colors when applicable)
@@ -557,6 +568,8 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       } else {
         p <- p + scale_color_manual(values = color_map, breaks = grp_levels, drop = FALSE)
       }
+      # Fill scale for summary points (shape=21 outline)
+      p <- p + scale_fill_manual(values = color_map, guide = "none")
 
       p <- p +
         labs(x = "Islet diameter (\u00b5m)", y = ylab, color = NULL, title = title_text) +
@@ -595,8 +608,26 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
 
       # Convert to plotly with click source (namespaced for module compatibility)
       gg <- ggplotly(p, source = ns("plot_scatter"))
+      # Add thin black outlines to all marker traces
+      for (i in seq_along(gg$x$data)) {
+        tr <- gg$x$data[[i]]
+        if (!is.null(tr$mode) && grepl("markers", tr$mode)) {
+          gg$x$data[[i]]$marker$line <- list(color = "black", width = 0.5)
+        }
+      }
+      # Clean plotly legend: strip "(ID, N)" -> "ID" from ggplotly trace naming
+      for (i in seq_along(gg$x$data)) {
+        nm <- gg$x$data[[i]]$name
+        if (!is.null(nm)) {
+          cleaned <- gsub("^\\((.+),\\s*\\d+\\)$", "\\1", nm)
+          gg$x$data[[i]]$name <- cleaned
+          gg$x$data[[i]]$legendgroup <- cleaned
+        }
+      }
       gg <- gg %>%
-        layout(legend = list(orientation = "h", x = 0, y = -0.15)) %>%
+        layout(legend = list(orientation = "h", x = 0, y = -0.25,
+                             xanchor = "left", yanchor = "top"),
+               margin = list(b = 80)) %>%
         event_register("plotly_click")
       gg
     })
@@ -664,9 +695,9 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       }
 
       # Y-axis label
-      ylab <- if (identical(input$mode, "Targets")) {
+      ylab <- if (identical(input$mode, "Microenvironment")) {
         metric <- input$metric %||% "Density"
-        if (metric == "Counts") "Target count" else "Target density (per \u00b5m\u00b2)"
+        if (metric == "Counts") "Structure count" else "Structure density (per \u00b5m\u00b2)"
       } else {
         metric <- input$metric %||% "Percentage"
         switch(metric,
@@ -694,7 +725,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       }
 
       g <- g +
-        scale_fill_manual(values = c("ND" = "#2ca02c", "Aab+" = "#ffcc00", "T1D" = "#9467bd"),
+        scale_fill_manual(values = DONOR_COLORS,
                           guide = "none")
 
       # Individual points
@@ -719,7 +750,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
                         alpha = ifelse(is.null(input$dist_pt_alpha), 0.25, input$dist_pt_alpha),
                         size  = ifelse(is.null(input$dist_pt_size), 0.7, input$dist_pt_size),
                         stroke = 0, inherit.aes = FALSE) +
-            scale_color_manual(values = c("ND" = "#2ca02c", "Aab+" = "#ffcc00", "T1D" = "#9467bd"),
+            scale_color_manual(values = DONOR_COLORS,
                                guide = "none")
         }
       }
@@ -749,6 +780,23 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         }
       }
 
+      # Add thin black outlines to jitter point traces
+      for (i in seq_along(p$x$data)) {
+        tr <- p$x$data[[i]]
+        if (!is.null(tr$mode) && grepl("markers", tr$mode)) {
+          p$x$data[[i]]$marker$line <- list(color = "black", width = 0.5)
+        }
+      }
+
+      # Clean plotly legend: strip "(ID, N)" -> "ID"
+      for (i in seq_along(p$x$data)) {
+        nm <- p$x$data[[i]]$name
+        if (!is.null(nm)) {
+          cleaned <- gsub("^\\((.+),\\s*\\d+\\)$", "\\1", nm)
+          p$x$data[[i]]$name <- cleaned
+          p$x$data[[i]]$legendgroup <- cleaned
+        }
+      }
       p <- p %>% layout(showlegend = isTRUE(color_by == "donor_id"))
       p
     })
@@ -760,10 +808,10 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
 
       if (show_table && !is.null(outlier_data) && nrow(outlier_data) > 0) {
         tags$div(
-          style = "margin-top: 15px; padding: 10px; background-color: #fff3cd; border: 1px solid #ffc107; border-radius: 5px;",
+          style = "margin-top: 15px; padding: 10px; background-color: #fff3cd; border: 1px solid #ffc107; border-radius: 5px; color: #000000;",
           tags$h6(
-            style = "margin-top: 0; color: #856404;",
-            sprintf("\u26a0\ufe0f %d Outlier%s Removed (>3 SD)",
+            style = "margin-top: 0; color: #000000;",
+            sprintf("\u26a0\ufe0f %d Outlier%s Detected (>3 SD within group)",
                     nrow(outlier_data),
                     ifelse(nrow(outlier_data) > 1, "s", ""))),
           tags$div(
@@ -878,22 +926,19 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
           ),
           column(6, style = "text-align: right;",
             if (has_cells) {
-              tagList(
-                # Non-namespaced inputs for root-level outputs
-                tags$div(style = "display: inline-block; margin-right: 10px;",
-                  radioButtons("drilldown_view_mode", NULL,
-                               choices = c("Boundaries", "Single Cells"),
-                               selected = "Single Cells", inline = TRUE)
-                )
+              tags$div(style = "display: inline-flex; align-items: center; gap: 12px; margin-right: 10px;",
+                checkboxInput("drilldown_show_cells", "Single Cells", value = TRUE),
+                checkboxInput("drilldown_show_peri_boundary", "Peri Boundary", value = TRUE),
+                checkboxInput("drilldown_show_structures", "Structures", value = TRUE)
               )
             },
             actionButton(ns("clear_segmentation"), "Close", class = "btn btn-sm btn-outline-secondary")
           )
         ),
-        # Controls row (visible only in Single Cells mode)
+        # Controls row (visible when Single Cells toggled on)
         if (has_cells) {
           conditionalPanel(
-            condition = "input.drilldown_view_mode == 'Single Cells'",
+            condition = "input.drilldown_show_cells",
             fluidRow(style = "margin-bottom: 10px;",
               column(3,
                 selectInput("drilldown_color_by", "Color by",
@@ -907,21 +952,12 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         },
         fluidRow(
           column(8,
-            conditionalPanel(
-              condition = if (has_cells) "input.drilldown_view_mode == 'Boundaries'" else "true",
-              plotOutput("islet_segmentation_view", height = "650px")
-            ),
-            if (has_cells) {
-              conditionalPanel(
-                condition = "input.drilldown_view_mode == 'Single Cells'",
-                plotOutput("islet_drilldown_view", height = "650px")
-              )
-            }
+            plotOutput("islet_segmentation_view", height = "650px")
           ),
           column(4,
             if (has_cells) {
               conditionalPanel(
-                condition = "input.drilldown_view_mode == 'Single Cells'",
+                condition = "input.drilldown_show_cells",
                 div(style = "padding: 15px; background-color: #f8f9fa; border-radius: 5px;",
                   h5("Cell Composition", style = "margin-top: 0; font-size: 17px;"),
                   plotOutput("islet_drilldown_summary", height = "400px"),
@@ -931,7 +967,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
               )
             },
             conditionalPanel(
-              condition = if (has_cells) "input.drilldown_view_mode == 'Boundaries'" else "true",
+              condition = if (has_cells) "!input.drilldown_show_cells" else "true",
               div(style = "padding: 15px; background-color: #f8f9fa; border-radius: 5px; height: 100%;",
                 h5("Legend", style = "margin-top: 0; margin-bottom: 15px; font-size: 17px;"),
                 div(style = "margin-bottom: 10px;",
@@ -1011,7 +1047,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
     get_selection_description <- function() {
       desc <- c()
       desc <- c(desc, paste("Generated:", Sys.time()))
-      desc <- c(desc, paste("Focus:", input$mode %||% "Unknown"))
+      desc <- c(desc, paste("Data Layer:", input$mode %||% "Unknown"))
       desc <- c(desc, paste("Selection:", input$which %||% "Unknown"))
       desc <- c(desc, paste("Metric:", input$metric %||% "Unknown"))
 

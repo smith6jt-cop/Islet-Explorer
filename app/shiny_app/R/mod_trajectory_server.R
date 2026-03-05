@@ -339,6 +339,12 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
 
       result_df <- result_df[valid_idx, , drop = FALSE]
 
+      # Rank-transform pseudotime for visualization (eliminates DPT compression artifacts)
+      # Raw DPT compresses 95% of data between 0.25-0.70 due to diffusion manifold geometry.
+      # Rank percentile preserves ordering while spreading points uniformly.
+      result_df$pt_raw <- result_df$pt
+      result_df$pt <- rank(result_df$pt, ties.method = "average") / nrow(result_df)
+
       message("[traj_data_clean] Successfully processed ", nrow(result_df),
               " observations for ", selected_feature)
       return(result_df)
@@ -387,14 +393,24 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         return(plotly_empty() %>% layout(title = "No trajectory data available"))
       }
 
-      # Remove outliers (>3 SD from mean) and store for reporting
+      # Remove outliers (>3 SD per donor group) and store for reporting
       df_original <- df
-      value_mean <- mean(df$value, na.rm = TRUE)
-      value_sd   <- sd(df$value, na.rm = TRUE)
       outlier_threshold <- 3
+      df$is_outlier <- FALSE
+      df$z_score <- NA_real_
 
-      df$is_outlier <- abs(df$value - value_mean) > (outlier_threshold * value_sd)
-      outliers <- df[df$is_outlier & !is.na(df$is_outlier), ]
+      for (grp in unique(df$donor_status)) {
+        idx <- which(df$donor_status == grp)
+        if (length(idx) < 3) next
+        grp_mean <- mean(df$value[idx], na.rm = TRUE)
+        grp_sd   <- sd(df$value[idx], na.rm = TRUE)
+        if (!is.finite(grp_sd) || grp_sd == 0) next
+        z <- (df$value[idx] - grp_mean) / grp_sd
+        df$z_score[idx] <- z
+        df$is_outlier[idx] <- !is.na(z) & abs(z) > outlier_threshold
+      }
+
+      outliers <- df[df$is_outlier, ]
 
       # Store outliers in reactiveVal
       if (nrow(outliers) > 0) {
@@ -405,7 +421,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
           Donor_Status = outliers$donor_status,
           Pseudotime   = round(outliers$pt, 3),
           Value        = round(outliers$value, 3),
-          Z_Score      = round((outliers$value - value_mean) / value_sd, 2),
+          Z_Score      = round(outliers$z_score, 2),
           stringsAsFactors = FALSE
         ))
       } else {
@@ -413,9 +429,9 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       }
 
       # Remove outliers from plotting data
-      df <- df[!df$is_outlier | is.na(df$is_outlier), ]
+      df <- df[!df$is_outlier, ]
 
-      cat(sprintf("[TRAJECTORY] Removed %d outliers (>3 SD)\n", nrow(df_original) - nrow(df)))
+      cat(sprintf("[TRAJECTORY] Removed %d outliers (>3 SD per group)\n", nrow(df_original) - nrow(df)))
 
       # Determine color mapping and aesthetics
       color_by   <- input$traj_color_by %||% "donor_status"
@@ -426,9 +442,9 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
 
       # Always apply jitter
       set.seed(42)
-      jitter_amount_x <- diff(range(df$pt, na.rm = TRUE)) * 0.01
-      jitter_amount_y <- diff(range(df$value, na.rm = TRUE)) * 0.02
-      df$pt    <- df$pt    + runif(nrow(df), -jitter_amount_x, jitter_amount_x)
+      jitter_amount_x <- diff(range(df$pt, na.rm = TRUE)) * 0.008
+      jitter_amount_y <- diff(range(df$value, na.rm = TRUE)) * 0.06
+      df$pt    <- pmax(0, pmin(1, df$pt + runif(nrow(df), -jitter_amount_x, jitter_amount_x)))
       df$value <- df$value + runif(nrow(df), -jitter_amount_y, jitter_amount_y)
 
       # Create base aesthetic mapping
@@ -472,7 +488,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       # Apply color scales
       if (color_by == "donor_status") {
         g <- g + scale_color_manual(
-          values = c("ND" = "#2ca02c", "Aab+" = "#ffcc00", "T1D" = "#9467bd"),
+          values = DONOR_COLORS,
           name = color_title, drop = FALSE)
       } else if (color_by == "donor_id") {
         df$donor_id <- factor(df$donor_id)
@@ -504,7 +520,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       } else if (trend_type == "by_donor") {
         if ("donor_status" %in% names(df) && !all(is.na(df$donor_status))) {
           df$donor_status <- factor(df$donor_status, levels = c("ND", "Aab+", "T1D"))
-          trend_colors <- c("ND" = "#2ca02c", "Aab+" = "#ffcc00", "T1D" = "#9467bd")
+          trend_colors <- DONOR_COLORS
 
           if (color_by == "donor_id") {
             # Add separate geom_smooth for each donor_status with explicit color
@@ -535,7 +551,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       # Labels
       selected_feature <- input$traj_feature %||% "Selected feature"
       metric_label <- "Expression Level"
-      x_label <- "Pseudotime (PAGA trajectory, INS-rooted)"
+      x_label <- "Pseudotime (rank-normalized)"
 
       g <- g + labs(
         x = x_label,
@@ -724,25 +740,25 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       }
 
       div(class = "card", style = "padding: 20px; margin-bottom: 20px; border: 2px solid #0066CC;",
-        # Header row: title + view mode toggle + close button
+        # Header row: title + layer toggles + close button
         div(style = "display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;",
           h4(paste("Islet:", info$islet_key, "(Case", info$case_id, ")"),
              style = "margin: 0; color: #0066CC; font-size: 20px;"),
           div(
             if (has_cells) {
-              tags$div(style = "display: inline-block; margin-right: 8px;",
-                radioButtons("drilldown_view_mode", NULL,
-                             choices = c("Boundaries", "Single Cells"),
-                             selected = "Single Cells", inline = TRUE)
+              tags$div(style = "display: inline-flex; align-items: center; gap: 12px; margin-right: 8px;",
+                checkboxInput("drilldown_show_cells", "Single Cells", value = TRUE),
+                checkboxInput("drilldown_show_peri_boundary", "Peri Boundary", value = TRUE),
+                checkboxInput("drilldown_show_structures", "Structures", value = TRUE)
               )
             },
             actionButton(ns("clear_segmentation"), "Close", class = "btn btn-sm btn-outline-secondary")
           )
         ),
-        # Controls row (visible only in Single Cells mode)
+        # Controls row (visible when Single Cells toggled on)
         if (has_cells) {
           conditionalPanel(
-            condition = "input.drilldown_view_mode == 'Single Cells'",
+            condition = "input.drilldown_show_cells",
             div(style = "margin-bottom: 10px;",
               fluidRow(
                 column(4,
@@ -756,15 +772,11 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
             )
           )
         },
-        # Main content
-        conditionalPanel(
-          condition = if (has_cells) "input.drilldown_view_mode == 'Boundaries'" else "true",
-          plotOutput("islet_segmentation_view", height = "550px")
-        ),
+        # Main content: single unified plot
+        plotOutput("islet_segmentation_view", height = "550px"),
         if (has_cells) {
           conditionalPanel(
-            condition = "input.drilldown_view_mode == 'Single Cells'",
-            plotOutput("islet_drilldown_view", height = "550px"),
+            condition = "input.drilldown_show_cells",
             div(style = "padding: 12px; background-color: #f8f9fa; border-radius: 5px; margin-top: 10px;",
               h5("Cell Composition", style = "margin-top: 0; font-size: 16px;"),
               plotOutput("islet_drilldown_summary", height = "300px"),
@@ -772,9 +784,9 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
             )
           )
         },
-        # Compact legend (shown in Boundaries mode)
+        # Compact legend (shown when cells not visible)
         conditionalPanel(
-          condition = if (has_cells) "input.drilldown_view_mode == 'Boundaries'" else "true",
+          condition = if (has_cells) "!input.drilldown_show_cells" else "true",
           div(style = "padding: 10px; background-color: #f8f9fa; border-radius: 5px; margin-top: 10px; font-size: 16px;",
             div(style = "display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 8px;",
               div(style = "display: flex; align-items: center;",
@@ -824,12 +836,12 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
 
       if (show_table && !is.null(outlier_data) && nrow(outlier_data) > 0) {
         tagList(
-          div(style = "background-color: #fff3cd; border: 1px solid #ffc107; border-radius: 5px; padding: 10px; margin-top: 10px;",
-            h5(style = "color: #856404; margin-top: 0;",
-               sprintf("\u26a0\ufe0f %d Outlier%s Removed (>3 SD)",
+          div(style = "background-color: #fff3cd; border: 1px solid #ffc107; border-radius: 5px; padding: 10px; margin-top: 10px; color: #000000;",
+            h5(style = "color: #000000; margin-top: 0;",
+               sprintf("\u26a0\ufe0f %d Outlier%s Removed (>3 SD within group)",
                        nrow(outlier_data), ifelse(nrow(outlier_data) > 1, "s", ""))),
-            p(style = "color: #856404; font-size: 12px; margin-bottom: 10px;",
-              "The following data points were excluded from the plot because they exceed 3 standard deviations from the mean:"),
+            p(style = "color: #000000; font-size: 12px; margin-bottom: 10px;",
+              "The following data points were excluded from the plot because they exceed 3 standard deviations from their group mean:"),
             div(style = "max-height: 200px; overflow-y: auto;",
               renderTable({
                 outlier_data
@@ -849,15 +861,15 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       if (color_by == "donor_status") {
         tagList(
           div(style = "display: flex; align-items: center; margin-bottom: 8px;",
-            div(style = "width: 20px; height: 20px; background-color: #2ca02c; border-radius: 3px; margin-right: 8px;"),
+            div(style = "width: 20px; height: 20px; background-color: #4477AA; border-radius: 3px; margin-right: 8px;"),
             span("ND", style = "font-size: 15px;")
           ),
           div(style = "display: flex; align-items: center; margin-bottom: 8px;",
-            div(style = "width: 20px; height: 20px; background-color: #ffcc00; border-radius: 3px; margin-right: 8px;"),
+            div(style = "width: 20px; height: 20px; background-color: #CC6633; border-radius: 3px; margin-right: 8px;"),
             span("Aab+", style = "font-size: 15px;")
           ),
           div(style = "display: flex; align-items: center;",
-            div(style = "width: 20px; height: 20px; background-color: #9467bd; border-radius: 3px; margin-right: 8px;"),
+            div(style = "width: 20px; height: 20px; background-color: #228833; border-radius: 3px; margin-right: 8px;"),
             span("T1D", style = "font-size: 15px;")
           )
         )
@@ -925,7 +937,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
 
       ggplot(df, aes(x = umap_1, y = umap_2, color = donor_status)) +
         geom_point(alpha = 0.6, size = 3.0) +
-        scale_color_manual(values = c("ND" = "#2ca02c", "Aab+" = "#ffcc00", "T1D" = "#9467bd")) +
+        scale_color_manual(values = DONOR_COLORS) +
         scale_x_continuous(expand = expansion(mult = 0.02)) +
         scale_y_continuous(expand = expansion(mult = 0.02)) +
         labs(x = "UMAP 1", y = "UMAP 2", title = "UMAP: Donor Status") +
@@ -971,13 +983,10 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       enc <- function(s) ifelse(s == "ND", 0, ifelse(s == "Aab+", 1, ifelse(s == "T1D", 2, NA_real_)))
       df$ds_code <- enc(df$donor_status)
 
-      # Normalize pseudotime to 0-1 range for binning
-      pt_range <- range(df$pt, na.rm = TRUE)
-      df$pt_norm <- (df$pt - pt_range[1]) / (pt_range[2] - pt_range[1])
-
+      # pt is already rank-normalized to ~[0, 1] by traj_data_clean()
       nb   <- 25
       brks <- seq(0, 1, length.out = nb + 1)
-      df$pt_bin <- cut(pmax(0, pmin(1, df$pt_norm)), breaks = brks, include.lowest = TRUE, right = FALSE)
+      df$pt_bin <- cut(pmax(0, pmin(1, df$pt)), breaks = brks, include.lowest = TRUE, right = FALSE)
 
       # Calculate averages per bin using base R
       bin_levels <- levels(df$pt_bin)
@@ -1001,29 +1010,30 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       hm <- do.call(rbind, hm_list)
       if (nrow(hm) == 0) return(NULL)
 
-      # Calculate bin midpoints in actual pseudotime range
+      # Bin midpoints on [0, 1] (matches rank-normalized scatter x-axis)
       all_mids <- head(brks, -1) + diff(brks)[1] / 2
       bin_idx  <- match(as.character(hm$pt_bin), bin_levels)
-      hm$x     <- all_mids[bin_idx] * (pt_range[2] - pt_range[1]) + pt_range[1]
+      hm$x     <- all_mids[bin_idx]
 
       ggplot(hm, aes(x = x, y = 1, fill = avg_donor_status)) +
         geom_tile(height = 1) +
         scale_fill_gradientn(
-          colors   = c("#2ca02c", "#ffcc00", "#9467bd"),
+          colors   = unname(DONOR_COLORS),
           limits   = c(0, 2),
           na.value = "#dddddd",
           name     = "Average\nDonor Type",
           breaks   = c(0, 1, 2),
           labels   = c("ND", "Aab+", "T1D")
         ) +
-        scale_x_continuous(limits = c(pt_range[1], pt_range[2]), expand = c(0, 0)) +
-        labs(x = "Pseudotime", y = "", title = "Donor Status Progression Along Pseudotime") +
+        scale_x_continuous(limits = c(0, 1), expand = c(0, 0)) +
+        labs(x = NULL, y = NULL, title = NULL) +
         theme_minimal() +
         theme(
           axis.text.y  = element_blank(),
           axis.ticks.y = element_blank(),
           panel.grid   = element_blank(),
-          plot.title   = element_text(size = 12, hjust = 0.5)
+          plot.title   = element_text(size = 12, hjust = 0.5),
+          legend.position = "none"
         )
     })
 

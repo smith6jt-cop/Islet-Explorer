@@ -434,7 +434,9 @@ annotations_data <- segmentation_data
 # Reusable GeoJSON base plot builder
 # Returns a ggplot with polygon layers + coord_sf (no crosshairs or title).
 # Used by both render_islet_segmentation_plot() and render_islet_drilldown_plot().
-build_segmentation_base_plot <- function(info, buffer_um = 250) {
+build_segmentation_base_plot <- function(info, buffer_um = 250,
+                                         show_peri_boundary = TRUE,
+                                         show_structures = TRUE) {
   if (is.null(info)) return(NULL)
 
   geojson <- load_case_geojson(info$case_id)
@@ -454,6 +456,11 @@ build_segmentation_base_plot <- function(info, buffer_um = 250) {
     "Nerve" = "#CC00CC", "Capillary" = "#CC0000", "Lymphatic" = "#00AA00"
   )
 
+  # Determine which layer classes to skip based on toggle params
+  skip_classes <- character(0)
+  if (!show_peri_boundary) skip_classes <- c(skip_classes, "IsletExpanded")
+  if (!show_structures) skip_classes <- c(skip_classes, "Nerve", "Capillary", "Lymphatic")
+
   p <- ggplot2::ggplot() +
     ggplot2::theme_minimal(base_size = 12) +
     ggplot2::theme(
@@ -466,6 +473,7 @@ build_segmentation_base_plot <- function(info, buffer_um = 250) {
   has_polygons <- FALSE
   layer_order <- c("IsletExpanded", "Islet", "Lymphatic", "Capillary", "Nerve")
   for (cls in layer_order) {
+    if (cls %in% skip_classes) next
     if (!is.null(polygons[[cls]]) && nrow(polygons[[cls]]) > 0) {
       p <- p + ggplot2::geom_sf(data = polygons[[cls]], fill = NA, color = colors[cls],
                            linewidth = 0.8, show.legend = FALSE)
@@ -499,11 +507,12 @@ build_segmentation_base_plot <- function(info, buffer_um = 250) {
 
 # Reusable segmentation plot renderer
 # Called by both Trajectory and Plot modules for their respective segmentation outputs
-render_islet_segmentation_plot <- function(info) {
+render_islet_segmentation_plot <- function(info, show_peri_boundary = TRUE, show_structures = TRUE) {
   if (is.null(info)) return(NULL)
   cat("[SEGMENTATION RENDER] Rendering for case=", info$case_id, ", islet=", info$islet_key, "\n")
 
-  p <- build_segmentation_base_plot(info)
+  p <- build_segmentation_base_plot(info, show_peri_boundary = show_peri_boundary,
+                                     show_structures = show_structures)
   if (is.null(p)) {
     return(
       ggplot2::ggplot() +

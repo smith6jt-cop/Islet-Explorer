@@ -80,12 +80,14 @@ load_islet_cells <- function(imageid, islet_key) {
 #' @param color_by "phenotype" or a marker column name
 #' @param show_peri Logical; if FALSE, only show core cells
 #' @return ggplot object
-render_islet_drilldown_plot <- function(info, cells, color_by = "phenotype", show_peri = TRUE) {
+render_islet_drilldown_plot <- function(info, cells, color_by = "phenotype", show_peri = TRUE,
+                                        show_peri_boundary = TRUE, show_structures = TRUE) {
   if (is.null(info) || is.null(cells) || nrow(cells) == 0) return(NULL)
 
-  # Build GeoJSON base plot
-  base_plot <- build_segmentation_base_plot(info)
-  if (is.null(base_plot)) return(NULL)
+  # Build base plot: GeoJSON boundaries (islet core always drawn)
+  base_plot <- build_segmentation_base_plot(info, show_peri_boundary = show_peri_boundary,
+                                             show_structures = show_structures)
+  if (is.null(base_plot)) base_plot <- ggplot2::ggplot() + ggplot2::theme_void()
 
   # Filter cells by region
   if (!show_peri && "cell_region" %in% colnames(cells)) {

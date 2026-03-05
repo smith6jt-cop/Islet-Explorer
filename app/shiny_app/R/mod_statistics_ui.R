@@ -51,47 +51,43 @@ statistics_ui <- function(id) {
       )
     ),
 
-    # ---- Cards 2 & 3: Hypothesis Testing + Per-Bin Heatmap ----
+    # ---- Row 2: Hypothesis Testing + Per-Bin Heatmap + Trend Analysis ----
     fluidRow(
-      column(6,
+      column(4,
         div(class = "card", style = "padding: 15px; margin-bottom: 15px;",
           h5("Hypothesis Testing"),
           tableOutput(ns("test_results_table")),
           hr(style = "margin: 8px 0;"),
           h6("Effect Size Forest Plot", style = "color: #555;"),
-          plotlyOutput(ns("forest_plot"), height = "320px")
+          plotlyOutput(ns("forest_plot"), height = "280px")
         )
       ),
-      column(6,
+      column(4,
         div(class = "card", style = "padding: 15px; margin-bottom: 15px;",
           h5("Per-Bin Significance Heatmap"),
-          plotlyOutput(ns("bin_heatmap"), height = "360px")
+          plotlyOutput(ns("bin_heatmap"), height = "320px")
         )
-      )
-    ),
-
-    # ---- Cards 4 & 5: Trend Analysis + Demographics ----
-    fluidRow(
-      column(6,
+      ),
+      column(4,
         div(class = "card", style = "padding: 15px; margin-bottom: 15px;",
           h5("Trend Analysis (Kendall \u03c4)"),
-          plotlyOutput(ns("trend_plot"), height = "360px")
+          plotlyOutput(ns("trend_plot"), height = "320px")
         )
-      ),
-      column(6,
-        uiOutput(ns("demographics_card"))
       )
     ),
 
-    # ---- Card 6: AUC Analysis ----
+    # ---- Row 3: Demographics + AUC Plot + AUC Summary ----
     fluidRow(
-      column(6,
+      column(4,
+        uiOutput(ns("demographics_card"))
+      ),
+      column(4,
         div(class = "card", style = "padding: 15px; margin-bottom: 15px;",
           h5("Area Under Curve by Donor Group"),
-          plotlyOutput(ns("auc_plot"), height = "320px")
+          plotlyOutput(ns("auc_plot"), height = "280px")
         )
       ),
-      column(6,
+      column(4,
         div(class = "card", style = "padding: 15px; margin-bottom: 15px;",
           h5("AUC Summary"),
           tableOutput(ns("auc_table")),

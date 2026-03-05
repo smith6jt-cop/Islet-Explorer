@@ -445,35 +445,39 @@ server <- function(input, output, session) {
   # AI Assistant module (self-contained)
   ai_assistant_server("ai")
 
-  # ---- Shared segmentation plot (root-level, used by both Plot and Trajectory panels) ----
+  # ---- Unified segmentation + drilldown plot (root-level, used by both Plot and Trajectory panels) ----
   output$islet_segmentation_view <- renderPlot({
     req(selected_islet())
     info <- selected_islet()
+    show_peri_bd <- if (!is.null(input$drilldown_show_peri_boundary)) input$drilldown_show_peri_boundary else TRUE
+    show_structs <- if (!is.null(input$drilldown_show_structures)) input$drilldown_show_structures else TRUE
+    show_cells <- if (!is.null(input$drilldown_show_cells)) input$drilldown_show_cells else TRUE
+
+    if (show_cells) {
+      cells <- load_islet_cells(info$case_id, info$islet_key)
+      if (!is.null(cells)) {
+        color_by <- input$drilldown_color_by %||% "phenotype"
+        show_peri_cells <- if (!is.null(input$drilldown_show_peri)) input$drilldown_show_peri else TRUE
+        return(tryCatch(
+          render_islet_drilldown_plot(info, cells, color_by = color_by, show_peri = show_peri_cells,
+                                      show_peri_boundary = show_peri_bd, show_structures = show_structs),
+          error = function(e) {
+            cat("[DRILLDOWN ERROR]", conditionMessage(e), "\n")
+            ggplot2::ggplot() +
+              ggplot2::annotate("text", x = 0.5, y = 0.5,
+                                label = paste("Render error:", conditionMessage(e)),
+                                size = 4, color = "red") +
+              ggplot2::theme_void() + ggplot2::xlim(0, 1) + ggplot2::ylim(0, 1)
+          }
+        ))
+      }
+    }
+    # Fallback: boundaries only (no cells or cells unavailable)
     tryCatch(
-      render_islet_segmentation_plot(info),
+      render_islet_segmentation_plot(info, show_peri_boundary = show_peri_bd,
+                                      show_structures = show_structs),
       error = function(e) {
         cat("[SEGMENTATION ERROR]", conditionMessage(e), "\n")
-        ggplot2::ggplot() +
-          ggplot2::annotate("text", x = 0.5, y = 0.5,
-                            label = paste("Render error:", conditionMessage(e)),
-                            size = 4, color = "red") +
-          ggplot2::theme_void() + ggplot2::xlim(0, 1) + ggplot2::ylim(0, 1)
-      }
-    )
-  })
-
-  # ---- Single-cell drill-down outputs (root-level, non-namespaced) ----
-  output$islet_drilldown_view <- renderPlot({
-    req(selected_islet())
-    info <- selected_islet()
-    cells <- load_islet_cells(info$case_id, info$islet_key)
-    req(cells)
-    color_by <- input$drilldown_color_by %||% "phenotype"
-    show_peri <- if (!is.null(input$drilldown_show_peri)) input$drilldown_show_peri else TRUE
-    tryCatch(
-      render_islet_drilldown_plot(info, cells, color_by = color_by, show_peri = show_peri),
-      error = function(e) {
-        cat("[DRILLDOWN ERROR]", conditionMessage(e), "\n")
         ggplot2::ggplot() +
           ggplot2::annotate("text", x = 0.5, y = 0.5,
                             label = paste("Render error:", conditionMessage(e)),

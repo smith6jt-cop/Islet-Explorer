@@ -13,11 +13,11 @@ spatial_server <- function(id, prepared) {
     ns <- session$ns
 
     # Donor status color palette
-    donor_colors <- c("ND" = "#2ca02c", "Aab+" = "#ffcc00", "T1D" = "#9467bd")
+    donor_colors <- DONOR_COLORS
 
     # 14-color qualitative palette for Leiden clusters
     leiden_palette <- c(
-      "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
+      "#1f77b4", "#ff7f0e", "#66c2a5", "#d62728", "#8da0cb",
       "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf",
       "#aec7e8", "#ffbb78", "#98df8a", "#ff9896"
     )
@@ -228,7 +228,8 @@ spatial_server <- function(id, prepared) {
             size = 0.4, alpha = 0.6,
             inherit.aes = FALSE
           ) +
-          ggplot2::scale_color_manual(values = pal, name = "Cluster", na.value = "#d9d9d9")
+          ggplot2::scale_color_manual(values = pal, name = "Cluster", na.value = "#d9d9d9",
+                                        guide = ggplot2::guide_legend(override.aes = list(size = 4)))
         } else {
           # Phenotype coloring
           pheno_present <- sort(unique(fg$phenotype))
@@ -241,7 +242,8 @@ spatial_server <- function(id, prepared) {
             size = 0.4, alpha = 0.6,
             inherit.aes = FALSE
           ) +
-          ggplot2::scale_color_manual(values = pal, name = "Phenotype", na.value = "#CCCCCC")
+          ggplot2::scale_color_manual(values = pal, name = "Phenotype", na.value = "#CCCCCC",
+                                        guide = ggplot2::guide_legend(override.aes = list(size = 4)))
         }
       }
 

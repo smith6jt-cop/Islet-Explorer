@@ -1,0 +1,31 @@
+{
+  "original": {
+    "r2_donor": 0.39723471461551985,
+    "r2_status": 0.10652053610227089,
+    "eta2_donor": 0.3972347378730774,
+    "eta2_status": 0.10652051866054535,
+    "eta2_excess": 0.29071420431137085,
+    "sil_donor": -0.04079597443342209,
+    "sil_status": 0.05180937051773071,
+    "pc0_var": 0.3713688850402832,
+    "knn_donor_frac": 0.6003255208333333,
+    "knn_status_frac": 0.7227213541666667,
+    "knn_donor_enrichment": 8.404557291666668,
+    "knn_status_enrichment": 2.1681640625000003
+  },
+  "new_no_covariates": {
+    "r2_donor": 0.5542814319729361,
+    "r2_status": 0.1491035906200715,
+    "eta2_donor": 0.5542815327644348,
+    "eta2_status": 0.14910361170768738,
+    "eta2_excess": 0.40517792105674744,
+    "sil_donor": 0.2502328157424927,
+    "sil_status": 0.0832451656460762,
+    "pc0_var": 0.3400728106498718,
+    "knn_donor_frac": 0.8494140625,
+    "knn_status_frac": 0.8743489583333334,
+    "knn_donor_enrichment": 11.891796875,
+    "knn_status_enrichment": 2.6230468750000004
+  },
+  "training_time_seconds": 4949.973839759827
+}
