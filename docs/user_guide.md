@@ -28,7 +28,7 @@ Interactive web application for exploring pancreatic islet CODEX multiplexed ima
 
 The app loads from a single enriched H5AD file (`data/islet_explorer.h5ad`, ~70 MB) containing:
 
-- **5,023 islets** from 14 nPOD donors (ND, Aab+, T1D)
+- **5,214 islets** from 14 nPOD donors (ND, Aab+, T1D)
 - **31 protein markers** (mean expression per islet)
 - **Pseudotime trajectory** (DPT with INS root, scVI-corrected)
 - **21 phenotype proportions** (from single-cell phenotyping)
@@ -106,6 +106,22 @@ The Trajectory tab uses a full-width layout (no sidebar). All controls are inlin
    - Highlight the selected islet
    - Open the segmentation viewer panel
    - Jump to the OME-TIFF Viewer tab for that donor
+
+### Controls
+
+- **Feature selector**: Choose which protein marker to display on the y-axis
+- **Trend lines**: None, Overall (single LOESS), or By Donor Status (ND/Aab+/T1D separate LOESS curves)
+- **Color points by**: Donor Status (default) or Donor ID
+- **Point size by**: Cell Count (default), Islet Diameter, or Uniform
+  - *Cell Count* sizes points by `sqrt(total_cells)` — small islets (3-10 cells) appear as tiny dots, large islets (100+ cells) as large dots. This honestly represents measurement quality.
+- **Point transparency**: Adjustable alpha (0.1-1.0)
+- **Point size**: Base point size slider (0.5-5.0)
+
+### Cell-Count-Weighted Trends
+
+Trend lines are weighted by `log1p(cell count)` so that well-measured islets (many cells) drive the biological signal while noisy small islets (few cells) contribute proportionally less. This is important because 60% of islets have ≤10 cells — their aggregated expression values are inherently noisier.
+
+Hover over any point to see its cell count in the tooltip (e.g., "Cells: 3"). Small islets at unexpected positions (e.g., ND islets at high pseudotime) typically have very few cells.
 
 ### Key Biological Insights
 
@@ -199,7 +215,7 @@ Tissue-wide spatial visualization and peri-islet microenvironment analysis. Comb
    - Uses ggplot2 `renderPlot` (not plotly) for performance at >100K points
 
 3. **Leiden Panel** (col-4)
-   - UMAP scatter of 5,023 islets colored by selected Leiden resolution
+   - UMAP scatter of 5,214 islets colored by selected Leiden resolution
    - Stacked bar chart of mean phenotype composition per cluster
    - Hidden with message when Leiden data unavailable in H5AD
 
@@ -222,8 +238,8 @@ Tissue-wide spatial visualization and peri-islet microenvironment analysis. Comb
 
 ### Data Coverage
 
-- All 5,023 islets have peri-islet data (100% coverage)
-- Donor 6533 has 0 core/peri cells (no islet annotations) — shows tissue background only
+- All 5,214 islets have peri-islet data (100% coverage)
+- Donor 6533 has 191 islets (fully integrated after Parent annotation fix)
 - Biological validation: T1D immune_frac_peri > Aab+ > ND (immune infiltration increases with disease progression)
 
 ---
@@ -250,7 +266,7 @@ Click any islet data point in the Plot or Trajectory tab to inspect individual c
 
 ### Data Source
 
-Per-islet cell CSVs in `data/cells/` (5,023 files, ~203 MB total). Each file contains:
+Per-islet cell CSVs in `data/cells/` (5,214 files, ~203 MB total). Each file contains:
 - X/Y centroid coordinates (μm, converted to pixel space for GeoJSON overlay)
 - Phenotype label (1 of 21 types)
 - Region (core or peri-islet)
@@ -259,7 +275,7 @@ Per-islet cell CSVs in `data/cells/` (5,023 files, ~203 MB total). Each file con
 
 ### Availability
 
-- All 5,023 islets have cell data
+- All 5,214 islets have cell data
 - If cell data is unavailable for a clicked islet, the panel shows "Boundaries" mode with a message
 
 ---
@@ -310,17 +326,17 @@ conda activate scvi-env
 
 # Step 1: Reaggregate islets + trajectory + Leiden (~15 min)
 python scripts/reaggregate_islets.py
-# → islet_analysis/islets_core_fixed.h5ad (5,023 islets)
+# → islet_analysis/islets_core_fixed.h5ad (5,214 islets)
 # → data/adata_ins_root.h5ad (+ pseudotime + UMAP)
 # → islet_analysis/islets_core_clustered.h5ad (+ Leiden at 4 resolutions)
 
 # Step 2: Compute neighborhood metrics (from 2.6M-cell single-cell H5AD)
 python scripts/compute_neighborhood_metrics.py
-# → data/neighborhood_metrics.csv (5,023 rows × 62 cols)
+# → data/neighborhood_metrics.csv (5,214 rows × 62 cols)
 
 # Step 3: Extract per-islet cell CSVs (for drill-down viewer)
 python scripts/extract_per_islet_cells.py
-# → data/cells/*.csv (5,023 files, ~203 MB)
+# → data/cells/*.csv (5,214 files, ~203 MB)
 
 # Step 4: Extract per-donor tissue CSVs (for Spatial tab scatter, independent of islet filtering)
 python scripts/extract_per_donor_tissue.py
@@ -336,7 +352,7 @@ python scripts/build_h5ad_for_app.py
 ```
 CODEX_scvi_BioCov_phenotyped_newDuctal.h5ad  (2.6M cells, canonical single-cell)
   ↓ scripts/reaggregate_islets.py (min_cells=0, require_paired=True)
-islets_core_fixed.h5ad  (5,023 islets, proteins + scVI embeddings + trajectory + Leiden)
+islets_core_fixed.h5ad  (5,214 islets, proteins + scVI embeddings + trajectory + Leiden)
   ↓ scripts/build_h5ad_for_app.py (+ groovy + neighborhood + donor metadata)
 data/islet_explorer.h5ad  (complete app data, incl. Leiden clustering)
 ```
@@ -430,7 +446,7 @@ python scripts/build_h5ad_for_app.py
 
 ### No neighborhood metrics in Plot selector
 
-1. Verify `data/neighborhood_metrics.csv` exists (5,023 rows)
+1. Verify `data/neighborhood_metrics.csv` exists (5,214 rows)
 2. Rebuild the H5AD: `python scripts/build_h5ad_for_app.py`
 3. Kill stale R workers and refresh the browser
 

@@ -286,10 +286,13 @@ load_master_h5ad <- function(path) {
     message("[H5AD] Loading enriched H5AD: ", path)
     ad <- anndata::read_h5ad(path)
 
-    # Reconstruct targets DataFrame from .uns arrays
-    targets <- reconstruct_groovy_df(ad, "targets")
-    markers <- reconstruct_groovy_df(ad, "markers")
-    comp    <- reconstruct_groovy_df(ad, "composition")
+    # Cache ad$uns as R list once (0.2s) instead of per-key bridge crossings (~14s for 62 keys)
+    uns <- ad$uns
+
+    # Reconstruct targets/markers/comp from cached uns list
+    targets <- reconstruct_groovy_df_from_list(uns, "targets")
+    markers <- reconstruct_groovy_df_from_list(uns, "markers")
+    comp    <- reconstruct_groovy_df_from_list(uns, "composition")
 
     # Split LGALS3 rows from markers (they share the same groovy storage)
     lgals3 <- NULL
@@ -357,26 +360,26 @@ load_master_h5ad <- function(path) {
   })
 }
 
-#' Reconstruct a groovy DataFrame from .uns arrays stored by build_h5ad_for_app.py
-#' @param ad AnnData object
+#' Reconstruct a groovy DataFrame from a pre-fetched .uns R list
+#' @param uns_list R list from ad$uns (single bridge crossing)
 #' @param sheet One of "targets", "markers", "composition"
 #' @return data.frame or NULL
-reconstruct_groovy_df <- function(ad, sheet) {
+reconstruct_groovy_df_from_list <- function(uns_list, sheet) {
   prefix <- paste0("groovy_", sheet, "_")
   cols_key <- paste0("groovy_", sheet, "_columns")
   nrows_key <- paste0("groovy_", sheet, "_n_rows")
 
-  if (is.null(ad$uns[[cols_key]])) return(NULL)
+  if (is.null(uns_list[[cols_key]])) return(NULL)
 
-  col_names <- ad$uns[[cols_key]]
-  n_rows <- as.integer(ad$uns[[nrows_key]])
+  col_names <- uns_list[[cols_key]]
+  n_rows <- as.integer(uns_list[[nrows_key]])
 
   if (n_rows == 0) return(NULL)
 
   df <- data.frame(row.names = seq_len(n_rows))
   for (col in col_names) {
     key <- paste0(prefix, col)
-    vals <- ad$uns[[key]]
+    vals <- uns_list[[key]]
     if (!is.null(vals)) {
       df[[col]] <- vals
     }
@@ -388,6 +391,12 @@ reconstruct_groovy_df <- function(ad, sheet) {
   }
 
   df
+}
+
+#' Legacy: Reconstruct a groovy DataFrame via ad$uns (slow, ~14s for 62 keys)
+#' Kept for backward compatibility but unused in normal path
+reconstruct_groovy_df <- function(ad, sheet) {
+  reconstruct_groovy_df_from_list(ad$uns, sheet)
 }
 
 #' Try loading from H5AD first, fall back to Excel

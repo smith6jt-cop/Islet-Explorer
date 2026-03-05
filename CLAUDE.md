@@ -302,6 +302,25 @@ Required env vars: `KEY` (API key), `BASE` (API base URL, optional).
 - **Token budget**: Controlled by `OPENAI_TOKEN_BUDGET` env var. Chat panel shows cumulative usage and blocks requests when budget exhausted.
 - **Debug mode**: Set `DEBUG_CREDENTIALS=1` env var for verbose credential loading logs in the Shiny console.
 
+## Cell-Count-Weighted Trajectory (Phase 12, Mar 2026)
+
+### Problem
+60.8% of islets have ≤10 cells — their aggregated scVI embeddings are noisy. DPT operates on 10-dim scVI latent space but the scatter shows single-marker expression from `.X`. An islet can be "far" in latent space (unusual across ALL 31 markers → high DPT) while having normal INS expression. These islets are real biology but shouldn't get equal visual weight.
+
+### Solution: Cell-Count-Aware Visualization
+- **Point sizing**: `sqrt(total_cells)` — area proportional to cell count. Default in trajectory scatter.
+- **Weighted LOESS**: `weight = log1p(total_cells)` — well-measured islets drive trends, small islets contribute proportionally less. Raw counts too skewed (median=9, max=1,902) → `log1p` compresses 1,902:1 ratio to ~11:1.
+- **Hover tooltip**: Shows "Cells: N" on hover so users understand point placement.
+- **UI controls**: Point size selector: Cell Count (default) / Islet Diameter / Uniform.
+
+### Key Details
+- `total_cells` is in `adata_ins_root.h5ad` `.obs` (all 5,214 islets, min=1, max=1,902)
+- Added to `traj_data_clean()` result_df with NA guard (fills missing with 1)
+- `log1p(total_cells)` for LOESS weights — prevents extreme islets from distorting trend lines
+- `sqrt(total_cells)` for point sizing — area proportional, range [0.3×, 3.0×] base point size
+- All three trend line variants weighted: overall, by-donor (donor_id coloring), by-donor (donor_status coloring)
+- **Critical**: Raw `total_cells` as LOESS weight causes wild curves — a 1,902-cell islet dominates the fit. Always use `log1p()`.
+
 ## Important Conventions
 
 - `ggplot2::coord_sf()` and `ggplot2::geom_sf()` - these are ggplot2 functions, NOT sf functions

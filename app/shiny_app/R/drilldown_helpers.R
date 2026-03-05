@@ -29,6 +29,93 @@ PHENOTYPE_COLORS <- c(
   "Unknown"       = "#CCCCCC"   # light gray
 )
 
+# ── High Contrast palette: immune spread across purple/cyan/magenta/indigo ──
+PHENOTYPE_COLORS_HIGH_CONTRAST <- c(
+  "Beta cell"     = "#D32F2F",  # deep red
+  "Alpha cell"    = "#FF8F00",  # amber
+  "Delta cell"    = "#FDD835",  # bright yellow
+  "Endocrine"     = "#8D6E63",  # brown
+  "Acinar"        = "#00ACC1",  # cyan
+  "Ductal"        = "#43A047",  # green
+  "ECAD+"         = "#7CB342",  # lime green
+  "Structural"    = "#9E9E9E",  # gray
+  "SMA+"          = "#F06292",  # pink
+  "Blood Vessel"  = "#E91E63",  # magenta-red
+  "Endothelial"   = "#FF7043",  # deep orange
+  "Lymphatic"     = "#26A69A",  # teal
+  "Neural"        = "#AB47BC",  # purple
+  "Macrophage"    = "#5C6BC0",  # indigo
+  "APCs"          = "#26C6DA",  # light cyan
+  "CD8a Tcell"    = "#7B1FA2",  # deep purple
+  "CD4 Tcell"     = "#1565C0",  # strong blue
+  "T cell"        = "#0097A7",  # dark cyan
+  "B cell"        = "#EC407A",  # hot pink
+  "Immune"        = "#283593",  # dark indigo
+  "Unknown"       = "#BDBDBD"   # light gray
+)
+
+# ── Colorblind Safe palette: adapted from Paul Tol qualitative schemes ──
+PHENOTYPE_COLORS_COLORBLIND <- c(
+  "Beta cell"     = "#CC6677",  # rose
+  "Alpha cell"    = "#DDCC77",  # sand
+  "Delta cell"    = "#999933",  # olive
+  "Endocrine"     = "#AA4499",  # purple
+  "Acinar"        = "#44AA99",  # teal
+  "Ductal"        = "#332288",  # indigo
+  "ECAD+"         = "#117733",  # green
+  "Structural"    = "#888888",  # gray
+  "SMA+"          = "#882255",  # wine
+  "Blood Vessel"  = "#EE8866",  # peach
+  "Endothelial"   = "#EEDD88",  # light yellow
+  "Lymphatic"     = "#77AADD",  # light blue
+  "Neural"        = "#FFAABB",  # pink
+  "Macrophage"    = "#44BB99",  # mint
+  "APCs"          = "#BBCC33",  # pear
+  "CD8a Tcell"    = "#AA4455",  # dark rose
+  "CD4 Tcell"     = "#4477AA",  # steel blue
+  "T cell"        = "#66CCEE",  # cyan
+  "B cell"        = "#EE6677",  # coral
+  "Immune"        = "#225566",  # dark teal
+  "Unknown"       = "#BBBBBB"   # light gray
+)
+
+# ── Maximum Distinction palette: adapted from Kelly's 22 maximally distinct ──
+PHENOTYPE_COLORS_MAX_DISTINCT <- c(
+  "Beta cell"     = "#BE0032",  # vivid red
+  "Alpha cell"    = "#F3C300",  # vivid yellow
+  "Delta cell"    = "#875692",  # strong purple
+  "Endocrine"     = "#F38400",  # vivid orange
+  "Acinar"        = "#A1CAF1",  # very light blue
+  "Ductal"        = "#008856",  # vivid green
+  "ECAD+"         = "#C2B280",  # dark yellowish brown
+  "Structural"    = "#848482",  # medium gray
+  "SMA+"          = "#E68FAC",  # purplish pink
+  "Blood Vessel"  = "#F99379",  # vivid orange-yellow
+  "Endothelial"   = "#604E97",  # strong violet
+  "Lymphatic"     = "#0067A5",  # strong blue
+  "Neural"        = "#DCD300",  # vivid greenish yellow
+  "Macrophage"    = "#7F180D",  # vivid reddish brown
+  "APCs"          = "#B3446C",  # deep purplish pink
+  "CD8a Tcell"    = "#F6A600",  # vivid yellowish brown
+  "CD4 Tcell"     = "#2B3D26",  # dark olive green
+  "T cell"        = "#8DB600",  # vivid yellowish green
+  "B cell"        = "#654522",  # deep yellowish brown
+  "Immune"        = "#E25822",  # vivid reddish orange
+  "Unknown"       = "#C0C0C0"   # silver gray
+)
+
+# ── Palette registry and accessor ────────────────────────────────────────
+PHENOTYPE_PALETTES <- list(
+  "Original"             = PHENOTYPE_COLORS,
+  "High Contrast"        = PHENOTYPE_COLORS_HIGH_CONTRAST,
+  "Colorblind Safe"      = PHENOTYPE_COLORS_COLORBLIND,
+  "Maximum Distinction"  = PHENOTYPE_COLORS_MAX_DISTINCT
+)
+
+get_phenotype_palette <- function(name = "Original") {
+  PHENOTYPE_PALETTES[[name]] %||% PHENOTYPE_COLORS
+}
+
 # ── Cell CSV cache (env-based, same pattern as geojson_cache) ──────────
 drilldown_cache <- new.env()
 
@@ -81,7 +168,8 @@ load_islet_cells <- function(imageid, islet_key) {
 #' @param show_peri Logical; if FALSE, only show core cells
 #' @return ggplot object
 render_islet_drilldown_plot <- function(info, cells, color_by = "phenotype", show_peri = TRUE,
-                                        show_peri_boundary = TRUE, show_structures = TRUE) {
+                                        show_peri_boundary = TRUE, show_structures = TRUE,
+                                        palette = PHENOTYPE_COLORS) {
   if (is.null(info) || is.null(cells) || nrow(cells) == 0) return(NULL)
 
   # Build base plot: GeoJSON boundaries (islet core always drawn)
@@ -109,7 +197,7 @@ render_islet_drilldown_plot <- function(info, cells, color_by = "phenotype", sho
   if (color_by == "phenotype" && "phenotype" %in% colnames(cells)) {
     # Categorical coloring by phenotype
     pheno_present <- sort(unique(cells$phenotype))
-    pal <- PHENOTYPE_COLORS[pheno_present]
+    pal <- palette[pheno_present]
     # Fill missing phenotypes with gray
     pal[is.na(pal)] <- "#CCCCCC"
 
@@ -165,7 +253,7 @@ render_islet_drilldown_plot <- function(info, cells, color_by = "phenotype", sho
 #' Render phenotype composition summary bar chart
 #' @param cells data.frame from load_islet_cells()
 #' @return ggplot object
-render_drilldown_summary <- function(cells) {
+render_drilldown_summary <- function(cells, palette = PHENOTYPE_COLORS) {
   if (is.null(cells) || nrow(cells) == 0 || !"phenotype" %in% colnames(cells)) {
     return(NULL)
   }
@@ -189,7 +277,7 @@ render_drilldown_summary <- function(cells) {
 
   # Colors
   pheno_present <- levels(counts$phenotype)
-  pal <- PHENOTYPE_COLORS[pheno_present]
+  pal <- palette[pheno_present]
   pal[is.na(pal)] <- "#CCCCCC"
 
   if ("cell_region" %in% colnames(cells) && length(unique(counts$region)) > 1) {

@@ -124,7 +124,7 @@ def reaggregate(sc_path, islet_dir, trajectory_out, min_cells=0):
     # Neighbors from scVI latent means
     if 'X_scVI_mean' in adata_islet.obsm:
         print("Computing neighbors from X_scVI_mean (batch-corrected)...")
-        sc.pp.neighbors(adata_islet, n_neighbors=15, use_rep='X_scVI_mean', metric='cosine')
+        sc.pp.neighbors(adata_islet, n_neighbors=30, use_rep='X_scVI_mean', metric='cosine')
     else:
         print("WARNING: X_scVI_mean not available, falling back to PCA")
         sc.pp.pca(adata_islet, n_comps=10)
@@ -137,7 +137,7 @@ def reaggregate(sc_path, islet_dir, trajectory_out, min_cells=0):
 
     # PAGA-initialized UMAP
     sc.pl.paga(adata_islet, plot=False)
-    sc.tl.umap(adata_islet, init_pos='paga', min_dist=0.1, spread=1.5)
+    sc.tl.umap(adata_islet, init_pos='paga', min_dist=0.3, spread=1.5)
     print(f"UMAP computed: {adata_islet.obsm['X_umap'].shape}")
 
     # Find root: ND islet with highest INS
@@ -207,6 +207,17 @@ def reaggregate(sc_path, islet_dir, trajectory_out, min_cells=0):
 
     if not all_pass:
         print("WARNING: Some validation checks failed. Outputs will still be saved.")
+
+    # Visualization UMAP from raw marker expression
+    # The scVI latent has donor-level variation corrected out (Age+Gender covariates
+    # bijectively map to donors), which reduces disease-stage separation in UMAP.
+    # Raw marker means (INS, GCG, immune markers) preserve this biological signal.
+    print("\nComputing visualization UMAP from raw marker expression...")
+    sc.pp.pca(adata_islet, n_comps=15)
+    sc.pp.neighbors(adata_islet, n_neighbors=30, use_rep='X_pca', metric='euclidean',
+                    key_added='neighbors_viz')
+    sc.tl.umap(adata_islet, neighbors_key='neighbors_viz', min_dist=0.5, spread=2.0)
+    print(f"Visualization UMAP computed: {adata_islet.obsm['X_umap'].shape}")
 
     # ---------------------------------------------------------------
     # Step 7: Save trajectory H5AD

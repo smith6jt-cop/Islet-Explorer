@@ -25,9 +25,10 @@ trajectory_ui <- function(id) {
                                      "Donor ID" = "donor_id"),
                          selected = "donor_status"),
               selectInput(ns("traj_point_size"), "Point size by:",
-                         choices = c("Uniform" = "uniform",
-                                     "Islet Diameter" = "islet_diam_um"),
-                         selected = "islet_diam_um")
+                         choices = c("Cell Count" = "total_cells",
+                                     "Islet Diameter" = "islet_diam_um",
+                                     "Uniform" = "uniform"),
+                         selected = "total_cells")
             ),
             column(3,
               sliderInput(ns("traj_alpha"), "Point transparency:",
@@ -42,9 +43,9 @@ trajectory_ui <- function(id) {
               )
             )
           ),
-          plotlyOutput(ns("traj_scatter"), height = 450),
+          plotlyOutput(ns("traj_scatter"), height = 650),
           br(),
-          plotOutput(ns("traj_heatmap"), height = 100),
+          plotlyOutput(ns("traj_heatmap"), height = 100),
           hr(),
           h5("Multi-Feature Heatmap", style = "color: #2c5aa0;"),
           fluidRow(

@@ -353,6 +353,14 @@ ui <- fluidPage(
     ),
     # Main Panel
     column(width = 10.6, class = "equal-height-panel main-content-panel",
+      div(style = "display: flex; justify-content: flex-end; align-items: center; margin-bottom: 8px; gap: 8px;",
+        tags$label("Phenotype palette:", style = "font-size: 13px; font-weight: 500; color: #555; margin: 0;"),
+        tags$div(style = "width: 180px;",
+          selectInput("phenotype_palette", NULL,
+                      choices = c("Original", "High Contrast", "Colorblind Safe", "Maximum Distinction"),
+                      selected = "High Contrast", width = "100%")
+        )
+      ),
       tabsetPanel(id = "tabs",
         tabPanel("Plot",
           fluidRow(
@@ -424,6 +432,11 @@ server <- function(input, output, session) {
   # Active tab reactive (used to prevent duplicate non-namespaced output IDs)
   active_tab <- reactive(input$tabs)
 
+  # Active phenotype palette (global, consumed by root renders + spatial module)
+  active_palette <- reactive({
+    get_phenotype_palette(input$phenotype_palette %||% "Original")
+  })
+
   # Plot module: returns list(raw_df, summary_df, get_selection_description)
   plot_returns <- plot_server("plot", prepared, selected_islet, active_tab)
 
@@ -440,7 +453,7 @@ server <- function(input, output, session) {
                     get_selection_description = plot_returns$get_selection_description)
 
   # Spatial Neighborhood module
-  spatial_server("spatial", prepared)
+  spatial_server("spatial", prepared, active_palette)
 
   # AI Assistant module (self-contained)
   ai_assistant_server("ai")
@@ -460,7 +473,8 @@ server <- function(input, output, session) {
         show_peri_cells <- if (!is.null(input$drilldown_show_peri)) input$drilldown_show_peri else TRUE
         return(tryCatch(
           render_islet_drilldown_plot(info, cells, color_by = color_by, show_peri = show_peri_cells,
-                                      show_peri_boundary = show_peri_bd, show_structures = show_structs),
+                                      show_peri_boundary = show_peri_bd, show_structures = show_structs,
+                                      palette = active_palette()),
           error = function(e) {
             cat("[DRILLDOWN ERROR]", conditionMessage(e), "\n")
             ggplot2::ggplot() +
@@ -496,7 +510,7 @@ server <- function(input, output, session) {
     if (!show_peri && "cell_region" %in% colnames(cells)) {
       cells <- cells[cells$cell_region == "core", , drop = FALSE]
     }
-    tryCatch(render_drilldown_summary(cells), error = function(e) NULL)
+    tryCatch(render_drilldown_summary(cells, palette = active_palette()), error = function(e) NULL)
   })
 
   output$islet_drilldown_table <- renderTable({

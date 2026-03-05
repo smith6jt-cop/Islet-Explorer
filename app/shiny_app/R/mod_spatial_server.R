@@ -7,7 +7,7 @@
 #   PHENOTYPE_COLORS — from drilldown_helpers.R
 #   donor_tissue_available(), get_available_donors(), load_donor_tissue() — from spatial_helpers.R
 
-spatial_server <- function(id, prepared) {
+spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS)) {
 
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
@@ -233,7 +233,7 @@ spatial_server <- function(id, prepared) {
         } else {
           # Phenotype coloring
           pheno_present <- sort(unique(fg$phenotype))
-          pal <- PHENOTYPE_COLORS[pheno_present]
+          pal <- palette()[pheno_present]
           pal[is.na(pal)] <- "#CCCCCC"
 
           p <- p + ggplot2::geom_point(
@@ -391,9 +391,9 @@ spatial_server <- function(id, prepared) {
       keep_phenos <- names(max_per_pheno[max_per_pheno > 0.01])
       bar_df <- bar_df[bar_df$phenotype %in% keep_phenos, , drop = FALSE]
 
-      # Use PHENOTYPE_COLORS where available
+      # Use active phenotype palette where available
       pheno_present <- unique(bar_df$phenotype)
-      pal <- PHENOTYPE_COLORS[pheno_present]
+      pal <- palette()[pheno_present]
       pal[is.na(pal)] <- "#CCCCCC"
 
       bar_df$phenotype <- factor(bar_df$phenotype, levels = names(sort(max_per_pheno[keep_phenos], decreasing = TRUE)))

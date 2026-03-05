@@ -269,8 +269,14 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         donor_id = donor_ids,
         value = as.numeric(expression_vals),
         feature_name = selected_feature,
+        total_cells = as.integer(obs_df$total_cells),
         stringsAsFactors = FALSE
       )
+
+      # Guard: fill missing total_cells with 1 (safe default weight)
+      if (any(is.na(result_df$total_cells))) {
+        result_df$total_cells[is.na(result_df$total_cells)] <- 1L
+      }
 
       # Add UMAP coordinates
       if (!is.null(umap_coords) && nrow(umap_coords) == nrow(result_df)) {
@@ -442,13 +448,17 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
 
       # Always apply jitter
       set.seed(42)
-      jitter_amount_x <- diff(range(df$pt, na.rm = TRUE)) * 0.008
-      jitter_amount_y <- diff(range(df$value, na.rm = TRUE)) * 0.06
+      jitter_amount_x <- diff(range(df$pt, na.rm = TRUE)) * 0.012
+      jitter_amount_y <- diff(range(df$value, na.rm = TRUE)) * 0.12
       df$pt    <- pmax(0, pmin(1, df$pt + runif(nrow(df), -jitter_amount_x, jitter_amount_x)))
       df$value <- df$value + runif(nrow(df), -jitter_amount_y, jitter_amount_y)
 
-      # Create base aesthetic mapping
-      aes_mapping <- aes(x = pt, y = value)
+      # Log-transform cell counts for LOESS weights (raw counts too skewed: median=9, max=1902)
+      df$loess_weight <- log1p(df$total_cells)
+
+      # Create base aesthetic mapping with cell count for hover
+      df$hover_cells <- paste0("Cells: ", df$total_cells)
+      aes_mapping <- aes(x = pt, y = value, text = hover_cells)
 
       # Add color aesthetic
       if (color_by == "donor_status") {
@@ -467,6 +477,9 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
           if (!all(is.na(df$islet_diam_um))) {
             aes_mapping$size <- as.name("islet_diam_um")
           }
+        } else if (size_by == "total_cells" && "total_cells" %in% colnames(df)) {
+          df$size_cells <- sqrt(df$total_cells)
+          aes_mapping$size <- as.name("size_cells")
         }
       }
 
@@ -509,6 +522,9 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
           size_range <- c(0.5 * point_size, 2.5 * point_size)
           g <- g + scale_size_continuous(name = "Islet Diameter (um)", range = size_range, guide = "none")
         }
+      } else if (size_by == "total_cells" && "size_cells" %in% colnames(df)) {
+        size_range <- c(0.3 * point_size, 3.0 * point_size)
+        g <- g + scale_size_continuous(name = "Cell Count", range = size_range, guide = "none")
       }
 
       # Trend lines
@@ -516,7 +532,8 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
 
       if (trend_type == "overall") {
         g <- g + geom_smooth(method = "loess", se = TRUE, alpha = 0.2, color = "black",
-                             size = 1, fullrange = FALSE, span = 0.75)
+                             size = 1, fullrange = FALSE, span = 0.75,
+                             aes(weight = loess_weight))
       } else if (trend_type == "by_donor") {
         if ("donor_status" %in% names(df) && !all(is.na(df$donor_status))) {
           df$donor_status <- factor(df$donor_status, levels = c("ND", "Aab+", "T1D"))
@@ -528,7 +545,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
               df_subset <- df[df$donor_status == status & !is.na(df$donor_status), ]
               if (nrow(df_subset) > 0) {
                 g <- g + geom_smooth(data = df_subset,
-                                     aes(x = pt, y = value),
+                                     aes(x = pt, y = value, weight = loess_weight),
                                      method = "loess", se = TRUE, alpha = 0.15,
                                      size = 0.8, show.legend = FALSE, fullrange = FALSE, span = 0.75,
                                      color = trend_colors[status])
@@ -539,7 +556,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
               method = "loess", se = TRUE, alpha = 0.15,
               size = 0.8, show.legend = FALSE, fullrange = FALSE, span = 0.75,
               inherit.aes = FALSE,
-              mapping = aes(x = pt, y = value, group = donor_status, color = donor_status)) +
+              mapping = aes(x = pt, y = value, group = donor_status, color = donor_status, weight = loess_weight)) +
               scale_color_manual(values = trend_colors,
                                 name = if (color_by == "donor_status") color_title else "Trend Lines",
                                 drop = FALSE,
@@ -561,7 +578,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       coord_cartesian(xlim = c(0, 1))
 
       # Convert to plotly with custom data for reliable click handling
-      p <- ggplotly(g, tooltip = c("x", "y", "colour"), source = ns("traj_scatter"))
+      p <- ggplotly(g, tooltip = c("x", "y", "colour", "text"), source = ns("traj_scatter"))
 
       # Add customdata to plotly traces for click handling
       if ("combined_islet_id" %in% colnames(df) && "case_id" %in% colnames(df)) {
@@ -975,7 +992,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
     })
 
     # ---------- Heatmap: Donor Status Progression ----------
-    output$traj_heatmap <- renderPlot({
+    output$traj_heatmap <- renderPlotly({
       df <- traj_data_clean()
       if (is.null(df) || nrow(df) == 0) return(NULL)
 
@@ -1015,25 +1032,25 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       bin_idx  <- match(as.character(hm$pt_bin), bin_levels)
       hm$x     <- all_mids[bin_idx]
 
-      ggplot(hm, aes(x = x, y = 1, fill = avg_donor_status)) +
-        geom_tile(height = 1) +
-        scale_fill_gradientn(
-          colors   = unname(DONOR_COLORS),
-          limits   = c(0, 2),
-          na.value = "#dddddd",
-          name     = "Average\nDonor Type",
-          breaks   = c(0, 1, 2),
-          labels   = c("ND", "Aab+", "T1D")
-        ) +
-        scale_x_continuous(limits = c(0, 1), expand = c(0, 0)) +
-        labs(x = NULL, y = NULL, title = NULL) +
-        theme_minimal() +
-        theme(
-          axis.text.y  = element_blank(),
-          axis.ticks.y = element_blank(),
-          panel.grid   = element_blank(),
-          plot.title   = element_text(size = 12, hjust = 0.5),
-          legend.position = "none"
+      # Build as plotly heatmap to match scatter margins exactly
+      # Diverging colorscale: ND (blue) -> even mix (white) -> T1D (green)
+      plot_ly() %>%
+        add_trace(
+          type = "heatmap",
+          x = hm$x,
+          y = list(""),
+          z = matrix(hm$avg_donor_status, nrow = 1),
+          colorscale = list(c(0, DONOR_COLORS[["ND"]]),
+                            c(0.5, "#F5F5F5"),
+                            c(1, DONOR_COLORS[["T1D"]])),
+          zmin = 0, zmax = 2,
+          showscale = FALSE,
+          hovertemplate = "PT: %{x:.2f}<br>Avg status: %{z:.2f}<extra></extra>"
+        ) %>%
+        layout(
+          xaxis = list(range = c(0, 1), title = "", fixedrange = TRUE),
+          yaxis = list(title = "", showticklabels = FALSE, fixedrange = TRUE),
+          margin = list(l = 60, r = 20, t = 5, b = 30, pad = 5)
         )
     })
 

@@ -378,7 +378,12 @@ get_islet_annotations <- function(case_id, islet_key) {
     }
   }
 
-  # Fallback to segmentation_data
+  # Fallback to segmentation_data (lazy load on first access)
+  if (!.seg_lazy$loaded) {
+    .seg_lazy$data <- load_segmentation_data()
+    .seg_lazy$loaded <- TRUE
+  }
+  segmentation_data <- .seg_lazy$data
   if (is.null(segmentation_data)) return(NULL)
 
   # Extract numeric islet ID from islet_key
@@ -424,17 +429,19 @@ get_islet_annotations <- function(case_id, islet_key) {
   annotations
 }
 
-# Load at startup
-segmentation_data <- load_segmentation_data()
-islet_spatial_lookup <- load_islet_spatial_lookup()
+# Deferred: annotations.tsv is 72 MB and only needed as a fallback
+# when islet_spatial_lookup doesn't have the islet (never happens in practice)
+.seg_lazy <- new.env(parent = emptyenv())
+.seg_lazy$data <- NULL
+.seg_lazy$loaded <- FALSE
 
-# Keep legacy annotations_data for backward compatibility
-annotations_data <- segmentation_data
+# Load spatial lookup eagerly (small file, always needed)
+islet_spatial_lookup <- load_islet_spatial_lookup()
 
 # Reusable GeoJSON base plot builder
 # Returns a ggplot with polygon layers + coord_sf (no crosshairs or title).
 # Used by both render_islet_segmentation_plot() and render_islet_drilldown_plot().
-build_segmentation_base_plot <- function(info, buffer_um = 250,
+build_segmentation_base_plot <- function(info, buffer_um = 150,
                                          show_peri_boundary = TRUE,
                                          show_structures = TRUE) {
   if (is.null(info)) return(NULL)
