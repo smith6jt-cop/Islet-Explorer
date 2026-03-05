@@ -26,9 +26,9 @@ Interactive web application for exploring pancreatic islet CODEX multiplexed ima
 
 ### Data Source
 
-The app loads from a single enriched H5AD file (`data/islet_explorer.h5ad`, ~48 MB) containing:
+The app loads from a single enriched H5AD file (`data/islet_explorer.h5ad`, ~70 MB) containing:
 
-- **1,015 islets** from 15 nPOD donors (ND, Aab+, T1D)
+- **5,023 islets** from 14 nPOD donors (ND, Aab+, T1D)
 - **31 protein markers** (mean expression per islet)
 - **Pseudotime trajectory** (DPT with INS root, scVI-corrected)
 - **21 phenotype proportions** (from single-cell phenotyping)
@@ -109,7 +109,7 @@ The Trajectory tab uses a full-width layout (no sidebar). All controls are inlin
 
 ### Key Biological Insights
 
-- **INS vs pseudotime**: Strong negative correlation (r = -0.741) — insulin decreases along the trajectory
+- **INS vs pseudotime**: Strong negative correlation (r = -0.591) — insulin decreases along the trajectory
 - **Disease ordering**: ND (early) → Aab+ (middle) → T1D (late) along pseudotime
 - **GCG increase**: Glucagon expression increases as insulin decreases, reflecting alpha cell persistence
 
@@ -199,7 +199,7 @@ Tissue-wide spatial visualization and peri-islet microenvironment analysis. Comb
    - Uses ggplot2 `renderPlot` (not plotly) for performance at >100K points
 
 3. **Leiden Panel** (col-4)
-   - UMAP scatter of 1,015 islets colored by selected Leiden resolution
+   - UMAP scatter of 5,023 islets colored by selected Leiden resolution
    - Stacked bar chart of mean phenotype composition per cluster
    - Hidden with message when Leiden data unavailable in H5AD
 
@@ -222,10 +222,9 @@ Tissue-wide spatial visualization and peri-islet microenvironment analysis. Comb
 
 ### Data Coverage
 
-- 949 of 1,015 islets (93.5%) have peri-islet data
-- 66 islets lack peri-islet cells → shown as N/A in plots
+- All 5,023 islets have peri-islet data (100% coverage)
 - Donor 6533 has 0 core/peri cells (no islet annotations) — shows tissue background only
-- Biological validation: T1D immune_frac_peri (0.155) > Aab+ (0.106) > ND (0.069)
+- Biological validation: T1D immune_frac_peri > Aab+ > ND (immune infiltration increases with disease progression)
 
 ---
 
@@ -251,7 +250,7 @@ Click any islet data point in the Plot or Trajectory tab to inspect individual c
 
 ### Data Source
 
-Per-islet cell CSVs in `data/cells/` (949 files, ~111 MB total). Each file contains:
+Per-islet cell CSVs in `data/cells/` (5,023 files, ~203 MB total). Each file contains:
 - X/Y centroid coordinates (μm, converted to pixel space for GeoJSON overlay)
 - Phenotype label (1 of 21 types)
 - Region (core or peri-islet)
@@ -260,7 +259,7 @@ Per-islet cell CSVs in `data/cells/` (949 files, ~111 MB total). Each file conta
 
 ### Availability
 
-- 949 of 1,015 islets have cell data
+- All 5,023 islets have cell data
 - If cell data is unavailable for a clicked islet, the panel shows "Boundaries" mode with a message
 
 ---
@@ -309,31 +308,35 @@ The canonical pipeline rebuilds `data/islet_explorer.h5ad` from source:
 # Activate the Python environment
 conda activate scvi-env
 
-# Step 1: Compute neighborhood metrics (from 2.6M-cell single-cell H5AD)
+# Step 1: Reaggregate islets + trajectory + Leiden (~15 min)
+python scripts/reaggregate_islets.py
+# → islet_analysis/islets_core_fixed.h5ad (5,023 islets)
+# → data/adata_ins_root.h5ad (+ pseudotime + UMAP)
+# → islet_analysis/islets_core_clustered.h5ad (+ Leiden at 4 resolutions)
+
+# Step 2: Compute neighborhood metrics (from 2.6M-cell single-cell H5AD)
 python scripts/compute_neighborhood_metrics.py
-# → data/neighborhood_metrics.csv (1,015 rows × 62 cols)
+# → data/neighborhood_metrics.csv (5,023 rows × 62 cols)
 
-# Step 2: Extract per-islet cell CSVs (for drill-down viewer)
+# Step 3: Extract per-islet cell CSVs (for drill-down viewer)
 python scripts/extract_per_islet_cells.py
-# → data/cells/*.csv (949 files, ~111 MB)
+# → data/cells/*.csv (5,023 files, ~203 MB)
 
-# Step 3: Extract per-donor tissue CSVs (for Spatial tab scatter)
+# Step 4: Extract per-donor tissue CSVs (for Spatial tab scatter, independent of islet filtering)
 python scripts/extract_per_donor_tissue.py
 # → data/donors/*.csv (15 files, ~78 MB)
 
-# Step 4: Build enriched H5AD (trajectory + groovy + neighborhood + Leiden + donor metadata)
+# Step 5: Build enriched H5AD (trajectory + groovy + neighborhood + Leiden + donor metadata)
 python scripts/build_h5ad_for_app.py
-# → data/islet_explorer.h5ad (~48 MB)
+# → data/islet_explorer.h5ad (~70 MB)
 ```
 
 ### Full Lineage
 
 ```
 CODEX_scvi_BioCov_phenotyped_newDuctal.h5ad  (2.6M cells, canonical single-cell)
-  ↓ islet_analysis/fixed_islet_aggregation.py (core only, min_cells=20)
-islets_core_fixed.h5ad  (1,015 islets, proteins + scVI embeddings)
-  ↓ notebooks/rebuild_trajectory.ipynb (scVI neighbors, PAGA→UMAP, DPT)
-data/adata_ins_root.h5ad  (+ pseudotime + UMAP)
+  ↓ scripts/reaggregate_islets.py (min_cells=0, require_paired=True)
+islets_core_fixed.h5ad  (5,023 islets, proteins + scVI embeddings + trajectory + Leiden)
   ↓ scripts/build_h5ad_for_app.py (+ groovy + neighborhood + donor metadata)
 data/islet_explorer.h5ad  (complete app data, incl. Leiden clustering)
 ```
@@ -412,7 +415,7 @@ conda activate scvi-env
 
 ### App fails to load
 
-1. Check that `data/islet_explorer.h5ad` exists and is ~48 MB
+1. Check that `data/islet_explorer.h5ad` exists and is ~70 MB
 2. Check that R packages are installed: `library(anndata); library(reticulate)`
 3. Check that Python is accessible via reticulate: `reticulate::py_available()`
 4. Fall back to Excel: ensure `data/master_results.xlsx` exists (reduced functionality)
@@ -427,13 +430,13 @@ python scripts/build_h5ad_for_app.py
 
 ### No neighborhood metrics in Plot selector
 
-1. Verify `data/neighborhood_metrics.csv` exists (1,015 rows)
+1. Verify `data/neighborhood_metrics.csv` exists (5,023 rows)
 2. Rebuild the H5AD: `python scripts/build_h5ad_for_app.py`
 3. Kill stale R workers and refresh the browser
 
 ### Single-cell drill-down not available
 
-1. Verify `data/cells/` directory contains ~949 CSV files
+1. Verify `data/cells/` directory contains ~5,023 CSV files
 2. If missing, regenerate: `python scripts/extract_per_islet_cells.py`
 
 ### Segmentation viewer shows "No GeoJSON found"

@@ -75,11 +75,11 @@ These are read by the root-level `renderPlot` outputs in `app.R`.
 
 ## Key Data Files
 
-- `data/islet_explorer.h5ad` - **Primary app data** (~48 MB, 1,015 islets, groovy + trajectory + donor + neighborhood + Leiden)
+- `data/islet_explorer.h5ad` - **Primary app data** (~70 MB, 5,023 islets, groovy + trajectory + donor + neighborhood + Leiden)
 - `data/master_results.xlsx` - Aggregated islet-level data (composition, markers, targets) -- Excel fallback
-- `data/adata_ins_root.h5ad` - Trajectory h5ad (1,015 islets, 31 vars, DPT pseudotime, UMAP)
-- `data/neighborhood_metrics.csv` - Per-islet peri-islet metrics (1,015 rows, 62 columns)
-- `data/cells/*.csv` - Per-islet single-cell CSVs for drill-down (~949 files, ~111 MB total)
+- `data/adata_ins_root.h5ad` - Trajectory h5ad (5,023 islets, 31 vars, DPT pseudotime, UMAP)
+- `data/neighborhood_metrics.csv` - Per-islet peri-islet metrics (5,023 rows, 62 columns)
+- `data/cells/*.csv` - Per-islet single-cell CSVs for drill-down (~5,023 files, ~203 MB total)
 - `data/donors/*.csv` - Per-donor tissue-wide cell CSVs for Spatial tab scatter (15 files, ~78 MB total)
 - `data/islet_spatial_lookup.csv` - Centroid coordinates for segmentation viewer
 - `data/json/*.geojson` / `data/gson/*.geojson.gz` - QuPath segmentation boundaries
@@ -92,17 +92,18 @@ These are read by the root-level `renderPlot` outputs in `app.R`.
 ```
 single_cell_analysis/CODEX_scvi_BioCov_phenotyped_newDuctal.h5ad  (2.6M cells, 31 markers)
   |
-  |-- islet_analysis/fixed_islet_aggregation.py (core only, min_cells=20)
-  |     -> islet_analysis/islets_core_fixed.h5ad  (1,015 islets)
-  |         |
-  |         |-- notebooks/rebuild_trajectory.ipynb (scVI n=15 cosine, PAGA->UMAP, DPT)
-  |         |     -> data/adata_ins_root.h5ad  (+ pseudotime + UMAP)
-  |         |
-  |         |-- scripts/compute_neighborhood_metrics.py
-  |         |     -> data/neighborhood_metrics.csv  (62 cols: peri-islet composition, immune, enrichment, distance)
-  |         |
-  |         +-- scripts/extract_per_islet_cells.py
-  |               -> data/cells/*.csv  (949 files, 37 cols: coords, phenotype, region, 31 markers)
+  |-- scripts/reaggregate_islets.py  (one-stop: aggregate + trajectory + Leiden)
+  |     -> islet_analysis/islets_core_fixed.h5ad  (5,023 islets, min_cells=0, require_paired=True)
+  |     -> islet_analysis/islets_peri_fixed.h5ad   (5,023 peri-islet)
+  |     -> islet_analysis/islets_merged_fixed.h5ad (5,023 paired core+peri)
+  |     -> data/adata_ins_root.h5ad  (+ pseudotime + UMAP)
+  |     -> islet_analysis/islets_core_clustered.h5ad  (+ Leiden at 4 resolutions)
+  |
+  |-- scripts/compute_neighborhood_metrics.py
+  |     -> data/neighborhood_metrics.csv  (5,023 rows, 62 cols)
+  |
+  |-- scripts/extract_per_islet_cells.py
+  |     -> data/cells/*.csv  (5,023 files, 37 cols: coords, phenotype, region, 31 markers)
   |
   |-- scripts/extract_per_donor_tissue.py
   |     -> data/donors/*.csv  (15 files, 5 cols: X/Y coords, phenotype, cell_region, islet_name)
@@ -111,18 +112,19 @@ single_cell_analysis/CODEX_scvi_BioCov_phenotyped_newDuctal.h5ad  (2.6M cells, 3
         -> data/islet_explorer.h5ad  (all app data in one file, incl. leiden_* + leiden_umap_*)
 ```
 
-Note: `islet_analysis/islets_core_clustered.h5ad` provides Leiden clustering (4 resolutions) + UMAP coords, merged by `build_h5ad_for_app.py` step 4.7.
+Note: `scripts/reaggregate_islets.py` replaces the manual notebook workflow (aggregation + trajectory + Leiden in one script). `islet_analysis/islets_core_clustered.h5ad` provides Leiden clustering (4 resolutions) + UMAP coords, merged by `build_h5ad_for_app.py` step 4.7.
 
 ### Pipeline Scripts & Notebooks
 
+- `scripts/reaggregate_islets.py` - **Primary pipeline**: aggregation (min_cells=0) + trajectory + Leiden in one script
 - `scripts/compute_neighborhood_metrics.py` - Computes per-islet peri-islet metrics from single-cell H5AD
 - `scripts/extract_per_islet_cells.py` - Extracts per-islet cell CSVs for drill-down viewer
 - `scripts/extract_per_donor_tissue.py` - Extracts per-donor tissue CSVs (ALL cells: core+peri+tissue) for Spatial tab scatter
 - `scripts/build_h5ad_for_app.py` - Builds enriched H5AD (trajectory + groovy + neighborhood + Leiden)
 - `scripts/build_master_excel.py` - Builds master_results.xlsx from groovy TSV exports
 - `notebooks/scvi_qc_validation.ipynb` - Validates scVI batch correction (silhouette, LISI, UMAP)
-- `notebooks/rebuild_trajectory.ipynb` - Regenerates trajectory from fixed pipeline
-- `islet_analysis/fixed_islet_aggregation.py` - Core aggregation module (islet-level from single-cell)
+- `notebooks/rebuild_trajectory.ipynb` - Regenerates trajectory from fixed pipeline (superseded by reaggregate_islets.py)
+- `islet_analysis/fixed_islet_aggregation.py` - Core aggregation module (islet-level from single-cell, default min_cells=0)
 
 ### Python Environment
 
@@ -144,11 +146,11 @@ conda activate scvi-env  # scanpy, anndata, scvi-tools, sklearn, scib-metrics, s
 
 ### Data Flow
 
-`compute_neighborhood_metrics.py` reads single-cell H5AD -> `neighborhood_metrics.csv` (1,015 rows) -> merged into `islet_explorer.h5ad` `.obs` by `build_h5ad_for_app.py` (step 4.5) -> extracted in `data_loading.R` `load_master_h5ad()` -> merged into `comp` by `prep_data()` -> available in Plot composition selector (4 option groups) + Statistics tab + Spatial tab.
+`compute_neighborhood_metrics.py` reads single-cell H5AD -> `neighborhood_metrics.csv` (5,023 rows) -> merged into `islet_explorer.h5ad` `.obs` by `build_h5ad_for_app.py` (step 4.5) -> extracted in `data_loading.R` `load_master_h5ad()` -> merged into `comp` by `prep_data()` -> available in Plot composition selector (4 option groups) + Statistics tab + Spatial tab.
 
 ### Key Details
 
-- 949/1,015 islets have peri-islet data; 66 get NaN (no `_exp20um` cells in single-cell H5AD)
+- All 5,023 islets have peri-islet data (100% coverage with min_cells=0 + require_paired=True)
 - Column naming sanitizes phenotype names: spaces -> `_`, `+` -> `plus` (e.g., `peri_prop_ECADplus`)
 - Immune signal validated: T1D immune_frac_peri (0.155) > Aab+ (0.106) > ND (0.069)
 - Plot composition selector now has 4 option groups: Hormone Fractions, Cell Type Proportions, Peri-Islet Proportions, Immune Metrics
@@ -159,7 +161,7 @@ conda activate scvi-env  # scanpy, anndata, scvi-tools, sklearn, scib-metrics, s
 
 1. **Controls** (full-width) -- donor selector, color-by (phenotype/Leiden), Leiden resolution dropdown, region filter (All/Core+Peri/Core), donor status checkboxes
 2. **Tissue Scatter** (col-8) -- ggplot2 `renderPlot` (NOT plotly) showing ~177K cells/donor. Background tissue cells in light grey; foreground (core/peri) colored by phenotype or Leiden cluster. `coord_fixed() + scale_y_reverse()` for spatial orientation. Height: 800px.
-3. **Leiden Panel** (col-4) -- plotly UMAP of 1,015 islets colored by selected Leiden resolution (0.3/0.5/0.8/1.0) + stacked bar chart of mean phenotype composition per cluster
+3. **Leiden Panel** (col-4) -- plotly UMAP of 5,023 islets colored by selected Leiden resolution (0.3/0.5/0.8/1.0) + stacked bar chart of mean phenotype composition per cluster
 4. **Enrichment** (col-6) -- grouped bar of Poisson enrichment z-scores by disease stage, with documentation banner explaining peri-islet vs tissue-wide context
 5. **Phenotype Heatmap** (col-6) -- mean peri-islet phenotype proportions x 3 stages, with documentation banner explaining the 20um expansion zone
 
@@ -184,7 +186,7 @@ Wired as `spatial_server("spatial", prepared)` -- no sidebar sharing, inline con
 ### Per-Islet Cell Data
 
 `extract_per_islet_cells.py` reads single-cell H5AD -> outputs `data/cells/{imageid}_Islet_{N}.csv`:
-- 949 files (matching islets with cell data), ~111 MB total
+- 5,023 files (matching islets with cell data), ~203 MB total
 - 37 columns: `X_centroid`, `Y_centroid`, `phenotype`, `cell_region` (core/peri), `Cell Area`, `Nucleus Area`, + 31 protein markers
 - File naming matches `combined_islet_id` from `islet_spatial_lookup.csv`
 
@@ -312,7 +314,7 @@ Required env vars: `KEY` (API key), `BASE` (API base URL, optional).
 - **Case ID zero-padding**: GeoJSON files use `0112.geojson` (4-digit padded), data uses `112` (unpadded). `load_case_geojson()` and click handlers use `sprintf("%04d", ...)` fallback
 - **Log-scale with zeros**: Use `scales::pseudo_log_trans(base=10)` instead of `scale_y_log10()` -- zeros map to 0 (visible) instead of -Infinity (dropped)
 - **Plot defaults**: Point size = 3.0, transparency = 0.6
-- **Peri-islet data guard**: Always check `total_cells_peri > 0` before using peri metrics (66 islets have 0 peri cells)
+- **Peri-islet data guard**: Always check `total_cells_peri > 0` before using peri metrics (all 5,023 islets have peri data with require_paired=True, but guard remains for robustness)
 - **Column name sanitization**: Phenotype names use `_` for spaces, `plus` for `+` in peri-islet columns
 - **Single-cell Parent column**: `Islet_N` = core cells, `Islet_N_exp20um` = peri-islet cells
 - **CSS overflow for cards with dropdowns**: `selectInput` menus extend below their container. Add `overflow: visible;` to card styles or dropdowns get clipped behind cards.
@@ -349,16 +351,19 @@ Rscript -e 'shiny::runApp(".", port = 7777)'
 ```bash
 conda activate scvi-env
 
-# Phase 7: Compute neighborhood metrics (reads 2.6M-cell H5AD, ~3 min)
+# Full rebuild from single-cell H5AD (aggregate + trajectory + Leiden, ~15 min)
+python scripts/reaggregate_islets.py
+
+# Compute neighborhood metrics (reads 2.6M-cell H5AD, ~3 min)
 python scripts/compute_neighborhood_metrics.py
 
-# Phase 8: Extract per-islet cell CSVs (reads 2.6M-cell H5AD, ~5 min)
+# Extract per-islet cell CSVs (reads 2.6M-cell H5AD, ~5 min)
 python scripts/extract_per_islet_cells.py
 
-# Phase 9: Extract per-donor tissue CSVs for Spatial tab scatter (~2 min)
+# Extract per-donor tissue CSVs for Spatial tab scatter (~2 min, independent of islet filtering)
 python scripts/extract_per_donor_tissue.py
 
-# Rebuild enriched H5AD (merges groovy + trajectory + neighborhood + Leiden)
+# Build enriched H5AD (merges trajectory + groovy + neighborhood + Leiden)
 python scripts/build_h5ad_for_app.py
 ```
 
