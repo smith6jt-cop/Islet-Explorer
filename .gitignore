@@ -56,3 +56,4 @@ scripts/tools/
 # Large package files
 *.deb
 *.rpm
+scripts/scvi_comparison_results/new_latent_single_cell.npy
