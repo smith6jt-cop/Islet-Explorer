@@ -128,6 +128,28 @@ ui <- fluidPage(
       transform: translateY(-1px);
     }
 
+    /* Palette picker inline with tab bar */
+    .palette-tab-row .nav-tabs {
+      flex: 1;
+    }
+    .palette-picker {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .palette-picker .form-group {
+      margin-bottom: 0;
+    }
+    .palette-picker label.palette-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: #2c5aa0;
+      margin: 0;
+    }
+
     /* Tab styling */
     .nav-tabs {
       border-bottom: 2px solid #e3f2fd;
@@ -334,6 +356,20 @@ ui <- fluidPage(
         }
       }
 
+      // Move palette picker into the tab bar as a right-aligned item
+      setTimeout(function() {
+        var picker = $('#palette-picker-source .palette-picker');
+        var tabBar = $('ul#tabs.nav-tabs');
+        if (picker.length && tabBar.length) {
+          var li = $('<li style=\"margin-left: auto; display: flex; align-items: center;\"></li>');
+          li.append(picker);
+          tabBar.css('display', 'flex').css('align-items', 'flex-end');
+          tabBar.append(li);
+          picker.show();
+          $('#palette-picker-source').remove();
+        }
+      }, 50);
+
       // Adjust on initial load
       setTimeout(adjustLayout, 100);
 
@@ -353,12 +389,15 @@ ui <- fluidPage(
     ),
     # Main Panel
     column(width = 10.6, class = "equal-height-panel main-content-panel",
-      div(style = "display: flex; justify-content: flex-end; align-items: center; margin-bottom: 8px; gap: 8px;",
-        tags$label("Phenotype palette:", style = "font-size: 13px; font-weight: 500; color: #555; margin: 0;"),
-        tags$div(style = "width: 180px;",
-          selectInput("phenotype_palette", NULL,
-                      choices = c("Original", "High Contrast", "Colorblind Safe", "Maximum Distinction"),
-                      selected = "High Contrast", width = "100%")
+      # Phenotype palette picker (JS moves this into the tab bar on load)
+      div(id = "palette-picker-source", style = "display: none;",
+        div(class = "palette-picker",
+          tags$label("Palette:", class = "palette-label"),
+          tags$div(style = "width: 170px;",
+            selectInput("phenotype_palette", NULL,
+                        choices = c("Original", "High Contrast", "Colorblind Safe", "Maximum Distinction"),
+                        selected = "High Contrast", width = "100%")
+          )
         )
       ),
       tabsetPanel(id = "tabs",

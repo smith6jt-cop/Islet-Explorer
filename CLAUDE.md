@@ -41,6 +41,14 @@ The app uses `load_master_auto()` which tries H5AD first, falls back to Excel:
 
 Both produce the same `list(markers, targets, comp, lgals3, phenotypes, donor_demographics, neighborhood)` structure consumed by `prep_data()`. The `phenotypes`, `donor_demographics`, and `neighborhood` elements are extracted from H5AD `.obs` and are `NULL` when loading from Excel (graceful fallback).
 
+### Performance: Reticulate Bridge Optimization (Mar 2026)
+
+**Critical**: `ad$uns[[key]]` crosses the Python-R bridge on EVERY call (~221ms each). With ~62 groovy columns × 3 sheets = ~186 calls, this took ~16s. Fix: cache `uns <- ad$uns` once (0.2s) then index the R list. `reconstruct_groovy_df_from_list(uns, sheet)` replaces per-key bridge crossings.
+
+**Deferred loading**: `annotations.tsv` (72 MB, 576K rows) was loaded eagerly at startup but only serves as a fallback when `islet_spatial_lookup` doesn't have the islet (never happens). Now lazy-loaded via `.seg_lazy` environment on first fallback access.
+
+Total startup: **~22s → ~3.5s**.
+
 ### Shared Reactive State (wired in app.R server)
 
 - `prepared()` - core data reactive from H5AD or Excel, consumed by Plot, Trajectory, Statistics, Spatial
@@ -343,6 +351,8 @@ Required env vars: `KEY` (API key), `BASE` (API base URL, optional).
 - **Leiden cluster mapping for cells**: Islet-level Leiden assignments map to single cells via `islet_name` column lookup. Tissue background cells without an islet get `cluster = "tissue"` (grey).
 - **Per-donor tissue CSVs**: `data/donors/{imageid}.csv` with 5 columns (X_centroid, Y_centroid, phenotype, cell_region, islet_name). `cell_region` = core/peri/tissue.
 - **Leiden in H5AD**: 4 resolution columns (`leiden_0.3/0.5/0.8/1.0`) + 2 UMAP coords (`leiden_umap_1/2`). Extracted via `^leiden_` regex in `data_loading.R`.
+- **Reticulate bridge crossing**: `ad$uns[[key]]` costs ~221ms per call. ALWAYS cache `uns <- ad$uns` as an R list first, then index. `reconstruct_groovy_df_from_list()` uses cached list; legacy `reconstruct_groovy_df()` is a thin wrapper.
+- **Deferred heavy file loading**: `annotations.tsv` (72 MB) lazy-loaded via `.seg_lazy` environment in `segmentation_helpers.R`. Only loaded on first fallback access (never in practice).
 
 ## Deployment Architecture
 

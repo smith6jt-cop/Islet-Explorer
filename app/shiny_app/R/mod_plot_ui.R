@@ -107,9 +107,10 @@ plot_main_ui <- function(id, extra_panel = NULL) {
       div(class = "card",
           style = "margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; height: clamp(550px, 65vh - 75px, 1200px); display: flex; flex-direction: column; gap: 12px;",
         h5("Distribution Comparison", style = "margin-top: 0; color: #333;"),
-        div(style = "flex: 1; min-height: 0; overflow-y: auto;",
-          plotlyOutput(ns("dist"), height = "100%"),
-          br(),
+        div(style = "flex: 1; min-height: 0; display: flex;",
+          plotlyOutput(ns("dist"), height = "100%")
+        ),
+        div(style = "flex: 0 0 auto; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; max-height: 35%; border-top: 1px solid #eee; padding-top: 10px;",
           uiOutput(ns("dist_ui"))
         )
       )
