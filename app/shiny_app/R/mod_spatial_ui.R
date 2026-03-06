@@ -42,6 +42,8 @@ spatial_ui <- function(id) {
                        selected = "all", inline = FALSE),
           checkboxInput(ns("color_background"), "Color background cells", value = FALSE),
           hr(style = "margin: 8px 0;"),
+          uiOutput(ns("phenotype_filter")),
+          hr(style = "margin: 8px 0;"),
           checkboxGroupInput(ns("groups"), "Donor Status",
                              choices = c("ND", "Aab+", "T1D"),
                              selected = c("ND", "Aab+", "T1D"), inline = FALSE),
@@ -61,8 +63,16 @@ spatial_ui <- function(id) {
       # ---- Center: Tissue Scatter ----
       column(6,
         div(class = "card", style = "padding: 15px; margin-bottom: 15px;",
-          h5("Tissue Scatter Plot"),
-          plotOutput(ns("tissue_scatter"), height = "800px")
+          div(style = "display: flex; align-items: center; gap: 10px; margin-bottom: 8px;",
+            h5("Tissue Scatter Plot", style = "margin: 0;"),
+            actionButton(ns("scatter_reset_zoom"), "Reset Zoom",
+                         style = "font-size: 12px; padding: 2px 10px;",
+                         class = "btn-sm btn-outline-secondary")
+          ),
+          tags$small("Drag to zoom, double-click to reset.", style = "color: #888; display: block; margin-bottom: 5px;"),
+          plotOutput(ns("tissue_scatter"), height = "800px",
+                     dblclick = ns("scatter_dblclick"),
+                     brush = brushOpts(id = ns("scatter_brush"), resetOnNew = TRUE))
         )
       ),
 

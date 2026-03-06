@@ -168,21 +168,24 @@ conda activate scvi-env  # scanpy, anndata, scvi-tools, sklearn, scib-metrics, s
 
 Row 1: Controls sidebar (col-2) + Tissue Scatter (col-6) + Leiden Panel (col-4). Row 2-4: Neighborhood Analysis Cards (A/B/C).
 
-1. **Controls Sidebar** (col-2) -- donor selector, color-by (phenotype/Leiden), Leiden resolution, region filter (All/Core+Peri/Core), "Color background cells" checkbox, donor status checkboxes, phenotype + donor palette selectors, download button. All stacked vertically.
-2. **Tissue Scatter** (col-6) -- ggplot2 `renderPlot` (NOT plotly) showing ~177K cells/donor. Background tissue cells in light grey or colored by phenotype (toggle). Foreground (core/peri) colored by phenotype or Leiden cluster. `coord_fixed() + scale_y_reverse()`. Height: 800px.
+1. **Controls Sidebar** (col-2) -- donor selector, color-by (phenotype/Leiden), Leiden resolution, region filter (All/Core+Peri/Core), "Color background cells" checkbox, phenotype filter (checkboxes with All/None links), donor status checkboxes, phenotype + donor palette selectors, download button. All stacked vertically.
+2. **Tissue Scatter** (col-6) -- ggplot2 `renderPlot` (NOT plotly) showing ~177K cells/donor. Background tissue cells in light grey or colored by phenotype (toggle). Foreground (core/peri) colored by phenotype or Leiden cluster. `coord_fixed() + scale_y_reverse()`. Height: 800px. Supports brush-to-zoom (drag to select, double-click or Reset Zoom button to restore).
 3. **Leiden Panel** (col-4) -- plotly UMAP of 5,214 islets colored by selected Leiden resolution (0.3/0.5/0.8/1.0) + stacked bar chart of mean phenotype composition per cluster. UMAP uses raw marker PCA visualization coords (same as trajectory) for disease-stage separation.
 4. **Neighborhood Analysis Cards** (3 sections, conditionally rendered via `has_neighborhood()` guard):
-   - **Card A: Immune Infiltration** -- Violin plot (5 selectable immune metrics, KW p-value) + peri vs core scatter (y=x diagonal reference). `infiltration_violin`, `infiltration_scatter`.
-   - **Card B: Immune Cell Enrichment** -- Grouped bar chart (7 immune types × 3 stages, SEM/IQR error bars, median/mean toggle, z-clip checkbox) + diverging heatmap (blue→white→red, numeric annotations). `enrichment_bars`, `enrichment_heatmap`. Shared `enrich_summary()` reactive.
-   - **Card C: Immune Proximity** -- Distance box plots (3 selectable metrics, NA rate in subtitle) + enrichment vs distance scatter (Pearson r, 7 selectable z-score columns). `distance_boxplot`, `enrich_vs_distance`.
+   - **Global controls bar**: Min cells/islet filter (`nbr_min_cells`), point size slider (`nbr_pt_size`), opacity slider (`nbr_pt_alpha`), live islet count display.
+   - **Card A: Immune Infiltration** -- Violin plot (5 selectable immune metrics, KW p-value) + peri vs core scatter (y=x diagonal, adjustable point size/opacity). `infiltration_violin`, `infiltration_scatter`.
+   - **Card B: Immune Cell Enrichment** -- Grouped bar chart (7 immune types × 3 stages, SEM/IQR error bars, median/mean toggle, z-clip checkbox) + heatmap. Region toggle: peri enrichment z-scores (diverging blue→red), core proportions (sequential white→red), peri proportions (sequential white→red). `enrichment_bars`, `enrichment_heatmap`. Shared `enrich_summary()` reactive with `immune_type_map` for column mapping across regions.
+   - **Card C: Immune Proximity** -- Distance box plots (3 selectable metrics, NA rate in subtitle, 99th percentile outlier clipping) + enrichment vs distance scatter (Pearson r, 7 selectable z-score columns, percentile-based outlier clipping). `distance_boxplot`, `enrich_vs_distance`.
    - Section headings reuse `section_heading()` pattern from Statistics tab (gradient pill badge + title + subtitle).
    - Documentation banners (light blue background) explain each analysis section.
+   - Distance NA values: caused by zero immune cells in peri-islet zone (20.1% NA for any immune, 88.6% for CD8+ T-cells). Biological, not a bug — ND has most NAs (least infiltration). Min-cells filter at ≥50 reduces NA from 20% to 6%.
 
 Wired as `spatial_server("spatial", prepared, active_palette, active_donor_colors)`.
 
 #### Neighborhood Cards Server Architecture
-- `nbr_comp()` shared reactive -- filters `prepared()$comp` by `input$groups` (donor status checkboxes). Reused by all 6 outputs.
-- `enrich_summary()` intermediate reactive -- aggregates 7 `enrich_z_*` columns per cell type × donor status, respects `input$enrich_clip` and `input$enrich_stat`. Returns data.frame: col, cell_type, donor_status, z_summary, z_lo, z_hi, n.
+- `nbr_comp()` shared reactive -- filters `prepared()$comp` by `input$groups` (donor status checkboxes) + `input$nbr_min_cells` (total_cells_core + total_cells_peri ≥ threshold). Reused by all 6 outputs.
+- `enrich_summary()` intermediate reactive -- aggregates 7 immune cell type columns per cell type × donor status. Respects `input$enrich_region` (peri/core/peri_prop), `input$enrich_clip`, `input$enrich_stat`. Uses `immune_type_map` to select correct column names per region. Returns data.frame.
+- `immune_type_map` -- list of 7 items, each with `label`, `enrich` (peri z-score col), `core` (core proportion col), `peri` (peri proportion col). Maps between naming conventions (spaces in core, underscores in peri).
 - `enrich_col_labels` -- named vector mapping `enrich_z_*` column names to friendly labels (e.g., `enrich_z_CD8a_Tcell` → "CD8+ T-cell").
 - All 6 outputs use `donor_colors_reactive()` for palette syncing and respond to `input$groups`.
 - **Plotly categorical axis ordering**: Must set `categoryorder = "array", categoryarray = c("ND", "Aab+", "T1D")` on x-axis for violin/box/bar plots. Plotly defaults to alphabetical, which puts "Aab+" before "ND".
@@ -199,6 +202,8 @@ Wired as `spatial_server("spatial", prepared, active_palette, active_donor_color
 - Uses `ggplot2::renderPlot` NOT plotly -- 177K points would freeze plotly
 - Foreground/background layering: tissue cells at `size=0.15, alpha=0.3` in grey; core/peri at `size=0.4, alpha=0.6` in color
 - Leiden coloring maps `islet_name -> cluster` via islet-level lookup from `prepared()$comp`
+- **Brush-to-zoom**: `plotOutput(brush=brushOpts(...), dblclick=...)` + `reactiveValues(xmin,xmax,ymin,ymax)`. When zoomed, switches from `coord_fixed()` to `coord_cartesian(xlim, ylim)` with `sort()` on ylim for reversed y-axis. Reset on double-click, Reset Zoom button, or donor change.
+- **Phenotype filter**: `checkboxGroupInput` with All/None action links. Dynamically populated from donor's unique phenotypes. Filters both foreground and background cells.
 - Donor 6533 has 191 islets (9,815 core + 13,840 peri cells) — fully integrated after patching Parent annotations in canonical H5AD
 
 ## Single-Cell Drill-Down (Phase 8, Feb 2026)

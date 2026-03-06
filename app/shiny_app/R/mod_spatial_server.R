@@ -123,6 +123,73 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       setNames(as.character(sub[[leiden_col]]), as.character(sub$islet_key))
     })
 
+    # ---- Phenotype filter ----
+    output$phenotype_filter <- renderUI({
+      cells <- tryCatch(donor_cells(), error = function(e) NULL)
+      if (is.null(cells)) return(NULL)
+      phenos <- sort(unique(cells$phenotype))
+      if (length(phenos) == 0) return(NULL)
+      tagList(
+        div(style = "display: flex; align-items: center; gap: 6px; margin-bottom: 4px;",
+          tags$label("Phenotypes", style = "font-weight: 600; font-size: 13px; margin: 0;"),
+          actionLink(ns("pheno_all"), "All", style = "font-size: 11px;"),
+          span("|", style = "color: #ccc;"),
+          actionLink(ns("pheno_none"), "None", style = "font-size: 11px;")
+        ),
+        checkboxGroupInput(ns("pheno_filter"), NULL,
+                           choices = phenos, selected = phenos,
+                           inline = FALSE)
+      )
+    })
+
+    observeEvent(input$pheno_all, {
+      cells <- tryCatch(donor_cells(), error = function(e) NULL)
+      if (!is.null(cells)) {
+        phenos <- sort(unique(cells$phenotype))
+        updateCheckboxGroupInput(session, "pheno_filter", selected = phenos)
+      }
+    })
+
+    observeEvent(input$pheno_none, {
+      updateCheckboxGroupInput(session, "pheno_filter", selected = character(0))
+    })
+
+    # ---- Zoom state for tissue scatter ----
+    scatter_zoom <- reactiveValues(xmin = NULL, xmax = NULL, ymin = NULL, ymax = NULL)
+
+    observeEvent(input$scatter_brush, {
+      brush <- input$scatter_brush
+      if (!is.null(brush)) {
+        scatter_zoom$xmin <- brush$xmin
+        scatter_zoom$xmax <- brush$xmax
+        # y is reversed in the plot, so brush coords are already in data space
+        scatter_zoom$ymin <- brush$ymin
+        scatter_zoom$ymax <- brush$ymax
+      }
+    })
+
+    observeEvent(input$scatter_dblclick, {
+      scatter_zoom$xmin <- NULL
+      scatter_zoom$xmax <- NULL
+      scatter_zoom$ymin <- NULL
+      scatter_zoom$ymax <- NULL
+    })
+
+    observeEvent(input$scatter_reset_zoom, {
+      scatter_zoom$xmin <- NULL
+      scatter_zoom$xmax <- NULL
+      scatter_zoom$ymin <- NULL
+      scatter_zoom$ymax <- NULL
+    })
+
+    # Reset zoom when donor changes
+    observeEvent(input$donor, {
+      scatter_zoom$xmin <- NULL
+      scatter_zoom$xmax <- NULL
+      scatter_zoom$ymin <- NULL
+      scatter_zoom$ymax <- NULL
+    })
+
     # ==== Card 2: Tissue Scatter Plot (ggplot2, rasterized) ====
     output$tissue_scatter <- renderPlot({
       cells <- donor_cells()
@@ -148,6 +215,12 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         } else {
           plot_df$cluster <- "tissue"
         }
+      }
+
+      # Phenotype filter (only in phenotype mode)
+      selected_phenos <- input$pheno_filter
+      if (!use_leiden && !is.null(selected_phenos) && length(selected_phenos) > 0) {
+        plot_df <- plot_df[plot_df$phenotype %in% selected_phenos, , drop = FALSE]
       }
 
       # Split into foreground (highlighted) and background (dimmed) layers
@@ -230,9 +303,23 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       }
 
       ds <- donor_status()
-      p + ggplot2::coord_fixed() +
-        ggplot2::scale_y_reverse() +
-        ggplot2::labs(
+
+      # Zoom via coord_cartesian (clips display without dropping data)
+      zoomed <- !is.null(scatter_zoom$xmin)
+      if (zoomed) {
+        # Brush coords are in display space (y already reversed by scale_y_reverse).
+        # coord_cartesian ylim is in *data* space (before reversal), so swap y.
+        p <- p + ggplot2::scale_y_reverse() +
+          ggplot2::coord_cartesian(
+            xlim = c(scatter_zoom$xmin, scatter_zoom$xmax),
+            ylim = sort(c(scatter_zoom$ymin, scatter_zoom$ymax))
+          )
+      } else {
+        p <- p + ggplot2::coord_fixed() +
+          ggplot2::scale_y_reverse()
+      }
+
+      p + ggplot2::labs(
           title = paste0("Donor ", input$donor, " (", ds, ")"),
           subtitle = paste0(nrow(fg), " foreground cells | ",
                             nrow(bg), " background cells"),
@@ -426,6 +513,14 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       comp <- pd$comp
       if (!is.null(input$groups) && "Donor Status" %in% colnames(comp))
         comp <- comp[comp$`Donor Status` %in% input$groups, , drop = FALSE]
+      # Global min cells filter
+      min_cells <- input$nbr_min_cells %||% 1
+      if (min_cells > 1) {
+        tc_core <- if ("total_cells_core" %in% colnames(comp)) comp$total_cells_core else NA
+        tc_peri <- if ("total_cells_peri" %in% colnames(comp)) comp$total_cells_peri else NA
+        tc <- ifelse(is.finite(tc_core), tc_core, 0) + ifelse(is.finite(tc_peri), tc_peri, 0)
+        comp <- comp[is.finite(tc) & tc >= min_cells, , drop = FALSE]
+      }
       comp
     })
 
@@ -440,27 +535,45 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       "enrich_z_Immune"     = "Immune (all)"
     )
 
-    # ---- Intermediate reactive for Card B: enrichment summary ----
+    # Mapping from enrichment z-score columns to core prop_* and peri_prop_* columns
+    immune_type_map <- list(
+      list(label = "CD8+ T-cell",  enrich = "enrich_z_CD8a_Tcell", core = "prop_CD8a Tcell",  peri = "peri_prop_CD8a_Tcell"),
+      list(label = "CD4+ T-cell",  enrich = "enrich_z_CD4_Tcell",  core = "prop_CD4 Tcell",   peri = "peri_prop_CD4_Tcell"),
+      list(label = "T cell",       enrich = "enrich_z_T_cell",     core = "prop_T cell",      peri = "peri_prop_T_cell"),
+      list(label = "B cell",       enrich = "enrich_z_B_cell",     core = "prop_B cell",      peri = "peri_prop_B_cell"),
+      list(label = "Macrophage",   enrich = "enrich_z_Macrophage", core = "prop_Macrophage",  peri = "peri_prop_Macrophage"),
+      list(label = "APCs",         enrich = "enrich_z_APCs",       core = "prop_APCs",        peri = "peri_prop_APCs"),
+      list(label = "Immune (all)", enrich = "enrich_z_Immune",     core = "prop_Immune",      peri = "peri_prop_Immune")
+    )
+
+    # ---- Intermediate reactive for Card B: enrichment/proportion summary ----
     enrich_summary <- reactive({
       comp <- nbr_comp()
-      req(comp)
-      nbr <- get_nbr_columns(colnames(comp))
-      enrich_cols <- nbr$enrich
-      req(length(enrich_cols) > 0)
-      req("Donor Status" %in% colnames(comp))
+      req(comp, "Donor Status" %in% colnames(comp))
 
       clip <- isTRUE(input$enrich_clip)
       stat_mode <- input$enrich_stat %||% "Median"
+      region <- input$enrich_region %||% "peri"
 
       statuses <- unique(comp$`Donor Status`)
+      comp_cols <- colnames(comp)
       rows <- list()
-      for (ec in enrich_cols) {
-        label <- enrich_col_labels[ec]
-        if (is.na(label)) label <- gsub("^enrich_z_", "", ec)
+
+      for (itm in immune_type_map) {
+        # Select column based on region
+        if (region == "peri") {
+          col <- itm$enrich  # enrichment z-score (peri)
+        } else if (region == "core") {
+          col <- itm$core    # core proportion
+        } else {
+          col <- itm$peri    # peri proportion (core+peri mode shows raw peri prop)
+        }
+        if (is.null(col) || !(col %in% comp_cols)) next
+
         for (ds in statuses) {
-          vals <- comp[[ec]][comp$`Donor Status` == ds]
+          vals <- comp[[col]][comp$`Donor Status` == ds]
           vals <- vals[is.finite(vals)]
-          if (clip) vals <- pmax(-5, pmin(5, vals))
+          if (region == "peri" && clip) vals <- pmax(-5, pmin(5, vals))
           n <- length(vals)
           if (n == 0) next
           if (stat_mode == "Median") {
@@ -475,7 +588,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
             z_hi <- z_summary + se
           }
           rows[[length(rows) + 1]] <- data.frame(
-            col = ec, cell_type = label, donor_status = ds,
+            col = col, cell_type = itm$label, donor_status = ds,
             z_summary = z_summary, z_lo = z_lo, z_hi = z_hi, n = n,
             stringsAsFactors = FALSE
           )
@@ -504,9 +617,20 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       }
 
       tagList(
+        # ==== Global filter for neighborhood cards ====
+        fluidRow(column(12,
+          div(class = "card", style = "padding: 12px 15px; margin-bottom: 10px; margin-top: 10px; display: flex; align-items: center; gap: 20px; overflow: visible;",
+            span(style = "font-weight: 600; font-size: 15px; white-space: nowrap;", "Neighborhood Analysis"),
+            numericInput(ns("nbr_min_cells"), "Min cells/islet", value = 1, min = 1, max = 100, step = 1, width = "130px"),
+            sliderInput(ns("nbr_pt_size"), "Point size", min = 2, max = 12, value = 5, step = 1, width = "150px"),
+            sliderInput(ns("nbr_pt_alpha"), "Opacity", min = 0.1, max = 1.0, value = 0.4, step = 0.05, width = "150px"),
+            uiOutput(ns("nbr_islet_count"))
+          )
+        )),
+
         # ==== Card A: Immune Infiltration Overview ====
         fluidRow(column(12, sec_heading(
-          "A", "Neighborhood Analysis \u2014 Immune Infiltration",
+          "A", "Immune Infiltration",
           "How does immune infiltration vary across disease stages? Compare peri-islet and core immune fractions."
         ))),
         fluidRow(
@@ -537,30 +661,38 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
 
         # ==== Card B: Immune Cell Enrichment by Type ====
         fluidRow(column(12, sec_heading(
-          "B", "Immune Cell Enrichment",
-          "Which immune cell types are disproportionately enriched in peri-islet zones vs tissue-wide background?"
+          "B", "Immune Cell Composition & Enrichment",
+          "Which immune cell types are present in islet core vs peri-islet zones, and which are enriched vs tissue-wide background?"
         ))),
         fluidRow(
           column(7,
             div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible;",
-              div(style = "display: flex; gap: 15px; align-items: center; margin-bottom: 8px;",
+              div(style = "display: flex; gap: 15px; align-items: center; flex-wrap: wrap; margin-bottom: 8px;",
+                radioButtons(ns("enrich_region"), "Region",
+                             c("Peri-islet (enrichment z)" = "peri",
+                               "Core (proportion)" = "core",
+                               "Peri-islet (proportion)" = "peri_prop"),
+                             selected = "peri", inline = TRUE),
                 radioButtons(ns("enrich_stat"), "Summary", c("Median", "Mean"),
                              selected = "Median", inline = TRUE),
-                checkboxInput(ns("enrich_clip"), "Clip extreme z > 5", value = TRUE)
+                conditionalPanel(
+                  condition = paste0("input['", ns("enrich_region"), "'] == 'peri'"),
+                  checkboxInput(ns("enrich_clip"), "Clip extreme z > 5", value = TRUE)
+                )
               ),
               plotlyOutput(ns("enrichment_bars"), height = "420px")
             )
           ),
           column(5,
             div(class = "card", style = "padding: 15px; margin-bottom: 15px;",
-              h5("Enrichment Heatmap", style = "font-size: 15px; margin-top: 0;"),
+              h5("Heatmap", style = "font-size: 15px; margin-top: 0;"),
               plotlyOutput(ns("enrichment_heatmap"), height = "420px")
             )
           )
         ),
         fluidRow(column(12,
           div(style = "background: #f0f6ff; padding: 10px 15px; border-radius: 6px; margin-bottom: 20px; font-size: 13px; color: #555;",
-            tags$em("Enrichment z-scores compare observed immune cell counts in the peri-islet zone vs expected counts based on tissue-wide proportions (Poisson model). z > 0 = enriched locally; z < 0 = depleted. Higher z in T1D for CD8+ T-cells suggests targeted immune surveillance.")
+            tags$em("Enrichment z-scores (peri-islet mode) compare observed immune cell counts in the peri-islet zone vs expected counts based on tissue-wide proportions (Poisson model). z > 0 = enriched; z < 0 = depleted. Core and peri-islet proportion modes show raw cell type fractions (0\u20131) within each compartment.")
           )
         )),
 
@@ -577,6 +709,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                                       "Macrophage" = "min_dist_Macrophage",
                                       "CD8+ T-cell (sparse)" = "min_dist_CD8a_Tcell"),
                           selected = "min_dist_immune_mean", width = "100%"),
+              checkboxInput(ns("distance_clip"), "Clip top 1% outliers", value = TRUE),
               plotlyOutput(ns("distance_boxplot"), height = "420px")
             )
           ),
@@ -591,6 +724,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                                       "B cell" = "enrich_z_B_cell",
                                       "APCs" = "enrich_z_APCs"),
                           selected = "enrich_z_Immune", width = "100%"),
+              checkboxInput(ns("enrich_dist_clip"), "Clip top 1% outliers", value = TRUE),
               plotlyOutput(ns("enrich_vs_distance"), height = "420px")
             )
           )
@@ -601,6 +735,14 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           )
         ))
       )
+    })
+
+    # ---- Islet count display ----
+    output$nbr_islet_count <- renderUI({
+      comp <- nbr_comp()
+      n <- if (!is.null(comp)) nrow(comp) else 0
+      span(style = "color: #555; font-size: 13px; white-space: nowrap;",
+           paste0(formatC(n, big.mark = ","), " islets"))
     })
 
     # ==== Card A-Left: Immune Metric Violin Plot ====
@@ -691,6 +833,9 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
 
       max_val <- max(c(df$peri, df$core), na.rm = TRUE) * 1.05
 
+      pt_sz <- input$nbr_pt_size %||% 5
+      pt_al <- input$nbr_pt_alpha %||% 0.4
+
       p <- plot_ly()
       for (s in levels(df$status)) {
         sub <- df[df$status == s, , drop = FALSE]
@@ -702,7 +847,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                         "<br>Core: ", round(core, 4)),
           hoverinfo = "text", name = s,
           type = "scatter", mode = "markers",
-          marker = list(size = 4, opacity = 0.4, color = dcols[s])
+          marker = list(size = pt_sz, opacity = pt_al, color = dcols[s])
         )
       }
       # Diagonal y=x reference
@@ -719,7 +864,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       )
     })
 
-    # ==== Card B-Left: Enrichment Grouped Bar Chart ====
+    # ==== Card B-Left: Enrichment/Proportion Grouped Bar Chart ====
     output$enrichment_bars <- renderPlotly({
       es <- enrich_summary()
       req(es)
@@ -730,7 +875,20 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       dcols <- donor_colors_reactive()
 
       stat_mode <- input$enrich_stat %||% "Median"
+      region <- input$enrich_region %||% "peri"
       error_label <- if (stat_mode == "Median") "IQR" else "SEM"
+
+      # Axis label and title depend on region
+      if (region == "peri") {
+        y_label <- "Enrichment z-score"
+        title_prefix <- paste0(stat_mode, " Enrichment z-score")
+      } else if (region == "core") {
+        y_label <- "Proportion (core)"
+        title_prefix <- paste0(stat_mode, " Core Proportion")
+      } else {
+        y_label <- "Proportion (peri-islet)"
+        title_prefix <- paste0(stat_mode, " Peri-islet Proportion")
+      }
 
       p <- plot_ly()
       for (s in levels(es$donor_status)) {
@@ -747,31 +905,37 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
             arrayminus = sub$z_summary - sub$z_lo,
             color = "#666", thickness = 1
           ),
-          hovertemplate = paste0("%{x}<br>", s, "<br>z = %{y:.2f}<extra></extra>")
+          hovertemplate = paste0("%{x}<br>", s, "<br>", y_label, " = %{y:.3f}<extra></extra>")
         )
       }
+
+      # Reference line at 0 for enrichment z-scores only
+      shapes <- if (region == "peri") {
+        list(list(type = "line", x0 = -0.5, x1 = 10, y0 = 0, y1 = 0,
+                  line = list(color = "#999", dash = "dash", width = 1)))
+      } else list()
+
       p %>% layout(
         barmode = "group",
-        title = list(text = paste0(stat_mode, " Enrichment z-score (error: ", error_label, ")"),
+        title = list(text = paste0(title_prefix, " (error: ", error_label, ")"),
                      font = list(size = 14)),
         xaxis = list(title = "", tickangle = -30,
                      categoryorder = "array",
                      categoryarray = unique(es$cell_type)),
-        yaxis = list(title = "Enrichment z-score"),
+        yaxis = list(title = y_label),
         legend = list(title = list(text = "Status")),
-        shapes = list(
-          list(type = "line", x0 = -0.5, x1 = 10, y0 = 0, y1 = 0,
-               line = list(color = "#999", dash = "dash", width = 1))
-        )
+        shapes = shapes
       )
     })
 
-    # ==== Card B-Right: Enrichment Heatmap ====
+    # ==== Card B-Right: Enrichment/Proportion Heatmap ====
     output$enrichment_heatmap <- renderPlotly({
       es <- enrich_summary()
       req(es)
 
-      # Pivot to matrix: cell_type × donor_status
+      region <- input$enrich_region %||% "peri"
+
+      # Pivot to matrix: cell_type x donor_status
       status_order <- c("ND", "Aab+", "T1D")
       cell_types <- unique(es$cell_type)
       statuses <- intersect(status_order, unique(es$donor_status))
@@ -785,26 +949,41 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           mat[as.character(s), ct] <- es$z_summary[i]
       }
 
-      # Annotation text
-      text_mat <- matrix(sprintf("%.2f", mat), nrow = nrow(mat), ncol = ncol(mat))
+      # Annotation text: more decimals for proportions (small numbers)
+      fmt <- if (region == "peri") "%.2f" else "%.4f"
+      text_mat <- matrix(sprintf(fmt, mat), nrow = nrow(mat), ncol = ncol(mat))
       text_mat[is.na(mat)] <- ""
 
-      # Symmetric color range
-      z_abs_max <- max(abs(mat), na.rm = TRUE)
-      if (!is.finite(z_abs_max) || z_abs_max == 0) z_abs_max <- 1
+      if (region == "peri") {
+        # Diverging for z-scores (symmetric around 0)
+        z_abs_max <- max(abs(mat), na.rm = TRUE)
+        if (!is.finite(z_abs_max) || z_abs_max == 0) z_abs_max <- 1
+        colorscale <- list(c(0, "#2166AC"), c(0.5, "#FFFFFF"), c(1, "#B2182B"))
+        zmin <- -z_abs_max; zmax <- z_abs_max
+        cb_title <- "z-score"
+        title_text <- paste0(input$enrich_stat %||% "Median", " Enrichment z-score")
+      } else {
+        # Sequential for proportions (0 to max)
+        zmax <- max(mat, na.rm = TRUE)
+        if (!is.finite(zmax) || zmax == 0) zmax <- 0.1
+        colorscale <- list(c(0, "#FFFFFF"), c(0.5, "#FDB863"), c(1, "#B2182B"))
+        zmin <- 0
+        cb_title <- "Proportion"
+        region_label <- if (region == "core") "Core" else "Peri-islet"
+        title_text <- paste0(input$enrich_stat %||% "Median", " ", region_label, " Proportion")
+      }
 
       plot_ly(
         x = colnames(mat), y = rownames(mat), z = mat,
         type = "heatmap",
-        colorscale = list(c(0, "#2166AC"), c(0.5, "#FFFFFF"), c(1, "#B2182B")),
-        zmin = -z_abs_max, zmax = z_abs_max,
+        colorscale = colorscale,
+        zmin = zmin, zmax = zmax,
         text = text_mat, texttemplate = "%{text}",
-        hovertemplate = "%{x}<br>%{y}<br>z = %{z:.2f}<extra></extra>",
+        hovertemplate = paste0("%{x}<br>%{y}<br>", cb_title, " = %{z:.4f}<extra></extra>"),
         showscale = TRUE,
-        colorbar = list(title = "z-score")
+        colorbar = list(title = cb_title)
       ) %>% layout(
-        title = list(text = paste0(input$enrich_stat %||% "Median", " Enrichment z-score"),
-                     font = list(size = 14)),
+        title = list(text = title_text, font = list(size = 14)),
         xaxis = list(title = "", tickangle = -30),
         yaxis = list(title = "", autorange = "reversed")
       )
@@ -838,10 +1017,18 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       na_rate <- 1 - sum(is.finite(df$value)) / nrow(df)
 
       df <- df[is.finite(df$value), , drop = FALSE]
-      if (nrow(df) == 0) return(plotly_empty() %>% layout(title = paste0(metric_label, " — all NA")))
+      if (nrow(df) == 0) return(plotly_empty() %>% layout(title = paste0(metric_label, " \u2014 all NA")))
+
+      # Clip top 1% outliers if requested
+      if (isTRUE(input$distance_clip) && nrow(df) > 0) {
+        q99 <- quantile(df$value, 0.99, na.rm = TRUE)
+        df <- df[df$value <= q99, , drop = FALSE]
+      }
 
       df$status <- factor(df$status, levels = intersect(status_order, unique(df$status)))
       dcols <- donor_colors_reactive()
+      pt_sz <- input$nbr_pt_size %||% 5
+      pt_al <- input$nbr_pt_alpha %||% 0.4
 
       # Subtitle with N per group
       n_labels <- sapply(levels(df$status), function(s) {
@@ -862,7 +1049,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           y = sub$value, x = s, name = s,
           type = "box",
           boxpoints = "all", jitter = 0.3, pointpos = -1.5,
-          marker = list(size = 3, opacity = 0.3, color = dcols[s]),
+          marker = list(size = pt_sz, opacity = pt_al, color = dcols[s]),
           line = list(color = dcols[s]),
           fillcolor = paste0(dcols[s], "44"),
           hoverinfo = "y"
@@ -899,9 +1086,20 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       df <- df[is.finite(df$distance) & is.finite(df$enrichment), , drop = FALSE]
       if (nrow(df) == 0) return(plotly_empty() %>% layout(title = "No overlapping data"))
 
+      # Clip top 1% outliers on both axes if requested
+      if (isTRUE(input$enrich_dist_clip) && nrow(df) > 0) {
+        d99 <- quantile(df$distance, 0.99, na.rm = TRUE)
+        e_lo <- quantile(df$enrichment, 0.005, na.rm = TRUE)
+        e_hi <- quantile(df$enrichment, 0.995, na.rm = TRUE)
+        df <- df[df$distance <= d99 & df$enrichment >= e_lo & df$enrichment <= e_hi, , drop = FALSE]
+      }
+      if (nrow(df) == 0) return(plotly_empty() %>% layout(title = "No data after clipping"))
+
       status_order <- c("ND", "Aab+", "T1D")
       df$status <- factor(df$status, levels = intersect(status_order, unique(df$status)))
       dcols <- donor_colors_reactive()
+      pt_sz <- input$nbr_pt_size %||% 5
+      pt_al <- input$nbr_pt_alpha %||% 0.4
 
       # Correlation
       cor_r <- tryCatch(cor(df$distance, df$enrichment, use = "complete.obs"), error = function(e) NA)
@@ -918,7 +1116,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                         "<br>Enrichment z: ", round(enrichment, 2)),
           hoverinfo = "text", name = s,
           type = "scatter", mode = "markers",
-          marker = list(size = 4, opacity = 0.3, color = dcols[s])
+          marker = list(size = pt_sz, opacity = pt_al, color = dcols[s])
         )
       }
       p %>% layout(

@@ -2,7 +2,7 @@ trajectory_ui <- function(id) {
   ns <- NS(id)
   tagList(
     div(style = "background-color: #e8f4fd; border: 1px solid #b8daff; border-radius: 5px; padding: 10px 15px; margin-bottom: 15px; color: #004085; font-size: 13px;",
-      tags$strong("Tip:"), " Click any point on the pseudotime scatter plot to view the segmentation map for that islet."
+      "Click any point on the pseudotime scatter plot to view the segmentation map for that islet."
     ),
     checkboxInput(ns("show_outlier_table"), "Show outlier table (if outliers detected)", value = FALSE),
     uiOutput(ns("traj_status")),

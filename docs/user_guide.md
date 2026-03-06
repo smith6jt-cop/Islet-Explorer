@@ -208,6 +208,7 @@ Tissue-wide spatial visualization and peri-islet microenvironment analysis. Comb
    - Leiden resolution dropdown (0.3, 0.5, 0.8, 1.0) — visible when Leiden coloring selected
    - Region filter: All cells, Core + Peri only, or Core only
    - **Color background cells**: Toggle to show tissue background cells in phenotype colors (dimmed) instead of grey
+   - **Phenotype filter**: Show/hide individual phenotypes with checkboxes. Use **All** / **None** links to quickly select or clear all types. Dynamically populated from the selected donor's cell types.
    - Donor status checkboxes
    - Phenotype and Donor Status palette selectors
    - Download CSV button
@@ -217,6 +218,7 @@ Tissue-wide spatial visualization and peri-islet microenvironment analysis. Comb
    - Background: tissue cells in light grey by default, or colored by phenotype when "Color background cells" is checked
    - Foreground: core/peri cells colored by phenotype or Leiden cluster
    - Spatial coordinate convention: `coord_fixed()` + `scale_y_reverse()` (microscopy standard)
+   - **Zoom**: Drag to select a region, then the view zooms in. Double-click or click **Reset Zoom** to restore the full view.
    - Uses ggplot2 `renderPlot` (not plotly) for performance at >100K points
 
 3. **Leiden Panel** (right)
@@ -235,20 +237,29 @@ Tissue-wide spatial visualization and peri-islet microenvironment analysis. Comb
 
 Below the tissue scatter and Leiden panel, three interactive analysis sections visualize the 62 computed peri-islet neighborhood metrics. Each answers a key biological question about immune-islet interactions in T1D progression. These cards only appear when neighborhood data is available in the H5AD (not in Excel fallback mode).
 
+**Global Controls** (toolbar above the cards):
+- **Min cells/islet**: Filter out small islets with few cells (default: 1, i.e., no filter). Higher values (e.g., 50) reduce noise from poorly-measured islets and decrease NA rates in distance metrics.
+- **Point size** and **Opacity**: Adjust scatter plot visualization across all cards.
+- **Islet count**: Shows how many islets pass the current filters.
+
 **Card A: Immune Infiltration**
 - **Left**: Violin plot of a selectable immune metric (immune fraction peri/core, T-cell density, CD8/macrophage ratio, peri/core immune ratio) by disease stage (ND → Aab+ → T1D). Shows Kruskal-Wallis p-value. Jittered points overlay with box + mean line.
 - **Right**: Scatter of peri vs core immune fraction with dashed y=x diagonal. Points above the line have more core than peri infiltration.
 - *Interpretation*: Higher immune fractions in T1D indicate increased immune surveillance.
 
 **Card B: Immune Cell Enrichment**
-- **Left**: Grouped bar chart of enrichment z-scores for 7 immune cell types (CD8+ T-cell, CD4+ T-cell, T cell, B cell, Macrophage, APCs, Immune), grouped by disease stage. Toggle between median/mean summary; clip extreme z > 5 (default on). Error bars show IQR (median) or SEM (mean).
-- **Right**: Heatmap of median enrichment z-scores — cell types (columns) × disease stages (rows). Blue = depleted, red = enriched. Numeric values annotated on each cell.
+- **Left**: Grouped bar chart of 7 immune cell types (CD8+ T-cell, CD4+ T-cell, T cell, B cell, Macrophage, APCs, Immune) grouped by disease stage. Toggle median/mean summary; clip extreme z > 5 (default on). Error bars show IQR (median) or SEM (mean).
+- **Right**: Heatmap — cell types (columns) × disease stages (rows). Numeric values annotated on each cell.
+- **Region toggle**: Switch between:
+  - *Peri-islet (enrichment z)*: Poisson z-scores comparing peri-islet vs tissue-wide. Diverging colorscale (blue = depleted, red = enriched). Default.
+  - *Core (proportion)*: Raw cell type proportions in islet core. Sequential colorscale (white → red).
+  - *Peri-islet (proportion)*: Raw cell type proportions in peri-islet zone. Sequential colorscale.
 - *Interpretation*: z > 0 means that cell type is enriched near islets relative to the tissue-wide proportion. CD8+ T-cell enrichment in T1D suggests targeted immune surveillance.
 
 **Card C: Immune Proximity**
-- **Left**: Box plot of minimum distance (μm) from islet core centroid to nearest immune cells. Selectable metrics: any immune cell, macrophage, CD8+ T-cell (sparse, ~89% NA). Shows non-NA counts per group.
-- **Right**: Scatter of selected enrichment z-score vs selected distance metric. Expected negative correlation (closer = more enriched). Pearson r shown in title.
-- *Interpretation*: Shorter distances suggest active immune targeting. CD8+ T-cell distances are sparse because most islets lack nearby CD8+ T-cells.
+- **Left**: Box plot of minimum distance (μm) from islet core centroid to nearest immune cells. Selectable metrics: any immune cell, macrophage, CD8+ T-cell (sparse, ~89% NA). Shows non-NA counts per group. 99th percentile outlier clipping (toggle on/off) for cleaner visualization.
+- **Right**: Scatter of selected enrichment z-score vs selected distance metric. Expected negative correlation (closer = more enriched). Pearson r shown in title. Percentile-based outlier clipping on both axes.
+- *Interpretation*: Shorter distances suggest active immune targeting. CD8+ T-cell distances are sparse because most islets lack nearby CD8+ T-cells — NA values indicate zero immune cells of that type in the peri-islet zone (biological, not a data error). Increase the min cells/islet filter to reduce NAs.
 
 ### Data Coverage
 
