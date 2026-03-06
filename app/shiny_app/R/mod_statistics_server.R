@@ -119,6 +119,14 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
       bin_anova <- per_bin_anova(rdf_binned, "diam_bin", "donor_status", "value")
       bin_kendall <- per_bin_kendall(rdf_binned, "diam_bin", "donor_status", "value")
 
+      # BH correction across bins to control false discovery rate
+      if (!is.null(bin_anova) && nrow(bin_anova) > 0) {
+        bin_anova$p_adj <- p.adjust(bin_anova$p_anova, method = "BH")
+      }
+      if (!is.null(bin_kendall) && nrow(bin_kendall) > 0) {
+        bin_kendall$p_adj <- p.adjust(bin_kendall$p_kendall, method = "BH")
+      }
+
       # ---- Demographics (NULL if columns absent) ----
       demo_summary <- NULL
       age_corr <- NULL
@@ -344,10 +352,11 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
                            name = "") +
         labs(x = "Cohen's d", y = NULL, title = "Pairwise Effect Sizes") +
         theme_minimal(base_size = 13) +
-        theme(legend.position = "bottom")
+        theme(legend.position = "none")
 
       ggplotly(g, tooltip = c("x", "y", "colour")) %>%
-        layout(legend = list(orientation = "h", x = 0.3, y = -0.15))
+        layout(margin = list(b = 60),
+               legend = list(orientation = "h", x = 0.5, xanchor = "center", y = -0.25))
     })
 
     # ===========================================================================
@@ -367,17 +376,17 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
       all_mids <- sort(unique(c(ba$mid, bk$mid)))
       if (length(all_mids) == 0) return(NULL)
 
-      # Build z matrix: rows = test types, cols = bin midpoints
+      # Build z matrix using BH-corrected p-values
       anova_p <- rep(NA_real_, length(all_mids))
       kendall_p <- rep(NA_real_, length(all_mids))
 
       if (!is.null(ba) && nrow(ba) > 0) {
         idx <- match(ba$mid, all_mids)
-        anova_p[idx[!is.na(idx)]] <- ba$p_anova[!is.na(idx)]
+        anova_p[idx[!is.na(idx)]] <- ba$p_adj[!is.na(idx)]
       }
       if (!is.null(bk) && nrow(bk) > 0) {
         idx <- match(bk$mid, all_mids)
-        kendall_p[idx[!is.na(idx)]] <- bk$p_kendall[!is.na(idx)]
+        kendall_p[idx[!is.na(idx)]] <- bk$p_adj[!is.na(idx)]
       }
 
       z_anova <- ifelse(!is.na(anova_p) & anova_p > 0, -log10(anova_p), NA_real_)
@@ -385,7 +394,7 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
 
       z_mat <- rbind(z_anova, z_kendall)
 
-      # Star annotations
+      # Star annotations (based on corrected p-values)
       star_fn <- function(p) {
         ifelse(is.na(p), "",
                ifelse(p < 0.001, "***",
@@ -402,14 +411,14 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
         x = mid_labels, y = c("ANOVA", "Kendall"), z = z_mat,
         type = "heatmap",
         colorscale = list(c(0, "#f7fbff"), c(0.5, "#6baed6"), c(1, "#08306b")),
-        colorbar = list(title = "-log10(p)"),
+        colorbar = list(title = "-log10(q)"),
         text = text_mat, texttemplate = "%{text}",
-        hovertemplate = "Bin: %{x} \u00b5m<br>Test: %{y}<br>-log10(p): %{z:.2f}<extra></extra>"
+        hovertemplate = "Bin: %{x} \u00b5m<br>Test: %{y}<br>-log10(q): %{z:.2f}<extra></extra>"
       ) %>%
         layout(
           xaxis = list(title = "Diameter bin midpoint (\u00b5m)"),
           yaxis = list(title = ""),
-          title = "Per-Bin Statistical Significance"
+          title = "Stratified Significance (BH-corrected)"
         )
     })
 
@@ -423,7 +432,7 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
       bk <- st$bin_kendall
       if (is.null(bk) || nrow(bk) == 0) return(NULL)
 
-      bk$sig_label <- ifelse(!is.na(bk$p_kendall) & bk$p_kendall < st$alpha, "Significant", "NS")
+      bk$sig_label <- ifelse(!is.na(bk$p_adj) & bk$p_adj < st$alpha, "Significant", "NS")
 
       # Overall Kendall tau across all data
       rdf <- st$rdf
@@ -451,10 +460,11 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
         labs(x = "Diameter bin midpoint (\u00b5m)", y = "Kendall \u03c4",
              title = paste("Disease Progression Trend:", direction_label)) +
         theme_minimal(base_size = 13) +
-        theme(legend.position = "bottom")
+        theme(legend.position = "none")
 
       ggplotly(g, tooltip = c("x", "y", "colour")) %>%
-        layout(legend = list(orientation = "h", x = 0.3, y = -0.15))
+        layout(margin = list(b = 60),
+               legend = list(orientation = "h", x = 0.5, xanchor = "center", y = -0.25))
     })
 
     # ===========================================================================
@@ -659,7 +669,7 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
           tags$br(),
           tags$strong("Effect sizes: "), "Cohen's d with 95% CI for pairwise comparisons; \u03b7\u00b2 for the global test.",
           tags$br(),
-          tags$strong("Per-bin analysis: "), "ANOVA and Kendall \u03c4 computed within each diameter bin to assess size-dependent effects.",
+          tags$strong("Stratified analysis: "), "ANOVA and Kendall \u03c4 computed within each diameter bin to detect effect modification by islet size. P-values are BH-corrected across all bins.",
           tags$br(),
           tags$strong("Multiple comparisons: "), "Benjamini-Hochberg (FDR) correction applied to pairwise p-values.",
           tags$br(),

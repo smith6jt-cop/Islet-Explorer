@@ -42,9 +42,11 @@ If the H5AD is unavailable, the app falls back to `data/master_results.xlsx` wit
 
 | Group | Color | Description |
 |-------|-------|-------------|
-| **ND** | Green (#2ca02c) | Non-diabetic control donors |
-| **Aab+** | Yellow (#ffcc00) | Autoantibody-positive (pre-T1D) |
-| **T1D** | Purple (#9467bd) | Type 1 diabetic donors |
+| **ND** | Steel Blue (#4477AA) | Non-diabetic control donors |
+| **Aab+** | Burnt Umber (#CC6633) | Autoantibody-positive (pre-T1D) |
+| **T1D** | Forest Green (#228833) | Type 1 diabetic donors |
+
+Colors are configurable via the **Donor Status Colors** palette selector (Paul Tol default, Bright, Okabe-Ito, Diverging). The selector is available on the Plot sidebar, Trajectory tab, and Spatial tab — all stay synced.
 
 ---
 
@@ -198,37 +200,30 @@ Rigorous statistical analysis of the currently selected feature from the Plot si
 
 Tissue-wide spatial visualization and peri-islet microenvironment analysis. Combines single-cell tissue scatter plots with Leiden clustering and neighborhood enrichment metrics.
 
-### 5-Card Layout
+### 3-Panel Layout
 
-1. **Controls** (full-width)
-   - Donor selector (15 nPOD donors)
+1. **Controls Sidebar** (left panel)
+   - Donor selector (15 nPOD donors with disease status labels)
    - Color by: Phenotype (21 cell types) or Leiden cluster
    - Leiden resolution dropdown (0.3, 0.5, 0.8, 1.0) — visible when Leiden coloring selected
    - Region filter: All cells, Core + Peri only, or Core only
-   - Donor status checkboxes (for enrichment/heatmap cards)
+   - **Color background cells**: Toggle to show tissue background cells in phenotype colors (dimmed) instead of grey
+   - Donor status checkboxes
+   - Phenotype and Donor Status palette selectors
+   - Download CSV button
 
-2. **Tissue Scatter** (col-8, 800px height)
+2. **Tissue Scatter** (center, 800px height)
    - Full tissue-wide scatter plot of ~177K cells per donor
-   - Background: tissue cells in light grey (`size=0.15, alpha=0.3`)
-   - Foreground: core/peri cells colored by phenotype or Leiden cluster (`size=0.4, alpha=0.6`)
+   - Background: tissue cells in light grey by default, or colored by phenotype when "Color background cells" is checked
+   - Foreground: core/peri cells colored by phenotype or Leiden cluster
    - Spatial coordinate convention: `coord_fixed()` + `scale_y_reverse()` (microscopy standard)
    - Uses ggplot2 `renderPlot` (not plotly) for performance at >100K points
 
-3. **Leiden Panel** (col-4)
+3. **Leiden Panel** (right)
    - UMAP scatter of 5,214 islets colored by selected Leiden resolution
    - Stacked bar chart of mean phenotype composition per cluster
+   - UMAP shows disease-stage separation (uses raw marker PCA visualization coordinates)
    - Hidden with message when Leiden data unavailable in H5AD
-
-4. **Enrichment** (col-6)
-   - Grouped bar chart of Poisson enrichment z-scores by disease stage (ND/Aab+/T1D)
-   - Positive z = enriched relative to tissue-wide baseline
-   - Documentation banner explaining peri-islet vs tissue-wide context
-   - Responds to donor status filter but not the feature selector
-
-5. **Phenotype Heatmap** (col-6)
-   - Mean peri-islet phenotype proportions across 21 phenotypes × 3 disease stages
-   - Documentation banner explaining the 20 μm expansion zone
-   - Responds to donor status filter but not the feature selector
 
 ### Data Sources
 
@@ -251,9 +246,13 @@ Click any islet data point in the Plot or Trajectory tab to inspect individual c
 ### How It Works
 
 1. Click a point in the scatter/UMAP plot
-2. A segmentation panel appears below the plot with two view modes:
-   - **Boundaries** — GeoJSON islet boundary overlay (default if no cell data)
-   - **Single Cells** — Individual cells plotted in spatial context over the islet boundary
+2. A segmentation panel appears below the plot with the title showing the islet name and donor info (case ID, disease status, age, gender)
+
+### Panel Layout
+
+- **Left sidebar**: Layer toggles (Single Cells, Peri Boundary, Structures), Color-by dropdown, Phenotype Palette, Show peri-islet cells checkbox. When no cell data is available, shows a boundary legend instead.
+- **Center**: Segmentation map with GeoJSON boundaries and optional single-cell overlay
+- **Right sidebar**: Cell composition bar chart and cell count table (visible when Single Cells is enabled)
 
 ### Single Cells View
 
@@ -482,7 +481,9 @@ The Statistics tab uses data from the Plot sidebar. Ensure:
 5. **"httr2 package required"**: Install with `install.packages('httr2')` and restart the app
 6. **Debug mode**: Set `DEBUG_CREDENTIALS=1` in `.Renviron` and check the R console output for credential loading details
 
-### Spatial tab enrichment/heatmap is empty
+### Leiden UMAP shows a blob
 
-1. Verify the H5AD has neighborhood columns: look for `peri_prop_*` in the data
-2. If absent, run `scripts/compute_neighborhood_metrics.py` and rebuild the H5AD
+The Leiden UMAP visualization uses raw marker PCA coordinates (same as the Trajectory tab). If it shows a blob, the clustered H5AD may have outdated scVI-based UMAP coordinates. Fix:
+1. Copy visualization UMAP from `data/adata_ins_root.h5ad` into `islet_analysis/islets_core_clustered.h5ad`
+2. Rebuild: `python scripts/build_h5ad_for_app.py`
+3. Kill stale R workers and refresh

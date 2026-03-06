@@ -47,7 +47,12 @@ statistics_ui <- function(id) {
             column(2,
               radioButtons(ns("test_type"), "Test Type",
                            choices = c("Parametric", "Non-parametric"),
-                           selected = "Parametric", inline = FALSE)
+                           selected = "Parametric", inline = FALSE),
+              tags$small(style = "color: #888; display: block; margin-top: -8px; line-height: 1.3;",
+                tags$strong("Parametric"), " (ANOVA / t-test): assumes roughly normal data within groups.",
+                tags$br(),
+                tags$strong("Non-parametric"), " (Kruskal-Wallis / Wilcoxon): no normality assumption; based on ranks."
+              )
             ),
             column(2,
               selectInput(ns("alpha"), "Significance (\u03b1)",
@@ -73,15 +78,15 @@ statistics_ui <- function(id) {
     section_heading("2", "Primary Results",
                     "Global test across all three donor groups, plus pairwise comparisons with effect sizes."),
 
-    fluidRow(
-      column(7,
-        div(class = "card", style = "padding: 15px; margin-bottom: 15px;",
+    fluidRow(style = "display: flex; flex-wrap: wrap;",
+      column(5,
+        div(class = "card", style = "padding: 15px; margin-bottom: 15px; height: 100%;",
           h5("Hypothesis Testing"),
           tableOutput(ns("test_results_table"))
         )
       ),
-      column(5,
-        div(class = "card", style = "padding: 15px; margin-bottom: 15px;",
+      column(7,
+        div(class = "card", style = "padding: 15px; margin-bottom: 15px; height: 100%;",
           h5("Effect Size Forest Plot"),
           plotlyOutput(ns("forest_plot"), height = "350px")
         )
@@ -90,18 +95,25 @@ statistics_ui <- function(id) {
 
     # ===== SECTION 3: Size-Dependent Patterns =====
     section_heading("3", "Size-Dependent Patterns",
-                    "How does the effect change across islet diameters?"),
+                    "Does the group effect depend on islet size? Each diameter bin is tested independently to detect effect modification."),
 
     fluidRow(
       column(6,
         div(class = "card", style = "padding: 15px; margin-bottom: 15px;",
-          h5("Per-Bin Significance Heatmap"),
+          h5("Stratified Tests by Islet Diameter"),
+          tags$small(style = "color: #888; display: block; margin-bottom: 8px;",
+            "ANOVA and Kendall \u03c4 computed within each size bin. ",
+            "P-values are BH-corrected across bins to control false discovery rate. ",
+            "Identifies which size ranges drive or lack group differences."),
           plotlyOutput(ns("bin_heatmap"), height = "320px")
         )
       ),
       column(6,
         div(class = "card", style = "padding: 15px; margin-bottom: 15px;",
           h5("Trend Analysis (Kendall \u03c4)"),
+          tags$small(style = "color: #888; display: block; margin-bottom: 8px;",
+            "Direction and strength of the ND \u2192 Aab+ \u2192 T1D gradient within each size bin. ",
+            "Positive \u03c4 = increases with disease progression."),
           plotlyOutput(ns("trend_plot"), height = "320px")
         )
       )

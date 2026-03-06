@@ -86,20 +86,6 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                   choices = choices, selected = nbr$leiden[2] %||% nbr$leiden[1])
     })
 
-    # ---- Overview banner ----
-    output$overview_banner <- renderUI({
-      n_donors <- length(get_available_donors())
-      if (n_donors == 0) {
-        return(div(style = "color: #888; font-style: italic;",
-          "Per-donor tissue data not available. Run extract_per_donor_tissue.py."))
-      }
-      tags$p(style = "margin: 0; font-size: 14px;",
-        strong(n_donors), " donors with tissue-wide cell data |",
-        if (has_leiden()) " Leiden clustering available" else " Leiden data not available",
-        if (has_neighborhood()) " | Neighborhood metrics available" else ""
-      )
-    })
-
     # ---- Donor cells reactive (load tissue CSV for selected donor) ----
     donor_cells <- reactive({
       req(input$donor)

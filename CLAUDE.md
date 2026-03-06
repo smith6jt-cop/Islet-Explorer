@@ -27,7 +27,7 @@ app/shiny_app/
     mod_viewer_ui.R / mod_viewer_server.R       # Viewer tab (OME-TIFF, Avivator iframe)
     mod_statistics_ui.R / mod_statistics_server.R  # Statistics tab (7-card: hypothesis, heatmap, trend, demographics, AUC)
     spatial_helpers.R           # Per-donor tissue CSV loader with new.env() caching
-    mod_spatial_ui.R / mod_spatial_server.R     # Spatial tab (5-card: tissue scatter, Leiden panel, enrichment, heatmap)
+    mod_spatial_ui.R / mod_spatial_server.R     # Spatial tab (3-panel: sidebar controls, tissue scatter, Leiden panel)
     mod_ai_assistant_ui.R / mod_ai_assistant_server.R  # AI chat panel
   www/                         # Static assets (images, logos)
   app_original.R               # Backup of pre-modularization monolithic app (5,397 lines)
@@ -52,9 +52,10 @@ Total startup: **~22s → ~3.5s**.
 ### Shared Reactive State (wired in app.R server)
 
 - `prepared()` - core data reactive from H5AD or Excel, consumed by Plot, Trajectory, Statistics, Spatial
-- `selected_islet` - reactiveVal, written by Plot and Trajectory click handlers
+- `selected_islet` - reactiveVal with `case_id`, `islet_key`, `centroid_x/y`, `donor_status`, `donor_age`, `donor_gender`
 - `forced_image` - reactiveVal, written by Trajectory, read by Viewer
 - `active_tab` - `reactive(input$tabs)`, passed to Plot and Trajectory to prevent duplicate output IDs
+- `active_donor_colors` - reactive from `donor_palette_name()`, synced across 3 non-namespaced inputs: `sidebar_donor_palette` (Plot sidebar), `traj_donor_palette` (Trajectory), `spatial_donor_palette` (Spatial)
 
 ### Critical: Root-Level Outputs + Active Tab Guard
 
@@ -163,17 +164,15 @@ conda activate scvi-env  # scanpy, anndata, scvi-tools, sklearn, scib-metrics, s
 - Immune signal validated: T1D immune_frac_peri (0.155) > Aab+ (0.106) > ND (0.069)
 - Plot composition selector now has 4 option groups: Hormone Fractions, Cell Type Proportions, Peri-Islet Proportions, Immune Metrics
 
-### Spatial Tab (Phase 9 overhaul, mod_spatial_ui/server.R)
+### Spatial Tab (Phase 9+13, mod_spatial_ui/server.R)
 
-5-card layout with tissue-wide scatter, Leiden clustering, and neighborhood charts:
+3-panel layout: Controls sidebar (col-2) + Tissue Scatter (col-6) + Leiden Panel (col-4).
 
-1. **Controls** (full-width) -- donor selector, color-by (phenotype/Leiden), Leiden resolution dropdown, region filter (All/Core+Peri/Core), donor status checkboxes
-2. **Tissue Scatter** (col-8) -- ggplot2 `renderPlot` (NOT plotly) showing ~177K cells/donor. Background tissue cells in light grey; foreground (core/peri) colored by phenotype or Leiden cluster. `coord_fixed() + scale_y_reverse()` for spatial orientation. Height: 800px.
-3. **Leiden Panel** (col-4) -- plotly UMAP of 5,214 islets colored by selected Leiden resolution (0.3/0.5/0.8/1.0) + stacked bar chart of mean phenotype composition per cluster
-4. **Enrichment** (col-6) -- grouped bar of Poisson enrichment z-scores by disease stage, with documentation banner explaining peri-islet vs tissue-wide context
-5. **Phenotype Heatmap** (col-6) -- mean peri-islet phenotype proportions x 3 stages, with documentation banner explaining the 20um expansion zone
+1. **Controls Sidebar** (col-2) -- donor selector, color-by (phenotype/Leiden), Leiden resolution, region filter (All/Core+Peri/Core), "Color background cells" checkbox, donor status checkboxes, phenotype + donor palette selectors, download button. All stacked vertically.
+2. **Tissue Scatter** (col-6) -- ggplot2 `renderPlot` (NOT plotly) showing ~177K cells/donor. Background tissue cells in light grey or colored by phenotype (toggle). Foreground (core/peri) colored by phenotype or Leiden cluster. `coord_fixed() + scale_y_reverse()`. Height: 800px.
+3. **Leiden Panel** (col-4) -- plotly UMAP of 5,214 islets colored by selected Leiden resolution (0.3/0.5/0.8/1.0) + stacked bar chart of mean phenotype composition per cluster. UMAP uses raw marker PCA visualization coords (same as trajectory) for disease-stage separation.
 
-Wired as `spatial_server("spatial", prepared)` -- no sidebar sharing, inline controls only.
+Wired as `spatial_server("spatial", prepared, active_palette, active_donor_colors)`.
 
 #### Supporting Files
 - `spatial_helpers.R` -- `donor_tissue_available()`, `get_available_donors()`, `load_donor_tissue(imageid)` with `new.env()` caching
@@ -198,14 +197,14 @@ Wired as `spatial_server("spatial", prepared)` -- no sidebar sharing, inline con
 - 37 columns: `X_centroid`, `Y_centroid`, `phenotype`, `cell_region` (core/peri), `Cell Area`, `Nucleus Area`, + 31 protein markers
 - File naming matches `combined_islet_id` from `islet_spatial_lookup.csv`
 
-### Segmentation Panel Extension
+### Islet Viewer Panel (Segmentation + Drill-Down)
 
-When cell data exists for a clicked islet, the segmentation panel shows:
-- **Boundaries | Single Cells** radio toggle (defaults to "Single Cells")
-- **Color-by dropdown**: phenotype (categorical) or any of 31 markers (viridis inferno continuous)
-- **Peri-islet toggle**: checkbox to show/hide peri-islet cells
-- **Layout**: 8-col plot + 4-col sidebar (composition chart + cell count table)
-- Falls back to Boundaries-only when cell data is unavailable for that islet
+When an islet is clicked, the viewer panel shows with controls on the left sidebar:
+- **Title**: `Islet_N (case_id, status, age, gender)` — donor info from `prepared()$comp`
+- **Left sidebar (col-2)**: Layer toggles (Single Cells, Peri Boundary, Structures), Color-by dropdown, Phenotype Palette, Show peri-islet cells. Falls back to boundary legend when no cell data.
+- **Center plot (col-6)**: Segmentation map with GeoJSON boundaries + optional single-cell overlay
+- **Right sidebar (col-4)**: Cell composition bar chart + cell count table (when Single Cells enabled)
+- `selected_islet()` carries `case_id`, `islet_key`, `centroid_x/y`, `donor_status`, `donor_age`, `donor_gender`
 
 ### Coordinate Alignment
 
@@ -351,6 +350,10 @@ Required env vars: `KEY` (API key), `BASE` (API base URL, optional).
 - **Leiden cluster mapping for cells**: Islet-level Leiden assignments map to single cells via `islet_name` column lookup. Tissue background cells without an islet get `cluster = "tissue"` (grey).
 - **Per-donor tissue CSVs**: `data/donors/{imageid}.csv` with 5 columns (X_centroid, Y_centroid, phenotype, cell_region, islet_name). `cell_region` = core/peri/tissue.
 - **Leiden in H5AD**: 4 resolution columns (`leiden_0.3/0.5/0.8/1.0`) + 2 UMAP coords (`leiden_umap_1/2`). Extracted via `^leiden_` regex in `data_loading.R`.
+- **Leiden UMAP uses visualization coords**: `islets_core_clustered.h5ad` X_umap is copied from trajectory's raw marker PCA UMAP (min_dist=0.5, spread=2.0), NOT computed separately from scVI (which produces a blob). Leiden clustering itself still uses scVI neighbors.
+- **Donor palette syncing**: 3 non-namespaced `selectInput`s (`sidebar_donor_palette`, `traj_donor_palette`, `spatial_donor_palette`) synced bidirectionally via `observeEvent` + `updateSelectInput` in `app.R`. All feed `donor_palette_name()` -> `active_donor_colors()`.
+- **Trajectory legend uses reactive colors**: `donor_colors_reactive()` NOT hardcoded hex. Changes when palette selector updates.
+- **Spatial background cell coloring**: `color_background` checkbox. When checked + phenotype mode, background cells get phenotype colors at alpha=0.25. Palette must include both fg + bg phenotypes.
 - **Reticulate bridge crossing**: `ad$uns[[key]]` costs ~221ms per call. ALWAYS cache `uns <- ad$uns` as an R list first, then index. `reconstruct_groovy_df_from_list()` uses cached list; legacy `reconstruct_groovy_df()` is a thin wrapper.
 - **Deferred heavy file loading**: `annotations.tsv` (72 MB) lazy-loaded via `.seg_lazy` environment in `segmentation_helpers.R`. Only loaded on first fallback access (never in practice).
 

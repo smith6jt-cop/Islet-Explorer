@@ -85,8 +85,12 @@ prep_data <- function(master) {
       dplyr::distinct() %>%
       dplyr::mutate(.has_union = TRUE)
 
-    core_rows <- targets_all %>% dplyr::filter(type == "islet_core") %>% dplyr::select(dplyr::all_of(c(keys, "count"))) %>% dplyr::rename(count_core = count)
-    band_rows <- targets_all %>% dplyr::filter(type == "islet_band") %>% dplyr::select(dplyr::all_of(c(keys, "count"))) %>% dplyr::rename(count_band = count)
+    core_rows <- targets_all %>% dplyr::filter(type == "islet_core") %>%
+      dplyr::select(dplyr::all_of(c(keys, "count", "area_um2", "region_um2"))) %>%
+      dplyr::rename(count_core = count, area_um2_core = area_um2, region_um2_core = region_um2)
+    band_rows <- targets_all %>% dplyr::filter(type == "islet_band") %>%
+      dplyr::select(dplyr::all_of(c(keys, "count", "area_um2", "region_um2"))) %>%
+      dplyr::rename(count_band = count, area_um2_band = area_um2, region_um2_band = region_um2)
     union_missing <- core_rows %>%
       dplyr::inner_join(band_rows, by = keys) %>%
   { safe_left_join(., have_union, by = keys, context = "targets_union_missing:have_union") } %>%
@@ -94,9 +98,11 @@ prep_data <- function(master) {
     if (nrow(union_missing) > 0) {
       synth <- union_missing %>%
         dplyr::transmute(`Case ID`, `Donor Status`, islet_key, type = "islet_union", class,
-                          area_um2 = NA_real_, region_um2 = NA_real_,
-                          area_density = NA_real_,
-                          count = suppressWarnings(as.numeric(count_core)) + suppressWarnings(as.numeric(count_band)))
+                          area_um2 = suppressWarnings(as.numeric(area_um2_core)) + suppressWarnings(as.numeric(area_um2_band)),
+                          region_um2 = suppressWarnings(as.numeric(region_um2_core)) + suppressWarnings(as.numeric(region_um2_band)),
+                          count = suppressWarnings(as.numeric(count_core)) + suppressWarnings(as.numeric(count_band))) %>%
+        dplyr::mutate(area_density = dplyr::if_else(is.finite(region_um2) & region_um2 > 0,
+                                                     area_um2 / region_um2, NA_real_))
       # Attach diameter via size_area
   synth <- synth %>% { safe_left_join(., size_area, by = c("Case ID", "Donor Status", "islet_key"), context = "targets_synth:size_area") }
       # Bind synthetic union rows to targets_all
