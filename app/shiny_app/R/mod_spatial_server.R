@@ -414,5 +414,521 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         write.csv(df[, keep_cols, drop = FALSE], file, row.names = FALSE)
       }
     )
+
+    # ======================================================================
+    # NEIGHBORHOOD ANALYSIS CARDS (A: Infiltration, B: Enrichment, C: Proximity)
+    # ======================================================================
+
+    # ---- Shared reactive: filtered comp data for neighborhood cards ----
+    nbr_comp <- reactive({
+      pd <- prepared()
+      req(pd$comp)
+      comp <- pd$comp
+      if (!is.null(input$groups) && "Donor Status" %in% colnames(comp))
+        comp <- comp[comp$`Donor Status` %in% input$groups, , drop = FALSE]
+      comp
+    })
+
+    # ---- Friendly labels for enrichment columns ----
+    enrich_col_labels <- c(
+      "enrich_z_CD8a_Tcell" = "CD8+ T-cell",
+      "enrich_z_CD4_Tcell"  = "CD4+ T-cell",
+      "enrich_z_T_cell"     = "T cell",
+      "enrich_z_B_cell"     = "B cell",
+      "enrich_z_Macrophage" = "Macrophage",
+      "enrich_z_APCs"       = "APCs",
+      "enrich_z_Immune"     = "Immune (all)"
+    )
+
+    # ---- Intermediate reactive for Card B: enrichment summary ----
+    enrich_summary <- reactive({
+      comp <- nbr_comp()
+      req(comp)
+      nbr <- get_nbr_columns(colnames(comp))
+      enrich_cols <- nbr$enrich
+      req(length(enrich_cols) > 0)
+      req("Donor Status" %in% colnames(comp))
+
+      clip <- isTRUE(input$enrich_clip)
+      stat_mode <- input$enrich_stat %||% "Median"
+
+      statuses <- unique(comp$`Donor Status`)
+      rows <- list()
+      for (ec in enrich_cols) {
+        label <- enrich_col_labels[ec]
+        if (is.na(label)) label <- gsub("^enrich_z_", "", ec)
+        for (ds in statuses) {
+          vals <- comp[[ec]][comp$`Donor Status` == ds]
+          vals <- vals[is.finite(vals)]
+          if (clip) vals <- pmax(-5, pmin(5, vals))
+          n <- length(vals)
+          if (n == 0) next
+          if (stat_mode == "Median") {
+            z_summary <- median(vals, na.rm = TRUE)
+            q <- quantile(vals, c(0.25, 0.75), na.rm = TRUE)
+            z_lo <- q[1]
+            z_hi <- q[2]
+          } else {
+            z_summary <- mean(vals, na.rm = TRUE)
+            se <- sd(vals, na.rm = TRUE) / sqrt(n)
+            z_lo <- z_summary - se
+            z_hi <- z_summary + se
+          }
+          rows[[length(rows) + 1]] <- data.frame(
+            col = ec, cell_type = label, donor_status = ds,
+            z_summary = z_summary, z_lo = z_lo, z_hi = z_hi, n = n,
+            stringsAsFactors = FALSE
+          )
+        }
+      }
+      if (length(rows) == 0) return(NULL)
+      do.call(rbind, rows)
+    })
+
+    # ---- Neighborhood cards UI (conditional on data availability) ----
+    output$neighborhood_cards <- renderUI({
+      if (!has_neighborhood()) return(NULL)
+
+      # section_heading helper (inline — cannot share with UI function directly)
+      sec_heading <- function(step, title, subtitle) {
+        div(style = "margin-bottom: 14px; margin-top: 22px; padding-bottom: 8px; border-bottom: 2px solid #d0e0f0;",
+          div(style = "display: flex; align-items: baseline; gap: 10px;",
+            span(step,
+                 style = paste0("display: inline-block; background: linear-gradient(135deg, #4477AA, #5599CC);",
+                                " color: white; font-weight: 700; font-size: 14px; padding: 2px 10px;",
+                                " border-radius: 12px; min-width: 28px; text-align: center;")),
+            span(title, style = "font-weight: 700; font-size: 18px;")
+          ),
+          tags$small(subtitle, style = "color: #777; display: block; margin-top: 4px;")
+        )
+      }
+
+      tagList(
+        # ==== Card A: Immune Infiltration Overview ====
+        fluidRow(column(12, sec_heading(
+          "A", "Neighborhood Analysis \u2014 Immune Infiltration",
+          "How does immune infiltration vary across disease stages? Compare peri-islet and core immune fractions."
+        ))),
+        fluidRow(
+          column(6,
+            div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible;",
+              selectInput(ns("infiltration_metric"), "Metric",
+                          choices = c("Immune fraction (peri)" = "immune_frac_peri",
+                                      "Immune fraction (core)" = "immune_frac_core",
+                                      "T-cell density (peri)" = "tcell_density_peri",
+                                      "CD8/Macrophage ratio" = "cd8_to_macro_ratio",
+                                      "Peri/core immune ratio" = "immune_ratio"),
+                          selected = "immune_frac_peri", width = "100%"),
+              plotlyOutput(ns("infiltration_violin"), height = "400px")
+            )
+          ),
+          column(6,
+            div(class = "card", style = "padding: 15px; margin-bottom: 15px;",
+              h5("Peri vs Core Immune Fraction", style = "font-size: 15px; margin-top: 0;"),
+              plotlyOutput(ns("infiltration_scatter"), height = "400px")
+            )
+          )
+        ),
+        fluidRow(column(12,
+          div(style = "background: #f0f6ff; padding: 10px 15px; border-radius: 6px; margin-bottom: 20px; font-size: 13px; color: #555;",
+            tags$em("Immune infiltration quantifies the proportion of immune cells among all cells in the peri-islet zone (20\u00b5m expansion) and islet core. Higher fractions indicate increased immune surveillance or active infiltration.")
+          )
+        )),
+
+        # ==== Card B: Immune Cell Enrichment by Type ====
+        fluidRow(column(12, sec_heading(
+          "B", "Immune Cell Enrichment",
+          "Which immune cell types are disproportionately enriched in peri-islet zones vs tissue-wide background?"
+        ))),
+        fluidRow(
+          column(7,
+            div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible;",
+              div(style = "display: flex; gap: 15px; align-items: center; margin-bottom: 8px;",
+                radioButtons(ns("enrich_stat"), "Summary", c("Median", "Mean"),
+                             selected = "Median", inline = TRUE),
+                checkboxInput(ns("enrich_clip"), "Clip extreme z > 5", value = TRUE)
+              ),
+              plotlyOutput(ns("enrichment_bars"), height = "420px")
+            )
+          ),
+          column(5,
+            div(class = "card", style = "padding: 15px; margin-bottom: 15px;",
+              h5("Enrichment Heatmap", style = "font-size: 15px; margin-top: 0;"),
+              plotlyOutput(ns("enrichment_heatmap"), height = "420px")
+            )
+          )
+        ),
+        fluidRow(column(12,
+          div(style = "background: #f0f6ff; padding: 10px 15px; border-radius: 6px; margin-bottom: 20px; font-size: 13px; color: #555;",
+            tags$em("Enrichment z-scores compare observed immune cell counts in the peri-islet zone vs expected counts based on tissue-wide proportions (Poisson model). z > 0 = enriched locally; z < 0 = depleted. Higher z in T1D for CD8+ T-cells suggests targeted immune surveillance.")
+          )
+        )),
+
+        # ==== Card C: Immune Proximity to Islets ====
+        fluidRow(column(12, sec_heading(
+          "C", "Immune Cell Proximity",
+          "How close are immune cells to islet cores? Shorter distances may indicate active immune targeting."
+        ))),
+        fluidRow(
+          column(6,
+            div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible;",
+              selectInput(ns("distance_metric"), "Distance to nearest",
+                          choices = c("Any immune cell" = "min_dist_immune_mean",
+                                      "Macrophage" = "min_dist_Macrophage",
+                                      "CD8+ T-cell (sparse)" = "min_dist_CD8a_Tcell"),
+                          selected = "min_dist_immune_mean", width = "100%"),
+              plotlyOutput(ns("distance_boxplot"), height = "420px")
+            )
+          ),
+          column(6,
+            div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible;",
+              selectInput(ns("distance_enrich_col"), "Enrichment z-score",
+                          choices = c("Immune (all)" = "enrich_z_Immune",
+                                      "CD8+ T-cell" = "enrich_z_CD8a_Tcell",
+                                      "Macrophage" = "enrich_z_Macrophage",
+                                      "CD4+ T-cell" = "enrich_z_CD4_Tcell",
+                                      "T cell" = "enrich_z_T_cell",
+                                      "B cell" = "enrich_z_B_cell",
+                                      "APCs" = "enrich_z_APCs"),
+                          selected = "enrich_z_Immune", width = "100%"),
+              plotlyOutput(ns("enrich_vs_distance"), height = "420px")
+            )
+          )
+        ),
+        fluidRow(column(12,
+          div(style = "background: #f0f6ff; padding: 10px 15px; border-radius: 6px; margin-bottom: 20px; font-size: 13px; color: #555;",
+            tags$em("Distance metrics measure minimum Euclidean distance (\u00b5m) from islet core centroid to nearest peri-islet immune cells. NAs indicate no cells of that type in the peri-islet zone. CD8+ T-cell distances are sparse (~89% NA) because most islets lack nearby CD8+ T-cells; macrophage (~30% NA) and overall immune (~20% NA) distances are more complete.")
+          )
+        ))
+      )
+    })
+
+    # ==== Card A-Left: Immune Metric Violin Plot ====
+    output$infiltration_violin <- renderPlotly({
+      comp <- nbr_comp()
+      req(comp, "Donor Status" %in% colnames(comp))
+      metric <- input$infiltration_metric %||% "immune_frac_peri"
+      req(metric %in% colnames(comp))
+
+      # Metric label for title
+      metric_labels <- c(
+        "immune_frac_peri" = "Immune Fraction (Peri)",
+        "immune_frac_core" = "Immune Fraction (Core)",
+        "tcell_density_peri" = "T-cell Density (Peri)",
+        "cd8_to_macro_ratio" = "CD8/Macrophage Ratio",
+        "immune_ratio" = "Peri/Core Immune Ratio"
+      )
+      metric_label <- metric_labels[metric]
+      if (is.na(metric_label)) metric_label <- metric
+
+      df <- data.frame(
+        value = comp[[metric]],
+        status = comp$`Donor Status`,
+        stringsAsFactors = FALSE
+      )
+      df <- df[is.finite(df$value), , drop = FALSE]
+      if (nrow(df) == 0) return(plotly_empty() %>% layout(title = "No data"))
+
+      # Order: ND, Aab+, T1D
+      status_order <- c("ND", "Aab+", "T1D")
+      df$status <- factor(df$status, levels = intersect(status_order, unique(df$status)))
+
+      dcols <- donor_colors_reactive()
+
+      # Kruskal-Wallis test
+      kw_p <- tryCatch({
+        kt <- kruskal.test(value ~ status, data = df)
+        kt$p.value
+      }, error = function(e) NA_real_)
+      p_label <- if (is.finite(kw_p)) paste0("KW p = ", formatC(kw_p, format = "g", digits = 3)) else ""
+
+      p <- plot_ly()
+      for (s in levels(df$status)) {
+        sub <- df[df$status == s, , drop = FALSE]
+        if (nrow(sub) == 0) next
+        p <- p %>% add_trace(
+          y = sub$value, x = s, name = s,
+          type = "violin", box = list(visible = TRUE),
+          meanline = list(visible = TRUE),
+          points = "all", jitter = 0.3,
+          pointpos = -1.5,
+          marker = list(size = 3, opacity = 0.3,
+                        color = dcols[s]),
+          line = list(color = dcols[s]),
+          fillcolor = paste0(dcols[s], "44"),
+          hoverinfo = "y"
+        )
+      }
+      p %>% layout(
+        title = list(text = paste0(metric_label, "<br><sup>", p_label, "</sup>"),
+                     font = list(size = 14)),
+        xaxis = list(title = "", categoryorder = "array",
+                     categoryarray = c("ND", "Aab+", "T1D")),
+        yaxis = list(title = metric_label),
+        showlegend = FALSE
+      )
+    })
+
+    # ==== Card A-Right: Peri vs Core Scatter ====
+    output$infiltration_scatter <- renderPlotly({
+      comp <- nbr_comp()
+      req(comp, "Donor Status" %in% colnames(comp))
+      req("immune_frac_peri" %in% colnames(comp), "immune_frac_core" %in% colnames(comp))
+
+      df <- data.frame(
+        peri = comp$immune_frac_peri,
+        core = comp$immune_frac_core,
+        status = comp$`Donor Status`,
+        islet_key = if ("islet_key" %in% colnames(comp)) comp$islet_key else "",
+        stringsAsFactors = FALSE
+      )
+      df <- df[is.finite(df$peri) & is.finite(df$core), , drop = FALSE]
+      if (nrow(df) == 0) return(plotly_empty() %>% layout(title = "No data"))
+
+      status_order <- c("ND", "Aab+", "T1D")
+      df$status <- factor(df$status, levels = intersect(status_order, unique(df$status)))
+      dcols <- donor_colors_reactive()
+
+      max_val <- max(c(df$peri, df$core), na.rm = TRUE) * 1.05
+
+      p <- plot_ly()
+      for (s in levels(df$status)) {
+        sub <- df[df$status == s, , drop = FALSE]
+        if (nrow(sub) == 0) next
+        p <- p %>% add_trace(
+          data = sub, x = ~peri, y = ~core,
+          text = ~paste0(islet_key, "<br>Status: ", status,
+                        "<br>Peri: ", round(peri, 4),
+                        "<br>Core: ", round(core, 4)),
+          hoverinfo = "text", name = s,
+          type = "scatter", mode = "markers",
+          marker = list(size = 4, opacity = 0.4, color = dcols[s])
+        )
+      }
+      # Diagonal y=x reference
+      p %>% add_trace(
+        x = c(0, max_val), y = c(0, max_val),
+        type = "scatter", mode = "lines",
+        line = list(dash = "dash", color = "#999", width = 1),
+        showlegend = FALSE, hoverinfo = "none"
+      ) %>% layout(
+        title = list(text = "Peri vs Core Immune Fraction", font = list(size = 14)),
+        xaxis = list(title = "Immune Fraction (Peri)", range = c(0, max_val)),
+        yaxis = list(title = "Immune Fraction (Core)", range = c(0, max_val)),
+        legend = list(title = list(text = "Status"))
+      )
+    })
+
+    # ==== Card B-Left: Enrichment Grouped Bar Chart ====
+    output$enrichment_bars <- renderPlotly({
+      es <- enrich_summary()
+      req(es)
+
+      status_order <- c("ND", "Aab+", "T1D")
+      es$donor_status <- factor(es$donor_status, levels = intersect(status_order, unique(es$donor_status)))
+
+      dcols <- donor_colors_reactive()
+
+      stat_mode <- input$enrich_stat %||% "Median"
+      error_label <- if (stat_mode == "Median") "IQR" else "SEM"
+
+      p <- plot_ly()
+      for (s in levels(es$donor_status)) {
+        sub <- es[es$donor_status == s, , drop = FALSE]
+        if (nrow(sub) == 0) next
+        p <- p %>% add_trace(
+          x = sub$cell_type, y = sub$z_summary, name = s,
+          type = "bar",
+          marker = list(color = dcols[s]),
+          error_y = list(
+            type = "data",
+            symmetric = FALSE,
+            array = sub$z_hi - sub$z_summary,
+            arrayminus = sub$z_summary - sub$z_lo,
+            color = "#666", thickness = 1
+          ),
+          hovertemplate = paste0("%{x}<br>", s, "<br>z = %{y:.2f}<extra></extra>")
+        )
+      }
+      p %>% layout(
+        barmode = "group",
+        title = list(text = paste0(stat_mode, " Enrichment z-score (error: ", error_label, ")"),
+                     font = list(size = 14)),
+        xaxis = list(title = "", tickangle = -30,
+                     categoryorder = "array",
+                     categoryarray = unique(es$cell_type)),
+        yaxis = list(title = "Enrichment z-score"),
+        legend = list(title = list(text = "Status")),
+        shapes = list(
+          list(type = "line", x0 = -0.5, x1 = 10, y0 = 0, y1 = 0,
+               line = list(color = "#999", dash = "dash", width = 1))
+        )
+      )
+    })
+
+    # ==== Card B-Right: Enrichment Heatmap ====
+    output$enrichment_heatmap <- renderPlotly({
+      es <- enrich_summary()
+      req(es)
+
+      # Pivot to matrix: cell_type × donor_status
+      status_order <- c("ND", "Aab+", "T1D")
+      cell_types <- unique(es$cell_type)
+      statuses <- intersect(status_order, unique(es$donor_status))
+
+      mat <- matrix(NA_real_, nrow = length(statuses), ncol = length(cell_types),
+                    dimnames = list(statuses, cell_types))
+      for (i in seq_len(nrow(es))) {
+        s <- es$donor_status[i]
+        ct <- es$cell_type[i]
+        if (as.character(s) %in% rownames(mat) && ct %in% colnames(mat))
+          mat[as.character(s), ct] <- es$z_summary[i]
+      }
+
+      # Annotation text
+      text_mat <- matrix(sprintf("%.2f", mat), nrow = nrow(mat), ncol = ncol(mat))
+      text_mat[is.na(mat)] <- ""
+
+      # Symmetric color range
+      z_abs_max <- max(abs(mat), na.rm = TRUE)
+      if (!is.finite(z_abs_max) || z_abs_max == 0) z_abs_max <- 1
+
+      plot_ly(
+        x = colnames(mat), y = rownames(mat), z = mat,
+        type = "heatmap",
+        colorscale = list(c(0, "#2166AC"), c(0.5, "#FFFFFF"), c(1, "#B2182B")),
+        zmin = -z_abs_max, zmax = z_abs_max,
+        text = text_mat, texttemplate = "%{text}",
+        hovertemplate = "%{x}<br>%{y}<br>z = %{z:.2f}<extra></extra>",
+        showscale = TRUE,
+        colorbar = list(title = "z-score")
+      ) %>% layout(
+        title = list(text = paste0(input$enrich_stat %||% "Median", " Enrichment z-score"),
+                     font = list(size = 14)),
+        xaxis = list(title = "", tickangle = -30),
+        yaxis = list(title = "", autorange = "reversed")
+      )
+    })
+
+    # ==== Card C-Left: Distance Box Plots ====
+    output$distance_boxplot <- renderPlotly({
+      comp <- nbr_comp()
+      req(comp, "Donor Status" %in% colnames(comp))
+      metric <- input$distance_metric %||% "min_dist_immune_mean"
+      req(metric %in% colnames(comp))
+
+      metric_labels <- c(
+        "min_dist_immune_mean" = "Min Distance to Any Immune Cell",
+        "min_dist_Macrophage" = "Min Distance to Macrophage",
+        "min_dist_CD8a_Tcell" = "Min Distance to CD8+ T-cell"
+      )
+      metric_label <- metric_labels[metric]
+      if (is.na(metric_label)) metric_label <- metric
+
+      df <- data.frame(
+        value = comp[[metric]],
+        status = comp$`Donor Status`,
+        stringsAsFactors = FALSE
+      )
+
+      # Count non-NA per group before filtering
+      status_order <- c("ND", "Aab+", "T1D")
+      n_total <- tapply(df$value, df$status, length)
+      n_valid <- tapply(df$value, df$status, function(x) sum(is.finite(x)))
+      na_rate <- 1 - sum(is.finite(df$value)) / nrow(df)
+
+      df <- df[is.finite(df$value), , drop = FALSE]
+      if (nrow(df) == 0) return(plotly_empty() %>% layout(title = paste0(metric_label, " — all NA")))
+
+      df$status <- factor(df$status, levels = intersect(status_order, unique(df$status)))
+      dcols <- donor_colors_reactive()
+
+      # Subtitle with N per group
+      n_labels <- sapply(levels(df$status), function(s) {
+        nv <- n_valid[s]
+        nt <- n_total[s]
+        if (is.na(nv)) nv <- 0
+        if (is.na(nt)) nt <- 0
+        paste0(s, ": ", nv, "/", nt)
+      })
+      subtitle <- paste0("Non-NA: ", paste(n_labels, collapse = ", "),
+                          " (", round(na_rate * 100, 0), "% NA overall)")
+
+      p <- plot_ly()
+      for (s in levels(df$status)) {
+        sub <- df[df$status == s, , drop = FALSE]
+        if (nrow(sub) == 0) next
+        p <- p %>% add_trace(
+          y = sub$value, x = s, name = s,
+          type = "box",
+          boxpoints = "all", jitter = 0.3, pointpos = -1.5,
+          marker = list(size = 3, opacity = 0.3, color = dcols[s]),
+          line = list(color = dcols[s]),
+          fillcolor = paste0(dcols[s], "44"),
+          hoverinfo = "y"
+        )
+      }
+      p %>% layout(
+        title = list(text = paste0(metric_label, "<br><sup>", subtitle, "</sup>"),
+                     font = list(size = 14)),
+        xaxis = list(title = "", categoryorder = "array",
+                     categoryarray = c("ND", "Aab+", "T1D")),
+        yaxis = list(title = paste0("Distance (\u00b5m)")),
+        showlegend = FALSE
+      )
+    })
+
+    # ==== Card C-Right: Enrichment vs Distance Scatter ====
+    output$enrich_vs_distance <- renderPlotly({
+      comp <- nbr_comp()
+      req(comp, "Donor Status" %in% colnames(comp))
+      dist_col <- input$distance_metric %||% "min_dist_immune_mean"
+      enrich_col <- input$distance_enrich_col %||% "enrich_z_Immune"
+      req(dist_col %in% colnames(comp), enrich_col %in% colnames(comp))
+
+      enrich_label <- enrich_col_labels[enrich_col]
+      if (is.na(enrich_label)) enrich_label <- gsub("^enrich_z_", "", enrich_col)
+
+      df <- data.frame(
+        distance = comp[[dist_col]],
+        enrichment = comp[[enrich_col]],
+        status = comp$`Donor Status`,
+        islet_key = if ("islet_key" %in% colnames(comp)) comp$islet_key else "",
+        stringsAsFactors = FALSE
+      )
+      df <- df[is.finite(df$distance) & is.finite(df$enrichment), , drop = FALSE]
+      if (nrow(df) == 0) return(plotly_empty() %>% layout(title = "No overlapping data"))
+
+      status_order <- c("ND", "Aab+", "T1D")
+      df$status <- factor(df$status, levels = intersect(status_order, unique(df$status)))
+      dcols <- donor_colors_reactive()
+
+      # Correlation
+      cor_r <- tryCatch(cor(df$distance, df$enrichment, use = "complete.obs"), error = function(e) NA)
+      cor_label <- if (is.finite(cor_r)) paste0("r = ", round(cor_r, 3)) else ""
+
+      p <- plot_ly()
+      for (s in levels(df$status)) {
+        sub <- df[df$status == s, , drop = FALSE]
+        if (nrow(sub) == 0) next
+        p <- p %>% add_trace(
+          data = sub, x = ~distance, y = ~enrichment,
+          text = ~paste0(islet_key, "<br>Status: ", status,
+                        "<br>Distance: ", round(distance, 1), " \u00b5m",
+                        "<br>Enrichment z: ", round(enrichment, 2)),
+          hoverinfo = "text", name = s,
+          type = "scatter", mode = "markers",
+          marker = list(size = 4, opacity = 0.3, color = dcols[s])
+        )
+      }
+      p %>% layout(
+        title = list(text = paste0(enrich_label, " Enrichment vs Distance<br><sup>", cor_label, "</sup>"),
+                     font = list(size = 14)),
+        xaxis = list(title = paste0("Distance (\u00b5m)")),
+        yaxis = list(title = paste0("Enrichment z-score (", enrich_label, ")")),
+        legend = list(title = list(text = "Status"))
+      )
+    })
+
   })
 }

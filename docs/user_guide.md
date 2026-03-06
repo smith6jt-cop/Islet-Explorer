@@ -231,6 +231,25 @@ Tissue-wide spatial visualization and peri-islet microenvironment analysis. Comb
 - **Leiden clustering**: Stored in `islet_explorer.h5ad` .obs as `leiden_0.3`, `leiden_0.5`, `leiden_0.8`, `leiden_1.0` + UMAP coords `leiden_umap_1`, `leiden_umap_2`.
 - **Neighborhood metrics**: 62 columns merged into H5AD .obs (peri-islet composition, immune, enrichment z-scores, distances).
 
+### Neighborhood Analysis Cards
+
+Below the tissue scatter and Leiden panel, three interactive analysis sections visualize the 62 computed peri-islet neighborhood metrics. Each answers a key biological question about immune-islet interactions in T1D progression. These cards only appear when neighborhood data is available in the H5AD (not in Excel fallback mode).
+
+**Card A: Immune Infiltration**
+- **Left**: Violin plot of a selectable immune metric (immune fraction peri/core, T-cell density, CD8/macrophage ratio, peri/core immune ratio) by disease stage (ND → Aab+ → T1D). Shows Kruskal-Wallis p-value. Jittered points overlay with box + mean line.
+- **Right**: Scatter of peri vs core immune fraction with dashed y=x diagonal. Points above the line have more core than peri infiltration.
+- *Interpretation*: Higher immune fractions in T1D indicate increased immune surveillance.
+
+**Card B: Immune Cell Enrichment**
+- **Left**: Grouped bar chart of enrichment z-scores for 7 immune cell types (CD8+ T-cell, CD4+ T-cell, T cell, B cell, Macrophage, APCs, Immune), grouped by disease stage. Toggle between median/mean summary; clip extreme z > 5 (default on). Error bars show IQR (median) or SEM (mean).
+- **Right**: Heatmap of median enrichment z-scores — cell types (columns) × disease stages (rows). Blue = depleted, red = enriched. Numeric values annotated on each cell.
+- *Interpretation*: z > 0 means that cell type is enriched near islets relative to the tissue-wide proportion. CD8+ T-cell enrichment in T1D suggests targeted immune surveillance.
+
+**Card C: Immune Proximity**
+- **Left**: Box plot of minimum distance (μm) from islet core centroid to nearest immune cells. Selectable metrics: any immune cell, macrophage, CD8+ T-cell (sparse, ~89% NA). Shows non-NA counts per group.
+- **Right**: Scatter of selected enrichment z-score vs selected distance metric. Expected negative correlation (closer = more enriched). Pearson r shown in title.
+- *Interpretation*: Shorter distances suggest active immune targeting. CD8+ T-cell distances are sparse because most islets lack nearby CD8+ T-cells.
+
 ### Data Coverage
 
 - All 5,214 islets have peri-islet data (100% coverage)

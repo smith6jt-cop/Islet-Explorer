@@ -164,15 +164,28 @@ conda activate scvi-env  # scanpy, anndata, scvi-tools, sklearn, scib-metrics, s
 - Immune signal validated: T1D immune_frac_peri (0.155) > Aab+ (0.106) > ND (0.069)
 - Plot composition selector now has 4 option groups: Hormone Fractions, Cell Type Proportions, Peri-Islet Proportions, Immune Metrics
 
-### Spatial Tab (Phase 9+13, mod_spatial_ui/server.R)
+### Spatial Tab (Phase 9+13+15, mod_spatial_ui/server.R)
 
-3-panel layout: Controls sidebar (col-2) + Tissue Scatter (col-6) + Leiden Panel (col-4).
+Row 1: Controls sidebar (col-2) + Tissue Scatter (col-6) + Leiden Panel (col-4). Row 2-4: Neighborhood Analysis Cards (A/B/C).
 
 1. **Controls Sidebar** (col-2) -- donor selector, color-by (phenotype/Leiden), Leiden resolution, region filter (All/Core+Peri/Core), "Color background cells" checkbox, donor status checkboxes, phenotype + donor palette selectors, download button. All stacked vertically.
 2. **Tissue Scatter** (col-6) -- ggplot2 `renderPlot` (NOT plotly) showing ~177K cells/donor. Background tissue cells in light grey or colored by phenotype (toggle). Foreground (core/peri) colored by phenotype or Leiden cluster. `coord_fixed() + scale_y_reverse()`. Height: 800px.
 3. **Leiden Panel** (col-4) -- plotly UMAP of 5,214 islets colored by selected Leiden resolution (0.3/0.5/0.8/1.0) + stacked bar chart of mean phenotype composition per cluster. UMAP uses raw marker PCA visualization coords (same as trajectory) for disease-stage separation.
+4. **Neighborhood Analysis Cards** (3 sections, conditionally rendered via `has_neighborhood()` guard):
+   - **Card A: Immune Infiltration** -- Violin plot (5 selectable immune metrics, KW p-value) + peri vs core scatter (y=x diagonal reference). `infiltration_violin`, `infiltration_scatter`.
+   - **Card B: Immune Cell Enrichment** -- Grouped bar chart (7 immune types × 3 stages, SEM/IQR error bars, median/mean toggle, z-clip checkbox) + diverging heatmap (blue→white→red, numeric annotations). `enrichment_bars`, `enrichment_heatmap`. Shared `enrich_summary()` reactive.
+   - **Card C: Immune Proximity** -- Distance box plots (3 selectable metrics, NA rate in subtitle) + enrichment vs distance scatter (Pearson r, 7 selectable z-score columns). `distance_boxplot`, `enrich_vs_distance`.
+   - Section headings reuse `section_heading()` pattern from Statistics tab (gradient pill badge + title + subtitle).
+   - Documentation banners (light blue background) explain each analysis section.
 
 Wired as `spatial_server("spatial", prepared, active_palette, active_donor_colors)`.
+
+#### Neighborhood Cards Server Architecture
+- `nbr_comp()` shared reactive -- filters `prepared()$comp` by `input$groups` (donor status checkboxes). Reused by all 6 outputs.
+- `enrich_summary()` intermediate reactive -- aggregates 7 `enrich_z_*` columns per cell type × donor status, respects `input$enrich_clip` and `input$enrich_stat`. Returns data.frame: col, cell_type, donor_status, z_summary, z_lo, z_hi, n.
+- `enrich_col_labels` -- named vector mapping `enrich_z_*` column names to friendly labels (e.g., `enrich_z_CD8a_Tcell` → "CD8+ T-cell").
+- All 6 outputs use `donor_colors_reactive()` for palette syncing and respond to `input$groups`.
+- **Plotly categorical axis ordering**: Must set `categoryorder = "array", categoryarray = c("ND", "Aab+", "T1D")` on x-axis for violin/box/bar plots. Plotly defaults to alphabetical, which puts "Aab+" before "ND".
 
 #### Supporting Files
 - `spatial_helpers.R` -- `donor_tissue_available()`, `get_available_donors()`, `load_donor_tissue(imageid)` with `new.env()` caching
