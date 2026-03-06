@@ -154,45 +154,45 @@ Embedded OME-TIFF viewer (Avivator) for full-resolution multiplexed imaging data
 
 Rigorous statistical analysis of the currently selected feature from the Plot sidebar. The Statistics tab **shares the Plot sidebar** — changing the feature, filters, or disease groups in the sidebar updates both Plot and Statistics simultaneously.
 
-### 7-Card Layout
+The tab uses a **5-section narrative layout** that walks you through a logical analytical flow, with numbered headings and brief explanations at each step.
 
-1. **Overview Banner**
-   - N islets included, global p-value, effect size (η²)
-   - Inline controls: test type (parametric/non-parametric), significance level (α), outlier removal, bin width, diameter range
+### Section 1: Configure Analysis
 
-2. **Hypothesis Testing**
-   - Global test: ANOVA (parametric) or Kruskal-Wallis (non-parametric)
-   - Pairwise comparisons table with Cohen's d effect sizes and 95% CIs
-   - Forest plot visualization of pairwise differences
+- Overview banner showing N islets, global p-value, effect size (η²)
+- **Run Statistics** button triggers computation; **Download CSV** exports results
+- Test type selector with inline explanations:
+  - **Parametric** (ANOVA / t-test): assumes roughly normal data within groups
+  - **Non-parametric** (Kruskal-Wallis / Wilcoxon): no normality assumption; based on ranks
+- Additional controls: significance level (α), outlier removal (>3 SD), bin width, diameter range
 
-3. **Per-Bin Significance Heatmap**
-   - Plotly heatmap: x = diameter bins (midpoints), y = test type, z = -log₁₀(p)
-   - Reveals which size ranges drive significance
+### Section 2: Primary Results
 
-4. **Trend Analysis**
-   - Kendall τ per diameter bin
-   - Line plot with significance coloring (significant bins highlighted)
+- **Hypothesis Testing** (left): Global test + pairwise comparisons table with Cohen's d effect sizes, 95% CIs, and BH-corrected p-values
+- **Effect Size Forest Plot** (right): Visual display of pairwise Cohen's d with confidence intervals. Points colored by significance.
 
-5. **Demographics** (H5AD only, hidden for Excel fallback)
-   - Age scatter with linear regression
-   - Gender-stratified tests
-   - Covariate-adjusted model
+### Section 3: Size-Dependent Patterns
 
-6. **AUC Analysis**
-   - Trapezoidal AUC by disease group (pseudo-log scale handles zeros)
-   - Percentage change relative to ND baseline
-   - Guards against division by zero when ND AUC = 0
+Stratified analysis testing whether group differences depend on islet size (effect modification):
 
-7. **Methods & Interpretation**
-   - Dynamic text describing all statistical tests, corrections, and assumptions
-   - Adjusts based on the controls selected in card 1
+- **Stratified Tests by Islet Diameter**: Heatmap of BH-corrected q-values (ANOVA and Kendall τ) computed within each diameter bin. Identifies which size ranges drive or lack group differences. P-values are corrected across bins to control false discovery rate.
+- **Trend Analysis (Kendall τ)**: Direction and strength of the ND → Aab+ → T1D gradient within each size bin. Significance coloring uses corrected p-values.
+
+### Section 4: Confounders & Deeper Analysis
+
+- **Demographics** (H5AD only, hidden for Excel fallback): Age scatter with linear regression, gender-stratified tests, covariate-adjusted model
+- **Area Under Curve**: Trapezoidal AUC by disease group with percentage change relative to ND baseline
+
+### Section 5: Methods Reference
+
+Dynamic text (subdued grey background) describing all statistical tests, corrections, and assumptions. Adjusts based on test type and parameters selected in Section 1.
 
 ### Using the Statistics Tab
 
 1. Select a feature in the Plot sidebar (e.g., `immune_frac_peri`)
-2. Switch to the Statistics tab — analysis runs automatically
-3. Adjust test parameters in the Overview banner (card 1)
-4. Pairwise results and heatmap update reactively
+2. Switch to the Statistics tab
+3. Adjust test parameters in Section 1 (Configure Analysis)
+4. Click **Run Statistics** — all sections populate
+5. Review the narrative flow: global test → effect sizes → size-dependent patterns → confounders
 
 ---
 

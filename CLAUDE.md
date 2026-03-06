@@ -25,7 +25,7 @@ app/shiny_app/
     mod_plot_ui.R / mod_plot_server.R           # Plot tab (scatter, distribution, outliers, segmentation+drilldown panel)
     mod_trajectory_ui.R / mod_trajectory_server.R  # Trajectory tab (UMAP, heatmap, pseudotime, segmentation+drilldown panel)
     mod_viewer_ui.R / mod_viewer_server.R       # Viewer tab (OME-TIFF, Avivator iframe)
-    mod_statistics_ui.R / mod_statistics_server.R  # Statistics tab (7-card: hypothesis, heatmap, trend, demographics, AUC)
+    mod_statistics_ui.R / mod_statistics_server.R  # Statistics tab (5-section narrative: configure, results, size-dependent, confounders, methods)
     spatial_helpers.R           # Per-donor tissue CSV loader with new.env() caching
     mod_spatial_ui.R / mod_spatial_server.R     # Spatial tab (3-panel: sidebar controls, tissue scatter, Leiden panel)
     mod_ai_assistant_ui.R / mod_ai_assistant_server.R  # AI chat panel
@@ -222,19 +222,25 @@ Cell centroids (`X_centroid`, `Y_centroid`) are in micrometers. GeoJSON polygons
 
 `build_segmentation_base_plot(info)` extracted from `render_islet_segmentation_plot()`. Returns ggplot with GeoJSON polygon layers + coord_sf (WITHOUT crosshairs or title). Reused by both `render_islet_segmentation_plot()` (adds crosshairs + title) and `render_islet_drilldown_plot()` (adds cell scatter layer).
 
-## Statistics Tab (Phase 6, Feb 2026)
+## Statistics Tab (Phase 6+14, Feb-Mar 2026)
 
 ### Shared Sidebar Architecture
 The Plot sidebar (mode, feature, region, donor status, AAb, age, gender filters) is visible on both the Plot and Statistics tabs. Achieved via `conditionalPanel` condition `"input.tabs == 'Plot' || input.tabs == 'Statistics'"` and matching JS `adjustLayout()` logic in `app.R`. The Statistics module consumes `plot_returns$raw_df` and `plot_returns$summary_df` directly -- no data duplication.
 
-### 7-Card Layout
-1. **Overview Banner** -- N islets, global p-value, effect size eta-squared, inline controls
-2. **Hypothesis Testing** -- Global test (ANOVA or Kruskal-Wallis) + pairwise table with Cohen's d + forest plot
-3. **Per-Bin Significance Heatmap** -- `plot_ly(type="heatmap")` with x=bin midpoints, y=test type, z=-log10(p)
-4. **Trend Analysis** -- Kendall tau per bin, line plot with significance coloring
-5. **Demographics** -- Conditional on H5AD (hidden for Excel fallback). Age scatter, gender-stratified tests
-6. **AUC Analysis** -- Trapezoidal AUC by donor group with percentage change interpretation
-7. **Methods & Interpretation** -- Dynamic text describing all tests, corrections, assumptions
+### 5-Section Narrative Layout
+Numbered sections with `section_heading()` helper (gradient blue pill badge + bold title + grey subtitle + light blue bottom border):
+
+1. **Configure Analysis** -- Overview banner, Run Statistics / CSV buttons, test type (with inline explanation), alpha, outliers, bin width, diameter range
+2. **Primary Results** -- Hypothesis table (col-5) + forest plot (col-7, 350px). Cards equal-height via `display: flex` row.
+3. **Size-Dependent Patterns** -- Stratified tests heatmap (col-6, BH-corrected q-values) + trend analysis (col-6, Kendall τ per bin). Both with explanatory `tags$small` subtitles.
+4. **Confounders & Deeper Analysis** -- Demographics (col-6, conditional) + merged AUC card (col-6: plot + table + interpretation)
+5. **Methods Reference** -- Subdued grey background (#f8f9fa), dynamic text
+
+### Multiple Testing Correction
+Per-bin ANOVA and Kendall τ p-values are BH-corrected across bins via `p.adjust(method = "BH")`. Heatmap shows `-log10(q)` (corrected) with star annotations using corrected values. Trend plot significance coloring also uses corrected p-values.
+
+### Plotly Legend Positioning
+Forest plot and trend plot use `theme(legend.position = "none")` in ggplot (prevents ggplotly auto-placement), then `layout(margin = list(b = 60), legend = list(orientation = "h", x = 0.5, xanchor = "center", y = -0.25))` in plotly. The `margin(b=60)` creates room below the x-axis title to prevent overlap.
 
 ### Effect Size Utilities (`utils_stats.R`)
 - `cohens_d(x, y)` -- returns `list(d, ci_lo, ci_hi)` (NOT `ci_lower`/`ci_upper`)
@@ -356,6 +362,7 @@ Required env vars: `KEY` (API key), `BASE` (API base URL, optional).
 - **Spatial background cell coloring**: `color_background` checkbox. When checked + phenotype mode, background cells get phenotype colors at alpha=0.25. Palette must include both fg + bg phenotypes.
 - **Reticulate bridge crossing**: `ad$uns[[key]]` costs ~221ms per call. ALWAYS cache `uns <- ad$uns` as an R list first, then index. `reconstruct_groovy_df_from_list()` uses cached list; legacy `reconstruct_groovy_df()` is a thin wrapper.
 - **Deferred heavy file loading**: `annotations.tsv` (72 MB) lazy-loaded via `.seg_lazy` environment in `segmentation_helpers.R`. Only loaded on first fallback access (never in practice).
+- **Synthetic union rows need density**: `prep_data()` synthesizes `islet_union` rows by summing core+band. Must compute `area_um2`, `region_um2`, and `area_density = area_um2/region_um2` — setting these to `NA` causes Microenvironment Core+Peri to drop 12/15 donors (default metric is Density, NA filtered by `!is.na(value)`).
 
 ## Deployment Architecture
 
