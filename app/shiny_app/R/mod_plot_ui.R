@@ -39,6 +39,12 @@ plot_sidebar_ui <- function(id) {
                   value = FALSE),
     uiOutput(ns("plot_outlier_info")),
     hr(),
+    h5("Color Palettes"),
+    # Non-namespaced: global donor palette choice synced via app.R observers
+    selectInput("sidebar_donor_palette", "Donor Status Colors",
+                choices = names(DONOR_PALETTES),
+                selected = "Paul Tol (default)"),
+    hr(),
     h5("Export"),
     downloadButton(ns("dl_summary"), "Download summary CSV")
   )

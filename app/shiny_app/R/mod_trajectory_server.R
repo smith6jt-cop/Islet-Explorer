@@ -1,4 +1,5 @@
-trajectory_server <- function(id, prepared, selected_islet, forced_image, active_tab = reactive("Trajectory")) {
+trajectory_server <- function(id, prepared, selected_islet, forced_image, active_tab = reactive("Trajectory"),
+                              donor_colors_reactive = reactive(DONOR_COLORS)) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
@@ -311,8 +312,8 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         result_df$islet_diam_um <- NA_real_
       }
 
-      # Add spatial coordinates from segmentation data (global)
-      if (!is.null(segmentation_data)) {
+      # Add spatial coordinates from segmentation data
+      if (!is.null(islet_spatial_lookup)) {
         result_df$centroid_x_um <- NA_real_
         result_df$centroid_y_um <- NA_real_
         result_df$has_spatial <- FALSE
@@ -449,7 +450,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       # Always apply jitter
       set.seed(42)
       jitter_amount_x <- diff(range(df$pt, na.rm = TRUE)) * 0.012
-      jitter_amount_y <- diff(range(df$value, na.rm = TRUE)) * 0.12
+      jitter_amount_y <- diff(range(df$value, na.rm = TRUE)) * 0.02
       df$pt    <- pmax(0, pmin(1, df$pt + runif(nrow(df), -jitter_amount_x, jitter_amount_x)))
       df$value <- df$value + runif(nrow(df), -jitter_amount_y, jitter_amount_y)
 
@@ -458,7 +459,8 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
 
       # Create base aesthetic mapping with cell count for hover
       df$hover_cells <- paste0("Cells: ", df$total_cells)
-      aes_mapping <- aes(x = pt, y = value, text = hover_cells)
+      df$click_key <- paste(df$case_id, df$islet_key, sep = "|")
+      aes_mapping <- aes(x = pt, y = value, text = hover_cells, key = click_key)
 
       # Add color aesthetic
       if (color_by == "donor_status") {
@@ -501,7 +503,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       # Apply color scales
       if (color_by == "donor_status") {
         g <- g + scale_color_manual(
-          values = DONOR_COLORS,
+          values = donor_colors_reactive(),
           name = color_title, drop = FALSE)
       } else if (color_by == "donor_id") {
         df$donor_id <- factor(df$donor_id)
@@ -531,13 +533,14 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       pt_range <- range(df$pt, na.rm = TRUE)
 
       if (trend_type == "overall") {
-        g <- g + geom_smooth(method = "loess", se = TRUE, alpha = 0.2, color = "black",
+        g <- g + geom_smooth(method = "loess", se = FALSE, color = "black",
                              size = 1, fullrange = FALSE, span = 0.75,
-                             aes(weight = loess_weight))
+                             inherit.aes = FALSE,
+                             aes(x = pt, y = value, weight = loess_weight))
       } else if (trend_type == "by_donor") {
         if ("donor_status" %in% names(df) && !all(is.na(df$donor_status))) {
           df$donor_status <- factor(df$donor_status, levels = c("ND", "Aab+", "T1D"))
-          trend_colors <- DONOR_COLORS
+          trend_colors <- donor_colors_reactive()
 
           if (color_by == "donor_id") {
             # Add separate geom_smooth for each donor_status with explicit color
@@ -546,14 +549,15 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
               if (nrow(df_subset) > 0) {
                 g <- g + geom_smooth(data = df_subset,
                                      aes(x = pt, y = value, weight = loess_weight),
-                                     method = "loess", se = TRUE, alpha = 0.15,
+                                     inherit.aes = FALSE,
+                                     method = "loess", se = FALSE,
                                      size = 0.8, show.legend = FALSE, fullrange = FALSE, span = 0.75,
                                      color = trend_colors[status])
               }
             }
           } else {
             g <- g + geom_smooth(
-              method = "loess", se = TRUE, alpha = 0.15,
+              method = "loess", se = FALSE,
               size = 0.8, show.legend = FALSE, fullrange = FALSE, span = 0.75,
               inherit.aes = FALSE,
               mapping = aes(x = pt, y = value, group = donor_status, color = donor_status, weight = loess_weight)) +
@@ -575,14 +579,13 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         y = paste(selected_feature, metric_label),
         title = NULL
       ) +
-      coord_cartesian(xlim = c(0, 1))
+      coord_cartesian(xlim = c(0, 1), ylim = range(df$value, na.rm = TRUE) * c(1, 1) + c(-0.05, 0.05) * diff(range(df$value, na.rm = TRUE)))
 
       # Convert to plotly with custom data for reliable click handling
       p <- ggplotly(g, tooltip = c("x", "y", "colour", "text"), source = ns("traj_scatter"))
 
-      # Add customdata to plotly traces for click handling
+      # Store coordinate lookup as fallback for click handling
       if ("combined_islet_id" %in% colnames(df) && "case_id" %in% colnames(df)) {
-        # Store the dataframe in a reactiveVal for coordinate-based lookup
         traj_coord_lookup(data.frame(
           pt                = df$pt,
           value             = df$value,
@@ -592,40 +595,6 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
           donor_status      = df$donor_status,
           stringsAsFactors  = FALSE
         ))
-
-        # Match customdata to actual trace data by coordinates
-        for (i in seq_along(p$x$data)) {
-          if (!is.null(p$x$data[[i]]$type) && p$x$data[[i]]$type == "scatter") {
-            trace_x <- p$x$data[[i]]$x
-            trace_y <- p$x$data[[i]]$y
-
-            if (length(trace_x) > 0 && length(trace_y) > 0) {
-              trace_customdata <- matrix(NA, nrow = length(trace_x), ncol = 4)
-
-              for (j in seq_along(trace_x)) {
-                tolerance <- 0.001
-                matches <- which(
-                  abs(df$pt - trace_x[j]) < tolerance &
-                  abs(df$value - trace_y[j]) < tolerance
-                )
-                if (length(matches) > 0) {
-                  idx <- matches[1]
-                  trace_customdata[j, ] <- c(
-                    as.character(df$case_id[idx]),
-                    as.character(df$islet_key[idx]),
-                    as.character(df$combined_islet_id[idx]),
-                    as.character(df$donor_status[idx])
-                  )
-                }
-              }
-
-              p$x$data[[i]]$customdata <- trace_customdata
-              cat("[PLOT] Added customdata to trace", i, "with", length(trace_x), "points\n")
-            }
-          }
-        }
-
-        cat("[PLOT] Stored coordinate lookup table with", nrow(traj_coord_lookup()), "entries\n")
       }
 
       # Layout and register click events
@@ -657,36 +626,45 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         return()
       }
 
-      cat("[SEGMENTATION CLICK] Received click event\n")
+      cat("[TRAJ CLICK] Received click event\n")
 
-      click_x <- click_data$x
-      click_y <- click_data$y
-
-      # First try to get from customdata
-      custom    <- click_data$customdata
+      # --- Priority 1: Parse key (format "case_id|islet_key") ---
       case_id   <- NULL
       islet_key <- NULL
-
-      if (!is.null(custom) && length(custom) >= 2) {
-        case_id   <- custom[[1]]
-        islet_key <- custom[[2]]
-        cat("[SEGMENTATION CLICK] From customdata: case_id=", case_id, ", islet_key=", islet_key, "\n")
+      click_key <- click_data$key
+      if (!is.null(click_key) && length(click_key) > 0 && !is.na(click_key[1]) && nzchar(click_key[1])) {
+        key_parts <- strsplit(as.character(click_key[1]), "\\|")[[1]]
+        if (length(key_parts) >= 2) {
+          case_id   <- key_parts[1]
+          islet_key <- key_parts[2]
+          cat("[TRAJ CLICK] From key:", case_id, islet_key, "\n")
+        }
       }
 
-      # If customdata not available, look up from coordinate table
+      # --- Priority 2: Fallback to customdata ---
+      if (is.null(case_id) || is.null(islet_key)) {
+        custom <- click_data$customdata
+        if (!is.null(custom) && length(custom) >= 2) {
+          case_id   <- custom[[1]]
+          islet_key <- custom[[2]]
+          cat("[TRAJ CLICK] From customdata:", case_id, islet_key, "\n")
+        }
+      }
+
+      # --- Priority 3: Fallback to coordinate lookup ---
       if (is.null(case_id) || is.null(islet_key) || is.na(case_id) || is.na(islet_key)) {
         lookup <- traj_coord_lookup()
         if (!is.null(lookup) && nrow(lookup) > 0) {
           tolerance <- 0.01
           matches <- which(
-            abs(lookup$pt - click_x) < tolerance &
-            abs(lookup$value - click_y) < tolerance
+            abs(lookup$pt - click_data$x) < tolerance &
+            abs(lookup$value - click_data$y) < tolerance
           )
           if (length(matches) > 0) {
             idx <- matches[1]
             case_id   <- lookup$case_id[idx]
             islet_key <- lookup$islet_key[idx]
-            cat("[SEGMENTATION CLICK] From coord lookup: case_id=", case_id, ", islet_key=", islet_key, "\n")
+            cat("[TRAJ CLICK] From coord lookup:", case_id, islet_key, "\n")
           }
         }
       }
@@ -722,7 +700,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       centroid_x <- spatial_match$centroid_x_um[1]
       centroid_y <- spatial_match$centroid_y_um[1]
 
-      cat("[SEGMENTATION CLICK] Centroid: x=", centroid_x, ", y=", centroid_y, "\n")
+      cat("[TRAJ CLICK] Centroid: x=", centroid_x, ", y=", centroid_y, "\n")
 
       # Store selected islet info - triggers embedded viewer to update
       selected_islet(list(
@@ -778,11 +756,17 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
             condition = "input.drilldown_show_cells",
             div(style = "margin-bottom: 10px;",
               fluidRow(
-                column(4,
+                column(2,
                   selectInput("drilldown_color_by", "Color by",
                               choices = marker_choices, selected = "phenotype")
                 ),
-                column(4,
+                column(3,
+                  # Non-namespaced: global phenotype palette synced via app.R observers
+                  selectInput("drilldown_palette", "Phenotype Palette",
+                              choices = c("Original", "High Contrast", "Colorblind Safe", "Maximum Distinction"),
+                              selected = "High Contrast")
+                ),
+                column(2,
                   checkboxInput("drilldown_show_peri", "Show peri-islet cells", value = TRUE)
                 )
               )
@@ -954,7 +938,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
 
       ggplot(df, aes(x = umap_1, y = umap_2, color = donor_status)) +
         geom_point(alpha = 0.6, size = 3.0) +
-        scale_color_manual(values = DONOR_COLORS) +
+        scale_color_manual(values = donor_colors_reactive()) +
         scale_x_continuous(expand = expansion(mult = 0.02)) +
         scale_y_continuous(expand = expansion(mult = 0.02)) +
         labs(x = "UMAP 1", y = "UMAP 2", title = "UMAP: Donor Status") +
@@ -1040,9 +1024,9 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
           x = hm$x,
           y = list(""),
           z = matrix(hm$avg_donor_status, nrow = 1),
-          colorscale = list(c(0, DONOR_COLORS[["ND"]]),
+          colorscale = list(c(0, donor_colors_reactive()[["ND"]]),
                             c(0.5, "#F5F5F5"),
-                            c(1, DONOR_COLORS[["T1D"]])),
+                            c(1, donor_colors_reactive()[["T1D"]])),
           zmin = 0, zmax = 2,
           showscale = FALSE,
           hovertemplate = "PT: %{x:.2f}<br>Avg status: %{z:.2f}<extra></extra>"

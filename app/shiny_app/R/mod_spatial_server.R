@@ -7,13 +7,11 @@
 #   PHENOTYPE_COLORS — from drilldown_helpers.R
 #   donor_tissue_available(), get_available_donors(), load_donor_tissue() — from spatial_helpers.R
 
-spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS)) {
+spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
+                           donor_colors_reactive = reactive(DONOR_COLORS)) {
 
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
-
-    # Donor status color palette
-    donor_colors <- DONOR_COLORS
 
     # 14-color qualitative palette for Leiden clusters
     leiden_palette <- c(
@@ -102,26 +100,6 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS)) {
       )
     })
 
-    # ---- Filtered neighborhood data (for enrichment + heatmap cards) ----
-    filtered_nbr <- reactive({
-      req(has_neighborhood())
-      pd <- prepared()
-      df <- pd$comp
-      if (is.null(df) || nrow(df) == 0) return(NULL)
-
-      # Filter by donor status
-      if (!is.null(input$groups) && "Donor Status" %in% colnames(df)) {
-        df <- df[df$`Donor Status` %in% input$groups, , drop = FALSE]
-      }
-
-      # Only keep rows with peri-islet data
-      if ("total_cells_peri" %in% colnames(df)) {
-        df <- df[!is.na(df$total_cells_peri) & df$total_cells_peri > 0, , drop = FALSE]
-      }
-
-      df
-    })
-
     # ---- Donor cells reactive (load tissue CSV for selected donor) ----
     donor_cells <- reactive({
       req(input$donor)
@@ -202,14 +180,29 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS)) {
 
       p <- ggplot2::ggplot()
 
-      # Background layer: always grey, small, transparent
+      color_bg <- isTRUE(input$color_background)
+
+      # Background layer
       if (nrow(bg) > 0) {
-        p <- p + ggplot2::geom_point(
-          data = bg,
-          ggplot2::aes(x = X_centroid, y = Y_centroid),
-          color = "#d9d9d9", size = 0.15, alpha = 0.3,
-          inherit.aes = FALSE
-        )
+        if (color_bg && !use_leiden) {
+          # Color background cells by phenotype (dimmed)
+          bg_phenos <- sort(unique(bg$phenotype))
+          bg_pal <- palette()[bg_phenos]
+          bg_pal[is.na(bg_pal)] <- "#CCCCCC"
+          p <- p + ggplot2::geom_point(
+            data = bg,
+            ggplot2::aes(x = X_centroid, y = Y_centroid, color = phenotype),
+            size = 0.15, alpha = 0.25,
+            inherit.aes = FALSE
+          )
+        } else {
+          p <- p + ggplot2::geom_point(
+            data = bg,
+            ggplot2::aes(x = X_centroid, y = Y_centroid),
+            color = "#d9d9d9", size = 0.15, alpha = 0.3,
+            inherit.aes = FALSE
+          )
+        }
       }
 
       # Foreground layer: colored by phenotype or leiden
@@ -231,9 +224,12 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS)) {
           ggplot2::scale_color_manual(values = pal, name = "Cluster", na.value = "#d9d9d9",
                                         guide = ggplot2::guide_legend(override.aes = list(size = 4)))
         } else {
-          # Phenotype coloring
-          pheno_present <- sort(unique(fg$phenotype))
-          pal <- palette()[pheno_present]
+          # Phenotype coloring — include bg phenotypes if colored
+          all_phenos <- sort(unique(fg$phenotype))
+          if (color_bg && nrow(bg) > 0) {
+            all_phenos <- sort(unique(c(all_phenos, bg$phenotype)))
+          }
+          pal <- palette()[all_phenos]
           pal[is.na(pal)] <- "#CCCCCC"
 
           p <- p + ggplot2::geom_point(
@@ -410,104 +406,21 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS)) {
         )
     })
 
-    # ==== Card 4: Enrichment Bar Chart (kept from original, with documentation) ====
-    output$enrichment_plot <- renderPlotly({
-      df <- filtered_nbr()
-      req(df, "Donor Status" %in% colnames(df))
-
-      enrich_cols <- grep("^enrich_z_", colnames(df), value = TRUE)
-      if (length(enrich_cols) == 0) {
-        return(plotly_empty() %>% layout(title = "No enrichment data"))
-      }
-
-      groups <- c("ND", "Aab+", "T1D")
-      plot_rows <- list()
-      for (g in groups) {
-        sub <- df[df$`Donor Status` == g, , drop = FALSE]
-        if (nrow(sub) == 0) next
-        for (ec in enrich_cols) {
-          vals <- suppressWarnings(as.numeric(sub[[ec]]))
-          vals <- vals[is.finite(vals)]
-          if (length(vals) > 0) {
-            plot_rows[[length(plot_rows) + 1]] <- data.frame(
-              cell_type = gsub("^enrich_z_", "", ec),
-              group = g,
-              mean_z = mean(vals),
-              se = sd(vals) / sqrt(length(vals)),
-              stringsAsFactors = FALSE
-            )
-          }
-        }
-      }
-
-      if (length(plot_rows) == 0) {
-        return(plotly_empty() %>% layout(title = "No enrichment data"))
-      }
-
-      bar_df <- do.call(rbind, plot_rows)
-      bar_df$cell_type <- gsub("_", " ", bar_df$cell_type)
-      bar_df$group <- factor(bar_df$group, levels = groups)
-
-      plot_ly(bar_df, x = ~cell_type, y = ~mean_z, color = ~group,
-              colors = donor_colors[groups],
-              error_y = list(type = "data", array = ~se),
-              type = "bar") %>%
-        layout(
-          title = list(text = "Enrichment Z-scores (Peri-Islet vs Tissue-wide)", font = list(size = 14)),
-          xaxis = list(title = "", tickangle = 45),
-          yaxis = list(title = "Mean enrichment z-score"),
-          barmode = "group",
-          legend = list(title = list(text = ""))
-        )
-    })
-
-    # ==== Card 5: Phenotype Heatmap (kept from original, with documentation) ====
-    output$phenotype_heatmap <- renderPlotly({
-      df <- filtered_nbr()
-      req(df, "Donor Status" %in% colnames(df))
-
-      comp_cols <- colnames(df)
-      peri_prop_cols <- grep("^peri_prop_", comp_cols, value = TRUE)
-      if (length(peri_prop_cols) == 0) {
-        return(plotly_empty() %>% layout(title = "No peri-islet proportion data"))
-      }
-
-      # Compute mean proportion per disease stage
-      groups <- c("ND", "Aab+", "T1D")
-      mat <- matrix(NA_real_, nrow = length(peri_prop_cols), ncol = length(groups),
-                    dimnames = list(peri_prop_cols, groups))
-      for (g in groups) {
-        sub <- df[df$`Donor Status` == g, peri_prop_cols, drop = FALSE]
-        if (nrow(sub) > 0) {
-          mat[, g] <- colMeans(sub, na.rm = TRUE)
-        }
-      }
-
-      # Clean labels
-      row_labels <- gsub("^peri_prop_", "", rownames(mat))
-      row_labels <- gsub("_", " ", row_labels)
-
-      plot_ly(
-        z = mat, x = groups, y = row_labels,
-        type = "heatmap",
-        colorscale = list(c(0, "#f7fbff"), c(0.5, "#6baed6"), c(1, "#08306b")),
-        colorbar = list(title = "Mean\nProportion")
-      ) %>%
-        layout(
-          title = list(text = "Mean Peri-Islet Phenotype Proportions", font = list(size = 14)),
-          xaxis = list(title = ""),
-          yaxis = list(title = "", tickfont = list(size = 10))
-        )
-    })
-
     # ---- Download handler ----
     output$download_spatial <- downloadHandler(
       filename = function() {
         paste0("spatial_neighborhood_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".csv")
       },
       content = function(file) {
-        df <- filtered_nbr()
-        if (is.null(df)) df <- data.frame()
+        pd <- prepared()
+        df <- pd$comp
+        if (is.null(df) || nrow(df) == 0) { df <- data.frame() }
+        else {
+          if (!is.null(input$groups) && "Donor Status" %in% colnames(df))
+            df <- df[df$`Donor Status` %in% input$groups, , drop = FALSE]
+          if ("total_cells_peri" %in% colnames(df))
+            df <- df[!is.na(df$total_cells_peri) & df$total_cells_peri > 0, , drop = FALSE]
+        }
         nbr <- get_nbr_columns(colnames(df))
         keep_cols <- c("Case ID", "Donor Status", "islet_key", "islet_diam_um",
                        unlist(nbr, use.names = FALSE))

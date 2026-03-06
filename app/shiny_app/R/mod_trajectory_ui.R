@@ -40,7 +40,10 @@ trajectory_ui <- function(id) {
               div(style = "border: 1px solid #ddd; padding: 10px; border-radius: 5px; background-color: #f9f9f9; min-height: 100px;",
                 h5("Legend", style = "margin-top: 0; margin-bottom: 10px; font-weight: bold; color: #333; font-size: 15px;"),
                 uiOutput(ns("traj_legend"))
-              )
+              ),
+              selectInput("traj_donor_palette", "Donor Status Colors",
+                          choices = names(DONOR_PALETTES),
+                          selected = "Paul Tol (default)")
             )
           ),
           plotlyOutput(ns("traj_scatter"), height = 650),

@@ -13,7 +13,8 @@
 #   selected_islet  -- reactiveVal for cross-module click-to-segmentation
 #   active_tab      -- reactive returning current tab name (e.g. "Plot")
 
-plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plot")) {
+plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plot"),
+                        donor_colors_reactive = reactive(DONOR_COLORS)) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
@@ -431,7 +432,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       color_by <- input$plot_color_by %||% "donor_status"
 
       # Summary lines always use donor_status colors
-      color_map <- DONOR_COLORS
+      color_map <- donor_colors_reactive()
 
       # Y-axis label
       ylab <- if (identical(input$mode, "Microenvironment")) {
@@ -725,7 +726,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       }
 
       g <- g +
-        scale_fill_manual(values = DONOR_COLORS,
+        scale_fill_manual(values = donor_colors_reactive(),
                           guide = "none")
 
       # Individual points
@@ -750,7 +751,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
                         alpha = ifelse(is.null(input$dist_pt_alpha), 0.25, input$dist_pt_alpha),
                         size  = ifelse(is.null(input$dist_pt_size), 0.7, input$dist_pt_size),
                         stroke = 0, inherit.aes = FALSE) +
-            scale_color_manual(values = DONOR_COLORS,
+            scale_color_manual(values = donor_colors_reactive(),
                                guide = "none")
         }
       }
@@ -940,11 +941,17 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
           conditionalPanel(
             condition = "input.drilldown_show_cells",
             fluidRow(style = "margin-bottom: 10px;",
-              column(3,
+              column(2,
                 selectInput("drilldown_color_by", "Color by",
                             choices = marker_choices, selected = "phenotype")
               ),
               column(3,
+                # Non-namespaced: global phenotype palette synced via app.R observers
+                selectInput("drilldown_palette", "Phenotype Palette",
+                            choices = c("Original", "High Contrast", "Colorblind Safe", "Maximum Distinction"),
+                            selected = "High Contrast")
+              ),
+              column(2,
                 checkboxInput("drilldown_show_peri", "Show peri-islet cells", value = TRUE)
               )
             )

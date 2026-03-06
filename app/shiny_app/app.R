@@ -128,28 +128,6 @@ ui <- fluidPage(
       transform: translateY(-1px);
     }
 
-    /* Palette picker inline with tab bar */
-    .palette-tab-row .nav-tabs {
-      flex: 1;
-    }
-    .palette-picker {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      padding: 4px 8px;
-      white-space: nowrap;
-      flex-shrink: 0;
-    }
-    .palette-picker .form-group {
-      margin-bottom: 0;
-    }
-    .palette-picker label.palette-label {
-      font-size: 12px;
-      font-weight: 600;
-      color: #2c5aa0;
-      margin: 0;
-    }
-
     /* Tab styling */
     .nav-tabs {
       border-bottom: 2px solid #e3f2fd;
@@ -356,20 +334,6 @@ ui <- fluidPage(
         }
       }
 
-      // Move palette picker into the tab bar as a right-aligned item
-      setTimeout(function() {
-        var picker = $('#palette-picker-source .palette-picker');
-        var tabBar = $('ul#tabs.nav-tabs');
-        if (picker.length && tabBar.length) {
-          var li = $('<li style=\"margin-left: auto; display: flex; align-items: center;\"></li>');
-          li.append(picker);
-          tabBar.css('display', 'flex').css('align-items', 'flex-end');
-          tabBar.append(li);
-          picker.show();
-          $('#palette-picker-source').remove();
-        }
-      }, 50);
-
       // Adjust on initial load
       setTimeout(adjustLayout, 100);
 
@@ -389,17 +353,6 @@ ui <- fluidPage(
     ),
     # Main Panel
     column(width = 10.6, class = "equal-height-panel main-content-panel",
-      # Phenotype palette picker (JS moves this into the tab bar on load)
-      div(id = "palette-picker-source", style = "display: none;",
-        div(class = "palette-picker",
-          tags$label("Palette:", class = "palette-label"),
-          tags$div(style = "width: 170px;",
-            selectInput("phenotype_palette", NULL,
-                        choices = c("Original", "High Contrast", "Colorblind Safe", "Maximum Distinction"),
-                        selected = "High Contrast", width = "100%")
-          )
-        )
-      ),
       tabsetPanel(id = "tabs",
         tabPanel("Plot",
           fluidRow(
@@ -472,15 +425,65 @@ server <- function(input, output, session) {
   active_tab <- reactive(input$tabs)
 
   # Active phenotype palette (global, consumed by root renders + spatial module)
+  # Two non-namespaced inputs update this: spatial_palette (Spatial tab) and drilldown_palette (drill-down panel)
+  palette_name <- reactiveVal("High Contrast")
+
+  observeEvent(input$spatial_palette, {
+    if (!identical(input$spatial_palette, palette_name())) {
+      palette_name(input$spatial_palette)
+      updateSelectInput(session, "drilldown_palette", selected = input$spatial_palette)
+    }
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$drilldown_palette, {
+    if (!identical(input$drilldown_palette, palette_name())) {
+      palette_name(input$drilldown_palette)
+      updateSelectInput(session, "spatial_palette", selected = input$drilldown_palette)
+    }
+  }, ignoreInit = TRUE)
+
   active_palette <- reactive({
-    get_phenotype_palette(input$phenotype_palette %||% "Original")
+    get_phenotype_palette(palette_name())
+  })
+
+  # Active donor color palette (global, consumed by Plot, Trajectory, Statistics, Spatial)
+  donor_palette_name <- reactiveVal("Paul Tol (default)")
+  DONOR_PALETTE_CHOICES <- names(DONOR_PALETTES)
+
+  # Sync all donor palette selectors (Plot sidebar, Trajectory, Spatial)
+  observeEvent(input$sidebar_donor_palette, {
+    if (!identical(input$sidebar_donor_palette, donor_palette_name())) {
+      donor_palette_name(input$sidebar_donor_palette)
+      updateSelectInput(session, "traj_donor_palette", selected = input$sidebar_donor_palette)
+      updateSelectInput(session, "spatial_donor_palette", selected = input$sidebar_donor_palette)
+    }
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$traj_donor_palette, {
+    if (!identical(input$traj_donor_palette, donor_palette_name())) {
+      donor_palette_name(input$traj_donor_palette)
+      updateSelectInput(session, "sidebar_donor_palette", selected = input$traj_donor_palette)
+      updateSelectInput(session, "spatial_donor_palette", selected = input$traj_donor_palette)
+    }
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$spatial_donor_palette, {
+    if (!identical(input$spatial_donor_palette, donor_palette_name())) {
+      donor_palette_name(input$spatial_donor_palette)
+      updateSelectInput(session, "sidebar_donor_palette", selected = input$spatial_donor_palette)
+      updateSelectInput(session, "traj_donor_palette", selected = input$spatial_donor_palette)
+    }
+  }, ignoreInit = TRUE)
+
+  active_donor_colors <- reactive({
+    get_donor_color_palette(donor_palette_name())
   })
 
   # Plot module: returns list(raw_df, summary_df, get_selection_description)
-  plot_returns <- plot_server("plot", prepared, selected_islet, active_tab)
+  plot_returns <- plot_server("plot", prepared, selected_islet, active_tab, active_donor_colors)
 
   # Trajectory module
-  trajectory_server("traj", prepared, selected_islet, forced_image, active_tab)
+  trajectory_server("traj", prepared, selected_islet, forced_image, active_tab, active_donor_colors)
 
   # Viewer module
   viewer_server("viewer", forced_image, reactive(input$tabs))
@@ -489,10 +492,11 @@ server <- function(input, output, session) {
   statistics_server("stats",
                     raw_df                  = plot_returns$raw_df,
                     summary_df              = plot_returns$summary_df,
-                    get_selection_description = plot_returns$get_selection_description)
+                    get_selection_description = plot_returns$get_selection_description,
+                    donor_colors             = active_donor_colors)
 
   # Spatial Neighborhood module
-  spatial_server("spatial", prepared, active_palette)
+  spatial_server("spatial", prepared, active_palette, active_donor_colors)
 
   # AI Assistant module (self-contained)
   ai_assistant_server("ai")

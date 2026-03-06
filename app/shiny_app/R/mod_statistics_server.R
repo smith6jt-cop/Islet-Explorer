@@ -6,7 +6,8 @@
 #   cohens_d, eta_squared, pairwise_wilcox          -- utils_stats.R
 #   bin_islet_sizes                                  -- data_loading.R
 
-statistics_server <- function(id, raw_df, summary_df, get_selection_description) {
+statistics_server <- function(id, raw_df, summary_df, get_selection_description,
+                              donor_colors = reactive(DONOR_COLORS)) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
@@ -517,7 +518,7 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description)
       g <- ggplot(rdf, aes(x = age_num, y = value, color = donor_status)) +
         geom_point(alpha = 0.4, size = 1.5) +
         geom_smooth(method = "lm", se = FALSE, linewidth = 0.8) +
-        scale_color_manual(values = DONOR_COLORS) +
+        scale_color_manual(values = donor_colors()) +
         labs(x = "Donor Age (years)", y = st$feature_name, color = NULL,
              title = "Age-Feature Relationship") +
         theme_minimal(base_size = 12) +
@@ -574,7 +575,7 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description)
 
       g <- ggplot(auc_df, aes(x = donor_status, y = auc, fill = donor_status)) +
         geom_col(width = 0.7, color = "black", alpha = 0.8) +
-        scale_fill_manual(values = DONOR_COLORS) +
+        scale_fill_manual(values = donor_colors()) +
         labs(x = "Donor Status", y = "Area Under Curve (AUC)",
              title = "Integrated Area by Donor Group") +
         theme_minimal(base_size = 14) +

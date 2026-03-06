@@ -254,10 +254,12 @@ def reaggregate(sc_path, islet_dir, trajectory_out, min_cells=0):
         sc.pp.pca(adata_clust, n_comps=10)
         sc.pp.neighbors(adata_clust, n_neighbors=15)
 
-    # Compute UMAP for clustering visualization (different params from trajectory)
-    sc.tl.umap(adata_clust, min_dist=0.3, spread=1.0)
+    # Use the visualization UMAP (raw marker PCA) for display —
+    # it shows disease-stage separation, unlike scVI-based UMAP which is a blob
+    adata_clust.obsm['X_umap'] = adata_islet.obsm['X_umap'].copy()
     adata_clust.obs['umap_1'] = adata_clust.obsm['X_umap'][:, 0]
     adata_clust.obs['umap_2'] = adata_clust.obsm['X_umap'][:, 1]
+    print("Using visualization UMAP from trajectory (raw marker PCA, min_dist=0.5, spread=2.0)")
 
     # Leiden at 4 resolutions
     resolutions = [0.3, 0.5, 0.8, 1.0]

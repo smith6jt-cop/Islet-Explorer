@@ -477,6 +477,34 @@ build_segmentation_base_plot <- function(info, buffer_um = 150,
     ) +
     ggplot2::coord_sf(xlim = xlim_range, ylim = rev(ylim_range), expand = FALSE)
 
+  # Filter Islet and IsletExpanded polygons to only the selected islet
+  # (the bounding box query picks up neighboring islets)
+  if (!is.null(polygons$Islet) && nrow(polygons$Islet) > 0 && !is.null(info$islet_key)) {
+    islet_names <- if ("name" %in% names(polygons$Islet)) polygons$Islet$name
+                   else if ("id" %in% names(polygons$Islet)) polygons$Islet$id
+                   else NULL
+    if (!is.null(islet_names)) {
+      match_idx <- which(islet_names == info$islet_key)
+      if (length(match_idx) == 0) match_idx <- grep(info$islet_key, islet_names, fixed = TRUE)
+      if (length(match_idx) > 0) {
+        polygons$Islet <- polygons$Islet[match_idx[1], , drop = FALSE]
+      }
+    }
+  }
+  if (!is.null(polygons$IsletExpanded) && nrow(polygons$IsletExpanded) > 0 && !is.null(info$islet_key)) {
+    exp_names <- if ("name" %in% names(polygons$IsletExpanded)) polygons$IsletExpanded$name
+                 else if ("id" %in% names(polygons$IsletExpanded)) polygons$IsletExpanded$id
+                 else NULL
+    if (!is.null(exp_names)) {
+      exp_key <- paste0(info$islet_key, "_exp20um")
+      match_idx <- which(exp_names == exp_key)
+      if (length(match_idx) == 0) match_idx <- grep(info$islet_key, exp_names, fixed = TRUE)
+      if (length(match_idx) > 0) {
+        polygons$IsletExpanded <- polygons$IsletExpanded[match_idx[1], , drop = FALSE]
+      }
+    }
+  }
+
   has_polygons <- FALSE
   layer_order <- c("IsletExpanded", "Islet", "Lymphatic", "Capillary", "Nerve")
   for (cls in layer_order) {
@@ -489,25 +517,6 @@ build_segmentation_base_plot <- function(info, buffer_um = 150,
   }
 
   if (!has_polygons) return(NULL)
-
-  # Highlight the clicked islet
-  if (!is.null(polygons$Islet) && nrow(polygons$Islet) > 0) {
-    islet_names <- if ("name" %in% names(polygons$Islet)) {
-      polygons$Islet$name
-    } else if ("id" %in% names(polygons$Islet)) {
-      polygons$Islet$id
-    } else NULL
-
-    if (!is.null(islet_names)) {
-      clicked_idx <- which(islet_names == info$islet_key)
-      if (length(clicked_idx) == 0) clicked_idx <- grep(info$islet_key, islet_names, fixed = TRUE)
-      if (length(clicked_idx) > 0) {
-        clicked_islet <- polygons$Islet[clicked_idx[1], ]
-        p <- p + ggplot2::geom_sf(data = clicked_islet, fill = NA, color = "#FFD700",
-                             linewidth = 2.5, show.legend = FALSE)
-      }
-    }
-  }
 
   p
 }

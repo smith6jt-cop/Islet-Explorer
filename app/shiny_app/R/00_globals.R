@@ -13,8 +13,25 @@ library(jsonlite)
 # GeoJSON polygons use pixel coordinates, while islet_spatial_lookup.csv uses micrometers
 PIXEL_SIZE_UM <- 0.3774  # micrometers per pixel
 
-# Donor status color palette (Paul Tol bright variant: colorblind-safe triad)
+# Donor status color palettes
 DONOR_COLORS <- c("ND" = "#4477AA", "Aab+" = "#CC6633", "T1D" = "#228833")
+
+DONOR_COLORS_BRIGHT <- c("ND" = "#3366CC", "Aab+" = "#FF6600", "T1D" = "#109618")
+
+DONOR_COLORS_COLORBLIND <- c("ND" = "#0072B2", "Aab+" = "#D55E00", "T1D" = "#009E73")
+
+DONOR_COLORS_CLASSIC <- c("ND" = "#2166AC", "Aab+" = "#B2182B", "T1D" = "#1B7837")
+
+DONOR_PALETTES <- list(
+  "Paul Tol (default)" = DONOR_COLORS,
+  "Bright"             = DONOR_COLORS_BRIGHT,
+  "Okabe-Ito"          = DONOR_COLORS_COLORBLIND,
+  "Diverging"          = DONOR_COLORS_CLASSIC
+)
+
+get_donor_color_palette <- function(name = "Paul Tol (default)") {
+  DONOR_PALETTES[[name]] %||% DONOR_COLORS
+}
 
 # Load sf package for GeoJSON/spatial operations (islet segmentation viewer)
 SF_AVAILABLE <- FALSE
