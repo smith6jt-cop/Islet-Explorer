@@ -62,25 +62,21 @@ statistics_ui <- function(id) {
             column(2,
               checkboxInput(ns("stats_remove_outliers"), "Remove outliers (>3 SD)", value = TRUE),
               numericInput(ns("stats_min_cells"), "Min cells/islet",
-                           value = 1, min = 1, max = 200, step = 1)
-            ),
-            column(7,
-              uiOutput(ns("normality_result"))
-            )
-          ),
-          hr(style = "margin: 6px 0;"),
-          # Row 2: Binning settings
-          fluidRow(
-            column(2,
+                           value = 1, min = 1, max = 200, step = 1),
               checkboxInput(ns("stats_no_binning"), "Skip size stratification", value = FALSE)
             ),
-            column(4,
+            column(3,
               sliderInput(ns("bin_width"), "Per-bin width (\u00b5m)",
                           min = 5, max = 150, value = 50, step = 5)
             ),
-            column(4,
+            column(3,
               sliderInput(ns("stats_diam_range"), "Diameter range (\u00b5m)",
                           min = 0, max = 500, value = c(0, 350), step = 10)
+            )
+          ),
+          fluidRow(
+            column(12,
+              uiOutput(ns("normality_result"))
             )
           )
         )
@@ -123,24 +119,27 @@ statistics_ui <- function(id) {
             "Tests use donor-level means within each size bin. ",
             "P-values are BH-corrected across bins. ",
             "Bins with <2 donors per group are greyed out (untestable)."),
-          plotlyOutput(ns("bin_heatmap"), height = "320px")
+          plotlyOutput(ns("bin_heatmap"), height = "400px")
         )
       ),
       column(6,
         div(class = "card", style = "padding: 15px; margin-bottom: 15px;",
           h5("Trend Analysis (Kendall \u03c4)"),
           tags$small(style = "color: #888; display: block; margin-bottom: 8px;",
-            "Direction and strength of the ND \u2192 Aab+ \u2192 T1D gradient within each size bin. ",
-            "Positive \u03c4 = increases with disease progression. Wider bins recommended for donor-level tests."),
+            "Each point is one diameter bin. Kendall \u03c4 measures the ",
+            "correlation between disease stage (ND=0, Aab+=1, T1D=2) and the feature value. ",
+            tags$strong("\u03c4 > 0:"), " feature increases ND \u2192 Aab+ \u2192 T1D. ",
+            tags$strong("\u03c4 < 0:"), " feature decreases. ",
+            tags$strong("\u03c4 \u2248 0:"), " no monotonic trend. ",
+            "Bins with <3 donors are skipped."),
           plotlyOutput(ns("trend_plot"), height = "320px")
         )
       )
     )
     ), # end conditionalPanel for Section 3
 
-    # ===== SECTION 4: Confounders & Deeper Analysis =====
-    section_heading("4", "Confounders & Deeper Analysis",
-                    "Check whether demographics explain the effect, and compare integrated area under the curve across groups."),
+    # ===== SECTION 4 (or 3 if binning skipped): Confounders & Deeper Analysis =====
+    uiOutput(ns("section_confounders_heading")),
 
     fluidRow(
       column(6,
@@ -157,9 +156,8 @@ statistics_ui <- function(id) {
       )
     ),
 
-    # ===== SECTION 5: Methods Reference =====
-    section_heading("5", "Methods Reference",
-                    "Technical details about tests, corrections, and guidelines."),
+    # ===== SECTION 5 (or 4 if binning skipped): Methods Reference =====
+    uiOutput(ns("section_methods_heading")),
 
     fluidRow(
       column(12,

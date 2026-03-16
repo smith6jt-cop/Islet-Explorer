@@ -18,6 +18,37 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
+    # Helper: section heading (mirrors the one in UI but available server-side)
+    section_heading <- function(step, title, subtitle) {
+      div(style = "margin-bottom: 14px; margin-top: 22px; padding-bottom: 8px; border-bottom: 2px solid #d0e0f0;",
+        div(style = "display: flex; align-items: baseline; gap: 10px;",
+          span(step,
+               style = paste0("display: inline-block; background: linear-gradient(135deg, #4477AA, #5599CC);",
+                              " color: white; font-weight: 700; font-size: 14px; padding: 2px 10px;",
+                              " border-radius: 12px; min-width: 24px; text-align: center;")),
+          span(title, style = "font-weight: 700; font-size: 17px; color: #333;")
+        ),
+        p(subtitle, style = "margin: 4px 0 0 0; color: #777; font-size: 13px;")
+      )
+    }
+
+    # Dynamic section numbers: shift down by 1 when binning is skipped
+    section_offset <- reactive({
+      if (isTRUE(input$stats_no_binning)) -1L else 0L
+    })
+
+    output$section_confounders_heading <- renderUI({
+      step <- 4L + section_offset()
+      section_heading(as.character(step), "Confounders & Deeper Analysis",
+                      "Check whether demographics explain the effect, and compare integrated area under the curve across groups.")
+    })
+
+    output$section_methods_heading <- renderUI({
+      step <- 5L + section_offset()
+      section_heading(as.character(step), "Methods Reference",
+                      "Technical details about tests, corrections, and guidelines.")
+    })
+
     # ===========================================================================
     # Core computation: eventReactive triggered by Run button
     # ===========================================================================
@@ -74,7 +105,7 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
       # Detect feature name from raw_df attributes
       feature_name <- attr(raw_df(), "selection_used") %||% "Unknown"
 
-      # ---- Donor-level aggregation ----
+      # ---- Donor-level aggregation (conservative sensitivity) ----
       ddf <- aggregate_to_donor(rdf, agg_fn = "mean")
       ddf$donor_status <- factor(ddf$donor_status, levels = c("ND", "Aab+", "T1D"))
       n_donors <- nrow(ddf)
@@ -82,31 +113,41 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
       # ---- Normality test on donor-level data ----
       norm_result <- normality_tests(ddf)
 
-      # ---- Mixed-effects sensitivity (islet-level data with donor random effect) ----
+      # ---- PRIMARY: Mixed-effects model (preserves islet variation, accounts for donor clustering) ----
       lmer_result <- tryCatch(lmer_test_donor(rdf), error = function(e) NULL)
       lmer_p <- if (!is.null(lmer_result)) lmer_result$p_value else NA_real_
       icc <- if (!is.null(lmer_result)) lmer_result$icc else NA_real_
 
-      # ---- Global test on DONOR-LEVEL means ----
-      global_test <- if (is_parametric) "ANOVA" else "Kruskal-Wallis"
-      global_p <- NA_real_
+      # Pairwise from mixed model via emmeans
+      lmer_pairwise <- NULL
+      if (!is.null(lmer_result) && !is.null(lmer_result$fit)) {
+        lmer_pairwise <- tryCatch({
+          emm <- emmeans::emmeans(lmer_result$fit, pairwise ~ donor_status)
+          ct <- as.data.frame(emm$contrasts)
+          # ct has columns: contrast, estimate, SE, df, t.ratio, p.value
+          ct
+        }, error = function(e) NULL)
+      }
+
+      # ---- SENSITIVITY: Donor-level test (conservative — collapses size variation) ----
+      donor_test <- if (is_parametric) "ANOVA" else "Kruskal-Wallis"
+      donor_p <- NA_real_
       eta_sq <- NA_real_
 
       if (is_parametric) {
         fit <- tryCatch(lm(value ~ donor_status, data = ddf), error = function(e) NULL)
         if (!is.null(fit)) {
           at <- tryCatch(anova(fit), error = function(e) NULL)
-          if (!is.null(at)) global_p <- suppressWarnings(as.numeric(at[["Pr(>F)"]][1]))
+          if (!is.null(at)) donor_p <- suppressWarnings(as.numeric(at[["Pr(>F)"]][1]))
           eta_sq <- eta_squared(fit)
         }
       } else {
         kt <- tryCatch(kruskal.test(value ~ donor_status, data = ddf), error = function(e) NULL)
-        if (!is.null(kt)) global_p <- kt$p.value
-        # Eta-squared approximation for K-W: H / (N-1)
+        if (!is.null(kt)) donor_p <- kt$p.value
         if (!is.null(kt) && n_donors > 1) eta_sq <- kt$statistic / (n_donors - 1)
       }
 
-      # ---- Pairwise comparisons with effect sizes (donor-level) ----
+      # ---- Pairwise comparisons with effect sizes (donor-level, conservative) ----
       groups <- levels(ddf$donor_status)
       pairs <- combn(groups, 2, simplify = FALSE)
 
@@ -148,6 +189,7 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
       # ---- Per-bin analysis (conditional on no-binning checkbox) ----
       bin_anova <- NULL
       bin_kendall <- NULL
+      bin_pairwise <- NULL
 
       if (!isTRUE(input$stats_no_binning)) {
         bw <- suppressWarnings(as.numeric(input$bin_width))
@@ -157,6 +199,8 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
 
         bin_anova <- per_bin_donor_anova(rdf_binned, "diam_bin", "donor_status", "value")
         bin_kendall <- per_bin_donor_kendall(rdf_binned, "diam_bin", "donor_status", "value")
+        bin_pairwise <- per_bin_donor_pairwise(rdf_binned, "diam_bin", "donor_status", "value",
+                                                parametric = is_parametric)
 
         # BH correction across bins to control false discovery rate
         if (!is.null(bin_anova) && nrow(bin_anova) > 0) {
@@ -164,6 +208,9 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
         }
         if (!is.null(bin_kendall) && nrow(bin_kendall) > 0) {
           bin_kendall$p_adj <- p.adjust(bin_kendall$p_kendall, method = "BH")
+        }
+        if (!is.null(bin_pairwise) && nrow(bin_pairwise) > 0) {
+          bin_pairwise$p_adj <- p.adjust(bin_pairwise$p_value, method = "BH")
         }
       }
 
@@ -177,7 +224,7 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
       has_gender <- "gender" %in% colnames(ddf)
 
       if (has_age || has_gender) {
-        # Demographic summary per donor group (already at donor level)
+        # Demographic summary per donor group
         demo_rows <- lapply(levels(ddf$donor_status), function(g) {
           sub <- ddf[ddf$donor_status == g, , drop = FALSE]
           n_d <- nrow(sub)
@@ -212,10 +259,10 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
         })
         demo_summary <- do.call(rbind, demo_rows)
 
-        # Age-feature correlation across ALL donors (not per-group with n=5)
+        # Age-feature correlation across ALL islets (note: correlated within donors)
         if (has_age) {
-          a <- as.numeric(ddf$age)
-          v <- ddf$value
+          a <- as.numeric(rdf$age)
+          v <- rdf$value
           keep <- is.finite(a) & is.finite(v)
           age_corr <- if (sum(keep) >= 3) {
             ct <- tryCatch(cor.test(a[keep], v[keep], method = "pearson"), error = function(e) NULL)
@@ -226,7 +273,7 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
           }
         }
 
-        # Covariate-adjusted model on DONOR-level data
+        # Covariate-adjusted model on DONOR-level data (correct level for this)
         if (has_age && has_gender) {
           ddf_cov <- ddf
           ddf_cov$age_num <- as.numeric(ddf_cov$age)
@@ -240,7 +287,7 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
           }
         }
 
-        # Gender-stratified tests on donor-level data
+        # Sex-stratified tests on donor-level data
         if (has_gender) {
           genders_present <- unique(na.omit(as.character(ddf$gender)))
           gender_rows <- lapply(genders_present, function(gen) {
@@ -268,6 +315,42 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
         }
       }
 
+      # ---- Autoantibody analysis (Aab+ islets only) ----
+      aab_cols <- c("AAb_GADA", "AAb_IA2A", "AAb_ZnT8A", "AAb_IAA", "AAb_mIAA")
+      aab_avail <- intersect(aab_cols, colnames(rdf))
+      aab_summary <- NULL
+      aab_donor_summary <- NULL
+
+      if (length(aab_avail) > 0) {
+        aab_sub <- rdf[rdf$donor_status == "Aab+", , drop = FALSE]
+        if (nrow(aab_sub) > 0) {
+          # Count AAbs per islet (same for all islets from same donor)
+          aab_sub$n_aab <- rowSums(sapply(aab_avail, function(col) {
+            as.numeric(as.logical(aab_sub[[col]]))
+          }), na.rm = TRUE)
+          aab_summary <- aab_sub
+
+          # Per-donor AAb profile table
+          aab_donor_rows <- lapply(unique(aab_sub$`Case ID`), function(cid) {
+            dsub <- aab_sub[aab_sub$`Case ID` == cid, , drop = FALSE]
+            row <- data.frame(
+              `Case ID` = cid,
+              n_islets = nrow(dsub),
+              mean_value = mean(dsub$value, na.rm = TRUE),
+              n_aab = dsub$n_aab[1],
+              check.names = FALSE, stringsAsFactors = FALSE
+            )
+            # Add individual AAb flags
+            for (ac in aab_avail) {
+              short_name <- sub("^AAb_", "", ac)
+              row[[short_name]] <- if (as.logical(dsub[[ac]][1])) "+" else "-"
+            }
+            row
+          })
+          aab_donor_summary <- do.call(rbind, aab_donor_rows)
+        }
+      }
+
       # ---- AUC: trapezoidal integration of binned summary curve per donor group ----
       sdf <- summary_df()
       auc_by_group <- tryCatch({
@@ -289,22 +372,28 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
         n_donors         = n_donors,
         donor_df         = ddf,
         feature_name     = feature_name,
-        global_test      = global_test,
-        global_p         = global_p,
+        # Primary test: mixed-effects
+        lmer_p           = lmer_p,
+        icc              = icc,
+        lmer_pairwise    = lmer_pairwise,
+        # Sensitivity test: donor-level
+        donor_test       = donor_test,
+        donor_p          = donor_p,
         eta_sq           = eta_sq,
         alpha            = alpha_num,
         is_parametric    = is_parametric,
         pairwise_df      = pairwise_df,
         bin_anova        = bin_anova,
         bin_kendall      = bin_kendall,
+        bin_pairwise     = bin_pairwise,
         auc_by_group     = auc_by_group,
         demo_summary     = demo_summary,
         age_corr         = age_corr,
         age_model_p      = age_model_p,
         gender_strat     = gender_strat,
-        lmer_p           = lmer_p,
-        icc              = icc,
         norm_result      = norm_result,
+        aab_summary      = aab_summary,
+        aab_donor_summary = aab_donor_summary,
         rdf              = rdf
       )
     }, ignoreInit = TRUE)
@@ -320,21 +409,20 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
                       "Select a feature in the sidebar, then click 'Run Statistics'."))
       }
 
-      p_col <- if (is.na(st$global_p)) "#999" else if (st$global_p < st$alpha) "#d62728" else "#2e7d32"
-      eta_label <- if (is.na(st$eta_sq)) "N/A" else sprintf("%.3f", st$eta_sq)
-      icc_label <- if (is.na(st$icc)) "" else sprintf(" | ICC = %.2f", st$icc)
+      # Primary p-value from mixed-effects model
+      primary_p <- st$lmer_p
+      p_col <- if (is.na(primary_p)) "#999" else if (primary_p < st$alpha) "#d62728" else "#2e7d32"
+      icc_label <- if (is.na(st$icc)) "" else sprintf("  ICC = %.2f", st$icc)
 
       tags$div(style = "display: flex; gap: 15px; align-items: center; flex-wrap: wrap;",
         tags$span(style = "background: #e3f2fd; padding: 4px 10px; border-radius: 4px; font-weight: 600;",
                   st$feature_name),
         tags$span(style = "padding: 4px 10px;",
-                  paste0("N = ", st$n_donors, " donors (",
-                         formatC(st$n_islets, format = "d", big.mark = ","), " islets)",
-                         icc_label)),
+                  paste0(formatC(st$n_islets, format = "d", big.mark = ","),
+                         " islets, ", st$n_donors, " donors", icc_label)),
         tags$span(style = paste0("background: ", p_col, "; color: white; padding: 4px 10px; border-radius: 4px;"),
-                  paste0(st$global_test, " p = ", if (is.na(st$global_p)) "N/A" else formatC(st$global_p, format = "e", digits = 2))),
-        tags$span(style = "padding: 4px 10px;",
-                  paste0("\u03b7\u00b2 = ", eta_label))
+                  paste0("Mixed-effects p = ",
+                         if (is.na(primary_p)) "N/A" else formatC(primary_p, format = "e", digits = 2)))
       )
     })
 
@@ -401,20 +489,28 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
       if (is.null(st)) return(NULL)
 
       icc_str <- if (is.na(st$icc)) "N/A" else sprintf("%.2f", st$icc)
-      lmer_str <- if (is.na(st$lmer_p)) "did not converge" else
-        paste0("p = ", formatC(st$lmer_p, format = "e", digits = 2))
+      donor_str <- if (is.na(st$donor_p)) "N/A" else
+        paste0("p = ", formatC(st$donor_p, format = "e", digits = 2))
+
+      icc_interp <- if (!is.na(st$icc) && st$icc > 0.3) {
+        " — substantial clustering: donor identity explains much of the variance."
+      } else if (!is.na(st$icc) && st$icc > 0.1) {
+        " — moderate clustering."
+      } else if (!is.na(st$icc)) {
+        " — low clustering: most variation is between islets within donors."
+      } else {
+        "."
+      }
 
       tags$div(
         style = "background: #e8f4fd; padding: 10px 14px; border-radius: 5px; margin-bottom: 12px; font-size: 13px; line-height: 1.5;",
-        tags$strong("Pseudoreplication correction: "),
-        paste0("Tests use donor-level means (N = ", st$n_donors,
-               ") to avoid treating correlated islets as independent. "),
-        "Islets within a donor share biology and tissue processing. ",
-        paste0("Mixed-effects sensitivity: ", lmer_str, ". "),
-        paste0("ICC = ", icc_str,
-               if (!is.na(st$icc) && st$icc > 0.1) " (substantial donor-level clustering)."
-               else if (!is.na(st$icc)) " (low donor-level clustering)."
-               else ".")
+        tags$strong("Statistical approach: "),
+        paste0("Primary test uses a mixed-effects model (lmer) with donor as random intercept, ",
+               "preserving islet-level variation while accounting for donor clustering. ",
+               "Islets of different sizes are biologically distinct and contribute meaningful signal. "),
+        tags$br(),
+        paste0("ICC = ", icc_str, icc_interp, " "),
+        paste0("Conservative sensitivity (donor-level ", st$donor_test, "): ", donor_str, ".")
       )
     })
 
@@ -426,26 +522,62 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
       st <- stats_run()
       if (is.null(st)) return(NULL)
 
-      fmt_p <- function(x) ifelse(is.na(x), "N/A", formatC(x, format = "e", digits = 2))
+      fmt_p <- function(x) {
+        ifelse(is.na(x), "N/A",
+               ifelse(x < 1e-5, formatC(x, format = "e", digits = 2),
+                      sprintf("%.4f", x)))
+      }
       fmt_d <- function(x) ifelse(is.na(x), "N/A", sprintf("%.2f", x))
 
-      # Global row (donor-level)
-      global_row <- data.frame(
-        Contrast = paste0("Global (", st$global_test, ", N=", st$n_donors, ")"),
-        `p-value` = fmt_p(st$global_p),
-        `p (adj)` = "-",
-        `Cohen's d` = "-",
-        `95% CI` = "-",
-        Sig = if (!is.na(st$global_p) && st$global_p < st$alpha) "*" else "",
+      rows <- data.frame(
+        Contrast = character(), `p-value` = character(), `p (adj)` = character(),
+        `Cohen's d` = character(), `95% CI` = character(), Sig = character(),
         check.names = FALSE, stringsAsFactors = FALSE
       )
 
+      # PRIMARY: Mixed-effects global
+      rows <- rbind(rows, data.frame(
+        Contrast = "Global (mixed-effects lmer)",
+        `p-value` = fmt_p(st$lmer_p),
+        `p (adj)` = "-",
+        `Cohen's d` = "-",
+        `95% CI` = "-",
+        Sig = if (!is.na(st$lmer_p) && st$lmer_p < st$alpha) "*" else "",
+        check.names = FALSE, stringsAsFactors = FALSE
+      ))
+
+      # Pairwise from mixed model (emmeans)
+      lmer_pw <- st$lmer_pairwise
+      if (!is.null(lmer_pw) && nrow(lmer_pw) > 0) {
+        lmer_pw_rows <- data.frame(
+          Contrast = paste0(lmer_pw$contrast, " (emmeans)"),
+          `p-value` = fmt_p(lmer_pw$p.value),
+          `p (adj)` = "-",
+          `Cohen's d` = "-",
+          `95% CI` = "-",
+          Sig = ifelse(!is.na(lmer_pw$p.value) & lmer_pw$p.value < st$alpha, "*", ""),
+          check.names = FALSE, stringsAsFactors = FALSE
+        )
+        rows <- rbind(rows, lmer_pw_rows)
+      }
+
+      # SENSITIVITY: Donor-level
+      rows <- rbind(rows, data.frame(
+        Contrast = paste0("Sensitivity (donor-level ", st$donor_test, ", N=", st$n_donors, ")"),
+        `p-value` = fmt_p(st$donor_p),
+        `p (adj)` = "-",
+        `Cohen's d` = "-",
+        `95% CI` = "-",
+        Sig = if (!is.na(st$donor_p) && st$donor_p < st$alpha) "*" else "",
+        check.names = FALSE, stringsAsFactors = FALSE
+      ))
+
+      # Donor-level pairwise with effect sizes
       pw <- st$pairwise_df
-      rows <- global_row
       if (!is.null(pw) && nrow(pw) > 0) {
         test_label <- if (st$is_parametric) "t-test" else "Wilcoxon"
         pw_rows <- data.frame(
-          Contrast = paste0(pw$contrast, " (", test_label, ")"),
+          Contrast = paste0(pw$contrast, " (donor ", test_label, ")"),
           `p-value` = fmt_p(pw$p_value),
           `p (adj)` = fmt_p(pw$p_adj),
           `Cohen's d` = fmt_d(pw$cohens_d),
@@ -457,17 +589,7 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
         rows <- rbind(rows, pw_rows)
       }
 
-      # Mixed-effects row
-      lmer_row <- data.frame(
-        Contrast = "Mixed-effects (lmer)",
-        `p-value` = fmt_p(st$lmer_p),
-        `p (adj)` = "-",
-        `Cohen's d` = "-",
-        `95% CI` = "-",
-        Sig = if (!is.na(st$lmer_p) && st$lmer_p < st$alpha) "*" else "",
-        check.names = FALSE, stringsAsFactors = FALSE
-      )
-      rbind(rows, lmer_row)
+      rows
     }, striped = TRUE, bordered = TRUE, spacing = "s", align = "lccccc")
 
     output$forest_plot <- renderPlotly({
@@ -486,7 +608,7 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
         geom_errorbarh(aes(xmin = d_ci_lo, xmax = d_ci_hi), height = 0.2) +
         scale_color_manual(values = c("Significant" = "#d62728", "NS" = "#1f77b4"),
                            name = "") +
-        labs(x = "Cohen's d (donor-level)", y = NULL, title = "Pairwise Effect Sizes") +
+        labs(x = "Cohen's d (donor means)", y = NULL, title = "Pairwise Effect Sizes (conservative)") +
         theme_minimal(base_size = 13) +
         theme(legend.position = "none")
 
@@ -505,16 +627,20 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
 
       ba <- st$bin_anova
       bk <- st$bin_kendall
+      bp <- st$bin_pairwise
 
       if ((is.null(ba) || nrow(ba) == 0) && (is.null(bk) || nrow(bk) == 0)) return(NULL)
 
       # Collect all bin midpoints
-      all_mids <- sort(unique(c(ba$mid, bk$mid)))
+      all_mids <- sort(unique(c(ba$mid, bk$mid,
+                                if (!is.null(bp) && nrow(bp) > 0) bp$mid)))
       if (length(all_mids) == 0) return(NULL)
 
-      # Build z matrix using BH-corrected p-values
-      anova_p <- rep(NA_real_, length(all_mids))
-      kendall_p <- rep(NA_real_, length(all_mids))
+      n_mids <- length(all_mids)
+
+      # Build p-value vectors for global tests
+      anova_p <- rep(NA_real_, n_mids)
+      kendall_p <- rep(NA_real_, n_mids)
 
       if (!is.null(ba) && nrow(ba) > 0) {
         idx <- match(ba$mid, all_mids)
@@ -525,26 +651,40 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
         kendall_p[idx[!is.na(idx)]] <- bk$p_adj[!is.na(idx)]
       }
 
-      z_anova <- ifelse(!is.na(anova_p) & anova_p > 0, -log10(anova_p), NA_real_)
-      z_kendall <- ifelse(!is.na(kendall_p) & kendall_p > 0, -log10(kendall_p), NA_real_)
+      # Build p-value vectors for pairwise tests
+      pair_names <- c("ND vs Aab+", "ND vs T1D", "Aab+ vs T1D")
+      pair_p_list <- lapply(pair_names, function(pn) {
+        pv <- rep(NA_real_, n_mids)
+        if (!is.null(bp) && nrow(bp) > 0) {
+          sub <- bp[bp$pair == pn, , drop = FALSE]
+          if (nrow(sub) > 0) {
+            idx <- match(sub$mid, all_mids)
+            pv[idx[!is.na(idx)]] <- sub$p_adj[!is.na(idx)]
+          }
+        }
+        pv
+      })
 
-      z_mat <- rbind(z_anova, z_kendall)
-
-      # Star annotations (based on corrected p-values)
+      # Convert to -log10(q) and build matrices
+      to_z <- function(p) ifelse(!is.na(p) & p > 0, -log10(p), NA_real_)
       star_fn <- function(p) {
         ifelse(is.na(p), "",
                ifelse(p < 0.001, "***",
                       ifelse(p < 0.01, "**",
                              ifelse(p < 0.05, "*", ""))))
       }
-      star_anova <- star_fn(anova_p)
-      star_kendall <- star_fn(kendall_p)
-      text_mat <- rbind(star_anova, star_kendall)
+
+      # Row order: ANOVA, pairwise (3), Kendall
+      row_names <- c("ANOVA", pair_names, "Kendall \u03c4")
+      all_p <- list(anova_p, pair_p_list[[1]], pair_p_list[[2]], pair_p_list[[3]], kendall_p)
+
+      z_mat <- do.call(rbind, lapply(all_p, to_z))
+      text_mat <- do.call(rbind, lapply(all_p, star_fn))
 
       mid_labels <- as.character(round(all_mids))
 
       plot_ly(
-        x = mid_labels, y = c("ANOVA", "Kendall"), z = z_mat,
+        x = mid_labels, y = row_names, z = z_mat,
         type = "heatmap",
         colorscale = list(c(0, "#f7fbff"), c(0.5, "#6baed6"), c(1, "#08306b")),
         colorbar = list(title = "-log10(q)"),
@@ -553,7 +693,7 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
       ) %>%
         layout(
           xaxis = list(title = "Diameter bin midpoint (\u00b5m)", tickangle = -45),
-          yaxis = list(title = ""),
+          yaxis = list(title = "", categoryorder = "array", categoryarray = rev(row_names)),
           title = "Stratified Significance (BH-corrected, donor-level)"
         )
     })
@@ -570,31 +710,12 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
 
       bk$sig_label <- ifelse(!is.na(bk$p_adj) & bk$p_adj < st$alpha, "Significant", "NS")
 
-      # Overall Kendall tau on donor-level means
-      ddf <- st$donor_df
-      code_group <- function(x) {
-        x <- as.character(x)
-        ifelse(x == "ND", 0, ifelse(x == "Aab+", 1, ifelse(x == "T1D", 2, NA_real_)))
-      }
-      x_all <- code_group(ddf$donor_status)
-      y_all <- ddf$value
-      keep <- is.finite(x_all) & is.finite(y_all)
-      overall_tau <- NA_real_
-      if (sum(keep) >= 3) {
-        ct <- tryCatch(cor.test(x_all[keep], y_all[keep], method = "kendall", exact = FALSE), error = function(e) NULL)
-        if (!is.null(ct)) overall_tau <- unname(ct$estimate)
-      }
-
-      direction_label <- if (is.na(overall_tau)) "No clear trend" else
-        if (overall_tau > 0) "\u2191 Increases with disease" else "\u2193 Decreases with disease"
-
       g <- ggplot(bk, aes(x = mid, y = tau, color = sig_label)) +
         geom_hline(yintercept = 0, linetype = "dashed", color = "#999") +
         geom_line(color = "#333", alpha = 0.4) +
         geom_point(size = 3) +
         scale_color_manual(values = c("Significant" = "#d62728", "NS" = "#aaaaaa"), name = "") +
-        labs(x = "Diameter bin midpoint (\u00b5m)", y = "Kendall \u03c4",
-             title = paste("Disease Progression Trend:", direction_label)) +
+        labs(x = "Diameter bin midpoint (\u00b5m)", y = "Kendall \u03c4") +
         theme_minimal(base_size = 13) +
         theme(legend.position = "none")
 
@@ -604,7 +725,7 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
     })
 
     # ===========================================================================
-    # Card 5: Demographics (conditional — NULL when no age/gender)
+    # Card 5: Demographics (conditional — NULL when no age/sex)
     # ===========================================================================
 
     output$demographics_card <- renderUI({
@@ -619,16 +740,29 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
       }
       if (is.null(st$demo_summary)) return(NULL)
 
-      div(class = "card", style = "padding: 15px; margin-bottom: 15px;",
+      # Build AAb section conditionally
+      aab_section <- NULL
+      if (!is.null(st$aab_summary) && nrow(st$aab_summary) > 0) {
+        aab_section <- tagList(
+          hr(style = "margin: 8px 0;"),
+          h6("Autoantibody Profile (Aab+ only)", style = "color: #555;"),
+          tableOutput(ns("aab_donor_table")),
+          plotlyOutput(ns("aab_plot"), height = "260px")
+        )
+      }
+
+      div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible;",
         h5("Demographics Analysis"),
         h6("Donor Summary", style = "color: #555;"),
         tableOutput(ns("demo_summary_table")),
         hr(style = "margin: 8px 0;"),
-        h6("Age vs Feature (donor-level)", style = "color: #555;"),
+        h6("Age vs Feature (islet-level)", style = "color: #555;"),
         plotlyOutput(ns("age_scatter"), height = "280px"),
         hr(style = "margin: 8px 0;"),
-        h6("Gender-Stratified Tests", style = "color: #555;"),
-        tableOutput(ns("gender_strat_table")),
+        h6("Sex vs Feature", style = "color: #555;"),
+        plotlyOutput(ns("gender_plot"), height = "280px"),
+        aab_section,
+        hr(style = "margin: 8px 0;"),
         uiOutput(ns("covariate_results"))
       )
     })
@@ -639,8 +773,8 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
       ds <- st$demo_summary
       display <- data.frame(
         `Donor Status` = ds$donor_status,
-        `N Donors` = ds$n,
         `N Islets` = ifelse(is.na(ds$n_islets), "-", formatC(ds$n_islets, format = "d", big.mark = ",")),
+        `N Donors` = ds$n,
         `Age Median` = ifelse(is.na(ds$age_median), "-", sprintf("%.0f", ds$age_median)),
         `Age Range` = ifelse(nzchar(ds$age_range), ds$age_range, "-"),
         `% Male` = ifelse(is.na(ds$pct_male), "-", sprintf("%.0f%%", ds$pct_male)),
@@ -653,25 +787,26 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
     output$age_scatter <- renderPlotly({
       st <- stats_run()
       if (is.null(st) || is.null(st$age_corr)) return(NULL)
-      ddf <- st$donor_df
-      if (!("age" %in% colnames(ddf))) return(NULL)
+      rdf_plot <- st$rdf
+      if (!("age" %in% colnames(rdf_plot))) return(NULL)
 
-      ddf$age_num <- as.numeric(ddf$age)
-      ddf <- ddf[is.finite(ddf$age_num) & is.finite(ddf$value), , drop = FALSE]
-      if (nrow(ddf) == 0) return(NULL)
+      rdf_plot$age_num <- as.numeric(rdf_plot$age)
+      rdf_plot <- rdf_plot[is.finite(rdf_plot$age_num) & is.finite(rdf_plot$value), , drop = FALSE]
+      if (nrow(rdf_plot) == 0) return(NULL)
 
-      ddf$donor_status <- factor(ddf$donor_status, levels = c("ND", "Aab+", "T1D"))
+      rdf_plot$donor_status <- factor(rdf_plot$donor_status, levels = c("ND", "Aab+", "T1D"))
 
-      # Annotation for overall correlation
-      corr_label <- sprintf("r = %.2f, p = %.3f (n=%d)",
-                            st$age_corr$cor, st$age_corr$p_value, st$age_corr$n)
+      corr_label <- sprintf("r = %.2f, p = %s (N=%d islets; correlated within donors)",
+                            st$age_corr$cor,
+                            formatC(st$age_corr$p_value, format = "e", digits = 2),
+                            st$age_corr$n)
 
-      g <- ggplot(ddf, aes(x = age_num, y = value, color = donor_status)) +
-        geom_point(size = 3, alpha = 0.8) +
+      g <- ggplot(rdf_plot, aes(x = age_num, y = value, color = donor_status)) +
+        geom_point(alpha = 0.4, size = 1.5) +
         geom_smooth(method = "lm", se = FALSE, linewidth = 0.8, aes(group = 1), color = "#333") +
         scale_color_manual(values = donor_colors()) +
         labs(x = "Donor Age (years)", y = st$feature_name, color = NULL,
-             title = "Age-Feature Relationship (donor means)",
+             title = "Age vs Feature (all islets)",
              subtitle = corr_label) +
         theme_minimal(base_size = 12) +
         theme(legend.position = "bottom")
@@ -680,21 +815,103 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
         layout(legend = list(orientation = "h", x = 0.2, y = -0.2))
     })
 
-    output$gender_strat_table <- renderTable({
+    output$gender_plot <- renderPlotly({
       st <- stats_run()
-      if (is.null(st) || is.null(st$gender_strat) || nrow(st$gender_strat) == 0) return(NULL)
+      if (is.null(st)) return(NULL)
+      rdf_plot <- st$rdf
+      if (!("gender" %in% colnames(rdf_plot))) return(NULL)
+
+      rdf_plot$gender <- as.character(rdf_plot$gender)
+      rdf_plot <- rdf_plot[!is.na(rdf_plot$gender) & nzchar(rdf_plot$gender) &
+                           is.finite(rdf_plot$value), , drop = FALSE]
+      if (nrow(rdf_plot) == 0) return(NULL)
+
+      rdf_plot$donor_status <- factor(rdf_plot$donor_status, levels = c("ND", "Aab+", "T1D"))
+      rdf_plot$gender <- factor(rdf_plot$gender, levels = c("M", "F"), labels = c("Male", "Female"))
+
+      # Build subtitle with stratified p-values (if available)
       gs <- st$gender_strat
-      result <- data.frame(
-        Gender = gs$gender,
-        Contrast = gs$contrast,
-        `p-value` = formatC(gs$p_value, format = "e", digits = 2),
-        check.names = FALSE, stringsAsFactors = FALSE
-      )
-      if ("low_power" %in% colnames(gs)) {
-        result$Note <- ifelse(gs$low_power, "Low power (n<3/group)", "")
+      sub_label <- ""
+      if (!is.null(gs) && nrow(gs) > 0) {
+        p_labels <- c()
+        for (gen in unique(as.character(gs$gender))) {
+          sub_gs <- gs[gs$gender == gen, , drop = FALSE]
+          if (nrow(sub_gs) > 0) {
+            min_p <- min(sub_gs$p_value, na.rm = TRUE)
+            lp <- sub_gs$low_power[1]
+            suffix <- if (isTRUE(lp)) " (low power)" else ""
+            p_labels <- c(p_labels, sprintf("%s: min p=%s%s", gen,
+                                            formatC(min_p, format = "e", digits = 1), suffix))
+          }
+        }
+        sub_label <- paste(p_labels, collapse = "  |  ")
       }
-      result
+
+      g <- ggplot(rdf_plot, aes(x = donor_status, y = value, fill = donor_status)) +
+        geom_boxplot(alpha = 0.7, outlier.size = 0.8) +
+        facet_wrap(~ gender) +
+        scale_fill_manual(values = donor_colors()) +
+        labs(x = NULL, y = st$feature_name,
+             title = "Feature by Donor Status & Sex",
+             subtitle = sub_label) +
+        theme_minimal(base_size = 12) +
+        theme(legend.position = "none")
+
+      ggplotly(g, tooltip = c("y")) %>%
+        layout(margin = list(b = 50))
+    })
+
+    output$aab_donor_table <- renderTable({
+      st <- stats_run()
+      if (is.null(st) || is.null(st$aab_donor_summary)) return(NULL)
+      ads <- st$aab_donor_summary
+      # Reorder: Case ID, individual AAbs, n_aab, n_islets, mean_value
+      aab_short <- sub("^AAb_", "", intersect(c("AAb_GADA", "AAb_IA2A", "AAb_ZnT8A", "AAb_IAA", "AAb_mIAA"),
+                                               colnames(st$rdf)))
+      base_cols <- c("Case ID", aab_short, "n_aab", "n_islets")
+      base_cols <- intersect(base_cols, colnames(ads))
+      display <- ads[, base_cols, drop = FALSE]
+      display$`Mean Value` <- sprintf("%.3f", ads$mean_value)
+      colnames(display)[colnames(display) == "n_aab"] <- "Total AAb"
+      colnames(display)[colnames(display) == "n_islets"] <- "N Islets"
+      display
     }, striped = TRUE, bordered = TRUE, spacing = "s")
+
+    output$aab_plot <- renderPlotly({
+      st <- stats_run()
+      if (is.null(st) || is.null(st$aab_summary) || nrow(st$aab_summary) == 0) return(NULL)
+
+      aab_df <- st$aab_summary
+      aab_df <- aab_df[is.finite(aab_df$value), , drop = FALSE]
+      if (nrow(aab_df) == 0) return(NULL)
+
+      # Group by AAb count (1, 2, 3+)
+      aab_df$aab_group <- ifelse(aab_df$n_aab >= 3, "3+", as.character(aab_df$n_aab))
+      aab_df$aab_group <- factor(aab_df$aab_group, levels = c("0", "1", "2", "3+"))
+      # Drop levels with no data
+      aab_df$aab_group <- droplevels(aab_df$aab_group)
+
+      if (length(levels(aab_df$aab_group)) < 2) {
+        # Only one AAb count level — not informative
+        return(NULL)
+      }
+
+      # Kruskal-Wallis test for trend
+      kt <- tryCatch(kruskal.test(value ~ aab_group, data = aab_df), error = function(e) NULL)
+      p_label <- if (!is.null(kt)) sprintf("KW p = %s", formatC(kt$p.value, format = "e", digits = 1)) else ""
+
+      g <- ggplot(aab_df, aes(x = aab_group, y = value, fill = aab_group)) +
+        geom_boxplot(alpha = 0.7, outlier.size = 0.8) +
+        scale_fill_brewer(palette = "Set2") +
+        labs(x = "Number of Autoantibodies", y = st$feature_name,
+             title = "Feature by AAb Count (Aab+ islets)",
+             subtitle = paste0("N = ", nrow(aab_df), " islets from ",
+                               length(unique(aab_df$`Case ID`)), " Aab+ donors. ", p_label)) +
+        theme_minimal(base_size = 12) +
+        theme(legend.position = "none")
+
+      ggplotly(g, tooltip = c("y"))
+    })
 
     output$covariate_results <- renderUI({
       st <- stats_run()
@@ -704,15 +921,15 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
       tags$div(style = "margin-top: 10px; padding: 10px; background: #f8f9fa; border-radius: 5px;",
         tags$strong("Covariate-Adjusted Model (donor-level)"),
         tags$p(style = "margin: 5px 0 0 0;",
-          paste0("lm(value ~ donor_status + age + gender, data = donor_means): donor_status p = ",
+          paste0("lm(value ~ donor_status + age + sex, data = donor_means): donor_status p = ",
                  if (is.na(p_cov)) "N/A" else formatC(p_cov, format = "e", digits = 2)),
           tags$br(),
           if (survived) {
             tags$span(style = "color: #d62728; font-weight: 600;",
-                      "Donor status effect SURVIVES adjustment for age and gender.")
+                      "Donor status effect SURVIVES adjustment for age and sex.")
           } else {
             tags$span(style = "color: #666;",
-                      "Donor status effect does NOT survive adjustment for age and gender.")
+                      "Donor status effect does NOT survive adjustment for age and sex.")
           }
         )
       )
@@ -809,31 +1026,36 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
 
       tags$div(style = "padding: 10px;",
         tags$p(
-          tags$strong("Pseudoreplication correction: "),
-          paste0("Islets from the same donor are correlated (shared biology, tissue processing, imaging). ",
-                 "Testing ", formatC(st$n_islets, big.mark = ","),
-                 " islets as independent observations inflates significance (true df ~12, not ~",
-                 formatC(st$n_islets - 3, big.mark = ","),
-                 "). All tests use donor-level means (N = ", st$n_donors, ")."),
+          tags$strong("Primary test: "),
+          paste0("Mixed-effects model: lmer(value ~ donor_status + (1 | donor)) on all ",
+                 formatC(st$n_islets, big.mark = ","),
+                 " islets. This preserves biologically meaningful islet-level variation ",
+                 "(islets of different sizes are structurally and functionally distinct) ",
+                 "while accounting for correlation between islets from the same donor. ",
+                 "Pairwise contrasts from estimated marginal means (emmeans)."),
           tags$br(), tags$br(),
-          tags$strong("Tests performed: "), test_desc,
-          " All computed on donor-level aggregated means.",
+          tags$strong("ICC: "),
+          "Intra-class correlation quantifies donor-level clustering. ",
+          "Low ICC means most variation is between islets (within donors), supporting islet-level analysis. ",
+          "High ICC would indicate donor identity dominates.",
+          tags$br(), tags$br(),
+          tags$strong("Conservative sensitivity: "), test_desc,
+          paste0(" Computed on donor-level means (N = ", st$n_donors,
+                 "). This is deliberately conservative — it collapses all size-dependent variation ",
+                 "to a single mean per donor, discarding meaningful biological signal."),
           tags$br(),
           tags$strong("Significance threshold: "), paste0("\u03b1 = ", alpha_str),
           tags$br(),
-          tags$strong("Mixed-effects model: "),
-          "lmer(value ~ donor_status + (1 | donor)) on islet-level data provides a sensitivity analysis. ",
-          "The ICC (intra-class correlation) quantifies how much variance is between donors vs within donors.",
-          tags$br(),
-          tags$strong("Effect sizes: "), "Cohen's d with 95% CI computed on donor-level means (N = 5 per group). ",
-          "CIs are wider than islet-level, reflecting honest uncertainty about group differences.",
+          tags$strong("Effect sizes: "), "Cohen's d with 95% CI computed on donor-level means. ",
+          "These are conservative estimates.",
           tags$br(),
           tags$strong("Normality: "), "Shapiro-Wilk test on donor-level means per group. ",
           "With n = 5, this test has limited power, so failure to reject normality does not guarantee it.",
           tags$br(),
           tags$strong("Stratified analysis: "), "ANOVA and Kendall \u03c4 on donor-level means within each diameter bin. ",
-          "P-values are BH-corrected across bins. Bins with <2 donors per group are untestable (greyed out). ",
-          "Wider bin widths are recommended for donor-level analysis.",
+          "Kendall \u03c4 correlates disease stage (ND=0, Aab+=1, T1D=2) with the feature value: ",
+          "\u03c4 > 0 means the feature increases with disease progression, \u03c4 < 0 means it decreases. ",
+          "P-values are BH-corrected across bins. Bins with <2 donors per group are untestable (greyed out).",
           tags$br(),
           tags$strong("Multiple comparisons: "), "Benjamini-Hochberg (FDR) correction applied to pairwise p-values.",
           tags$br(),
@@ -842,11 +1064,17 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
         if (!is.null(st$demo_summary)) {
           tags$p(style = "margin-top: 8px;",
             tags$strong("Demographic covariates: "),
-            "Age-feature correlation (Pearson r) computed across all donors. ",
-            "Gender-stratified pairwise tests check whether effects hold within each sex ",
-            "(low power with ~2-3 donors per gender per group). ",
+            "Age-feature scatter shows all islets (note: correlated within donors). ",
+            "Sex analysis uses box plots by donor status, faceted by sex. ",
+            "Sex-stratified pairwise tests report minimum p-value ",
+            "(low power with ~2-3 donors per sex per group). ",
             if (!is.null(st$age_model_p)) {
-              "A linear model on donor means adjusting for age and gender tests whether donor_status retains significance."
+              "A linear model on donor means adjusting for age and sex tests whether donor_status retains significance."
+            } else {
+              ""
+            },
+            if (!is.null(st$aab_summary)) {
+              " Autoantibody analysis shows feature distribution by AAb count (number of positive AAbs) for Aab+ donors only."
             } else {
               ""
             }
@@ -879,20 +1107,20 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
         if (!is.null(st)) {
           # Methodology notes
           lines <- c(lines, "# METHODOLOGY")
-          lines <- c(lines, paste0("# Tests use donor-level means (N = ", st$n_donors,
-                                   ") to avoid pseudoreplication"))
-          lines <- c(lines, paste0("# Total islets after filtering: ",
-                                   formatC(st$n_islets, big.mark = ",")))
+          lines <- c(lines, paste0("# Primary: mixed-effects lmer (islet-level with donor random intercept)"))
+          lines <- c(lines, paste0("# Total islets: ",
+                                   formatC(st$n_islets, big.mark = ","),
+                                   ", Donors: ", st$n_donors))
           lines <- c(lines, paste0("# ICC (intra-class correlation): ",
                                    if (is.na(st$icc)) "N/A" else sprintf("%.4f", st$icc)))
-          lines <- c(lines, paste0("# Mixed-effects p-value: ",
+          lines <- c(lines, paste0("# Mixed-effects p-value (primary): ",
                                    if (is.na(st$lmer_p)) "N/A" else formatC(st$lmer_p, format = "e", digits = 4)))
           lines <- c(lines, "")
 
-          # Global test
-          lines <- c(lines, "# Global Test (donor-level)")
-          lines <- c(lines, paste0("# ", st$global_test, ", p = ",
-                                   formatC(st$global_p, format = "e", digits = 4),
+          # Sensitivity test
+          lines <- c(lines, "# Sensitivity: Donor-Level Test (conservative)")
+          lines <- c(lines, paste0("# ", st$donor_test, ", p = ",
+                                   formatC(st$donor_p, format = "e", digits = 4),
                                    ", eta_sq = ", round(st$eta_sq, 4)))
           lines <- c(lines, "")
 
@@ -943,8 +1171,13 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
           }
 
           if (!is.null(st$age_corr)) {
-            cat("\n# Age-Feature Correlation (all donors)\n", file = file, append = TRUE)
+            cat("\n# Age-Feature Correlation (all islets)\n", file = file, append = TRUE)
             write.table(st$age_corr, file, append = TRUE, sep = ",", row.names = FALSE, quote = TRUE)
+          }
+
+          if (!is.null(st$aab_donor_summary)) {
+            cat("\n# Autoantibody Profile (Aab+ donors)\n", file = file, append = TRUE)
+            write.table(st$aab_donor_summary, file, append = TRUE, sep = ",", row.names = FALSE, quote = TRUE)
           }
         } else {
           writeLines(c(lines, "# No results computed"), file)

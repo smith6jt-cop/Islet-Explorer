@@ -200,6 +200,44 @@ per_bin_donor_kendall <- function(df, bin_col, group_col, value_col, mid_col = "
   arrange(out, mid)
 }
 
+#' Per-bin pairwise tests on donor-level means within each bin
+#' Returns data.frame with bin, mid, pair, p_value
+per_bin_donor_pairwise <- function(df, bin_col, group_col, value_col,
+                                    mid_col = "diam_mid", parametric = TRUE) {
+  if (nrow(df) == 0 || !"Case ID" %in% colnames(df)) {
+    return(tibble(bin = character(), mid = numeric(), pair = character(), p_value = numeric()))
+  }
+  bmeta <- df %>% filter(!is.na(.data[[bin_col]])) %>%
+    group_by(.data[[bin_col]]) %>%
+    summarise(mid = suppressWarnings(as.numeric(first(na.omit(.data[[mid_col]])))), .groups = "drop")
+  pairs_list <- list(c("ND", "Aab+"), c("ND", "T1D"), c("Aab+", "T1D"))
+  res <- lapply(seq_len(nrow(bmeta)), function(i) {
+    b <- bmeta[[bin_col]][i]
+    sub <- df %>% filter(.data[[bin_col]] == b)
+    ddf <- sub %>%
+      dplyr::group_by(`Case ID`, .data[[group_col]]) %>%
+      dplyr::summarise(value = mean(.data[[value_col]], na.rm = TRUE), .groups = "drop")
+    pair_rows <- lapply(pairs_list, function(pair) {
+      g1 <- ddf$value[ddf[[group_col]] == pair[1]]
+      g2 <- ddf$value[ddf[[group_col]] == pair[2]]
+      if (length(g1) < 2 || length(g2) < 2) return(NULL)
+      p_val <- if (parametric) {
+        tt <- tryCatch(t.test(g1, g2), error = function(e) NULL)
+        if (!is.null(tt)) tt$p.value else NA_real_
+      } else {
+        wt <- tryCatch(wilcox.test(g1, g2, exact = FALSE), error = function(e) NULL)
+        if (!is.null(wt)) wt$p.value else NA_real_
+      }
+      tibble(bin = as.character(b), mid = bmeta$mid[i],
+             pair = paste(pair[1], "vs", pair[2]), p_value = p_val)
+    })
+    bind_rows(pair_rows)
+  })
+  out <- bind_rows(res)
+  if (nrow(out) == 0) return(tibble(bin = character(), mid = numeric(), pair = character(), p_value = numeric()))
+  arrange(out, mid, pair)
+}
+
 #' Shapiro-Wilk normality test per donor group on donor-level values
 #' Returns data.frame with donor_status, W, p_value, is_normal
 normality_tests <- function(ddf) {
