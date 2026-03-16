@@ -720,8 +720,10 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
         theme(legend.position = "none")
 
       ggplotly(g, tooltip = c("x", "y", "colour")) %>%
-        layout(margin = list(b = 60),
-               legend = list(orientation = "h", x = 0.5, xanchor = "center", y = -0.25))
+        layout(margin = list(b = 70),
+               legend = list(orientation = "h", x = 0.5, xanchor = "center",
+                             y = -0.15, font = list(size = 12)),
+               showlegend = TRUE)
     })
 
     # ===========================================================================
@@ -756,11 +758,16 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
         h6("Donor Summary", style = "color: #555;"),
         tableOutput(ns("demo_summary_table")),
         hr(style = "margin: 8px 0;"),
-        h6("Age vs Feature (islet-level)", style = "color: #555;"),
-        plotlyOutput(ns("age_scatter"), height = "280px"),
-        hr(style = "margin: 8px 0;"),
-        h6("Sex vs Feature", style = "color: #555;"),
-        plotlyOutput(ns("gender_plot"), height = "280px"),
+        fluidRow(
+          column(6,
+            h6("Age vs Feature (islet-level)", style = "color: #555;"),
+            plotlyOutput(ns("age_scatter"), height = "300px")
+          ),
+          column(6,
+            h6("Sex vs Feature", style = "color: #555;"),
+            plotlyOutput(ns("gender_plot"), height = "300px")
+          )
+        ),
         aab_section,
         hr(style = "margin: 8px 0;"),
         uiOutput(ns("covariate_results"))

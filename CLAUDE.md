@@ -253,7 +253,7 @@ The app has 5,214 islets from only **15 donors** (5 per group). Islets within a 
 5. **No-binning option**: `stats_no_binning` checkbox hides Section 3 (size-dependent analysis).
 6. **Bin slider fix**: Max increased from 75 to 150, step=5. Heatmap x-axis labels angled (-45°) to prevent overlap.
 7. **Per-bin donor-level**: `per_bin_donor_anova()` and `per_bin_donor_kendall()` aggregate to donor means within each bin. Bins with <2 donors per group are skipped (greyed out in heatmap).
-8. **Demographics on donor-level**: Age scatter shows 15 donor-level points with overall Pearson r. Gender-stratified tests note low power (~2-3 donors per gender per group).
+8. **Demographics redesign**: Age scatter shows all islets (not donor means) with Pearson r. Sex analysis uses box plot faceted by sex (replaces p-value table). Autoantibody analysis (Aab+ only): per-donor AAb profile table + feature by AAb count box plot. Use 'Sex' not 'Gender' in all user-facing labels.
 
 ### Key Utilities (`utils_stats.R`)
 - `aggregate_to_donor(rdf, agg_fn)` -- Groups by `Case ID` + `donor_status`, computes mean/median of `value`, preserves age/gender
@@ -274,16 +274,16 @@ The Plot sidebar (mode, feature, region, donor status, AAb, age, gender filters)
 Numbered sections with `section_heading()` helper (gradient blue pill badge + bold title + grey subtitle + light blue bottom border):
 
 1. **Configure Analysis** -- Overview banner, Run/CSV buttons, test type, alpha, outliers, min-cells filter, normality test results, no-binning checkbox, bin width, diameter range. Two control rows.
-2. **Primary Results** -- Pseudoreplication info banner (ICC, mixed-effects p) + hypothesis table (col-5, includes lmer row) + forest plot (col-7, 350px). Cards equal-height via `display: flex` row.
+2. **Primary Results** -- Pseudoreplication info banner (ICC, mixed-effects p) + hypothesis table (col-4) + forest plot (col-4) + AUC (col-4). Cards equal-height via `display: flex` row.
 3. **Size-Dependent Patterns** -- Wrapped in `conditionalPanel` for no-binning toggle. Donor-level stratified tests heatmap + trend analysis. Angled x-axis labels.
-4. **Confounders & Deeper Analysis** -- Demographics (donor-level scatter, overall correlation) + merged AUC card
+4. **Confounders & Deeper Analysis** -- Demographics (full-width card): donor summary table (N islets primary, N donors), age scatter (islet-level, all points), sex box plot (faceted by sex), autoantibody profile (Aab+ only, AAb count box plot + per-donor table), covariate model (donor-level)
 5. **Methods Reference** -- Updated to explain pseudoreplication, donor-level aggregation, ICC, mixed-effects, normality testing
 
 ### Multiple Testing Correction
 Per-bin ANOVA and Kendall τ p-values are BH-corrected across bins via `p.adjust(method = "BH")`. Heatmap shows `-log10(q)` (corrected) with star annotations using corrected values. Trend plot significance coloring also uses corrected p-values.
 
 ### Plotly Legend Positioning
-Forest plot and trend plot use `theme(legend.position = "none")` in ggplot (prevents ggplotly auto-placement), then `layout(margin = list(b = 60), legend = list(orientation = "h", x = 0.5, xanchor = "center", y = -0.25))` in plotly. The `margin(b=60)` creates room below the x-axis title to prevent overlap.
+Forest plot uses `theme(legend.position = "none")` in ggplot (prevents ggplotly auto-placement), then `layout(margin = list(b = 60), legend = list(orientation = "h", x = 0.5, xanchor = "center", y = -0.25))` in plotly. The `margin(b=60)` creates room below the x-axis title to prevent overlap. The trend plot shows its legend (`showlegend = TRUE`) and has no title (title removed entirely).
 
 ### Effect Size Utilities (`utils_stats.R`)
 - `cohens_d(x, y)` -- returns `list(d, ci_lo, ci_hi)` (NOT `ci_lower`/`ci_upper`)
@@ -295,8 +295,8 @@ Forest plot and trend plot use `theme(legend.position = "none")` in ggplot (prev
 ### Phenotype Composition Explorer
 Plot tab Composition mode exposes 21 cell-type proportions (`prop_*` from H5AD `.obs`) + 21 peri-islet proportions (`peri_prop_*`) + 5 immune metrics alongside 3 hormone fractions. Grouped `selectInput` with 4 option groups.
 
-### Age & Gender Demographic Filters
-Age slider and gender checkboxes in Plot sidebar (H5AD only). `renderUI` returns `NULL` when absent.
+### Age & Sex Demographic Filters
+Age slider and sex checkboxes in Plot sidebar (H5AD only). `renderUI` returns `NULL` when absent.
 
 ### Multi-Feature Trajectory Heatmap
 Z-scored expression along pseudotime. Clamped [-2.5, 2.5], blue-white-red, dynamic height.
@@ -385,6 +385,7 @@ Required env vars: `KEY` (API key), `BASE` (API base URL, optional).
 - Donor status colors: ND = steel blue (#4477AA), Aab+ = burnt umber (#CC6633), T1D = forest green (#228833) — Paul Tol bright variant, colorblind-safe, centralized as `DONOR_COLORS` in `00_globals.R`
 - Phenotyping uses Rules1 (`data/phenotype_rules.csv`) - 19 phenotypes, 18 markers
 - **Donor metadata**: Comes from `islets_core_fixed.h5ad` obs, NOT from `CODEX_Pancreas_Donors.xlsx` (different cohort)
+- **User-facing terminology**: Use "Sex" not "Gender" in all UI labels, plot titles, and methods text. The underlying data column remains `gender` for backwards compatibility.
 - **H5AD obs index**: `islets_core_fixed.h5ad` index name is `islet_id` -- same as column, use `reset_index(drop=True)`
 - **Case ID zero-padding**: GeoJSON files use `0112.geojson` (4-digit padded), data uses `112` (unpadded). `load_case_geojson()` and click handlers use `sprintf("%04d", ...)` fallback
 - **Log-scale with zeros**: Use `scales::pseudo_log_trans(base=10)` instead of `scale_y_log10()` -- zeros map to 0 (visible) instead of -Infinity (dropped)

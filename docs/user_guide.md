@@ -68,7 +68,7 @@ The Plot tab is the primary exploration interface. It has a **sidebar** (left) a
 - **Donor Status**: Select disease groups to include (ND, Aab+, T1D)
 - **AAb Filter**: Filter by autoantibody positivity (when available)
 - **Age Range**: Slider to restrict donor age (H5AD only)
-- **Gender**: Checkbox filter (H5AD only)
+- **Sex**: Checkbox filter (H5AD only)
 - **Diameter Range**: Restrict islet diameter in μm
 
 ### Main Panel
@@ -167,20 +167,28 @@ The tab uses a **5-section narrative layout** that walks you through a logical a
 
 ### Section 2: Primary Results
 
-- **Hypothesis Testing** (left): Global test + pairwise comparisons table with Cohen's d effect sizes, 95% CIs, and BH-corrected p-values
-- **Effect Size Forest Plot** (right): Visual display of pairwise Cohen's d with confidence intervals. Points colored by significance.
+Three equal-height cards showing the core statistical results:
+
+- **Hypothesis Testing** (left): Global test + pairwise comparisons table with Cohen's d effect sizes, 95% CIs, and BH-corrected p-values. Includes mixed-effects model (primary) and donor-level tests (sensitivity).
+- **Effect Size Forest Plot** (center): Visual display of pairwise Cohen's d with confidence intervals. Points colored by significance.
+- **Area Under Curve** (right): Trapezoidal AUC by disease group with percentage change relative to ND baseline.
 
 ### Section 3: Size-Dependent Patterns
 
 Stratified analysis testing whether group differences depend on islet size (effect modification):
 
 - **Stratified Tests by Islet Diameter**: Heatmap of BH-corrected q-values (ANOVA and Kendall τ) computed within each diameter bin. Identifies which size ranges drive or lack group differences. P-values are corrected across bins to control false discovery rate.
-- **Trend Analysis (Kendall τ)**: Direction and strength of the ND → Aab+ → T1D gradient within each size bin. Significance coloring uses corrected p-values.
+- **Trend Analysis (Kendall τ)**: Measures correlation between disease stage (ND=0, Aab+=1, T1D=2) and the feature value within each size bin. τ > 0 means the feature increases with disease progression; τ < 0 means it decreases. Points colored by significance (red = significant, grey = NS).
 
 ### Section 4: Confounders & Deeper Analysis
 
-- **Demographics** (H5AD only, hidden for Excel fallback): Age scatter with linear regression, gender-stratified tests, covariate-adjusted model
-- **Area Under Curve**: Trapezoidal AUC by disease group with percentage change relative to ND baseline
+Full-width **Demographics** card (H5AD only, hidden for Excel fallback):
+
+- **Donor Summary Table**: N islets (primary), N donors, age median/range, % male/female per disease group
+- **Age vs Feature** (left): Islet-level scatter plot (all ~5,214 islets) with overall linear regression line and Pearson correlation. Subtitle notes that islets are correlated within donors.
+- **Sex vs Feature** (right): Box plot of feature value by donor status, faceted by sex (Male/Female). Sex-stratified p-values shown in subtitle.
+- **Autoantibody Profile** (Aab+ only, hidden when no AAb data): Per-donor table showing which AAbs are positive, total AAb count, N islets, and mean feature value. Box plot of feature by number of positive autoantibodies (1, 2, 3+) with Kruskal-Wallis test.
+- **Covariate-Adjusted Model**: Donor-level linear model adjusting for age and sex, testing whether donor status retains significance.
 
 ### Section 5: Methods Reference
 
@@ -276,7 +284,7 @@ Click any islet data point in the Plot or Trajectory tab to inspect individual c
 ### How It Works
 
 1. Click a point in the scatter/UMAP plot
-2. A segmentation panel appears below the plot with the title showing the islet name and donor info (case ID, disease status, age, gender)
+2. A segmentation panel appears below the plot with the title showing the islet name and donor info (case ID, disease status, age, sex)
 
 ### Panel Layout
 

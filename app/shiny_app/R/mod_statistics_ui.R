@@ -90,16 +90,25 @@ statistics_ui <- function(id) {
     uiOutput(ns("pseudorep_banner")),
 
     fluidRow(style = "display: flex; flex-wrap: wrap;",
-      column(5,
+      column(4,
         div(class = "card", style = "padding: 15px; margin-bottom: 15px; height: 100%;",
           h5("Hypothesis Testing"),
           tableOutput(ns("test_results_table"))
         )
       ),
-      column(7,
+      column(4,
         div(class = "card", style = "padding: 15px; margin-bottom: 15px; height: 100%;",
           h5("Effect Size Forest Plot"),
           plotlyOutput(ns("forest_plot"), height = "350px")
+        )
+      ),
+      column(4,
+        div(class = "card", style = "padding: 15px; margin-bottom: 15px; height: 100%;",
+          h5("Area Under Curve by Donor Group"),
+          plotlyOutput(ns("auc_plot"), height = "280px"),
+          hr(style = "margin: 10px 0;"),
+          tableOutput(ns("auc_table")),
+          uiOutput(ns("auc_interpretation"))
         )
       )
     ),
@@ -111,9 +120,9 @@ statistics_ui <- function(id) {
     section_heading("3", "Size-Dependent Patterns",
                     "Does the group effect depend on islet size? Each diameter bin is tested independently (donor-level means per bin)."),
 
-    fluidRow(
+    fluidRow(style = "display: flex; flex-wrap: wrap;",
       column(6,
-        div(class = "card", style = "padding: 15px; margin-bottom: 15px;",
+        div(class = "card", style = "padding: 15px; margin-bottom: 15px; height: 100%;",
           h5("Stratified Tests by Islet Diameter"),
           tags$small(style = "color: #888; display: block; margin-bottom: 8px;",
             "Tests use donor-level means within each size bin. ",
@@ -123,7 +132,7 @@ statistics_ui <- function(id) {
         )
       ),
       column(6,
-        div(class = "card", style = "padding: 15px; margin-bottom: 15px;",
+        div(class = "card", style = "padding: 15px; margin-bottom: 15px; height: 100%;",
           h5("Trend Analysis (Kendall \u03c4)"),
           tags$small(style = "color: #888; display: block; margin-bottom: 8px;",
             "Each point is one diameter bin. Kendall \u03c4 measures the ",
@@ -132,7 +141,7 @@ statistics_ui <- function(id) {
             tags$strong("\u03c4 < 0:"), " feature decreases. ",
             tags$strong("\u03c4 \u2248 0:"), " no monotonic trend. ",
             "Bins with <3 donors are skipped."),
-          plotlyOutput(ns("trend_plot"), height = "320px")
+          plotlyOutput(ns("trend_plot"), height = "400px")
         )
       )
     )
@@ -142,17 +151,8 @@ statistics_ui <- function(id) {
     uiOutput(ns("section_confounders_heading")),
 
     fluidRow(
-      column(6,
+      column(12,
         uiOutput(ns("demographics_card"))
-      ),
-      column(6,
-        div(class = "card", style = "padding: 15px; margin-bottom: 15px;",
-          h5("Area Under Curve by Donor Group"),
-          plotlyOutput(ns("auc_plot"), height = "280px"),
-          hr(style = "margin: 10px 0;"),
-          tableOutput(ns("auc_table")),
-          uiOutput(ns("auc_interpretation"))
-        )
       )
     ),
 
