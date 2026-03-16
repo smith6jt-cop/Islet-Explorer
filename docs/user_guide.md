@@ -28,7 +28,7 @@ Interactive web application for exploring pancreatic islet CODEX multiplexed ima
 
 The app loads from a single enriched H5AD file (`data/islet_explorer.h5ad`, ~70 MB) containing:
 
-- **5,214 islets** from 14 nPOD donors (ND, Aab+, T1D)
+- **5,214 islets** from 15 nPOD donors (ND, Aab+, T1D)
 - **31 protein markers** (mean expression per islet)
 - **Pseudotime trajectory** (DPT with INS root, scVI-corrected)
 - **21 phenotype proportions** (from single-cell phenotyping)

@@ -1,52 +1,38 @@
 # Islet Explorer
 
-Interactive web applications for exploring human pancreatic islet measurements from multiplex imaging studies. Analyze islet composition, cell type distributions, and marker expression patterns across donor groups (Non-Diabetic, Autoantibody-positive, Type 1 Diabetic).
+Interactive R Shiny application for exploring pancreatic islet CODEX multiplexed imaging data from nPOD donors. Tracks insulin loss, immune infiltration, and cellular microenvironment changes across the ND → Aab+ → T1D disease progression.
 
 <div align="center">
 
 [![GitHub](https://img.shields.io/badge/GitHub-Repository-blue.svg)](https://github.com/smith6jt-cop/Islet-Explorer)
 [![R Shiny](https://img.shields.io/badge/R-Shiny-blue.svg)](https://shiny.rstudio.com/)
-[![Python Panel](https://img.shields.io/badge/Python-Panel-green.svg)](https://panel.holoviz.org/)
 
 </div>
 
 ## Overview
 
-Islet Explorer provides two complementary interactive web applications for analyzing pancreatic islet data:
+Islet Explorer is a modular R Shiny application for analyzing **5,214 islets** from **15 nPOD donors** across three disease stages. The app loads from a single enriched H5AD file (`data/islet_explorer.h5ad`) containing 31 protein markers, pseudotime trajectory, 21 phenotype proportions, donor demographics, 62 neighborhood metrics, and Leiden clustering — with Excel fallback for reduced-feature operation.
 
-- **R Shiny App** (`app/shiny_app/`) - Production-ready application with trajectory analysis and embedded OME-TIFF viewer
-- **Python Panel App** (`app/panel_app/`) - Alternative implementation with AI-powered analysis assistant
+### Key Capabilities
 
-Both applications work with the same data format (`master_results.xlsx`) and provide:
-- Interactive scatter plots of islet metrics by size and donor group
-- Statistical analysis (ANOVA, pairwise comparisons, effect sizes)
-- Islet composition analysis (insulin, glucagon, somatostatin fractions)
-- Quality assurance and data diagnostics
-- OME-TIFF image viewing capabilities
+- **6 interactive tabs**: Plot, Trajectory, Viewer, Statistics, Spatial, AI Assistant
+- **Single-cell drill-down**: Click any islet to view segmentation boundaries and cell composition
+- **Pseudotime trajectory**: Diffusion pseudotime (DPT) with INS root, cell-count-weighted visualization
+- **Spatial neighborhood analysis**: Immune infiltration, enrichment z-scores, distance metrics
+- **Leiden clustering**: 4 resolution levels with UMAP visualization
+- **AI-powered analysis**: Chat assistant via UF Navigator API
+- **Configurable palettes**: Paul Tol (default), Bright, Okabe-Ito, Diverging — synced across all tabs
+- **Demographic filters**: Age, gender, autoantibody status
 
-## Key Features
+### Disease Groups
 
-### Data Analysis
-- **Donor Group Comparison**: Analyze differences between ND (Non-Diabetic), Aab+ (Autoantibody-positive), and T1D (Type 1 Diabetic) donors
-- **Size-Based Analysis**: Explore how islet size correlates with cellular composition and marker expression
-- **Autoantibody Filtering**: Filter Aab+ donors by specific autoantibodies (GADA, IA2A, ZnT8A, IAA, mIAA)
-- **Normalization Options**: Apply global z-score or robust per-donor normalization
-- **Statistical Testing**: One-way ANOVA with Benjamini-Hochberg correction, pairwise t-tests
-
-### Visualization
-- **Interactive Plots**: Mean ± SE plots with plotly/ggplot2 interactivity
-- **Distribution Comparisons**: Violin plots and density distributions by donor group
-- **Trajectory Analysis** (R Shiny): UMAP and pseudotime analysis with slingshot
-- **Image Viewer**: Embedded Avivator/Viv viewer for local OME-TIFF files
-
-### Data Processing
-- **Region Synthesis**: Automatically compute union regions from core + band measurements
-- **Quality Checks**: Built-in validation for data completeness and consistency
-- **Flexible Metrics**: Support for markers, targets, and composition data
+| Group | Color (default) | Description |
+|-------|-----------------|-------------|
+| **ND** | Steel Blue (#4477AA) | Non-diabetic control donors |
+| **Aab+** | Burnt Umber (#CC6633) | Autoantibody-positive (pre-T1D) |
+| **T1D** | Forest Green (#228833) | Type 1 diabetic donors |
 
 ## Quick Start
-
-### R Shiny Application (Recommended)
 
 ```bash
 # Install R dependencies
@@ -56,354 +42,315 @@ Rscript scripts/install_shiny_deps.R
 R -q -e "shiny::runApp('app/shiny_app', launch.browser=TRUE)"
 ```
 
-The app will open in your default web browser at `http://127.0.0.1:XXXX`.
-
-### Python Panel Application
-
-```bash
-# Create virtual environment
-cd app/panel_app
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Run the application
-panel serve app.py --show --autoreload
-```
+**Production URL**: `http://10.15.152.7:8080/islet-explorer/`
 
 ## Installation
 
 ### Prerequisites
 
-**For R Shiny App:**
-- R >= 4.2.0
-- CRAN packages: `shiny`, `readxl`, `dplyr`, `tidyr`, `stringr`, `ggplot2`, `plotly`, `broom`
-- Optional: Bioconductor packages for trajectory analysis (`slingshot`, `SingleCellExperiment`)
+**R Shiny App (R >= 4.2.0):**
 
-**For Python Panel App:**
-- Python >= 3.9
-- See `app/panel_app/requirements.txt` for full dependency list
+| Package | Purpose |
+|---------|---------|
+| `shiny`, `shinyjs` | App framework |
+| `readxl` | Excel fallback data loading |
+| `dplyr`, `tidyr`, `stringr` | Data wrangling |
+| `ggplot2`, `plotly` | Visualization |
+| `broom`, `jsonlite` | Stats and JSON |
+| `scales` | Axis formatting |
+| `sf` | GeoJSON segmentation viewer (optional) |
+| `anndata`, `reticulate` | H5AD loading, trajectory (optional) |
+| `httr2` | AI assistant API calls (optional) |
+| `vitessceR` | Embedded OME-TIFF viewer (optional) |
 
-**For Data Processing:**
-- Python >= 3.9 with `pandas`, `openpyxl` for building `master_results.xlsx`
+**Python Pipeline (conda `scvi-env`):**
+- `scanpy`, `anndata`, `scvi-tools`, `sklearn`, `scib-metrics`, `scipy`
 
-### Detailed Installation
-
-#### R Shiny App
+### Install
 
 ```bash
-# Automated installation of all dependencies
+# R dependencies (automated)
 Rscript scripts/install_shiny_deps.R
 
-# Optional: Install Bioconductor packages for trajectory analysis
+# Optional: Install Bioconductor packages for trajectory + viewer
 INSTALL_VITESSCER=1 Rscript scripts/install_shiny_deps.R
-```
 
-#### Python Panel App
-
-```bash
-cd app/panel_app
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-```
-
-#### Avivator Image Viewer (Optional)
-
-```bash
-# Install static Avivator bundle for OME-TIFF viewing
+# Optional: Avivator image viewer static bundle
 ./scripts/install_avivator.sh
 ```
 
-This installs the Avivator viewer into `app/shiny_app/www/avivator/`.
+## Application Tabs
 
-## Data Requirements
+### Plot Tab
 
-### Input Data Format
+Primary exploration interface with sidebar controls shared with Statistics.
 
-The applications require a `master_results.xlsx` file with the following sheets:
+- **Scatter mode**: Feature expression vs islet diameter (31 markers, targets)
+- **Composition mode**: Cell type proportions with 4 option groups:
+  - Hormone Fractions (INS, GCG, SST)
+  - Cell Type Proportions (21 phenotypes)
+  - Peri-Islet Proportions (20 μm expansion zone)
+  - Immune Metrics (infiltration ratios, density)
+- **Filters**: Donor status, autoantibody (GADA, IA2A, ZnT8A, IAA, mIAA), age range, gender, diameter range
+- **Normalization**: None, global z-score, robust per-donor (median/MAD×1.4826)
+- **Click interaction**: Click any point to open islet segmentation + single-cell drill-down
 
-1. **Islet_Targets**: Target density and count measurements
-   - Columns: `Case ID`, `Donor Status`, `region`, `class`, `region_um2`, `area_um2`, `area_density`, `count`
-   - Region format: `Islet_<number>_<type>` (e.g., `Islet_64_core`, `Islet_64_band`)
+### Trajectory Tab
 
-2. **Islet_Markers**: Marker positivity per islet region
-   - Columns: `Case ID`, `Donor Status`, `region`, `marker`, `n_cells`, `pos_count`, `pos_frac`
+Pseudotime analysis computed via diffusion pseudotime (DPT) with INS as root anchor.
 
-3. **Islet_Composition**: Cell type composition
-   - Columns: `Case ID`, `Donor Status`, `islet_id`, `cells_total`, `Ins_any`, `Glu_any`, `Stt_any`
+- **UMAP scatter**: Color by donor status, selected feature (viridis inferno), or pseudotime
+- **Cell-count weighting**: Point size by `sqrt(total_cells)` — honestly represents measurement quality
+- **Weighted LOESS trends**: `log1p(total_cells)` weights prevent noisy small islets from distorting fits
+- **Multi-feature heatmap**: Z-scored expression along pseudotime, clamped [-2.5, 2.5]
+- **Click to drill-down**: Opens segmentation viewer and can jump to OME-TIFF Viewer tab
 
-4. **LGALS3** (Optional): Additional LGALS3 marker data
+### Statistics Tab
 
-### Donor Metadata
+Five-section narrative layout with shared sidebar from Plot tab:
 
-Donor information with:
-- `Case ID`: Zero-padded 4-digit string (e.g., "0001", "0064")
-- `Donor Status`: One of ND, Aab+, T1D
-- Autoantibody flags: `AAb_GADA`, `AAb_IA2A`, `AAb_ZnT8A`, `AAb_IAA`, `AAb_mIAA`
+1. **Configure Analysis** — Test type, alpha, outlier handling, bin width, diameter range
+2. **Primary Results** — Hypothesis table + forest plot (Cohen's d with CI)
+3. **Size-Dependent Patterns** — BH-corrected stratified test heatmap + Kendall τ trend analysis
+4. **Confounders & Deeper Analysis** — Demographics + AUC analysis
+5. **Methods Reference** — Dynamic statistical methods description
 
-### Building master_results.xlsx
+### Spatial Tab
+
+Three-panel layout with neighborhood analysis cards:
+
+- **Tissue scatter** (ggplot2, ~177K cells/donor): Foreground/background layering, brush-to-zoom, phenotype filtering
+- **Leiden panel**: UMAP of 5,214 islets colored by Leiden cluster (4 resolutions: 0.3/0.5/0.8/1.0) + stacked bar chart
+- **Neighborhood analysis cards**:
+  - **Immune Infiltration**: Violin plots + peri vs core scatter
+  - **Immune Cell Enrichment**: Grouped bar chart (7 immune types × 3 stages) + heatmap
+  - **Immune Proximity**: Distance box plots + enrichment vs distance scatter
+
+### Viewer Tab
+
+Embedded OME-TIFF viewer using Avivator/Viv for multiplex image visualization with configurable channel mappings.
+
+### AI Assistant
+
+Chat interface powered by UF Navigator API (`gpt-oss-20b` / `gpt-oss-120b` reasoning model). Supports streaming responses with token budget tracking.
+
+### Single-Cell Drill-Down
+
+Available from both Plot and Trajectory tabs when clicking an islet:
+
+- **Segmentation view**: GeoJSON boundary polygons from QuPath
+- **Single-cell overlay**: 5,214 per-islet CSV files with 37 columns (coordinates, phenotype, 31 markers)
+- **Composition summary**: Horizontal bar chart + cell count table (core/peri breakdown)
+- **Color by**: Phenotype (21 categories) or any protein marker
+
+## Data
+
+### Primary Data File
+
+`data/islet_explorer.h5ad` (~70 MB) — single enriched file containing all app data:
+
+- 5,214 islets from 15 nPOD donors
+- 31 protein markers (mean expression per islet)
+- Pseudotime trajectory (DPT with INS root, scVI-corrected)
+- 21 phenotype proportions (from single-cell phenotyping)
+- Donor demographics (age, gender, autoantibody status)
+- 62 neighborhood metrics (peri-islet composition, immune infiltration, enrichment z-scores, distances)
+- Leiden clustering at 4 resolutions + UMAP coordinates
+- QuPath groovy data (targets, markers, composition, LGALS3)
+
+**Fallback**: `data/master_results.xlsx` (4 sheets: Islet_Markers, Islet_Targets, Islet_Composition, LGALS3) — no phenotype proportions, demographics, or neighborhood metrics.
+
+### Supporting Data Files
+
+| File | Description |
+|------|-------------|
+| `data/adata_ins_root.h5ad` | Trajectory source (5,214 islets, pseudotime, UMAP) |
+| `data/cells/*.csv` | Per-islet single-cell CSVs (5,214 files, ~203 MB) |
+| `data/donors/*.csv` | Per-donor tissue CSVs for Spatial tab (15 files, ~78 MB) |
+| `data/neighborhood_metrics.csv` | Per-islet peri-islet metrics (5,214 rows, 62 columns) |
+| `data/islet_spatial_lookup.csv` | Islet centroid coordinates |
+| `data/json/*.geojson` | QuPath segmentation boundaries |
+| `data/gson/*.geojson.gz` | Compressed segmentation boundaries |
+| `data/phenotype_rules.csv` | Rules1 phenotyping (19 phenotypes, 18 markers) |
+
+### Data Conventions
+
+**Islet keying**: All joins use (`Case ID`, `Donor Status`, `islet_key`). `islet_key` is derived from region names (e.g., `Islet_200` from `Islet_200_core`).
+
+**Region types**: `islet_core`, `islet_band`, `islet_union` — no other spellings.
+
+**Islet diameter**: `islet_diam_um = 2 * sqrt(core_region_um2 / pi)`
+
+**Region synthesis**: If union rows are missing — Targets: synthesize `count` only. Markers: synthesize `n_cells` and `pos_count` as sums, compute `pos_frac`.
+
+**Factor ordering**: ND < Aab+ < T1D (always).
+
+## Data Pipeline
+
+```
+single_cell_analysis/CODEX_scvi_BioCov_phenotyped_newDuctal.h5ad  (2.6M cells, 31 markers)
+  │
+  ├── scripts/reaggregate_islets.py          → islet-level aggregation + trajectory + Leiden
+  │     → islet_analysis/islets_core_fixed.h5ad      (5,214 islets)
+  │     → data/adata_ins_root.h5ad                    (+ pseudotime + UMAP)
+  │     → islet_analysis/islets_core_clustered.h5ad   (+ Leiden at 4 resolutions)
+  │
+  ├── scripts/compute_neighborhood_metrics.py → data/neighborhood_metrics.csv
+  ├── scripts/extract_per_islet_cells.py      → data/cells/*.csv
+  ├── scripts/extract_per_donor_tissue.py     → data/donors/*.csv
+  │
+  └── scripts/build_h5ad_for_app.py           → data/islet_explorer.h5ad (all app data)
+```
+
+### Running Pipeline Scripts
 
 ```bash
-# From TSV files in data/results/
-python scripts/build_master_excel.py
+conda activate scvi-env
 
-# From a ZIP archive of donor data
-python scripts/compile_donors.py --input donors.zip --output data/master_results.xlsx
+# Full rebuild from single-cell H5AD (~15 min)
+python scripts/reaggregate_islets.py
+
+# Compute peri-islet neighborhood metrics (~3 min)
+python scripts/compute_neighborhood_metrics.py
+
+# Extract per-islet single-cell CSVs (~5 min)
+python scripts/extract_per_islet_cells.py
+
+# Extract per-donor tissue CSVs for Spatial tab (~2 min)
+python scripts/extract_per_donor_tissue.py
+
+# Build enriched app H5AD (merges all sources)
+python scripts/build_h5ad_for_app.py
+
+# Build Excel fallback (from groovy TSV exports)
+python scripts/build_master_excel.py
 ```
 
 ## Project Structure
 
 ```
 Islet-Explorer/
-├── app/
-│   ├── shiny_app/           # R Shiny application
-│   │   ├── app.R            # Main application file
-│   │   ├── README.md        # Shiny-specific documentation
-│   │   └── www/             # Static assets and image viewer
-│   │       └── avivator/    # Embedded OME-TIFF viewer
-│   └── panel_app/           # Python Panel application
-│       ├── app.py           # Main application file
-│       ├── requirements.txt # Python dependencies
-│       ├── components/      # UI components
-│       └── utils/           # Data processing utilities
-├── scripts/
-│   ├── install_shiny_deps.R      # Install R dependencies
-│   ├── install_avivator.sh       # Install image viewer
-│   ├── build_master_excel.py     # Build Excel from TSVs
-│   ├── compile_donors.py         # Compile donor data from ZIP
-│   ├── compute_pseudotime.R      # Trajectory analysis
-│   ├── convert_to_ometiff.sh     # Image format conversion
-│   └── ...                       # Additional utility scripts
-└── data/                    # Data directory (not in repo, see .gitignore)
-    └── master_results.xlsx  # Main data file
+├── app/shiny_app/                 # Modular R Shiny application
+│   ├── app.R                      # Entrypoint: UI layout, CSS, server wiring
+│   ├── R/
+│   │   ├── 00_globals.R           # Package loads, constants, palettes, paths
+│   │   ├── data_loading.R         # load_master_auto(), prep_data(), H5AD loading
+│   │   ├── utils_stats.R          # summary_stats(), cohens_d(), pairwise_wilcox()
+│   │   ├── utils_safe_join.R      # safe_left_join(), add_islet_key()
+│   │   ├── segmentation_helpers.R # GeoJSON cache, segmentation plot builders
+│   │   ├── drilldown_helpers.R    # Single-cell overlay, phenotype colors
+│   │   ├── spatial_helpers.R      # Per-donor tissue CSV loader with caching
+│   │   ├── viewer_helpers.R       # Avivator URL builders, channel config
+│   │   ├── ai_helpers.R           # OpenAI/UF Navigator API, streaming
+│   │   ├── mod_plot_*.R           # Plot tab module (UI + server)
+│   │   ├── mod_trajectory_*.R     # Trajectory tab module
+│   │   ├── mod_statistics_*.R     # Statistics tab module
+│   │   ├── mod_spatial_*.R        # Spatial tab module
+│   │   ├── mod_viewer_*.R         # Viewer tab module
+│   │   └── mod_ai_assistant_*.R   # AI chat panel module
+│   └── www/                       # Static assets (logo, avivator/)
+├── data/                          # Data files (see Data section)
+├── scripts/                       # Pipeline and utility scripts
+├── islet_analysis/                # Python analysis notebooks and modules
+├── notebooks/                     # Validation notebooks (scVI QC, trajectory)
+├── docs/
+│   ├── user_guide.md              # End-user documentation
+│   └── competitive_landscape.md
+└── CLAUDE.md                      # Developer reference (architecture, conventions)
 ```
-
-## Usage
-
-### Application Tabs
-
-#### Plot Tab
-Visualize islet metrics as a function of size:
-1. Select metric type (Markers, Targets, or Composition)
-2. Choose specific marker/target/component
-3. Apply normalization (optional)
-4. Filter by autoantibodies (for Aab+ donors)
-5. View mean ± SE plots and distribution comparisons
-
-#### Statistics Tab
-Perform statistical analysis:
-- Global model: `value ~ donor_status + islet_diam_um`
-- Pairwise comparisons with size correction
-- Effect size calculations
-- Benjamini-Hochberg adjusted p-values
-
-#### Trajectory Tab (R Shiny)
-Analyze developmental trajectories:
-- UMAP visualization of islet space
-- Pseudotime computation with slingshot
-- Gene expression patterns along trajectories
-
-#### Viewer Tab
-View OME-TIFF multiplex images:
-- Embedded Avivator viewer
-- Channel-specific visualization
-- Configurable color mappings
-
-#### QA Tab
-Data quality diagnostics:
-- Region count validation
-- Missing value analysis
-- Donor group summaries
-
-### Keyboard Shortcuts & Tips
-
-- **R Shiny**: Use the sidebar to control filtering and normalization
-- **Python Panel**: AI assistant available for data interpretation (requires API key)
-- **Plots**: Hover over points for detailed information
-- **Export**: Download plots and tables using built-in export features
 
 ## Development
 
-### Running in Development Mode
+### Running Locally
 
-**R Shiny:**
 ```bash
-# With automatic reloading (in RStudio)
-shiny::runApp('app/shiny_app')
-
 # From command line
 R -q -e "shiny::runApp('app/shiny_app', launch.browser=FALSE)"
+
+# Or use the VS Code task: "Run Shiny app to reproduce issues"
 ```
 
-**Python Panel:**
-```bash
-cd app/panel_app
-panel serve app.py --show --autoreload --dev
-```
+### Deployment
 
-### Testing Data Preparation
+- **nginx** (port 8080) reverse-proxies `/islet-explorer/` → **shiny-server** (port 3838)
+- Symlink: `/srv/shiny-server/islet-explorer` → `app/shiny_app/`
+- Code changes take effect when shiny-server spawns a fresh R worker (no restart needed)
 
-```bash
-# Test data loading and preparation
-Rscript scripts/test_shiny_prep.R
-
-# Diagnose islet data quality
-Rscript scripts/diagnose_islets.R
-Rscript scripts/diagnose_marker_regions.R
-
-# Audit for missing values
-Rscript scripts/na_audit.R
-```
-
-### Working with Images
+### Testing & Diagnostics
 
 ```bash
-# Convert images to OME-TIFF format
-./scripts/convert_to_ometiff.sh input.tiff output.ome.tiff
-
-# Convert to OME-ZARR format (alternative)
-./scripts/convert_to_omezarr.sh input.tiff output.zarr
-
-# Annotate channel names
-python scripts/annotate_ome_tiff_channels.py input.ome.tiff channel_names.txt
-
-# Auto-color channels
-python scripts/auto_color_ome_tiff_channels.py input.ome.tiff
+Rscript scripts/test_shiny_prep.R            # Test data loading
+Rscript scripts/diagnose_islets.R            # Islet data quality
+Rscript scripts/diagnose_marker_regions.R    # Marker region checks
+Rscript scripts/na_audit.R                   # Missing value audit
+./scripts/clear_shiny_cache.sh               # Clear Shiny cache
 ```
 
 ### Environment Variables
 
-**R Shiny App:**
-- `LOCAL_IMAGE_ROOT`: Directory containing OME-TIFF files for viewer
+| Variable | Purpose |
+|----------|---------|
+| `LOCAL_IMAGE_ROOT` | Directory containing OME-TIFF files for Viewer tab |
+| `KEY` | UF Navigator API key (for AI assistant) |
+| `BASE` | API base URL (defaults to `https://api.openai.com/v1`) |
+| `RETICULATE_PYTHON` | Python binary for reticulate/anndata |
+| `DEBUG_CREDENTIALS` | Set to `1` for verbose credential loading |
+| `VIEWER_DEBUG` | Set to `1` for Viewer tab debug output |
 
-**Python Panel App:**
-- `ISLET_DATA_PATH`: Path to `master_results.xlsx` (default: `../../data/master_results.xlsx`)
-- `LOCAL_IMAGE_ROOT`: Directory containing OME-TIFF files
-- `NAVIGATOR_API_URL`: AI API endpoint for analysis assistant
-- `NAVIGATOR_API_KEY`: API key for AI features
+### Working with Images
 
-## Data Conventions
-
-### Islet Keying
-All data joins use three keys:
-- `Case ID`: Donor identifier (zero-padded 4-digit string)
-- `Donor Status`: ND, Aab+, or T1D
-- `islet_key`: Derived from region name (e.g., `Islet_200` from `Islet_200_core`)
-
-### Region Types
-Three normalized region types:
-- `islet_core`: Central region of islet
-- `islet_band`: Peripheral band region
-- `islet_union`: Combined core + band region
-
-### Islet Diameter
-Calculated from CORE region area:
-```
-islet_diam_um = 2 * sqrt(core_region_um2 / pi)
+```bash
+./scripts/convert_to_ometiff.sh input.tiff output.ome.tiff
+./scripts/convert_to_omezarr.sh input.tiff output.zarr
+python scripts/annotate_ome_tiff_channels.py input.ome.tiff channel_names.txt
+python scripts/auto_color_ome_tiff_channels.py input.ome.tiff
 ```
 
-### Region Synthesis
-If union rows are missing:
-- **Targets**: Synthesize `count` only as `union = core + band`
-- **Markers**: Synthesize `n_cells` and `pos_count` as sums, compute `pos_frac`
+## Contributing
+
+### Conventions
+
+- **Data keys**: Preserve (`Case ID`, `Donor Status`, `islet_key`) three-key system
+- **Region labels**: Only `islet_core`, `islet_band`, `islet_union`
+- **Factor ordering**: ND < Aab+ < T1D
+- **Normalization**: `none`, `global z-score`, `robust per-donor` (median/MAD×1.4826)
+- **Statistical models**: Global `value ~ donor_status + islet_diam_um`; pairwise on residuals; BH correction
+- **Large scatter plots (>50K points)**: Use `ggplot2::renderPlot()` not plotly
+- **Coordinate convention**: `coord_fixed() + scale_y_reverse()` for tissue scatter (microscopy convention)
+
+### Architecture Notes
+
+- The Plot sidebar is shared with Statistics via `conditionalPanel`
+- Root-level outputs (`islet_segmentation_view`, `islet_drilldown_view`, etc.) are defined in `app.R` and shared by Plot + Trajectory modules with active-tab guards to prevent duplicate DOM IDs
+- Donor palette is synced across 3 non-namespaced `selectInput`s via `observeEvent` + `updateSelectInput`
+
+See [CLAUDE.md](CLAUDE.md) for full architectural documentation.
 
 ## Troubleshooting
 
-### Common Issues
-
 **"Package not found" errors:**
 ```bash
-# R packages
 Rscript scripts/install_shiny_deps.R
-
-# Python packages
-pip install -r app/panel_app/requirements.txt
 ```
 
-**"Cannot find master_results.xlsx":**
-- Ensure data file exists at `data/master_results.xlsx`
-- Build from TSVs: `python scripts/build_master_excel.py`
-- Check that data is not ignored by .gitignore
+**"Cannot find islet_explorer.h5ad" / "Cannot find master_results.xlsx":**
+- Run the data pipeline scripts (see [Data Pipeline](#data-pipeline))
+- Or ensure files exist at `data/islet_explorer.h5ad` and `data/master_results.xlsx`
+
+**Trajectory/demographics not available:**
+- Install `anndata`: `BiocManager::install('anndata')`
+- Ensure `data/islet_explorer.h5ad` exists (Excel fallback lacks these features)
 
 **Image viewer not loading:**
 ```bash
-# Install Avivator viewer
 ./scripts/install_avivator.sh
-
-# Verify static files
 ./scripts/verify_static_images.sh
-```
-
-**Trajectory analysis not available:**
-```bash
-# Install Bioconductor packages
-INSTALL_VITESSCER=1 Rscript scripts/install_shiny_deps.R
 ```
 
 **App performance issues:**
 ```bash
-# Clear Shiny cache
 ./scripts/clear_shiny_cache.sh
-
-# Reduce data size or increase bin width in UI
 ```
-
-### Getting Help
-
-1. Check application-specific READMEs:
-   - [R Shiny App Documentation](app/shiny_app/README.md)
-   - [Python Panel App Documentation](app/panel_app/README.md)
-
-2. Review diagnostic output in the console/terminal
-
-3. Run data quality scripts to identify issues:
-   ```bash
-   Rscript scripts/na_audit.R
-   Rscript scripts/diagnose_islets.R
-   ```
-
-## Contributing
-
-### Development Workflow
-
-1. **Code Style**
-   - R: Follow tidyverse style guide
-   - Python: Follow PEP 8 conventions
-
-2. **Data Conventions**
-   - Preserve three-key system (`Case ID`, `Donor Status`, `islet_key`)
-   - Use normalized region labels (`islet_core`, `islet_band`, `islet_union`)
-   - Maintain donor group ordering: ND < Aab+ < T1D
-
-3. **Testing**
-   - Test with representative data
-   - Verify plots and statistics output
-   - Check edge cases (missing data, single donors, etc.)
-
-4. **Documentation**
-   - Update README when adding features
-   - Document new scripts in their headers
-   - Add inline comments for complex logic
-
-### Project Conventions
-
-**Normalization Options:**
-- `none`: Raw values
-- `global z-score`: (value - mean) / sd across all data
-- `robust per-donor`: (value - median) / (MAD * 1.4826) per donor
-
-**Donor Colors:**
-- ND: `#1f77b4` (blue)
-- Aab+: `#ff7f0e` (orange)
-- T1D: `#d62728` (red)
-
-**Statistical Models:**
-- Global: `value ~ donor_status + islet_diam_um`
-- Pairwise: t-tests on residuals from `value ~ islet_diam_um`
-- Multiple testing correction: Benjamini-Hochberg (BH)
 
 ## License
 
@@ -414,22 +361,20 @@ Research use only. Contact the repository maintainers for licensing and collabor
 If you use Islet Explorer in your research, please cite this repository:
 
 ```
-Islet Explorer: Interactive web applications for exploring human pancreatic islet measurements
+Islet Explorer: Interactive Shiny application for exploring human pancreatic islet
+CODEX multiplexed imaging data
 https://github.com/smith6jt-cop/Islet-Explorer
 ```
 
 ## Acknowledgments
 
-- Developed for analysis of human pancreatic islet multiplex imaging data
-- Built with R Shiny and Python Panel frameworks
+- Developed for analysis of human pancreatic islet CODEX multiplexed imaging data from nPOD donors
+- Built with R Shiny, ggplot2, plotly, and sf
 - Avivator/Viv viewer for OME-TIFF visualization
-- Statistical analysis with R stats, broom, and scipy/statsmodels
-
-## Contact
-
-For questions, issues, or collaboration opportunities, please open an issue on GitHub or contact the repository maintainers.
+- AI assistant powered by UF Navigator API
+- Statistical analysis with R stats and broom
 
 ---
 
-**Version**: 1.0  
-**Last Updated**: December 2024
+**Version**: 2.0 (modular architecture)
+**Last Updated**: March 2026
