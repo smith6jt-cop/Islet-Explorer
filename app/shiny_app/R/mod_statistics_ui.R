@@ -43,6 +43,7 @@ statistics_ui <- function(id) {
             )
           ),
           hr(style = "margin: 10px 0;"),
+          # Row 1: Analysis settings
           fluidRow(
             column(2,
               radioButtons(ns("test_type"), "Test Type",
@@ -54,18 +55,30 @@ statistics_ui <- function(id) {
                 tags$strong("Non-parametric"), " (Kruskal-Wallis / Wilcoxon): no normality assumption; based on ranks."
               )
             ),
-            column(2,
-              selectInput(ns("alpha"), "Significance (\u03b1)",
+            column(1,
+              selectInput(ns("alpha"), "\u03b1",
                           choices = c("0.05", "0.01", "0.001"), selected = "0.05")
             ),
             column(2,
-              checkboxInput(ns("stats_remove_outliers"), "Remove outliers (>3 SD)", value = TRUE)
+              checkboxInput(ns("stats_remove_outliers"), "Remove outliers (>3 SD)", value = TRUE),
+              numericInput(ns("stats_min_cells"), "Min cells/islet",
+                           value = 1, min = 1, max = 200, step = 1)
             ),
-            column(3,
+            column(7,
+              uiOutput(ns("normality_result"))
+            )
+          ),
+          hr(style = "margin: 6px 0;"),
+          # Row 2: Binning settings
+          fluidRow(
+            column(2,
+              checkboxInput(ns("stats_no_binning"), "Skip size stratification", value = FALSE)
+            ),
+            column(4,
               sliderInput(ns("bin_width"), "Per-bin width (\u00b5m)",
-                          min = 1, max = 75, value = 50, step = 1)
+                          min = 5, max = 150, value = 50, step = 5)
             ),
-            column(3,
+            column(4,
               sliderInput(ns("stats_diam_range"), "Diameter range (\u00b5m)",
                           min = 0, max = 500, value = c(0, 350), step = 10)
             )
@@ -76,7 +89,9 @@ statistics_ui <- function(id) {
 
     # ===== SECTION 2: Primary Results =====
     section_heading("2", "Primary Results",
-                    "Global test across all three donor groups, plus pairwise comparisons with effect sizes."),
+                    "Donor-level tests (N=15) to avoid pseudoreplication, with mixed-effects sensitivity analysis."),
+
+    uiOutput(ns("pseudorep_banner")),
 
     fluidRow(style = "display: flex; flex-wrap: wrap;",
       column(5,
@@ -94,17 +109,20 @@ statistics_ui <- function(id) {
     ),
 
     # ===== SECTION 3: Size-Dependent Patterns =====
+    conditionalPanel(
+      condition = sprintf("!input['%s']", ns("stats_no_binning")),
+
     section_heading("3", "Size-Dependent Patterns",
-                    "Does the group effect depend on islet size? Each diameter bin is tested independently to detect effect modification."),
+                    "Does the group effect depend on islet size? Each diameter bin is tested independently (donor-level means per bin)."),
 
     fluidRow(
       column(6,
         div(class = "card", style = "padding: 15px; margin-bottom: 15px;",
           h5("Stratified Tests by Islet Diameter"),
           tags$small(style = "color: #888; display: block; margin-bottom: 8px;",
-            "ANOVA and Kendall \u03c4 computed within each size bin. ",
-            "P-values are BH-corrected across bins to control false discovery rate. ",
-            "Identifies which size ranges drive or lack group differences."),
+            "Tests use donor-level means within each size bin. ",
+            "P-values are BH-corrected across bins. ",
+            "Bins with <2 donors per group are greyed out (untestable)."),
           plotlyOutput(ns("bin_heatmap"), height = "320px")
         )
       ),
@@ -113,11 +131,12 @@ statistics_ui <- function(id) {
           h5("Trend Analysis (Kendall \u03c4)"),
           tags$small(style = "color: #888; display: block; margin-bottom: 8px;",
             "Direction and strength of the ND \u2192 Aab+ \u2192 T1D gradient within each size bin. ",
-            "Positive \u03c4 = increases with disease progression."),
+            "Positive \u03c4 = increases with disease progression. Wider bins recommended for donor-level tests."),
           plotlyOutput(ns("trend_plot"), height = "320px")
         )
       )
-    ),
+    )
+    ), # end conditionalPanel for Section 3
 
     # ===== SECTION 4: Confounders & Deeper Analysis =====
     section_heading("4", "Confounders & Deeper Analysis",

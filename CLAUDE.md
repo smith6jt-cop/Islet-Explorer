@@ -240,7 +240,32 @@ Cell centroids (`X_centroid`, `Y_centroid`) are in micrometers. GeoJSON polygons
 
 `build_segmentation_base_plot(info)` extracted from `render_islet_segmentation_plot()`. Returns ggplot with GeoJSON polygon layers + coord_sf (WITHOUT crosshairs or title). Reused by both `render_islet_segmentation_plot()` (adds crosshairs + title) and `render_islet_drilldown_plot()` (adds cell scatter layer).
 
-## Statistics Tab (Phase 6+14, Feb-Mar 2026)
+## Statistics Tab (Phase 6+14+16, Feb-Mar 2026)
+
+### Pseudoreplication Fix (Phase 16)
+
+The app has 5,214 islets from only **15 donors** (5 per group). Islets within a donor are correlated (shared biology, tissue processing, imaging). Phase 16 fixes this textbook pseudoreplication by:
+
+1. **Donor-level aggregation**: All tests use `aggregate_to_donor()` to compute per-donor means (N=15), not islet-level (N=5,214). This produces realistic p-values (0.01-0.05 range, not 1e-50).
+2. **Mixed-effects sensitivity**: `lmer_test_donor()` runs `lmerTest::lmer(value ~ donor_status + (1 | case_id))` on islet-level data with donor as random intercept. ICC quantifies donor-level clustering.
+3. **Min-cells filter**: `stats_min_cells` numericInput filters islets by `total_cells_core + total_cells_peri >= threshold` (like spatial tab's `nbr_min_cells`). Defaults to 1 (no filter).
+4. **Normality testing**: Shapiro-Wilk on donor-level means per group, with auto-suggestion for test type.
+5. **No-binning option**: `stats_no_binning` checkbox hides Section 3 (size-dependent analysis).
+6. **Bin slider fix**: Max increased from 75 to 150, step=5. Heatmap x-axis labels angled (-45°) to prevent overlap.
+7. **Per-bin donor-level**: `per_bin_donor_anova()` and `per_bin_donor_kendall()` aggregate to donor means within each bin. Bins with <2 donors per group are skipped (greyed out in heatmap).
+8. **Demographics on donor-level**: Age scatter shows 15 donor-level points with overall Pearson r. Gender-stratified tests note low power (~2-3 donors per gender per group).
+
+### Key Utilities (`utils_stats.R`)
+- `aggregate_to_donor(rdf, agg_fn)` -- Groups by `Case ID` + `donor_status`, computes mean/median of `value`, preserves age/gender
+- `lmer_test_donor(rdf)` -- Mixed-effects model, returns `list(p_value, icc, fit)`. Uses `car::Anova(fit, type="III")`.
+- `per_bin_donor_anova(df, ...)` -- Donor-level per-bin ANOVA. Skips bins where any group has <2 donors.
+- `per_bin_donor_kendall(df, ...)` -- Donor-level per-bin Kendall tau. Skips bins with <3 total donors.
+- `normality_tests(ddf)` -- Shapiro-Wilk per group, returns data.frame with `W`, `p_value`, `is_normal`
+
+### R Package Dependencies for Phase 16
+- `lmerTest` (3.1.3) -- Mixed-effects model with Satterthwaite df
+- `lme4` (1.1.37) -- `VarCorr()` for ICC computation
+- `car` (3.1.3) -- Type III ANOVA for mixed model
 
 ### Shared Sidebar Architecture
 The Plot sidebar (mode, feature, region, donor status, AAb, age, gender filters) is visible on both the Plot and Statistics tabs. Achieved via `conditionalPanel` condition `"input.tabs == 'Plot' || input.tabs == 'Statistics'"` and matching JS `adjustLayout()` logic in `app.R`. The Statistics module consumes `plot_returns$raw_df` and `plot_returns$summary_df` directly -- no data duplication.
@@ -248,11 +273,11 @@ The Plot sidebar (mode, feature, region, donor status, AAb, age, gender filters)
 ### 5-Section Narrative Layout
 Numbered sections with `section_heading()` helper (gradient blue pill badge + bold title + grey subtitle + light blue bottom border):
 
-1. **Configure Analysis** -- Overview banner, Run Statistics / CSV buttons, test type (with inline explanation), alpha, outliers, bin width, diameter range
-2. **Primary Results** -- Hypothesis table (col-5) + forest plot (col-7, 350px). Cards equal-height via `display: flex` row.
-3. **Size-Dependent Patterns** -- Stratified tests heatmap (col-6, BH-corrected q-values) + trend analysis (col-6, Kendall τ per bin). Both with explanatory `tags$small` subtitles.
-4. **Confounders & Deeper Analysis** -- Demographics (col-6, conditional) + merged AUC card (col-6: plot + table + interpretation)
-5. **Methods Reference** -- Subdued grey background (#f8f9fa), dynamic text
+1. **Configure Analysis** -- Overview banner, Run/CSV buttons, test type, alpha, outliers, min-cells filter, normality test results, no-binning checkbox, bin width, diameter range. Two control rows.
+2. **Primary Results** -- Pseudoreplication info banner (ICC, mixed-effects p) + hypothesis table (col-5, includes lmer row) + forest plot (col-7, 350px). Cards equal-height via `display: flex` row.
+3. **Size-Dependent Patterns** -- Wrapped in `conditionalPanel` for no-binning toggle. Donor-level stratified tests heatmap + trend analysis. Angled x-axis labels.
+4. **Confounders & Deeper Analysis** -- Demographics (donor-level scatter, overall correlation) + merged AUC card
+5. **Methods Reference** -- Updated to explain pseudoreplication, donor-level aggregation, ICC, mixed-effects, normality testing
 
 ### Multiple Testing Correction
 Per-bin ANOVA and Kendall τ p-values are BH-corrected across bins via `p.adjust(method = "BH")`. Heatmap shows `-log10(q)` (corrected) with star annotations using corrected values. Trend plot significance coloring also uses corrected p-values.

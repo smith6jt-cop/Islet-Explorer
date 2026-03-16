@@ -80,6 +80,149 @@ per_bin_kendall <- function(df, bin_col, group_col, value_col, mid_col = "diam_m
   arrange(out, mid)
 }
 
+# ---------- Donor-level aggregation (pseudoreplication fix) ----------
+
+#' Aggregate islet-level data to donor-level means
+#' Returns one row per donor with mean value, n_islets, and preserved metadata
+aggregate_to_donor <- function(rdf, agg_fn = c("mean", "median")) {
+  agg_fn <- match.arg(agg_fn)
+  fn <- if (agg_fn == "mean") mean else median
+  if (!"Case ID" %in% colnames(rdf)) return(rdf)
+  has_age <- "age" %in% colnames(rdf)
+  has_gender <- "gender" %in% colnames(rdf)
+  out <- rdf %>%
+    dplyr::group_by(`Case ID`, donor_status) %>%
+    dplyr::summarise(
+      value = fn(value, na.rm = TRUE),
+      n_islets = dplyr::n(),
+      .groups = "drop"
+    )
+  if (has_age) {
+    age_lookup <- rdf %>%
+      dplyr::group_by(`Case ID`) %>%
+      dplyr::summarise(age = dplyr::first(na.omit(age)), .groups = "drop")
+    out <- dplyr::left_join(out, age_lookup, by = "Case ID")
+  }
+  if (has_gender) {
+    gender_lookup <- rdf %>%
+      dplyr::group_by(`Case ID`) %>%
+      dplyr::summarise(gender = dplyr::first(na.omit(as.character(gender))), .groups = "drop")
+    out <- dplyr::left_join(out, gender_lookup, by = "Case ID")
+  }
+  out
+}
+
+#' Mixed-effects test: value ~ donor_status + (1 | Case ID)
+#' Returns list(p_value, icc, fit) or NULL on failure
+lmer_test_donor <- function(rdf) {
+  if (!requireNamespace("lmerTest", quietly = TRUE)) return(NULL)
+  if (!"Case ID" %in% colnames(rdf)) return(NULL)
+  rdf$case_id_f <- factor(rdf$`Case ID`)
+  fit <- lmerTest::lmer(value ~ donor_status + (1 | case_id_f), data = rdf)
+  # Type III ANOVA for donor_status p-value
+  at <- tryCatch(car::Anova(fit, type = "III"), error = function(e) NULL)
+  p_val <- if (!is.null(at) && "donor_status" %in% rownames(at)) {
+    as.numeric(at["donor_status", "Pr(>Chisq)"])
+  } else {
+    NA_real_
+  }
+  # ICC: donor variance / total variance
+  vc <- as.data.frame(lme4::VarCorr(fit))
+  donor_var <- vc$vcov[vc$grp == "case_id_f"]
+  resid_var <- vc$vcov[vc$grp == "Residual"]
+  icc <- if (length(donor_var) > 0 && length(resid_var) > 0 && (donor_var + resid_var) > 0) {
+    donor_var / (donor_var + resid_var)
+  } else {
+    NA_real_
+  }
+  list(p_value = p_val, icc = icc, fit = fit)
+}
+
+#' Per-bin ANOVA on donor-level means within each bin
+per_bin_donor_anova <- function(df, bin_col, group_col, value_col, mid_col = "diam_mid") {
+  if (nrow(df) == 0) return(tibble(bin = character(), mid = numeric(), p_anova = numeric()))
+  if (!"Case ID" %in% colnames(df)) return(per_bin_anova(df, bin_col, group_col, value_col, mid_col))
+  bmeta <- df %>% filter(!is.na(.data[[bin_col]])) %>%
+    group_by(.data[[bin_col]]) %>%
+    summarise(mid = suppressWarnings(as.numeric(first(na.omit(.data[[mid_col]])))), .groups = "drop")
+  res <- lapply(seq_len(nrow(bmeta)), function(i) {
+    b <- bmeta[[bin_col]][i]
+    sub <- df %>% filter(.data[[bin_col]] == b)
+    # Aggregate to donor means within this bin
+    ddf <- sub %>%
+      dplyr::group_by(`Case ID`, .data[[group_col]]) %>%
+      dplyr::summarise(value = mean(.data[[value_col]], na.rm = TRUE), .groups = "drop")
+    colnames(ddf)[colnames(ddf) == group_col] <- "grp"
+    # Need >= 2 groups with >= 2 donors each
+    grp_n <- ddf %>% dplyr::group_by(grp) %>% dplyr::summarise(n = dplyr::n(), .groups = "drop")
+    if (nrow(grp_n) < 2 || any(grp_n$n < 2)) return(NULL)
+    fit <- tryCatch(aov(value ~ grp, data = ddf), error = function(e) NULL)
+    if (is.null(fit)) return(NULL)
+    pval <- tryCatch({
+      at <- anova(fit)
+      as.numeric(at[["Pr(>F)"]][1])
+    }, error = function(e) NA_real_)
+    tibble(bin = as.character(b), mid = bmeta$mid[i], p_anova = pval)
+  })
+  out <- bind_rows(res)
+  if (nrow(out) == 0) return(tibble(bin = character(), mid = numeric(), p_anova = numeric()))
+  arrange(out, mid)
+}
+
+#' Per-bin Kendall tau on donor-level means within each bin
+per_bin_donor_kendall <- function(df, bin_col, group_col, value_col, mid_col = "diam_mid") {
+  if (nrow(df) == 0) return(tibble(bin = character(), mid = numeric(), p_kendall = numeric(), tau = numeric()))
+  if (!"Case ID" %in% colnames(df)) return(per_bin_kendall(df, bin_col, group_col, value_col, mid_col))
+  code_group <- function(x) {
+    x <- as.character(x)
+    ifelse(x == "ND", 0, ifelse(x == "Aab+", 1, ifelse(x == "T1D", 2, NA_real_)))
+  }
+  bmeta <- df %>% filter(!is.na(.data[[bin_col]])) %>% group_by(.data[[bin_col]]) %>%
+    summarise(mid = suppressWarnings(as.numeric(first(na.omit(.data[[mid_col]])))), .groups = "drop")
+  res <- lapply(seq_len(nrow(bmeta)), function(i) {
+    b <- bmeta[[bin_col]][i]
+    sub <- df %>% filter(.data[[bin_col]] == b)
+    # Aggregate to donor means within this bin
+    ddf <- sub %>%
+      dplyr::group_by(`Case ID`, .data[[group_col]]) %>%
+      dplyr::summarise(value = mean(.data[[value_col]], na.rm = TRUE), .groups = "drop")
+    x <- code_group(ddf[[group_col]])
+    y <- ddf$value
+    keep <- is.finite(x) & is.finite(y)
+    x <- x[keep]; y <- y[keep]
+    if (length(unique(x)) < 2 || length(y) < 3) return(NULL)
+    ct <- tryCatch(cor.test(x, y, method = "kendall", exact = FALSE), error = function(e) NULL)
+    if (is.null(ct)) return(NULL)
+    tibble(bin = as.character(b), mid = bmeta$mid[i], p_kendall = unname(ct$p.value), tau = unname(ct$estimate))
+  })
+  out <- bind_rows(res)
+  if (nrow(out) == 0) return(out)
+  arrange(out, mid)
+}
+
+#' Shapiro-Wilk normality test per donor group on donor-level values
+#' Returns data.frame with donor_status, W, p_value, is_normal
+normality_tests <- function(ddf) {
+  groups <- levels(ddf$donor_status)
+  if (is.null(groups)) groups <- unique(ddf$donor_status)
+  rows <- lapply(groups, function(g) {
+    vals <- ddf$value[ddf$donor_status == g]
+    vals <- vals[is.finite(vals)]
+    if (length(vals) < 3) {
+      return(data.frame(donor_status = g, W = NA_real_, p_value = NA_real_,
+                        is_normal = NA, n = length(vals), stringsAsFactors = FALSE))
+    }
+    sw <- tryCatch(shapiro.test(vals), error = function(e) NULL)
+    if (is.null(sw)) {
+      return(data.frame(donor_status = g, W = NA_real_, p_value = NA_real_,
+                        is_normal = NA, n = length(vals), stringsAsFactors = FALSE))
+    }
+    data.frame(donor_status = g, W = unname(sw$statistic), p_value = sw$p.value,
+               is_normal = sw$p.value > 0.05, n = length(vals), stringsAsFactors = FALSE)
+  })
+  do.call(rbind, rows)
+}
+
 # ---------- Effect size utilities (Statistics tab) ----------
 
 #' Cohen's d for two-sample comparison with 95% CI (normal approximation)
