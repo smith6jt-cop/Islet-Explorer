@@ -114,9 +114,13 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
       norm_result <- normality_tests(ddf)
 
       # ---- PRIMARY: Mixed-effects model (preserves islet variation, accounts for donor clustering) ----
-      lmer_result <- tryCatch(lmer_test_donor(rdf), error = function(e) NULL)
+      lmer_result <- tryCatch(lmer_test_donor(rdf), error = function(e) {
+        list(p_value = NA_real_, icc = NA_real_, fit = NULL,
+             error_msg = paste("Unexpected error:", e$message))
+      })
       lmer_p <- if (!is.null(lmer_result)) lmer_result$p_value else NA_real_
       icc <- if (!is.null(lmer_result)) lmer_result$icc else NA_real_
+      lmer_error <- lmer_result$error_msg  # NULL if no error
 
       # Pairwise from mixed model via emmeans
       lmer_pairwise <- NULL
@@ -376,6 +380,7 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
         lmer_p           = lmer_p,
         icc              = icc,
         lmer_pairwise    = lmer_pairwise,
+        lmer_error       = lmer_error,
         # Sensitivity test: donor-level
         donor_test       = donor_test,
         donor_p          = donor_p,
@@ -502,15 +507,32 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
         "."
       }
 
-      tags$div(
-        style = "background: #e8f4fd; padding: 10px 14px; border-radius: 5px; margin-bottom: 12px; font-size: 13px; line-height: 1.5;",
-        tags$strong("Statistical approach: "),
-        paste0("Primary test uses a mixed-effects model (lmer) with donor as random intercept, ",
-               "preserving islet-level variation while accounting for donor clustering. ",
-               "Islets of different sizes are biologically distinct and contribute meaningful signal. "),
-        tags$br(),
-        paste0("ICC = ", icc_str, icc_interp, " "),
-        paste0("Conservative sensitivity (donor-level ", st$donor_test, "): ", donor_str, ".")
+      # Show warning if mixed-effects model failed
+      lmer_warn <- NULL
+      if (!is.null(st$lmer_error)) {
+        lmer_warn <- tags$div(
+          style = "background: #fff3cd; padding: 8px 12px; border-radius: 4px; margin-bottom: 8px; font-size: 12px; color: #856404;",
+          tags$strong("Mixed-effects model issue: "), st$lmer_error,
+          " — donor-level results below remain valid."
+        )
+      }
+
+      tagList(
+        lmer_warn,
+        tags$div(
+          style = "background: #e8f4fd; padding: 10px 14px; border-radius: 5px; margin-bottom: 12px; font-size: 13px; line-height: 1.5;",
+          tags$strong("Statistical approach: "),
+          paste0("The primary test is a mixed-effects model with donor as a random intercept. ",
+                 "This uses all islets while accounting for the fact that islets from the same donor are correlated. ",
+                 "Islets of different sizes are biologically distinct and contribute meaningful signal."),
+          tags$br(),
+          paste0("ICC = ", icc_str, icc_interp, " "),
+          tags$br(),
+          tags$strong("Donor-level sensitivity check: "),
+          paste0("As a conservative cross-check, islets are averaged within each donor to yield one value per donor (N=",
+                 st$n_donors, "), then tested with ", st$donor_test, ": ", donor_str, ". ",
+                 "If both approaches agree, the result is robust.")
+        )
       )
     })
 
@@ -535,9 +557,9 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
         check.names = FALSE, stringsAsFactors = FALSE
       )
 
-      # PRIMARY: Mixed-effects global
+      # PRIMARY: Mixed-effects global (islet-level, donor as random intercept)
       rows <- rbind(rows, data.frame(
-        Contrast = "Global (mixed-effects lmer)",
+        Contrast = "Overall (mixed-effects, donor random intercept)",
         `p-value` = fmt_p(st$lmer_p),
         `p (adj)` = "-",
         `Cohen's d` = "-",
@@ -546,11 +568,11 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
         check.names = FALSE, stringsAsFactors = FALSE
       ))
 
-      # Pairwise from mixed model (emmeans)
+      # Pairwise from mixed model (estimated marginal means)
       lmer_pw <- st$lmer_pairwise
       if (!is.null(lmer_pw) && nrow(lmer_pw) > 0) {
         lmer_pw_rows <- data.frame(
-          Contrast = paste0(lmer_pw$contrast, " (emmeans)"),
+          Contrast = paste0(lmer_pw$contrast, " (mixed-effects pairwise)"),
           `p-value` = fmt_p(lmer_pw$p.value),
           `p (adj)` = "-",
           `Cohen's d` = "-",
@@ -561,9 +583,9 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
         rows <- rbind(rows, lmer_pw_rows)
       }
 
-      # SENSITIVITY: Donor-level
+      # SENSITIVITY: Donor-level means (collapses islets to one value per donor)
       rows <- rbind(rows, data.frame(
-        Contrast = paste0("Sensitivity (donor-level ", st$donor_test, ", N=", st$n_donors, ")"),
+        Contrast = paste0("Donor-level means (", st$donor_test, ", N=", st$n_donors, " donors)"),
         `p-value` = fmt_p(st$donor_p),
         `p (adj)` = "-",
         `Cohen's d` = "-",
@@ -577,7 +599,7 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
       if (!is.null(pw) && nrow(pw) > 0) {
         test_label <- if (st$is_parametric) "t-test" else "Wilcoxon"
         pw_rows <- data.frame(
-          Contrast = paste0(pw$contrast, " (donor ", test_label, ")"),
+          Contrast = paste0(pw$contrast, " (donor-level ", test_label, ")"),
           `p-value` = fmt_p(pw$p_value),
           `p (adj)` = fmt_p(pw$p_adj),
           `Cohen's d` = fmt_d(pw$cohens_d),
@@ -720,9 +742,9 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
         theme(legend.position = "none")
 
       ggplotly(g, tooltip = c("x", "y", "colour")) %>%
-        layout(margin = list(b = 70),
+        layout(margin = list(b = 100),
                legend = list(orientation = "h", x = 0.5, xanchor = "center",
-                             y = -0.15, font = list(size = 12)),
+                             y = -0.3, font = list(size = 12)),
                showlegend = TRUE)
     })
 
@@ -745,32 +767,41 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
       # Build AAb section conditionally
       aab_section <- NULL
       if (!is.null(st$aab_summary) && nrow(st$aab_summary) > 0) {
-        aab_section <- tagList(
-          hr(style = "margin: 8px 0;"),
-          h6("Autoantibody Profile (Aab+ only)", style = "color: #555;"),
-          tableOutput(ns("aab_donor_table")),
-          plotlyOutput(ns("aab_plot"), height = "260px")
+        aab_section <- div(style = "margin-top: 18px;",
+          h6("Autoantibody Profile (Aab+ only)", style = "color: #555; margin-bottom: 10px;"),
+          fluidRow(
+            column(6,
+              tableOutput(ns("aab_donor_table"))
+            ),
+            column(6,
+              plotlyOutput(ns("aab_plot"), height = "260px")
+            )
+          )
         )
       }
 
       div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible;",
         h5("Demographics Analysis"),
-        h6("Donor Summary", style = "color: #555;"),
-        tableOutput(ns("demo_summary_table")),
-        hr(style = "margin: 8px 0;"),
-        fluidRow(
-          column(6,
-            h6("Age vs Feature (islet-level)", style = "color: #555;"),
-            plotlyOutput(ns("age_scatter"), height = "300px")
-          ),
-          column(6,
-            h6("Sex vs Feature", style = "color: #555;"),
-            plotlyOutput(ns("gender_plot"), height = "300px")
+        div(style = "margin-bottom: 18px;",
+          h6("Donor Summary", style = "color: #555; margin-bottom: 10px;"),
+          tableOutput(ns("demo_summary_table"))
+        ),
+        div(style = "margin-bottom: 18px;",
+          fluidRow(
+            column(6,
+              h6("Age vs Feature (islet-level)", style = "color: #555; margin-bottom: 10px;"),
+              plotlyOutput(ns("age_scatter"), height = "300px")
+            ),
+            column(6,
+              h6("Sex vs Feature", style = "color: #555; margin-bottom: 10px;"),
+              plotlyOutput(ns("gender_plot"), height = "300px")
+            )
           )
         ),
         aab_section,
-        hr(style = "margin: 8px 0;"),
-        uiOutput(ns("covariate_results"))
+        div(style = "margin-top: 18px;",
+          uiOutput(ns("covariate_results"))
+        )
       )
     })
 
@@ -1033,23 +1064,25 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
 
       tags$div(style = "padding: 10px;",
         tags$p(
-          tags$strong("Primary test: "),
-          paste0("Mixed-effects model: lmer(value ~ donor_status + (1 | donor)) on all ",
+          tags$strong("Primary test (mixed-effects model): "),
+          paste0("A linear mixed-effects model tests whether donor status (ND / Aab+ / T1D) predicts the feature value across all ",
                  formatC(st$n_islets, big.mark = ","),
-                 " islets. This preserves biologically meaningful islet-level variation ",
-                 "(islets of different sizes are structurally and functionally distinct) ",
-                 "while accounting for correlation between islets from the same donor. ",
-                 "Pairwise contrasts from estimated marginal means (emmeans)."),
+                 " islets, with donor included as a random intercept. ",
+                 "This accounts for the fact that islets from the same donor share biology, tissue processing, and imaging conditions, ",
+                 "while still leveraging the full islet-level variation — important because islets of different sizes are ",
+                 "structurally and functionally distinct. ",
+                 "Pairwise group comparisons use estimated marginal means from the mixed model."),
           tags$br(), tags$br(),
-          tags$strong("ICC: "),
-          "Intra-class correlation quantifies donor-level clustering. ",
-          "Low ICC means most variation is between islets (within donors), supporting islet-level analysis. ",
-          "High ICC would indicate donor identity dominates.",
+          tags$strong("ICC (intra-class correlation): "),
+          "Measures what fraction of total variation is explained by donor identity. ",
+          "Low ICC means most variation is between islets within the same donor, supporting islet-level analysis. ",
+          "High ICC means donor identity dominates the signal.",
           tags$br(), tags$br(),
-          tags$strong("Conservative sensitivity: "), test_desc,
-          paste0(" Computed on donor-level means (N = ", st$n_donors,
-                 "). This is deliberately conservative — it collapses all size-dependent variation ",
-                 "to a single mean per donor, discarding meaningful biological signal."),
+          tags$strong("Donor-level sensitivity check: "), test_desc,
+          paste0(" As a cross-check, all islets within each donor are averaged to one value per donor (N = ", st$n_donors,
+                 "), then tested directly. This is deliberately conservative — it collapses size-dependent variation ",
+                 "to a single mean per donor. If both the mixed-effects model and this donor-level test agree, ",
+                 "the result is robust."),
           tags$br(),
           tags$strong("Significance threshold: "), paste0("\u03b1 = ", alpha_str),
           tags$br(),

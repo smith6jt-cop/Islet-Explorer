@@ -346,6 +346,14 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
 
       result_df <- result_df[valid_idx, , drop = FALSE]
 
+      # Apply min cells/islet filter
+      min_cells <- input$min_cells %||% 1
+      if (min_cells > 1 && "total_cells" %in% colnames(result_df)) {
+        tc <- suppressWarnings(as.integer(result_df$total_cells))
+        result_df <- result_df[is.finite(tc) & tc >= min_cells, , drop = FALSE]
+        if (nrow(result_df) == 0) return(NULL)
+      }
+
       # Rank-transform pseudotime for visualization (eliminates DPT compression artifacts)
       # Raw DPT compresses 95% of data between 0.25-0.70 due to diffusion manifold geometry.
       # Rank percentile preserves ordering while spreading points uniformly.

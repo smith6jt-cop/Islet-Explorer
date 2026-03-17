@@ -69,6 +69,7 @@ The Plot tab is the primary exploration interface. It has a **sidebar** (left) a
 - **AAb Filter**: Filter by autoantibody positivity (when available)
 - **Age Range**: Slider to restrict donor age (H5AD only)
 - **Sex**: Checkbox filter (H5AD only)
+- **Min cells/islet**: Filter out islets with fewer than N total cells (core + peri). Default: 1 (no filter). Increase to reduce noise from poorly-measured small islets.
 - **Diameter Range**: Restrict islet diameter in μm
 
 ### Main Panel
@@ -118,6 +119,7 @@ The Trajectory tab uses a full-width layout (no sidebar). All controls are inlin
   - *Cell Count* sizes points by `sqrt(total_cells)` — small islets (3-10 cells) appear as tiny dots, large islets (100+ cells) as large dots. This honestly represents measurement quality.
 - **Point transparency**: Adjustable alpha (0.1-1.0)
 - **Point size**: Base point size slider (0.5-5.0)
+- **Min cells/islet**: Filter out islets with fewer than N total cells. Default: 1 (no filter). Increase to focus on well-measured islets.
 
 ### Cell-Count-Weighted Trends
 
@@ -169,7 +171,7 @@ The tab uses a **5-section narrative layout** that walks you through a logical a
 
 Three equal-height cards showing the core statistical results:
 
-- **Hypothesis Testing** (left): Global test + pairwise comparisons table with Cohen's d effect sizes, 95% CIs, and BH-corrected p-values. Includes mixed-effects model (primary) and donor-level tests (sensitivity).
+- **Hypothesis Testing** (left): Global test + pairwise comparisons table with Cohen's d effect sizes, 95% CIs, and BH-corrected p-values. The primary "Overall" row uses a mixed-effects model with donor as random intercept. The "Donor-level means" row averages islets within each donor (N=15) as a conservative cross-check.
 - **Effect Size Forest Plot** (center): Visual display of pairwise Cohen's d with confidence intervals. Points colored by significance.
 - **Area Under Curve** (right): Trapezoidal AUC by disease group with percentage change relative to ND baseline.
 
@@ -452,7 +454,7 @@ Port 7777 is for local testing only and is not accessible to end users.
 
 ```
 shiny, shinyjs, plotly, ggplot2, dplyr, tidyr, readxl, sf, jsonlite,
-RColorBrewer, scales, anndata, reticulate
+RColorBrewer, scales, anndata, reticulate, lmerTest, lme4, emmeans
 ```
 
 ### Python Dependencies (pipeline only)

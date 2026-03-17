@@ -27,6 +27,8 @@ plot_sidebar_ui <- function(id) {
                        choices = c("ND", "Aab+", "T1D"),
                        selected = c("ND", "Aab+", "T1D"),
                        inline = TRUE),
+    numericInput(ns("min_cells"), "Min cells/islet",
+                 value = 1, min = 1, max = 200, step = 1),
     uiOutput(ns("age_filter_ui")),
     uiOutput(ns("gender_filter_ui")),
     radioButtons(ns("stat"), "Statistic",

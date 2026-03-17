@@ -276,6 +276,18 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         dplyr::mutate(donor_status = `Donor Status`) %>%
         dplyr::filter(!is.na(value))
 
+      # Apply min cells/islet filter
+      min_cells <- input$min_cells %||% 1
+      if (min_cells > 1 &&
+          "total_cells_core" %in% colnames(out) &&
+          "total_cells_peri" %in% colnames(out)) {
+        tc_core <- suppressWarnings(as.numeric(out$total_cells_core))
+        tc_peri <- suppressWarnings(as.numeric(out$total_cells_peri))
+        tc_core <- ifelse(is.finite(tc_core), tc_core, 0)
+        tc_peri <- ifelse(is.finite(tc_peri), tc_peri, 0)
+        out <- out[is.finite(tc_core + tc_peri) & (tc_core + tc_peri) >= min_cells, , drop = FALSE]
+      }
+
       # Apply diameter range filter
       if (!is.null(input$diam_range) && length(input$diam_range) == 2) {
         diam_min <- as.numeric(input$diam_range[1])

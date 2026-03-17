@@ -248,7 +248,7 @@ The app has 5,214 islets from only **15 donors** (5 per group). Islets within a 
 
 1. **Donor-level aggregation**: All tests use `aggregate_to_donor()` to compute per-donor means (N=15), not islet-level (N=5,214). This produces realistic p-values (0.01-0.05 range, not 1e-50).
 2. **Mixed-effects sensitivity**: `lmer_test_donor()` runs `lmerTest::lmer(value ~ donor_status + (1 | case_id))` on islet-level data with donor as random intercept. ICC quantifies donor-level clustering.
-3. **Min-cells filter**: `stats_min_cells` numericInput filters islets by `total_cells_core + total_cells_peri >= threshold` (like spatial tab's `nbr_min_cells`). Defaults to 1 (no filter).
+3. **Min-cells filter**: Available on all 4 analysis tabs — Plot (`min_cells` in sidebar, filters `raw_df_base()`), Trajectory (`min_cells` in controls, filters `traj_data_clean()` by `total_cells`), Statistics (`stats_min_cells`), and Spatial (`nbr_min_cells`). All use `total_cells_core + total_cells_peri >= threshold` (Trajectory uses `total_cells` directly). Defaults to 1 (no filter).
 4. **Normality testing**: Shapiro-Wilk on donor-level means per group, with auto-suggestion for test type.
 5. **No-binning option**: `stats_no_binning` checkbox hides Section 3 (size-dependent analysis).
 6. **Bin slider fix**: Max increased from 75 to 150, step=5. Heatmap x-axis labels angled (-45°) to prevent overlap.
@@ -257,15 +257,14 @@ The app has 5,214 islets from only **15 donors** (5 per group). Islets within a 
 
 ### Key Utilities (`utils_stats.R`)
 - `aggregate_to_donor(rdf, agg_fn)` -- Groups by `Case ID` + `donor_status`, computes mean/median of `value`, preserves age/gender
-- `lmer_test_donor(rdf)` -- Mixed-effects model, returns `list(p_value, icc, fit)`. Uses `car::Anova(fit, type="III")`.
+- `lmer_test_donor(rdf)` -- Mixed-effects model, returns `list(p_value, icc, fit, error_msg)`. Uses `lmerTest::anova()` (Satterthwaite F-test). Returns diagnostic `error_msg` on failure (singular fit, convergence, missing packages). Yellow warning banner displayed in UI when `error_msg` is non-NULL.
 - `per_bin_donor_anova(df, ...)` -- Donor-level per-bin ANOVA. Skips bins where any group has <2 donors.
 - `per_bin_donor_kendall(df, ...)` -- Donor-level per-bin Kendall tau. Skips bins with <3 total donors.
 - `normality_tests(ddf)` -- Shapiro-Wilk per group, returns data.frame with `W`, `p_value`, `is_normal`
 
 ### R Package Dependencies for Phase 16
-- `lmerTest` (3.1.3) -- Mixed-effects model with Satterthwaite df
+- `lmerTest` (3.2-1) -- Mixed-effects model with Satterthwaite df
 - `lme4` (1.1.37) -- `VarCorr()` for ICC computation
-- `car` (3.1.3) -- Type III ANOVA for mixed model
 
 ### Shared Sidebar Architecture
 The Plot sidebar (mode, feature, region, donor status, AAb, age, gender filters) is visible on both the Plot and Statistics tabs. Achieved via `conditionalPanel` condition `"input.tabs == 'Plot' || input.tabs == 'Statistics'"` and matching JS `adjustLayout()` logic in `app.R`. The Statistics module consumes `plot_returns$raw_df` and `plot_returns$summary_df` directly -- no data duplication.
@@ -283,7 +282,7 @@ Numbered sections with `section_heading()` helper (gradient blue pill badge + bo
 Per-bin ANOVA and Kendall τ p-values are BH-corrected across bins via `p.adjust(method = "BH")`. Heatmap shows `-log10(q)` (corrected) with star annotations using corrected values. Trend plot significance coloring also uses corrected p-values.
 
 ### Plotly Legend Positioning
-Forest plot uses `theme(legend.position = "none")` in ggplot (prevents ggplotly auto-placement), then `layout(margin = list(b = 60), legend = list(orientation = "h", x = 0.5, xanchor = "center", y = -0.25))` in plotly. The `margin(b=60)` creates room below the x-axis title to prevent overlap. The trend plot shows its legend (`showlegend = TRUE`) and has no title (title removed entirely).
+Forest plot uses `theme(legend.position = "none")` in ggplot (prevents ggplotly auto-placement), then `layout(margin = list(b = 60), legend = list(orientation = "h", x = 0.5, xanchor = "center", y = -0.25))` in plotly. The `margin(b=60)` creates room below the x-axis title to prevent overlap. The trend plot uses `margin(b=100)` with legend at `y = -0.3` (`showlegend = TRUE`, no title).
 
 ### Effect Size Utilities (`utils_stats.R`)
 - `cohens_d(x, y)` -- returns `list(d, ci_lo, ci_hi)` (NOT `ci_lower`/`ci_upper`)
@@ -466,4 +465,4 @@ Skills are registered in `.claude/skills/<name>/SKILL.md` (NOT in Skills_Registr
 
 ## R Dependencies
 
-shiny, shinyjs, plotly, ggplot2, dplyr, tidyr, readxl, sf, jsonlite, RColorBrewer, scales, anndata, reticulate, httr2, stringr
+shiny, shinyjs, plotly, ggplot2, dplyr, tidyr, readxl, sf, jsonlite, RColorBrewer, scales, anndata, reticulate, httr2, stringr, lmerTest, lme4, emmeans

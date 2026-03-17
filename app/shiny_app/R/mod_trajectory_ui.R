@@ -34,7 +34,9 @@ trajectory_ui <- function(id) {
               sliderInput(ns("traj_alpha"), "Point transparency:",
                          min = 0.1, max = 1.0, value = 0.6, step = 0.05),
               sliderInput(ns("traj_point_size_slider"), "Point size:",
-                         min = 0.5, max = 5.0, value = 3.0, step = 0.1)
+                         min = 0.5, max = 5.0, value = 3.0, step = 0.1),
+              numericInput(ns("min_cells"), "Min cells/islet",
+                           value = 1, min = 1, max = 200, step = 1)
             ),
             column(3,
               div(style = "border: 1px solid #ddd; padding: 10px; border-radius: 5px; background-color: #f9f9f9; min-height: 100px;",

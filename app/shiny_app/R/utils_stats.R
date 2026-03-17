@@ -115,27 +115,53 @@ aggregate_to_donor <- function(rdf, agg_fn = c("mean", "median")) {
 #' Mixed-effects test: value ~ donor_status + (1 | Case ID)
 #' Returns list(p_value, icc, fit) or NULL on failure
 lmer_test_donor <- function(rdf) {
-  if (!requireNamespace("lmerTest", quietly = TRUE)) return(NULL)
-  if (!"Case ID" %in% colnames(rdf)) return(NULL)
+  if (!requireNamespace("lmerTest", quietly = TRUE)) {
+    return(list(p_value = NA_real_, icc = NA_real_, fit = NULL,
+                error_msg = "lmerTest package not installed"))
+  }
+  if (!"Case ID" %in% colnames(rdf)) {
+    return(list(p_value = NA_real_, icc = NA_real_, fit = NULL,
+                error_msg = "No 'Case ID' column in data"))
+  }
   rdf$case_id_f <- factor(rdf$`Case ID`)
-  fit <- lmerTest::lmer(value ~ donor_status + (1 | case_id_f), data = rdf)
-  # Type III ANOVA for donor_status p-value
-  at <- tryCatch(car::Anova(fit, type = "III"), error = function(e) NULL)
-  p_val <- if (!is.null(at) && "donor_status" %in% rownames(at)) {
-    as.numeric(at["donor_status", "Pr(>Chisq)"])
-  } else {
-    NA_real_
+
+  # Fit mixed-effects model
+  fit <- tryCatch(
+    lmerTest::lmer(value ~ donor_status + (1 | case_id_f), data = rdf),
+    error = function(e) e
+  )
+  if (inherits(fit, "error")) {
+    return(list(p_value = NA_real_, icc = NA_real_, fit = NULL,
+                error_msg = paste("Model failed to fit:", fit$message)))
   }
+
+  # Extract p-value via lmerTest's anova (Satterthwaite F-test)
+  # With a single fixed effect, Type I = Type III, so no need for car::Anova
+  p_val <- tryCatch({
+    at <- anova(fit)  # lmerTest anova method
+    if ("donor_status" %in% rownames(at)) {
+      as.numeric(at["donor_status", "Pr(>F)"])
+    } else {
+      NA_real_
+    }
+  }, error = function(e) NA_real_)
+
   # ICC: donor variance / total variance
-  vc <- as.data.frame(lme4::VarCorr(fit))
-  donor_var <- vc$vcov[vc$grp == "case_id_f"]
-  resid_var <- vc$vcov[vc$grp == "Residual"]
-  icc <- if (length(donor_var) > 0 && length(resid_var) > 0 && (donor_var + resid_var) > 0) {
-    donor_var / (donor_var + resid_var)
-  } else {
-    NA_real_
+  vc <- tryCatch(as.data.frame(lme4::VarCorr(fit)), error = function(e) NULL)
+  icc <- NA_real_
+  if (!is.null(vc)) {
+    donor_var <- vc$vcov[vc$grp == "case_id_f"]
+    resid_var <- vc$vcov[vc$grp == "Residual"]
+    if (length(donor_var) > 0 && length(resid_var) > 0 && (donor_var + resid_var) > 0) {
+      icc <- donor_var / (donor_var + resid_var)
+    }
   }
-  list(p_value = p_val, icc = icc, fit = fit)
+
+  error_msg <- NULL
+  if (is.na(p_val)) error_msg <- "Could not extract p-value from model ANOVA table"
+  if (isSingular(fit)) error_msg <- paste0(error_msg %||% "", "Model is singular (zero donor variance)")
+
+  list(p_value = p_val, icc = icc, fit = fit, error_msg = error_msg)
 }
 
 #' Per-bin ANOVA on donor-level means within each bin
