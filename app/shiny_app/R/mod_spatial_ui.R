@@ -22,10 +22,10 @@ spatial_ui <- function(id) {
 
   tagList(
     # ==== ROW 1 (existing): Controls + Scatter + Leiden ====
-    fluidRow(
+    fluidRow(style = "display: flex; flex-wrap: wrap;",
       # ---- Left sidebar: Controls ----
       column(2,
-        div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible;",
+        div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible; height: 100%;",
           h5("Spatial Tissue Map", style = "margin-top: 0;"),
           uiOutput(ns("donor_selector")),
           hr(style = "margin: 8px 0;"),
@@ -62,7 +62,7 @@ spatial_ui <- function(id) {
 
       # ---- Center: Tissue Scatter ----
       column(6,
-        div(class = "card", style = "padding: 15px; margin-bottom: 15px;",
+        div(class = "card", style = "padding: 15px; margin-bottom: 15px; height: 100%;",
           div(style = "display: flex; align-items: center; gap: 10px; margin-bottom: 8px;",
             h5("Tissue Scatter Plot", style = "margin: 0;"),
             actionButton(ns("scatter_reset_zoom"), "Reset Zoom",
@@ -70,7 +70,7 @@ spatial_ui <- function(id) {
                          class = "btn-sm btn-outline-secondary")
           ),
           tags$small("Drag to zoom, double-click to reset.", style = "color: #888; display: block; margin-bottom: 5px;"),
-          plotOutput(ns("tissue_scatter"), height = "800px",
+          plotOutput(ns("tissue_scatter"), height = "700px",
                      dblclick = ns("scatter_dblclick"),
                      brush = brushOpts(id = ns("scatter_brush"), resetOnNew = TRUE))
         )
@@ -78,10 +78,19 @@ spatial_ui <- function(id) {
 
       # ---- Right: Leiden Panel ----
       column(4,
-        div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible;",
-          h5("Leiden Clustering (Islet-Level)"),
+        div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible; height: 100%;",
+          h5("Islet-Level UMAPs"),
           uiOutput(ns("leiden_not_available")),
-          plotlyOutput(ns("leiden_umap"), height = "380px"),
+          fluidRow(
+            column(6,
+              h5("Leiden Clustering", style = "font-size: 13px; margin-top: 0;"),
+              plotlyOutput(ns("leiden_umap"), height = "300px")
+            ),
+            column(6,
+              h5("Donor Status", style = "font-size: 13px; margin-top: 0;"),
+              plotOutput(ns("spatial_umap_donor"), height = 300)
+            )
+          ),
           hr(style = "margin: 8px 0;"),
           h5("Cluster Composition", style = "font-size: 15px;"),
           plotlyOutput(ns("cluster_composition"), height = "350px")

@@ -1,7 +1,7 @@
 ai_assistant_ui <- function(id) {
   ns <- NS(id)
   div(class = "card ai-chat-panel",
-    style = "margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; height: clamp(550px, 65vh - 75px, 1200px); display: flex; flex-direction: column; gap: 12px;",
+    style = "margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; height: clamp(715px, 84.5vh - 97px, 1560px); display: flex; flex-direction: column; gap: 12px;",
     div(
       class = "ai-chat-header",
       style = "display: flex; align-items: center; padding-bottom: 12px; border-bottom: 1px solid rgba(44, 90, 160, 0.15);",

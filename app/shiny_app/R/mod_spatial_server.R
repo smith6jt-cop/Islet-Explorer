@@ -13,11 +13,12 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
-    # 14-color qualitative palette for Leiden clusters
+    # 20-color qualitative palette for Leiden clusters
     leiden_palette <- c(
       "#1f77b4", "#ff7f0e", "#66c2a5", "#d62728", "#8da0cb",
       "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf",
-      "#aec7e8", "#ffbb78", "#98df8a", "#ff9896"
+      "#aec7e8", "#ffbb78", "#98df8a", "#ff9896",
+      "#9467bd", "#c49c94", "#f7b6d2", "#c7c7c7", "#dbdb8d", "#9edae5"
     )
 
     # ---- Helpers: column identification ----
@@ -129,6 +130,8 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       if (is.null(cells)) return(NULL)
       phenos <- sort(unique(cells$phenotype))
       if (length(phenos) == 0) return(NULL)
+      hide_default <- c("Acinar", "Ductal", "Endocrine", "T cell", "Unknown")
+      selected_phenos <- setdiff(phenos, hide_default)
       tagList(
         div(style = "display: flex; align-items: center; gap: 6px; margin-bottom: 4px;",
           tags$label("Phenotypes", style = "font-weight: 600; font-size: 13px; margin: 0;"),
@@ -136,9 +139,11 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           span("|", style = "color: #ccc;"),
           actionLink(ns("pheno_none"), "None", style = "font-size: 11px;")
         ),
-        checkboxGroupInput(ns("pheno_filter"), NULL,
-                           choices = phenos, selected = phenos,
-                           inline = FALSE)
+        div(style = "column-count: 2; column-gap: 8px;",
+          checkboxGroupInput(ns("pheno_filter"), NULL,
+                             choices = phenos, selected = selected_phenos,
+                             inline = FALSE)
+        )
       )
     })
 
@@ -270,8 +275,8 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           cluster_levels <- sort(unique(fg$cluster[fg$cluster != "tissue"]))
           fg$cluster <- factor(fg$cluster, levels = c(cluster_levels, "tissue"))
           n_clusters <- length(cluster_levels)
-          pal <- setNames(leiden_palette[seq_len(min(n_clusters, length(leiden_palette)))],
-                          cluster_levels)
+          pal_colors <- rep_len(leiden_palette, n_clusters)
+          pal <- setNames(pal_colors, cluster_levels)
           pal["tissue"] <- "#d9d9d9"
 
           p <- p + ggplot2::geom_point(
@@ -283,12 +288,16 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           ggplot2::scale_color_manual(values = pal, name = "Cluster", na.value = "#d9d9d9",
                                         guide = ggplot2::guide_legend(override.aes = list(size = 4)))
         } else {
-          # Phenotype coloring — include bg phenotypes if colored
-          all_phenos <- sort(unique(fg$phenotype))
-          if (color_bg && nrow(bg) > 0) {
-            all_phenos <- sort(unique(c(all_phenos, bg$phenotype)))
+          # Phenotype coloring — legend limited to selected phenotypes
+          legend_phenos <- if (!is.null(selected_phenos) && length(selected_phenos) > 0) {
+            sort(selected_phenos)
+          } else {
+            sort(unique(fg$phenotype))
           }
-          pal <- palette()[all_phenos]
+          if (color_bg && nrow(bg) > 0) {
+            legend_phenos <- sort(unique(c(legend_phenos, bg$phenotype)))
+          }
+          pal <- palette()[legend_phenos]
           pal[is.na(pal)] <- "#CCCCCC"
 
           p <- p + ggplot2::geom_point(
@@ -297,7 +306,8 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
             size = 0.4, alpha = 0.6,
             inherit.aes = FALSE
           ) +
-          ggplot2::scale_color_manual(values = pal, name = "Phenotype", na.value = "#CCCCCC",
+          ggplot2::scale_color_manual(values = pal, breaks = legend_phenos,
+                                        name = "Phenotype", na.value = "#CCCCCC",
                                         guide = ggplot2::guide_legend(override.aes = list(size = 4)))
         }
       }
@@ -382,8 +392,8 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       cluster_levels <- sort(unique(plot_df$cluster))
       plot_df$cluster <- factor(plot_df$cluster, levels = cluster_levels)
       n_clusters <- length(cluster_levels)
-      pal <- setNames(leiden_palette[seq_len(min(n_clusters, length(leiden_palette)))],
-                      cluster_levels)
+      pal_colors <- rep_len(leiden_palette, n_clusters)
+      pal <- setNames(pal_colors, cluster_levels)
 
       res_label <- gsub("^leiden_", "", leiden_col)
 
@@ -394,14 +404,51 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                              islet_key),
               hoverinfo = "text",
               type = "scatter", mode = "markers",
-              marker = list(size = 7, opacity = 0.7)) %>%
+              marker = list(size = 5, opacity = 0.7)) %>%
         layout(
           title = list(text = paste0("Leiden ", res_label, " (", nrow(plot_df), " islets)"),
                        font = list(size = 14)),
-          xaxis = list(title = "UMAP 1", zeroline = FALSE),
-          yaxis = list(title = "UMAP 2", zeroline = FALSE),
+          xaxis = list(title = "UMAP 1", zeroline = FALSE,
+                       showgrid = FALSE, showticklabels = FALSE,
+                       constrain = "domain"),
+          yaxis = list(title = "UMAP 2", zeroline = FALSE,
+                       showgrid = FALSE, showticklabels = FALSE,
+                       scaleanchor = "x", scaleratio = 1,
+                       constrain = "domain"),
           legend = list(title = list(text = "Cluster"))
         )
+    })
+
+    # ==== Donor Status UMAP (static ggplot, mirrors trajectory tab) ====
+    output$spatial_umap_donor <- renderPlot({
+      req(has_leiden())
+      pd <- prepared()
+      comp <- pd$comp
+      req("leiden_umap_1" %in% colnames(comp), "leiden_umap_2" %in% colnames(comp))
+
+      plot_comp <- comp
+      if (!is.null(input$groups) && "Donor Status" %in% colnames(plot_comp)) {
+        plot_comp <- plot_comp[plot_comp$`Donor Status` %in% input$groups, , drop = FALSE]
+      }
+
+      umap1 <- suppressWarnings(as.numeric(plot_comp$leiden_umap_1))
+      umap2 <- suppressWarnings(as.numeric(plot_comp$leiden_umap_2))
+      ds <- if ("Donor Status" %in% colnames(plot_comp)) as.character(plot_comp$`Donor Status`) else rep("?", nrow(plot_comp))
+
+      plot_df <- data.frame(umap1 = umap1, umap2 = umap2, donor_status = ds, stringsAsFactors = FALSE)
+      plot_df <- plot_df[is.finite(plot_df$umap1) & is.finite(plot_df$umap2), , drop = FALSE]
+      if (nrow(plot_df) == 0) return(NULL)
+
+      plot_df$donor_status <- factor(plot_df$donor_status, levels = c("ND", "Aab+", "T1D"))
+
+      ggplot(plot_df, aes(x = umap1, y = umap2, color = donor_status)) +
+        geom_point(alpha = 0.6, size = 3.0) +
+        scale_color_manual(values = donor_colors_reactive()) +
+        scale_x_continuous(expand = expansion(mult = 0.02)) +
+        scale_y_continuous(expand = expansion(mult = 0.02)) +
+        coord_fixed() +
+        labs(x = "UMAP 1", y = "UMAP 2", color = "Status") +
+        theme_minimal(base_size = 12)
     })
 
     # ==== Card 3 (bottom): Cluster Composition ====
@@ -422,10 +469,17 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         plot_comp <- plot_comp[plot_comp$`Donor Status` %in% input$groups, , drop = FALSE]
       }
 
-      # Get phenotype proportion columns (prop_*)
+      # Get phenotype proportion columns (prop_*), filtered by selected phenotypes
       prop_cols <- grep("^prop_", colnames(plot_comp), value = TRUE)
       if (length(prop_cols) == 0) {
         return(plotly_empty() %>% layout(title = "No phenotype proportion data"))
+      }
+      if (!is.null(input$pheno_filter) && length(input$pheno_filter) > 0) {
+        keep_cols <- paste0("prop_", input$pheno_filter)
+        prop_cols <- intersect(prop_cols, keep_cols)
+        if (length(prop_cols) == 0) {
+          return(plotly_empty() %>% layout(title = "No matching phenotypes selected"))
+        }
       }
 
       cluster <- as.character(plot_comp[[leiden_col]])
@@ -573,7 +627,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         for (ds in statuses) {
           vals <- comp[[col]][comp$`Donor Status` == ds]
           vals <- vals[is.finite(vals)]
-          if (region == "peri" && clip) vals <- pmax(-5, pmin(5, vals))
+          if (region == "peri" && clip) vals <- vals[vals >= -5 & vals <= 5]
           n <- length(vals)
           if (n == 0) next
           if (stat_mode == "Median") {
@@ -636,14 +690,19 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         fluidRow(
           column(6,
             div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible;",
-              selectInput(ns("infiltration_metric"), "Metric",
-                          choices = c("Immune fraction (peri)" = "immune_frac_peri",
-                                      "Immune fraction (core)" = "immune_frac_core",
-                                      "T-cell density (peri)" = "tcell_density_peri",
-                                      "CD8/Macrophage ratio" = "cd8_to_macro_ratio",
-                                      "Peri/core immune ratio" = "immune_ratio"),
-                          selected = "immune_frac_peri", width = "100%"),
-              plotlyOutput(ns("infiltration_violin"), height = "400px")
+              div(style = "display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 8px;",
+                div(style = "flex: 1; min-width: 180px;",
+                  selectInput(ns("infiltration_metric"), "Metric",
+                              choices = c("Immune fraction (peri)" = "immune_frac_peri",
+                                          "Immune fraction (core)" = "immune_frac_core",
+                                          "T-cell density (peri)" = "tcell_density_peri",
+                                          "CD8/Macrophage ratio" = "cd8_to_macro_ratio",
+                                          "Peri/core immune ratio" = "immune_ratio"),
+                              selected = "immune_frac_peri", width = "100%")
+                ),
+                checkboxInput(ns("infiltration_outliers"), "Remove outliers", value = FALSE)
+              ),
+              plotlyOutput(ns("infiltration_bars"), height = "400px")
             )
           ),
           column(6,
@@ -715,23 +774,22 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           ),
           column(6,
             div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible;",
-              selectInput(ns("distance_enrich_col"), "Enrichment z-score",
-                          choices = c("Immune (all)" = "enrich_z_Immune",
-                                      "CD8+ T-cell" = "enrich_z_CD8a_Tcell",
-                                      "Macrophage" = "enrich_z_Macrophage",
-                                      "CD4+ T-cell" = "enrich_z_CD4_Tcell",
-                                      "T cell" = "enrich_z_T_cell",
-                                      "B cell" = "enrich_z_B_cell",
-                                      "APCs" = "enrich_z_APCs"),
-                          selected = "enrich_z_Immune", width = "100%"),
-              checkboxInput(ns("enrich_dist_clip"), "Clip top 1% outliers", value = TRUE),
-              plotlyOutput(ns("enrich_vs_distance"), height = "420px")
+              selectInput(ns("kde_immune_type"), "Immune cell type",
+                          choices = c("All immune" = "all",
+                                      "Macrophage" = "Macrophage",
+                                      "APCs" = "APCs",
+                                      "CD8+ T-cell" = "CD8a Tcell",
+                                      "T cell" = "T cell",
+                                      "B cell" = "B cell",
+                                      "CD4+ T-cell" = "CD4 Tcell"),
+                          selected = "all", width = "100%"),
+              plotlyOutput(ns("immune_distance_kde"), height = "420px")
             )
           )
         ),
         fluidRow(column(12,
           div(style = "background: #f0f6ff; padding: 10px 15px; border-radius: 6px; margin-bottom: 20px; font-size: 13px; color: #555;",
-            tags$em("Distance metrics measure minimum Euclidean distance (\u00b5m) from islet core centroid to nearest peri-islet immune cells. NAs indicate no cells of that type in the peri-islet zone. CD8+ T-cell distances are sparse (~89% NA) because most islets lack nearby CD8+ T-cells; macrophage (~30% NA) and overall immune (~20% NA) distances are more complete.")
+            tags$em("Left: Distance metrics measure minimum Euclidean distance (\u00b5m) from islet core centroid to nearest peri-islet immune cells. NAs indicate no cells of that type in the peri-islet zone. Right: KDE of signed distance from islet boundary for individual immune cells. Negative = inside islet (core), positive = outside (peri-islet zone). The dashed line at zero marks the islet boundary.")
           )
         ))
       )
@@ -745,10 +803,10 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
            paste0(formatC(n, big.mark = ","), " islets"))
     })
 
-    # ==== Card A-Left: Immune Metric Violin Plot ====
-    output$infiltration_violin <- renderPlotly({
+    # ==== Card A-Left: Immune Metric Bar Chart (donor-level) ====
+    output$infiltration_bars <- renderPlotly({
       comp <- nbr_comp()
-      req(comp, "Donor Status" %in% colnames(comp))
+      req(comp, "Donor Status" %in% colnames(comp), "Case ID" %in% colnames(comp))
       metric <- input$infiltration_metric %||% "immune_frac_peri"
       req(metric %in% colnames(comp))
 
@@ -766,47 +824,94 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       df <- data.frame(
         value = comp[[metric]],
         status = comp$`Donor Status`,
+        case_id = comp$`Case ID`,
         stringsAsFactors = FALSE
       )
       df <- df[is.finite(df$value), , drop = FALSE]
       if (nrow(df) == 0) return(plotly_empty() %>% layout(title = "No data"))
 
-      # Order: ND, Aab+, T1D
+      # Outlier removal (per-group IQR on non-zero values to handle zero-inflated metrics)
+      if (isTRUE(input$infiltration_outliers)) {
+        keep <- logical(nrow(df))
+        for (grp in unique(df$status)) {
+          idx <- df$status == grp
+          vals <- df$value[idx]
+          nz <- vals[vals != 0]
+          if (length(nz) < 4) { keep[idx] <- TRUE; next }
+          q <- quantile(nz, c(0.25, 0.75), na.rm = TRUE)
+          iqr <- q[2] - q[1]
+          lo <- q[1] - 1.5 * iqr
+          hi <- q[2] + 1.5 * iqr
+          keep[idx] <- vals == 0 | (vals >= lo & vals <= hi)
+        }
+        df <- df[keep, , drop = FALSE]
+        if (nrow(df) == 0) return(plotly_empty() %>% layout(title = "No data after outlier removal"))
+      }
+
+      # Aggregate to donor-level means
+      donor_df <- df %>%
+        dplyr::group_by(case_id, status) %>%
+        dplyr::summarise(value = mean(value, na.rm = TRUE), .groups = "drop")
+
       status_order <- c("ND", "Aab+", "T1D")
-      df$status <- factor(df$status, levels = intersect(status_order, unique(df$status)))
+      donor_df$status <- factor(donor_df$status, levels = intersect(status_order, unique(donor_df$status)))
+
+      # Donor-level summary: mean +/- SEM per group
+      summary_df <- donor_df %>%
+        dplyr::group_by(status) %>%
+        dplyr::summarise(
+          mean_val = mean(value, na.rm = TRUE),
+          sd_val = sd(value, na.rm = TRUE),
+          n = dplyr::n(),
+          sem = sd(value, na.rm = TRUE) / sqrt(dplyr::n()),
+          .groups = "drop"
+        )
 
       dcols <- donor_colors_reactive()
 
-      # Kruskal-Wallis test
+      # Kruskal-Wallis on donor-level means (N=15)
       kw_p <- tryCatch({
-        kt <- kruskal.test(value ~ status, data = df)
+        kt <- kruskal.test(value ~ status, data = donor_df)
         kt$p.value
       }, error = function(e) NA_real_)
       p_label <- if (is.finite(kw_p)) paste0("KW p = ", formatC(kw_p, format = "g", digits = 3)) else ""
 
       p <- plot_ly()
-      for (s in levels(df$status)) {
-        sub <- df[df$status == s, , drop = FALSE]
-        if (nrow(sub) == 0) next
+      for (s in levels(summary_df$status)) {
+        row <- summary_df[summary_df$status == s, , drop = FALSE]
+        if (nrow(row) == 0) next
+        # Individual donor points
+        donor_pts <- donor_df[donor_df$status == s, , drop = FALSE]
         p <- p %>% add_trace(
-          y = sub$value, x = s, name = s,
-          type = "violin", box = list(visible = TRUE),
-          meanline = list(visible = TRUE),
-          points = "all", jitter = 0.3,
-          pointpos = -1.5,
-          marker = list(size = 3, opacity = 0.3,
-                        color = dcols[s]),
-          line = list(color = dcols[s]),
-          fillcolor = paste0(dcols[s], "44"),
-          hoverinfo = "y"
+          x = s, y = donor_pts$value,
+          type = "scatter", mode = "markers",
+          marker = list(size = 8, opacity = 0.6, color = dcols[s]),
+          name = s, showlegend = FALSE,
+          hoverinfo = "text",
+          text = paste0("Donor ", donor_pts$case_id, ": ", round(donor_pts$value, 4))
+        )
+        # Bar with SEM error bars
+        p <- p %>% add_trace(
+          x = s, y = row$mean_val,
+          type = "bar",
+          marker = list(color = paste0(dcols[s], "66"),
+                        line = list(color = dcols[s], width = 1.5)),
+          error_y = list(type = "data", array = row$sem, visible = TRUE,
+                         color = dcols[s], thickness = 1.5, width = 6),
+          name = s, showlegend = FALSE,
+          hoverinfo = "text",
+          text = paste0(s, "<br>Mean: ", round(row$mean_val, 4),
+                       "<br>SEM: ", round(row$sem, 4),
+                       "<br>N donors: ", row$n)
         )
       }
       p %>% layout(
-        title = list(text = paste0(metric_label, "<br><sup>", p_label, "</sup>"),
+        title = list(text = paste0(metric_label, "<br><sup>Donor-level means \u00b1 SEM (N=donors) | ", p_label, "</sup>"),
                      font = list(size = 14)),
         xaxis = list(title = "", categoryorder = "array",
                      categoryarray = c("ND", "Aab+", "T1D")),
         yaxis = list(title = metric_label),
+        barmode = "overlay",
         showlegend = FALSE
       )
     })
@@ -1065,65 +1170,87 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       )
     })
 
-    # ==== Card C-Right: Enrichment vs Distance Scatter ====
-    output$enrich_vs_distance <- renderPlotly({
-      comp <- nbr_comp()
-      req(comp, "Donor Status" %in% colnames(comp))
-      dist_col <- input$distance_metric %||% "min_dist_immune_mean"
-      enrich_col <- input$distance_enrich_col %||% "enrich_z_Immune"
-      req(dist_col %in% colnames(comp), enrich_col %in% colnames(comp))
+    # ==== Card C-Right: Immune Cell Distance KDE (signed distance from islet boundary) ====
+    # Lazy-load immune distance CSV (cached in module scope)
+    .kde_data_env <- new.env(parent = emptyenv())
+    load_immune_kde_data <- function() {
+      if (!is.null(.kde_data_env$data)) return(.kde_data_env$data)
+      kde_path <- file.path("..", "..", "data", "immune_distance_kde.csv")
+      if (!file.exists(kde_path)) return(NULL)
+      .kde_data_env$data <- read.csv(kde_path, stringsAsFactors = FALSE)
+      .kde_data_env$data
+    }
 
-      enrich_label <- enrich_col_labels[enrich_col]
-      if (is.na(enrich_label)) enrich_label <- gsub("^enrich_z_", "", enrich_col)
+    output$immune_distance_kde <- renderPlotly({
+      kde_df <- load_immune_kde_data()
+      req(kde_df)
 
-      df <- data.frame(
-        distance = comp[[dist_col]],
-        enrichment = comp[[enrich_col]],
-        status = comp$`Donor Status`,
-        islet_key = if ("islet_key" %in% colnames(comp)) comp$islet_key else "",
-        stringsAsFactors = FALSE
-      )
-      df <- df[is.finite(df$distance) & is.finite(df$enrichment), , drop = FALSE]
-      if (nrow(df) == 0) return(plotly_empty() %>% layout(title = "No overlapping data"))
-
-      # Clip top 1% outliers on both axes if requested
-      if (isTRUE(input$enrich_dist_clip) && nrow(df) > 0) {
-        d99 <- quantile(df$distance, 0.99, na.rm = TRUE)
-        e_lo <- quantile(df$enrichment, 0.005, na.rm = TRUE)
-        e_hi <- quantile(df$enrichment, 0.995, na.rm = TRUE)
-        df <- df[df$distance <= d99 & df$enrichment >= e_lo & df$enrichment <= e_hi, , drop = FALSE]
+      cell_type <- input$kde_immune_type %||% "all"
+      # Filter to selected immune type
+      if (cell_type == "all") {
+        df <- kde_df
+        type_label <- "All Immune Cells"
+      } else {
+        df <- kde_df[kde_df$phenotype == cell_type, , drop = FALSE]
+        type_label <- cell_type
       }
-      if (nrow(df) == 0) return(plotly_empty() %>% layout(title = "No data after clipping"))
+
+      # Filter to selected donor status groups
+      if (!is.null(input$groups)) {
+        df <- df[df$donor_status %in% input$groups, , drop = FALSE]
+      }
+      req(nrow(df) > 0)
+
+      # Clip to 1st-99th percentile
+      q_lo <- quantile(df$signed_dist, 0.01, na.rm = TRUE)
+      q_hi <- quantile(df$signed_dist, 0.99, na.rm = TRUE)
+      df <- df[df$signed_dist >= q_lo & df$signed_dist <= q_hi, , drop = FALSE]
+      req(nrow(df) > 0)
 
       status_order <- c("ND", "Aab+", "T1D")
-      df$status <- factor(df$status, levels = intersect(status_order, unique(df$status)))
+      df$donor_status <- factor(df$donor_status, levels = intersect(status_order, unique(df$donor_status)))
       dcols <- donor_colors_reactive()
-      pt_sz <- input$nbr_pt_size %||% 5
-      pt_al <- input$nbr_pt_alpha %||% 0.4
 
-      # Correlation
-      cor_r <- tryCatch(cor(df$distance, df$enrichment, use = "complete.obs"), error = function(e) NA)
-      cor_label <- if (is.finite(cor_r)) paste0("r = ", round(cor_r, 3)) else ""
+      # Compute KDE per disease stage
+      kde_list <- list()
+      y_max <- 0
+      for (s in levels(df$donor_status)) {
+        vals <- df$signed_dist[df$donor_status == s]
+        if (length(vals) < 2) next
+        d <- density(vals, n = 512, from = q_lo, to = q_hi)
+        kde_list[[s]] <- d
+        y_max <- max(y_max, max(d$y))
+      }
+      req(length(kde_list) > 0)
 
       p <- plot_ly()
-      for (s in levels(df$status)) {
-        sub <- df[df$status == s, , drop = FALSE]
-        if (nrow(sub) == 0) next
+      for (s in names(kde_list)) {
+        d <- kde_list[[s]]
         p <- p %>% add_trace(
-          data = sub, x = ~distance, y = ~enrichment,
-          text = ~paste0(islet_key, "<br>Status: ", status,
-                        "<br>Distance: ", round(distance, 1), " \u00b5m",
-                        "<br>Enrichment z: ", round(enrichment, 2)),
-          hoverinfo = "text", name = s,
-          type = "scatter", mode = "markers",
-          marker = list(size = pt_sz, opacity = pt_al, color = dcols[s])
+          x = d$x, y = d$y,
+          type = "scatter", mode = "lines",
+          name = s,
+          line = list(color = dcols[s], width = 2.5),
+          fill = "tozeroy",
+          fillcolor = paste0(dcols[s], "22"),
+          hoverinfo = "text",
+          text = paste0(s, "<br>dist = ", round(d$x, 1), " \u00b5m",
+                       "<br>density = ", round(d$y, 4))
         )
       }
+      # Vertical line at zero (islet boundary)
+      p <- p %>% add_trace(
+        x = c(0, 0), y = c(0, y_max * 1.05),
+        type = "scatter", mode = "lines",
+        line = list(color = "#333", width = 1.5, dash = "dash"),
+        showlegend = FALSE, hoverinfo = "none"
+      )
       p %>% layout(
-        title = list(text = paste0(enrich_label, " Enrichment vs Distance<br><sup>", cor_label, "</sup>"),
+        title = list(text = paste0(type_label, " Distance from Islet"),
                      font = list(size = 14)),
-        xaxis = list(title = paste0("Distance (\u00b5m)")),
-        yaxis = list(title = paste0("Enrichment z-score (", enrich_label, ")")),
+        xaxis = list(title = "Signed distance (\u00b5m) \u2014 inside islet \u2190 0 \u2192 outside",
+                     zeroline = FALSE),
+        yaxis = list(title = "Density"),
         legend = list(title = list(text = "Status"))
       )
     })
