@@ -234,12 +234,14 @@ Cell centroids (`X_centroid`, `Y_centroid`) are in micrometers. GeoJSON polygons
 - `PHENOTYPE_COLORS` -- 21 phenotypes with distinctive hex palette (endocrine=warm, immune=cool, structural=neutral)
 - `drilldown_available()` -- checks if `data/cells/` exists with CSVs
 - `load_islet_cells(imageid, islet_key)` -- CSV loader with `new.env()` caching
-- `render_islet_drilldown_plot(info, cells, color_by, show_peri)` -- cells over `build_segmentation_base_plot()`
+- `render_islet_drilldown_plot(info, cells, color_by, show_peri)` -- cells over `build_segmentation_base_plot()`. Uses `fill` aesthetic (shape 21) for phenotype/marker coloring, `alpha` for core/peri distinction (0.9/0.4). `colour` aesthetic reserved for structure boundaries.
 - `render_drilldown_summary(cells)` -- horizontal bar chart of phenotype composition
 
 ### segmentation_helpers.R Refactor
 
 `build_segmentation_base_plot(info)` extracted from `render_islet_segmentation_plot()`. Returns ggplot with GeoJSON polygon layers + coord_sf (WITHOUT crosshairs or title). Reused by both `render_islet_segmentation_plot()` (adds crosshairs + title) and `render_islet_drilldown_plot()` (adds cell scatter layer).
+
+**Structure Legend**: `build_segmentation_base_plot()` combines all visible polygons into one sf with a `structure_type` column, uses `aes(colour = structure_type)` + `scale_colour_manual(name = "Structures")` with `key_glyph = "path"`. Display names: Islet, Peri Boundary, Nerve, Capillary, Lymphatic. The `colour` aesthetic is reserved for structures; drilldown cell scatter uses `fill` (shape 21) to avoid scale conflict.
 
 ## Statistics Tab (Phase 6+14+16, Feb-Mar 2026)
 
@@ -313,7 +315,7 @@ The AI chat panel (`mod_ai_assistant_ui/server.R`) uses the University of Florid
 **Key files:**
 - `ai_helpers.R` -- Credential loading, API calls (streaming + non-streaming), model selection, error handling
 - `mod_ai_assistant_ui.R` -- Chat panel UI with model picker, textarea, send/reset buttons
-- `mod_ai_assistant_server.R` -- Chat history management, streaming callback, token budget tracking
+- `mod_ai_assistant_server.R` -- Chat history management, streaming callback, token budget tracking, `strip_markdown()` for plain-text display
 
 ### UF Navigator API
 
@@ -357,6 +359,7 @@ Required env vars: `KEY` (API key), `BASE` (API base URL, optional).
 - **Streaming parser must handle `reasoning_content`**: Standard delta parsing only checks `delta.content`. For reasoning models, `delta.reasoning_content` chunks arrive first — use a "Thinking..." indicator.
 - **Token budget**: Controlled by `OPENAI_TOKEN_BUDGET` env var. Chat panel shows cumulative usage and blocks requests when budget exhausted.
 - **Debug mode**: Set `DEBUG_CREDENTIALS=1` env var for verbose credential loading logs in the Shiny console.
+- **Plain-text display**: `strip_markdown()` in `mod_ai_assistant_server.R` removes markdown formatting (bold, headers, bullets, code blocks, links) from AI responses before display. Chat shows clean plain text, not raw markdown syntax.
 
 ## Cell-Count-Weighted Trajectory (Phase 12, Mar 2026)
 

@@ -30,8 +30,34 @@ ai_assistant_server <- function(id) {
       c(list(first_entry), rest)
     }
 
+    strip_markdown <- function(text) {
+      if (is.null(text) || !nzchar(text)) return(text)
+      # Remove fenced code block markers (```lang ... ```)
+      text <- gsub("```[a-zA-Z]*\n?", "", text)
+      # Remove inline code backticks
+      text <- gsub("`([^`]+)`", "\\1", text)
+      # Remove bold (**...**) and (__...__)
+      text <- gsub("\\*\\*([^*]+)\\*\\*", "\\1", text)
+      text <- gsub("__([^_]+)__", "\\1", text)
+      # Remove italic (*...*) and (_..._)
+      text <- gsub("\\*([^*]+)\\*", "\\1", text)
+      text <- gsub("(?<![a-zA-Z])_([^_]+)_(?![a-zA-Z])", "\\1", text, perl = TRUE)
+      # Remove headers
+      text <- gsub("(?m)^#{1,6}\\s+", "", text, perl = TRUE)
+      # Remove bullet markers (- or * at start of line), keep the text
+      text <- gsub("(?m)^[*\\-]\\s+", "", text, perl = TRUE)
+      # Remove numbered list markers
+      text <- gsub("(?m)^\\d+\\.\\s+", "", text, perl = TRUE)
+      # Convert markdown links [text](url) to just text
+      text <- gsub("\\[([^]]+)\\]\\([^)]+\\)", "\\1", text)
+      # Remove horizontal rules
+      text <- gsub("(?m)^[-*]{3,}$", "", text, perl = TRUE)
+      text
+    }
+
     format_chat_content <- function(text) {
       if (is.null(text)) return(htmltools::HTML(""))
+      text <- strip_markdown(text)
       text <- stringr::str_replace_all(text, "\r\n", "\n")
       htmltools::HTML(gsub("\n", "<br/>", htmltools::htmlEscape(text)))
     }
