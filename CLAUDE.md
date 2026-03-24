@@ -125,6 +125,7 @@ Note: `scripts/reaggregate_islets.py` replaces the manual notebook workflow (agg
 
 ### Pipeline Scripts & Notebooks
 
+- `scripts/fix_tcell_subtypes.py` - Reclassifies CD4/CD8 T cells by marker gating (CD8a/CD4 >= 0.5); `--dry-run` flag for preview
 - `scripts/reaggregate_islets.py` - **Primary pipeline**: aggregation (min_cells=0) + trajectory + Leiden in one script
 - `scripts/compute_neighborhood_metrics.py` - Computes per-islet peri-islet metrics from single-cell H5AD
 - `scripts/extract_per_islet_cells.py` - Extracts per-islet cell CSVs for drill-down viewer
@@ -382,7 +383,7 @@ Required env vars: `KEY` (API key), `BASE` (API base URL, optional).
 - `PIXEL_SIZE_UM = 0.3774` - micrometers per pixel conversion constant
 - UMAP "Selected Feature" uses continuous viridis (inferno) colormap scaled to data min/max
 - Donor status colors: ND = steel blue (#4477AA), Aab+ = burnt umber (#CC6633), T1D = forest green (#228833) — Paul Tol bright variant, colorblind-safe, centralized as `DONOR_COLORS` in `00_globals.R`
-- Phenotyping uses Rules1 (`data/phenotype_rules.csv`) - 19 phenotypes, 18 markers
+- Phenotyping uses Rules1 (`data/phenotype_rules.csv`) - 21 phenotypes, 18 markers. CSV headers use adata.var_names (CD8a, HLADR, PDPN — not CD8, HLA-DR, Podoplanin)
 - **Donor metadata**: Comes from `islets_core_fixed.h5ad` obs, NOT from `CODEX_Pancreas_Donors.xlsx` (different cohort)
 - **User-facing terminology**: Use "Sex" not "Gender" in all UI labels, plot titles, and methods text. The underlying data column remains `gender` for backwards compatibility.
 - **H5AD obs index**: `islets_core_fixed.h5ad` index name is `islet_id` -- same as column, use `reset_index(drop=True)`
@@ -432,6 +433,10 @@ Rscript -e 'shiny::runApp(".", port = 7777)'
 
 ```bash
 conda activate scvi-env
+
+# Fix T cell subtypes in canonical H5AD (dry-run first, then apply)
+python scripts/fix_tcell_subtypes.py --dry-run
+python scripts/fix_tcell_subtypes.py
 
 # Full rebuild from single-cell H5AD (aggregate + trajectory + Leiden, ~15 min)
 python scripts/reaggregate_islets.py
