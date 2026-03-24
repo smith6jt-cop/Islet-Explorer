@@ -354,7 +354,7 @@ Rscript scripts/install_shiny_deps.R
 
 ## License
 
-Research use only. Contact the repository maintainers for licensing and collaboration inquiries.
+This project is licensed under the [MIT License](LICENSE). Copyright (c) 2026 smith6jt-cop.
 
 ## Citation
 
