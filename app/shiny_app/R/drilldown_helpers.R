@@ -187,15 +187,15 @@ render_islet_drilldown_plot <- function(info, cells, color_by = "phenotype", sho
   cells$x_px <- cells$X_centroid / PIXEL_SIZE_UM
   cells$y_px <- cells$Y_centroid / PIXEL_SIZE_UM
 
-  # Assign shape: filled for core, open for peri
+  # Assign region label for alpha-based core/peri distinction
   if ("cell_region" %in% colnames(cells)) {
-    cells$pt_shape <- ifelse(cells$cell_region == "core", 16, 1)
+    cells$region_label <- ifelse(cells$cell_region == "core", "Core", "Peri")
   } else {
-    cells$pt_shape <- 16
+    cells$region_label <- "Core"
   }
 
   if (color_by == "phenotype" && "phenotype" %in% colnames(cells)) {
-    # Categorical coloring by phenotype
+    # Categorical coloring by phenotype (using fill to avoid colour conflict with structures)
     pheno_present <- sort(unique(cells$phenotype))
     pal <- palette[pheno_present]
     # Fill missing phenotypes with gray
@@ -204,30 +204,26 @@ render_islet_drilldown_plot <- function(info, cells, color_by = "phenotype", sho
     p <- base_plot +
       ggplot2::geom_point(
         data = cells,
-        ggplot2::aes(x = x_px, y = y_px, color = phenotype, shape = factor(pt_shape)),
-        size = 3.0, alpha = 0.8,
+        ggplot2::aes(x = x_px, y = y_px, fill = phenotype, alpha = region_label),
+        shape = 21, colour = "grey30", stroke = 0.3, size = 3.0,
         inherit.aes = FALSE
       ) +
-      ggplot2::scale_color_manual(values = pal, name = "Phenotype") +
-      ggplot2::scale_shape_manual(values = c("16" = 16, "1" = 1),
-                                  labels = c("16" = "Core", "1" = "Peri"),
-                                  name = "Region") +
+      ggplot2::scale_fill_manual(values = pal, name = "Phenotype") +
+      ggplot2::scale_alpha_manual(values = c("Core" = 0.9, "Peri" = 0.4), name = "Region") +
       ggplot2::labs(title = paste(info$islet_key, "- Single Cells"))
   } else if (color_by %in% colnames(cells)) {
-    # Continuous coloring by marker expression
+    # Continuous coloring by marker expression (using fill)
     cells$marker_val <- suppressWarnings(as.numeric(cells[[color_by]]))
 
     p <- base_plot +
       ggplot2::geom_point(
         data = cells,
-        ggplot2::aes(x = x_px, y = y_px, color = marker_val, shape = factor(pt_shape)),
-        size = 3.0, alpha = 0.8,
+        ggplot2::aes(x = x_px, y = y_px, fill = marker_val, alpha = region_label),
+        shape = 21, colour = "grey30", stroke = 0.3, size = 3.0,
         inherit.aes = FALSE
       ) +
-      ggplot2::scale_color_viridis_c(option = "inferno", name = color_by, na.value = "gray80") +
-      ggplot2::scale_shape_manual(values = c("16" = 16, "1" = 1),
-                                  labels = c("16" = "Core", "1" = "Peri"),
-                                  name = "Region") +
+      ggplot2::scale_fill_viridis_c(option = "inferno", name = color_by, na.value = "gray80") +
+      ggplot2::scale_alpha_manual(values = c("Core" = 0.9, "Peri" = 0.4), name = "Region") +
       ggplot2::labs(title = paste(info$islet_key, "-", color_by))
   } else {
     # Fallback: just plot cells in gray

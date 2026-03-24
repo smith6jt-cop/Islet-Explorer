@@ -12,6 +12,7 @@ app/shiny_app/www/segmentation_data/
 AI_Markdown/
 analysis_output/*
 islet_analysis/
+literature/*
 
 # R workspace and environment files
 .RData

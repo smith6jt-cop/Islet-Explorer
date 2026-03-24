@@ -505,18 +505,44 @@ build_segmentation_base_plot <- function(info, buffer_um = 150,
     }
   }
 
-  has_polygons <- FALSE
+  # Display names for legend
+  display_names <- c(
+    "Islet" = "Islet", "IsletExpanded" = "Peri Boundary",
+    "Nerve" = "Nerve", "Capillary" = "Capillary", "Lymphatic" = "Lymphatic"
+  )
+  display_colors <- c(
+    "Islet" = "#0066CC", "Peri Boundary" = "#00CCCC",
+    "Nerve" = "#CC00CC", "Capillary" = "#CC0000", "Lymphatic" = "#00AA00"
+  )
+
+  # Combine all visible polygons into one sf with a structure_type column
   layer_order <- c("IsletExpanded", "Islet", "Lymphatic", "Capillary", "Nerve")
+  poly_list <- list()
   for (cls in layer_order) {
     if (cls %in% skip_classes) next
     if (!is.null(polygons[[cls]]) && nrow(polygons[[cls]]) > 0) {
-      p <- p + ggplot2::geom_sf(data = polygons[[cls]], fill = NA, color = colors[cls],
-                           linewidth = 0.8, show.legend = FALSE)
-      has_polygons <- TRUE
+      pg <- sf::st_sf(
+        structure_type = rep(display_names[cls], nrow(polygons[[cls]])),
+        geometry = sf::st_geometry(polygons[[cls]])
+      )
+      poly_list[[cls]] <- pg
     }
   }
 
-  if (!has_polygons) return(NULL)
+  if (length(poly_list) == 0) return(NULL)
+
+  combined_sf <- do.call(rbind, poly_list)
+  # Order factor so legend matches layer order
+  visible_names <- display_names[layer_order[!layer_order %in% skip_classes]]
+  visible_names <- visible_names[visible_names %in% unique(combined_sf$structure_type)]
+  combined_sf$structure_type <- factor(combined_sf$structure_type, levels = visible_names)
+
+  p <- p +
+    ggplot2::geom_sf(data = combined_sf,
+                     ggplot2::aes(colour = structure_type),
+                     fill = NA, linewidth = 0.8, key_glyph = "path") +
+    ggplot2::scale_colour_manual(values = display_colors, name = "Structures",
+                                  drop = FALSE)
 
   p
 }
@@ -551,6 +577,12 @@ render_islet_segmentation_plot <- function(info, show_peri_boundary = TRUE, show
     ggplot2::labs(
       title = paste(info$islet_key, "- Case", info$case_id),
       x = "X position (pixels)", y = "Y position (pixels)"
+    ) +
+    ggplot2::theme(
+      legend.position = "right",
+      legend.key.size = ggplot2::unit(0.9, "cm"),
+      legend.title = ggplot2::element_text(size = 16, face = "bold"),
+      legend.text = ggplot2::element_text(size = 14)
     )
 
   p
