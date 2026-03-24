@@ -288,14 +288,12 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           ggplot2::scale_color_manual(values = pal, name = "Cluster", na.value = "#d9d9d9",
                                         guide = ggplot2::guide_legend(override.aes = list(size = 4)))
         } else {
-          # Phenotype coloring — legend limited to selected phenotypes
-          legend_phenos <- if (!is.null(selected_phenos) && length(selected_phenos) > 0) {
-            sort(selected_phenos)
+          # Phenotype coloring — legend strictly limited to checked phenotypes
+          if (!is.null(selected_phenos) && length(selected_phenos) > 0) {
+            legend_phenos <- sort(intersect(selected_phenos,
+                                            unique(c(fg$phenotype, if (color_bg) bg$phenotype))))
           } else {
-            sort(unique(fg$phenotype))
-          }
-          if (color_bg && nrow(bg) > 0) {
-            legend_phenos <- sort(unique(c(legend_phenos, bg$phenotype)))
+            legend_phenos <- sort(unique(c(fg$phenotype, if (color_bg) bg$phenotype)))
           }
           pal <- palette()[legend_phenos]
           pal[is.na(pal)] <- "#CCCCCC"
@@ -404,18 +402,20 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                              islet_key),
               hoverinfo = "text",
               type = "scatter", mode = "markers",
-              marker = list(size = 5, opacity = 0.7)) %>%
+              marker = list(size = 3, opacity = 0.7)) %>%
         layout(
           title = list(text = paste0("Leiden ", res_label, " (", nrow(plot_df), " islets)"),
-                       font = list(size = 14)),
-          xaxis = list(title = "UMAP 1", zeroline = FALSE,
-                       showgrid = FALSE, showticklabels = FALSE,
+                       font = list(size = 15)),
+          xaxis = list(title = list(text = "UMAP 1", font = list(size = 14)),
+                       zeroline = FALSE, showgrid = FALSE, showticklabels = FALSE,
+                       showline = FALSE, constrain = "domain"),
+          yaxis = list(title = list(text = "UMAP 2", font = list(size = 14)),
+                       zeroline = FALSE, showgrid = FALSE, showticklabels = FALSE,
+                       showline = FALSE, scaleanchor = "x", scaleratio = 1,
                        constrain = "domain"),
-          yaxis = list(title = "UMAP 2", zeroline = FALSE,
-                       showgrid = FALSE, showticklabels = FALSE,
-                       scaleanchor = "x", scaleratio = 1,
-                       constrain = "domain"),
-          legend = list(title = list(text = "Cluster"))
+          legend = list(title = list(text = "Cluster", font = list(size = 14)),
+                        font = list(size = 13),
+                        itemsizing = "constant")
         )
     })
 
@@ -442,13 +442,19 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       plot_df$donor_status <- factor(plot_df$donor_status, levels = c("ND", "Aab+", "T1D"))
 
       ggplot(plot_df, aes(x = umap1, y = umap2, color = donor_status)) +
-        geom_point(alpha = 0.6, size = 3.0) +
+        geom_point(alpha = 0.6, size = 1.0) +
         scale_color_manual(values = donor_colors_reactive()) +
         scale_x_continuous(expand = expansion(mult = 0.02)) +
         scale_y_continuous(expand = expansion(mult = 0.02)) +
         coord_fixed() +
         labs(x = "UMAP 1", y = "UMAP 2", color = "Status") +
-        theme_minimal(base_size = 12)
+        guides(color = guide_legend(override.aes = list(size = 3))) +
+        theme_minimal(base_size = 15) +
+        theme(axis.text = element_blank(), axis.ticks = element_blank(),
+              panel.grid = element_blank(), axis.line = element_blank(),
+              axis.title = element_text(size = 14),
+              legend.text = element_text(size = 13),
+              legend.title = element_text(size = 14))
     })
 
     # ==== Card 3 (bottom): Cluster Composition ====
@@ -687,9 +693,9 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           "A", "Immune Infiltration",
           "How does immune infiltration vary across disease stages? Compare peri-islet and core immune fractions."
         ))),
-        fluidRow(
+        fluidRow(style = "display: flex; flex-wrap: wrap;",
           column(6,
-            div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible;",
+            div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible; height: 100%; box-sizing: border-box;",
               div(style = "display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 8px;",
                 div(style = "flex: 1; min-width: 180px;",
                   selectInput(ns("infiltration_metric"), "Metric",
@@ -706,7 +712,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
             )
           ),
           column(6,
-            div(class = "card", style = "padding: 15px; margin-bottom: 15px;",
+            div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible; height: 100%; box-sizing: border-box;",
               h5("Peri vs Core Immune Fraction", style = "font-size: 15px; margin-top: 0;"),
               plotlyOutput(ns("infiltration_scatter"), height = "400px")
             )
@@ -723,9 +729,9 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           "B", "Immune Cell Composition & Enrichment",
           "Which immune cell types are present in islet core vs peri-islet zones, and which are enriched vs tissue-wide background?"
         ))),
-        fluidRow(
-          column(7,
-            div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible;",
+        fluidRow(style = "display: flex; flex-wrap: wrap;",
+          column(6,
+            div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible; height: 100%; box-sizing: border-box;",
               div(style = "display: flex; gap: 15px; align-items: center; flex-wrap: wrap; margin-bottom: 8px;",
                 radioButtons(ns("enrich_region"), "Region",
                              c("Peri-islet (enrichment z)" = "peri",
@@ -742,8 +748,8 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
               plotlyOutput(ns("enrichment_bars"), height = "420px")
             )
           ),
-          column(5,
-            div(class = "card", style = "padding: 15px; margin-bottom: 15px;",
+          column(6,
+            div(class = "card", style = "padding: 15px; margin-bottom: 15px; height: 100%; box-sizing: border-box;",
               h5("Heatmap", style = "font-size: 15px; margin-top: 0;"),
               plotlyOutput(ns("enrichment_heatmap"), height = "420px")
             )
@@ -760,9 +766,9 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           "C", "Immune Cell Proximity",
           "How close are immune cells to islet cores? Shorter distances may indicate active immune targeting."
         ))),
-        fluidRow(
+        fluidRow(style = "display: flex; flex-wrap: wrap;",
           column(6,
-            div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible;",
+            div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible; height: 100%; box-sizing: border-box;",
               selectInput(ns("distance_metric"), "Distance to nearest",
                           choices = c("Any immune cell" = "min_dist_immune_mean",
                                       "Macrophage" = "min_dist_Macrophage",
@@ -773,7 +779,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
             )
           ),
           column(6,
-            div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible;",
+            div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible; height: 100%; box-sizing: border-box;",
               selectInput(ns("kde_immune_type"), "Immune cell type",
                           choices = c("All immune" = "all",
                                       "Macrophage" = "Macrophage",

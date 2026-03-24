@@ -961,15 +961,20 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       df$donor_status <- factor(df$donor_status, levels = c("ND", "Aab+", "T1D"))
 
       ggplot(df, aes(x = umap_1, y = umap_2, color = donor_status)) +
-        geom_point(alpha = 0.6, size = 1.5) +
+        geom_point(alpha = 0.6, size = 1.0) +
         scale_color_manual(values = donor_colors_reactive()) +
         scale_x_continuous(expand = expansion(mult = 0.02)) +
         scale_y_continuous(expand = expansion(mult = 0.02)) +
         coord_fixed() +
         labs(x = "UMAP 1", y = "UMAP 2", title = "UMAP: Donor Status") +
-        theme_minimal(base_size = 12) +
+        guides(color = guide_legend(override.aes = list(size = 3))) +
+        theme_minimal(base_size = 15) +
         theme(axis.text = element_blank(), axis.ticks = element_blank(),
-              panel.grid = element_blank())
+              panel.grid = element_blank(), axis.line = element_blank(),
+              axis.title = element_text(size = 14),
+              plot.title = element_text(size = 15, face = "bold"),
+              legend.text = element_text(size = 13),
+              legend.title = element_text(size = 14))
     })
 
     # ---------- UMAP: Selected Feature ----------
@@ -986,16 +991,20 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       selected_feature <- input$traj_feature %||% "Selected feature"
 
       g <- ggplot(df, aes(x = umap_1, y = umap_2, color = value)) +
-        geom_point(alpha = 0.6, size = 1.5) +
+        geom_point(alpha = 0.6, size = 1.0) +
         scale_x_continuous(expand = expansion(mult = 0.02)) +
         scale_y_continuous(expand = expansion(mult = 0.02)) +
         coord_fixed() +
         labs(x = "UMAP 1", y = "UMAP 2",
              title = paste("UMAP:", selected_feature),
              color = "Expression") +
-        theme_minimal(base_size = 12) +
+        theme_minimal(base_size = 15) +
         theme(axis.text = element_blank(), axis.ticks = element_blank(),
-              panel.grid = element_blank())
+              panel.grid = element_blank(), axis.line = element_blank(),
+              axis.title = element_text(size = 14),
+              plot.title = element_text(size = 15, face = "bold"),
+              legend.text = element_text(size = 13),
+              legend.title = element_text(size = 14))
 
       # Continuous colormap scaled to data min/max
       val_range <- range(df$value, na.rm = TRUE)
