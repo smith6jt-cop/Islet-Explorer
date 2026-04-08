@@ -70,9 +70,11 @@ spatial_ui <- function(id) {
                          class = "btn-sm btn-outline-secondary")
           ),
           tags$small("Drag to zoom, double-click to reset.", style = "color: #888; display: block; margin-bottom: 5px;"),
-          plotOutput(ns("tissue_scatter"), height = "700px",
-                     dblclick = ns("scatter_dblclick"),
-                     brush = brushOpts(id = ns("scatter_brush"), resetOnNew = TRUE))
+          # Phase 3: `tissue_scatter_container` is a uiOutput that resolves
+          # (server-side) to either the legacy brush-enabled plotOutput or an
+          # rdeck WebGL widget when `ISLET_USE_RDECK=TRUE`. Client-side
+          # output id remains stable, so existing CSS rules still apply.
+          uiOutput(ns("tissue_scatter_container"))
         )
       ),
 

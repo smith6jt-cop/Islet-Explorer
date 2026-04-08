@@ -48,7 +48,9 @@ trajectory_ui <- function(id) {
                           selected = "Paul Tol (default)")
             )
           ),
-          plotlyOutput(ns("traj_scatter"), height = 650),
+          # Phase 3: server wraps this output id in renderUI so the rdeck
+          # WebGL variant can take over when `ISLET_USE_RDECK=TRUE`.
+          uiOutput(ns("traj_scatter_container")),
           br(),
           plotlyOutput(ns("traj_heatmap"), height = 100),
           hr(),

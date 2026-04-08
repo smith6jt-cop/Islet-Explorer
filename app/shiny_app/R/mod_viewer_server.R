@@ -2,6 +2,11 @@ viewer_server <- function(id, forced_image, current_tab) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
+    # Phase 2: when USE_ZARR is TRUE the viewer builds an Avivator iframe
+    # pointing at an OME-Zarr store in MinIO instead of an OME-TIFF served
+    # by nginx. Controlled by env var so legacy deployments keep working.
+    use_zarr <- isTRUE(as.logical(Sys.getenv("ISLET_USE_ZARR", "FALSE")))
+
     viewer_info <- reactive({
       forced_img <- forced_image()
       env_info <- detect_environment(session)
@@ -10,9 +15,30 @@ viewer_server <- function(id, forced_image, current_tab) {
       info <- list(
         base = base, selection = NULL, mode = "picker", ok = FALSE,
         iframe_src = NULL, image_url = NULL, image_public_url = NULL,
-        image_rel = NULL, image_app_url = NULL, asset_diag = NULL, env = env_info
+        image_rel = NULL, image_app_url = NULL, asset_diag = NULL, env = env_info,
+        use_zarr = use_zarr
       )
       if (is.null(base)) return(info)
+
+      # --- Zarr path: skip the OME-TIFF asset discovery entirely ---
+      if (isTRUE(use_zarr)) {
+        sel <- forced_img
+        if (is.null(sel)) sel <- input$selected_image
+        info$selection <- sel
+        if (!is.null(sel) && nzchar(sel)) {
+          zarr_url <- build_zarr_image_url(sel)
+          info$image_url <- zarr_url
+          info$image_public_url <- zarr_url
+          info$image_param <- zarr_url
+          ch_b64 <- tryCatch(build_channel_config_b64(channel_names_vec),
+                             error = function(e) NULL)
+          info$iframe_src <- build_avivator_iframe_url(sel, ch_b64)
+          info$ok <- !is.null(info$iframe_src)
+        }
+        cat("[VIEWER] Zarr mode: sel=", sel %||% "NULL",
+            " iframe_src=", info$iframe_src %||% "NULL", "\n")
+        return(info)
+      }
 
       cat("[VIEWER] Environment detection - reverse_proxy:", env_info$is_reverse_proxy,
           "hostname:", env_info$hostname, "pathname:", env_info$pathname, "\n")
@@ -122,15 +148,20 @@ viewer_server <- function(id, forced_image, current_tab) {
       }
 
       available_images <- character(0)
-      images_dir <- file.path("www", "local_images")
-      if (dir.exists(images_dir)) {
-        image_files <- list.files(images_dir, pattern = "\\.ome\\.tiff?$", ignore.case = TRUE)
-        available_images <- c(available_images, image_files)
-      }
-      local_root <- Sys.getenv("LOCAL_IMAGE_ROOT", unset = "")
-      if (nzchar(local_root) && dir.exists(local_root)) {
-        root_files <- list.files(local_root, pattern = "\\.ome\\.tiff?$", ignore.case = TRUE)
-        available_images <- unique(c(available_images, root_files))
+      if (isTRUE(use_zarr)) {
+        # Zarr mode: list stems from the manifest / local zarr_images dir.
+        available_images <- list_available_zarr_images()
+      } else {
+        images_dir <- file.path("www", "local_images")
+        if (dir.exists(images_dir)) {
+          image_files <- list.files(images_dir, pattern = "\\.ome\\.tiff?$", ignore.case = TRUE)
+          available_images <- c(available_images, image_files)
+        }
+        local_root <- Sys.getenv("LOCAL_IMAGE_ROOT", unset = "")
+        if (nzchar(local_root) && dir.exists(local_root)) {
+          root_files <- list.files(local_root, pattern = "\\.ome\\.tiff?$", ignore.case = TRUE)
+          available_images <- unique(c(available_images, root_files))
+        }
       }
 
       image_basename <- NULL
