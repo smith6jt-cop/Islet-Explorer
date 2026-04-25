@@ -43,17 +43,21 @@ DEFAULT_ISLET_H5AD = os.path.join(
 )
 DEFAULT_OUTPUT = os.path.join(PROJECT_ROOT, "data", "neighborhood_metrics.csv")
 
-# Immune phenotypes for infiltration metrics
+# Immune phenotypes — drives the AGGREGATE metrics where "what counts as
+# immune" must be defined narrowly: immune_frac_peri/core, immune_ratio,
+# tcell_density_peri, immune_count_peri/core, and the min_dist_immune_mean
+# summary. Do NOT extend this list — it would make those aggregates
+# meaningless (e.g. "fraction of peri cells that are 'Beta cell or B cell'").
 IMMUNE_TYPES = [
     "CD8a Tcell", "CD4 Tcell", "T cell", "B cell",
     "Macrophage", "APCs", "Immune"
 ]
 
-# Enrichment z-score targets (subset of immune types most relevant)
-ENRICH_TYPES = [
-    "CD8a Tcell", "CD4 Tcell", "T cell", "B cell",
-    "Macrophage", "APCs", "Immune"
-]
+# Per-type metrics (enrich_z_*, min_dist_*) are computed for ALL phenotypes
+# discovered in the data, minus this noise bucket. This replaces the earlier
+# 7-phenotype ENRICH_TYPES subset so the app can expose phenotype-driven
+# selectors uniformly across every cell type, not a hand-curated subset.
+PER_TYPE_EXCLUDE = {"Unknown"}
 
 PIXEL_SIZE_UM = 0.3774  # micrometers per pixel, matches app constant
 
@@ -133,6 +137,10 @@ def compute_metrics(sc_path, islet_path, output_path):
     tissue_counts = obs["phenotype"].value_counts()
     tissue_props = (tissue_counts / tissue_total).to_dict()
     print(f"   {len(all_phenotypes)} phenotypes, {tissue_total:,} total cells")
+    # Per-type metrics span all phenotypes minus PER_TYPE_EXCLUDE.
+    per_type_phenotypes = [p for p in all_phenotypes if p not in PER_TYPE_EXCLUDE]
+    print(f"   Per-type metrics (enrich_z, min_dist) computed for "
+          f"{len(per_type_phenotypes)} phenotypes")
 
     # ── 5. Compute per-islet metrics ─────────────────────────────────────
     print("\n5. Computing per-islet neighborhood metrics...")
@@ -218,8 +226,8 @@ def compute_metrics(sc_path, islet_path, output_path):
             100 * tcell_peri / peri_total if peri_total > 0 else np.nan
         )
 
-        # --- Enrichment z-scores (Poisson model) ---
-        for etype in ENRICH_TYPES:
+        # --- Enrichment z-scores (Poisson model) — per-phenotype ---
+        for etype in per_type_phenotypes:
             safe_name = etype.replace(" ", "_").replace("+", "plus")
             observed = int(peri_pheno_counts.get(etype, 0))
             expected = tissue_props.get(etype, 0) * peri_total
@@ -231,42 +239,41 @@ def compute_metrics(sc_path, islet_path, output_path):
             else:
                 rec[f"enrich_z_{safe_name}"] = np.nan
 
-        # --- Distance metrics (min distance to immune cells) ---
+        # --- Distance metrics (min distance from islet core centroid to
+        #     nearest cell of each phenotype in the peri-islet zone) ---
         if peri_total > 0 and len(core) > 0:
             # Use core centroid as reference point
             core_cx = core["X_centroid"].astype(float).mean()
             core_cy = core["Y_centroid"].astype(float).mean()
 
-            # Find immune cells in peri-islet zone
+            # Aggregate "any immune cell" min distance — uses IMMUNE_TYPES.
             peri_immune_mask = peri["phenotype"].isin(IMMUNE_TYPES)
             peri_immune_cells = peri[peri_immune_mask]
-
             if len(peri_immune_cells) > 0:
                 dx = peri_immune_cells["X_centroid"].astype(float).values - core_cx
                 dy = peri_immune_cells["Y_centroid"].astype(float).values - core_cy
-                dists = np.sqrt(dx**2 + dy**2)
-                rec["min_dist_immune_mean"] = float(np.min(dists))
-
-                # Per-type distances
-                for dtype in ["CD8a Tcell", "Macrophage"]:
-                    safe_name = dtype.replace(" ", "_").replace("+", "plus")
-                    type_mask = peri_immune_cells["phenotype"] == dtype
-                    if type_mask.any():
-                        type_cells = peri_immune_cells[type_mask]
-                        tdx = type_cells["X_centroid"].astype(float).values - core_cx
-                        tdy = type_cells["Y_centroid"].astype(float).values - core_cy
-                        tdists = np.sqrt(tdx**2 + tdy**2)
-                        rec[f"min_dist_{safe_name}"] = float(np.min(tdists))
-                    else:
-                        rec[f"min_dist_{safe_name}"] = np.nan
+                rec["min_dist_immune_mean"] = float(np.min(np.sqrt(dx**2 + dy**2)))
             else:
                 rec["min_dist_immune_mean"] = np.nan
-                for dtype in ["CD8a Tcell", "Macrophage"]:
-                    safe_name = dtype.replace(" ", "_").replace("+", "plus")
+
+            # Per-phenotype min distances — extends across all phenotypes.
+            peri_phenos = peri["phenotype"].values
+            peri_x = peri["X_centroid"].astype(float).values
+            peri_y = peri["Y_centroid"].astype(float).values
+            for dtype in per_type_phenotypes:
+                safe_name = dtype.replace(" ", "_").replace("+", "plus")
+                type_mask = peri_phenos == dtype
+                if type_mask.any():
+                    tdx = peri_x[type_mask] - core_cx
+                    tdy = peri_y[type_mask] - core_cy
+                    rec[f"min_dist_{safe_name}"] = float(
+                        np.min(np.sqrt(tdx**2 + tdy**2))
+                    )
+                else:
                     rec[f"min_dist_{safe_name}"] = np.nan
         else:
             rec["min_dist_immune_mean"] = np.nan
-            for dtype in ["CD8a Tcell", "Macrophage"]:
+            for dtype in per_type_phenotypes:
                 safe_name = dtype.replace(" ", "_").replace("+", "plus")
                 rec[f"min_dist_{safe_name}"] = np.nan
 

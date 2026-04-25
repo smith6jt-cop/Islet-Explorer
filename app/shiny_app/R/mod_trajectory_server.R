@@ -77,10 +77,13 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         }
       }
 
-      # Extract required columns
+      # Extract required columns. Both dpt_pseudotime (core) and
+      # dpt_pseudotime_combined (core + peri) may be present; the user
+      # toggles between them via input$pt_mode.
       cols <- intersect(
         c("combined_islet_id", "base_islet_id", "donor_status", "Case ID",
-          "case_id", "imageid", "dpt_pseudotime", "age", "gender", "total_cells"),
+          "case_id", "imageid", "dpt_pseudotime", "dpt_pseudotime_combined",
+          "age", "gender", "total_cells"),
         colnames(obs)
       )
       obs2 <- as.data.frame(obs[, cols, drop = FALSE])
@@ -128,9 +131,17 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       obs <- tr$obs
       ad  <- tr$adata
 
-      # Always use PAGA pseudotime (default)
-      if ("dpt_pseudotime" %in% names(obs)) {
+      # Switch pseudotime mode based on user selection.
+      # "core" uses dpt_pseudotime (core scVI features).
+      # "combined" uses dpt_pseudotime_combined (core + peri-islet scVI features).
+      # Falls back to whichever column is available if the requested one isn't.
+      mode <- if (!is.null(input$pt_mode)) input$pt_mode else "core"
+      if (mode == "combined" && "dpt_pseudotime_combined" %in% names(obs)) {
+        obs$pseudotime <- obs$dpt_pseudotime_combined
+      } else if ("dpt_pseudotime" %in% names(obs)) {
         obs$pseudotime <- obs$dpt_pseudotime
+      } else if ("dpt_pseudotime_combined" %in% names(obs)) {
+        obs$pseudotime <- obs$dpt_pseudotime_combined
       }
 
       list(obs = obs, obsm = tr$obsm, uns = tr$uns, var_names = tr$var_names, adata = ad)
@@ -171,7 +182,12 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       neural_markers   <- intersect(c("B3TUBB", "GAP43", "PGP9.5"), available_features)
       other_markers    <- setdiff(available_features, c(hormone_markers, immune_markers, vascular_markers, neural_markers))
 
-      # Build choices list with categories
+      # Build choices list with categories.
+      # Note: peri-islet immune/density columns are NOT exposed here as
+      # Y-axis features. Users select pseudotime mode (Core / Core+Peri)
+      # to incorporate the peri-zone and structural-density signals into
+      # the X-axis (pseudotime) instead, then visualise the associated
+      # markers (CD3e, CD8a, CD45, CD31, CD34, PDPN, etc.) on Y.
       choices <- list()
       if (length(hormone_markers)  > 0) choices[["Hormone Markers"]]  <- setNames(hormone_markers, hormone_markers)
       if (length(immune_markers)   > 0) choices[["Immune Markers"]]   <- setNames(immune_markers, immune_markers)
@@ -231,14 +247,10 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       obs_df <- tr$obs
       if (is.null(obs_df)) return(NULL)
 
-      # Extract expression values
+      # Extract expression values from .X (markers only).
       expression_vals <- tryCatch({
-        if (selected_feature %in% var_names) {
-          idx <- which(var_names == selected_feature)
-          as.numeric(adata$X[, idx])
-        } else {
-          rep(NA_real_, nrow(obs_df))
-        }
+        idx <- which(var_names == selected_feature)
+        as.numeric(adata$X[, idx])
       }, error = function(e) {
         message("[traj_data_clean] Error extracting feature: ", e$message)
         rep(NA_real_, nrow(obs_df))
@@ -288,11 +300,16 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         result_df$umap_2 <- NA_real_
       }
 
-      # Merge diameter from prepared() comp table
+      # Merge diameter and Leiden cluster cols from prepared() comp table.
       prep_data <- prepared()
       if (!is.null(prep_data) && !is.null(prep_data$comp)) {
-        size_lookup <- prep_data$comp[c("Case ID", "Donor Status", "islet_key", "islet_diam_um")]
-        result_df$`Case ID` <- sprintf("%04d", as.numeric(result_df$case_id))
+        leiden_cols <- intersect(c("leiden_0.3", "leiden_0.5", "leiden_0.8", "leiden_1.0"),
+                                 colnames(prep_data$comp))
+        lookup_cols <- c("Case ID", "Donor Status", "islet_key", "islet_diam_um",
+                         leiden_cols)
+        size_lookup <- prep_data$comp[intersect(lookup_cols, colnames(prep_data$comp))]
+        # comp$`Case ID` is integer (data_loading.R:346); match the type so merge succeeds.
+        result_df$`Case ID` <- suppressWarnings(as.integer(result_df$case_id))
         result_df$`Donor Status` <- result_df$donor_status
 
         # Base R merge (faster for this use case)
@@ -300,11 +317,18 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
                         by = c("Case ID", "Donor Status", "islet_key"),
                         all.x = TRUE, sort = FALSE)
 
+        match_idx <- match(
+          paste(result_df$`Case ID`, result_df$`Donor Status`, result_df$islet_key),
+          paste(merged$`Case ID`, merged$`Donor Status`, merged$islet_key)
+        )
+
         if ("islet_diam_um" %in% colnames(merged)) {
-          result_df$islet_diam_um <- merged$islet_diam_um[match(
-            paste(result_df$`Case ID`, result_df$`Donor Status`, result_df$islet_key),
-            paste(merged$`Case ID`, merged$`Donor Status`, merged$islet_key)
-          )]
+          result_df$islet_diam_um <- merged$islet_diam_um[match_idx]
+        }
+        for (lc in leiden_cols) {
+          if (lc %in% colnames(merged)) {
+            result_df[[lc]] <- as.character(merged[[lc]][match_idx])
+          }
         }
       }
 
@@ -479,6 +503,20 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         df$donor_id <- factor(df$donor_id)
         aes_mapping$colour <- as.name("donor_id")
         color_title <- "Donor ID"
+      } else if (startsWith(color_by, "leiden_") && color_by %in% colnames(df)) {
+        # Sort factor levels numerically so legend reads 0,1,2,... instead of 0,1,10,11
+        lvl_vals <- unique(stats::na.omit(df[[color_by]]))
+        num_vals <- suppressWarnings(as.numeric(lvl_vals))
+        sorted_lvls <- if (!any(is.na(num_vals))) lvl_vals[order(num_vals)] else sort(lvl_vals)
+        df[[color_by]] <- factor(df[[color_by]], levels = sorted_lvls)
+        aes_mapping$colour <- as.name(color_by)
+        color_title <- paste("Leiden", sub("^leiden_", "res ", color_by))
+      } else if (startsWith(color_by, "leiden_")) {
+        # Column not present in df (e.g., Excel fallback) — fall back to donor_status
+        df$donor_status <- factor(df$donor_status, levels = c("ND", "Aab+", "T1D"))
+        aes_mapping$colour <- as.name("donor_status")
+        color_title <- "Donor Status"
+        color_by <- "donor_status"
       }
 
       # Add size aesthetic if not uniform
@@ -524,6 +562,16 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
           names(colors) <- levels(df$donor_id)
         }
         g <- g + scale_color_manual(values = colors, name = color_title, drop = FALSE)
+      } else if (startsWith(color_by, "leiden_") && color_by %in% colnames(df)) {
+        clust_levels <- levels(df[[color_by]])
+        n_clust <- length(clust_levels)
+        clust_colors <- if (n_clust <= 12) {
+          RColorBrewer::brewer.pal(max(3, min(12, n_clust)), "Set3")[seq_len(n_clust)]
+        } else {
+          scales::hue_pal()(n_clust)
+        }
+        names(clust_colors) <- clust_levels
+        g <- g + scale_color_manual(values = clust_colors, name = color_title, drop = FALSE)
       }
 
       # Size scale
@@ -550,8 +598,9 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
           df$donor_status <- factor(df$donor_status, levels = c("ND", "Aab+", "T1D"))
           trend_colors <- donor_colors_reactive()
 
-          if (color_by == "donor_id") {
-            # Add separate geom_smooth for each donor_status with explicit color
+          if (color_by == "donor_id" || startsWith(color_by, "leiden_")) {
+            # Use explicit color per-status loop — adding a second scale_color_manual
+            # after a Leiden/donor_id cluster scale would override it and blank out the points.
             for (status in c("ND", "Aab+", "T1D")) {
               df_subset <- df[df$donor_status == status & !is.na(df$donor_status), ]
               if (nrow(df_subset) > 0) {
@@ -944,6 +993,38 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         } else {
           p("No data available", style = "font-size: 12px; color: #999;")
         }
+      } else if (startsWith(color_by, "leiden_")) {
+        df <- traj_data_clean()
+        if (is.null(df) || !(color_by %in% colnames(df))) {
+          return(p("Leiden clusters unavailable (rebuild islet_explorer.h5ad).",
+                   style = "font-size: 12px; color: #999;"))
+        }
+        lvl_vals <- unique(stats::na.omit(df[[color_by]]))
+        num_vals <- suppressWarnings(as.numeric(lvl_vals))
+        clust_levels <- if (!any(is.na(num_vals))) lvl_vals[order(num_vals)] else sort(lvl_vals)
+        n_clust <- length(clust_levels)
+        clust_colors <- if (n_clust <= 12) {
+          RColorBrewer::brewer.pal(max(3, min(12, n_clust)), "Set3")[seq_len(n_clust)]
+        } else {
+          scales::hue_pal()(n_clust)
+        }
+        mid_point <- ceiling(n_clust / 2)
+        col1_idx <- seq_len(mid_point)
+        col2_idx <- if (n_clust > mid_point) (mid_point + 1):n_clust else integer(0)
+        make_row <- function(i) {
+          div(style = "display: flex; align-items: center; margin-bottom: 6px;",
+            div(style = sprintf(
+              "width: 18px; height: 18px; background-color: %s; border-radius: 3px; margin-right: 6px;",
+              clust_colors[i])),
+            span(paste("Cluster", clust_levels[i]), style = "font-size: 14px;")
+          )
+        }
+        tagList(
+          div(style = "display: flex; gap: 10px;",
+            div(style = "flex: 1;", lapply(col1_idx, make_row)),
+            if (length(col2_idx) > 0) div(style = "flex: 1;", lapply(col2_idx, make_row))
+          )
+        )
       }
     })
 
@@ -1036,7 +1117,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         bin_name <- bin_levels[i]
         bin_data <- df[!is.na(df$pt_bin) & df$pt_bin == bin_name, ]
 
-        if (nrow(bin_data) >= 3) {
+        if (nrow(bin_data) >= 1) {
           hm_list[[length(hm_list) + 1]] <- data.frame(
             pt_bin            = factor(bin_name, levels = bin_levels),
             avg_donor_status  = mean(bin_data$ds_code, na.rm = TRUE),
@@ -1056,7 +1137,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       hm$x     <- all_mids[bin_idx]
 
       # Build as plotly heatmap to match scatter margins exactly
-      # Diverging colorscale: ND (blue) -> even mix (white) -> T1D (green)
+      # Colorscale: ND (blue) -> Aab+ (orange) -> T1D (green)
       plot_ly() %>%
         add_trace(
           type = "heatmap",
@@ -1064,7 +1145,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
           y = list(""),
           z = matrix(hm$avg_donor_status, nrow = 1),
           colorscale = list(c(0, donor_colors_reactive()[["ND"]]),
-                            c(0.5, "#F5F5F5"),
+                            c(0.5, donor_colors_reactive()[["Aab+"]]),
                             c(1, donor_colors_reactive()[["T1D"]])),
           zmin = 0, zmax = 2,
           showscale = FALSE,
@@ -1099,9 +1180,24 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       expr <- tryCatch(as.matrix(tr$adata$X[, idx, drop = FALSE]), error = function(e) NULL)
       if (is.null(expr)) return(NULL)
       colnames(expr) <- valid
-      result <- data.frame(pt = as.numeric(tr$obs$pseudotime), stringsAsFactors = FALSE)
+      result <- data.frame(
+        pt = as.numeric(tr$obs$pseudotime),
+        total_cells = as.integer(tr$obs$total_cells),
+        stringsAsFactors = FALSE)
       result <- cbind(result, as.data.frame(expr))
       result <- result[is.finite(result$pt), , drop = FALSE]
+
+      # Apply min cells/islet filter (matches traj_data_clean)
+      min_cells <- input$min_cells %||% 1
+      if (min_cells > 1) {
+        result <- result[is.finite(result$total_cells) & result$total_cells >= min_cells, , drop = FALSE]
+        if (nrow(result) == 0) return(NULL)
+      }
+
+      # Rank-normalize pseudotime (matches scatter x-axis)
+      result$pt <- rank(result$pt, ties.method = "average") / nrow(result)
+      result$total_cells <- NULL
+
       list(data = result, markers = valid)
     })
 
@@ -1131,7 +1227,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         for (i in seq_along(bin_levels)) {
           bin_data <- df[!is.na(df$pt_bin) & df$pt_bin == bin_levels[i], mk]
           bin_counts[i] <- length(bin_data)
-          bin_means[i] <- if (length(bin_data) >= 3) mean(bin_data, na.rm = TRUE) else NA_real_
+          bin_means[i] <- if (length(bin_data) >= 1) mean(bin_data, na.rm = TRUE) else NA_real_
         }
         # Z-score across bins
         valid_means <- bin_means[is.finite(bin_means)]
@@ -1143,14 +1239,12 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         z <- pmax(-2.5, pmin(2.5, z))  # clamp
 
         for (i in seq_along(bin_levels)) {
-          if (is.finite(z[i])) {
-            hm_rows[[length(hm_rows) + 1]] <- data.frame(
-              marker = mk,
-              x = all_mids[i] * (pt_range[2] - pt_range[1]) + pt_range[1],
-              z = z[i],
-              stringsAsFactors = FALSE
-            )
-          }
+          hm_rows[[length(hm_rows) + 1]] <- data.frame(
+            marker = mk,
+            x = all_mids[i] * (pt_range[2] - pt_range[1]) + pt_range[1],
+            z = z[i],
+            stringsAsFactors = FALSE
+          )
         }
       }
 
@@ -1170,7 +1264,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         geom_tile() +
         scale_fill_gradient2(low = "#2166ac", mid = "#f7f7f7", high = "#b2182b",
                              midpoint = 0, limits = c(-2.5, 2.5),
-                             name = "Z-score") +
+                             name = "Z-score", na.value = "#f7f7f7") +
         scale_x_continuous(limits = c(pt_range[1], pt_range[2]), expand = c(0, 0)) +
         labs(x = "Pseudotime", y = "", title = "Multi-Feature Expression Along Pseudotime") +
         theme_minimal() +

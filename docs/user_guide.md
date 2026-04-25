@@ -59,11 +59,10 @@ The Plot tab is the primary exploration interface. It has a **sidebar** (left) a
 - **Mode**: Switch between `Scatter` (feature vs diameter) and `Composition` (cell type proportions)
 - **Feature/Composition selector**: Choose what to plot
   - *Scatter mode*: Select from markers (31 proteins) or targets (hormone intensities)
-  - *Composition mode*: Four option groups:
-    - **Hormone Fractions** — INS, GCG, SST fractions
-    - **Cell Type Proportions** — 21 phenotype proportions from single-cell data
+  - *Composition mode*: Three option groups (the previous "Immune Metrics" group of 5 hand-curated ratios was removed in Apr 2026 — use the Spatial tab's per-phenotype enrichment / proportion / distance views instead):
+    - **Hormone Positivity (QuPath threshold)** — Ins_any, Glu_any, Stt_any
+    - **Phenotype Proportions (scVI)** — 21 phenotype proportions from single-cell data
     - **Peri-Islet Proportions** — Proportions of each phenotype in the 20 μm expansion zone around the islet
-    - **Immune Metrics** — `immune_frac_peri`, `immune_frac_core`, `immune_ratio`, `cd8_to_macro_ratio`, `tcell_density_peri`
 - **Region**: Filter by tissue region (core only, peri-islet, or all)
 - **Donor Status**: Select disease groups to include (ND, Aab+, T1D)
 - **AAb Filter**: Filter by autoantibody positivity (when available)
@@ -112,9 +111,12 @@ The Trajectory tab uses a full-width layout (no sidebar). All controls are inlin
 
 ### Controls
 
-- **Feature selector**: Choose which protein marker to display on the y-axis
+- **Feature selector**: Choose which protein marker to display on the y-axis (drawn from the 31-marker panel only — no aggregate/derived metrics)
 - **Trend lines**: None, Overall (single LOESS), or By Donor Status (ND/Aab+/T1D separate LOESS curves)
-- **Color points by**: Donor Status (default) or Donor ID
+- **Color points by**: Donor Status (default), Donor ID, or Leiden cluster at any of 4 resolutions (0.3 / 0.5 / 0.8 / 1.0)
+- **Pseudotime mode** (Apr 2026): Toggle between two pseudotime axes:
+  - *Core only* (default) — DPT computed from raw scVI core means. Strongest INS signal (r ≈ −0.69).
+  - *Core + Peri* — DPT computed from a 36-d input combining core scVI (10) + peri scVI (10) + 16 structural cell densities (Neural, Blood Vessel, Endothelial, Lymphatic in core and peri, weighted at α=0.15), with light Harmony (θ=0.1) on imageid. Strengthens immune/vascular marker correlations (CD3e, CD8a, CD31, CD34, PDPN) at a small cost to INS-driven span.
 - **Point size by**: Cell Count (default), Islet Diameter, or Uniform
   - *Cell Count* sizes points by `sqrt(total_cells)` — small islets (3-10 cells) appear as tiny dots, large islets (100+ cells) as large dots. This honestly represents measurement quality.
 - **Point transparency**: Adjustable alpha (0.1-1.0)
@@ -129,9 +131,10 @@ Hover over any point to see its cell count in the tooltip (e.g., "Cells: 3"). Sm
 
 ### Key Biological Insights
 
-- **INS vs pseudotime**: Strong negative correlation (r = -0.591) — insulin decreases along the trajectory
+- **INS vs pseudotime**: Strong negative correlation (r = −0.694 in Core mode, −0.51 in Core+Peri mode) — insulin decreases along the trajectory
 - **Disease ordering**: ND (early) → Aab+ (middle) → T1D (late) along pseudotime
 - **GCG increase**: Glucagon expression increases as insulin decreases, reflecting alpha cell persistence
+- **Aab+ heterogeneity**: Aab+ donors genuinely span a heterogeneous range of islet types (not all T1D-like); their pseudotime IQR is wider than ND or T1D — this is biology, not noise.
 
 ---
 
@@ -198,7 +201,7 @@ Dynamic text (subdued grey background) describing all statistical tests, correct
 
 ### Using the Statistics Tab
 
-1. Select a feature in the Plot sidebar (e.g., `immune_frac_peri`)
+1. Select a feature in the Plot sidebar (e.g., `prop_CD8a Tcell` or `peri_prop_Macrophage`)
 2. Switch to the Statistics tab
 3. Adjust test parameters in Section 1 (Configure Analysis)
 4. Click **Run Statistics** — all sections populate
@@ -241,35 +244,35 @@ Tissue-wide spatial visualization and peri-islet microenvironment analysis. Comb
 
 - **Tissue CSVs**: `data/donors/{imageid}.csv` (15 files, ~78 MB total). Columns: X/Y centroids (μm), phenotype, cell_region (core/peri/tissue), islet_name.
 - **Leiden clustering**: Stored in `islet_explorer.h5ad` .obs as `leiden_0.3`, `leiden_0.5`, `leiden_0.8`, `leiden_1.0` + UMAP coords `leiden_umap_1`, `leiden_umap_2`.
-- **Neighborhood metrics**: 62 columns merged into H5AD .obs (peri-islet composition, immune, enrichment z-scores, distances).
+- **Neighborhood metrics**: ~100 columns merged into H5AD .obs (peri-islet composition, per-phenotype enrichment z-scores and distances, plus aggregate immune metrics).
 
 ### Neighborhood Analysis Cards
 
-Below the tissue scatter and Leiden panel, three interactive analysis sections visualize the 62 computed peri-islet neighborhood metrics. Each answers a key biological question about immune-islet interactions in T1D progression. These cards only appear when neighborhood data is available in the H5AD (not in Excel fallback mode).
+Below the tissue scatter and Leiden panel, three interactive analysis sections visualize the per-phenotype peri-islet neighborhood metrics. **Apr 2026 update:** all three cards now expose every phenotype uniformly — previous hand-curated 7-immune-type lists replaced with dynamic dropdowns populated from the data. Cards only appear when neighborhood data is available in the H5AD (not in Excel fallback mode).
 
 **Global Controls** (toolbar above the cards):
 - **Min cells/islet**: Filter out small islets with few cells (default: 1, i.e., no filter). Higher values (e.g., 50) reduce noise from poorly-measured islets and decrease NA rates in distance metrics.
 - **Point size** and **Opacity**: Adjust scatter plot visualization across all cards.
 - **Islet count**: Shows how many islets pass the current filters.
 
-**Card A: Immune Infiltration**
-- **Left**: Violin plot of a selectable immune metric (immune fraction peri/core, T-cell density, CD8/macrophage ratio, peri/core immune ratio) by disease stage (ND → Aab+ → T1D). Shows Kruskal-Wallis p-value. Jittered points overlay with box + mean line.
-- **Right**: Scatter of peri vs core immune fraction with dashed y=x diagonal. Points above the line have more core than peri infiltration.
-- *Interpretation*: Higher immune fractions in T1D indicate increased immune surveillance.
+**Card A: Peri-Islet Phenotype Enrichment**
+- **Left** (`Phenotype (peri enrichment z)` dropdown): Bar chart of donor-level mean/median enrichment z-score across disease stages for the selected phenotype. Shows Kruskal-Wallis p-value. Donor points overlay with summary bars (mean ± SEM or median ± IQR).
+- **Right** (`Phenotype (peri vs core)` dropdown): Scatter of peri-zone proportion vs core proportion for the selected phenotype, with dashed y=x diagonal. Sqrt-scale toggle and per-status trend-line option. Points above the line have higher core proportion than peri.
+- *Interpretation*: Pick any phenotype (Macrophage, CD8a Tcell, Beta cell, Endothelial, etc.) to see its peri-zone enrichment trajectory across ND→Aab+→T1D.
 
-**Card B: Immune Cell Enrichment**
-- **Left**: Grouped bar chart of 7 immune cell types (CD8+ T-cell, CD4+ T-cell, T cell, B cell, Macrophage, APCs, Immune) grouped by disease stage. Toggle median/mean summary; clip extreme z > 5 (default on). Error bars show IQR (median) or SEM (mean).
-- **Right**: Heatmap — cell types (columns) × disease stages (rows). Numeric values annotated on each cell.
+**Card B: Phenotype Composition & Enrichment**
+- **Left**: Grouped bar chart spanning ALL 20 phenotypes (drops "Unknown") × 3 disease stages. Toggle median/mean summary; clip extreme z > 5 (default on). Error bars show IQR (median) or SEM (mean).
+- **Right**: Heatmap — phenotypes (columns) × disease stages (rows). Numeric values annotated on each cell.
 - **Region toggle**: Switch between:
   - *Peri-islet (enrichment z)*: Poisson z-scores comparing peri-islet vs tissue-wide. Diverging colorscale (blue = depleted, red = enriched). Default.
   - *Core (proportion)*: Raw cell type proportions in islet core. Sequential colorscale (white → red).
   - *Peri-islet (proportion)*: Raw cell type proportions in peri-islet zone. Sequential colorscale.
-- *Interpretation*: z > 0 means that cell type is enriched near islets relative to the tissue-wide proportion. CD8+ T-cell enrichment in T1D suggests targeted immune surveillance.
+- *Interpretation*: z > 0 means that phenotype is enriched near islets relative to the tissue-wide proportion. Useful for spotting structural changes (Endothelial, Lymphatic, Neural) alongside immune infiltration.
 
-**Card C: Immune Proximity**
-- **Left**: Box plot of minimum distance (μm) from islet core centroid to nearest immune cells. Selectable metrics: any immune cell, macrophage, CD8+ T-cell (sparse, ~89% NA). Shows non-NA counts per group. 99th percentile outlier clipping (toggle on/off) for cleaner visualization.
-- **Right**: Scatter of selected enrichment z-score vs selected distance metric. Expected negative correlation (closer = more enriched). Pearson r shown in title. Percentile-based outlier clipping on both axes.
-- *Interpretation*: Shorter distances suggest active immune targeting. CD8+ T-cell distances are sparse because most islets lack nearby CD8+ T-cells — NA values indicate zero immune cells of that type in the peri-islet zone (biological, not a data error). Increase the min cells/islet filter to reduce NAs.
+**Card C: Phenotype Proximity to Islet**
+- **Left** (`Distance to nearest` dropdown): Box plot of minimum distance (μm) from islet core centroid to nearest peri-zone cells of the selected phenotype. Includes "Immune (all)" aggregate plus every individual phenotype with `min_dist_*` data. Shows non-NA counts per group. 99th percentile outlier clipping (toggle).
+- **Right** (`Phenotype` dropdown): KDE of signed distance from islet boundary for individual cells of the selected phenotype. Negative = inside islet (core), positive = outside (peri-islet). Dashed line at zero marks the boundary.
+- *Interpretation*: NA values in the box plot indicate islets with zero cells of that phenotype in the peri-islet zone (biological, not a data error — common for rare phenotypes like CD4 Tcell, B cell). Increase the min cells/islet filter to reduce NAs.
 
 ### Data Coverage
 
@@ -371,7 +374,7 @@ python scripts/reaggregate_islets.py
 
 # Step 2: Compute neighborhood metrics (from 2.6M-cell single-cell H5AD)
 python scripts/compute_neighborhood_metrics.py
-# → data/neighborhood_metrics.csv (5,214 rows × 62 cols)
+# → data/neighborhood_metrics.csv (5,214 rows × ~100 cols, per-phenotype enrich_z_* and min_dist_*)
 
 # Step 3: Extract per-islet cell CSVs (for drill-down viewer)
 python scripts/extract_per_islet_cells.py
@@ -406,7 +409,7 @@ Branch pipelines:
 
 | Source | Location | Description |
 |--------|----------|-------------|
-| Single-cell H5AD | `single_cell_analysis/CODEX_scvi_BioCov_phenotyped_newDuctal.h5ad` | 2.6M cells, scVI batch-corrected, phenotyped |
+| Single-cell H5AD | `single_cell_analysis/CODEX_scvi_BioCov_phenotyped_newDuctal.h5ad` | 2.6M cells, scVI-embedded (note: scVI training was not batch_key-aware; downstream Harmony in reaggregate_islets.py corrects donor variance for clustering and combined-mode pseudotime), phenotyped |
 | Groovy TSV exports | `panc_CODEX/results/groovy_exports/` | QuPath islet measurements (15 donors × 4 types) |
 | GeoJSON boundaries | `data/json/*.geojson` | Islet segmentation polygons |
 | Spatial lookup | `data/islet_spatial_lookup.csv` | Islet centroid coordinates |

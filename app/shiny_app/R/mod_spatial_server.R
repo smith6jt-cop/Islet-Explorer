@@ -130,8 +130,14 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       if (is.null(cells)) return(NULL)
       phenos <- sort(unique(cells$phenotype))
       if (length(phenos) == 0) return(NULL)
-      hide_default <- c("Acinar", "Ductal", "Endocrine", "T cell", "Unknown")
-      selected_phenos <- setdiff(phenos, hide_default)
+      # Preserve previous selections if available (donor change shouldn't reset)
+      prev <- isolate(input$pheno_filter)
+      if (!is.null(prev)) {
+        selected_phenos <- intersect(prev, phenos)
+      } else {
+        hide_default <- c("Acinar", "Ductal", "Endocrine", "T cell", "Unknown")
+        selected_phenos <- setdiff(phenos, hide_default)
+      }
       tagList(
         div(style = "display: flex; align-items: center; gap: 6px; margin-bottom: 4px;",
           tags$label("Phenotypes", style = "font-weight: 600; font-size: 13px; margin: 0;"),
@@ -288,13 +294,16 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           ggplot2::scale_color_manual(values = pal, name = "Cluster", na.value = "#d9d9d9",
                                         guide = ggplot2::guide_legend(override.aes = list(size = 4)))
         } else {
-          # Phenotype coloring — legend strictly limited to checked phenotypes
+          # Phenotype coloring — legend in canonical palette order
+          canonical_order <- names(palette())
           if (!is.null(selected_phenos) && length(selected_phenos) > 0) {
-            legend_phenos <- sort(intersect(selected_phenos,
-                                            unique(c(fg$phenotype, if (color_bg) bg$phenotype))))
+            present <- intersect(selected_phenos,
+                                 unique(c(fg$phenotype, if (color_bg) bg$phenotype)))
           } else {
-            legend_phenos <- sort(unique(c(fg$phenotype, if (color_bg) bg$phenotype)))
+            present <- unique(c(fg$phenotype, if (color_bg) bg$phenotype))
           }
+          legend_phenos <- intersect(canonical_order, present)
+          legend_phenos <- c(legend_phenos, setdiff(present, legend_phenos))
           pal <- palette()[legend_phenos]
           pal[is.na(pal)] <- "#CCCCCC"
 
@@ -413,9 +422,10 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                        zeroline = FALSE, showgrid = FALSE, showticklabels = FALSE,
                        showline = FALSE, scaleanchor = "x", scaleratio = 1,
                        constrain = "domain"),
-          legend = list(title = list(text = "Cluster", font = list(size = 14)),
-                        font = list(size = 13),
-                        itemsizing = "constant")
+          legend = list(title = list(text = "Cluster", font = list(size = 11)),
+                        font = list(size = 10),
+                        itemsizing = "trace",
+                        tracegroupgap = 2)
         )
     })
 
@@ -515,9 +525,9 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       }
       bar_df <- do.call(rbind, bar_rows)
 
-      # Only show top phenotypes (>1% in any cluster) to reduce clutter
+      # Remove phenotypes with zero proportion across all clusters
       max_per_pheno <- tapply(bar_df$proportion, bar_df$phenotype, max, na.rm = TRUE)
-      keep_phenos <- names(max_per_pheno[max_per_pheno > 0.01])
+      keep_phenos <- names(max_per_pheno[max_per_pheno > 0])
       bar_df <- bar_df[bar_df$phenotype %in% keep_phenos, , drop = FALSE]
 
       # Use active phenotype palette where available
@@ -525,7 +535,10 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       pal <- palette()[pheno_present]
       pal[is.na(pal)] <- "#CCCCCC"
 
-      bar_df$phenotype <- factor(bar_df$phenotype, levels = names(sort(max_per_pheno[keep_phenos], decreasing = TRUE)))
+      canonical_order <- names(palette())
+      ordered_phenos <- intersect(canonical_order, keep_phenos)
+      ordered_phenos <- c(ordered_phenos, setdiff(keep_phenos, canonical_order))
+      bar_df$phenotype <- factor(bar_df$phenotype, levels = rev(ordered_phenos))
 
       plot_ly(bar_df, x = ~cluster, y = ~proportion, color = ~phenotype,
               colors = pal,
@@ -584,32 +597,60 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       comp
     })
 
-    # ---- Friendly labels for enrichment columns ----
-    enrich_col_labels <- c(
-      "enrich_z_CD8a_Tcell" = "CD8+ T-cell",
-      "enrich_z_CD4_Tcell"  = "CD4+ T-cell",
-      "enrich_z_T_cell"     = "T cell",
-      "enrich_z_B_cell"     = "B cell",
-      "enrich_z_Macrophage" = "Macrophage",
-      "enrich_z_APCs"       = "APCs",
-      "enrich_z_Immune"     = "Immune (all)"
-    )
+    # Phenotype options derived dynamically from prepared()$comp columns.
+    # Each entry maps a phenotype label to its associated metric columns.
+    # Replaces the previous hand-curated 7-immune-type list so users can
+    # interrogate any phenotype the pipeline computed metrics for.
+    phenotype_options <- reactive({
+      comp <- nbr_comp()
+      if (is.null(comp)) return(list())
+      cn <- colnames(comp)
+      ez_cols <- grep("^enrich_z_", cn, value = TRUE)
+      if (length(ez_cols) == 0) return(list())
+      build <- function(ez) {
+        safe <- sub("^enrich_z_", "", ez)
+        # Map safe-name back to the original phenotype label by checking
+        # possible un-sanitised forms of the name against existing prop_* cols.
+        candidates <- unique(c(
+          gsub("plus", "+", gsub("_", " ", safe), fixed = TRUE),
+          gsub("_", " ", safe),
+          gsub("plus", "+", safe, fixed = TRUE),
+          safe
+        ))
+        prop_core_col <- NA_character_
+        label <- safe
+        for (cand in candidates) {
+          pc <- paste0("prop_", cand)
+          if (pc %in% cn) { prop_core_col <- pc; label <- cand; break }
+        }
+        list(
+          label      = label,
+          safe       = safe,
+          enrich     = ez,
+          prop_core  = prop_core_col,
+          peri_prop  = {p <- paste0("peri_prop_", safe);  if (p %in% cn) p else NA_character_},
+          peri_count = {p <- paste0("peri_count_", safe); if (p %in% cn) p else NA_character_},
+          min_dist   = {p <- paste0("min_dist_", safe);   if (p %in% cn) p else NA_character_}
+        )
+      }
+      recs <- lapply(ez_cols, build)
+      recs <- recs[order(sapply(recs, function(r) r$label))]
+      names(recs) <- sapply(recs, function(r) r$label)
+      recs
+    })
 
-    # Mapping from enrichment z-score columns to core prop_* and peri_prop_* columns
-    immune_type_map <- list(
-      list(label = "CD8+ T-cell",  enrich = "enrich_z_CD8a_Tcell", core = "prop_CD8a Tcell",  peri = "peri_prop_CD8a_Tcell"),
-      list(label = "CD4+ T-cell",  enrich = "enrich_z_CD4_Tcell",  core = "prop_CD4 Tcell",   peri = "peri_prop_CD4_Tcell"),
-      list(label = "T cell",       enrich = "enrich_z_T_cell",     core = "prop_T cell",      peri = "peri_prop_T_cell"),
-      list(label = "B cell",       enrich = "enrich_z_B_cell",     core = "prop_B cell",      peri = "peri_prop_B_cell"),
-      list(label = "Macrophage",   enrich = "enrich_z_Macrophage", core = "prop_Macrophage",  peri = "peri_prop_Macrophage"),
-      list(label = "APCs",         enrich = "enrich_z_APCs",       core = "prop_APCs",        peri = "peri_prop_APCs"),
-      list(label = "Immune (all)", enrich = "enrich_z_Immune",     core = "prop_Immune",      peri = "peri_prop_Immune")
-    )
+    # Choice vector for selectInputs — names are user-facing labels, values are safe-names.
+    phenotype_choices <- reactive({
+      opts <- phenotype_options()
+      if (length(opts) == 0) return(character(0))
+      vec <- vapply(opts, function(o) o$safe, character(1))
+      stats::setNames(vec, vapply(opts, function(o) o$label, character(1)))
+    })
 
     # ---- Intermediate reactive for Card B: enrichment/proportion summary ----
     enrich_summary <- reactive({
       comp <- nbr_comp()
-      req(comp, "Donor Status" %in% colnames(comp))
+      req(comp, "Donor Status" %in% colnames(comp), "Case ID" %in% colnames(comp))
 
       clip <- isTRUE(input$enrich_clip)
       stat_mode <- input$enrich_stat %||% "Median"
@@ -619,31 +660,47 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       comp_cols <- colnames(comp)
       rows <- list()
 
-      for (itm in immune_type_map) {
+      for (itm in phenotype_options()) {
         # Select column based on region
         if (region == "peri") {
-          col <- itm$enrich  # enrichment z-score (peri)
+          col <- itm$enrich      # enrichment z-score (peri)
         } else if (region == "core") {
-          col <- itm$core    # core proportion
+          col <- itm$prop_core   # core proportion
         } else {
-          col <- itm$peri    # peri proportion (core+peri mode shows raw peri prop)
+          col <- itm$peri_prop   # peri proportion
         }
-        if (is.null(col) || !(col %in% comp_cols)) next
+        if (is.null(col) || is.na(col) || !(col %in% comp_cols)) next
 
         for (ds in statuses) {
-          vals <- comp[[col]][comp$`Donor Status` == ds]
-          vals <- vals[is.finite(vals)]
-          if (region == "peri" && clip) vals <- vals[vals >= -5 & vals <= 5]
-          n <- length(vals)
+          mask <- comp$`Donor Status` == ds
+          vals <- comp[[col]][mask]
+          donors <- comp$`Case ID`[mask]
+          finite_mask <- is.finite(vals)
+          vals <- vals[finite_mask]
+          donors <- donors[finite_mask]
+          if (region == "peri" && clip) {
+            clip_mask <- vals >= -5 & vals <= 5
+            vals <- vals[clip_mask]
+            donors <- donors[clip_mask]
+          }
+          if (length(vals) == 0) next
+
+          # Aggregate to donor-level means first (avoids pseudoreplication;
+          # islet-level median is 0 for rare immune types because >50% of islets
+          # have no cells of that type)
+          donor_means <- tapply(vals, donors, mean, na.rm = TRUE)
+          donor_means <- donor_means[is.finite(donor_means)]
+          n <- length(donor_means)
           if (n == 0) next
+
           if (stat_mode == "Median") {
-            z_summary <- median(vals, na.rm = TRUE)
-            q <- quantile(vals, c(0.25, 0.75), na.rm = TRUE)
+            z_summary <- median(donor_means)
+            q <- quantile(donor_means, c(0.25, 0.75))
             z_lo <- q[1]
             z_hi <- q[2]
           } else {
-            z_summary <- mean(vals, na.rm = TRUE)
-            se <- sd(vals, na.rm = TRUE) / sqrt(n)
+            z_summary <- mean(donor_means)
+            se <- if (n > 1) sd(donor_means) / sqrt(n) else 0
             z_lo <- z_summary - se
             z_hi <- z_summary + se
           }
@@ -690,21 +747,17 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
 
         # ==== Card A: Immune Infiltration Overview ====
         fluidRow(column(12, sec_heading(
-          "A", "Immune Infiltration",
-          "How does immune infiltration vary across disease stages? Compare peri-islet and core immune fractions."
+          "A", "Peri-Islet Phenotype Enrichment",
+          "Per-phenotype peri-zone enrichment across disease stages, with peri vs core proportion scatter."
         ))),
         fluidRow(style = "display: flex; flex-wrap: wrap;",
           column(6,
             div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible; height: 100%; box-sizing: border-box;",
               div(style = "display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 8px;",
                 div(style = "flex: 1; min-width: 180px;",
-                  selectInput(ns("infiltration_metric"), "Metric",
-                              choices = c("Immune fraction (peri)" = "immune_frac_peri",
-                                          "Immune fraction (core)" = "immune_frac_core",
-                                          "T-cell density (peri)" = "tcell_density_peri",
-                                          "CD8/Macrophage ratio" = "cd8_to_macro_ratio",
-                                          "Peri/core immune ratio" = "immune_ratio"),
-                              selected = "immune_frac_peri", width = "100%")
+                  # Populated server-side from phenotype_choices().
+                  selectInput(ns("infiltration_phenotype"), "Phenotype (peri enrichment z)",
+                              choices = NULL, width = "100%")
                 ),
                 checkboxInput(ns("infiltration_outliers"), "Remove outliers", value = FALSE)
               ),
@@ -713,7 +766,15 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           ),
           column(6,
             div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible; height: 100%; box-sizing: border-box;",
-              h5("Peri vs Core Immune Fraction", style = "font-size: 15px; margin-top: 0;"),
+              div(style = "display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 8px;",
+                div(style = "flex: 1; min-width: 180px;",
+                  # Populated server-side from phenotype_choices().
+                  selectInput(ns("scatter_phenotype"), "Phenotype (peri vs core)",
+                              choices = NULL, width = "100%")
+                ),
+                checkboxInput(ns("scatter_sqrt"), "Sqrt scale", value = TRUE),
+                checkboxInput(ns("scatter_trend"), "Trend lines", value = FALSE)
+              ),
               plotlyOutput(ns("infiltration_scatter"), height = "400px")
             )
           )
@@ -726,8 +787,8 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
 
         # ==== Card B: Immune Cell Enrichment by Type ====
         fluidRow(column(12, sec_heading(
-          "B", "Immune Cell Composition & Enrichment",
-          "Which immune cell types are present in islet core vs peri-islet zones, and which are enriched vs tissue-wide background?"
+          "B", "Phenotype Composition & Enrichment",
+          "Which phenotypes are present in islet core vs peri-islet zones, and which are enriched vs tissue-wide background?"
         ))),
         fluidRow(style = "display: flex; flex-wrap: wrap;",
           column(6,
@@ -763,32 +824,24 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
 
         # ==== Card C: Immune Proximity to Islets ====
         fluidRow(column(12, sec_heading(
-          "C", "Immune Cell Proximity",
-          "How close are immune cells to islet cores? Shorter distances may indicate active immune targeting."
+          "C", "Phenotype Proximity to Islet",
+          "Minimum distance from islet core centroid to nearest peri-islet cells of each phenotype, plus signed-distance KDE for selected types."
         ))),
         fluidRow(style = "display: flex; flex-wrap: wrap;",
           column(6,
             div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible; height: 100%; box-sizing: border-box;",
+              # Populated server-side: "Immune (all)" + every phenotype with min_dist_*.
               selectInput(ns("distance_metric"), "Distance to nearest",
-                          choices = c("Any immune cell" = "min_dist_immune_mean",
-                                      "Macrophage" = "min_dist_Macrophage",
-                                      "CD8+ T-cell (sparse)" = "min_dist_CD8a_Tcell"),
-                          selected = "min_dist_immune_mean", width = "100%"),
+                          choices = NULL, width = "100%"),
               checkboxInput(ns("distance_clip"), "Clip top 1% outliers", value = TRUE),
               plotlyOutput(ns("distance_boxplot"), height = "420px")
             )
           ),
           column(6,
             div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible; height: 100%; box-sizing: border-box;",
-              selectInput(ns("kde_immune_type"), "Immune cell type",
-                          choices = c("All immune" = "all",
-                                      "Macrophage" = "Macrophage",
-                                      "APCs" = "APCs",
-                                      "CD8+ T-cell" = "CD8a Tcell",
-                                      "T cell" = "T cell",
-                                      "B cell" = "B cell",
-                                      "CD4+ T-cell" = "CD4 Tcell"),
-                          selected = "all", width = "100%"),
+              # Populated server-side from the KDE CSV's distinct phenotypes.
+              selectInput(ns("kde_immune_type"), "Phenotype",
+                          choices = NULL, width = "100%"),
               plotlyOutput(ns("immune_distance_kde"), height = "420px")
             )
           )
@@ -809,23 +862,68 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
            paste0(formatC(n, big.mark = ","), " islets"))
     })
 
-    # ==== Card A-Left: Immune Metric Bar Chart (donor-level) ====
+    # ---- Populate dynamic phenotype dropdowns once data is available ----
+    # Replaces the previous hand-curated 7-immune-type lists. Choices are
+    # built from prepared()$comp columns (enrich_z_*, prop_*, peri_prop_*,
+    # min_dist_*) so every phenotype the pipeline computed metrics for is
+    # surfaced uniformly. Defaults pick a sensible immune phenotype when
+    # available (Macrophage), else first.
+    pick_default <- function(choices, prefer = c("Macrophage", "Immune", "T_cell", "CD8a_Tcell")) {
+      if (length(choices) == 0) return(character(0))
+      for (p in prefer) if (p %in% choices) return(p)
+      choices[[1]]
+    }
+
+    observe({
+      ch <- phenotype_choices()
+      if (length(ch) == 0) return()
+      # Card A-Left: enrichment z-score per phenotype
+      cur_a <- isolate(input$infiltration_phenotype)
+      sel_a <- if (!is.null(cur_a) && cur_a %in% ch) cur_a else pick_default(ch)
+      updateSelectInput(session, "infiltration_phenotype", choices = ch, selected = sel_a)
+      # Card A-Right: peri vs core proportion (only phenotypes with both prop_ + peri_prop_)
+      opts <- phenotype_options()
+      paired <- vapply(opts, function(o) !is.na(o$prop_core) && !is.na(o$peri_prop), logical(1))
+      ch_b <- ch[paired]
+      cur_b <- isolate(input$scatter_phenotype)
+      sel_b <- if (!is.null(cur_b) && cur_b %in% ch_b) cur_b else pick_default(ch_b)
+      updateSelectInput(session, "scatter_phenotype", choices = ch_b, selected = sel_b)
+      # Card C-Left: distance metric — "Immune (all)" plus min_dist_<phenotype>
+      dist_opts <- Filter(function(o) !is.na(o$min_dist), opts)
+      dist_ch <- c("Immune (all)" = "min_dist_immune_mean",
+                   stats::setNames(
+                     vapply(dist_opts, function(o) o$min_dist, character(1)),
+                     vapply(dist_opts, function(o) o$label, character(1))
+                   ))
+      cur_c <- isolate(input$distance_metric)
+      sel_c <- if (!is.null(cur_c) && cur_c %in% dist_ch) cur_c else "min_dist_immune_mean"
+      updateSelectInput(session, "distance_metric", choices = dist_ch, selected = sel_c)
+    })
+
+    # Card C-Right: KDE phenotypes — populate from CSV's distinct phenotype values.
+    observe({
+      kde_df <- load_immune_kde_data()
+      if (is.null(kde_df) || !"phenotype" %in% colnames(kde_df)) return()
+      phenos <- sort(unique(as.character(kde_df$phenotype)))
+      ch <- c("Immune (all)" = "all", stats::setNames(phenos, phenos))
+      cur <- isolate(input$kde_immune_type)
+      sel <- if (!is.null(cur) && cur %in% ch) cur else "all"
+      updateSelectInput(session, "kde_immune_type", choices = ch, selected = sel)
+    })
+
+    # ==== Card A-Left: Per-phenotype peri-zone enrichment z-score (donor-level) ====
     output$infiltration_bars <- renderPlotly({
       comp <- nbr_comp()
       req(comp, "Donor Status" %in% colnames(comp), "Case ID" %in% colnames(comp))
-      metric <- input$infiltration_metric %||% "immune_frac_peri"
+      opts <- phenotype_options()
+      sel_safe <- input$infiltration_phenotype
+      req(sel_safe)
+      itm <- Filter(function(o) o$safe == sel_safe, opts)
+      req(length(itm) > 0)
+      itm <- itm[[1]]
+      metric <- itm$enrich
       req(metric %in% colnames(comp))
-
-      # Metric label for title
-      metric_labels <- c(
-        "immune_frac_peri" = "Immune Fraction (Peri)",
-        "immune_frac_core" = "Immune Fraction (Core)",
-        "tcell_density_peri" = "T-cell Density (Peri)",
-        "cd8_to_macro_ratio" = "CD8/Macrophage Ratio",
-        "immune_ratio" = "Peri/Core Immune Ratio"
-      )
-      metric_label <- metric_labels[metric]
-      if (is.na(metric_label)) metric_label <- metric
+      metric_label <- paste0("Peri Enrichment z-score — ", itm$label)
 
       df <- data.frame(
         value = comp[[metric]],
@@ -922,15 +1020,27 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       )
     })
 
-    # ==== Card A-Right: Peri vs Core Scatter ====
+    # ==== Card A-Right: Peri vs Core Proportion Scatter ====
     output$infiltration_scatter <- renderPlotly({
       comp <- nbr_comp()
       req(comp, "Donor Status" %in% colnames(comp))
-      req("immune_frac_peri" %in% colnames(comp), "immune_frac_core" %in% colnames(comp))
+
+      opts <- phenotype_options()
+      sel_safe <- input$scatter_phenotype
+      req(sel_safe)
+      itm <- Filter(function(o) o$safe == sel_safe, opts)
+      req(length(itm) > 0)
+      itm <- itm[[1]]
+      cols <- list(peri = itm$peri_prop, core = itm$prop_core,
+                   label = paste0(itm$label, " Proportion"))
+      req(!is.na(cols$peri), !is.na(cols$core))
+      req(cols$peri %in% colnames(comp), cols$core %in% colnames(comp))
+
+      use_sqrt <- isTRUE(input$scatter_sqrt)
 
       df <- data.frame(
-        peri = comp$immune_frac_peri,
-        core = comp$immune_frac_core,
+        peri = comp[[cols$peri]],
+        core = comp[[cols$core]],
         status = comp$`Donor Status`,
         islet_key = if ("islet_key" %in% colnames(comp)) comp$islet_key else "",
         stringsAsFactors = FALSE
@@ -938,11 +1048,20 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       df <- df[is.finite(df$peri) & is.finite(df$core), , drop = FALSE]
       if (nrow(df) == 0) return(plotly_empty() %>% layout(title = "No data"))
 
+      # Apply sqrt transform if requested
+      if (use_sqrt) {
+        df$peri_plot <- sqrt(df$peri)
+        df$core_plot <- sqrt(df$core)
+      } else {
+        df$peri_plot <- df$peri
+        df$core_plot <- df$core
+      }
+
       status_order <- c("ND", "Aab+", "T1D")
       df$status <- factor(df$status, levels = intersect(status_order, unique(df$status)))
       dcols <- donor_colors_reactive()
 
-      max_val <- max(c(df$peri, df$core), na.rm = TRUE) * 1.05
+      max_val <- max(c(df$peri_plot, df$core_plot), na.rm = TRUE) * 1.05
 
       pt_sz <- input$nbr_pt_size %||% 5
       pt_al <- input$nbr_pt_alpha %||% 0.4
@@ -952,7 +1071,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         sub <- df[df$status == s, , drop = FALSE]
         if (nrow(sub) == 0) next
         p <- p %>% add_trace(
-          data = sub, x = ~peri, y = ~core,
+          data = sub, x = ~peri_plot, y = ~core_plot,
           text = ~paste0(islet_key, "<br>Status: ", status,
                         "<br>Peri: ", round(peri, 4),
                         "<br>Core: ", round(core, 4)),
@@ -961,6 +1080,32 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           marker = list(size = pt_sz, opacity = pt_al, color = dcols[s])
         )
       }
+
+      # Optional linear trend lines per status group
+      if (isTRUE(input$scatter_trend)) {
+        for (s in levels(df$status)) {
+          sub <- df[df$status == s, , drop = FALSE]
+          if (nrow(sub) < 3) next
+          fit <- lm(core_plot ~ peri_plot, data = sub)
+          pred_x <- seq(min(sub$peri_plot, na.rm = TRUE),
+                        max(sub$peri_plot, na.rm = TRUE), length.out = 50)
+          pred_y <- predict(fit, newdata = data.frame(peri_plot = pred_x))
+          p <- p %>% add_trace(
+            x = pred_x, y = pred_y,
+            type = "scatter", mode = "lines",
+            line = list(color = dcols[s], width = 2),
+            name = paste0(s, " trend"),
+            showlegend = FALSE,
+            hoverinfo = "none"
+          )
+        }
+      }
+
+      # Axis labels
+      scale_note <- if (use_sqrt) "\u221a" else ""
+      x_title <- paste0(scale_note, cols$label, " (Peri)")
+      y_title <- paste0(scale_note, cols$label, " (Core)")
+
       # Diagonal y=x reference
       p %>% add_trace(
         x = c(0, max_val), y = c(0, max_val),
@@ -968,9 +1113,9 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         line = list(dash = "dash", color = "#999", width = 1),
         showlegend = FALSE, hoverinfo = "none"
       ) %>% layout(
-        title = list(text = "Peri vs Core Immune Fraction", font = list(size = 14)),
-        xaxis = list(title = "Immune Fraction (Peri)", range = c(0, max_val)),
-        yaxis = list(title = "Immune Fraction (Core)", range = c(0, max_val)),
+        title = list(text = paste0("Peri vs Core: ", cols$label), font = list(size = 14)),
+        xaxis = list(title = x_title, range = c(0, max_val)),
+        yaxis = list(title = y_title, range = c(0, max_val)),
         legend = list(title = list(text = "Status"))
       )
     })
@@ -1022,13 +1167,13 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
 
       # Reference line at 0 for enrichment z-scores only
       shapes <- if (region == "peri") {
-        list(list(type = "line", x0 = -0.5, x1 = 10, y0 = 0, y1 = 0,
+        list(list(type = "line", x0 = -0.5, x1 = length(unique(es$cell_type)) - 0.5, y0 = 0, y1 = 0,
                   line = list(color = "#999", dash = "dash", width = 1)))
       } else list()
 
       p %>% layout(
         barmode = "group",
-        title = list(text = paste0(title_prefix, " (error: ", error_label, ")"),
+        title = list(text = paste0(title_prefix, "<br><sup>Donor-level means, ", error_label, " (N=donors)</sup>"),
                      font = list(size = 14)),
         xaxis = list(title = "", tickangle = -30,
                      categoryorder = "array",
@@ -1107,13 +1252,15 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       metric <- input$distance_metric %||% "min_dist_immune_mean"
       req(metric %in% colnames(comp))
 
-      metric_labels <- c(
-        "min_dist_immune_mean" = "Min Distance to Any Immune Cell",
-        "min_dist_Macrophage" = "Min Distance to Macrophage",
-        "min_dist_CD8a_Tcell" = "Min Distance to CD8+ T-cell"
-      )
-      metric_label <- metric_labels[metric]
-      if (is.na(metric_label)) metric_label <- metric
+      # Build label dynamically: aggregate "Immune (all)" or per-phenotype label
+      if (metric == "min_dist_immune_mean") {
+        metric_label <- "Min Distance to Immune (all)"
+      } else {
+        opts <- phenotype_options()
+        match <- Filter(function(o) !is.na(o$min_dist) && o$min_dist == metric, opts)
+        metric_label <- if (length(match) > 0)
+          paste0("Min Distance to ", match[[1]]$label) else metric
+      }
 
       df <- data.frame(
         value = comp[[metric]],
@@ -1217,14 +1364,17 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       df$donor_status <- factor(df$donor_status, levels = intersect(status_order, unique(df$donor_status)))
       dcols <- donor_colors_reactive()
 
-      # Compute KDE per disease stage
+      # Compute KDE per disease stage, scaled by cell count
       kde_list <- list()
+      kde_counts <- list()
       y_max <- 0
       for (s in levels(df$donor_status)) {
         vals <- df$signed_dist[df$donor_status == s]
         if (length(vals) < 2) next
         d <- density(vals, n = 512, from = q_lo, to = q_hi)
+        d$y <- d$y * length(vals)  # Scale density by cell count
         kde_list[[s]] <- d
+        kde_counts[[s]] <- length(vals)
         y_max <- max(y_max, max(d$y))
       }
       req(length(kde_list) > 0)
@@ -1232,16 +1382,18 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       p <- plot_ly()
       for (s in names(kde_list)) {
         d <- kde_list[[s]]
+        n_cells <- kde_counts[[s]]
         p <- p %>% add_trace(
           x = d$x, y = d$y,
           type = "scatter", mode = "lines",
-          name = s,
+          name = paste0(s, " (n=", formatC(n_cells, big.mark = ","), ")"),
           line = list(color = dcols[s], width = 2.5),
           fill = "tozeroy",
           fillcolor = paste0(dcols[s], "22"),
           hoverinfo = "text",
-          text = paste0(s, "<br>dist = ", round(d$x, 1), " \u00b5m",
-                       "<br>density = ", round(d$y, 4))
+          text = paste0(s, " (n=", formatC(n_cells, big.mark = ","), ")",
+                       "<br>dist = ", round(d$x, 1), " \u00b5m",
+                       "<br>count density = ", round(d$y, 2))
         )
       }
       # Vertical line at zero (islet boundary)
@@ -1256,7 +1408,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                      font = list(size = 14)),
         xaxis = list(title = "Signed distance (\u00b5m) \u2014 inside islet \u2190 0 \u2192 outside",
                      zeroline = FALSE),
-        yaxis = list(title = "Density"),
+        yaxis = list(title = "Cell count density"),
         legend = list(title = list(text = "Status"))
       )
     })

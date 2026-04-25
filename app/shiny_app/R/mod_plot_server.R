@@ -35,14 +35,33 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
     }
 
     # ---- Pseudo-log break points (includes 0 + powers of 10) ----
+    # Filters out breaks that are too close in pseudo-log transformed space
+    # to prevent label overlap (e.g., 0 and 1 collide on large-range axes).
     pseudo_log_breaks <- function(base = 10) {
       function(limits) {
         max_val <- max(limits)
         if (max_val <= 0) return(0)
         max_pow <- ceiling(log(max_val, base))
         min_pow <- if (max_val < 1) floor(log(max_val, base)) else 0
-        brks <- c(0, base^seq(min_pow, max_pow))
-        sort(unique(brks[brks <= max_val * 1.1]))
+        candidates <- sort(unique(c(0, base^seq(min_pow, max_pow))))
+        candidates <- candidates[candidates <= max_val * 1.1]
+
+        # Greedy filter: drop breaks whose transformed position is too close
+        trans_pos <- asinh(candidates / 2) / log(base)
+        total_range <- diff(range(trans_pos))
+        if (total_range == 0) return(candidates)
+        min_gap <- max(0.3, total_range * 0.15)
+
+        keep <- logical(length(candidates))
+        keep[1] <- TRUE
+        last_kept <- trans_pos[1]
+        for (i in seq_along(candidates)[-1]) {
+          if (trans_pos[i] - last_kept >= min_gap) {
+            keep[i] <- TRUE
+            last_kept <- trans_pos[i]
+          }
+        }
+        candidates[keep]
       }
     }
 
@@ -77,33 +96,20 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         comp_cols <- colnames(prepared()$comp)
         prop_cols <- grep("^prop_", comp_cols, value = TRUE)
         peri_prop_cols <- grep("^peri_prop_", comp_cols, value = TRUE)
-        immune_metric_cols <- intersect(
-          c("immune_frac_peri", "immune_frac_core", "immune_ratio",
-            "cd8_to_macro_ratio", "tcell_density_peri"),
-          comp_cols
-        )
-        if (length(prop_cols) > 0 || length(peri_prop_cols) > 0 || length(immune_metric_cols) > 0) {
-          choices <- list("Hormone Positivity (single-marker)" = base_choices)
+        # Note: aggregate immune ratio metrics (immune_frac_*, immune_ratio,
+        # cd8_to_macro_ratio, tcell_density_peri) are intentionally NOT
+        # surfaced here. The Spatial tab now exposes phenotype-level peri
+        # proportions and enrichment uniformly across all phenotypes; the
+        # ad-hoc curated ratios were removed in favour of that systematic UI.
+        if (length(prop_cols) > 0 || length(peri_prop_cols) > 0) {
+          choices <- list("Hormone Positivity (QuPath threshold)" = base_choices)
           if (length(prop_cols) > 0) {
             prop_labels <- gsub("^prop_", "", prop_cols)
-            choices[["Phenotype Proportions (multi-marker)"]] <- setNames(prop_cols, prop_labels)
+            choices[["Phenotype Proportions (scVI)"]] <- setNames(prop_cols, prop_labels)
           }
           if (length(peri_prop_cols) > 0) {
             peri_labels <- gsub("^peri_prop_", "", peri_prop_cols)
             choices[["Peri-Islet Proportions"]] <- setNames(peri_prop_cols, peri_labels)
-          }
-          if (length(immune_metric_cols) > 0) {
-            immune_labels <- c(
-              immune_frac_peri = "Immune fraction (peri)",
-              immune_frac_core = "Immune fraction (core)",
-              immune_ratio = "Peri/core immune ratio",
-              cd8_to_macro_ratio = "CD8/macrophage ratio (peri)",
-              tcell_density_peri = "T-cell density (peri)"
-            )
-            choices[["Immune Metrics"]] <- setNames(
-              immune_metric_cols,
-              immune_labels[immune_metric_cols]
-            )
           }
         } else {
           choices <- base_choices
@@ -119,10 +125,17 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
                      choices = c("Counts", "Density"),
                      selected = "Density", inline = TRUE)
       } else {
-        # Composition
-        radioButtons(ns("metric"), "Metric",
-                     choices = c("Percentage", "Counts", "Density"),
-                     selected = "Percentage", inline = TRUE)
+        # Composition — hide Density for peri_prop_* (no peri area available)
+        w <- input$which %||% ""
+        if (startsWith(w, "peri_prop_")) {
+          radioButtons(ns("metric"), "Metric",
+                       choices = c("Percentage", "Counts"),
+                       selected = "Percentage", inline = TRUE)
+        } else {
+          radioButtons(ns("metric"), "Metric",
+                       choices = c("Percentage", "Counts", "Density"),
+                       selected = "Percentage", inline = TRUE)
+        }
       }
     })
 
@@ -209,7 +222,10 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         metric <- input$metric %||% "Density"
         df <- df %>%
           dplyr::mutate(value = as.numeric(
-            if (metric == "Counts") count else area_density
+            if (metric == "Counts") count else {
+              reg <- suppressWarnings(as.numeric(region_um2))
+              ifelse(is.finite(reg) & reg > 0, as.numeric(count) / reg * 1e6, NA_real_)
+            }
           ))
       } else {
         # Composition
@@ -228,42 +244,43 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
           if (metric == "Counts") {
             df <- df %>% dplyr::mutate(value = round(raw_val * peri_total))
           } else if (metric == "Density") {
-            area <- pi * (suppressWarnings(as.numeric(df$islet_diam_um)) / 2)^2
-            df <- df %>% dplyr::mutate(value = ifelse(area > 0,
-              raw_val * peri_total / area, NA_real_))
+            # Peri-islet area not available; defensive fallback to percentage
+            df <- df %>% dplyr::mutate(value = raw_val * 100.0)
           } else {
             df <- df %>% dplyr::mutate(value = raw_val * 100.0)
           }
         } else if (startsWith(w, "prop_")) {
           raw_val <- suppressWarnings(as.numeric(df[[w]]))
-          core_total <- suppressWarnings(as.numeric(df$cells_total))
+          core_total <- suppressWarnings(as.numeric(df$total_cells_core))
           if (metric == "Counts") {
             df <- df %>% dplyr::mutate(value = round(raw_val * core_total))
           } else if (metric == "Density") {
             area <- pi * (suppressWarnings(as.numeric(df$islet_diam_um)) / 2)^2
             df <- df %>% dplyr::mutate(value = ifelse(area > 0,
-              raw_val * core_total / area, NA_real_))
+              raw_val * core_total / area * 1e6, NA_real_))
           } else {
             df <- df %>% dplyr::mutate(value = raw_val * 100.0)
           }
         } else if (w %in% c("immune_frac_peri", "immune_frac_core", "immune_ratio",
                              "cd8_to_macro_ratio", "tcell_density_peri")) {
-          # Immune metrics — already ratios/densities, show as-is for Percentage
+          # Immune metrics — only immune_frac_peri/core are true fractions (×100 for %)
           raw_val <- suppressWarnings(as.numeric(df[[w]]))
-          if (metric == "Percentage") {
+          if (w %in% c("immune_frac_peri", "immune_frac_core") && metric == "Percentage") {
             df <- df %>% dplyr::mutate(value = raw_val * 100.0)
           } else {
             df <- df %>% dplyr::mutate(value = raw_val)
           }
         } else {
-          # Hormone fractions (Ins_any, Glu_any, Stt_any) — raw counts
+          # Hormone fractions (Ins_any, Glu_any, Stt_any) — QuPath threshold counts.
+          # Must use cells_total (same QuPath/groovy pipeline), NOT total_cells_core
+          # (DeepCell single-cell pipeline) — mismatched denominators can yield >100%.
           num <- suppressWarnings(as.numeric(df[[w]]))
           den <- suppressWarnings(as.numeric(df$cells_total))
           if (metric == "Counts") {
             df <- df %>% dplyr::mutate(value = num)
           } else if (metric == "Density") {
             area <- pi * (suppressWarnings(as.numeric(df$islet_diam_um)) / 2)^2
-            df <- df %>% dplyr::mutate(value = ifelse(area > 0, num / area, NA_real_))
+            df <- df %>% dplyr::mutate(value = ifelse(area > 0, num / area * 1e6, NA_real_))
           } else {
             df <- df %>%
               dplyr::mutate(value = ifelse(is.finite(num) & is.finite(den) & den > 0,
@@ -449,12 +466,12 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       # Y-axis label
       ylab <- if (identical(input$mode, "Microenvironment")) {
         metric <- input$metric %||% "Density"
-        if (metric == "Counts") "Structure count" else "Structure density (per \u00b5m\u00b2)"
+        if (metric == "Counts") "Structure count" else "Structure density (per mm\u00b2)"
       } else {
         metric <- input$metric %||% "Percentage"
         switch(metric,
           "Counts"     = "Cell count",
-          "Density"    = "Cell density (per \u00b5m\u00b2)",
+          "Density"    = "Cell density (per mm\u00b2)",
           "Percentage" = "% composition"
         )
       }
@@ -482,6 +499,17 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         paste0(nm, " vs Islet Size")
       }
 
+      # Pseudo-log transform: apply manually to avoid ggplotly axis corruption
+      log_scale_on <- !is.null(input$log_scale) && input$log_scale
+      plog <- function(x) asinh(x / 2) / log(10)
+      orig_y_vals <- numeric(0)
+      if (log_scale_on) {
+        orig_y_vals <- c(sm$y, sm$ymin, sm$ymax)
+        sm$y    <- plog(sm$y)
+        sm$ymin <- plog(sm$ymin)
+        sm$ymax <- plog(sm$ymax)
+      }
+
       # Initialize base plot
       p <- ggplot(sm, aes(x = diam_mid, y = y, color = donor_status, group = donor_status))
 
@@ -499,6 +527,12 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
           raw$islet_click_key <- paste(raw$`Case ID`, raw$islet_key, sep = "|")
         } else {
           raw$islet_click_key <- NA_character_
+        }
+
+        # Transform y-values for pseudo-log if needed
+        if (log_scale_on) {
+          orig_y_vals <- c(orig_y_vals, raw$value)
+          raw$value <- plog(raw$value)
         }
 
         # Separate normal vs outliers
@@ -605,10 +639,14 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         p <- p + scale_x_continuous(breaks = major_breaks, minor_breaks = minor_breaks)
       }
 
-      # Y-axis log scale (pseudo-log keeps zeros visible)
-      if (!is.null(input$log_scale) && input$log_scale) {
-        p <- p + scale_y_continuous(trans = scales::pseudo_log_trans(base = 10),
-                                    breaks = pseudo_log_breaks(10))
+      # Y-axis log scale (manual pseudo-log — ggplotly can't handle trans objects)
+      if (log_scale_on) {
+        orig_range <- range(orig_y_vals[is.finite(orig_y_vals)])
+        brks <- pseudo_log_breaks(10)(orig_range)
+        p <- p + scale_y_continuous(
+          breaks = plog(brks),
+          labels = scales::label_comma()(brks)
+        )
       }
 
       # Minor grid
@@ -642,6 +680,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
                              xanchor = "left", yanchor = "top"),
                margin = list(b = 80)) %>%
         event_register("plotly_click")
+
       gg
     })
 
@@ -710,12 +749,12 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       # Y-axis label
       ylab <- if (identical(input$mode, "Microenvironment")) {
         metric <- input$metric %||% "Density"
-        if (metric == "Counts") "Structure count" else "Structure density (per \u00b5m\u00b2)"
+        if (metric == "Counts") "Structure count" else "Structure density (per mm\u00b2)"
       } else {
         metric <- input$metric %||% "Percentage"
         switch(metric,
           "Counts"     = "Cell count",
-          "Density"    = "Cell density (per \u00b5m\u00b2)",
+          "Density"    = "Cell density (per mm\u00b2)",
           "Percentage" = "% composition"
         )
       }
@@ -775,7 +814,8 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
 
       if (!is.null(input$dist_log_scale) && input$dist_log_scale) {
         g <- g + scale_y_continuous(trans = scales::pseudo_log_trans(base = 10),
-                                    breaks = pseudo_log_breaks(10))
+                                    breaks = pseudo_log_breaks(10),
+                                    labels = scales::label_comma())
       }
 
       p <- ggplotly(g, tooltip = c("x", "y", "colour"))

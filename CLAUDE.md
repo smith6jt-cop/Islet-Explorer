@@ -105,11 +105,11 @@ single_cell_analysis/CODEX_scvi_BioCov_phenotyped_newDuctal.h5ad  (2.6M cells, 3
   |     -> islet_analysis/islets_core_fixed.h5ad  (5,214 islets, min_cells=0, require_paired=True)
   |     -> islet_analysis/islets_peri_fixed.h5ad   (5,214 peri-islet)
   |     -> islet_analysis/islets_merged_fixed.h5ad (5,214 paired core+peri)
-  |     -> data/adata_ins_root.h5ad  (+ pseudotime + UMAP)
-  |     -> islet_analysis/islets_core_clustered.h5ad  (+ Leiden at 4 resolutions)
+  |     -> data/adata_ins_root.h5ad  (+ core + combined pseudotimes, UMAP, X_scVI_harmony_pt, X_scVI_combined_harmony_pt)
+  |     -> islet_analysis/islets_core_clustered.h5ad  (+ Leiden at 4 resolutions, Harmony θ=2 on imageid)
   |
   |-- scripts/compute_neighborhood_metrics.py
-  |     -> data/neighborhood_metrics.csv  (5,214 rows, 62 cols)
+  |     -> data/neighborhood_metrics.csv  (5,214 rows, ~100 cols — per-phenotype enrich_z and min_dist)
   |
   |-- scripts/extract_per_islet_cells.py
   |     -> data/cells/*.csv  (5,214 files, 37 cols: coords, phenotype, region, 31 markers)
@@ -140,19 +140,21 @@ Note: `scripts/reaggregate_islets.py` replaces the manual notebook workflow (agg
 
 Pipeline scripts use the `scvi-env` conda environment:
 ```bash
-conda activate scvi-env  # scanpy, anndata, scvi-tools, sklearn, scib-metrics, scipy
+conda activate scvi-env  # scanpy, anndata, scvi-tools, sklearn, scib-metrics, scipy, harmonypy
 ```
 
-## Spatial Neighborhood Analysis (Phase 7, Feb 2026)
+`harmonypy==0.2.0` is a downstream batch-correction dependency (added Apr 2026 — see `## Donor Batch Correction & Pseudotime Modes` below). One-time install: `pip install harmonypy` inside `scvi-env`.
 
-### Peri-Islet Metrics (4 categories, 62 columns)
+## Spatial Neighborhood Analysis (Phase 7, Feb 2026 — extended Apr 2026)
+
+### Peri-Islet Metrics (~100 columns, all phenotypes systematic)
 
 | Category | Columns | Description |
 |----------|---------|-------------|
-| Peri-islet composition | `peri_prop_*`, `peri_count_*`, `total_cells_peri` | Proportion & count of each of 21 phenotypes in 20um expansion zone |
-| Immune infiltration | `immune_frac_peri/core`, `immune_ratio`, `cd8_to_macro_ratio`, `tcell_density_peri` | Immune fractions, ratios, density |
-| Enrichment z-scores | `enrich_z_CD8a_Tcell`, `enrich_z_Macrophage`, etc. | Poisson z comparing peri-islet vs tissue-wide proportion |
-| Distance metrics | `min_dist_cd8`, `min_dist_Macrophage`, `min_dist_immune_mean` | Min distance from islet centroid to nearest immune cells |
+| Peri-islet composition | `peri_prop_*`, `peri_count_*`, `total_cells_peri` | Proportion & count for each of 21 phenotypes in 20µm expansion zone |
+| Aggregate immune metrics (legacy) | `immune_frac_peri/core`, `immune_ratio`, `cd8_to_macro_ratio`, `tcell_density_peri` | Immune fractions, ratios, density. Columns retained for compatibility but no longer surfaced in any UI. |
+| Enrichment z-scores (per phenotype) | `enrich_z_<phenotype>` | Poisson z (observed vs tissue-baseline) for **all 20 phenotypes** (excludes "Unknown"). Extended Apr 2026 from a hand-curated 7-immune subset. |
+| Distance metrics (per phenotype) | `min_dist_<phenotype>`, `min_dist_immune_mean` | Min distance from islet core centroid to nearest peri cell of each phenotype, plus the aggregate "any immune" mean across the 7 IMMUNE_TYPES. |
 
 ### Data Flow
 
@@ -163,7 +165,8 @@ conda activate scvi-env  # scanpy, anndata, scvi-tools, sklearn, scib-metrics, s
 - All 5,214 islets have peri-islet data (100% coverage with min_cells=0 + require_paired=True)
 - Column naming sanitizes phenotype names: spaces -> `_`, `+` -> `plus` (e.g., `peri_prop_ECADplus`)
 - Immune signal validated: T1D immune_frac_peri (0.155) > Aab+ (0.106) > ND (0.069)
-- Plot composition selector now has 4 option groups: Hormone Fractions, Cell Type Proportions, Peri-Islet Proportions, Immune Metrics
+- **Plot composition selector** has 3 option groups: Hormone Positivity, Phenotype Proportions, Peri-Islet Proportions. The 5 aggregate ratio metrics (immune_frac_*, immune_ratio, cd8_to_macro_ratio, tcell_density_peri) were removed (Apr 2026) in favour of phenotype-driven Spatial UI selectors.
+- **`IMMUNE_TYPES`** in `compute_neighborhood_metrics.py` (CD8a Tcell, CD4 Tcell, T cell, B cell, Macrophage, APCs, Immune) is intentionally narrow — drives only aggregates where "what counts as immune" needs definition. **`per_type_phenotypes`** (all `obs.phenotype.unique()` minus `PER_TYPE_EXCLUDE = {"Unknown"}`) drives `enrich_z_*` and `min_dist_*` per-phenotype loops.
 
 ### Spatial Tab (Phase 9+13+15, mod_spatial_ui/server.R)
 
@@ -172,11 +175,11 @@ Row 1: Controls sidebar (col-2) + Tissue Scatter (col-6) + Leiden Panel (col-4).
 1. **Controls Sidebar** (col-2) -- donor selector, color-by (phenotype/Leiden), Leiden resolution, region filter (All/Core+Peri/Core), "Color background cells" checkbox, phenotype filter (checkboxes with All/None links), donor status checkboxes, phenotype + donor palette selectors, download button. All stacked vertically.
 2. **Tissue Scatter** (col-6) -- ggplot2 `renderPlot` (NOT plotly) showing ~177K cells/donor. Background tissue cells in light grey or colored by phenotype (toggle). Foreground (core/peri) colored by phenotype or Leiden cluster. `coord_fixed() + scale_y_reverse()`. Height: 800px. Supports brush-to-zoom (drag to select, double-click or Reset Zoom button to restore).
 3. **Leiden Panel** (col-4) -- plotly UMAP of 5,214 islets colored by selected Leiden resolution (0.3/0.5/0.8/1.0) + stacked bar chart of mean phenotype composition per cluster. UMAP uses raw marker PCA visualization coords (same as trajectory) for disease-stage separation.
-4. **Neighborhood Analysis Cards** (3 sections, conditionally rendered via `has_neighborhood()` guard):
+4. **Neighborhood Analysis Cards** (3 sections, conditionally rendered via `has_neighborhood()` guard). Apr 2026: all four card selectors are now phenotype-driven and dynamically populated from `prepared()$comp` columns — replaces previous hand-curated 7-immune-type lists.
    - **Global controls bar**: Min cells/islet filter (`nbr_min_cells`), point size slider (`nbr_pt_size`), opacity slider (`nbr_pt_alpha`), live islet count display.
-   - **Card A: Immune Infiltration** -- Violin plot (5 selectable immune metrics, KW p-value) + peri vs core scatter (y=x diagonal, adjustable point size/opacity). `infiltration_violin`, `infiltration_scatter`.
-   - **Card B: Immune Cell Enrichment** -- Grouped bar chart (7 immune types × 3 stages, SEM/IQR error bars, median/mean toggle, z-clip checkbox) + heatmap. Region toggle: peri enrichment z-scores (diverging blue→red), core proportions (sequential white→red), peri proportions (sequential white→red). `enrichment_bars`, `enrichment_heatmap`. Shared `enrich_summary()` reactive with `immune_type_map` for column mapping across regions.
-   - **Card C: Immune Proximity** -- Distance box plots (3 selectable metrics, NA rate in subtitle, 99th percentile outlier clipping) + enrichment vs distance scatter (Pearson r, 7 selectable z-score columns, percentile-based outlier clipping). `distance_boxplot`, `enrich_vs_distance`.
+   - **Card A: Peri-Islet Phenotype Enrichment** -- Bar chart (donor-level mean/median enrichment z-score per status for selected phenotype) + peri vs core proportion scatter. Inputs: `infiltration_phenotype`, `scatter_phenotype` (both populated server-side via `updateSelectInput` from all phenotypes with `enrich_z_*` columns).
+   - **Card B: Phenotype Composition & Enrichment** -- Grouped bar chart + heatmap across all 20 phenotypes × 3 stages, SEM/IQR error bars, median/mean toggle, z-clip checkbox. Region toggle: peri enrichment z-scores (diverging blue→red), core proportions (sequential white→red), peri proportions (sequential white→red). `enrichment_bars`, `enrichment_heatmap`. Shared `enrich_summary()` reactive iterates over `phenotype_options()`.
+   - **Card C: Phenotype Proximity to Islet** -- Distance box plots (per phenotype + "Immune (all)" aggregate) + signed-distance KDE. Inputs: `distance_metric` (built from `min_dist_*` columns) and `kde_immune_type` (built from `immune_distance_kde.csv` phenotype column).
    - Section headings reuse `section_heading()` pattern from Statistics tab (gradient pill badge + title + subtitle).
    - Documentation banners (light blue background) explain each analysis section.
    - Distance NA values: caused by zero immune cells in peri-islet zone (20.1% NA for any immune, 88.6% for CD8+ T-cells). Biological, not a bug — ND has most NAs (least infiltration). Min-cells filter at ≥50 reduces NA from 20% to 6%.
@@ -185,9 +188,9 @@ Wired as `spatial_server("spatial", prepared, active_palette, active_donor_color
 
 #### Neighborhood Cards Server Architecture
 - `nbr_comp()` shared reactive -- filters `prepared()$comp` by `input$groups` (donor status checkboxes) + `input$nbr_min_cells` (total_cells_core + total_cells_peri ≥ threshold). Reused by all 6 outputs.
-- `enrich_summary()` intermediate reactive -- aggregates 7 immune cell type columns per cell type × donor status. Respects `input$enrich_region` (peri/core/peri_prop), `input$enrich_clip`, `input$enrich_stat`. Uses `immune_type_map` to select correct column names per region. Returns data.frame.
-- `immune_type_map` -- list of 7 items, each with `label`, `enrich` (peri z-score col), `core` (core proportion col), `peri` (peri proportion col). Maps between naming conventions (spaces in core, underscores in peri).
-- `enrich_col_labels` -- named vector mapping `enrich_z_*` column names to friendly labels (e.g., `enrich_z_CD8a_Tcell` → "CD8+ T-cell").
+- `phenotype_options()` reactive (Apr 2026) -- builds a list of phenotype records from `prepared()$comp` columns. Each entry: `label` (recovered original phenotype name), `safe` (sanitised name used in column suffixes), `enrich` (`enrich_z_<safe>` col), `prop_core`, `peri_prop`, `peri_count`, `min_dist`. Replaces the previous static `immune_type_map` / `enrich_col_labels`. Recovers original phenotype label from sanitised column suffix by trying common transforms (`_` → space, `plus` → `+`) against existing `prop_*` columns.
+- `phenotype_choices()` reactive -- named vector for `selectInput` choices: names = labels, values = safe-names. All four card selectors (`infiltration_phenotype`, `scatter_phenotype`, `distance_metric`, `kde_immune_type`) populate via `updateSelectInput` from this.
+- `enrich_summary()` intermediate reactive -- iterates over `phenotype_options()` per cell type × donor status. Respects `input$enrich_region` (peri/core/peri_prop), `input$enrich_clip`, `input$enrich_stat`. Returns data.frame.
 - All 6 outputs use `donor_colors_reactive()` for palette syncing and respond to `input$groups`.
 - **Plotly categorical axis ordering**: Must set `categoryorder = "array", categoryarray = c("ND", "Aab+", "T1D")` on x-axis for violin/box/bar plots. Plotly defaults to alphabetical, which puts "Aab+" before "ND".
 
@@ -379,6 +382,44 @@ Required env vars: `KEY` (API key), `BASE` (API base URL, optional).
 - `sqrt(total_cells)` for point sizing — area proportional, range [0.3×, 3.0×] base point size
 - All three trend line variants weighted: overall, by-donor (donor_id coloring), by-donor (donor_status coloring)
 - **Critical**: Raw `total_cells` as LOESS weight causes wild curves — a 1,902-cell islet dominates the fit. Always use `log1p()`.
+
+## Donor Batch Correction & Pseudotime Modes (Phase 17, Apr 2026)
+
+### scVI batch_key bug (root cause)
+
+`single_cell_analysis/SCVI_CODEX_v2.ipynb` cell 16 set `categorical_covariate_keys=["Age", "Gender"]` but **never passed `batch_key="imageid"`**, despite comments claiming otherwise. Result: scVI's batch decoder was never activated and donor-specific technical variance (staining, antibody lot, imaging gain) leaked into `X_scVI_mean`. Symptoms: donor 6356 (ND, 18.8% of cells) formed a standalone Leiden cluster at every resolution (80–92% dominance); Cramer's V donor↔cluster ≈ 0.4 with AMI(donor) > AMI(status).
+
+**Fix:** downstream Harmony correction (avoids scVI retrain on 2.6M cells). Two different θ values for two different goals.
+
+### Step 8: Harmony for Leiden clustering (θ=2)
+
+`scripts/reaggregate_islets.py` Step 8 applies `harmonypy.run_harmony` on `X_scVI_mean` with `batch=imageid`, `theta=2.0` before `sc.pp.neighbors`. Embedding stored as `obsm['X_scVI_harmony']`. Goal: donor-invariant islet cell-types. Post-fix metrics: Cramer's V dropped from 0.38 → 0.135, donor 6356's worst-cluster fraction 0.83 → 0.29, AMI(donor) 0.19 → 0.028. Status-orthogonality is fine/desired (clusters are cell-types, disease lives on pseudotime).
+
+### Step 5: Trajectory pseudotime (raw scVI core, robust medoid root)
+
+Step 5 uses **raw `X_scVI_mean`** (no Harmony) for the default core-only pseudotime. Empirical sweep showed even θ=0.1 compressed ND→T1D span more than it bought in donor noise reduction. Aab+ donor variance accepted as biology (Aab+ donors exhibit a heterogeneous range of islet types).
+
+**Robust root selection** (replaces single-islet `argmax(INS)` over ND): root = medoid of top-50 ND islets by INS in scVI space. Anchored by the centre-of-mass of "healthy ND, INS-high" islets and naturally draws from multiple donors. Current root: index 703, donor 6516, INS 0.663 (99.7th percentile).
+
+### Step 5b: Combined-mode pseudotime (Harmony θ=0.1 + structures α=0.15)
+
+Computes a SECOND pseudotime saved as `dpt_pseudotime_combined`. Input matrix: `[core_scVI(10) | peri_scVI(10) | α_struct · z(struct(16))]` = 36 dims. Structural block: (`prop`, `count`) × (Neural, Blood Vessel, Endothelial, Lymphatic) × (core, peri), z-scored, scaled by `ALPHA_STRUCT = 0.15`. Disease ordering breaks at α ≥ 0.20; α=0.15 is the largest weight preserving ND<Aab+<T1D ordering while strengthening immune/vascular marker correlations (CD3e, CD8a, CD31, CD34, PDPN). Light Harmony (θ=0.1) on the combined matrix; same medoid root as core mode.
+
+### App: Pseudotime mode selector
+
+`mod_trajectory_ui.R` adds a dropdown "Pseudotime mode" with two options: "Core only" (default) and "Core + Peri". `mod_trajectory_server.R::traj_with_pseudotime()` switches `obs$pseudotime` between `dpt_pseudotime` and `dpt_pseudotime_combined` based on `input$pt_mode`. The selector controls X-axis (pseudotime) only — Y-axis features remain the 31-marker panel.
+
+### Step 6 validation thresholds
+
+- INS Spearman r < −0.3 (PASS at −0.69 raw / −0.55 combined)
+- GCG Spearman r > 0.1 (relaxed from 0.2 because raw donor-amplified ~0.27 dropped post-fix)
+- ND<Aab+<T1D mean ordering
+- Donor eta² within status: ≤ 0.15 for ND/T1D, **≤ 0.25 for Aab+** (relaxed because Aab+ donors genuinely span heterogeneous islet types)
+- 6533 included
+
+### Important: don't claim "scVI is batch-corrected"
+
+Old comments in `reaggregate_islets.py` and `islet_analysis/CLAUDE.md` claimed "scVI latent has donor-level variation corrected out (Age+Gender covariates bijectively map to donors)". This is wrong — Age/Gender as `categorical_covariate_keys` don't activate batch correction; only `batch_key` does. Comments updated Apr 2026.
 
 ## Important Conventions
 

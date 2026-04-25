@@ -187,13 +187,6 @@ render_islet_drilldown_plot <- function(info, cells, color_by = "phenotype", sho
   cells$x_px <- cells$X_centroid / PIXEL_SIZE_UM
   cells$y_px <- cells$Y_centroid / PIXEL_SIZE_UM
 
-  # Assign region label for alpha-based core/peri distinction
-  if ("cell_region" %in% colnames(cells)) {
-    cells$region_label <- ifelse(cells$cell_region == "core", "Core", "Peri")
-  } else {
-    cells$region_label <- "Core"
-  }
-
   if (color_by == "phenotype" && "phenotype" %in% colnames(cells)) {
     # Categorical coloring by phenotype (using fill to avoid colour conflict with structures)
     pheno_present <- sort(unique(cells$phenotype))
@@ -204,12 +197,11 @@ render_islet_drilldown_plot <- function(info, cells, color_by = "phenotype", sho
     p <- base_plot +
       ggplot2::geom_point(
         data = cells,
-        ggplot2::aes(x = x_px, y = y_px, fill = phenotype, alpha = region_label),
-        shape = 21, colour = "grey30", stroke = 0.3, size = 3.0,
+        ggplot2::aes(x = x_px, y = y_px, fill = phenotype),
+        shape = 21, colour = "grey30", stroke = 0.3, size = 3.0, alpha = 0.9,
         inherit.aes = FALSE
       ) +
       ggplot2::scale_fill_manual(values = pal, name = "Phenotype") +
-      ggplot2::scale_alpha_manual(values = c("Core" = 0.9, "Peri" = 0.4), name = "Region") +
       ggplot2::labs(title = paste(info$islet_key, "- Single Cells"))
   } else if (color_by %in% colnames(cells)) {
     # Continuous coloring by marker expression (using fill)
@@ -218,12 +210,11 @@ render_islet_drilldown_plot <- function(info, cells, color_by = "phenotype", sho
     p <- base_plot +
       ggplot2::geom_point(
         data = cells,
-        ggplot2::aes(x = x_px, y = y_px, fill = marker_val, alpha = region_label),
-        shape = 21, colour = "grey30", stroke = 0.3, size = 3.0,
+        ggplot2::aes(x = x_px, y = y_px, fill = marker_val),
+        shape = 21, colour = "grey30", stroke = 0.3, size = 3.0, alpha = 0.9,
         inherit.aes = FALSE
       ) +
       ggplot2::scale_fill_viridis_c(option = "inferno", name = color_by, na.value = "gray80") +
-      ggplot2::scale_alpha_manual(values = c("Core" = 0.9, "Peri" = 0.4), name = "Region") +
       ggplot2::labs(title = paste(info$islet_key, "-", color_by))
   } else {
     # Fallback: just plot cells in gray
@@ -277,10 +268,10 @@ render_drilldown_summary <- function(cells, palette = PHENOTYPE_COLORS) {
   pal[is.na(pal)] <- "#CCCCCC"
 
   if ("cell_region" %in% colnames(cells) && length(unique(counts$region)) > 1) {
-    ggplot2::ggplot(counts, ggplot2::aes(x = phenotype, y = count, fill = phenotype, alpha = region)) +
-      ggplot2::geom_col(position = "stack") +
+    ggplot2::ggplot(counts, ggplot2::aes(x = phenotype, y = count, fill = phenotype, colour = region)) +
+      ggplot2::geom_col(position = "stack", linewidth = 0.5) +
       ggplot2::scale_fill_manual(values = pal, guide = "none") +
-      ggplot2::scale_alpha_manual(values = c("core" = 1.0, "peri" = 0.5), name = "Region") +
+      ggplot2::scale_colour_manual(values = c("core" = "grey20", "peri" = "white"), name = "Region") +
       ggplot2::coord_flip() +
       ggplot2::labs(x = NULL, y = "Cell count") +
       ggplot2::theme_minimal(base_size = 16) +

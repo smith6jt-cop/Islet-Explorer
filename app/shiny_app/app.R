@@ -6,7 +6,10 @@
 
 ui <- fluidPage(
   useShinyjs(),
-  tags$head(tags$style(HTML("
+  tags$head(
+    tags$link(rel = "icon", type = "image/png", href = "favicon.png"),
+    tags$link(rel = "shortcut icon", type = "image/png", href = "favicon.png"),
+    tags$style(HTML("
     /* Viewer and trajectory mode styles - fix tab positioning */
     body.viewer-mode .col-sm-2 {
       display: none !important;
