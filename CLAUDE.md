@@ -504,13 +504,9 @@ See `islet_analysis/CLAUDE.md` for the Python analysis pipeline (phenotyping, ag
 See `data/DATA_PROVENANCE.md` for full data lineage documentation.
 See `docs/user_guide.md` for end-user documentation.
 
-## Skills Registry
+## Cross-Session Knowledge
 
-The `Skills_Registry/` submodule contains cross-session development knowledge. Custom slash commands:
-- `/advise` -- search registry for relevant experiments before starting new work
-- `/retrospective` -- save session learnings as a new skill
-
-Skills are registered in `.claude/skills/<name>/SKILL.md` (NOT in Skills_Registry/CLAUDE.md).
+Cross-session development knowledge for this project lives in Claude's auto-memory at `~/.claude/projects/-home-smith6jt/memory/` (multi-project index in `MEMORY.md`, Islet-Explorer entries prefixed `islet_*`). The earlier `Skills_Registry/` submodule + `/advise` + `/retrospective` workflow was retired Apr 2026 in favour of the auto-memory mechanism.
 
 ## R Dependencies
 

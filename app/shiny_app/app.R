@@ -7,8 +7,17 @@
 ui <- fluidPage(
   useShinyjs(),
   tags$head(
-    tags$link(rel = "icon", type = "image/png", href = "favicon.png"),
-    tags$link(rel = "shortcut icon", type = "image/png", href = "favicon.png"),
+    # Favicons for browser tab, bookmarks, and mobile pinning. Browsers pick
+    # the most appropriate sized PNG based on context; the ICO is the legacy
+    # default location for tools that hard-fetch /favicon.ico. Apple touch
+    # icon covers iOS Safari Add-to-Home-Screen.
+    tags$link(rel = "icon", type = "image/png", sizes = "16x16",  href = "favicon-16.png"),
+    tags$link(rel = "icon", type = "image/png", sizes = "32x32",  href = "favicon-32.png"),
+    tags$link(rel = "icon", type = "image/png", sizes = "48x48",  href = "favicon-48.png"),
+    tags$link(rel = "icon", type = "image/png", sizes = "192x192", href = "favicon-192.png"),
+    tags$link(rel = "icon", type = "image/png", sizes = "512x512", href = "favicon-512.png"),
+    tags$link(rel = "apple-touch-icon", sizes = "180x180", href = "apple-touch-icon.png"),
+    tags$link(rel = "shortcut icon", type = "image/x-icon", href = "favicon.ico"),
     tags$style(HTML("
     /* Viewer and trajectory mode styles - fix tab positioning */
     body.viewer-mode .col-sm-2 {
