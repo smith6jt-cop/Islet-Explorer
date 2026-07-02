@@ -877,7 +877,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         # ==== Card C: Immune Proximity to Islets ====
         fluidRow(column(12, sec_heading(
           "C", "Phenotype Proximity to Islet",
-          "Minimum distance from islet core centroid to nearest peri-islet cells of each phenotype, plus signed-distance KDE for selected types."
+          "Left: per-islet minimum distance to nearest peri-islet cells of each phenotype. Right: per-cell signed distance-to-islet on a symlog axis — a density (by disease status) or a phenotype composition, spanning islet interior to bulk tissue."
         ))),
         fluidRow(style = "display: flex; flex-wrap: wrap;",
           column(6,
@@ -896,17 +896,67 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           ),
           column(6,
             div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible; height: 100%; box-sizing: border-box;",
-              # Populated server-side from the KDE CSV's distinct phenotypes.
-              selectInput(ns("kde_immune_type"), "Phenotype",
-                          choices = NULL, width = "100%"),
-              uiOutput(ns("kde_pheno_hint")),
-              plotlyOutput(ns("immune_distance_kde"), height = "420px")
+              # Two views: the donor-averaged KDE (default) or the Senior-ported
+              # per-cell tissue-wide density/composition. CODEX phenotypes only.
+              radioButtons(ns("dist_view"), "View",
+                           choices = c("Donor-averaged KDE" = "kde",
+                                       "Per-cell distance" = "cellwise"),
+                           selected = "kde", inline = TRUE),
+              conditionalPanel(
+                condition = "input.dist_view == 'kde'", ns = ns,
+                selectInput(ns("kde_immune_type"), "Phenotype",
+                            choices = NULL, width = "100%"),
+                uiOutput(ns("kde_pheno_hint")),
+                radioButtons(ns("kde_metric"), NULL, inline = TRUE, selected = "shape",
+                             choices = c("Distribution shape" = "shape",
+                                         "Cell abundance" = "abundance"))
+              ),
+              conditionalPanel(
+                condition = "input.dist_view == 'cellwise'", ns = ns,
+                fluidRow(
+                  column(6, radioButtons(ns("dist_mode"), "Group by",
+                                         choices = c("Phenotype" = "phenotype", "Marker+" = "marker"),
+                                         selected = "phenotype", inline = TRUE)),
+                  column(6, radioButtons(ns("dist_norm"), "Y-axis",
+                                         choices = c("Proportion of class" = "prop", "Raw count" = "count"),
+                                         selected = "prop", inline = TRUE))
+                ),
+                radioButtons(ns("dist_ptype"), "Plot",
+                             choices = c("Density curves" = "density",
+                                         "Composition bars" = "composition"),
+                             selected = "density", inline = TRUE),
+                # dist_group / dist_comp_items choices are populated server-side by
+                # observeEvent(input$dist_mode) (phenotypes vs markers).
+                conditionalPanel(
+                  condition = "input.dist_ptype == 'density'", ns = ns,
+                  selectInput(ns("dist_group"), "Show", choices = NULL, width = "100%")
+                ),
+                conditionalPanel(
+                  condition = "input.dist_ptype == 'composition'", ns = ns,
+                  # Flow the (up to ~20) checkboxes into as many ~120px columns
+                  # as fit, instead of one tall column. Targets the options-group
+                  # so it survives the observeEvent(dist_mode) rebuild.
+                  tags$style(HTML(paste0(
+                    ".cd-comp-cols,.cd-comp-cols .shiny-input-checkboxgroup,",
+                    ".cd-comp-cols .shiny-options-group{width:100%;max-width:none;",
+                    "display:block;box-sizing:border-box;}",
+                    ".cd-comp-cols .shiny-options-group{column-width:100px;column-gap:16px;}",
+                    ".cd-comp-cols .checkbox{break-inside:avoid;margin:2px 0;}"))),
+                  tags$div(class = "cd-comp-cols",
+                           checkboxGroupInput(ns("dist_comp_items"), "Show",
+                                              choices = NULL))
+                ),
+                checkboxGroupInput(ns("dist_status"), "Disease status",
+                                   choices = c("ND", "Aab+", "T1D"),
+                                   selected = c("ND", "Aab+", "T1D"), inline = TRUE)
+              ),
+              plotlyOutput(ns("immune_distance_kde"), height = "520px")
             )
           )
         ),
         fluidRow(column(12,
           div(style = "background: #f0f6ff; padding: 10px 15px; border-radius: 6px; margin-bottom: 20px; font-size: 13px; color: #555;",
-            tags$em("Left: Distance metrics measure minimum Euclidean distance (\u00b5m) from islet core centroid to nearest peri-islet immune cells. NAs indicate no cells of that type in the peri-islet zone. Right: KDE of signed distance from islet boundary for individual immune cells. Negative = inside islet (core), positive = outside (peri-islet zone). The dashed line at zero marks the islet boundary.")
+            tags$em("Left: Distance metrics measure minimum Euclidean distance (\u00b5m) from islet core centroid to nearest peri-islet immune cells. NAs indicate no cells of that type in the peri-islet zone. Right: per-cell signed distance-to-islet on a symlog axis — a density split by disease status (per phenotype or all cells) or a phenotype composition (stacked bars, one facet per status, zero-anchored at the islet border). Negative = inside islet, positive = outside; the dashed line marks the border. Pooled per cell (descriptive) — for donor-fair group comparison see Card A.")
           )
         ))
       )
@@ -1036,19 +1086,42 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       sel_c <- if (!is.null(cur_c) && cur_c %in% dist_ch) cur_c else "min_dist_immune_mean"
       updateSelectInput(session, "distance_metric", choices = dist_ch, selected = sel_c)
 
-      # Card C-Right: KDE phenotypes — populated from CSV's distinct phenotypes.
-      # Lives inside this observer so it shares the phenotype_choices() reactive
-      # dependency, ensuring the update fires after the Card C renderUI has
-      # mounted the kde_immune_type selectInput on the client.
+      # Card C-Right "kde" view: populate kde_immune_type from phenotype_options()
+      # (same universe as Card C-left). The "cellwise" view sets its own choices
+      # at UI-build time from cell_distance_phenotypes().
       kde_df <- load_immune_kde_data()
       if (!is.null(kde_df) && "phenotype" %in% colnames(kde_df)) {
-        phenos <- sort(unique(as.character(kde_df$phenotype)))
-        ch_kde <- c("Immune (all)" = "all", stats::setNames(phenos, phenos))
+        present <- unique(as.character(kde_df$phenotype))
+        kopts <- Filter(function(o) o$safe %in% present, opts)
+        ch_kde <- c("Immune (all)" = "all",
+                    stats::setNames(
+                      vapply(kopts, function(o) o$safe,  character(1)),
+                      vapply(kopts, function(o) o$label, character(1))
+                    ))
         cur_k <- isolate(input$kde_immune_type)
         sel_k <- if (!is.null(cur_k) && cur_k %in% ch_kde) cur_k else "all"
         updateSelectInput(session, "kde_immune_type", choices = ch_kde, selected = sel_k)
       }
     })
+
+    # Card C-Right "cellwise": repopulate the phenotype/marker pickers when the
+    # group-by mode flips. Depends on input$dist_mode so it fires post-mount.
+    observeEvent(input$dist_mode, {
+      mode <- input$dist_mode %||% "phenotype"
+      items <- if (identical(mode, "marker")) cell_distance_markers() else cell_distance_phenotypes()
+      ch <- c("All cells" = "__all__", stats::setNames(items, items))
+      cur_g <- isolate(input$dist_group)
+      sel_g <- if (!is.null(cur_g) && cur_g %in% ch) cur_g else "__all__"
+      updateSelectInput(session, "dist_group", choices = ch, selected = sel_g)
+      def <- if (identical(mode, "marker"))
+               intersect(c("INS", "GCG", "CD3e", "CD8a", "CD68", "CD31"), items)
+             else
+               intersect(c("Beta cell", "Alpha cell", "Acinar", "Ductal",
+                           "Macrophage", "CD8a Tcell", "APCs"), items)
+      cur_c <- isolate(input$dist_comp_items)
+      sel_c <- if (!is.null(cur_c) && length(cur_c) > 0 && all(cur_c %in% items)) cur_c else def
+      updateCheckboxGroupInput(session, "dist_comp_items", choices = items, selected = sel_c)
+    }, ignoreNULL = FALSE)
 
     # ---- Inline marker-rule hints under the four phenotype selectors ----
     # Each looks up the selected phenotype's label via phenotype_options() and
@@ -1623,101 +1696,247 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         plotly_islet_config(paste0("spatial_distance_box_", gsub("[^A-Za-z0-9_]", "_", metric)))
     })
 
-    # ==== Card C-Right: Immune Cell Distance KDE (signed distance from islet boundary) ====
-    # Lazy-load immune distance CSV (cached in module scope)
+    # ==== Card C-Right: two views selected by input$dist_view ====
+    #  "kde"      = donor-averaged signed-distance KDE over islet-associated
+    #               cells (data/signed_distance_kde.csv) — the DEFAULT.
+    #  "cellwise" = per-cell tissue-wide distance density + phenotype composition
+    #               (data/cell_distance.csv, symlog axis) — ported from Senior.
     .kde_data_env <- new.env(parent = emptyenv())
     load_immune_kde_data <- function() {
       if (!is.null(.kde_data_env$data)) return(.kde_data_env$data)
-      kde_path <- file.path("..", "..", "data", "immune_distance_kde.csv")
+      kde_path <- file.path("..", "..", "data", "signed_distance_kde.csv")
       if (!file.exists(kde_path)) return(NULL)
       .kde_data_env$data <- read.csv(kde_path, stringsAsFactors = FALSE)
       .kde_data_env$data
     }
 
     output$immune_distance_kde <- renderPlotly({
-      kde_df <- load_immune_kde_data()
-      req(kde_df)
+      view <- input$dist_view %||% "kde"
 
-      cell_type <- input$kde_immune_type %||% "all"
-      # Filter to selected immune type
-      if (cell_type == "all") {
-        df <- kde_df
-        type_label <- "All Immune Cells"
-      } else {
-        df <- kde_df[kde_df$phenotype == cell_type, , drop = FALSE]
-        type_label <- cell_type
-      }
+      if (identical(view, "kde")) {
+        kde_df <- load_immune_kde_data()
+        req(kde_df)
 
-      # Filter to selected donor status groups
-      if (!is.null(input$groups)) {
-        df <- df[df$donor_status %in% input$groups, , drop = FALSE]
-      }
-      req(nrow(df) > 0)
+        # Safety net: a stale CSV without case_id collapses to one donor per
+        # status (degrades to pooled, never crashes). The regenerated CSV has it.
+        if (!"case_id" %in% colnames(kde_df)) kde_df$case_id <- kde_df$donor_status
 
-      # Clip to 1st-99th percentile
-      q_lo <- quantile(df$signed_dist, 0.01, na.rm = TRUE)
-      q_hi <- quantile(df$signed_dist, 0.99, na.rm = TRUE)
-      df <- df[df$signed_dist >= q_lo & df$signed_dist <= q_hi, , drop = FALSE]
-      req(nrow(df) > 0)
+        cell_type <- input$kde_immune_type %||% "all"
+        metric <- input$kde_metric %||% "shape"
+        # Filter to selected phenotype. "all" = the IMMUNE_TYPES aggregate,
+        # flagged by is_immune (same set as Card C-left's min_dist_immune_mean).
+        if (identical(cell_type, "all")) {
+          df <- if ("is_immune" %in% colnames(kde_df))
+                  kde_df[kde_df$is_immune == 1, , drop = FALSE] else kde_df
+          type_label <- "Immune (all)"
+        } else {
+          df <- kde_df[kde_df$phenotype == cell_type, , drop = FALSE]
+          type_label <- .lookup_pheno_label(cell_type)
+        }
 
-      status_order <- c("ND", "Aab+", "T1D")
-      df$donor_status <- factor(df$donor_status, levels = intersect(status_order, unique(df$donor_status)))
-      dcols <- donor_colors_reactive()
+        # Filter to selected donor status groups (sidebar)
+        if (!is.null(input$groups)) {
+          df <- df[df$donor_status %in% input$groups, , drop = FALSE]
+        }
+        req(nrow(df) > 0)
 
-      # Compute KDE per disease stage, scaled by cell count
-      kde_list <- list()
-      kde_counts <- list()
-      y_max <- 0
-      for (s in levels(df$donor_status)) {
-        vals <- df$signed_dist[df$donor_status == s]
-        if (length(vals) < 2) next
-        d <- density(vals, n = 512, from = q_lo, to = q_hi)
-        d$y <- d$y * length(vals)  # Scale density by cell count
-        kde_list[[s]] <- d
-        kde_counts[[s]] <- length(vals)
-        y_max <- max(y_max, max(d$y))
-      }
-      req(length(kde_list) > 0)
+        # Clip to 1st-99th percentile
+        q_lo <- quantile(df$signed_dist, 0.01, na.rm = TRUE)
+        q_hi <- quantile(df$signed_dist, 0.99, na.rm = TRUE)
+        df <- df[df$signed_dist >= q_lo & df$signed_dist <= q_hi, , drop = FALSE]
+        req(nrow(df) > 0)
 
-      p <- plot_ly()
-      for (s in names(kde_list)) {
-        d <- kde_list[[s]]
-        n_cells <- kde_counts[[s]]
-        p <- p %>% add_trace(
-          x = d$x, y = d$y,
+        status_order <- c("ND", "Aab+", "T1D")
+        df$donor_status <- factor(df$donor_status, levels = intersect(status_order, unique(df$donor_status)))
+        dcols <- donor_colors_reactive()
+
+        # Per-donor densities on a shared grid, averaged with EQUAL donor weight
+        # (removes pseudoreplication, e.g. ND donor 6356 = 71% of ND's APC cells).
+        #   shape     -> MEAN of per-donor densities that each integrate to 1
+        #   abundance -> MEDIAN of per-donor densities scaled by that donor's count
+        grid_x <- seq(q_lo, q_hi, length.out = 512)
+        bw <- tryCatch(stats::bw.nrd0(df$signed_dist[is.finite(df$signed_dist)]),
+                       error = function(e) NULL)
+        dens_one <- function(v) {
+          v <- v[is.finite(v)]
+          if (length(v) < 2) return(NULL)
+          d <- if (is.null(bw)) density(v, n = 512, from = q_lo, to = q_hi)
+               else            density(v, bw = bw, n = 512, from = q_lo, to = q_hi)
+          if (identical(metric, "abundance")) d$y * length(v) else d$y
+        }
+        agg_donors <- function(mat) {
+          if (identical(metric, "abundance")) apply(mat, 1, median) else rowMeans(mat)
+        }
+
+        kde_list <- list(); n_donors <- list(); n_cells <- list(); y_max <- 0
+        for (s in levels(df$donor_status)) {
+          sdf <- df[df$donor_status == s, , drop = FALSE]
+          cols <- list()
+          for (dn in unique(sdf$case_id)) {
+            y <- dens_one(sdf$signed_dist[sdf$case_id == dn])
+            if (!is.null(y)) cols[[length(cols) + 1L]] <- y
+          }
+          if (length(cols) < 1) next
+          ybar <- agg_donors(do.call(cbind, cols))
+          kde_list[[s]] <- ybar
+          n_donors[[s]] <- length(cols)
+          n_cells[[s]]  <- nrow(sdf)
+          y_max <- max(y_max, max(ybar))
+        }
+        req(length(kde_list) > 0)
+
+        y_title <- if (identical(metric, "abundance"))
+                     "Median cells per µm per donor" else "Per-donor mean density (area = 1)"
+
+        fonts <- plotly_islet_fonts()
+        p <- plot_ly()
+        for (s in names(kde_list)) {
+          ybar <- kde_list[[s]]
+          lbl <- paste0(s, " (", n_donors[[s]], " donors, ",
+                        formatC(n_cells[[s]], big.mark = ","), " cells)")
+          p <- p %>% add_trace(
+            x = grid_x, y = ybar, type = "scatter", mode = "lines", name = lbl,
+            line = list(color = dcols[s], width = 2.5),
+            fill = "tozeroy", fillcolor = paste0(dcols[s], "22"),
+            hoverinfo = "text",
+            text = paste0(lbl, "<br>dist = ", round(grid_x, 1), " µm<br>",
+                          y_title, " = ", signif(ybar, 3)))
+        }
+        p <- p %>% add_trace(x = c(0, 0), y = c(0, y_max * 1.05),
           type = "scatter", mode = "lines",
-          name = paste0(s, " (n=", formatC(n_cells, big.mark = ","), ")"),
-          line = list(color = dcols[s], width = 2.5),
-          fill = "tozeroy",
-          fillcolor = paste0(dcols[s], "22"),
-          hoverinfo = "text",
-          text = paste0(s, " (n=", formatC(n_cells, big.mark = ","), ")",
-                       "<br>dist = ", round(d$x, 1), " \u00b5m",
-                       "<br>cells/\u00b5m = ", round(d$y, 2))
-        )
+          line = list(color = "#333", width = 1.5, dash = "dash"),
+          showlegend = FALSE, hoverinfo = "none")
+        p %>% layout(
+          font = fonts$global, margin = list(t = 96),
+          title = list(text = paste0(type_label, " — Distance from Islet"),
+                       font = fonts$title, y = 0.97, yanchor = "top"),
+          xaxis = list(title = list(text = "Signed distance (µm) — inside islet ← 0 → outside",
+                                    font = fonts$axis_title),
+                       tickfont = fonts$axis_tick, zeroline = FALSE),
+          yaxis = list(title = list(text = y_title, font = fonts$axis_title),
+                       tickfont = fonts$axis_tick),
+          legend = list(orientation = "h", x = 0.5, xanchor = "center",
+                        y = 1.0, yanchor = "bottom",
+                        title = list(text = "Status (donor-averaged):",
+                                     font = fonts$legend_title, side = "top"),
+                        font = fonts$legend_text)
+        ) %>%
+          plotly_islet_config(paste0("spatial_distance_kde_", gsub("[^A-Za-z0-9_]", "_", type_label)))
+
+      } else {
+        ptype <- input$dist_ptype %||% "density"
+        mode  <- input$dist_mode %||% "phenotype"
+        norm  <- input$dist_norm %||% "prop"
+        status_order <- c("ND", "Aab+", "T1D")
+        statuses <- intersect(status_order, input$dist_status %||% status_order)
+        req(length(statuses) > 0)
+        dcols <- donor_colors_reactive()
+        fonts <- plotly_islet_fonts()
+        item_colors <- if (identical(mode, "marker")) CELL_DIST_MARKER_COLORS else PHENOTYPE_COLORS
+
+        if (identical(ptype, "composition")) {
+          # ---- Composition: stacked bars (phenotype or marker), one facet per status ----
+          items <- input$dist_comp_items
+          req(length(items) > 0)
+          res <- query_cell_distance_composition(mode, items, statuses, norm)
+          req(res, nrow(res$comp) > 0)
+          comp <- res$comp
+          present <- intersect(status_order, unique(comp$donor_status))
+          pcols <- item_colors[items]; pcols[is.na(pcols)] <- "#999999"; names(pcols) <- items
+          y_lab <- if (identical(norm, "prop")) "fraction of class cells" else "cells"
+          panels <- lapply(present, function(s) {
+            ss <- comp[comp$donor_status == s, , drop = FALSE]
+            pp <- plot_ly()
+            for (m in items) {
+              sub <- ss[ss$item == m, , drop = FALSE]
+              sub <- sub[order(sub$binx), , drop = FALSE]
+              if (nrow(sub) == 0) next
+              pp <- pp %>% add_trace(
+                x = sub$x, y = sub$val, type = "bar",
+                name = m, legendgroup = m, showlegend = identical(s, present[1]),
+                marker = list(color = unname(pcols[m])),
+                hoverinfo = "text",
+                hovertext = paste0(s, " · ", m, "<br>dist ≈ ", round(sub$x), " µm<br>",
+                                   formatC(sub$n, big.mark = ","), " cells"))
+            }
+            tot <- stats::aggregate(val ~ binx, ss, sum)
+            ymax <- if (nrow(tot)) max(tot$val) else 1
+            pp <- pp %>% add_trace(x = c(0, 0), y = c(0, ymax * 1.02),
+              type = "scatter", mode = "lines",
+              line = list(color = "#333", width = 1.4, dash = "dash"),
+              showlegend = FALSE, hoverinfo = "none")
+            pp %>% layout(barmode = "stack",
+              xaxis = list(title = "", tickfont = fonts$axis_tick, zeroline = FALSE),
+              yaxis = list(title = list(text = s, font = fonts$legend_title),
+                           tickfont = fonts$axis_tick))
+          })
+          fig <- if (length(panels) == 1) panels[[1]]
+                 else plotly::subplot(panels, nrows = length(panels), shareX = TRUE,
+                                      titleY = TRUE, margin = 0.04)
+          fig %>% layout(
+            font = fonts$global,
+            margin = list(t = 58, b = 62),
+            legend = list(orientation = "h", x = 0.5, xanchor = "center",
+                          y = 1.0, yanchor = "bottom", font = fonts$legend_text),
+            annotations = list(list(
+              text = paste0("Signed distance (µm) — inside ← 0 → outside   ·   y = ", y_lab),
+              x = 0.5, y = -0.09, xref = "paper", yref = "paper",
+              xanchor = "center", yanchor = "top", showarrow = FALSE,
+              font = fonts$axis_title))
+          ) %>% plotly_islet_config("spatial_cell_distance_composition")
+
+        } else {
+          # ---- Density: symlog filled curves per status (pooled per cell) ----
+          group <- input$dist_group %||% "__all__"
+          res <- query_cell_distance_hist(mode, group, statuses, norm)
+          req(res, nrow(res$hist) > 0)
+          hist <- res$hist
+          present <- intersect(status_order, unique(hist$donor_status))
+          y_max <- max(hist$dens)
+          type_label <- if (identical(group, "__all__")) "All cells"
+                        else if (identical(mode, "marker")) paste0(group, "+") else group
+          y_title <- if (identical(norm, "prop")) "Fraction of class cells per µm"
+                     else "Cells per µm of distance"
+          leg_title <- if (identical(norm, "prop")) "Status (proportion of class):"
+                       else "Status (pooled counts):"
+          p <- plot_ly()
+          for (s in present) {
+            hs <- hist[hist$donor_status == s, , drop = FALSE]
+            hs <- hs[order(hs$x), , drop = FALSE]
+            n_cells <- res$n_by_status[[s]]
+            p <- p %>% add_trace(
+              x = hs$x, y = hs$dens, type = "scatter", mode = "lines",
+              name = paste0(s, " (n=", formatC(n_cells, big.mark = ","), ")"),
+              line = list(color = dcols[s], width = 2.5),
+              fill = "tozeroy", fillcolor = paste0(dcols[s], "22"),
+              hoverinfo = "text",
+              text = paste0(s, "<br>dist = ", round(hs$real_x, 1), " µm<br>",
+                            y_title, " = ", signif(hs$dens, 3)))
+          }
+          p <- p %>% add_trace(x = c(0, 0), y = c(0, y_max * 1.05),
+            type = "scatter", mode = "lines",
+            line = list(color = "#333", width = 1.5, dash = "dash"),
+            showlegend = FALSE, hoverinfo = "none")
+          ticks <- cd_symlog_ticks(res$lo, res$hi)
+          p %>% layout(
+            font = fonts$global,
+            margin = list(t = 80),
+            title = list(text = paste0(type_label, " — distance from islet"),
+                         font = fonts$title, y = 0.97, yanchor = "top"),
+            xaxis = list(title = list(text = "Signed distance (µm, symlog) — inside ← 0 → outside",
+                                      font = fonts$axis_title),
+                         tickmode = "array", tickvals = ticks$vals, ticktext = ticks$text,
+                         tickfont = fonts$axis_tick, zeroline = FALSE),
+            yaxis = list(title = list(text = y_title, font = fonts$axis_title),
+                         tickfont = fonts$axis_tick),
+            legend = list(orientation = "h", x = 0.5, xanchor = "center",
+                          y = 1.0, yanchor = "bottom",
+                          title = list(text = leg_title, font = fonts$legend_title, side = "top"),
+                          font = fonts$legend_text)
+          ) %>% plotly_islet_config(paste0("spatial_cell_distance_density_",
+                                           gsub("[^A-Za-z0-9_]", "_", type_label)))
+        }
       }
-      # Vertical line at zero (islet boundary)
-      p <- p %>% add_trace(
-        x = c(0, 0), y = c(0, y_max * 1.05),
-        type = "scatter", mode = "lines",
-        line = list(color = "#333", width = 1.5, dash = "dash"),
-        showlegend = FALSE, hoverinfo = "none"
-      )
-      fonts <- plotly_islet_fonts()
-      p %>% layout(
-        font = fonts$global,
-        title = list(text = paste0(type_label, " Distance from Islet"),
-                     font = fonts$title),
-        xaxis = list(title = list(text = "Signed distance (\u00b5m) \u2014 inside islet \u2190 0 \u2192 outside",
-                                  font = fonts$axis_title),
-                     tickfont = fonts$axis_tick, zeroline = FALSE),
-        yaxis = list(title = list(text = "Cells per µm of distance (KDE × N)",
-                                  font = fonts$axis_title),
-                     tickfont = fonts$axis_tick),
-        legend = list(title = list(text = "Status", font = fonts$legend_title),
-                      font = fonts$legend_text)
-      ) %>%
-        plotly_islet_config(paste0("spatial_distance_kde_", gsub("[^A-Za-z0-9_]", "_", type_label)))
     })
 
     # ---- Inline "see all rules" links under Card A/C phenotype hints ----

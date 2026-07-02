@@ -40,7 +40,7 @@ Old comments in `reaggregate_islets.py` and `islet_analysis/CLAUDE.md` claimed "
 
 - `scripts/fix_tcell_subtypes.py` - Reclassifies CD4/CD8 T cells by marker gating (CD8a/CD4 >= 0.5); `--dry-run` flag for preview
 - `scripts/reaggregate_islets.py` - **Primary pipeline**: aggregation (min_cells=0) + trajectory + Leiden in one script
-- `scripts/compute_neighborhood_metrics.py` - Computes per-islet peri-islet metrics from single-cell H5AD
+- `scripts/compute_neighborhood_metrics.py` - Computes per-islet peri-islet metrics from single-cell H5AD. Emits **three** files: `data/neighborhood_metrics.csv` (per-islet); `data/signed_distance_kde.csv` (per islet-associated cell: `signed_dist` + `case_id` + `is_immune`, feeds the donor-averaged Card C KDE); `data/cell_distance.csv` (ALL ~2.65M cells: `case_id, donor_status, cell_region, phenotype, signed_dist` + `{marker}_pos` int columns for ~16 lineage markers via `build_marker_positivity()` = scimap-rescaled X>0.5, the phenotyping gate; tissue-wide, feeds the Card C per-cell density + composition views incl. their phenotype/marker toggle)
 - `scripts/extract_per_islet_cells.py` - Extracts per-islet cell CSVs for drill-down viewer
 - `scripts/extract_per_donor_tissue.py` - Extracts per-donor tissue CSVs (ALL cells: core+peri+tissue) for Spatial tab scatter
 - `scripts/build_h5ad_for_app.py` - Builds enriched H5AD (trajectory + groovy + neighborhood + Leiden)

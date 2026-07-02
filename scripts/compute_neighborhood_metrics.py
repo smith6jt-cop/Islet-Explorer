@@ -11,7 +11,14 @@ Metrics computed (4 categories):
   3. Enrichment z-scores — Poisson z comparing peri-islet vs tissue-wide proportion
   4. Distance metrics — min distance from islet centroid to nearest immune cells
 
-Output: data/neighborhood_metrics.csv (1,015 rows × ~61 columns)
+Outputs:
+  - data/neighborhood_metrics.csv  (one row per qualified islet; ~5,214 × ~100 cols)
+  - data/signed_distance_kde.csv   (one row per islet-associated cell: phenotype,
+      case_id, donor_status, signed_dist, cell_region, is_immune) — donor-aware
+      source for the Spatial-tab Card C signed-distance KDE
+  - data/cell_distance.csv         (one row per ALL cells: case_id, donor_status,
+      cell_region, phenotype, signed_dist) — tissue-wide source for the Card C
+      density + composition views (symlog distance axis reaches bulk tissue)
 
 Usage:
     python scripts/compute_neighborhood_metrics.py
@@ -42,6 +49,8 @@ DEFAULT_ISLET_H5AD = os.path.join(
     PROJECT_ROOT, "islet_analysis", "islets_core_fixed.h5ad"
 )
 DEFAULT_OUTPUT = os.path.join(PROJECT_ROOT, "data", "neighborhood_metrics.csv")
+DEFAULT_KDE_OUTPUT = os.path.join(PROJECT_ROOT, "data", "signed_distance_kde.csv")
+DEFAULT_CELL_DISTANCE_OUTPUT = os.path.join(PROJECT_ROOT, "data", "cell_distance.csv")
 
 # Immune phenotypes — drives the AGGREGATE metrics where "what counts as
 # immune" must be defined narrowly: immune_frac_peri/core, immune_ratio,
@@ -58,6 +67,14 @@ IMMUNE_TYPES = [
 # 7-phenotype ENRICH_TYPES subset so the app can expose phenotype-driven
 # selectors uniformly across every cell type, not a hand-curated subset.
 PER_TYPE_EXCLUDE = {"Unknown"}
+
+# Lineage markers for the Card C "Marker" mode. Positivity = scimap-rescaled X
+# > 0.5 (the same gate used to phenotype cells) — CODEX's equivalent of
+# Senior's RESTORE _pos. Only markers present in the panel are emitted.
+POS_MARKERS_CODEX = [
+    "INS", "GCG", "SST", "CD3e", "CD8a", "CD4", "CD20", "CD68", "CD163",
+    "HLADR", "CD31", "CD34", "SMA", "PDPN", "ECAD", "panCK",
+]
 
 PIXEL_SIZE_UM = 0.3774  # micrometers per pixel, matches app constant
 
@@ -78,7 +95,93 @@ def parse_parent(parent_str):
     return None, None
 
 
-def compute_metrics(sc_path, islet_path, output_path):
+def write_kde_long_table(islet_cells, per_type_phenotypes, kde_output_path):
+    """Per-cell signed-distance long table for the Spatial-tab KDE (Card C-right).
+
+    One row per islet-associated cell (core+peri) of a non-Unknown phenotype.
+    ``signed_dist`` is the QuPath 'Dist to Closest Islet' (negative = inside the
+    islet core, positive = outside / peri-islet zone). The ``case_id`` column lets
+    the app aggregate to donor level, which removes the pseudoreplication that
+    pooling all cells introduced (e.g. one large ND donor dominating the pool).
+    Regenerated in lockstep with neighborhood_metrics.csv so it can never drift
+    from the current phenotyping.
+    """
+    keep = islet_cells[islet_cells["phenotype"].isin(per_type_phenotypes)].copy()
+    safe = (keep["phenotype"].astype(str)
+            .str.replace(" ", "_", regex=False)
+            .str.replace("+", "plus", regex=False))
+    signed = pd.to_numeric(keep["Dist to Closest Islet"], errors="coerce")
+    out = pd.DataFrame({
+        "phenotype":    safe.values,                          # safe-name: matches neighborhood cols + app selectors
+        "case_id":      keep["imageid"].astype(str).values,   # donor id == app Case ID
+        "donor_status": keep["Donor Status"].astype(str).values,
+        "signed_dist":  signed.values,
+        "cell_region":  keep["cell_region"].astype(str).values,
+        "is_immune":    keep["phenotype"].isin(IMMUNE_TYPES).astype(int).values,
+    })
+    out = out[np.isfinite(out["signed_dist"])].reset_index(drop=True)
+    os.makedirs(os.path.dirname(kde_output_path), exist_ok=True)
+    out.to_csv(kde_output_path, index=False)
+    print(f"   Signed-distance KDE long table written to: {kde_output_path}")
+    print(f"   Shape: {out.shape}  "
+          f"(phenotypes: {out['phenotype'].nunique()}, donors: {out['case_id'].nunique()})")
+    return out
+
+
+def build_marker_positivity(sc):
+    """Per-cell marker positivity from scimap-rescaled X (gate 0.5 — the same
+    threshold that phenotyped the cells). CODEX's equivalent of Senior's RESTORE
+    _pos. Returns an int8 DataFrame of {marker}_pos columns in sc row order, or
+    None if no target marker is in the panel.
+    """
+    avail = [m for m in POS_MARKERS_CODEX if m in list(sc.var_names)]
+    if not avail:
+        print("   [marker positivity] none of POS_MARKERS_CODEX in panel; skipping")
+        return None
+    Xm = sc[:, avail].to_memory().X
+    Xm = Xm.toarray() if hasattr(Xm, "toarray") else np.asarray(Xm)
+    df = pd.DataFrame({f"{m}_pos": (Xm[:, i] > 0.5).astype("int8")
+                       for i, m in enumerate(avail)})
+    fr = ", ".join(f"{m}={df[m + '_pos'].mean():.3f}" for m in avail)
+    print(f"   [marker positivity] {len(avail)} markers @ X>0.5 | pos frac: {fr}")
+    return df
+
+
+def write_cell_distance_table(obs, marker_pos, cell_distance_output_path):
+    """All-cells per-cell signed-distance table for Spatial Card C (density +
+    composition views), including per-cell marker positivity.
+
+    One row per cell with a finite QuPath 'Dist to Closest Islet'. Unlike
+    signed_distance_kde.csv (islet-associated core+peri only), this spans ALL
+    cells — islet interior (negative) out to bulk tissue (large positive) — so
+    the symlog distance axis reaches the full range. ``cell_region`` is
+    core/peri for islet-associated cells, 'tissue' otherwise. Phenotype labels
+    are the raw app names (match PHENOTYPE_COLORS in the R app); ``{marker}_pos``
+    columns (int 0/1, scimap X>0.5) drive the app's "Marker" mode.
+    """
+    region = obs["cell_region"].where(obs["cell_region"].notna(), "tissue")
+    signed = pd.to_numeric(obs["Dist to Closest Islet"], errors="coerce")
+    out = pd.DataFrame({
+        "case_id":      obs["imageid"].astype(str).values,
+        "donor_status": obs["Donor Status"].astype(str).values,
+        "cell_region":  region.astype(str).values,
+        "phenotype":    obs["phenotype"].astype(str).values,
+        "signed_dist":  signed.values.astype("float32"),
+    })
+    if marker_pos is not None:
+        for c in marker_pos.columns:
+            out[c] = marker_pos[c].values
+    out = out[np.isfinite(out["signed_dist"])].reset_index(drop=True)
+    os.makedirs(os.path.dirname(cell_distance_output_path), exist_ok=True)
+    out.to_csv(cell_distance_output_path, index=False)
+    print(f"   Cell-distance table written to: {cell_distance_output_path}")
+    print(f"   Shape: {out.shape}  "
+          f"(phenotypes: {out['phenotype'].nunique()}, donors: {out['case_id'].nunique()})")
+    return out
+
+
+def compute_metrics(sc_path, islet_path, output_path, kde_output_path=None,
+                    cell_distance_output_path=None):
     """Main computation: read single-cell data, compute per-islet neighborhood metrics."""
     import anndata as ad
 
@@ -105,7 +208,15 @@ def compute_metrics(sc_path, islet_path, output_path):
 
     # ── 3. Parse Parent column → islet assignment + region ───────────────
     print("\n3. Parsing cell-islet assignments from Parent column...")
-    obs = sc.obs[["imageid", "Parent", "phenotype", "X_centroid", "Y_centroid"]].copy()
+    kde_obs_cols = ["Dist to Closest Islet", "Donor Status"]
+    missing_kde = [c for c in kde_obs_cols if c not in sc.obs.columns]
+    if missing_kde:
+        raise KeyError(
+            "single-cell obs is missing columns needed for the signed-distance "
+            f"KDE output: {missing_kde}"
+        )
+    obs = sc.obs[["imageid", "Parent", "phenotype", "X_centroid", "Y_centroid",
+                  "Dist to Closest Islet", "Donor Status"]].copy()
     obs["imageid"] = obs["imageid"].astype(str)
     obs["Parent"] = obs["Parent"].astype(str)
     obs["phenotype"] = obs["phenotype"].astype(str)
@@ -299,6 +410,18 @@ def compute_metrics(sc_path, islet_path, output_path):
     df.to_csv(output_path, index=False)
     print(f"\n   Written to: {output_path}")
     print(f"   Shape: {df.shape}")
+
+    # ── 7. Signed-distance KDE long table (per-cell, donor-aware) ─────────
+    if kde_output_path:
+        print("\n7. Writing signed-distance KDE long table...")
+        write_kde_long_table(islet_cells, per_type_phenotypes, kde_output_path)
+
+    # ── 8. All-cells cell-distance table (tissue-wide, Card C density/comp) ─
+    if cell_distance_output_path:
+        print("\n8. Writing all-cells cell-distance table...")
+        marker_pos = build_marker_positivity(sc)
+        write_cell_distance_table(obs, marker_pos, cell_distance_output_path)
+
     print(f"\n{'='*60}")
     print("DONE")
     print(f"{'='*60}")
@@ -322,6 +445,14 @@ if __name__ == "__main__":
         "--output", default=DEFAULT_OUTPUT,
         help="Output path for neighborhood_metrics.csv"
     )
+    parser.add_argument(
+        "--kde-output", default=DEFAULT_KDE_OUTPUT,
+        help="Output path for the per-cell signed-distance KDE long table"
+    )
+    parser.add_argument(
+        "--cell-distance-output", default=DEFAULT_CELL_DISTANCE_OUTPUT,
+        help="Output path for the all-cells tissue-wide cell-distance table"
+    )
     args = parser.parse_args()
 
     for path, label in [
@@ -332,4 +463,5 @@ if __name__ == "__main__":
             print(f"ERROR: {label} not found: {path}")
             sys.exit(1)
 
-    compute_metrics(args.input, args.islets, args.output)
+    compute_metrics(args.input, args.islets, args.output, args.kde_output,
+                    args.cell_distance_output)
