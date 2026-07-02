@@ -688,11 +688,20 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       stat_mode <- input$enrich_stat %||% "Median"
       region <- input$enrich_region %||% "peri"
 
+      # Card B phenotype filter — controls which phenotypes appear in BOTH the
+      # bar chart and the heatmap (both consume enrich_summary()). The default
+      # hidden set (Acinar etc.) is applied via the checkbox's initial `selected`
+      # in output$enrich_pheno_filter; here we just honor the current selection.
+      # A NULL selection ("None" clicked, or the filter not yet mounted) means
+      # "show nothing" — every phenotype is skipped below.
+      sel <- input$enrich_phenos
+
       statuses <- unique(comp$`Donor Status`)
       comp_cols <- colnames(comp)
       rows <- list()
 
       for (itm in phenotype_options()) {
+        if (!(itm$label %in% sel)) next
         # Select column based on region
         if (region == "peri") {
           col <- itm$enrich      # enrichment z-score (peri)
@@ -745,6 +754,39 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       }
       if (length(rows) == 0) return(NULL)
       do.call(rbind, rows)
+    })
+
+    # ---- Card B phenotype filter (checkbox group shared by bar chart + heatmap) ----
+    # Mirrors the tissue-scatter output$phenotype_filter. Choices are the
+    # phenotype_options() labels (so they match enrich_summary()'s itm$label).
+    # Default hides the same bulk classes as the tissue scatter so the shared
+    # proportion scale is not dominated by Acinar's exocrine abundance.
+    output$enrich_pheno_filter <- renderUI({
+      labels <- sort(names(phenotype_options()))
+      if (length(labels) == 0) return(NULL)
+      hide_default <- c("Acinar", "Ductal", "Endocrine", "T cell", "Unknown")
+      prev <- isolate(input$enrich_phenos)
+      selected <- if (!is.null(prev)) intersect(prev, labels) else setdiff(labels, hide_default)
+      tagList(
+        div(style = "display: flex; align-items: center; gap: 6px; margin-bottom: 4px;",
+          tags$label("Phenotypes shown", style = "font-weight: 600; font-size: 13px; margin: 0;"),
+          actionLink(ns("enrich_pheno_all"), "All", style = "font-size: 11px;"),
+          span("|", style = "color: #ccc;"),
+          actionLink(ns("enrich_pheno_none"), "None", style = "font-size: 11px;")
+        ),
+        div(style = "column-count: 3; column-gap: 12px;",
+          checkboxGroupInput(ns("enrich_phenos"), NULL,
+                             choices = labels, selected = selected, inline = FALSE)
+        )
+      )
+    })
+
+    observeEvent(input$enrich_pheno_all, {
+      updateCheckboxGroupInput(session, "enrich_phenos",
+                               selected = sort(names(phenotype_options())))
+    })
+    observeEvent(input$enrich_pheno_none, {
+      updateCheckboxGroupInput(session, "enrich_phenos", selected = character(0))
     })
 
     # ---- Neighborhood cards UI (conditional on data availability) ----
@@ -842,6 +884,14 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           "B", "Phenotype Composition & Enrichment",
           "Which phenotypes are present in islet core vs peri-islet zones, and which are enriched vs tissue-wide background?"
         ))),
+        # Shared phenotype filter — governs BOTH plots below. Default hides bulk
+        # classes (Acinar etc.) so the shared color/axis scale is driven by the
+        # immune/endocrine classes rather than exocrine abundance.
+        fluidRow(column(12,
+          div(class = "card", style = "padding: 8px 15px; margin-bottom: 10px; overflow: visible;",
+            uiOutput(ns("enrich_pheno_filter"))
+          )
+        )),
         fluidRow(style = "display: flex; flex-wrap: wrap;",
           column(6,
             div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible; height: 100%; box-sizing: border-box;",
@@ -863,7 +913,10 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           ),
           column(6,
             div(class = "card", style = "padding: 15px; margin-bottom: 15px; height: 100%; box-sizing: border-box;",
-              h5("Heatmap", style = "font-size: 15px; margin-top: 0;"),
+              div(style = "display: flex; align-items: center; justify-content: space-between; gap: 10px;",
+                h5("Heatmap", style = "font-size: 15px; margin-top: 0; margin-bottom: 0;"),
+                checkboxInput(ns("enrich_show_values"), "Show values", value = TRUE)
+              ),
               plotlyOutput(ns("enrichment_heatmap"), height = "420px")
             )
           )
@@ -1493,6 +1546,9 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       req(es)
 
       region <- input$enrich_region %||% "peri"
+      # Per-cell numeric overlay toggle (default on). NULL-safe so the overlay
+      # is present on the first render before the checkbox registers.
+      show_vals <- isTRUE(input$enrich_show_values %||% TRUE)
 
       # Pivot to matrix: cell_type x donor_status
       status_order <- c("ND", "Aab+", "T1D")
@@ -1538,8 +1594,9 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         type = "heatmap",
         colorscale = colorscale,
         zmin = zmin, zmax = zmax,
-        text = text_mat, texttemplate = "%{text}",
-        textfont = list(size = ISLET_FONT_SIZES$dense_min),
+        text = if (show_vals) text_mat else NULL,
+        texttemplate = if (show_vals) "%{text}" else NULL,
+        textfont = if (show_vals) list(size = ISLET_FONT_SIZES$dense_min) else NULL,
         hovertemplate = paste0("%{x}<br>%{y}<br>", cb_title, " = %{z:.4f}<extra></extra>"),
         showscale = TRUE,
         colorbar = list(title = list(text = cb_title, font = fonts$colorbar_title),
