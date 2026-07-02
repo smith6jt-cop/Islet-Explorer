@@ -17,9 +17,17 @@ if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
   exit 0
 fi
 
+# Escalate with sudo only when needed, and only non-interactively — a bare `sudo`
+# would block session startup on a password prompt, defeating the "never block"
+# intent. If we're not root and passwordless sudo isn't available, warn and no-op.
 SUDO=""
-if [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1; then
-  SUDO="sudo"
+if [ "$(id -u)" -ne 0 ]; then
+  if command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then
+    SUDO="sudo -n"
+  else
+    echo "[session-start] Not root and passwordless sudo unavailable — skipping R setup (would block on a password prompt)." >&2
+    exit 0
+  fi
 fi
 
 APT_UPDATED=""
