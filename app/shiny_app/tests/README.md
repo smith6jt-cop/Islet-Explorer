@@ -51,63 +51,25 @@ Drop `test-*.R` files in `tests/testthat/`. Dependencies and the code under test
 are loaded once by `tests/testthat/helper-setup.R` (sourced automatically before
 the test files). Keep new tests data-independent so they run in CI.
 
-## Optional: auto-install R in Claude Code web sessions (SessionStart hook)
+## Auto-install R in Claude Code web sessions (SessionStart hook)
 
-By default a fresh Claude Code on the web container has **no R**, so the agent
-can't run the checks above without installing it first. To make R + the test
-packages available automatically at the start of every web session, add a
-`SessionStart` hook. (This is opt-in agent configuration, so it is documented
-here rather than committed as an active hook — enable it yourself if you want it.)
+A fresh Claude Code on the web container has **no R**, so the checks above can't run
+until R is installed. This repo ships a `SessionStart` hook that installs R + the
+test packages automatically at the start of every web session:
 
-1. Create `.claude/hooks/session-start.sh` (and `chmod +x` it):
+- `.claude/hooks/session-start.sh` — installs `r-base-core` plus the precompiled
+  `r-cran-*` Debian packages (testthat, dplyr, tidyr, tibble, lme4, lmerTest). It is
+  idempotent (skips what's already present), remote-only (`$CLAUDE_CODE_REMOTE`
+  guard, so it's a no-op on local machines), and always exits 0 so it never blocks
+  session startup.
+- `.claude/settings.json` — registers the hook under `hooks.SessionStart`.
 
-   ```bash
-   #!/bin/bash
-   # Ensure R + the Shiny app's test deps are available in Claude Code web sessions.
-   # Idempotent; enables tests/parse_check.R and tests/run_tests.R (not a full app
-   # launch — that also needs sf/reticulate/anndata and the gitignored data/).
-   set -uo pipefail
-   [ "${CLAUDE_CODE_REMOTE:-}" != "true" ] && exit 0
+The hook runs **synchronously**, so the session waits until R is ready (no race
+where the agent runs tests before the packages exist). The `r-cran-*` debs install
+fast on Ubuntu and bundle their own system dependencies (BLAS/LAPACK, gfortran
+runtime) — no compilation. Verified by running the full suite (58 tests pass) after
+a clean install.
 
-   SUDO=""; [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1 && SUDO="sudo"
-
-   if ! command -v Rscript >/dev/null 2>&1; then
-     export DEBIAN_FRONTEND=noninteractive
-     $SUDO apt-get update -qq && \
-       $SUDO apt-get install -y --no-install-recommends r-base-core || {
-         echo "[session-start] WARNING: R install failed; tests unavailable." >&2; exit 0; }
-   fi
-
-   # Precompiled Debian packages pull all system libs (no gfortran/libuv yak-shave).
-   need=""
-   for p in testthat dplyr tidyr tibble lme4 lmerTest; do
-     Rscript -e "quit(status = !requireNamespace('$p', quietly=TRUE))" 2>/dev/null || \
-       need="$need r-cran-$(echo "$p" | tr '[:upper:]' '[:lower:]')"
-   done
-   if [ -n "$need" ]; then
-     export DEBIAN_FRONTEND=noninteractive
-     $SUDO apt-get install -y --no-install-recommends $need || \
-       echo "[session-start] WARNING: some R test packages missing." >&2
-   fi
-   echo "[session-start] R ready for app/shiny_app tests."
-   ```
-
-2. Register it in `.claude/settings.json` (merge if the file exists):
-
-   ```json
-   {
-     "hooks": {
-       "SessionStart": [
-         { "hooks": [ { "type": "command",
-             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-start.sh" } ] }
-       ]
-     }
-   }
-   ```
-
-Notes: the hook runs synchronously, so the session waits until R is ready (no race
-where the agent runs tests before packages exist). On Ubuntu the `r-cran-*`
-packages install fast and bundle their system dependencies. This was verified in a
-web session by installing R this way and running the full suite (58 tests pass).
-The **full app** still cannot be launched in a web session — it needs the
-gitignored `data/` artifacts — so the hook only enables the automated checks.
+The hook only enables the automated **checks**. The **full app** still cannot be
+launched in a web session — it needs the gitignored `data/` artifacts (see above).
+To disable the hook, remove the `SessionStart` entry from `.claude/settings.json`.
