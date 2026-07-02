@@ -13,40 +13,21 @@
 #   cohens_d, eta_squared, pairwise_wilcox           -- utils_stats.R
 #   bin_islet_sizes                                  -- data_loading.R
 
+# Fixed per-bin width for the Section 3 size-stratified analysis. Intentionally a
+# constant, not a slider: a tunable bin width is a multiple-comparison p-hacking
+# surface (retune the bins until one is significant). Referenced by stats_run() and
+# the methods text / CSV header.
+STATS_BIN_WIDTH_UM <- 50L
+
 statistics_server <- function(id, raw_df, summary_df, get_selection_description,
                               donor_colors = reactive(DONOR_COLORS),
                               remove_outliers = reactive(TRUE)) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
-    # Helper: section heading (mirrors the one in UI but available server-side)
-    # `tip` (NULL or character): if supplied, renders a small "(?)" icon with a
-    # native browser tooltip describing the section's contents.
-    section_heading <- function(step, title, subtitle, tip = NULL) {
-      tip_icon <- if (!is.null(tip) && nzchar(tip)) {
-        span("?", title = tip,
-             style = paste0("display: inline-block; margin-left: 6px; width: 18px; height: 18px;",
-                            " line-height: 18px; text-align: center; font-size: 12px; font-weight: 700;",
-                            " color: #4477AA; background: #eaf2fa; border: 1px solid #c0d4e8;",
-                            " border-radius: 50%; cursor: help;"))
-      } else NULL
-      div(style = "margin-bottom: 14px; margin-top: 22px; padding-bottom: 8px; border-bottom: 2px solid #d0e0f0;",
-        div(style = "display: flex; align-items: baseline; gap: 10px;",
-          span(step,
-               style = paste0("display: inline-block; background: linear-gradient(135deg, #4477AA, #5599CC);",
-                              " color: white; font-weight: 700; font-size: 14px; padding: 2px 10px;",
-                              " border-radius: 12px; min-width: 24px; text-align: center;")),
-          span(title, style = "font-weight: 700; font-size: 17px; color: #333;"),
-          tip_icon
-        ),
-        p(subtitle, style = "margin: 4px 0 0 0; color: #777; font-size: 13px;")
-      )
-    }
-
-    # Dynamic section numbers: shift down by 1 when binning is skipped
-    section_offset <- reactive({
-      if (isTRUE(input$stats_no_binning)) -1L else 0L
-    })
+    # (Section headings are now static in mod_statistics_ui.R after the Jul 2026
+    #  redesign — no server-side heading helper or dynamic section offset needed.
+    #  Section numbering is a fixed 1–5.)
 
     # Compact caption beneath the local outlier toggle: shows how many islets
     # the most recent Run excluded, or an "OFF" notice when the toggle is off.
@@ -73,23 +54,6 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
         label)
     })
 
-    output$section_confounders_heading <- renderUI({
-      step <- 4L + section_offset()
-      section_heading(as.character(step), "Confounders & Deeper Analysis",
-                      "Check whether demographics explain the effect, and compare integrated area under the curve across groups.",
-                      tip = paste0("Demographic confounders (age, sex, AAb count) and a covariate-adjusted ",
-                                   "donor-level linear model. Sex-stratified pairwise tests are BH-corrected ",
-                                   "across the 6 contrasts (3 pairs x 2 sexes)."))
-    })
-
-    output$section_methods_heading <- renderUI({
-      step <- 5L + section_offset()
-      section_heading(as.character(step), "Methods Reference",
-                      "Technical details about tests, corrections, and guidelines.",
-                      tip = paste0("Full methods text. Updates dynamically with the current test type, ",
-                                   "outlier rule, zero-exclusion state, and binning settings."))
-    })
-
     # ===========================================================================
     # Core computation: eventReactive triggered by Run button
     # ===========================================================================
@@ -98,8 +62,14 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
       rdf <- raw_df()
       if (is.null(rdf) || !nrow(rdf)) return(NULL)
 
-      alpha_num <- as.numeric(input$alpha)
-      is_parametric <- identical(input$test_type, "Parametric")
+      # Alpha is FIXED at 0.05 — a user-movable threshold is a p-hacking lever
+      # (lower it post hoc to reframe a null, or to move a goalpost). Documented in
+      # the methods text and CSV header.
+      alpha_num <- 0.05
+      # Test type (parametric vs non-parametric) is AUTO-selected from the donor-level
+      # normality result — see `is_parametric` defined right after normality_tests()
+      # below. The manual Parametric/Non-parametric toggle was removed because flipping
+      # it to chase significance is a classic garden-of-forking-paths move.
 
       # ---- Outlier removal via shared helper (controlled by LOCAL toggle) ----
       # `stats_remove_outliers` lives in the Statistics tab Section 1 controls
@@ -170,6 +140,18 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
 
       # ---- Normality test on donor-level data ----
       norm_result <- normality_tests(ddf)
+
+      # ---- AUTO test-type selection (replaces the removed Parametric/Non-parametric
+      #      toggle) ----
+      # Parametric only when every group with a computable Shapiro-Wilk test passes;
+      # otherwise fall back to non-parametric. NA groups (too few donors) are ignored,
+      # and an all-NA result defaults to non-parametric — the conservative choice when
+      # normality cannot be established. This is the single source of truth for
+      # is_parametric; the Section 1 normality readout reports the same decision.
+      is_parametric <- {
+        norm_flags <- norm_result$is_normal
+        if (all(is.na(norm_flags))) FALSE else isTRUE(all(norm_flags, na.rm = TRUE))
+      }
 
       # ---- PRIMARY: Mixed-effects model (preserves islet variation, accounts for donor clustering) ----
       lmer_result <- tryCatch(lmer_test_donor(rdf), error = function(e) {
@@ -248,14 +230,16 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
                                   FALSE)
       }
 
-      # ---- Per-bin analysis (conditional on no-binning checkbox) ----
+      # ---- Per-bin analysis (exploratory, Section 3) ----
+      # Bin width is FIXED at STATS_BIN_WIDTH_UM — a tunable width is a
+      # multiple-comparison p-hacking surface. Always computed; the Section 3 "Show
+      # exploratory analyses" toggle is a client-side display gate only.
       bin_anova <- NULL
       bin_kendall <- NULL
       bin_pairwise <- NULL
 
-      if (!isTRUE(input$stats_no_binning)) {
-        bw <- suppressWarnings(as.numeric(input$bin_width))
-        if (!is.finite(bw) || bw <= 0) bw <- 50
+      {
+        bw <- STATS_BIN_WIDTH_UM
 
         rdf_binned <- bin_islet_sizes(rdf, "islet_diam_um", bw)
 
@@ -490,11 +474,7 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
                       "Select a feature in the sidebar, then click 'Run Statistics'."))
       }
 
-      # Primary p-value from mixed-effects model
-      primary_p <- st$lmer_p
-      p_col <- if (is.na(primary_p)) "#999" else if (primary_p < st$alpha) "#d62728" else "#2e7d32"
-      icc_label <- if (is.na(st$icc)) "" else sprintf("  ICC = %.2f", st$icc)
-
+      # Descriptive only — the primary p-value now lives in Section 2's headline.
       zero_badge <- if (isTRUE(st$exclude_zero)) {
         tags$span(style = paste0("background: #fff3e0; color: #6a3a00; padding: 4px 10px; ",
                                  "border: 1px solid #ffcc80; border-radius: 4px;"),
@@ -508,11 +488,48 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
                   st$feature_name),
         tags$span(style = "padding: 4px 10px;",
                   paste0(formatC(st$n_islets, format = "d", big.mark = ","),
-                         " islets, ", st$n_donors, " donors", icc_label)),
-        tags$span(style = paste0("background: ", p_col, "; color: white; padding: 4px 10px; border-radius: 4px;"),
-                  paste0("Mixed-effects p = ",
-                         if (is.na(primary_p)) "N/A" else formatC(primary_p, format = "e", digits = 2))),
+                         " islets, ", st$n_donors, " donors")),
+        tags$span(style = "color: #888; font-size: 12px;",
+                  "Primary result is shown in Section 2 below."),
         zero_badge
+      )
+    })
+
+    # ===========================================================================
+    # Section 2 headline: the single pre-specified primary result
+    # ===========================================================================
+
+    output$primary_headline <- renderUI({
+      st <- stats_run()
+      if (is.null(st)) {
+        return(tags$p(style = "color: #666; margin: 0;",
+                      "Click 'Run Statistics' to compute the primary test."))
+      }
+
+      primary_p <- st$lmer_p
+      sig <- !is.na(primary_p) && primary_p < st$alpha
+      p_col <- if (is.na(primary_p)) "#999" else if (sig) "#d62728" else "#2e7d32"
+      icc_str <- if (is.na(st$icc)) "N/A" else sprintf("%.2f", st$icc)
+
+      tags$div(
+        tags$div(style = "font-size: 13px; color: #555; margin-bottom: 8px; line-height: 1.4;",
+          "Linear mixed-effects model — donor status with a per-donor random intercept ",
+          tags$em("(the pre-specified primary test).")),
+        tags$div(style = paste0("display: inline-block; background: ", p_col,
+                                "; color: white; padding: 8px 16px; border-radius: 6px;",
+                                " font-size: 20px; font-weight: 700;"),
+          paste0("p = ", if (is.na(primary_p)) "N/A" else formatC(primary_p, format = "e", digits = 2))),
+        tags$span(style = "margin-left: 10px; font-size: 14px; color: #555;",
+          paste0(if (is.na(primary_p)) "—" else if (sig) "Significant" else "Not significant",
+                 " at α = ", st$alpha, " (fixed)")),
+        tags$div(style = "margin-top: 12px; font-size: 13px; color: #555;",
+          tags$strong("ICC = "), icc_str,
+          tags$span(style = "color: #888;",
+                    "  (fraction of variance from donor identity)")),
+        tags$div(style = "margin-top: 6px; font-size: 12px; color: #777; line-height: 1.4;",
+          "Sensitivity test auto-selected from normality: ", tags$strong(st$donor_test),
+          " on donor means. Full secondary tests are in the ",
+          tags$em("Sensitivity check"), " panel below.")
       )
     })
 
@@ -546,27 +563,28 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
         tags$span(style = paste0("color: ", col, "; margin-right: 12px;"), label)
       })
 
-      all_normal <- all(nr$is_normal, na.rm = TRUE)
-      any_non_normal <- any(!nr$is_normal, na.rm = TRUE)
-      suggestion <- if (any_non_normal) {
-        tags$span(style = "color: #e65100; font-weight: 600;",
-                  "Consider non-parametric tests.")
-      } else if (all_normal) {
-        tags$span(style = "color: #2e7d32;",
-                  "Parametric tests may be appropriate.")
-      } else {
-        NULL
-      }
+      # Report the SAME decision the engine made (st$is_parametric is the single
+      # source of truth) so the readout never contradicts the test actually run.
+      auto_parametric <- isTRUE(st$is_parametric)
+      all_na <- all(is.na(nr$is_normal))
+      reason <- if (auto_parametric) "all groups passed Shapiro-Wilk"
+                else if (all_na) "normality indeterminate (too few donors)"
+                else "at least one group is non-normal"
+      suggestion <- tags$span(
+        style = paste0("font-weight: 600; color: ", if (auto_parametric) "#2e7d32" else "#e65100", ";"),
+        paste0("→ Sensitivity test auto-selected: ", st$donor_test,
+               " on donor means (", reason, ")."))
 
       tags$div(
         style = "background: #f5f5f5; padding: 8px 12px; border-radius: 5px; font-size: 12px; line-height: 1.8;",
         tags$strong("Shapiro-Wilk normality (donor means):"),
         tags$br(),
         tagList(items),
-        if (!is.null(suggestion)) tagList(tags$br(), suggestion),
+        tagList(tags$br(), suggestion),
         tags$br(),
         tags$span(style = "color: #999; font-size: 11px;",
-                  "Note: with n=5/group, Shapiro-Wilk has limited power to detect departures from normality.")
+                  "Note: with n=5/group, Shapiro-Wilk has limited power to detect departures from normality. ",
+                  "The test type is chosen automatically and is not a user setting.")
       )
     })
 
@@ -1204,9 +1222,12 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
 
       alpha_str <- as.character(st$alpha)
       test_desc <- if (st$is_parametric) {
-        "Parametric tests: one-way ANOVA (global), pairwise t-tests (BH-corrected)."
+        paste0("Auto-selected parametric (all donor-mean groups passed Shapiro-Wilk): ",
+               "one-way ANOVA (global), pairwise t-tests (BH-corrected).")
       } else {
-        "Non-parametric tests: Kruskal-Wallis (global), pairwise Wilcoxon rank-sum (BH-corrected)."
+        paste0("Auto-selected non-parametric (at least one group failed Shapiro-Wilk, ",
+               "or normality could not be established): Kruskal-Wallis (global), ",
+               "pairwise Wilcoxon rank-sum (BH-corrected).")
       }
 
       outlier_para <- {
@@ -1265,6 +1286,16 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
       }
 
       tags$div(style = "padding: 10px;",
+        tags$p(style = paste0("background: #eef6ee; border-left: 3px solid #2e7d32; ",
+                              "padding: 8px 12px; border-radius: 4px;"),
+          tags$strong("Design safeguards against p-hacking. "),
+          "This tab reports a single pre-specified primary test — the mixed-effects model. ",
+          "The significance threshold is fixed at α = 0.05, the parametric vs. non-parametric ",
+          "form of the sensitivity test is auto-selected from normality (not a user toggle), and ",
+          "the size-stratified analysis uses a fixed ", STATS_BIN_WIDTH_UM, " µm bin width. ",
+          "Optional data-subset filters (outliers, zero-values, min-cells, diameter range) are ",
+          "confined to an Advanced panel and recorded in the exported CSV, so any robustness ",
+          "probing is explicit and auditable rather than a hidden researcher degree of freedom."),
         tags$p(outlier_para),
         tags$p(zero_para),
         tags$p(
@@ -1288,7 +1319,7 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
                  "to a single mean per donor. If both the mixed-effects model and this donor-level test agree, ",
                  "the result is robust."),
           tags$br(),
-          tags$strong("Significance threshold: "), paste0("\u03b1 = ", alpha_str),
+          tags$strong("Significance threshold: "), paste0("\u03b1 = ", alpha_str, " (fixed)"),
           tags$br(),
           tags$strong("Effect sizes: "), "Cohen's d with 95% CI computed on donor-level means. ",
           "These are conservative estimates.",
@@ -1296,15 +1327,21 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
           tags$strong("Normality: "), "Shapiro-Wilk test on donor-level means per group. ",
           "With n = 5, this test has limited power, so failure to reject normality does not guarantee it.",
           tags$br(),
-          tags$strong("Stratified analysis: "), "ANOVA, pairwise tests, and Kendall \u03c4 on donor-level means within each diameter bin. ",
+          tags$strong("Stratified analysis (exploratory): "), "ANOVA, pairwise tests, and Kendall \u03c4 on donor-level means within each fixed 50 \u00b5m diameter bin. ",
           "Kendall \u03c4 correlates disease stage (ND=0, Aab+=1, T1D=2) with the feature value: ",
           "\u03c4 > 0 means the feature increases with disease progression, \u03c4 < 0 means it decreases. ",
           "P-values are BH-corrected across bins. A bin is tested only if at least 2 donor-status groups ",
           "each have \u2265 2 donors with finite values (same rule for the heatmap and the trend plot).",
           tags$br(),
-          tags$strong("Multiple comparisons: "), "Benjamini-Hochberg (FDR) correction applied to pairwise p-values.",
+          tags$strong("Multiple comparisons: "),
+          "Benjamini-Hochberg (FDR) correction is applied ", tags$em("within"),
+          " each test family — donor-level pairwise contrasts (3 pairs), per-bin ANOVA / Kendall / ",
+          "pairwise (across bins), and sex-stratified pairwise (6 contrasts). It is ",
+          tags$strong("not"), " applied across families, nor across the many features you might test. ",
+          "The Section 3–4 exploratory views are therefore hypothesis-generating, not confirmatory; ",
+          "confirm any finding with the Section 2 primary test on a single, pre-specified feature.",
           tags$br(),
-          tags$strong("AUC: "), "Area under curve computed by trapezoidal integration of binned mean values across islet diameters, per donor group."
+          tags$strong("AUC (exploratory): "), "Area under curve computed by trapezoidal integration of binned mean values across islet diameters, per donor group. Descriptive summary — no inferential test."
         ),
         if (!is.null(st$demo_summary)) {
           tags$p(style = "margin-top: 8px;",
@@ -1353,6 +1390,10 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
           # Methodology notes
           lines <- c(lines, "# METHODOLOGY")
           lines <- c(lines, paste0("# Primary: mixed-effects lmer (islet-level with donor random intercept)"))
+          lines <- c(lines, paste0("# Alpha (fixed): ", st$alpha))
+          lines <- c(lines, paste0("# Sensitivity test (auto-selected from normality): ", st$donor_test,
+                                   " (", if (st$is_parametric) "parametric" else "non-parametric", ")"))
+          lines <- c(lines, paste0("# Per-bin width (fixed): ", STATS_BIN_WIDTH_UM, " um"))
           os <- st$outlier_summary
           if (!is.null(os)) {
             lines <- c(lines, paste0("# Outlier rule: ",

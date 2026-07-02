@@ -1,0 +1,42 @@
+name: Shiny App CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'app/shiny_app/**'
+      - '.github/workflows/shiny-app-ci.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'app/shiny_app/**'
+      - '.github/workflows/shiny-app-ci.yml'
+
+jobs:
+  parse-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Ubuntu's precompiled r-cran-* debs bundle their system dependencies
+      # (BLAS/LAPACK, gfortran runtime, etc.), so no compilation and no P3M binary
+      # lookup — deterministic on ubuntu-latest. Only the deps needed to source
+      # R/utils_stats.R and run the tests are installed; the full app also needs
+      # sf / reticulate / anndata / shiny + the gitignored data/ artifacts, which
+      # is why CI parse-checks (rather than sources) the app files.
+      - name: Install R and test packages
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            r-base-core \
+            r-cran-testthat r-cran-dplyr r-cran-tidyr \
+            r-cran-tibble r-cran-lme4 r-cran-lmertest
+
+      - name: Parse-check all R source files
+        run: Rscript app/shiny_app/tests/parse_check.R
+
+      - name: Run unit tests
+        run: |
+          cd app/shiny_app
+          Rscript tests/run_tests.R

@@ -58,7 +58,7 @@ Cell centroids (`X_centroid`, `Y_centroid`) are in micrometers. GeoJSON polygons
 
 ## Statistics Tab
 
-See [`docs/statistics.md`](docs/statistics.md) for full details — pseudoreplication fix (Phase 16), `utils_stats.R` reference, unified outlier handling, zero-value exclusion, sex-stratified BH correction, 5-section narrative layout, multiple-testing correction.
+See [`docs/statistics.md`](docs/statistics.md) for full details — the Jul 2026 streamlined redesign (fixed α, auto-selected test type, fixed 50 µm bins, Advanced/sensitivity + Sensitivity-check collapsibles, single primary result, consolidated exploratory section), pseudoreplication fix (Phase 16), `utils_stats.R` reference, unified outlier handling, zero-value exclusion, sex-stratified BH correction, 5-section narrative layout, multiple-testing correction.
 
 ## Trajectory Tab Features
 
