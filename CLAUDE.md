@@ -144,7 +144,7 @@ Per-tab implementation details — Spatial Neighborhood Analysis (Phase 7), Sing
 - `PIXEL_SIZE_UM = 0.3774` - micrometers per pixel conversion constant
 - UMAP "Selected Feature" uses continuous viridis (inferno) colormap scaled to data min/max
 - Donor status colors: ND = steel blue (#4477AA), Aab+ = burnt umber (#CC6633), T1D = forest green (#228833) — Paul Tol bright variant, colorblind-safe, centralized as `DONOR_COLORS` in `00_globals.R`
-- Phenotyping uses Rules1 (`data/phenotype_rules.csv`) - 21 phenotypes, 18 markers. CSV headers use adata.var_names (CD8a, HLADR, PDPN — not CD8, HLA-DR, Podoplanin)
+- Phenotyping uses Rules1 (`data/phenotype_rules.csv`) - 19 phenotypes, 15 markers. CSV headers use adata.var_names (CD8a, HLADR, PDPN — not CD8, HLA-DR, Podoplanin). The upstream Rules1 template also listed `CD99` (Endocrine) and `CD56` (Neural), but neither is in this 31-plex panel (`adata.uns['all_markers']` in `single_cell_analysis/CODEX_Panc_scimap_Analysis.ipynb`), so `scimap.tl.phenotype_cells` silently dropped them — effective gates were `Endocrine = any of INS/GCG/SST+` and `Neural = B3TUBB+`. Both phantom columns were removed from the app's CSV (Jul 2026) so the rules helper matches what was applied.
 - **Donor metadata**: Comes from `islets_core_fixed.h5ad` obs, NOT from `CODEX_Pancreas_Donors.xlsx` (different cohort)
 - **User-facing terminology**: Use "Sex" not "Gender" in all UI labels, plot titles, and methods text. The underlying data column remains `gender` for backwards compatibility.
 - **H5AD obs index**: `islets_core_fixed.h5ad` index name is `islet_id` -- same as column, use `reset_index(drop=True)`

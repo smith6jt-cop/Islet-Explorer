@@ -214,8 +214,8 @@ The Viewer embeds a local Avivator build (`www/avivator`, Vite bundle) in an `<i
 
 Source of truth: `data/phenotype_rules.csv`. Parsed once at startup in
 `R/00_globals.R` into `PHENOTYPE_RULES_CSV` (19 phenotypes, marker columns
-`CD99, INS, GCG, SST, SMA, CD20, CD3e, CD68, CD163, CD8a, CD4, HLADR, PDPN,
-CD34, CD31, B3TUBB, CD56`). The composer walks each phenotype's parent chain
+`INS, GCG, SST, SMA, CD20, CD3e, CD68, CD163, CD8a, CD4, HLADR, PDPN,
+CD34, CD31, B3TUBB`). The composer walks each phenotype's parent chain
 (e.g. `CD8 T cell` → `T cell` → `Immune`) and unions positive/negative
 constraints, then strips redundant `anypos` groups that are supersets of a
 stricter constraint downstream. Four residual phenotypes (`ECAD+`, `APCs`,
@@ -226,6 +226,19 @@ Naming aliases: PHENOTYPE_COLORS (drilldown_helpers.R) uses
 `CD8a Tcell` / `CD4 Tcell` / `Blood Vessel` / `SMA+`; the CSV uses
 `CD8 T cell` / `CD4 T cell` / `Blood vessel` / `Smooth Muscle`. The
 `PHENOTYPE_ALIASES` map normalises PHENOTYPE_COLORS → CSV before lookup.
+
+**Canonical display label (Jul 2026):** the PHENOTYPE_COLORS / data
+`phenotype`-column form is the single canonical label shown to users
+everywhere — drill-down legend, composition chart, Plot and Spatial selectors,
+and (as of Jul 2026) the Phenotype-Rules reference modal. The modal reads the
+CSV, so it previously displayed `Smooth Muscle` / `Blood vessel` / `CD8 T cell`
+for phenotypes the rest of the app calls `SMA+` / `Blood Vessel` / `CD8a Tcell`.
+`phenotype_display_label()` (backed by `PHENOTYPE_ALIASES_REV`, the inverse of
+`PHENOTYPE_ALIASES`) maps any CSV/rule-form name back to the canonical label;
+`phenotype_rules_table_df()` applies it to the modal's Phenotype column so all
+views agree. Note: marker `SMA` (expression / gating feature) and phenotype
+`SMA+` (smooth-muscle cell type) are intentionally distinct — the `+` marks the
+phenotype, not a spelling variant of the marker.
 
 Helpers:
 

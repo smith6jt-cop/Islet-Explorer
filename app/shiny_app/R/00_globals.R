@@ -335,6 +335,22 @@ PHENOTYPE_ALIASES <- c(
   "SMA+"         = "Smooth Muscle"
 )
 
+# CSV/rule-form -> canonical display label (the PHENOTYPE_COLORS / data
+# `phenotype`-column form used everywhere else in the app: drill-down legend,
+# composition chart, Plot and Spatial selectors). The reference modal reads the
+# CSV, so without this map it would show "Smooth Muscle" / "Blood vessel" /
+# "CD8 T cell" while the rest of the app shows "SMA+" / "Blood Vessel" /
+# "CD8a Tcell" for the same phenotype. Inverse of PHENOTYPE_ALIASES.
+PHENOTYPE_ALIASES_REV <- stats::setNames(names(PHENOTYPE_ALIASES), unname(PHENOTYPE_ALIASES))
+
+# Resolve any phenotype name (CSV-form or already-canonical) to the app's
+# canonical display label. Falls back to the input unchanged.
+phenotype_display_label <- function(name) {
+  if (is.null(name) || is.na(name) || !nzchar(name)) return(name)
+  if (name %in% names(PHENOTYPE_ALIASES_REV)) return(unname(PHENOTYPE_ALIASES_REV[[name]]))
+  name
+}
+
 # Phenotypes with no CSV row — residuals from the upstream pipeline.
 # Each entry: list(parent, pos, neg, anypos_groups, description).
 PHENOTYPE_RESIDUALS <- list(
@@ -530,8 +546,11 @@ phenotype_rules_table_df <- function() {
                sort(setdiff(all_names, PHENOTYPE_DISPLAY_ORDER)))
   rows <- lapply(ordered, function(nm) {
     rule <- get_phenotype_rule(nm)
+    # Display the app's canonical label (SMA+, Blood Vessel, CD8a Tcell, …),
+    # not the CSV-form name, so the modal matches every other view.
+    disp <- phenotype_display_label(nm)
     if (is.null(rule)) {
-      return(data.frame(Phenotype = nm, Category = "?", Positive = "",
+      return(data.frame(Phenotype = disp, Category = "?", Positive = "",
                         Negative = "", Notes = "",
                         stringsAsFactors = FALSE))
     }
@@ -544,7 +563,7 @@ phenotype_rules_table_df <- function() {
     }
     neg_parts <- if (length(rule$neg) > 0) paste0(rule$neg, "−") else character()
     data.frame(
-      Phenotype = nm,
+      Phenotype = disp,
       Category  = rule$parent,
       Positive  = if (length(pos_parts) > 0) paste(pos_parts, collapse = ", ") else "—",
       Negative  = if (length(neg_parts) > 0) paste(neg_parts, collapse = ", ") else "—",
@@ -598,7 +617,26 @@ phenotype_rules_modal_ui <- function() {
     shiny::tags$p(style = "margin-top: 10px; font-size: 12px; color: #777;",
       "Rule source: ",
       shiny::tags$code("data/phenotype_rules.csv"),
-      " (18 markers: CD99, INS, GCG, SST, SMA, CD20, CD3e, CD68, CD163, CD8a, CD4, HLADR, PDPN, CD34, CD31, B3TUBB, CD56)."
+      " (15 markers: INS, GCG, SST, SMA, CD20, CD3e, CD68, CD163, CD8a, CD4, HLADR, PDPN, CD34, CD31, B3TUBB)."
+    ),
+    shiny::tags$p(style = "margin-top: 6px; font-size: 12px; color: #777;",
+      shiny::tags$strong("Data vs. rules: "),
+      "this table is the gating spec. A few rule phenotypes have no cells in the ",
+      "shipped dataset because the upstream scVI labeling merged or renamed them ",
+      "(e.g. Dendritic cell folds into the ", shiny::tags$code("APCs"),
+      "/Immune aggregates; Exocrine splits into Acinar/Ductal). ",
+      shiny::tags$code("APCs"),
+      " is an HLADR+ myeloid aggregate created upstream, not itself a ",
+      shiny::tags$code("phenotype_rules.csv"), " row."
+    ),
+    shiny::tags$p(style = "margin-top: 6px; font-size: 12px; color: #777;",
+      shiny::tags$strong("Panel note: "),
+      "the original Rules1 template also listed ", shiny::tags$code("CD99"),
+      " (Endocrine) and ", shiny::tags$code("CD56"),
+      " (Neural), but neither antibody is in this 31-plex panel, so the ",
+      "phenotyping step dropped them. The effective gates were therefore ",
+      shiny::tags$code("Endocrine = any of INS/GCG/SST+"), " and ",
+      shiny::tags$code("Neural = B3TUBB+"), " — reflected in the table above."
     )
   )
 }
