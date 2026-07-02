@@ -105,7 +105,7 @@ The Plot sidebar (mode, feature, region, donor status, AAb, age, gender filters)
 
 ### 5-Section Narrative Layout
 
-A "About this tab" banner above Section 1 describes the tab's purpose, primary test (mixed-effects with donor random intercept), and how to use it. Each section heading carries a `(?)` icon with a native-tooltip one-line description (helper: `section_heading(step, title, subtitle, tip = NULL)` in both `mod_statistics_ui.R` and `mod_statistics_server.R`).
+A "About this tab" banner above Section 1 describes the tab's purpose, primary test (mixed-effects with donor random intercept), and how to use it. Each section heading carries a `(?)` icon with a native-tooltip one-line description (helper: `section_heading(step, title, subtitle, tip = NULL)` in `mod_statistics_ui.R`). Prior to the Jul 2026 redesign a duplicate copy also lived in `mod_statistics_server.R` to render dynamically-numbered headings; that server-side helper (and the dynamic numbering) was removed when section numbering became a static 1–5, so the helper now exists only in the UI file.
 
 (Section names updated in the Jul 2026 redesign; see "Streamlined Redesign" above.)
 
