@@ -47,9 +47,20 @@ volume or in the image. It is injected at runtime via `run.sh`'s `--env-file` in
 
 ```bash
 cd <repo root>
-apptainer build deploy/islet-explorer.sif deploy/islet-explorer.def   # %files paths need CWD=repo root
+# --fakeroot lets an unprivileged HiPerGator user run the %post apt-get/install steps.
+apptainer build --fakeroot deploy/islet-explorer.sif deploy/islet-explorer.def   # %files paths need CWD=repo root
 # copy to the VM's container store:
 rsync -av deploy/islet-explorer.sif $VM:/podman/$SERVICEUSER/
+```
+
+The image installs only the **required** R manifest. `scripts/install_shiny_deps.R` now exits
+non-zero if any required package fails, so a broken build fails here rather than as an HTTP 500
+from a shiny-server worker. The optional stacks are opt-in and none are needed by the app (the
+trajectory ships precomputed in the H5AD):
+
+```bash
+# only if you need the offline trajectory/recompute paths:
+INSTALL_BIOC=1 INSTALL_VITESSCER=1 INSTALL_LAMIAN=1 Rscript scripts/install_shiny_deps.R
 ```
 
 ## Step 2 — Stage code + data + images on `/pubapps`
@@ -102,7 +113,10 @@ Open `https://islet-explorer.rc.ufl.edu/islet-explorer/` and check:
 3. **Viewer** renders an OME-TIFF (Range serving + correct public URL through the proxy).
 4. **AI Assistant** returns a reply (KEY injected + egress to `api.ai.it.ufl.edu`).
 5. **Spatial Card C** distance views load (`cell_distance.csv` staged/readable).
-6. Container/shiny-server logs (`/var/log/shiny-server/`) show no anndata/reticulate errors.
+6. Container/shiny-server logs show no anndata/reticulate errors. `run.sh` bind-mounts
+   `/pubapps/$PROJECT/logs` → `/var/log/shiny-server`, so read them on the host with
+   `tail -f /pubapps/$PROJECT/logs/*.log`. Without that bind `--writable-tmpfs` discards
+   them — which is precisely when you need them (a worker that dies at startup leaves nothing).
 
 ## Resource sizing
 

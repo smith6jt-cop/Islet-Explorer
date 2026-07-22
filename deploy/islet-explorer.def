@@ -9,7 +9,9 @@
 #   apptainer build deploy/islet-explorer.sif deploy/islet-explorer.def
 # Then copy the .sif to /podman/$serviceuser (or wherever RC runs it) on the PubApps VM.
 #
-# Podman equivalent: `podman build -f deploy/Containerfile .` — same steps translate directly.
+# This repo ships the Apptainer path only. If RC standardizes on Podman instead, the %post
+# block below translates directly to a Containerfile (RUN per step, COPY for %files, ENV for
+# %environment, CMD for %runscript); deploy/run.sh documents the equivalent `podman run`.
 
 Bootstrap: docker
 From: rocker/shiny:4.5.1
@@ -31,6 +33,9 @@ From: rocker/shiny:4.5.1
     # sf -> GDAL/GEOS/PROJ/udunits; magick -> ImageMagick(++); xml2 -> libxml2;
     # httr2/curl -> libcurl+openssl; ragg/text shaping -> fontconfig/harfbuzz/fribidi;
     # reticulate anndata venv -> python3 + venv + pip.
+    # cmake + libnlopt-dev are the nloptr -> lme4/lmerTest source-build toolchain. The base
+    # image serves binaries so this is normally unused, but lme4 is required (Statistics tab
+    # HTTP 500s without it), so keep the fallback path buildable rather than silently broken.
     export DEBIAN_FRONTEND=noninteractive
     apt-get update
     apt-get install -y --no-install-recommends \
@@ -40,14 +45,17 @@ From: rocker/shiny:4.5.1
         libfontconfig1-dev libharfbuzz-dev libfribidi-dev \
         libpng-dev libtiff5-dev libjpeg-dev \
         python3 python3-venv python3-pip \
-        git
+        git \
+        cmake libnlopt-dev
     rm -rf /var/lib/apt/lists/*
 
     # --- R packages -----------------------------------------------------------------------
     # Single authoritative manifest (CRAN core + guarded runtime + stats). Bioconductor and
     # Lamian are optional and best-effort inside this script (the app ships precomputed
     # trajectory, so they are not required). Enable them only if you use those paths:
-    #   INSTALL_VITESSCER=1 INSTALL_LAMIAN=1 Rscript /opt/install_shiny_deps.R
+    #   INSTALL_BIOC=1 INSTALL_VITESSCER=1 INSTALL_LAMIAN=1 Rscript /opt/install_shiny_deps.R
+    # The script now exits non-zero if any REQUIRED package fails, so a broken build fails
+    # here rather than as an HTTP 500 from the shiny-server worker at run time.
     Rscript /opt/install_shiny_deps.R
 
     # --- reticulate Python venv (anndata) -------------------------------------------------
@@ -72,4 +80,13 @@ From: rocker/shiny:4.5.1
     # app at /islet-explorer/ on :3838. Chosen over `R -e shiny::runApp` specifically because
     # shiny-server's static file server honors HTTP Range — required for streaming the 109 GB
     # OME-TIFFs to the Avivator Viewer.
+    #
+    # %runscript is what `apptainer run` executes. deploy/run.sh instead uses
+    # `apptainer instance start`, which runs %startscript below — BOTH must exist or the
+    # persistent service comes up serving nothing.
+    exec /usr/bin/shiny-server
+
+%startscript
+    # Executed by `apptainer instance start` (see deploy/run.sh) — the path RC's persistent
+    # service unit uses. Must stay in sync with %runscript above.
     exec /usr/bin/shiny-server

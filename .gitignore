@@ -58,3 +58,6 @@ scripts/tools/
 *.deb
 *.rpm
 scripts/scvi_comparison_results/new_latent_single_cell.npy
+
+# Apptainer/Singularity images (built artifacts, multi-GB)
+*.sif

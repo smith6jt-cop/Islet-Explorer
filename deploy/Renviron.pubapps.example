@@ -12,6 +12,13 @@
 # UF Navigator AI Assistant endpoint (OpenAI-compatible). Reachable from the UF network.
 BASE=https://api.ai.it.ufl.edu
 
+# Per-session cap on AI Assistant token spend (mod_ai_assistant_server.R blocks requests once
+# the budget is exhausted). MUST be set on a Public Open, no-login endpoint: the default is
+# unlimited, and the budget resets per session, so an anonymous visitor could otherwise spend
+# the UF-issued key without bound. Anyone can open as many sessions as they like — treat this
+# as a per-session brake, not a total. If that is not acceptable, disable the AI Assistant tab.
+OPENAI_TOKEN_BUDGET=100000
+
 # reticulate: the anndata venv baked into the container image (deploy/islet-explorer.def).
 # Must match the venv path in the image and %environment. If this is wrong, read_h5ad()
 # fails and the app SILENTLY falls back to master_results.xlsx (Plot cell-type selector
