@@ -1,0 +1,19 @@
+# TEMPLATE — copy to  /pubapps/$PROJECT/islet-explorer/app/shiny_app/.Renviron  on the VM.
+# This file lives on the world-readable /pubapps volume, so it MUST NOT contain any secret.
+#
+# Differences from the on-prem lab .Renviron:
+#   - NO R_LIBS_USER   : packages live in the container image's site-library, not a personal lib.
+#   - NO on-prem IP    : the public host + SSL come from RC's reverse proxy.
+#   - NO KEY line here : the UF Navigator API key is injected at container runtime via the
+#                        --env-file in deploy/run.sh. Leaving KEY out of this file is REQUIRED —
+#                        readRenviron() would otherwise overwrite the injected value with a blank.
+#                        (ai_helpers.R reads Sys.getenv("KEY"), which the injected env satisfies.)
+
+# UF Navigator AI Assistant endpoint (OpenAI-compatible). Reachable from the UF network.
+BASE=https://api.ai.it.ufl.edu
+
+# reticulate: the anndata venv baked into the container image (deploy/islet-explorer.def).
+# Must match the venv path in the image and %environment. If this is wrong, read_h5ad()
+# fails and the app SILENTLY falls back to master_results.xlsx (Plot cell-type selector
+# goes empty) — so verify it after deploy (smoke test #2 in deploy/README.md).
+RETICULATE_PYTHON=/opt/islet-explorer-py/bin/python

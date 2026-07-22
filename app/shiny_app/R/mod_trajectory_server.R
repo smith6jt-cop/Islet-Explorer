@@ -147,6 +147,27 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         obs$pseudotime <- obs$dpt_pseudotime_combined
       }
 
+      # Stable rank axis, computed ONCE over the full unfiltered islet set.
+      #
+      # This used to be done downstream in traj_data_clean() AFTER the
+      # !is.na(value) and min_cells filters, which made the x-axis depend on
+      # both the min_cells setting and the selected Y-axis feature: the same
+      # islet moved along the axis when either changed (measured mean |delta
+      # rank| 0.179, max 0.357 at min_cells = 25). Ranking here, before any
+      # filtering, makes the axis a fixed property of the pseudotime mode.
+      #
+      # (rank - 0.5)/n rather than rank/n so the axis is symmetric on (0, 1)
+      # instead of (1/n, 1].
+      obs$pt_rank <- NA_real_
+      if (!is.null(obs$pseudotime)) {
+        finite_pt <- is.finite(obs$pseudotime)
+        n_finite <- sum(finite_pt)
+        if (n_finite > 0) {
+          obs$pt_rank[finite_pt] <-
+            (rank(obs$pseudotime[finite_pt], ties.method = "average") - 0.5) / n_finite
+        }
+      }
+
       list(obs = obs, obsm = tr$obsm, uns = tr$uns, var_names = tr$var_names, adata = ad)
     })
 
@@ -281,6 +302,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         islet_key = islet_keys,
         combined_islet_id = as.character(obs_df$combined_islet_id),
         pt = as.numeric(obs_df$pseudotime),
+        pt_rank = if (!is.null(obs_df$pt_rank)) as.numeric(obs_df$pt_rank) else NA_real_,
         donor_status = donor_clean,
         donor_id = donor_ids,
         value = as.numeric(expression_vals),
@@ -381,11 +403,29 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         if (nrow(result_df) == 0) return(NULL)
       }
 
-      # Rank-transform pseudotime for visualization (eliminates DPT compression artifacts)
-      # Raw DPT compresses 95% of data between 0.25-0.70 due to diffusion manifold geometry.
-      # Rank percentile preserves ordering while spreading points uniformly.
+      # Pseudotime axis scale.
+      #
+      # "rank" (default) spreads points uniformly, which counteracts the raw-DPT
+      # compression (95% of islets fall between 0.25-0.70 due to diffusion
+      # manifold geometry). "raw" shows true DPT spacing, so where islets
+      # actually concentrate is visible -- note that on the rank axis, LOESS
+      # curvature and bin density are artifacts of the transform, since ranks
+      # are uniform by construction.
+      #
+      # The rank itself is computed in traj_with_pseudotime() over the FULL
+      # unfiltered set, so it does not shift with min_cells or the selected
+      # feature. Do not re-rank here.
       result_df$pt_raw <- result_df$pt
-      result_df$pt <- rank(result_df$pt, ties.method = "average") / nrow(result_df)
+      pt_scale <- input$pt_scale %||% "rank"
+      if (pt_scale == "raw") {
+        result_df$pt <- result_df$pt_raw
+      } else if (all(is.na(result_df$pt_rank))) {
+        # Defensive: older H5AD/pseudotime paths that never populated pt_rank.
+        result_df$pt <- (rank(result_df$pt, ties.method = "average") - 0.5) / nrow(result_df)
+      } else {
+        result_df$pt <- result_df$pt_rank
+      }
+      attr(result_df, "pt_scale") <- pt_scale
 
       message("[traj_data_clean] Successfully processed ", nrow(result_df),
               " observations for ", selected_feature)
@@ -477,18 +517,46 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       trend_type <- input$traj_show_trend %||% "by_donor"
       alpha_val  <- 1 - (input$traj_alpha %||% 0.4)
       point_size <- input$traj_point_size_slider %||% 3.0
+      # 95% CI bands on the LOESS trends (Bodenmiller 2025 Fig 2D/5E convention:
+      # every smoothed trajectory carries a confidence band).
+      show_ci    <- isTRUE(input$traj_trend_ci %||% TRUE)
+
+      # Pseudotime domain, taken from the data rather than assumed to be [0, 1]
+      # — on the "raw" scale the axis is true DPT and does not span [0, 1].
+      pt_dom <- range(df$pt, na.rm = TRUE)
+      if (!all(is.finite(pt_dom)) || diff(pt_dom) <= 0) pt_dom <- c(0, 1)
 
       # Always apply jitter — use the kept-rows range as the jitter scale
       # so ghost points land in the same visual frame.
+      #
+      # Jitter is NOT clamped back into the domain: the previous pmax/pmin
+      # clamp piled roughly the outermost 1.2% of points onto the exact
+      # endpoints (~60 islets per side), producing artificial spikes at both
+      # ends. The axis is widened by the jitter amount instead (see pt_lim).
+      #
+      # set.seed() inside a render function would reset the session-global RNG
+      # stream, so the previous seed is saved and restored around the draw.
+      .seed_saved <- if (exists(".Random.seed", envir = .GlobalEnv)) {
+        get(".Random.seed", envir = .GlobalEnv)
+      } else NULL
       set.seed(42)
-      jitter_amount_x <- diff(range(df$pt, na.rm = TRUE)) * 0.012
+      jitter_amount_x <- diff(pt_dom) * 0.012
       jitter_amount_y <- diff(range(df$value, na.rm = TRUE)) * 0.02
-      df$pt    <- pmax(0, pmin(1, df$pt + runif(nrow(df), -jitter_amount_x, jitter_amount_x)))
+      df$pt    <- df$pt + runif(nrow(df), -jitter_amount_x, jitter_amount_x)
       df$value <- df$value + runif(nrow(df), -jitter_amount_y, jitter_amount_y)
       if (nrow(df_ghost) > 0) {
-        df_ghost$pt    <- pmax(0, pmin(1, df_ghost$pt + runif(nrow(df_ghost), -jitter_amount_x, jitter_amount_x)))
+        df_ghost$pt    <- df_ghost$pt + runif(nrow(df_ghost), -jitter_amount_x, jitter_amount_x)
         df_ghost$value <- df_ghost$value + runif(nrow(df_ghost), -jitter_amount_y, jitter_amount_y)
       }
+      if (is.null(.seed_saved)) {
+        suppressWarnings(rm(".Random.seed", envir = .GlobalEnv))
+      } else {
+        assign(".Random.seed", .seed_saved, envir = .GlobalEnv)
+      }
+
+      # Plot limits: domain plus the jitter margin, so jittered points are not
+      # clipped and no pile-up appears at the endpoints.
+      pt_lim <- c(pt_dom[1] - jitter_amount_x, pt_dom[2] + jitter_amount_x)
 
       # Log-transform cell counts for LOESS weights (raw counts too skewed: median=9, max=1902)
       df$loess_weight <- log1p(df$total_cells)
@@ -610,7 +678,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       pt_range <- range(df$pt, na.rm = TRUE)
 
       if (trend_type == "overall") {
-        g <- g + geom_smooth(method = "loess", se = FALSE, color = "black",
+        g <- g + geom_smooth(method = "loess", se = show_ci, color = "black",
                              size = 1, fullrange = FALSE, span = 0.75,
                              inherit.aes = FALSE,
                              aes(x = pt, y = value, weight = loess_weight))
@@ -628,9 +696,10 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
                 g <- g + geom_smooth(data = df_subset,
                                      aes(x = pt, y = value, weight = loess_weight),
                                      inherit.aes = FALSE,
-                                     method = "loess", se = FALSE,
+                                     method = "loess", se = show_ci,
                                      size = 0.8, show.legend = FALSE, fullrange = FALSE, span = 0.75,
-                                     color = trend_colors[status])
+                                     color = trend_colors[status],
+                                     fill = trend_colors[status], alpha = 0.15)
               }
             }
           } else {
@@ -650,14 +719,18 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       # Labels
       selected_feature <- input$traj_feature %||% "Selected feature"
       metric_label <- "— normalized expression (mean per islet, 0–1)"
-      x_label <- "Pseudotime (rank-normalized)"
+      x_label <- if ((input$pt_scale %||% "rank") == "raw") {
+        "Pseudotime (raw DPT)"
+      } else {
+        "Pseudotime (rank-normalized)"
+      }
 
       g <- g + labs(
         x = x_label,
         y = paste(selected_feature, metric_label),
         title = NULL
       ) +
-      coord_cartesian(xlim = c(0, 1), ylim = range(df$value, na.rm = TRUE) * c(1, 1) + c(-0.05, 0.05) * diff(range(df$value, na.rm = TRUE)))
+      coord_cartesian(xlim = pt_lim, ylim = range(df$value, na.rm = TRUE) * c(1, 1) + c(-0.05, 0.05) * diff(range(df$value, na.rm = TRUE)))
 
       # Convert to plotly with custom data for reliable click handling
       p <- ggplotly(g, tooltip = c("x", "y", "colour", "text"), source = ns("traj_scatter"))
@@ -686,7 +759,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
           title = NULL,
           font = fonts$global,
           margin = list(l = 80, r = 20, t = 30, b = 70, pad = 5),
-          xaxis = list(fixedrange = FALSE, automargin = TRUE, range = c(0, 1),
+          xaxis = list(fixedrange = FALSE, automargin = TRUE, range = pt_lim,
                        title = list(font = fonts$axis_title),
                        tickfont = fonts$axis_tick),
           yaxis = list(fixedrange = FALSE, automargin = TRUE,
@@ -746,10 +819,17 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       if (is.null(case_id) || is.null(islet_key) || is.na(case_id) || is.na(islet_key)) {
         lookup <- traj_coord_lookup()
         if (!is.null(lookup) && nrow(lookup) > 0) {
-          tolerance <- 0.01
+          # Tolerances are scaled to each axis's actual span rather than a flat
+          # 0.01, which only made sense while pt was always rank-normalized to
+          # [0, 1]. On the "raw" DPT scale the span is much narrower, and a
+          # fixed 0.01 would match nearly the whole axis.
+          pt_span  <- diff(range(lookup$pt, na.rm = TRUE))
+          val_span <- diff(range(lookup$value, na.rm = TRUE))
+          if (!is.finite(pt_span)  || pt_span  <= 0) pt_span  <- 1
+          if (!is.finite(val_span) || val_span <= 0) val_span <- 1
           matches <- which(
-            abs(lookup$pt - click_data$x) < tolerance &
-            abs(lookup$value - click_data$y) < tolerance
+            abs(lookup$pt - click_data$x) < 0.01 * pt_span &
+            abs(lookup$value - click_data$y) < 0.01 * val_span
           )
           if (length(matches) > 0) {
             idx <- matches[1]
@@ -1168,11 +1248,15 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       feature_name <- df$feature_name[1]
       donor_cols   <- donor_colors_reactive()
       n_bins       <- 25
-      brks         <- seq(0, 1, length.out = n_bins + 1)
+      # Bin over the data's actual pseudotime domain rather than an assumed
+      # [0, 1] — on the "raw" DPT scale the axis does not span [0, 1].
+      hm_dom       <- range(df$pt, na.rm = TRUE)
+      if (!all(is.finite(hm_dom)) || diff(hm_dom) <= 0) hm_dom <- c(0, 1)
+      brks         <- seq(hm_dom[1], hm_dom[2], length.out = n_bins + 1)
       bin_w        <- diff(brks)[1]
       mids         <- head(brks, -1) + bin_w / 2
 
-      df$pt_bin <- cut(pmax(0, pmin(1, df$pt)), breaks = brks,
+      df$pt_bin <- cut(df$pt, breaks = brks,
                        include.lowest = TRUE, right = FALSE)
       bin_levels <- levels(df$pt_bin)
 
@@ -1244,7 +1328,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       g <- ggplot(hm, aes(x = x, y = 0.5, fill = fill, text = hover)) +
         geom_tile(width = bin_w, height = 1) +
         scale_fill_identity(guide = "none") +
-        scale_x_continuous(limits = c(0, 1), expand = c(0, 0)) +
+        scale_x_continuous(limits = hm_dom, expand = c(0, 0)) +
         scale_y_continuous(limits = c(0, 1), expand = c(0, 0)) +
         guides(fill = "none") +
         theme_void() +
@@ -1255,7 +1339,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         layout(
           showlegend = FALSE,
           xaxis = list(fixedrange = TRUE, showticklabels = FALSE,
-                       zeroline = FALSE, range = c(0, 1)),
+                       zeroline = FALSE, range = hm_dom),
           yaxis = list(fixedrange = TRUE, showticklabels = FALSE,
                        zeroline = FALSE, range = c(0, 1))
         ) %>%
@@ -1285,11 +1369,12 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       if (is.null(expr)) return(NULL)
       colnames(expr) <- valid
       result <- data.frame(
-        pt = as.numeric(tr$obs$pseudotime),
+        pt_raw = as.numeric(tr$obs$pseudotime),
+        pt_rank = if (!is.null(tr$obs$pt_rank)) as.numeric(tr$obs$pt_rank) else NA_real_,
         total_cells = as.integer(tr$obs$total_cells),
         stringsAsFactors = FALSE)
       result <- cbind(result, as.data.frame(expr))
-      result <- result[is.finite(result$pt), , drop = FALSE]
+      result <- result[is.finite(result$pt_raw), , drop = FALSE]
 
       # Apply min cells/islet filter (matches traj_data_clean)
       min_cells <- input$min_cells %||% 1
@@ -1298,9 +1383,21 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         if (nrow(result) == 0) return(NULL)
       }
 
-      # Rank-normalize pseudotime (matches scatter x-axis)
-      result$pt <- rank(result$pt, ties.method = "average") / nrow(result)
+      # Use the SAME stable axis as the scatter above. This panel used to
+      # re-rank over its own row set, which silently produced a different
+      # x-axis from the scatter it sits under (its denominator excluded the
+      # per-feature !is.na(value) filter that traj_data_clean applies).
+      pt_scale <- input$pt_scale %||% "rank"
+      if (pt_scale == "raw") {
+        result$pt <- result$pt_raw
+      } else if (all(is.na(result$pt_rank))) {
+        result$pt <- (rank(result$pt_raw, ties.method = "average") - 0.5) / nrow(result)
+      } else {
+        result$pt <- result$pt_rank
+      }
       result$total_cells <- NULL
+      result$pt_raw <- NULL
+      result$pt_rank <- NULL
 
       list(data = result, markers = valid)
     })

@@ -35,7 +35,17 @@ trajectory_ui <- function(id) {
               selectInput(ns("pt_mode"), "Pseudotime mode:",
                          choices = c("Core only" = "core",
                                      "Core + Peri" = "combined"),
-                         selected = "core")
+                         selected = "core"),
+              selectInput(ns("pt_scale"), "Pseudotime scale:",
+                         choices = c("Rank-normalized" = "rank",
+                                     "Raw DPT" = "raw"),
+                         selected = "rank"),
+              tags$small(
+                style = "color: #888; display: block; margin-top: -8px; margin-bottom: 8px; line-height: 1.3;",
+                "Rank spreads islets evenly; raw shows true DPT spacing, so ",
+                "where islets actually concentrate is visible. Trend curvature ",
+                "on the rank axis is partly an artifact of the transform."
+              )
             ),
             column(3,
               selectInput(ns("traj_color_by"), "Color points by:",
@@ -58,7 +68,9 @@ trajectory_ui <- function(id) {
               sliderInput(ns("traj_point_size_slider"), "Point size:",
                          min = 0.5, max = 5.0, value = 3.0, step = 0.1),
               numericInput(ns("min_cells"), "Min cells/islet",
-                           value = 1, min = 1, max = 200, step = 1)
+                           value = 1, min = 1, max = 200, step = 1),
+              checkboxInput(ns("traj_trend_ci"), "95% CI band on trends",
+                           value = TRUE)
             ),
             column(3,
               div(style = "border: 1px solid #ddd; padding: 10px; border-radius: 5px; background-color: #f9f9f9; min-height: 100px;",

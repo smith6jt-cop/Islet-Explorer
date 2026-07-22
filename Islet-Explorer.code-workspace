@@ -1,12 +1,15 @@
 {
+	// Single-repo workspace, tracked in git — keep it portable.
+	// Machine-specific paths (r.rterm.linux, r.rpath.linux, r.lsp.path) belong in
+	// .vscode/settings.json, which is gitignored.
+	// For cross-repo work with Islet-Explorer-Senior, open
+	// ../islet-all.code-workspace instead.
 	"folders": [
 		{
 			"path": "."
 		}
 	],
 	"settings": {
-		"r.rterm.linux": "/usr/bin/R",
-		"r.rpath.linux": "/usr/bin/R",
 		"r.sessionWatcher": true,
 		"r.alwaysUseActiveTerminal": true,
 		"r.bracketedPaste": true,
@@ -14,6 +17,23 @@
 			"*.R": "r",
 			"*.r": "r",
 			"*.Rmd": "rmd"
+		},
+		"search.exclude": {
+			"data/cells/**": true,
+			"data/donors/**": true,
+			"data/json/**": true,
+			"data/gson/**": true,
+			"archive/**": true,
+			"tmp/**": true,
+			"**/*.h5ad": true,
+			"**/*.xlsx": true
+		},
+		"files.watcherExclude": {
+			"data/cells/**": true,
+			"data/donors/**": true,
+			"data/json/**": true,
+			"data/gson/**": true,
+			"archive/**": true
 		}
 	}
 }
