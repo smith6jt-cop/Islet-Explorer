@@ -153,6 +153,29 @@ IMMUNE_SUBTYPE_GATES = {
     "T":          ["CD3e"],
 }
 
+# CD20 IS NOT A COMPARTMENT ANCHOR, matching upstream 6d49ae7 which removed it from Senior's
+# any-positive Immune union: a lone CD20 call is far likelier to be stray signal on an abundant
+# cell than a real B cell, and a union would let it pull that cell into Immune before a more
+# frequent compartment claimed it. CODEX is compliant by construction -- the Immune gate is CD45
+# alone -- and B is reachable only as a sub-split INSIDE Immune, i.e. it already requires CD45+.
+#
+# Measured on the corrected CODEX data, and the margin is stark. Of 42,183 CD20+ cells at the
+# donor-local floor, only 2,450 (5.8%) are also CD45+. 39,197 (92.9%) are CD20-only with no
+# CD45, CD3e or CD68 -- and 48.6% of THOSE are ECAD+, i.e. abundant epithelium carrying stray
+# CD20. So "CD20+ = 1.58% of cells" was measuring mostly noise; the CD45-gated figure of ~0.09%
+# is a plausible pancreatic B-cell rate.
+#
+# Senior notes B cells still reach Immune via CD79a, which this panel lacks. CODEX does not need
+# it: requiring CD45+ before CD20 is consulted is what makes the call trustworthy here, and a
+# CD20-only ECAD+ cell correctly becomes Epithelial rather than B.
+CD20_NOT_A_COMPARTMENT_ANCHOR = True
+CD20_STRAY_SIGNAL = {           # measured post-REDSEA at donor-local floors
+    "cd20_pos": 42183,
+    "cd20_and_cd45_pos": 2450,          # 5.8% -- the plausible B-cell population
+    "cd20_only": 39197,                 # 92.9%, of which 48.6% are ECAD+
+    "cd20_only_ecad_pos_pct": 48.6,
+}
+
 # Prevalence anomalies to resolve BEFORE trusting an immune sub-call. Measured post-REDSEA at the
 # donor-local Otsu floors: these two are not biologically plausible and indicate the 2-component
 # fit is landing inside the background on some donors -- the same failure class as the
