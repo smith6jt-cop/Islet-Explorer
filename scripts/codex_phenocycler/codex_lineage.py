@@ -99,6 +99,60 @@ FIRST_PASS_PAIRS = [
 ENDOCRINE_SPLIT_PAIR = ["CHGA", "CD31"]
 ENDOCRINE_SPLIT_PARENT = "Epithelial"
 
+# --- Input-QC arm floors (replaces the abandoned `>50` prefilter) -------------------------------
+# The current-of-record method (`restore_validation.py`, METHOD_VERSION restore-pair-validation-v6)
+# has dropped RESTORE's hardcoded `>50` co-positive prefilter in favour of DONOR-LOCAL,
+# MARKER-SPECIFIC raw-linear floors. These are NOT divisors and NOT positivity thresholds: they
+# define the provisional mutually-exclusive fitting arms, the Step 1 anchor, and the
+# input-QC-retained set eligible for target-component support. Cells below both floors remain
+# double-low and cannot be rescued by NNMF assignment.
+#
+# `estimate_marker_input_floor()` RAISES for an unregistered marker, so CODEX must declare its
+# own: Senior's map has no CD45 and no PGP9.5 (its panel has neither).
+#
+# Assignments below are MEASURED, not inherited (all 15 donors, raw QuPath means -- see
+# docs/codex_restore_pairs.md). Triangle falls below Otsu for all five gate markers, so
+# max(Otsu, Triangle) reduces to plain Otsu and the second statistic buys nothing. CHGA is the
+# sole exception -- Triangle EXCEEDS Otsu there, tightening 2.21% -> 1.42% high, the same
+# signature that earned CD3e/CD20 their two-statistic floor in Senior.
+LINEAR_OTSU_FLOOR = "linear_otsu"
+MAX_LINEAR_OTSU_TRIANGLE_FLOOR = "max_linear_otsu_triangle"
+
+MARKER_INPUT_FLOOR_METHODS = {
+    "CD45":   LINEAR_OTSU_FLOOR,             # Triangle 746 << Otsu 2872
+    "ECAD":   LINEAR_OTSU_FLOOR,             # Triangle 3124 << Otsu 12623
+    "CD31":   LINEAR_OTSU_FLOOR,             # Triangle 603 << Otsu 3085
+    "PGP9.5": LINEAR_OTSU_FLOOR,             # Triangle 543 << Otsu 5547
+    "VIM":    LINEAR_OTSU_FLOOR,             # Triangle 1151 << Otsu 4460
+    "panCK":  LINEAR_OTSU_FLOOR,             # Triangle 2238 < Otsu 4093 (max() moves 15.89->15.80%)
+    "CHGA":   MAX_LINEAR_OTSU_TRIANGLE_FLOOR,  # Triangle 798 > Otsu 716 -- both must call it high
+}
+
+# Median donor-local floor per marker, and the min-max spread across the 15 donors. Recorded so a
+# rerun that lands far outside these is caught as a regression rather than accepted silently.
+# The spread is the whole reason the floors are donor-local: PGP9.5 varies 10.5x, CHGA 6.0x.
+OBSERVED_FLOORS = {          # marker: (median, min, max, pct_high_at_median)
+    "CD45":   (2871.7, 1812, 6653, 2.16),
+    "ECAD":  (12622.9, 8384, 17170, 32.05),
+    "CD31":   (3084.9, 1473, 6156, 4.42),
+    "PGP9.5": (5547.0,  738, 7751, 1.70),
+    "VIM":    (4459.5, 2593, 6394, 4.52),
+    "panCK":  (4223.8, 3129, 7970, 15.80),
+    "CHGA":    (950.9,  250, 1498, 1.42),
+}
+
+
+def floor_method(marker: str) -> str:
+    """The arm-floor statistic for a marker. Fails closed, matching upstream."""
+    m = to_panel(marker)
+    if m not in MARKER_INPUT_FLOOR_METHODS:
+        raise ValueError(
+            f"no input-floor method is configured for marker {m!r}. Declare one here after "
+            "measuring Otsu vs Triangle on this cohort -- do not inherit Senior's map blindly."
+        )
+    return MARKER_INPUT_FLOOR_METHODS[m]
+
+
 # --- Known biases, recorded so they are not rediscovered as anomalies ---------------------------
 NOTES = {
     "acinar_autofluorescence": (
@@ -122,11 +176,14 @@ NOTES = {
         "and vimentin-dim quiescent stellate cells."
     ),
     "intensity_floor": (
-        "The RESTORE code's `>50` floor is a property of the code, not the panel, and in these "
-        "native 16-bit units it does NOT sit between background and signal: 99.2% of all cells "
-        "exceed it on ECAD (median 7632), 96.1% on panCK, 80.9% on CD45. It is effectively a "
-        "no-op for the abundant gates and only bites the dim markers (SMA 28%, B3TUBB 44%). "
-        "Treat it as a zero-drop, not a background floor."
+        "ABANDONED upstream. RESTORE's hardcoded `>50` co-positive prefilter survives only in the "
+        "parked restore.py and as an explicit neg_q<=0 escape hatch; the current-of-record method "
+        "(restore-pair-validation-v6) replaced it with donor-local marker-specific raw-linear "
+        "floors -- see MARKER_INPUT_FLOOR_METHODS above. This was the right call for CODEX "
+        "independently: in these native 16-bit units `>50` did NOT sit between background and "
+        "signal (99.2% of cells exceed it on ECAD, median 7633; 96.1% on panCK; 80.9% on CD45), "
+        "so it was a zero-drop rather than a background floor. The measured Otsu floors land at "
+        "700-12,600 -- two to three orders of magnitude higher."
     ),
 }
 
