@@ -93,12 +93,30 @@ FIRST_PASS_PAIRS = [
     ["VIM",    "ECAD"],
 ]
 
+# --- Invalid reference markers ------------------------------------------------------------------
+# Mirrors `restore_validation.INVALID_REFERENCE_MARKERS`, added upstream in 09a2069 (2026-07-23),
+# so both codebases state the rule in the same terms.
+#
+# Upstream's diagnostic is sharper than prevalence: a reference's positive cells ARE the target's
+# negative control, and CD20's exclusive arm ran **41-2,026 cells per donor** against 2,206-50,000
+# for the structural markers. On the v6 screen the three CD20-referenced pairs produced 60 rows,
+# 15 of them INVERTED fits thresholding an abundant target against a handful of reference cells --
+# worst case 50 reference cells for 30,507 target cells (610:1) -- plus 4 of the 22 degenerate-bound
+# rows and 4 MODEL_UNSTABLE rows.
+#
+# The CODEX measurement agrees and adds the donor-variability angle: CD20 is 1.58% of cells
+# cohort-wide but swings 0.32%-4.85% across donors (15.2x), where CD3e is *rarer* (0.86%) yet 4x
+# more stable. Abundance and stability both matter; CD20 fails on both counts as a reference.
+INVALID_REFERENCE_MARKERS = {
+    "CD20": (
+        "B cells are sparse in pancreas even with inflammation or disease, so CD20-positive cells "
+        "cannot define a negative-control population; use CD3e as the immune reference."
+    ),
+}
+
 # --- Immune subtyping pairs (second pass, inside the Immune compartment) ------------------------
-# CD20 IS NEVER A COUNTERPART. Measured post-REDSEA at the real donor-local floors, CD20 is
-# 1.58% of cells cohort-wide but ranges 0.32%-4.85% across donors -- a 15.2x swing. On the
-# sparsest donor that is ~500 cells from which to define a negative control, so the divisor it
-# produces is unstable by construction. Senior used it as the reference for CD3e, CD4, CD8,
-# FOXP3, Granzyme_B, CD56 and CD57.
+# CD20 IS NEVER A COUNTERPART. Senior used it as the reference for CD3e, CD4, CD8, FOXP3,
+# Granzyme_B, CD56 and CD57.
 #
 # "Replace with CD3e" holds for the myeloid and B targets but NOT for CD4/CD8a, and the reason is
 # biological, not statistical: CD4 and CD8a are T-cell co-receptors, so CD3e is the one marker
@@ -268,19 +286,17 @@ NOTES = {
 
 
 def no_rare_counterparts() -> None:
-    """CD20 must never appear as a counterpart, in any pass.
+    """No pair may use an invalid reference, or be a self-pair.
 
-    An assertion rather than a comment because this is the exact defect being fixed: a reference
-    whose prevalence swings 15x across donors (0.32%-4.85%) cannot define a stable negative
-    control, and the resulting divisor is unstable in a way that produces plausible output.
+    Assertions rather than comments because a bad reference yields plausible output rather than
+    an error. Same two rules upstream enforces at import in `restore_validation` (09a2069); kept
+    here because the CODEX pair sets never pass through `CANDIDATE_PAIRS`.
     """
-    banned = {"CD20"}
     for tgt, cp in FIRST_PASS_PAIRS + IMMUNE_PAIRS + [ENDOCRINE_SPLIT_PAIR]:
-        if cp in banned:
-            raise ValueError(
-                f"{cp!r} is too rare and too donor-variable to be a counterpart (pair {tgt} <- {cp}). "
-                "It may only ever be a TARGET."
-            )
+        if cp in INVALID_REFERENCE_MARKERS:
+            raise ValueError(f"{tgt} <- {cp}: {INVALID_REFERENCE_MARKERS[cp]}")
+        if tgt == cp:
+            raise ValueError(f"{tgt} cannot be its own reference")
     # CD4/CD8a are T-cell co-receptors: CD3e is definitionally NOT exclusive of them.
     for tgt, cp in IMMUNE_PAIRS:
         if tgt in ("CD4", "CD8a") and cp == "CD3e":
@@ -288,6 +304,30 @@ def no_rare_counterparts() -> None:
                 f"{tgt} <- CD3e is biologically invalid: {tgt} is a T-cell co-receptor and is "
                 "co-expressed with CD3e. Use a myeloid (CD68/CD163) or non-immune (CD31) counterpart."
             )
+
+
+def assert_pairs_valid(marker_pairs) -> None:
+    """Validate a pair list at the point of use, not just at import.
+
+    UPSTREAM CONTEXT (2026-07-23): `config.MARKER_PAIRS` / `FUNCTIONAL_PAIRS` and the
+    `run_restore` / `run_restore_functional` entry points were RETIRED rather than repaired --
+    seven MARKER_PAIRS and three FUNCTIONAL_PAIRS referenced CD20, and upstream's note states
+    there is no mechanical substitute because "CD3e is invalid for the T-subset targets
+    (CD4/CD8/FOXP3 cells are CD3e+)". That is the same objection measured here (CD8a<-CD3e
+    58% overlap by the p99 proxy; co-expression by biology).
+
+    So there is no longer an implicit CD20-referenced default to fall back into -- the hazard
+    that motivated the earlier guard is gone at the source. This check remains because CODEX
+    pair sets never pass through upstream's `CANDIDATE_PAIRS` import guard, so they would
+    otherwise be validated nowhere.
+    """
+    if not marker_pairs:
+        raise ValueError("no marker_pairs supplied; CODEX pairs must always be passed explicitly")
+    for tgt, cp in marker_pairs:
+        if cp in INVALID_REFERENCE_MARKERS:
+            raise ValueError(f"{tgt} <- {cp}: {INVALID_REFERENCE_MARKERS[cp]}")
+        if tgt == cp:
+            raise ValueError(f"{tgt} cannot be its own reference")
 
 
 def validate_against_panel() -> None:
