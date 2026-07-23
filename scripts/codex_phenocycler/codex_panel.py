@@ -139,6 +139,32 @@ def panel_markers(donor_id: str) -> list[str]:
     return [m for m in PANEL_31 if m in have]
 
 
+# Image source of truth. NOT /data/QuPath_Projects/.../Images/ -- see the module docstring.
+LOCAL_IMAGES = Path(__file__).resolve().parents[2] / "app" / "shiny_app" / "www" / "local_images"
+
+
+def image_path(donor_id: str, images_dir: Path | None = None) -> Path:
+    """The OME-TIFF for a donor.
+
+    Senior's `redsea.resolve_paths` derives this as `images_dir / img.split(" - ")[0]`, which
+    assumes the QuPath image name IS the filename ('...qptiff - resolution #1' -> '...qptiff').
+    CODEX image names are bare zero-padded donor ids, so that yields `images_dir/0112` -- a path
+    that does not exist. Files here are '<status>_<padded case>.ome.tiff' (Aab_6505.ome.tiff),
+    so the mapping has to go through the donor id.
+    """
+    root = Path(images_dir) if images_dir else LOCAL_IMAGES
+    want = normalize_donor_id(donor_id)
+    hits = [
+        p for p in sorted(root.glob("*.ome.tiff"))
+        if normalize_donor_id(p.name.replace(".ome.tiff", "").split("_")[-1]) == want
+    ]
+    if len(hits) != 1:
+        raise FileNotFoundError(
+            f"expected exactly 1 image for donor {want!r} in {root}, found {[p.name for p in hits]}"
+        )
+    return hits[0]
+
+
 def normalize_donor_id(image_name: str) -> str:
     """QuPath `Image` values are zero-padded ('0112'); the rest of the repo uses '112'.
 
