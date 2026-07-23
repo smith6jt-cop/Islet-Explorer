@@ -93,6 +93,58 @@ FIRST_PASS_PAIRS = [
     ["VIM",    "ECAD"],
 ]
 
+# --- Immune subtyping pairs (second pass, inside the Immune compartment) ------------------------
+# CD20 IS NEVER A COUNTERPART. Measured post-REDSEA at the real donor-local floors, CD20 is
+# 1.58% of cells cohort-wide but ranges 0.32%-4.85% across donors -- a 15.2x swing. On the
+# sparsest donor that is ~500 cells from which to define a negative control, so the divisor it
+# produces is unstable by construction. Senior used it as the reference for CD3e, CD4, CD8,
+# FOXP3, Granzyme_B, CD56 and CD57.
+#
+# "Replace with CD3e" holds for the myeloid and B targets but NOT for CD4/CD8a, and the reason is
+# biological, not statistical: CD4 and CD8a are T-cell co-receptors, so CD3e is the one marker
+# guaranteed NOT to be exclusive of them. A CD8+CD3e+ cell is the definition of a CD8 T cell.
+# Measured overlap confirms it -- 3.44% (CD8a) and 5.59% (CD4) look acceptable only because each
+# marker's Otsu floor is catching mostly non-T signal (myeloid CD4; see the CD8a anomaly below).
+# Low measured overlap does not make a biologically co-expressed pair valid.
+#
+# So CD4 and CD8a take a MYELOID or NON-IMMUNE counterpart instead, which is genuinely exclusive:
+#   overlap %      CD20    CD3e    CD68   CD163    CD31    ECAD
+#   CD4  <-        1.80    5.59   15.32   20.10    5.88   20.02
+#   CD8a <-        1.03    3.44    1.74    1.26    2.82   31.13
+IMMUNE_PAIRS = [
+    ["CD3e",  "CD68"],    # was CD20. 4.85% overlap; CD68 is 2.00% prevalent and 2.9x-stable
+    ["CD68",  "CD3e"],    # already correct in Senior -- CD68 never referenced CD20
+    ["CD163", "CD3e"],    # already correct
+    ["CD20",  "CD3e"],    # CD20 stays a TARGET (it must be, to get a positivity call at all)
+    ["CD4",   "CD31"],    # was CD20. Endothelium is CD4-negative; 5.88% overlap, 4.32% prevalent
+    ["CD8a",  "CD68"],    # was CD20. Macrophages are CD8a-negative; 1.74% overlap
+    ["HLADR", "CD31"],    # functional/activation pass -- weaker RESTORE assumption, flagged upstream
+]
+
+# Immune sub-split precedence, LOWEST first (later writes win, matching `lineage._cell_types`).
+# B sits at the bottom deliberately: the abundant, well-supported types claim their cells before a
+# CD20 call is allowed to stand, so a CD20+CD68+ cell resolves to Macrophage rather than B. This
+# is already how upstream orders it (lineage.py:115-122) -- recorded here so a CODEX-specific
+# rewrite of `_cell_types` cannot silently reintroduce the inverted order.
+# DC / Neutrophil / Plasma / NK are unreachable in the 31-plex (no CD11c, CD209, MPO, CD38,
+# CD56/CD57) and are omitted rather than left to evaluate as all-False.
+IMMUNE_PRECEDENCE = ["Immune-other", "B", "Macrophage", "T"]
+IMMUNE_SUBTYPE_GATES = {
+    "B":          ["CD20"],
+    "Macrophage": ["CD68", "CD163"],
+    "T":          ["CD3e"],
+}
+
+# Prevalence anomalies to resolve BEFORE trusting an immune sub-call. Measured post-REDSEA at the
+# donor-local Otsu floors: these two are not biologically plausible and indicate the 2-component
+# fit is landing inside the background on some donors -- the same failure class as the
+# near-zero-prevalence trap, from the opposite direction.
+PREVALENCE_ANOMALIES = {
+    # marker: (cohort_pct, per_donor_min, per_donor_max)
+    "CD8a":  (17.66, 0.59, 59.80),   # 59.8% of one donor's cells CD8a+ is not biology
+    "HLADR": (36.54, 0.81, 62.83),
+}
+
 # Optional same-pass endocrine/exocrine split INSIDE the Epithelial compartment. CHGA is one
 # pan-endocrine marker labelling all islet cells -- cleaner than the three hormones, and the one
 # place this 31-plex is strictly better equipped than the 59-plex, which had no chromogranin.
@@ -215,14 +267,39 @@ NOTES = {
 }
 
 
+def no_rare_counterparts() -> None:
+    """CD20 must never appear as a counterpart, in any pass.
+
+    An assertion rather than a comment because this is the exact defect being fixed: a reference
+    whose prevalence swings 15x across donors (0.32%-4.85%) cannot define a stable negative
+    control, and the resulting divisor is unstable in a way that produces plausible output.
+    """
+    banned = {"CD20"}
+    for tgt, cp in FIRST_PASS_PAIRS + IMMUNE_PAIRS + [ENDOCRINE_SPLIT_PAIR]:
+        if cp in banned:
+            raise ValueError(
+                f"{cp!r} is too rare and too donor-variable to be a counterpart (pair {tgt} <- {cp}). "
+                "It may only ever be a TARGET."
+            )
+    # CD4/CD8a are T-cell co-receptors: CD3e is definitionally NOT exclusive of them.
+    for tgt, cp in IMMUNE_PAIRS:
+        if tgt in ("CD4", "CD8a") and cp == "CD3e":
+            raise ValueError(
+                f"{tgt} <- CD3e is biologically invalid: {tgt} is a T-cell co-receptor and is "
+                "co-expressed with CD3e. Use a myeloid (CD68/CD163) or non-immune (CD31) counterpart."
+            )
+
+
 def validate_against_panel() -> None:
     """Every marker referenced here must exist in the 31-marker panel, on every donor."""
     used = {SEGMENTATION_MARKER}
     for ms in COMPARTMENT_GATES.values():
         used.update(ms)
+    for ms in IMMUNE_SUBTYPE_GATES.values():
+        used.update(ms)
     used.update(NEURAL_CONSENSUS)
     used.update(MESENCHYMAL_SUBTYPE)
-    for tgt, cp in FIRST_PASS_PAIRS + [ENDOCRINE_SPLIT_PAIR]:
+    for tgt, cp in FIRST_PASS_PAIRS + IMMUNE_PAIRS + [ENDOCRINE_SPLIT_PAIR]:
         used.update([tgt, cp])
     panel = set(PANEL_31) | {SEGMENTATION_MARKER}
     unknown = {m for m in used if to_panel(m) not in panel}
@@ -246,3 +323,4 @@ validate_order(COMPARTMENT_ORDER)
 validate_order(COMPARTMENT_ORDER_EPITHELIAL_FIRST)
 validate_against_panel()
 every_target_is_gated()
+no_rare_counterparts()

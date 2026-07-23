@@ -120,3 +120,67 @@ not left to comment discipline:
 
 `COMPARTMENT_ORDER_EPITHELIAL_FIRST` is provided and validates: ECAD and CD45 swap freely, so
 clearing the 85–90% epithelial mass first to shrink every later gate's pool is equally correct.
+
+---
+
+## 4. CD20 is never a counterpart (2026-07-23)
+
+Measured post-REDSEA at the real donor-local floors (`max(Otsu, Triangle)` for CD3e/CD20 per
+upstream policy), on all 15 donors:
+
+| marker | cohort % | per-donor min–max | swing |
+|---|---:|---|---:|
+| **CD20** | 1.58% | **0.32% – 4.85%** | **15.2×** |
+| CD3e | 0.86% | 0.47% – 1.93% | 4.1× |
+| CD68 | 2.00% | 1.33% – 3.84% | 2.9× |
+| CD163 | 1.70% | 1.07% – 3.13% | 2.9× |
+| CD45 | 2.73% | 1.40% – 6.83% | 4.9× |
+
+The disqualifying property is the **swing, not the mean** — CD3e is actually *rarer* than CD20
+cohort-wide (0.86% vs 1.58%). On the sparsest donor CD20 marks ~500 cells, which cannot define a
+stable negative control, and RESTORE's divisor inherits that instability while still producing
+plausible-looking output.
+
+Senior referenced CD20 for seven targets: CD3e, CD4, CD8, FOXP3, Granzyme_B, CD56, CD57. Three
+are CODEX-relevant. `CD68 ← CD3e` was **already correct upstream** — CD68 never referenced CD20.
+
+### "Replace with CD3e" holds for three of four, and fails for two on biology
+
+| pair | old | new | why |
+|---|---|---|---|
+| CD3e | ← CD20 | **← CD68** | 4.85% overlap; CD68 more abundant and 5× more stable than CD20 |
+| CD20 | ← CD3e | ← CD3e | unchanged — CD20 stays a **target**, which it must be to get a call at all |
+| CD4 | ← CD20 | **← CD31** | CD3e is **invalid**: CD4 is a T-cell co-receptor |
+| CD8a | ← CD20 | **← CD68** | CD3e is **invalid**: CD8+CD3e+ *is* a CD8 T cell |
+
+Candidate overlaps (% of target-positive cells also counterpart-positive):
+
+| target | ← CD20 | ← CD3e | ← CD68 | ← CD163 | ← CD31 | ← ECAD |
+|---|---:|---:|---:|---:|---:|---:|
+| CD4 | 1.80 | 5.59 | 15.32 | 20.10 | **5.88** | 20.02 |
+| CD8a | 1.03 | 3.44 | **1.74** | 1.26 | 2.82 | 31.13 |
+| CD3e | 3.11 | — | **4.85** | 5.26 | 4.57 | 10.23 |
+
+The measured CD4←CD3e and CD8a←CD3e overlaps (5.59%, 3.44%) look acceptable, but that is an
+artifact: each marker's Otsu floor is catching mostly non-T signal. **Low measured overlap does
+not make a biologically co-expressed pair valid.** Both are refused by
+`codex_lineage.no_rare_counterparts()`.
+
+### Gating priority — already correct upstream
+
+`lineage._cell_types` (lineage.py:115-122) already writes B/Plasma **first**, i.e. at the
+*lowest* precedence, so more frequent immune types claim their cells before a CD20 call stands;
+a CD20+CD68+ cell resolves to Macrophage. `IMMUNE_PRECEDENCE` records this so a CODEX-specific
+rewrite cannot silently reintroduce the inverted order.
+
+## 5. Two prevalence anomalies to resolve before trusting an immune sub-call
+
+| marker | cohort % | per-donor min–max |
+|---|---:|---|
+| CD8a | 17.66% | 0.59% – **59.80%** |
+| HLADR | 36.54% | 0.81% – **62.83%** |
+
+Neither is biologically plausible — 59.8% of one donor's cells being CD8a+ is not a T-cell
+frequency. The 2-component Otsu fit is landing **inside the background** on those donors: the
+same failure class as the near-zero-prevalence trap, from the opposite direction. CD8a anchors
+the T-cell subtype split, so this must be resolved before any CD4/CD8 call is trusted.
