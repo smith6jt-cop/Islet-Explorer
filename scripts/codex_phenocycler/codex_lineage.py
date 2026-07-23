@@ -128,17 +128,44 @@ MARKER_INPUT_FLOOR_METHODS = {
     "CHGA":   MAX_LINEAR_OTSU_TRIANGLE_FLOOR,  # Triangle 798 > Otsu 716 -- both must call it high
 }
 
-# Median donor-local floor per marker, and the min-max spread across the 15 donors. Recorded so a
-# rerun that lands far outside these is caught as a regression rather than accepted silently.
-# The spread is the whole reason the floors are donor-local: PGP9.5 varies 10.5x, CHGA 6.0x.
-OBSERVED_FLOORS = {          # marker: (median, min, max, pct_high_at_median)
-    "CD45":   (2871.7, 1812, 6653, 2.16),
-    "ECAD":  (12622.9, 8384, 17170, 32.05),
-    "CD31":   (3084.9, 1473, 6156, 4.42),
-    "PGP9.5": (5547.0,  738, 7751, 1.70),
-    "VIM":    (4459.5, 2593, 6394, 4.52),
-    "panCK":  (4223.8, 3129, 7970, 15.80),
-    "CHGA":    (950.9,  250, 1498, 1.42),
+# Median donor-local floor per marker, measured on the REDSEA-CORRECTED parquet -- which is what
+# RESTORE actually reads. Recorded so a rerun landing far outside these is caught as a regression.
+# The spread is the whole reason the floors are donor-local: CHGA varies 11.4x, PGP9.5 10.1x.
+#
+# NOTE the raw-vs-corrected difference. Floors measured on the raw QuPath means are NOT valid
+# post-REDSEA: spillover subtraction lowers every one of them, by -3.8% (CD31) to -40% (CHGA),
+# with ECAD -27% and panCK -21.7%. The Otsu/Triangle METHOD assignment is unchanged either way --
+# CHGA remains the sole marker where Triangle exceeds Otsu -- but the values are not
+# interchangeable. Re-measure after any REDSEA parameter change.
+OBSERVED_FLOORS = {          # marker: (median, pct_high_at_median, spread_x) -- post-REDSEA
+    "CD45":   (2641.3,  1.91,  3.6),
+    "ECAD":   (9213.8, 29.24,  2.0),
+    "CD31":   (2968.0,  4.16,  4.1),
+    "PGP9.5": (4658.8,  1.62, 10.1),
+    "VIM":    (4176.3,  4.04,  2.5),
+    "panCK":  (3308.8, 14.05,  2.6),
+    "CHGA":    (570.8,  1.23, 11.4),
+}
+OBSERVED_FLOORS_RAW = {      # pre-REDSEA, for reference only -- do NOT feed these to RESTORE
+    "CD45": 2871.7, "ECAD": 12622.9, "CD31": 3084.9, "PGP9.5": 5547.0,
+    "VIM": 4459.5, "panCK": 4223.8, "CHGA": 950.9,
+}
+
+# Fraction of cells REDSEA clamped to ZERO, cohort median (max donor in parentheses). Recorded
+# because it is large, gate-relevant, and NOT what Senior saw: its comparable figures were CD31
+# 25.7%, VIM 18.1%, CD44 16.8%. Two of the five compartment gates are materially affected --
+# VIM loses ~40% of cells cohort-wide and 54.6% on donor 6534, ECAD ~31%. Subtract-only
+# compensation cannot create signal, so these are cells whose apparent positivity WAS neighbour
+# bleed; but a gate marker zeroed in half the cells shifts the Mesenchymal residual, so check
+# Other% and the Mesenchymal fraction against the pre-REDSEA run before accepting the first pass.
+REDSEA_ZERO_CLAMP = {        # marker: (cohort_median_pct, worst_pct, worst_donor)
+    "CD45":   (16.6, 32.3, "6534"),
+    "ECAD":   (31.1, 35.8, "6505"),
+    "CD31":   (20.8, 28.4, "6450"),
+    "PGP9.5": (17.4, 29.7, "6450"),
+    "VIM":    (39.7, 54.6, "6534"),
+    "panCK":  (28.9, 39.6, "6534"),
+    "CHGA":    (4.5,  6.8, "6549"),
 }
 
 

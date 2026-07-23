@@ -133,6 +133,20 @@ def install_patches() -> None:
     _redsea.qptiff_channels = codex_qptiff_channels
 
 
+def _run_one(donor: str, *, cfg, params):
+    """Worker entry point for the per-donor pool.
+
+    Re-installs the patches inside the worker. On Linux/CPython 3.13 the pool forks, so the
+    parent's patched module state is inherited and this is redundant -- but the default start
+    method is scheduled to change, and a spawned worker would re-import `phenocycler.redsea`
+    clean and silently run Senior's `resolve_paths`/`qptiff_channels` instead. That failure is
+    not loud: `qptiff_channels` would return ch0..chN and the run would complete with unjoinable
+    columns. Cheap insurance against a very expensive silent wrong answer.
+    """
+    install_patches()
+    return _redsea.process_donor(donor, cfg, params)
+
+
 def make_config(data_dir: Path) -> PipelineConfig:
     # images_dir is unused once resolve_paths is patched, but set it truthfully anyway.
     from codex_panel import LOCAL_IMAGES
@@ -172,9 +186,43 @@ def main() -> int:
 
     from phenocycler.redsea import RedseaParams
     params = RedseaParams()
-    for d in donors:
-        print(f"=== {d} ===")
-        _redsea.process_donor(d, cfg, params)
+
+    # Skip donors already done, so an interrupted cohort run resumes instead of restarting.
+    out_dir = cfg.cells_redsea_dir
+    todo = [d for d in donors if not list((out_dir / f"donor_id={d}").glob("*.parquet"))]
+    if len(todo) < len(donors):
+        print(f"Skipping {len(donors) - len(todo)} already-corrected donors: "
+              f"{sorted(set(donors) - set(todo), key=int)}")
+    if not todo:
+        print("Nothing to do.")
+        return 0
+
+    if args.jobs > 1:
+        from functools import partial
+
+        from phenocycler.parallel import map_donors, resolve_jobs
+        n = resolve_jobs(args.jobs, len(todo))
+        print(f"Running {len(todo)} donors across {n} processes")
+        # functools.partial over a TOP-LEVEL function, never a lambda: the callable is pickled
+        # across the process boundary, and a closure fails with
+        # "Can't get local object 'main.<locals>.<lambda>'".
+        results = map_donors(partial(_run_one, cfg=cfg, params=params), todo,
+                             n_jobs=n, ordered=True, on_error="log")
+        failed = [d for d, r in zip(todo, results) if isinstance(r, Exception) or r is None]
+    else:
+        failed = []
+        for i, d in enumerate(todo, 1):
+            print(f"=== {d}  ({i}/{len(todo)}) ===", flush=True)
+            try:
+                _run_one(d, cfg, params)
+            except Exception as e:                      # keep going; report at the end
+                print(f"  FAILED {d}: {e}", flush=True)
+                failed.append(d)
+
+    print(f"\n{len(todo) - len(failed)}/{len(todo)} donors corrected -> {out_dir}")
+    if failed:
+        print(f"FAILED: {sorted(failed, key=int)}", file=sys.stderr)
+        return 1
     return 0
 
 
