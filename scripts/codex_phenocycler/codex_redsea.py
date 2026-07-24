@@ -34,11 +34,11 @@ import os
 import sys
 from pathlib import Path
 
-# Locate the Phenocycler_Analysis package. Override with PHENOCYCLER_ROOT. The plan is to consume
-# it as a git submodule + `pip install -e .`; until then this keeps the scripts runnable standalone.
+# Locate the Phenocycler_Analysis package: the vendored submodule at repo-root external/, overridable
+# with PHENOCYCLER_ROOT (e.g. point it at a working-tree checkout for upstream development).
 _PA = Path(os.environ.get(
     "PHENOCYCLER_ROOT",
-    "/home/smith6jt/IO60panc2nd/Islet-Explorer-Senior/Phenocycler_Analysis",
+    str(Path(__file__).resolve().parents[2] / "external" / "Phenocycler_Analysis"),
 ))
 if not (_PA / "phenocycler").is_dir():
     raise SystemExit(

@@ -15,8 +15,11 @@ ORDER CONSTRAINTS (enforced by `validate_order()`, not left to comment disciplin
    cleared into the epithelial bin before the neural gate runs.
 
 Everything else is free. ECAD and CD45 may swap -- leukocytes and epithelium are cleanly
-exclusive -- so clearing the 85-90% epithelial mass first to shrink the pool for every later
-gate is equally valid. `COMPARTMENT_ORDER_EPITHELIAL_FIRST` is that variant.
+exclusive -- so clearing the epithelial mass first to shrink the pool for every later gate is
+equally valid (order-invariant on the residual: 0.00 pp of Other). `COMPARTMENT_ORDER_EPITHELIAL_FIRST`
+is that variant. (NB: a pancreas section is ~72% epithelial by the app's labels, not the "85-90%"
+once stated here; and at donor-local FLOORS only ~28% reaches Epithelial -- floors are not positivity
+thresholds, see NOTES["other_composition"]. RESTORE supplies the actual call.)
 
 SMA is deliberately NOT a compartment gate: SMA+ is a subset of VIM+, so it adds nothing here.
 It comes back at subtyping to make the mesenchymal call positive rather than residual.
@@ -42,7 +45,10 @@ COMPARTMENT_GATES = {
 }
 RESIDUAL = "Other"
 
-# The equally-valid variant: clear the epithelial mass first to shrink every later gate's pool.
+# A documented EQUIVALENCE, not a live decision: clearing the epithelial mass first is order-invariant
+# on the residual, so it changes Other% by EXACTLY 0.00 pp and moves <= 0.42 pp of any single donor's
+# cells (only the CD45+/ECAD+ intersection). Measured 2026-07-23 on both raw and REDSEA parquets. Do
+# not spend a review round choosing between the two orders.
 COMPARTMENT_ORDER_EPITHELIAL_FIRST = ["Epithelial", "Immune", "Endothelial", "Neural", "Mesenchymal"]
 
 SEGMENTATION_MARKER = "DAPI"          # not a phenotype gate
@@ -93,32 +99,75 @@ FIRST_PASS_PAIRS = [
     ["VIM",    "ECAD"],
 ]
 
-# --- Invalid reference markers ------------------------------------------------------------------
-# Mirrors `restore_validation.INVALID_REFERENCE_MARKERS`, added upstream in 09a2069 (2026-07-23),
-# so both codebases state the rule in the same terms.
+# --- Markers excluded from RESTORE in BOTH roles ------------------------------------------------
+# Mirrors upstream `restore_validation.RESTORE_EXCLUDED_MARKERS` (committed 92f379a, 2026-07-23,
+# "Exclude CD20 from RESTORE entirely (both roles); defer to a post-lineage pass"). This is STRONGER
+# than the earlier `INVALID_REFERENCE_MARKERS`: an excluded marker gets no threshold, no divisor and
+# no positivity call from RESTORE at all, as EITHER target or reference, and is deferred to a
+# validated second pass once the broad cell types are settled.
 #
-# Upstream's diagnostic is sharper than prevalence: a reference's positive cells ARE the target's
-# negative control, and CD20's exclusive arm ran **41-2,026 cells per donor** against 2,206-50,000
-# for the structural markers. On the v6 screen the three CD20-referenced pairs produced 60 rows,
-# 15 of them INVERTED fits thresholding an abundant target against a handful of reference cells --
-# worst case 50 reference cells for 30,507 target cells (610:1) -- plus 4 of the 22 degenerate-bound
-# rows and 4 MODEL_UNSTABLE rows.
+# Upstream's rationale (both roles): as a REFERENCE its positive cells would BE the negative control,
+# and its exclusive arm ran 41-2,026 cells per donor against 2,206-50,000 for the structural markers
+# (inverted fits, e.g. 50 reference cells thresholding 30,507 target cells). As a TARGET its Step-1
+# anchor bottomed out at **14 cells** with anchor recovery down to **0.217**, and reviewer inspection
+# of the CD20 review PDFs found overcalling throughout with both qptiff channels stretched from
+# near-background into block-like tile artifacts. CD20 is the weakest channel in the panel after
+# CD163 (display ceiling median ~503 counts vs ~6,800 for E-cadherin).
 #
-# The CODEX measurement agrees and adds the donor-variability angle: CD20 is 1.58% of cells
-# cohort-wide but swings 0.32%-4.85% across donors (15.2x), where CD3e is *rarer* (0.86%) yet 4x
-# more stable. Abundance and stability both matter; CD20 fails on both counts as a reference.
-INVALID_REFERENCE_MARKERS = {
+# The CODEX measurement agrees on the donor-variability angle (kept for the record): at donor-local
+# floors CD20 swings 0.32%-4.85% across donors (15.2x) where CD3e is rarer (0.86%) yet 4x more stable.
+RESTORE_EXCLUDED_MARKERS = {
     "CD20": (
-        "B cells are sparse in pancreas even with inflammation or disease, so CD20-positive cells "
-        "cannot define a negative-control population; use CD3e as the immune reference."
+        "B cells are sparse in pancreas even with inflammation or disease, and CD20 is too weak and "
+        "too donor-variable to serve in EITHER RESTORE role: as a reference its positive cells would "
+        "be the negative control (14-2,026 cells/donor), as a target its Step-1 anchor bottomed out "
+        "at 14 cells (anchor recovery 0.217) with reviewer-confirmed overcalling. Excluded from "
+        "RESTORE; deferred to a post-lineage B-cell pass. Its compartment means are still extracted."
     ),
 }
 
+# Extracted from QuPath but NOT screened: takes no part in the pair web, yet its compartment means
+# ride along (CellCompartments.tsv already carries all 35 markers x 4 compartments) so the deferred
+# B-cell pass needs no re-export. Mirrors upstream `restore_validation.DEFERRED_EXTRACTION_MARKERS`.
+DEFERRED_EXTRACTION_MARKERS = tuple(RESTORE_EXCLUDED_MARKERS)
+
+# The upstream commit this CODEX config is aligned to. The adapter (codex_restore_validation.py)
+# asserts the consumed phenocycler package matches this, so upstream drift fails loudly rather than
+# silently re-screening CD20 or reverting the both-role guard.
+# 92f379a -> 55b904d (2026-07-23): audited, doc-only -- corrects the CD3e<-CD163 review caption
+# (confirms CD163 is a weak-but-valid reference, reference_fold 4.4x); no pair/marker/floor/scoring
+# change, so the CODEX contract is unaffected.
+# 55b904d -> 58d3738 (2026-07-23): commits the v7 divisor-gated call (was the uncommitted working-tree
+# change the METHOD_VERSION tripwire caught below); no floor/pair/divisor/clip/marker change.
+# 58d3738 -> 8db37af (2026-07-24): upstream is now VENDORED as a submodule (external/Phenocycler_Analysis)
+# instead of a working-tree checkout, so this SHA pin is authoritative rather than advisory. v7 -> v8:
+# audited ADDITIVE / contract-safe -- adds phenocycler/reference_selection.py (the Gate-2 reference>=target
+# frequency rule + ACCEPTED_REFERENCE_OVERRIDES) and a frozen ACCEPTED_PAIRS tuple with import-time
+# validation. The ONLY new raises are the ACCEPTED_PAIRS-in-CANDIDATE_PAIRS membership check and a
+# min_reference_to_target_ratio>0 guard. No change to MARKER_INPUT_FLOOR_METHODS, pair_input_qc,
+# canonical_divisor, or input_qc_upper_quantile -- so CODEX's accepted first-pass divisors and 88/90
+# screen states are unaffected. (The level-2 pair-web redesign will consume reference_selection.)
+UPSTREAM_PINNED_SHA = "8db37af"
+
+# METHOD_VERSION is the finer tripwire: the SHA pin above only catches COMMITTED moves, but upstream
+# is developed with UNCOMMITTED working-tree edits, and METHOD_VERSION bumps ONLY on a real method
+# change -- so this catches those even before they are committed. v6 -> v7 (2026-07-23, working tree
+# ahead of 55b904d): the positive CALL is now divisor-gated only (`value > divisor`); the former
+# NNMF-target-component rescue below the divisor is dropped (negligible for clean markers <=0.3 pp;
+# it doubled high-background markers like CD11b). Divisors, floors, pairs and the clip are UNCHANGED,
+# so CODEX's contract and its screen states/divisors are unaffected -- only per-cell calls + the
+# review-overlay category labels change. When this trips, re-audit and bump.
+# v7 -> v8 (2026-07-24, committed at 8db37af): adds Gate-2 reference selection + the frozen ACCEPTED_PAIRS
+# set. Purely additive and contract-safe (audited above at UPSTREAM_PINNED_SHA); CODEX screen states and
+# divisors are unaffected -- only new machinery the level-2 redesign opts into.
+EXPECTED_METHOD_VERSION = "restore-pair-validation-v8"
+
 # --- Immune subtyping pairs (second pass, inside the Immune compartment) ------------------------
-# CD20 IS NEVER A COUNTERPART. Senior used it as the reference for CD3e, CD4, CD8, FOXP3,
-# Granzyme_B, CD56 and CD57.
+# CD20 IS NEITHER A COUNTERPART NOR A TARGET here (aligned to upstream 92f379a). It is excluded from
+# RESTORE in both roles and deferred; there is no `["CD20", ...]` pair. So this list has 6 pairs, and
+# CODEX's full screened set is FIRST_PASS_PAIRS(5) + IMMUNE_PAIRS(6) + ENDOCRINE_SPLIT_PAIR = 12.
 #
-# "Replace with CD3e" holds for the myeloid and B targets but NOT for CD4/CD8a, and the reason is
+# "Replace CD20 with CD3e" holds for the myeloid targets but NOT for CD4/CD8a, and the reason is
 # biological, not statistical: CD4 and CD8a are T-cell co-receptors, so CD3e is the one marker
 # guaranteed NOT to be exclusive of them. A CD8+CD3e+ cell is the definition of a CD8 T cell.
 # Measured overlap confirms it -- 3.44% (CD8a) and 5.59% (CD4) look acceptable only because each
@@ -133,7 +182,6 @@ IMMUNE_PAIRS = [
     ["CD3e",  "CD68"],    # was CD20. 4.85% overlap; CD68 is 2.00% prevalent and 2.9x-stable
     ["CD68",  "CD3e"],    # already correct in Senior -- CD68 never referenced CD20
     ["CD163", "CD3e"],    # already correct
-    ["CD20",  "CD3e"],    # CD20 stays a TARGET (it must be, to get a positivity call at all)
     ["CD4",   "CD31"],    # was CD20. Endothelium is CD4-negative; 5.88% overlap, 4.32% prevalent
     ["CD8a",  "CD68"],    # was CD20. Macrophages are CD8a-negative; 1.74% overlap
     ["HLADR", "CD31"],    # functional/activation pass -- weaker RESTORE assumption, flagged upstream
@@ -144,11 +192,17 @@ IMMUNE_PAIRS = [
 # CD20 call is allowed to stand, so a CD20+CD68+ cell resolves to Macrophage rather than B. This
 # is already how upstream orders it (lineage.py:115-122) -- recorded here so a CODEX-specific
 # rewrite of `_cell_types` cannot silently reintroduce the inverted order.
+#
+# B IS NOW A DELIBERATE ABSTENTION, not a call (aligned to upstream 92f379a). CD20 is excluded from
+# RESTORE, so no `CD20_pos` column is produced and the B gate never fires; CODEX also lacks CD79a
+# (Senior's B-cell fallback). Until the deferred B-cell pass lands, Immune cells that would be B
+# remain "Immune-other" -- an honest abstention, NOT a 0% B-cell call. The B gate is retained so the
+# deferred pass needs no edit here, matching upstream's lineage._cell_types comment.
 # DC / Neutrophil / Plasma / NK are unreachable in the 31-plex (no CD11c, CD209, MPO, CD38,
 # CD56/CD57) and are omitted rather than left to evaluate as all-False.
 IMMUNE_PRECEDENCE = ["Immune-other", "B", "Macrophage", "T"]
 IMMUNE_SUBTYPE_GATES = {
-    "B":          ["CD20"],
+    "B":          ["CD20"],   # NOT screened by RESTORE -> abstention until the deferred B-cell pass
     "Macrophage": ["CD68", "CD163"],
     "T":          ["CD3e"],
 }
@@ -165,25 +219,47 @@ IMMUNE_SUBTYPE_GATES = {
 # CD20. So "CD20+ = 1.58% of cells" was measuring mostly noise; the CD45-gated figure of ~0.09%
 # is a plausible pancreatic B-cell rate.
 #
-# Senior notes B cells still reach Immune via CD79a, which this panel lacks. CODEX does not need
-# it: requiring CD45+ before CD20 is consulted is what makes the call trustworthy here, and a
-# CD20-only ECAD+ cell correctly becomes Epithelial rather than B.
+# Senior notes B cells still reach Immune via CD79a, which this panel lacks -- so with CD20 excluded
+# from RESTORE (92f379a), B is an abstention (see IMMUNE_SUBTYPE_GATES above), not an Epithelial
+# reroute. The measurement below is KEPT as the evidence that CD20 is untrustworthy at the single-cell
+# level (92.9% of CD20+ cells are CD45-negative, half of those ECAD+ epithelium), which is exactly
+# why upstream deferred it -- but it no longer supports "CD20 stays a target": there is no CD20 call.
 CD20_NOT_A_COMPARTMENT_ANCHOR = True
-CD20_STRAY_SIGNAL = {           # measured post-REDSEA at donor-local floors
+CD20_STRAY_SIGNAL = {           # measured post-REDSEA at donor-local floors; retained as evidence only
     "cd20_pos": 42183,
     "cd20_and_cd45_pos": 2450,          # 5.8% -- the plausible B-cell population
     "cd20_only": 39197,                 # 92.9%, of which 48.6% are ECAD+
     "cd20_only_ecad_pos_pct": 48.6,
 }
 
-# Prevalence anomalies to resolve BEFORE trusting an immune sub-call. Measured post-REDSEA at the
-# donor-local Otsu floors: these two are not biologically plausible and indicate the 2-component
-# fit is landing inside the background on some donors -- the same failure class as the
-# near-zero-prevalence trap, from the opposite direction.
-PREVALENCE_ANOMALIES = {
-    # marker: (cohort_pct, per_donor_min, per_donor_max)
-    "CD8a":  (17.66, 0.59, 59.80),   # 59.8% of one donor's cells CD8a+ is not biology
-    "HLADR": (36.54, 0.81, 62.83),
+# The CD8a/HLADR "prevalence anomaly" -- RESOLVED 2026-07-23, and it was NOT a marker property.
+#
+# MECHANISM: upstream `raw_otsu_floor` CLIPS at the 99.5th percentile before running Otsu
+# (restore_validation.py:772-804; the clip quantile is `input_qc_upper_quantile`, default 0.995). On
+# the 2-3 donors where a sparse marker's positive rate is BELOW 0.5% (CD8a on 112/6356, HLADR on
+# 6516/6356/6505, CHGA on 6548/6550/6551), the entire positive tail sits above p99.5, so the clip
+# deletes it and Otsu bisects background. The bright cells are still there (6356 CD8a p99.9 = 23,792,
+# max 48,684) -- the clipped threshold just cannot see them, landing at ~median instead of ~14,000.
+#
+# The distributions are NORMAL (cohort dynamic range p99.5/median: CD8a 70, HLADR 31, HIGHER than
+# CD68's 35). The recorded 17.66/36.54 figures were the REDSEA-aggravated ones; the operative RAW
+# figures were 6.6%/7.4%, concentrated on those 2-3 donors.
+#
+# FIX (validated on the actual RESTORE fit, not just the floor): screen the immune pairs UNCLIPPED
+# (`input_qc_upper_quantile = 1.0`). Measured donor 6356: CD8a<-CD68 MODEL_UNSTABLE (floor 350 at
+# median, divisor 349) -> VALID (floor 10,671 in the tail, divisor 1,343); HLADR<-CD31 MODEL_UNSTABLE
+# -> VALID (floor 4,735). The good donor 6534 is unaffected (VALID both ways). Unclipped Otsu gives
+# CD8a 0.6% / HLADR 0.5% cohort, sane and stable on all 15 donors, with CD8a+/CD3e+ ~= 0.95.
+# `max(Otsu, Triangle)` was a REJECTED band-aid (a disguised p98-99 quantile cut). So the immune
+# markers stay LINEAR_OTSU; the CLIP -- not the statistic -- is the control. The first-pass pairs keep
+# the locked 0.995 clip (they were never broken; unclipping only perturbs their divisors).
+#
+# Clip applied to the immune screen. The first-pass screen keeps upstream's locked 0.995.
+IMMUNE_SCREEN_UPPER_QUANTILE = 1.0
+CLIP_ARTIFACT_DONORS = {          # marker: donors where the p99.5 clip broke plain Otsu (RAW)
+    "CD8a":  ["112", "6356"],
+    "HLADR": ["6516", "6356", "6505"],
+    "CHGA":  ["6548", "6550", "6551"],
 }
 
 # Optional same-pass endocrine/exocrine split INSIDE the Epithelial compartment. CHGA is one
@@ -204,53 +280,78 @@ ENDOCRINE_SPLIT_PARENT = "Epithelial"
 # own: Senior's map has no CD45 and no PGP9.5 (its panel has neither).
 #
 # Assignments below are MEASURED, not inherited (all 15 donors, raw QuPath means -- see
-# docs/codex_restore_pairs.md). Triangle falls below Otsu for all five gate markers, so
-# max(Otsu, Triangle) reduces to plain Otsu and the second statistic buys nothing. CHGA is the
-# sole exception -- Triangle EXCEEDS Otsu there, tightening 2.21% -> 1.42% high, the same
-# signature that earned CD3e/CD20 their two-statistic floor in Senior.
+# docs/codex_restore_pairs.md). Triangle falls below Otsu for all five STRUCTURAL gate markers
+# (CD45/ECAD/CD31/PGP9.5/VIM), so max(Otsu, Triangle) reduces to plain Otsu there and the second
+# statistic buys nothing. CHGA is the exception -- Triangle EXCEEDS Otsu on 9/15 donors (RAW),
+# tightening cohort-mean 5.30% -> 1.50% high. This "Triangle < Otsu" claim holds ONLY for the six
+# abundant structural markers; it does NOT generalise to the sparse immune markers (Triangle > Otsu
+# for CD8a 2/15, CD3e 6/15, HLADR 7/15 on RAW), which is exactly why upstream keeps CD3e/CD20 on
+# max() and why floor_method() fails closed rather than letting Senior's map be inherited blindly.
 LINEAR_OTSU_FLOOR = "linear_otsu"
 MAX_LINEAR_OTSU_TRIANGLE_FLOOR = "max_linear_otsu_triangle"
 
+# Measured by `codex_floors.py` on the RAW parquet, all 15 donors. The rule (codex_floors.choose_method):
+# max(Otsu,Triangle) iff a marker is BOTH low-dynamic-range (min p99.5/median < 7) AND sparse
+# (< 10% at the max floor); plain Otsu otherwise. `min_dynrange` is the per-donor minimum of
+# p99.5/median -- the predictor of the p99.5-clip failure. Re-derive with `python codex_floors.py`.
 MARKER_INPUT_FLOOR_METHODS = {
-    "CD45":   LINEAR_OTSU_FLOOR,             # Triangle 746 << Otsu 2872
-    "ECAD":   LINEAR_OTSU_FLOOR,             # Triangle 3124 << Otsu 12623
-    "CD31":   LINEAR_OTSU_FLOOR,             # Triangle 603 << Otsu 3085
-    "PGP9.5": LINEAR_OTSU_FLOOR,             # Triangle 543 << Otsu 5547
-    "VIM":    LINEAR_OTSU_FLOOR,             # Triangle 1151 << Otsu 4460
-    "panCK":  LINEAR_OTSU_FLOOR,             # Triangle 2238 < Otsu 4093 (max() moves 15.89->15.80%)
-    "CHGA":   MAX_LINEAR_OTSU_TRIANGLE_FLOOR,  # Triangle 798 > Otsu 716 -- both must call it high
+    # --- structural gates: high dynamic range, plain Otsu is safe -----------------------------
+    "CD45":   LINEAR_OTSU_FLOOR,             # min_dynrange 32.5, prev 2.97%
+    "ECAD":   LINEAR_OTSU_FLOOR,             # min_dynrange  4.0 but ABUNDANT (31.25%) -> Otsu, not max
+    "CD31":   LINEAR_OTSU_FLOOR,             # min_dynrange 55.7, prev 4.56%
+    "PGP9.5": LINEAR_OTSU_FLOOR,             # min_dynrange 83.3, prev 2.05%
+    "VIM":    LINEAR_OTSU_FLOOR,             # min_dynrange 97.7, prev 4.89%
+    "panCK":  LINEAR_OTSU_FLOOR,             # min_dynrange 15.5, ABUNDANT (15.73%)
+    # --- myeloid: sparse but high dynamic range, plain Otsu is safe at 0.995 -------------------
+    "CD68":   LINEAR_OTSU_FLOOR,             # min_dynrange 13.2, prev 2.09%
+    "CD163":  LINEAR_OTSU_FLOOR,             # min_dynrange 22.7, prev 1.79%
+    # --- lymphocyte/activation: plain Otsu, but screened UNCLIPPED (IMMUNE_SCREEN_UPPER_QUANTILE).
+    #     At the locked 0.995 clip these break on the 2-3 low-rate donors; unclipped they are clean on
+    #     all 15 (CD8a 0.6%, HLADR 0.5%, CD3e 0.6%, CD4 0.8%) and the RESTORE fit goes VALID. max() was
+    #     rejected -- see the CD8a/HLADR resolution note above. CHGA stays max() because it rides the
+    #     first-pass run at the locked 0.995 clip, where its divisor is robust.
+    "CHGA":   MAX_LINEAR_OTSU_TRIANGLE_FLOOR,  # first-pass @ 0.995; Triangle wins 9/15, divisor robust
+    "CD3e":   LINEAR_OTSU_FLOOR,             # immune @ unclipped -> 0.6% cohort, sane on all 15
+    "CD4":    LINEAR_OTSU_FLOOR,             # immune @ unclipped -> 0.8%
+    "CD8a":   LINEAR_OTSU_FLOOR,             # immune @ unclipped -> 0.6%, CD8a+/CD3e+ ~= 0.95
+    "HLADR":  LINEAR_OTSU_FLOOR,             # immune @ unclipped -> 0.5%
 }
 
-# Median donor-local floor per marker, measured on the REDSEA-CORRECTED parquet -- which is what
-# RESTORE actually reads. Recorded so a rerun landing far outside these is caught as a regression.
-# The spread is the whole reason the floors are donor-local: CHGA varies 11.4x, PGP9.5 10.1x.
+# CORRECTED 2026-07-23: RESTORE floors on the RAW parquet, NOT the REDSEA one. Upstream's
+# `pair_input_qc(target_raw, reference_raw, ...)` (restore_validation.py:1906) floors on
+# `raw__{marker}`, and `load_validation_sample` (:1499-1512) np.allclose-asserts that `raw__{m}`
+# equals the UNCORRECTED QuPath `Cell: {m}: Mean`. REDSEA enters only as the divisor/separator axis
+# (`redsea__{m}`). So `OBSERVED_FLOORS_RAW` below is the OPERATIVE table; `OBSERVED_FLOORS`
+# (post-REDSEA) is reference-only. The earlier note here had this exactly backwards, and the
+# HANDOFF's "measure floors post-REDSEA" instruction was wrong on the same premise.
 #
-# NOTE the raw-vs-corrected difference. Floors measured on the raw QuPath means are NOT valid
-# post-REDSEA: spillover subtraction lowers every one of them, by -3.8% (CD31) to -40% (CHGA),
-# with ECAD -27% and panCK -21.7%. The Otsu/Triangle METHOD assignment is unchanged either way --
-# CHGA remains the sole marker where Triangle exceeds Otsu -- but the values are not
-# interchangeable. Re-measure after any REDSEA parameter change.
-OBSERVED_FLOORS = {          # marker: (median, pct_high_at_median, spread_x) -- post-REDSEA
+# The post-REDSEA table is still recorded (correction lowers every floor, -3.8% CD31 to -40% CHGA)
+# as a diagnostic, but a rerun should be regression-checked against OBSERVED_FLOORS_RAW.
+OBSERVED_FLOORS = {          # marker: (median, pct_high_at_median, spread_x) -- post-REDSEA, REFERENCE ONLY
     "CD45":   (2641.3,  1.91,  3.6),
     "ECAD":   (9213.8, 29.24,  2.0),
     "CD31":   (2968.0,  4.16,  4.1),
     "PGP9.5": (4658.8,  1.62, 10.1),
     "VIM":    (4176.3,  4.04,  2.5),
     "panCK":  (3308.8, 14.05,  2.6),
-    "CHGA":    (570.8,  1.23, 11.4),
+    "CHGA":    (811.9,  1.33,  4.3),   # was (570.8,1.23,11.4): a chimera taking floor+spread from
+                                       # plain Otsu while CHGA is registered as max(Otsu,Triangle).
+                                       # Corrected to the declared statistic (measured 2026-07-23).
 }
-OBSERVED_FLOORS_RAW = {      # pre-REDSEA, for reference only -- do NOT feed these to RESTORE
+OBSERVED_FLOORS_RAW = {      # pre-REDSEA -- THIS is what RESTORE floors on. Max-statistic for CHGA.
     "CD45": 2871.7, "ECAD": 12622.9, "CD31": 3084.9, "PGP9.5": 5547.0,
-    "VIM": 4459.5, "panCK": 4223.8, "CHGA": 950.9,
+    "VIM": 4459.5, "panCK": 4092.7, "CHGA": 950.9,   # panCK was 4223.8 (10th of 15); median is 4092.7
 }
 
-# Fraction of cells REDSEA clamped to ZERO, cohort median (max donor in parentheses). Recorded
-# because it is large, gate-relevant, and NOT what Senior saw: its comparable figures were CD31
-# 25.7%, VIM 18.1%, CD44 16.8%. Two of the five compartment gates are materially affected --
-# VIM loses ~40% of cells cohort-wide and 54.6% on donor 6534, ECAD ~31%. Subtract-only
-# compensation cannot create signal, so these are cells whose apparent positivity WAS neighbour
-# bleed; but a gate marker zeroed in half the cells shifts the Mesenchymal residual, so check
-# Other% and the Mesenchymal fraction against the pre-REDSEA run before accepting the first pass.
+# Fraction of cells REDSEA clamped to ZERO, cohort median (max donor in parentheses).
+#
+# RESOLVED 2026-07-23 (handoff issue 3, CLOSED, not a blocker): the clamp lands on BACKGROUND, not
+# on gate-positive cells. Mesenchymal moves only 2.95% -> 2.79% (-0.16 pp); only ~1.1% of raw-VIM+
+# cells clamp to zero, and the VIM-positive set has Jaccard 84-88% raw-vs-corrected. Decisive
+# counterfactual: with prevalence-matched corrected floors, pre/post Other differs by 0.15 pp and
+# Epithelial by 0.00 pp -- REDSEA does not change WHICH cells rank positive; the apparent +4.5 pp
+# Other shift is just the Otsu cut re-landing at a higher percentile of the corrected distribution.
+# It is moot for RESTORE anyway, which floors on RAW (see OBSERVED_FLOORS_RAW). Kept as a diagnostic.
 REDSEA_ZERO_CLAMP = {        # marker: (cohort_median_pct, worst_pct, worst_donor)
     "CD45":   (16.6, 32.3, "6534"),
     "ECAD":   (31.1, 35.8, "6505"),
@@ -260,6 +361,14 @@ REDSEA_ZERO_CLAMP = {        # marker: (cohort_median_pct, worst_pct, worst_dono
     "panCK":  (28.9, 39.6, "6534"),
     "CHGA":    (4.5,  6.8, "6549"),
 }
+
+# A hard ceiling discovered while closing issue 3: post-REDSEA only 69.03% of cells have ECAD > 0 at
+# all (per-donor 64.2%-80.5%), versus 99.97% on the raw parquet -- subtract-only over-subtraction on
+# the abundant acinar mass. No positive ECAD threshold can therefore assign more than ~69% of cells
+# to Epithelial on cells_redsea, and the five-gate nonzero union caps non-Other at 98.60%. This is
+# one more reason RESTORE (and its floors) run on RAW, where ECAD > 0 on essentially every cell.
+ECAD_NONZERO_POST_REDSEA = 0.6903
+FIVE_GATE_NONZERO_UNION_POST_REDSEA = 0.9860
 
 
 def floor_method(marker: str) -> str:
@@ -290,10 +399,16 @@ NOTES = {
         "2-component fit will find a positive mode."
     ),
     "other_composition": (
-        "Residual Other is small because CD45 sweeps up every leukocyte lineage a CD-specific "
-        "union misses (mast and plasma cells now land in Immune). What remains: adipocytes (no "
-        "perilipin; usually morphological), Schwann cells (no S100/SOX10 -- some caught by VIM), "
-        "and vimentin-dim quiescent stellate cells."
+        "CORRECTED 2026-07-23: at the donor-local FLOORS (a proxy, NOT RESTORE positivity), Other is "
+        "the LARGEST compartment, ~61% post-REDSEA / ~56% raw, and ~62% of it is app-labelled Acinar "
+        "(61% of all Acinar fails every gate). Epithelial lands at ~28% in a tissue the app puts at "
+        "~72% epithelial, and 67% of app-Beta cells route to Neural. This is expected of Otsu FLOORS "
+        "used as positivity calls -- the post-REDSEA ECAD floor (9214) sits ABOVE the raw ECAD median, "
+        "so Otsu splits the positive mode. It is NOT the acceptance verdict: RESTORE's per-image "
+        "divisor is what supplies positivity (and is measurably more permissive -- donor 6516 ECAD "
+        "divisor 9023 vs input floor 11834). The composition MUST be re-judged on RESTORE output "
+        "(plan Phase 5); if Other stays ~60% there, the gate marker set is reopened as measured "
+        "evidence. The old 'Other is small (adipocytes/Schwann/stellate)' claim was never measured."
     ),
     "intensity_floor": (
         "ABANDONED upstream. RESTORE's hardcoded `>50` co-positive prefilter survives only in the "
@@ -309,15 +424,19 @@ NOTES = {
 
 
 def no_rare_counterparts() -> None:
-    """No pair may use an invalid reference, or be a self-pair.
+    """No pair may use an EXCLUDED marker in either role, or be a self-pair.
 
     Assertions rather than comments because a bad reference yields plausible output rather than
-    an error. Same two rules upstream enforces at import in `restore_validation` (09a2069); kept
+    an error. Mirrors upstream's both-role import guard in `restore_validation` (92f379a); kept
     here because the CODEX pair sets never pass through `CANDIDATE_PAIRS`.
     """
     for tgt, cp in FIRST_PASS_PAIRS + IMMUNE_PAIRS + [ENDOCRINE_SPLIT_PAIR]:
-        if cp in INVALID_REFERENCE_MARKERS:
-            raise ValueError(f"{tgt} <- {cp}: {INVALID_REFERENCE_MARKERS[cp]}")
+        for m, role in ((tgt, "target"), (cp, "reference")):
+            if m in RESTORE_EXCLUDED_MARKERS:
+                raise ValueError(
+                    f"{tgt} <- {cp}: {m} is excluded from RESTORE in both roles (here as the "
+                    f"{role}). {RESTORE_EXCLUDED_MARKERS[m]}"
+                )
         if tgt == cp:
             raise ValueError(f"{tgt} cannot be its own reference")
     # CD4/CD8a are T-cell co-receptors: CD3e is definitionally NOT exclusive of them.
@@ -347,8 +466,12 @@ def assert_pairs_valid(marker_pairs) -> None:
     if not marker_pairs:
         raise ValueError("no marker_pairs supplied; CODEX pairs must always be passed explicitly")
     for tgt, cp in marker_pairs:
-        if cp in INVALID_REFERENCE_MARKERS:
-            raise ValueError(f"{tgt} <- {cp}: {INVALID_REFERENCE_MARKERS[cp]}")
+        for m, role in ((tgt, "target"), (cp, "reference")):
+            if m in RESTORE_EXCLUDED_MARKERS:
+                raise ValueError(
+                    f"{tgt} <- {cp}: {m} is excluded from RESTORE in both roles (here as the "
+                    f"{role}). {RESTORE_EXCLUDED_MARKERS[m]}"
+                )
         if tgt == cp:
             raise ValueError(f"{tgt} cannot be its own reference")
 
