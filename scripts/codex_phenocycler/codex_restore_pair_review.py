@@ -22,13 +22,17 @@ INPUTS the bundle needs (built here):
     context and is loaded with `n == canonical_n`, so the raw/redsea it is checked against must
     contain EXACTLY the same finite-in-both cell set. `build_bundle_inputs()` builds all three
     consistently (the ~47 all-NaN cells excluded from every tree).
-  * `results_dir` -- a COMPLETE `evaluate_locked_cohort` output (method_spec.json etc.). Use the
-    first-pass screen dir; the immune screen used the robust per-pair runner and has no method_spec.
+  * `results_dir` -- a COMPLETE screen output (method_spec.json etc.). `run_cohort_full_robust` writes
+    the full contract for BOTH level-2 clip groups, so each group's screen dir can feed a bundle.
+
+Two bundles, one per clip group (a bundle re-thresholds at its screen's recorded clip, so it can only
+shortlist that group's pairs). The 6 level-1/endocrine-split pairs are omitted (already reviewer-
+accepted at level 1). The FULL-compartment tree + clean raw/redsea on disk are the stale 13-marker
+level-1 ones, so the FIRST level-2 bundle must pass --force-build.
 
     conda activate scvi-env
-    # first-pass bundle (6 pairs, locked 0.995 clip):
-    python codex_restore_pair_review.py --results /data/codex_phenocycler/restore_validation/screen_first_pass \
-        --output /data/codex_phenocycler/restore_validation/review_first_pass
+    python codex_restore_pair_review.py --group clipped   --force-build   # 11 pairs, 0.995
+    python codex_restore_pair_review.py --group unclipped                 # 13 pairs, 1.0 (reuses trees)
 """
 
 from __future__ import annotations
@@ -53,17 +57,51 @@ import codex_panel  # noqa: E402
 import codex_restore_validation as crv  # noqa: E402
 from codex_panel import DONORS, image_path  # noqa: E402
 
-# CODEX first-pass shortlist: the 5 compartment pairs + the endocrine split. These are the reviewable
-# set with a complete evaluate_locked_cohort results dir (0.995 clip). The immune pairs are a separate
-# bundle (unclipped) built after the first-pass compartments are adjudicated.
-CODEX_SHORTLIST_PAIRS = tuple(tuple(p) for p in (cl.FIRST_PASS_PAIRS + [cl.ENDOCRINE_SPLIT_PAIR]))
+# Level-2 review shortlists, ONE per clip group (a bundle re-thresholds at its results dir's recorded
+# clip, so a bundle can only shortlist pairs from its own group). The 6 level-1/endocrine-split pairs
+# (ECAD/CD31/CD45/PGP9.5/VIM<-... + CHGA<-CD31) are OMITTED: they were reviewer-accepted at level 1 and
+# reproduced their exact divisors at v8 (8582/2580/2623/3411/3817/650), so they need no re-review.
+#
+# CLIPPED group (0.995): the new level-2 pairs whose target is not clip-sensitive.
+CODEX_SHORTLIST_CLIPPED = (
+    ("CD20", "ECAD"), ("CD68", "ECAD"), ("CD163", "ECAD"),
+    ("CK19", "CD31"), ("panCK", "CD31"),
+    ("GCG", "INS"), ("GCG", "panCK"),
+    ("CD34", "ECAD"), ("GAP43", "panCK"), ("B3TUBB", "panCK"), ("SMA", "ECAD"),
+)
+# UNCLIPPED group (1.0): the clip-sensitive targets (bright tail above p99.5). All new.
+CODEX_SHORTLIST_UNCLIPPED = (
+    ("CD3e", "ECAD"), ("CD4", "ECAD"), ("CD8a", "ECAD"), ("HLADR", "ECAD"), ("CD35", "ECAD"),
+    ("KRT14", "CD31"), ("SST", "INS"), ("SST", "panCK"), ("INS", "GCG"), ("INS", "panCK"),
+    ("PDPN", "ECAD"), ("CD44", "ECAD"), ("LGALS3", "CD31"),
+)
 CODEX_PAIR_RATIONALE = {
-    ("ECAD", "CD31"):   "epithelial compartment anchor; must exclude endothelial ECAD bleed",
-    ("CD31", "ECAD"):   "endothelial anchor; epithelial adjacency risk",
-    ("CD45", "ECAD"):   "pan-leukocyte immune gate; acinar-autofluorescence negative control",
-    ("PGP9.5", "panCK"): "neural anchor vs exocrine-restricted panCK (epCAM unavailable cohort-wide)",
-    ("VIM", "ECAD"):    "mesenchymal candidate; must exclude genuine epithelial Vimentin",
-    ("CHGA", "CD31"):   "endocrine-split anchor inside Epithelial; pan-endocrine chromogranin",
+    # --- clipped group ---
+    ("CD20", "ECAD"):   "B target, re-included after the both-role unwind; watch ECAD+ epithelial stray CD20",
+    ("CD68", "ECAD"):   "macrophage; ECAD counterpart (whole-scene threshold, interpreted within CD45+)",
+    ("CD163", "ECAD"):  "M2 macrophage; nested under CD68 at interpretation",
+    ("CK19", "CD31"):   "ductal epithelium; CD31 negative is undersized (endothelium sparse) but exclusive",
+    ("panCK", "CD31"):  "epithelial confirmatory; CD31 undersized like ECAD<-CD31 (accepted precedent)",
+    ("GCG", "INS"):     "alpha; INS reference undersized in T1D beta-loss -- compare the panCK comparator",
+    ("GCG", "panCK"):   "alpha exocrine comparator: is panCK a cleaner reference than the undersized INS?",
+    ("CD34", "ECAD"):   "capillary EC / resting fibroblast (dual-use, parent-resolved at interpretation)",
+    ("GAP43", "panCK"): "sprouting axons; exocrine-restricted panCK negative (epCAM dropped, 8/15-donor)",
+    ("B3TUBB", "panCK"): "pan-neural consensus with PGP9.5; panCK negative",
+    ("SMA", "ECAD"):    "smooth muscle / pericyte; positive mesenchymal call (VIM is the residual gate)",
+    # --- unclipped group ---
+    ("CD3e", "ECAD"):   "T anchor; ECAD counterpart; CD4/CD8 read WITHIN CD3e+ at interpretation",
+    ("CD4", "ECAD"):    "T-helper; interpret only within CD3e+ (monocytes are CD4-dim)",
+    ("CD8a", "ECAD"):   "T-cytotoxic; unclipped (bright tail above the 0.995 clip on low-rate donors)",
+    ("HLADR", "ECAD"):  "WEAKEST pair -- ductal upregulates HLA-II in T1D, so the ECAD negative is contaminated; flag conservative",
+    ("CD35", "ECAD"):   "FDC/TLS -- near-zero without lymphoid aggregates (prevalence-collapse marker)",
+    ("KRT14", "CD31"):  "basal/metaplastic -- near-zero in normal tissue (prevalence-collapse marker)",
+    ("SST", "INS"):     "delta; INS reference undersized in T1D -- compare the panCK comparator",
+    ("SST", "panCK"):   "delta exocrine comparator vs the undersized hormone reference",
+    ("INS", "GCG"):     "beta; GCG reference undersized in ND (alpha<beta) -- compare the panCK comparator",
+    ("INS", "panCK"):   "beta exocrine comparator vs the undersized hormone reference",
+    ("PDPN", "ECAD"):   "lymphatic EC / inflammatory-CAF (dual-use; CD31 gate disambiguates at interpretation)",
+    ("CD44", "ECAD"):   "activation/stemness STATE annotation, not a lineage class call",
+    ("LGALS3", "CD31"): "macrophage+ductal STATE annotation; CD31 undersized -- never a class call",
 }
 
 CELLS_RAW = crv.CELLS_RAW
@@ -78,19 +116,21 @@ def _codex_qptiff_channel_names(series):
     return codex_panel.ome_channel_names(tif.ome_metadata)
 
 
-def patch_review() -> None:
+def patch_review(shortlist=CODEX_SHORTLIST_CLIPPED, rationale=None) -> None:
     crv.patch_upstream()                                   # markers / floors / candidate pairs / pin
+    shortlist = tuple(tuple(p) for p in shortlist)
+    rationale = dict(rationale or {p: CODEX_PAIR_RATIONALE.get(p, "") for p in shortlist})
     # rpr imported MARKER_INPUT_FLOOR_METHODS into its OWN namespace at import time (used directly in
     # _add_review_suptitle), so patching rv's copy is not enough -- rebind rpr's too, to the CODEX map.
     rpr.MARKER_INPUT_FLOOR_METHODS = rv.MARKER_INPUT_FLOOR_METHODS
     rpr._qptiff_channel_names = _codex_qptiff_channel_names
-    rpr.SHORTLIST_PAIRS = CODEX_SHORTLIST_PAIRS
-    rpr.PAIR_RATIONALE = dict(CODEX_PAIR_RATIONALE)
+    rpr.SHORTLIST_PAIRS = shortlist
+    rpr.PAIR_RATIONALE = rationale
     # select_review_queue captured SHORTLIST_PAIRS as a default arg at def time -> re-bind it so the
     # queue is built for the CODEX pairs, not the stale Senior default.
     _orig_queue = rpr.select_review_queue.__wrapped__ if hasattr(rpr.select_review_queue, "__wrapped__") \
         else rpr.select_review_queue
-    def _codex_queue(evaluations, *, pairs=CODEX_SHORTLIST_PAIRS):
+    def _codex_queue(evaluations, *, pairs=shortlist):
         return _orig_queue(evaluations, pairs=pairs)
     rpr.select_review_queue = _codex_queue
 
@@ -157,26 +197,40 @@ def build_bundle_inputs(work: Path, donors=DONORS, *, force: bool = False):
     return sample, full, raw_clean, redsea_clean, images
 
 
-def build_bundle(results_dir: Path, output_dir: Path, *, work: Path = WORKDIR, donors=DONORS,
-                 force_build: bool = False):
-    patch_review()
+def build_bundle(results_dir: Path, output_dir: Path, *, shortlist=CODEX_SHORTLIST_CLIPPED,
+                 work: Path = WORKDIR, donors=DONORS, force_build: bool = False):
+    patch_review(shortlist)
     sample, full, raw_clean, redsea_clean, images = build_bundle_inputs(work, donors, force=force_build)
     return rpr.build_review_bundle(sample, full, raw_clean, redsea_clean, images, results_dir, output_dir)
 
 
+_GROUPS = {
+    "clipped":   (CODEX_SHORTLIST_CLIPPED,   "screen_l2_clipped",   "review_l2_clipped"),
+    "unclipped": (CODEX_SHORTLIST_UNCLIPPED, "screen_l2_unclipped", "review_l2_unclipped"),
+}
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--results", type=Path, required=True,
-                    help="a COMPLETE evaluate_locked_cohort output dir (needs method_spec.json)")
-    ap.add_argument("--output", type=Path, required=True)
+    ap.add_argument("--group", choices=sorted(_GROUPS), required=True,
+                    help="which clip group's bundle to build (its shortlist + its screen dir)")
+    ap.add_argument("--results", type=Path, default=None,
+                    help="override the screen dir (default WORKDIR/screen_l2_<group>)")
+    ap.add_argument("--output", type=Path, default=None,
+                    help="override the output dir (default WORKDIR/review_l2_<group>)")
     ap.add_argument("--work", type=Path, default=WORKDIR)
     ap.add_argument("--donors", nargs="+", default=None)
-    ap.add_argument("--force-build", action="store_true")
+    ap.add_argument("--force-build", action="store_true",
+                    help="rebuild the full-compartment tree + clean raw/redsea (REQUIRED the first "
+                         "level-2 build -- the on-disk trees are the stale 13-marker level-1 ones)")
     args = ap.parse_args()
     donors = args.donors or DONORS
-    print(f"Building CODEX review bundle for {len(CODEX_SHORTLIST_PAIRS)} pairs "
-          f"(results {args.results.name}, pin {cl.UPSTREAM_PINNED_SHA})")
-    outputs = build_bundle(args.results, args.output, work=args.work, donors=donors,
+    shortlist, screen_name, review_name = _GROUPS[args.group]
+    results = args.results or (WORKDIR / screen_name)
+    output = args.output or (WORKDIR / review_name)
+    print(f"Building CODEX {args.group} review bundle for {len(shortlist)} pairs "
+          f"(results {results.name}, pin {cl.UPSTREAM_PINNED_SHA}) -> {output}")
+    outputs = build_bundle(results, output, shortlist=shortlist, work=args.work, donors=donors,
                            force_build=args.force_build)
     for name, path in outputs.items():
         print(f"[review] {name}: {path}")

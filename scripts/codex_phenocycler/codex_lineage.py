@@ -100,35 +100,24 @@ FIRST_PASS_PAIRS = [
 ]
 
 # --- Markers excluded from RESTORE in BOTH roles ------------------------------------------------
-# Mirrors upstream `restore_validation.RESTORE_EXCLUDED_MARKERS` (committed 92f379a, 2026-07-23,
-# "Exclude CD20 from RESTORE entirely (both roles); defer to a post-lineage pass"). This is STRONGER
-# than the earlier `INVALID_REFERENCE_MARKERS`: an excluded marker gets no threshold, no divisor and
-# no positivity call from RESTORE at all, as EITHER target or reference, and is deferred to a
-# validated second pass once the broad cell types are settled.
+# EMPTY at level 2 (2026-07-24): CD20 is RE-INCLUDED as a B target (`CD20 <- ECAD`, in LEVEL2_PAIRS)
+# per the authoritative level-2 spec. This is a deliberate CODEX-side UNWIND of the pinned upstream
+# both-role exclusion. It is runtime-safe: upstream's both-role import guard runs over UPSTREAM's own
+# `CANDIDATE_PAIRS` (which still excludes CD20), and `codex_restore_validation.patch_upstream()`
+# rebinds `rv.CANDIDATE_PAIRS` to the CODEX set that INCLUDES `CD20 <- ECAD` -- so upstream never
+# blocks the CD20 pair at runtime. The adapter still asserts upstream's `rv.RESTORE_EXCLUDED_MARKERS`
+# carries CD20 (that assertion guards the SHA pin, not the CODEX policy).
 #
-# Upstream's rationale (both roles): as a REFERENCE its positive cells would BE the negative control,
-# and its exclusive arm ran 41-2,026 cells per donor against 2,206-50,000 for the structural markers
-# (inverted fits, e.g. 50 reference cells thresholding 30,507 target cells). As a TARGET its Step-1
-# anchor bottomed out at **14 cells** with anchor recovery down to **0.217**, and reviewer inspection
-# of the CD20 review PDFs found overcalling throughout with both qptiff channels stretched from
-# near-background into block-like tile artifacts. CD20 is the weakest channel in the panel after
-# CD163 (display ceiling median ~503 counts vs ~6,800 for E-cadherin).
-#
-# The CODEX measurement agrees on the donor-variability angle (kept for the record): at donor-local
-# floors CD20 swings 0.32%-4.85% across donors (15.2x) where CD3e is rarer (0.86%) yet 4x more stable.
-RESTORE_EXCLUDED_MARKERS = {
-    "CD20": (
-        "B cells are sparse in pancreas even with inflammation or disease, and CD20 is too weak and "
-        "too donor-variable to serve in EITHER RESTORE role: as a reference its positive cells would "
-        "be the negative control (14-2,026 cells/donor), as a target its Step-1 anchor bottomed out "
-        "at 14 cells (anchor recovery 0.217) with reviewer-confirmed overcalling. Excluded from "
-        "RESTORE; deferred to a post-lineage B-cell pass. Its compartment means are still extracted."
-    ),
-}
+# HISTORICAL RATIONALE for the earlier exclusion (kept for the record, now superseded): CD20 is a
+# weak, donor-variable channel (donor-local prevalence 0.32%-4.85%, 15.2x swing; display-ceiling
+# median ~503 counts vs ~6,800 for E-cadherin); of 42,183 CD20+ cells only 5.8% are CD45+, and 48.6%
+# of the CD20-only cells are ECAD+ stray signal on epithelium (see CD20_STRAY_SIGNAL below). The
+# level-2 spec accepts this: CD20 is screened as a target BUT the B call is made only INSIDE the
+# Immune (CD45+) compartment at the bottom of the sub-split precedence, and CD20 is a designated
+# PREVALENCE_COLLAPSE marker (borrowed/global divisor where its per-donor fit collapses).
+RESTORE_EXCLUDED_MARKERS: dict[str, str] = {}
 
-# Extracted from QuPath but NOT screened: takes no part in the pair web, yet its compartment means
-# ride along (CellCompartments.tsv already carries all 35 markers x 4 compartments) so the deferred
-# B-cell pass needs no re-export. Mirrors upstream `restore_validation.DEFERRED_EXTRACTION_MARKERS`.
+# No markers are extraction-only now that CD20 is screened. Kept for the adapter contract.
 DEFERRED_EXTRACTION_MARKERS = tuple(RESTORE_EXCLUDED_MARKERS)
 
 # The upstream commit this CODEX config is aligned to. The adapter (codex_restore_validation.py)
@@ -162,30 +151,70 @@ UPSTREAM_PINNED_SHA = "8db37af"
 # divisors are unaffected -- only new machinery the level-2 redesign opts into.
 EXPECTED_METHOD_VERSION = "restore-pair-validation-v8"
 
-# --- Immune subtyping pairs (second pass, inside the Immune compartment) ------------------------
-# CD20 IS NEITHER A COUNTERPART NOR A TARGET here (aligned to upstream 92f379a). It is excluded from
-# RESTORE in both roles and deferred; there is no `["CD20", ...]` pair. So this list has 6 pairs, and
-# CODEX's full screened set is FIRST_PASS_PAIRS(5) + IMMUNE_PAIRS(6) + ENDOCRINE_SPLIT_PAIR = 12.
+# --- Level-2 sub-typing pairs (authoritative spec, user 2026-07-24) -----------------------------
+# RESTORE thresholds are computed GLOBALLY per scene (whole-cell), ONE per target -- NOT within gated
+# subsets. "Level 2" = additional targets appended to the pair list under the same counterpart rules;
+# the compartment hierarchy is applied AFTERWARD (codex_lineage_run.py, Phase I) to INTERPRET the
+# thresholds. This RETIRES the old within-compartment `IMMUNE_PAIRS` (CD3e<-CD68, CD4<-CD31, CD8a<-CD68,
+# ...): every immune target now takes ECAD, matching the whole-scene convention and upstream v8's
+# ACCEPTED_PAIRS direction. The old co-receptor hazard (CD4/CD8a<-CD3e) is thereby moot, but the guard
+# in no_rare_counterparts() is kept as a defensive invariant.
 #
-# "Replace CD20 with CD3e" holds for the myeloid targets but NOT for CD4/CD8a, and the reason is
-# biological, not statistical: CD4 and CD8a are T-cell co-receptors, so CD3e is the one marker
-# guaranteed NOT to be exclusive of them. A CD8+CD3e+ cell is the definition of a CD8 T cell.
-# Measured overlap confirms it -- 3.44% (CD8a) and 5.59% (CD4) look acceptable only because each
-# marker's Otsu floor is catching mostly non-T signal (myeloid CD4; see the CD8a anomaly below).
-# Low measured overlap does not make a biologically co-expressed pair valid.
+# Counterpart rules (carried over from level 1): epithelial-family target -> CD31; hormone -> other
+# hormone; neural -> panCK (epCAM dropped -- 8/15-donor only, and panCK measured a cleaner exocrine
+# negative, see docs/codex_restore_pairs.md); LGALS3 -> CD31 (stated exception); everything else -> ECAD.
+# Three markers do DOUBLE DUTY (PDPN, CD34, LGALS3): ONE threshold each, disambiguated by which parent
+# node the cell landed in (the CD31 gate separates lymphatic-EC from fibroblast for PDPN/CD34). CD44,
+# LGALS3 are STATE annotations, never a class call.
 #
-# So CD4 and CD8a take a MYELOID or NON-IMMUNE counterpart instead, which is genuinely exclusive:
-#   overlap %      CD20    CD3e    CD68   CD163    CD31    ECAD
-#   CD4  <-        1.80    5.59   15.32   20.10    5.88   20.02
-#   CD8a <-        1.03    3.44    1.74    1.26    2.82   31.13
-IMMUNE_PAIRS = [
-    ["CD3e",  "CD68"],    # was CD20. 4.85% overlap; CD68 is 2.00% prevalent and 2.9x-stable
-    ["CD68",  "CD3e"],    # already correct in Senior -- CD68 never referenced CD20
-    ["CD163", "CD3e"],    # already correct
-    ["CD4",   "CD31"],    # was CD20. Endothelium is CD4-negative; 5.88% overlap, 4.32% prevalent
-    ["CD8a",  "CD68"],    # was CD20. Macrophages are CD8a-negative; 1.74% overlap
-    ["HLADR", "CD31"],    # functional/activation pass -- weaker RESTORE assumption, flagged upstream
+# 22 pairs. With FIRST_PASS_PAIRS(5) + HORMONE_COMPARATOR_PAIRS(3) the full screened set is 30 pairs
+# over 27 markers (= PANEL_31 minus BActin/NaKATPase/BCatenin/ColIV; epCAM/KRT8-18 are 8/15-donor and
+# also excluded). CHGA<-CD31 is shared with ENDOCRINE_SPLIT_PAIR (already reviewer-accepted, divisor ~650).
+LEVEL2_PAIRS = [
+    # === IMMUNE (CD45+) -> ECAD ===
+    ["CD3e",   "ECAD"],   # T
+    ["CD68",   "ECAD"],   # macrophage
+    ["CD163",  "ECAD"],   # M2 polarization -- nested under CD68 at interpretation
+    ["CD4",    "ECAD"],   # T-helper -- read ONLY within CD3e+ (monocytes/macrophages are CD4-dim)
+    ["CD8a",   "ECAD"],   # T-cytotoxic
+    ["HLADR",  "ECAD"],   # APC/activation -- WEAKEST pair (ductal upregulates HLA-II in T1D -> flag conservative)
+    ["CD20",   "ECAD"],   # B -- re-included (CD20 unwind); prevalence-collapse marker
+    ["CD35",   "ECAD"],   # FDC/TLS -- near-zero without lymphoid aggregates; prevalence-collapse marker
+    # === EPITHELIAL (ECAD+): family -> CD31, endocrine hormones -> other hormone ===
+    ["CHGA",   "CD31"],   # pan-endocrine split (== ENDOCRINE_SPLIT_PAIR; already VALID, divisor ~650)
+    ["CK19",   "CD31"],   # ductal
+    ["panCK",  "CD31"],   # epithelial confirmatory (also the neural counterpart)
+    ["KRT14",  "CD31"],   # basal/metaplastic -- near-zero in normal tissue; prevalence-collapse marker
+    ["INS",    "GCG"],    # beta
+    ["GCG",    "INS"],    # alpha
+    ["SST",    "INS"],    # delta -- sparse; prevalence-collapse marker
+    # === ENDOTHELIAL (CD31+) -> ECAD (dual-use PDPN/CD34; CD31 gate disambiguates at interpretation) ===
+    ["PDPN",   "ECAD"],   # NOT CD31 -- lymphatic EC are CD31+; PDPN+ -> lymphatic under Endothelial, CAF under Mesenchymal
+    ["CD34",   "ECAD"],   # capillary EC / resting fibroblast (parent-resolved)
+    # === NEURAL (PGP9.5+) -> panCK (epCAM substitute -- cohort-wide + cleaner negative) ===
+    ["GAP43",  "panCK"],  # growth-associated/sprouting axons; prevalence-collapse marker
+    ["B3TUBB", "panCK"],  # consensus pan-neural with PGP9.5
+    # === MESENCHYMAL (VIM+) -> ECAD ===
+    ["SMA",    "ECAD"],   # smooth muscle / pericyte / myofibroblast
+    # === STATE (annotation, not a lineage class call) ===
+    ["CD44",   "ECAD"],   # activation/stemness state
+    ["LGALS3", "CD31"],   # dual macrophage+ductal -> ECAD disqualified; CD31 (stated exception). State only.
 ]
+
+# Exocrine comparator references for the three hormones (user decision 2026-07-24). The hormone->hormone
+# reference goes UNDERSIZED in exactly the disease states of interest (alpha<beta in ND -> INS<-GCG
+# undersized; beta-loss in T1D -> GCG<-INS / SST<-INS undersized). These extra CANDIDATE pairs give the
+# reference_selection dossier (Phase F) an exocrine comparator to weigh against the undersized hormone
+# reference, instead of blindly accepting it via override. The hormone-hormone pair stays the predeclared
+# baseline; these are additional candidates only (one-ref-per-target is required only for the frozen exit).
+HORMONE_COMPARATOR_PAIRS = [
+    ["INS", "panCK"],
+    ["GCG", "panCK"],
+    ["SST", "panCK"],
+]
+
+# All pairs the CODEX screen fits (adapters derive SCREENED_MARKERS / CODEX_PAIRS from this).
+ALL_SCREEN_PAIRS = FIRST_PASS_PAIRS + LEVEL2_PAIRS + HORMONE_COMPARATOR_PAIRS
 
 # Immune sub-split precedence, LOWEST first (later writes win, matching `lineage._cell_types`).
 # B sits at the bottom deliberately: the abundant, well-supported types claim their cells before a
@@ -193,16 +222,18 @@ IMMUNE_PAIRS = [
 # is already how upstream orders it (lineage.py:115-122) -- recorded here so a CODEX-specific
 # rewrite of `_cell_types` cannot silently reintroduce the inverted order.
 #
-# B IS NOW A DELIBERATE ABSTENTION, not a call (aligned to upstream 92f379a). CD20 is excluded from
-# RESTORE, so no `CD20_pos` column is produced and the B gate never fires; CODEX also lacks CD79a
-# (Senior's B-cell fallback). Until the deferred B-cell pass lands, Immune cells that would be B
-# remain "Immune-other" -- an honest abstention, NOT a 0% B-cell call. The B gate is retained so the
-# deferred pass needs no edit here, matching upstream's lineage._cell_types comment.
+# B is now a SCREENED call (2026-07-24): CD20 is re-included as a RESTORE target (`CD20 <- ECAD`), so a
+# `CD20_pos` column IS produced and the B gate can fire -- but only INSIDE the Immune (CD45+) compartment
+# and at the BOTTOM of this precedence, so the abundant, well-supported types (Macrophage, T) claim their
+# cells first and a CD20+CD68+ cell resolves to Macrophage. This bottom-precedence placement is what keeps
+# CD20's known stray-on-epithelium signal (48.6% of CD20-only cells are ECAD+, see CD20_STRAY_SIGNAL) from
+# producing spurious B calls: those cells are Epithelial, never reach the Immune sub-split. CODEX still
+# lacks CD79a (Senior's B-cell fallback), so B rests on CD20 alone.
 # DC / Neutrophil / Plasma / NK are unreachable in the 31-plex (no CD11c, CD209, MPO, CD38,
 # CD56/CD57) and are omitted rather than left to evaluate as all-False.
 IMMUNE_PRECEDENCE = ["Immune-other", "B", "Macrophage", "T"]
 IMMUNE_SUBTYPE_GATES = {
-    "B":          ["CD20"],   # NOT screened by RESTORE -> abstention until the deferred B-cell pass
+    "B":          ["CD20"],   # screened (CD20 <- ECAD); called only within CD45+ at bottom precedence
     "Macrophage": ["CD68", "CD163"],
     "T":          ["CD3e"],
 }
@@ -254,8 +285,42 @@ CD20_STRAY_SIGNAL = {           # measured post-REDSEA at donor-local floors; re
 # markers stay LINEAR_OTSU; the CLIP -- not the statistic -- is the control. The first-pass pairs keep
 # the locked 0.995 clip (they were never broken; unclipping only perturbs their divisors).
 #
-# Clip applied to the immune screen. The first-pass screen keeps upstream's locked 0.995.
-IMMUNE_SCREEN_UPPER_QUANTILE = 1.0
+# The two input-QC clips. The clip is a WHOLE-CONFIG scalar in upstream (`PairValidationConfig.
+# input_qc_upper_quantile`, one float per evaluate_locked_cohort call), so a mixed-clip level-2 screen
+# MUST run as TWO cohort passes (see codex_restore_validation): the 0.995 group for abundant/structural
+# targets, and the 1.0 (unclipped) group for the clip-sensitive targets whose positive tail sits above
+# p99.5 on low-rate donors.
+LOCKED_UPPER_QUANTILE = 0.995     # the clipped group (structural + abundant + CHGA)
+IMMUNE_SCREEN_UPPER_QUANTILE = 1.0  # the unclipped group value (kept name for back-compat)
+
+# Targets screened UNCLIPPED. Membership = the codex_floors.clip_sensitive set MINUS CHGA (CHGA rides
+# the 0.995 group where its max()@0.995 divisor is robust). A pair goes in the unclipped group iff its
+# TARGET is here; otherwise the 0.995 group. MEASURED by `codex_floors.py` (2026-07-24, all 15 donors
+# RAW) -- this literal is the single source of truth for the clip split.
+#
+# These 11 markers have min(p99.5/median) < 7 AND prev_max < 10%: their bright positive population sits
+# in the tail ABOVE the p99.5 clip on the low-rate donors, so a clipped 2-component Otsu bisects
+# background. Note two SPARSE markers are NOT here: CD20 (prev 14.5% at its low stray-signal floor ->
+# abundant-at-floor, not clipped-out) and GAP43 (min_dynrange 13.6 -> long tail, clip is safe). Both
+# still ride the borrow/global-divisor prevalence-collapse policy (PREVALENCE_COLLAPSE_MARKERS), which
+# is a positivity-step concern, not a clip concern.
+CLIP_UNCLIPPED_TARGETS = frozenset({
+    "CD3e", "CD4", "CD8a", "HLADR",           # lymphocyte/activation
+    "CD35", "KRT14", "SST", "INS",            # sparse subtype targets (INS bright, sparse cohort-wide)
+    "PDPN", "CD44", "LGALS3",                 # low-dynamic-range state/dual-use targets
+})
+
+# Targets whose POSITIVE mode collapses on some donors: RESTORE's 2-component fit then splits the
+# NEGATIVE distribution instead of failing, and the `counterpart > median` prefilter selects half the
+# tissue while the target positive mode may be < 0.1%. This is DISTINCT from reference sparsity
+# (reference_selection's job) and from the p99.5 clip artifact (CLIP_UNCLIPPED_TARGETS). Policy
+# (user 2026-07-24): estimate the threshold on scenes KNOWN to contain positives and apply it GLOBALLY,
+# and/or check positive-cluster size before trusting any per-scene value. Consumed by
+# codex_positivity.resolve_divisors (Phase H): a per-donor divisor is trusted only if its positive
+# cluster is adequate, else a cohort divisor (median of adequate donors) is borrowed; abstain
+# cohort-wide only if NO donor has an adequate positive cluster.
+PREVALENCE_COLLAPSE_MARKERS = ("KRT14", "CD35", "CD20", "SST", "GAP43")
+
 CLIP_ARTIFACT_DONORS = {          # marker: donors where the p99.5 clip broke plain Otsu (RAW)
     "CD8a":  ["112", "6356"],
     "HLADR": ["6516", "6356", "6505"],
@@ -315,6 +380,23 @@ MARKER_INPUT_FLOOR_METHODS = {
     "CD4":    LINEAR_OTSU_FLOOR,             # immune @ unclipped -> 0.8%
     "CD8a":   LINEAR_OTSU_FLOOR,             # immune @ unclipped -> 0.6%, CD8a+/CD3e+ ~= 0.95
     "HLADR":  LINEAR_OTSU_FLOOR,             # immune @ unclipped -> 0.5%
+    # --- level-2 sub-typing markers (2026-07-24). ALL plain Otsu: max(Otsu,Triangle) was rejected
+    #     (a disguised quantile cut); the sparse ones ride the UNCLIPPED group (CLIP_UNCLIPPED_TARGETS)
+    #     instead of a max() band-aid. Floors measured on RAW by codex_floors.py; see OBSERVED_FLOORS_RAW.
+    "CD20":   LINEAR_OTSU_FLOOR,             # B -- sparse, unclipped; prevalence-collapse
+    "CD35":   LINEAR_OTSU_FLOOR,             # FDC/TLS -- sparse, unclipped; prevalence-collapse
+    "SST":    LINEAR_OTSU_FLOOR,             # delta hormone -- sparse, unclipped; prevalence-collapse
+    "GAP43":  LINEAR_OTSU_FLOOR,             # neural -- sparse, unclipped; prevalence-collapse
+    "KRT14":  LINEAR_OTSU_FLOOR,             # basal/metaplastic -- sparse, unclipped; prevalence-collapse
+    "INS":    LINEAR_OTSU_FLOOR,             # beta hormone (abundant in ND, sparse in T1D)
+    "GCG":    LINEAR_OTSU_FLOOR,             # alpha hormone
+    "CK19":   LINEAR_OTSU_FLOOR,             # ductal epithelium
+    "B3TUBB": LINEAR_OTSU_FLOOR,             # pan-neural consensus
+    "CD34":   LINEAR_OTSU_FLOOR,             # capillary EC / resting fibroblast (dual-use)
+    "PDPN":   LINEAR_OTSU_FLOOR,             # lymphatic EC / inflammatory-CAF (dual-use)
+    "SMA":    LINEAR_OTSU_FLOOR,             # smooth muscle / pericyte
+    "CD44":   LINEAR_OTSU_FLOOR,             # activation/stemness state
+    "LGALS3": LINEAR_OTSU_FLOOR,             # macrophage+ductal state
 }
 
 # CORRECTED 2026-07-23: RESTORE floors on the RAW parquet, NOT the REDSEA one. Upstream's
@@ -338,9 +420,23 @@ OBSERVED_FLOORS = {          # marker: (median, pct_high_at_median, spread_x) --
                                        # plain Otsu while CHGA is registered as max(Otsu,Triangle).
                                        # Corrected to the declared statistic (measured 2026-07-23).
 }
-OBSERVED_FLOORS_RAW = {      # pre-REDSEA -- THIS is what RESTORE floors on. Max-statistic for CHGA.
+OBSERVED_FLOORS_RAW = {      # pre-REDSEA -- THIS is what RESTORE floors on. Max-statistic for CHGA only.
+    # Measured 2026-07-24 by codex_floors.py on the RAW parquet (median across 15 donors, each marker's
+    # registered statistic). All 27 screened markers are recorded so `--check` regresses the full set.
+    # --- level-1 structural gates + CHGA ---
     "CD45": 2871.7, "ECAD": 12622.9, "CD31": 3084.9, "PGP9.5": 5547.0,
-    "VIM": 4459.5, "panCK": 4092.7, "CHGA": 950.9,   # panCK was 4223.8 (10th of 15); median is 4092.7
+    "VIM": 4459.5, "panCK": 4092.7, "CHGA": 950.9,   # CHGA = max(Otsu,Triangle); panCK median of 15
+    # --- immune sub-typing ---
+    "CD3e": 540.5, "CD4": 746.6, "CD8a": 5256.5, "CD68": 716.8, "CD163": 1240.1,
+    "HLADR": 818.1, "CD20": 279.1, "CD35": 184.9,
+    # --- epithelial family + hormones ---
+    "CK19": 6719.1, "KRT14": 2069.9, "INS": 203.0, "GCG": 3617.9, "SST": 201.7,
+    # --- endothelial (dual-use) ---
+    "PDPN": 712.5, "CD34": 2603.3,
+    # --- neural ---
+    "GAP43": 855.7, "B3TUBB": 2273.9,
+    # --- mesenchymal + state ---
+    "SMA": 7381.1, "CD44": 1104.5, "LGALS3": 10065.5,
 }
 
 # Fraction of cells REDSEA clamped to ZERO, cohort median (max donor in parentheses).
@@ -430,7 +526,7 @@ def no_rare_counterparts() -> None:
     an error. Mirrors upstream's both-role import guard in `restore_validation` (92f379a); kept
     here because the CODEX pair sets never pass through `CANDIDATE_PAIRS`.
     """
-    for tgt, cp in FIRST_PASS_PAIRS + IMMUNE_PAIRS + [ENDOCRINE_SPLIT_PAIR]:
+    for tgt, cp in ALL_SCREEN_PAIRS:
         for m, role in ((tgt, "target"), (cp, "reference")):
             if m in RESTORE_EXCLUDED_MARKERS:
                 raise ValueError(
@@ -439,8 +535,9 @@ def no_rare_counterparts() -> None:
                 )
         if tgt == cp:
             raise ValueError(f"{tgt} cannot be its own reference")
-    # CD4/CD8a are T-cell co-receptors: CD3e is definitionally NOT exclusive of them.
-    for tgt, cp in IMMUNE_PAIRS:
+    # CD4/CD8a are T-cell co-receptors: CD3e is definitionally NOT exclusive of them. Vacuous now that
+    # every immune target takes ECAD, but kept as a defensive invariant against a future re-edit.
+    for tgt, cp in LEVEL2_PAIRS:
         if tgt in ("CD4", "CD8a") and cp == "CD3e":
             raise ValueError(
                 f"{tgt} <- CD3e is biologically invalid: {tgt} is a T-cell co-receptor and is "
@@ -485,7 +582,7 @@ def validate_against_panel() -> None:
         used.update(ms)
     used.update(NEURAL_CONSENSUS)
     used.update(MESENCHYMAL_SUBTYPE)
-    for tgt, cp in FIRST_PASS_PAIRS + IMMUNE_PAIRS + [ENDOCRINE_SPLIT_PAIR]:
+    for tgt, cp in ALL_SCREEN_PAIRS:
         used.update([tgt, cp])
     panel = set(PANEL_31) | {SEGMENTATION_MARKER}
     unknown = {m for m in used if to_panel(m) not in panel}

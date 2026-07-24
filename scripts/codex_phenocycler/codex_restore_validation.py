@@ -1,14 +1,24 @@
-"""Run upstream's locked v6 RESTORE pair screen on the CODEX cohort, unmodified.
+"""Run upstream's locked v8 RESTORE pair screen on the CODEX cohort, unmodified.
 
 This is a thin ADAPTER, not a fork: it builds CODEX-shaped inputs, overrides three upstream
-module-level constants for CODEX's marker vocabulary and pair set, and then calls upstream
-`restore_validation.evaluate_locked_cohort` verbatim. No scoring is reimplemented.
+module-level constants for CODEX's marker vocabulary and pair set, and then calls upstream's
+per-pair scorer verbatim. No scoring is reimplemented.
 
-WHY EACH PIECE EXISTS (all verified against upstream 92f379a):
+LEVEL 2 (2026-07-24): the screen is now the 30-pair / 27-marker level-2 set (cl.ALL_SCREEN_PAIRS).
+Because the input-QC clip is a WHOLE-CONFIG scalar, the screen runs as TWO cohort passes -- a 0.995
+`--clipped` group and a 1.0 `--unclipped` group (targets whose bright tail sits above the clip; see
+cl.CLIP_UNCLIPPED_TARGETS). Both use `run_cohort_full_robust` (a per-(donor,pair) try/except that
+still writes the full `evaluate_locked_cohort` file set, incl. method_spec.json), because level-2 has
+sparse targets that empty an arm on some donors. reference_selection + positivity consume the
+CONCATENATION of the two screen dirs; each review bundle is built per-group.
+
+WHY EACH PIECE EXISTS (verified against upstream v8 / 8db37af):
   * `patch_upstream()` -- upstream's `QUPATH_MARKERS`/`MARKER_INPUT_FLOOR_METHODS`/`CANDIDATE_PAIRS`
     are frozen for the Senior 59-plex. `compartment_column` raises for a marker not in QUPATH_MARKERS
-    and `evaluate_locked_pair` raises for a pair not in CANDIDATE_PAIRS, so CODEX's markers and its 7
-    non-Senior pairs must be injected. The CD20 both-role guard is inherited from upstream unchanged.
+    and `evaluate_locked_pair` raises for a pair not in CANDIDATE_PAIRS, so CODEX's markers and its
+    non-Senior pairs must be injected. CODEX re-includes CD20 as a target: it rebinds rv.CANDIDATE_PAIRS
+    to a set containing `CD20 <- ECAD`, so upstream's both-role guard (over upstream's own pairs) never
+    blocks it at runtime. The sentinel that upstream STILL excludes CD20 is kept to guard the SHA pin.
   * `build_sample()` -- upstream's own `extract_compartment_sample` derives `donor_id` as
     `regexp_extract(Image,'[0-9]+')`, which yields '0112' for donor 112 and drops it from the join.
     This builds the same sample schema but takes donor_id from the normalized id, reads CODEX's single
@@ -25,8 +35,8 @@ variant -- because CellCompartments.tsv supplies real per-compartment means. `me
 
     conda activate scvi-env
     python codex_restore_validation.py --smoke 6516 6534      # build + load 2 donors, no scoring
-    python codex_restore_validation.py --donors 6516 6534     # screen 2 donors, first-pass pairs
-    python codex_restore_validation.py                        # full 15 donors, all 12 pairs
+    python codex_restore_validation.py --clipped              # 15 donors, 0.995 group -> screen_l2_clipped
+    python codex_restore_validation.py --unclipped            # 15 donors, 1.0 group -> screen_l2_unclipped
 """
 
 from __future__ import annotations
@@ -50,20 +60,22 @@ import codex_lineage as cl  # noqa: E402
 from codex_panel import DONORS, to_panel  # noqa: E402
 
 # --- CODEX screen configuration -----------------------------------------------------------------
-# The 13 markers in the 12 screened pairs. NOT CD20 (excluded from RESTORE in both roles, 92f379a);
-# CD20 rides along in CellCompartments.tsv for the deferred B-cell pass but takes no part here.
-SCREENED_MARKERS = sorted({m for pair in (cl.FIRST_PASS_PAIRS + cl.IMMUNE_PAIRS
-                                          + [cl.ENDOCRINE_SPLIT_PAIR]) for m in pair})
-CODEX_PAIRS = [tuple(p) for p in (cl.FIRST_PASS_PAIRS + cl.IMMUNE_PAIRS + [cl.ENDOCRINE_SPLIT_PAIR])]
-# Two screen classes, screened at DIFFERENT input-QC clip quantiles:
-#   * first pass  (5 compartment pairs + endocrine split): the LOCKED 0.995 clip. These abundant
-#     markers were never broken by the clip; unclipping only perturbs their divisors.
-#   * immune      (CD3e/CD68/CD163/CD4/CD8a/HLADR): UNCLIPPED (IMMUNE_SCREEN_UPPER_QUANTILE = 1.0).
-#     The 0.995 clip deletes the sparse positive tail on the 2-3 low-rate donors and drives the fit
-#     MODEL_UNSTABLE; unclipped it is VALID and clean on all 15. See codex_lineage's resolution note.
-FIRST_PASS_ONLY = [tuple(p) for p in (cl.FIRST_PASS_PAIRS + [cl.ENDOCRINE_SPLIT_PAIR])]
-IMMUNE_ONLY = [tuple(p) for p in cl.IMMUNE_PAIRS]
+# The level-2 screen: 27 markers over 30 pairs (cl.ALL_SCREEN_PAIRS = FIRST_PASS_PAIRS + LEVEL2_PAIRS
+# + HORMONE_COMPARATOR_PAIRS). CD20 is now a screened TARGET (CD20 <- ECAD); the CD20 both-role guard
+# is unwound on the CODEX side (cl.RESTORE_EXCLUDED_MARKERS is empty), while patch_upstream still
+# asserts UPSTREAM keeps its exclusion (that assertion guards the SHA pin, not the CODEX policy).
+SCREENED_MARKERS = sorted({m for pair in cl.ALL_SCREEN_PAIRS for m in pair})
+CODEX_PAIRS = [tuple(p) for p in cl.ALL_SCREEN_PAIRS]
+
+# The clip is a WHOLE-CONFIG scalar in upstream (PairValidationConfig.input_qc_upper_quantile), so a
+# mixed-clip screen MUST run as TWO cohort passes. A pair goes in the UNCLIPPED (1.0) group iff its
+# TARGET is in cl.CLIP_UNCLIPPED_TARGETS (its bright positive tail sits above the 0.995 clip on the
+# low-rate donors); otherwise the LOCKED 0.995 group. reference_selection + positivity consume the
+# CONCATENATION of the two screen dirs (both v8); each review bundle is built per-group (its
+# method_spec.json records one clip, and build_review_bundle re-thresholds at that clip).
 LOCKED_UPPER_QUANTILE = 0.995
+CLIP_UNCLIPPED_PAIRS = [tuple(p) for p in CODEX_PAIRS if p[0] in cl.CLIP_UNCLIPPED_TARGETS]
+CLIP_0995_PAIRS = [tuple(p) for p in CODEX_PAIRS if p[0] not in cl.CLIP_UNCLIPPED_TARGETS]
 
 COMPARTMENTS = ("Nucleus", "Cytoplasm", "Membrane", "Cell")
 TSV = Path("/home/smith6jt/panc_CODEX/Islet-Explorer/CellCompartments.tsv")
@@ -94,8 +106,10 @@ def patch_upstream() -> None:
             "Re-audit codex_lineage against the new upstream before screening, then bump "
             "cl.UPSTREAM_PINNED_SHA."
         )
-    # Sentinel: the committed both-role exclusion must be present (guards against a stale checkout
-    # even when git is unavailable).
+    # Sentinel: UPSTREAM's committed both-role exclusion must still be present (guards the SHA pin even
+    # when git is unavailable). CODEX UNWINDS this at level 2 -- it re-includes CD20 as a target and
+    # rebinds rv.CANDIDATE_PAIRS below to a set that contains CD20 <- ECAD, so upstream's import-time
+    # guard (which runs over upstream's OWN CANDIDATE_PAIRS) never blocks the CODEX pair at runtime.
     if not hasattr(rv, "RESTORE_EXCLUDED_MARKERS") or "CD20" not in getattr(rv, "RESTORE_EXCLUDED_MARKERS", {}):
         raise RuntimeError("upstream lacks RESTORE_EXCLUDED_MARKERS['CD20']; it is behind 92f379a")
     # METHOD_VERSION catches UNCOMMITTED method changes the SHA pin cannot see (upstream is developed
@@ -250,55 +264,125 @@ def run(donors, output_dir: Path, *, pairs=None, work: Path = WORKDIR, modulus: 
     )
 
 
-def run_robust(donors, output_dir: Path, *, pairs, work: Path = WORKDIR, modulus: int = 20,
-               upper_quantile: float = LOCKED_UPPER_QUANTILE,
-               pair_reviews: Path | None = None):
-    """Per-(donor,pair) screen that RECORDS a degenerate pair instead of crashing the cohort.
+def run_cohort_full_robust(donors, output_dir: Path, *, pairs, work: Path = WORKDIR, modulus: int = 20,
+                           upper_quantile: float = LOCKED_UPPER_QUANTILE,
+                           pair_reviews: Path | None = None, expression_reviews: Path | None = None,
+                           force_build: bool = False):
+    """`evaluate_locked_cohort` with a per-(donor,pair) try/except, writing the FULL output contract.
 
-    `evaluate_locked_cohort` runs every pair in one try block, so a single degenerate arm (e.g.
-    HLADR near-absent on a donor -> <2 cells in an exclusive arm at the unclipped floor) aborts the
-    whole run. A cohort screen must instead report that pair and continue. Successful pairs use
-    upstream `locked_pair_metrics` verbatim; a raise becomes an `INPUT_QC_DEGENERATE` row.
+    Two facts force this at level 2:
+      1. `evaluate_locked_cohort` runs every (donor,pair) in ONE try block, so a single degenerate arm
+         (a sparse target -- CD20/CD35/KRT14/SST/GAP43 -- emptying an exclusive arm on a donor) aborts
+         the whole cohort. A level-2 screen has such arms by construction, so it must record that pair
+         and continue.
+      2. The retired `run_robust` survived (1) but wrote ONLY `pair_evaluations.csv`. The review bundle
+         (`build_review_bundle`) requires a COMPLETE results dir -- `method_spec.json`,
+         `expression_reviews.csv`, `pair_reviews.csv` -- and reference_selection needs the v8 columns.
+
+    So this reproduces `evaluate_locked_cohort`'s file set VERBATIM (data_audit / pair_evaluations /
+    threshold_sampling / seed_stability / expression_reviews / pair_reviews / method_spec.json /
+    run_manifest.json), differing only in the per-pair try/except. A degenerate pair becomes an
+    `INPUT_QC_DEGENERATE` row with NaN v8 columns -- dropped by build_reference_matrix.median() and
+    skipped by the bundle (not VALID). Successful pairs use upstream `locked_pair_metrics` verbatim.
     """
+    import json
+    import shutil
     import pandas as pd
+    from phenocycler.cohort import DONOR_EXCLUSIONS, ensure_eligible_donors
+
     patch_upstream()
-    pairs = [tuple(p) for p in pairs]
+    pairs = tuple((str(t), str(r)) for t, r in pairs)
     cl.assert_pairs_valid(pairs)
-    sample, raw_view, redsea = prepare_inputs(work, donors, modulus)
-    review_map, _ = rv.load_pair_reviews(pair_reviews)
+    if not pairs or len(set(pairs)) != len(pairs):
+        raise ValueError("pairs must be a nonempty unique sequence")
+    donors = ensure_eligible_donors([str(d) for d in donors], context="CODEX level-2 cohort screen")
+    sample, raw_view, redsea = prepare_inputs(work, donors, modulus, force=force_build)
+    review_map, review_table = rv.load_expression_reviews(expression_reviews)
+    pair_review_map, pair_review_table = rv.load_pair_reviews(pair_reviews)
+
+    output_dir = Path(output_dir).resolve()
+    if output_dir.exists():
+        raise FileExistsError(f"output already exists: {output_dir}")
+    temp_dir = output_dir.with_name(output_dir.name + ".tmp")
+    if temp_dir.exists():
+        raise FileExistsError(f"temporary output already exists: {temp_dir}")
+    temp_dir.mkdir(parents=True)
+
     cfg = rv.PairValidationConfig(input_qc_upper_quantile=upper_quantile)
-    rows = []
-    for donor in donors:
-        donor_df, _ = rv.load_validation_sample(sample, raw_view, redsea, str(donor))
-        for target, reference in pairs:
-            try:
-                ev = rv.evaluate_locked_pair(
-                    donor_df, str(donor), target, reference, config=cfg,
-                    pair_review=review_map.get((target, reference), rv.PairReview.UNREVIEWED))
-                rows.append(rv.locked_pair_metrics(ev))
-            except Exception as e:
-                rows.append({"method_version": rv.METHOD_VERSION, "donor": str(donor),
-                             "target": target, "reference": reference,
-                             "state": "INPUT_QC_DEGENERATE", "state_reason": str(e)[:120]})
-    df = pd.DataFrame(rows)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    df.to_csv(output_dir / "pair_evaluations.csv", index=False)
-    return df
+    audits, pair_rows, threshold_rows, stability_rows = [], [], [], []
+    try:
+        for donor in donors:
+            donor_df, audit = rv.load_validation_sample(sample, raw_view, redsea, str(donor))
+            audits.append(audit)
+            degen = 0
+            for target, reference in pairs:
+                try:
+                    ev = rv.evaluate_locked_pair(
+                        donor_df, str(donor), target, reference, config=cfg,
+                        expression_review=review_map.get((str(donor), target), rv.ExpressionReview.UNREVIEWED),
+                        pair_review=pair_review_map.get((target, reference), rv.PairReview.UNREVIEWED))
+                    pair_rows.append(rv.locked_pair_metrics(ev))
+                    for axis, grid in (("target", ev["target_threshold_grid"]),
+                                       ("reference", ev["reference_threshold_grid"])):
+                        for row in grid.to_dict("records"):
+                            threshold_rows.append({"donor": str(donor), "target": target,
+                                                   "reference": reference, "axis": axis, **row})
+                    for row in ev["stability_rows"]:
+                        stability_rows.append({"donor": str(donor), "target": target,
+                                               "reference": reference, **row})
+                except Exception as e:
+                    degen += 1
+                    pair_rows.append({"method_version": rv.METHOD_VERSION, "donor": str(donor),
+                                      "target": target, "reference": reference,
+                                      "state": "INPUT_QC_DEGENERATE", "state_reason": str(e)[:200]})
+            print(f"[locked-evaluate-robust] donor {donor}: {len(donor_df):,} cells, "
+                  f"{degen} degenerate pair(s)", flush=True)
+
+        tables = {
+            "data_audit": pd.DataFrame(audits),
+            "pair_evaluations": pd.DataFrame(pair_rows),
+            "threshold_sampling": pd.DataFrame(threshold_rows),
+            "seed_stability": pd.DataFrame(stability_rows),
+            "expression_reviews": review_table,
+            "pair_reviews": pair_review_table,
+        }
+        for name, table in tables.items():
+            table.to_csv(temp_dir / f"{name}.csv", index=False)
+        (temp_dir / "method_spec.json").write_text(json.dumps(cfg.specification(), indent=2) + "\n")
+        (temp_dir / "run_manifest.json").write_text(json.dumps({
+            "method_version": rv.METHOD_VERSION,
+            "donors": list(donors),
+            "cohort_exclusions": DONOR_EXCLUSIONS,
+            "pairs": [list(p) for p in pairs],
+            "input_qc_upper_quantile": upper_quantile,
+            "robust_wrapper": "codex_restore_validation.run_cohort_full_robust",
+        }, indent=2) + "\n")
+        temp_dir.rename(output_dir)
+        return tables
+    except Exception:
+        if temp_dir.exists():
+            shutil.rmtree(temp_dir)
+        raise
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--donors", nargs="+", default=None, help="donor ids (default all 15)")
-    ap.add_argument("--first-pass", action="store_true",
-                    help="screen only the 5 first-pass pairs + endocrine split, at the locked 0.995 clip")
-    ap.add_argument("--immune", action="store_true",
-                    help="screen only the 6 immune pairs, UNCLIPPED (IMMUNE_SCREEN_UPPER_QUANTILE)")
+    grp = ap.add_mutually_exclusive_group()
+    grp.add_argument("--clipped", action="store_true",
+                     help=f"screen the {len(CLIP_0995_PAIRS)} pairs whose target is NOT clip-sensitive, "
+                          "at the locked 0.995 clip (incl. the level-1 gates + CHGA)")
+    grp.add_argument("--unclipped", action="store_true",
+                     help=f"screen the {len(CLIP_UNCLIPPED_PAIRS)} pairs whose target IS clip-sensitive, "
+                          "UNCLIPPED (input_qc_upper_quantile=1.0)")
     ap.add_argument("--smoke", nargs="+", default=None, metavar="DONOR",
                     help="build + load-check the named donors, no scoring")
-    ap.add_argument("--output", type=Path, default=WORKDIR / "screen")
+    ap.add_argument("--output", type=Path, default=None,
+                    help="output dir (default screen_l2_clipped / screen_l2_unclipped under --work)")
     ap.add_argument("--work", type=Path, default=WORKDIR)
     ap.add_argument("--modulus", type=int, default=20)
-    ap.add_argument("--pair-reviews", type=Path, default=None)
+    ap.add_argument("--pair-reviews", type=Path, default=None,
+                    help="pair_reviews.csv to promote ACCEPTED pairs to VALID with divisors (post-review)")
     ap.add_argument("--force-build", action="store_true")
     args = ap.parse_args()
 
@@ -306,26 +390,29 @@ def main() -> int:
         smoke(args.smoke, args.work, args.modulus)
         return 0
 
+    if not (args.clipped or args.unclipped):
+        ap.error("choose a clip group: --clipped or --unclipped (or --smoke DONOR...)")
+
     donors = args.donors or DONORS
-    if args.immune:
-        pairs, uq = IMMUNE_ONLY, cl.IMMUNE_SCREEN_UPPER_QUANTILE
-    elif args.first_pass:
-        pairs, uq = FIRST_PASS_ONLY, LOCKED_UPPER_QUANTILE
+    if args.unclipped:
+        pairs, uq = CLIP_UNCLIPPED_PAIRS, cl.IMMUNE_SCREEN_UPPER_QUANTILE
+        default_out = args.work / "screen_l2_unclipped"
     else:
-        pairs, uq = CODEX_PAIRS, LOCKED_UPPER_QUANTILE
+        pairs, uq = CLIP_0995_PAIRS, LOCKED_UPPER_QUANTILE
+        default_out = args.work / "screen_l2_clipped"
+    output = args.output or default_out
+
     print(f"Screening {len(donors)} donors x {len(pairs)} pairs at clip={uq} "
-          f"(upstream {_upstream_sha()}, pin {cl.UPSTREAM_PINNED_SHA})")
-    if args.immune:
-        # unclipped immune floors can empty an exclusive arm on near-absent-marker donors -> use the
-        # robust per-pair runner so one degenerate pair is recorded, not fatal.
-        pe = run_robust(donors, args.output, pairs=pairs, work=args.work, modulus=args.modulus,
-                        upper_quantile=uq, pair_reviews=args.pair_reviews)
-    else:
-        results = run(donors, args.output, pairs=pairs, work=args.work, modulus=args.modulus,
-                      upper_quantile=uq, pair_reviews=args.pair_reviews, force_build=args.force_build)
-        pe = results.get("pair_evaluations")
+          f"(upstream {_upstream_sha()}, pin {cl.UPSTREAM_PINNED_SHA}) -> {output}")
+    # Both groups use the robust runner: level-2 has sparse targets in BOTH clip groups (CD20/GAP43 in
+    # the 0.995 group; CD35/KRT14/SST in the unclipped group), so a degenerate arm must be recorded,
+    # not fatal -- and the runner still writes method_spec.json for the review bundle.
+    tables = run_cohort_full_robust(donors, output, pairs=pairs, work=args.work, modulus=args.modulus,
+                                    upper_quantile=uq, pair_reviews=args.pair_reviews,
+                                    force_build=args.force_build)
+    pe = tables.get("pair_evaluations")
     if pe is not None:
-        print(f"\nwrote {len(pe)} pair-evaluation rows to {args.output}")
+        print(f"\nwrote {len(pe)} pair-evaluation rows to {output}")
         if "state" in pe:
             print(pe["state"].value_counts().to_string())
     return 0

@@ -33,10 +33,10 @@ import codex_lineage as cl  # noqa: E402
 
 COMPARTMENTS = ("Nucleus", "Cytoplasm", "Membrane", "Cell")
 
-# Every marker CODEX screens, plus the deferred CD20. Derived from the pair config so this cannot
+# Every marker CODEX screens (the 30-pair level-2 set). Derived from the pair config so this cannot
 # drift from what the pipeline actually consumes.
 SCREENED = sorted(
-    {m for pair in (cl.FIRST_PASS_PAIRS + cl.IMMUNE_PAIRS + [cl.ENDOCRINE_SPLIT_PAIR]) for m in pair}
+    {m for pair in cl.ALL_SCREEN_PAIRS for m in pair}
     | {m for ms in cl.IMMUNE_SUBTYPE_GATES.values() for m in ms}
 )
 

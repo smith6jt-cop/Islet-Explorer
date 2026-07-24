@@ -25,7 +25,8 @@ computes internally) over the CODEX cohort, and:
 The floor is the arm-QC threshold and the Step-1 anchor input; it is NOT the positivity call. For
 CD8a/HLADR specifically, max(Otsu,Triangle) fixes the ARM floor but is not a validated positivity
 threshold (it makes CD8a+ ~= CD3e+, and HLADR miss 93-99% of CD68+); those markers are routed to
-RESTORE + image review for the actual call. See codex_lineage.PREVALENCE_ANOMALIES.
+RESTORE + image review for the actual call. See codex_lineage.PREVALENCE_COLLAPSE_MARKERS and
+codex_lineage.CLIP_UNCLIPPED_TARGETS.
 
     conda activate scvi-env
     python codex_floors.py                 # measure + print the recommended method map
@@ -66,11 +67,10 @@ RAW_PARQUET = Path("/data/codex_phenocycler/cells")
 DYNRANGE_MIN = 7.0
 SPARSE_MAX_PREV = 10.0   # a marker above this prevalence is abundant, and low dynrange is expected
 
-# Markers whose floors the RESTORE screen needs: every marker in the 12 screened pairs. INS/GCG/SST
-# are NOT here -- the endocrine split is an argmax on norm, not a RESTORE pair, so its floors belong
-# to the lineage step (Phase 6), not the screen.
-SCREENED_MARKERS = sorted({m for pair in (cl.FIRST_PASS_PAIRS + cl.IMMUNE_PAIRS
-                                          + [cl.ENDOCRINE_SPLIT_PAIR]) for m in pair})
+# Markers whose floors the RESTORE screen needs: every marker in the level-2 screen (30 pairs).
+# INS/GCG/SST ARE here now -- at level 2 the endocrine subtypes are RESTORE pairs (INS<-GCG etc.),
+# so the hormones are screened targets and need floors.
+SCREENED_MARKERS = sorted({m for pair in cl.ALL_SCREEN_PAIRS for m in pair})
 
 
 def _marker_present(donor_dir: str, marker: str) -> bool:
@@ -178,10 +178,14 @@ def main() -> int:
     print(f"Measuring floors on {tag} for {len(SCREENED_MARKERS)} screened markers x {len(DONORS)} donors")
 
     df = measure_floors(args.parquet)
-    print("\n" + summarize(df).to_string(index=False))
-    print("\n`clip_sensitive=1` markers (CHGA/CD3e/CD4/CD8a/HLADR) have their positive tail above the")
-    print("p99.5 clip on the low-rate donors. Policy (codex_lineage): CHGA -> max()@0.995 (first-pass);")
-    print("CD3e/CD4/CD8a/HLADR -> plain Otsu screened UNCLIPPED (immune run). max() is NOT used for them.")
+    summ = summarize(df)
+    print("\n" + summ.to_string(index=False))
+    flagged = sorted(summ.loc[summ["clip_sensitive"] == 1, "marker"])
+    unclipped = sorted(cl.CLIP_UNCLIPPED_TARGETS)
+    print(f"\n`clip_sensitive=1` markers: {flagged}")
+    print("Their bright positive population sits above the p99.5 clip on the low-rate donors, so a")
+    print("clipped 2-component Otsu bisects background. Policy (codex_lineage): CHGA rides max()@0.995")
+    print(f"(first-pass); CLIP_UNCLIPPED_TARGETS = {unclipped} screen UNCLIPPED. max() is NOT used.")
 
     if args.check:
         problems = check_against_observed(df)

@@ -6,6 +6,73 @@ Plans: `~/.claude/plans/continue-from-handoff-parsed-kay.md` (Phase 0, DONE belo
 
 ---
 
+## 2026-07-24 (later) — Level-2 build A–G DONE, at the user image-review gate (READ FIRST)
+
+Executed the approved plan `~/.claude/plans/make-a-plan-to-gleaming-parrot.md`, Phases A–G. The
+level-2 screen ran, the reference dossier is built, and the two image-review bundles are the
+deliverable now waiting on the user. **Next = the user reviews the bundle PDFs and fills
+`review_decisions.csv`; then Phases H–K (positivity → cell_type tree → app integration).**
+
+**Authoritative level-2 pair web (user, superseded the earlier sketch):** 27 markers / 30 pairs =
+`PANEL_31 − {BActin, NaKATPase, BCatenin, ColIV, epCAM, KRT8-18}`. Counterparts: immune→ECAD (retires
+the old CD68/CD31 immune refs), hormone→hormone (INS←GCG, GCG←INS, SST←INS), neural→**panCK**
+(epCAM dropped — user chose panCK), epithelial-family→CD31, LGALS3←CD31, else→ECAD; dual-use
+PDPN/CD34/LGALS3 get ONE threshold, parent-resolved at interpretation. **CD20 re-included as a B
+target** (`CD20←ECAD`) — the both-role exclusion is UNWOUND on the CODEX side
+(`cl.RESTORE_EXCLUDED_MARKERS={}`); runtime-safe because the adapter rebinds `rv.CANDIDATE_PAIRS` to
+include it. Ki67 → the retained `run_restore_proliferation` path (not a pair). Prevalence-collapse
+policy (user): estimate on positive-containing scenes → global threshold + positive-cluster-size
+guard (Phase H).
+
+**Done + verified (all under `scripts/codex_phenocycler/`, artifacts on `/data/codex_phenocycler/`):**
+- **A** committed the reviewer-accepted level-1 baseline + the v8 submodule (`ca2913a`); gitignored the
+  11 GB `CellCompartments.tsv`.
+- **B** `codex_lineage.py`: `LEVEL2_PAIRS` (22) + `HORMONE_COMPARATOR_PAIRS` (3) + `ALL_SCREEN_PAIRS`;
+  CD20 unwind; validators repointed; `CLIP_UNCLIPPED_TARGETS` + `PREVALENCE_COLLAPSE_MARKERS`.
+- **C** `codex_floors.py`: 27-marker RAW floors measured + registered (all `LINEAR_OTSU`; CHGA the sole
+  `max()`); `OBSERVED_FLOORS_RAW` expanded to 27; `--check` GREEN. `CLIP_UNCLIPPED_TARGETS` = the
+  measured clip-sensitive set minus CHGA = {CD3e,CD4,CD8a,HLADR,CD35,KRT14,SST,INS,PDPN,CD44,LGALS3}
+  (11). NB: CD20 & GAP43 are prevalence-collapse but NOT clip-sensitive → 0.995 group.
+- **D** `codex_restore_validation.py`: derives 27/30 from `cl.ALL_SCREEN_PAIRS`; clip split
+  `CLIP_0995_PAIRS`(17)/`CLIP_UNCLIPPED_PAIRS`(13); **`run_cohort_full_robust`** (writes the full
+  `evaluate_locked_cohort` contract incl. `method_spec.json`, per-(donor,pair) try/except);
+  `--clipped`/`--unclipped` CLI. `--smoke 6516 6534` green (membrane_cell_complete=1.0).
+- **E** screen ran (all 15 donors, ::20): **clipped 255 rows** (249 PENDING / 4 MODEL_UNSTABLE / 2
+  NO_REFERENCE), **unclipped 195 rows** (171 PENDING / 13 LOW_SIGNAL / 7 TECHNICAL_FAILURE / 3
+  INPUT_QC_DEGENERATE / 1 NO_REFERENCE). **Level-1 divisors reproduced EXACTLY at v8**
+  (ECAD 8581.5 vs 8582, CD31 2579.9/2580, CD45 2622.7/2623, PGP9.5 3411.2/3411, VIM 3817.0/3817,
+  CHGA 650.2/650). Dirs: `screen_l2_clipped`, `screen_l2_unclipped`.
+- **F** `codex_reference_selection.py` (NEW): rebinds `rs.CANDIDATE_PAIRS`/`.BASELINE_PAIRS`/
+  `._TARGET_ORDER` (the last or ZERO figures); `combine_screens` concats the two clip groups (drops
+  degenerate); `build_bundle` with CODEX overrides. **All 27 targets got an accepted reference**, 27
+  figures emitted. Overrides accept-despite-undersized: ECAD/CK19/panCK/LGALS3←CD31 (epithelial-family,
+  endothelium is the sparse-exclusive negative — the ECAD←CD31 level-1 precedent) + INS←GCG/GCG←INS/
+  SST←INS (hormones). Dossier: `reference_dossier_l2/{reference_matrix,frozen_reference_matrix}.csv`,
+  `figures/`, `SUMMARY.md`.
+- **G** `codex_restore_pair_review.py`: two clip-group shortlists (`CODEX_SHORTLIST_CLIPPED` 11 pairs /
+  `CODEX_SHORTLIST_UNCLIPPED` 13 — the level-1 pairs omitted as already-accepted); `--group
+  clipped|unclipped` CLI. Bundles built into `review_l2_clipped` / `review_l2_unclipped` (5-panel PDFs
+  + `review_decisions.csv` + QuPath overlays). **22 tests pass**, `codex_floors.py --check` green.
+
+**Reproduce (read-only):**
+```
+conda activate scvi-env; cd scripts/codex_phenocycler
+python -m pytest test_codex_panel.py test_codex_restore_validation.py -q   # 22 pass
+python codex_floors.py --check                                             # green (27 markers, 2%)
+python codex_restore_validation.py --smoke 6516 6534                       # load gate
+```
+
+**NEXT (Phase H, post-review):** reviewer scores the two bundles → re-run each `--clipped`/`--unclipped`
+screen with `--pair-reviews` to promote ACCEPTED pairs to VALID + divisors → `codex_positivity`
+`resolve_divisors` (the prevalence-collapse borrow/global policy for
+{KRT14,CD35,CD20,SST,GAP43}) → **Phase I** `codex_lineage_run.py` (the cell_type tree: endocrine
+argmax + `Endocrine-hormone-neg` + min-margin guard; Acinar=ECAD+/CHGA−/CK19− residual; T within CD3e+;
+CD163 nested; B at bottom precedence; dual-use parent-resolved; fail-closed, `<U40`) → **J/K** inject
+`.obs['phenotype']` on `Object ID` (H5AD ⊆ parquet, fail-closed) mapped into the 21 app labels,
+regenerate the app data (ALPHA_STRUCT re-sweep), retire the rules-CSV UI, add the startup grey-guard.
+
+---
+
 ## 2026-07-24 — Phase 0 done + level-2 spec received (READ FIRST)
 
 **Phase 0 (submodule + v8) — DONE, verified.** Upstream is now a git submodule at
