@@ -9,9 +9,36 @@ Plans: `~/.claude/plans/continue-from-handoff-parsed-kay.md` (Phase 0, DONE belo
 ## 2026-07-24 (later) — Level-2 build A–G DONE, at the user image-review gate (READ FIRST)
 
 Executed the approved plan `~/.claude/plans/make-a-plan-to-gleaming-parrot.md`, Phases A–G. The
-level-2 screen ran, the reference dossier is built, and the two image-review bundles are the
-deliverable now waiting on the user. **Next = the user reviews the bundle PDFs and fills
-`review_decisions.csv`; then Phases H–K (positivity → cell_type tree → app integration).**
+level-2 screen ran, the reference dossier is built, the two image-review bundles were built, and the
+user completed **image-review round 1** (outcomes below).
+
+**IMAGE-REVIEW ROUND 1 (user, 2026-07-24) — decisions + actions:**
+- **CD20 overcalls cohort-wide** (5–14% called vs ~0.09% real B; divisor ~300 sits in stray signal).
+  DECISION: **keep CD20 but call B ONLY within CD45+ at bottom precedence** (the compartment
+  restriction + precedence tames the overcall). Encode in the Phase-I `cell_type` tree; do NOT drop
+  the CD20 divisor.
+- **PDPN undercalled everywhere** in the unclipped screen (0.18% median, 3 zeros + degeneracy). ROOT
+  CAUSE: `clip_sensitive` FALSE-flagged it — a clip sweep proved unclipping is the WORST choice.
+  FIXED: **PDPN moved to the 0.995 clipped group** (`CLIP_UNCLIPPED_TARGETS` no longer lists it) →
+  0.43% median (max 5.22%), all 15 donors stable, only 2 genuine zero-donors (6479, 6538 → prevalence
+  policy). Re-screened + rebuilt panel `review_l2_pdpn_recheck/` for re-verification. **Full re-run
+  will screen PDPN in the clipped group.**
+- **HLADR "no plotted points" on 6521/6534/6551** — INVESTIGATED: genuine, not a bug. The fit's
+  divisor (15.8k–27.2k) exceeds every HLADR cell there → 0 called; HLADR near-absent (+ 6548/6549
+  degenerate). Real signal on ~6 donors. Treat HLADR as prevalence-collapse (global threshold from
+  signal-bearing donors) at Phase H.
+- **Donor 6549 is channel-problematic** — high epithelial-channel background (KRT14 27%, panCK 19%,
+  CK19 13% — implausible KRT14) and low immune (CD4 0.08%, CD44 0.18%, HLADR degenerate). Exclude
+  6549's divisors for KRT14/CD4/CD44/HLADR/PDPN → borrow cohort (prevalence policy).
+- **KRT14 overcalls on 6549/6550/6551** (27/10/31%) and **INS spuriously inflates on 6551**
+  (beta-loss donor: ~15–20 real INS+, fit found 31% background) → both are prevalence-collapse; the
+  positive-cluster-size guard + the tree's min-margin guard handle them.
+- **CD44 6533/6549 wobble** — CD44 is a STATE annotation (not a lineage class), so it does not affect
+  cell typing. Noted, no action.
+- Everything else: **ACCEPTED**.
+
+**Next = user re-verifies the PDPN 0.995 panel; then Phases H–K (positivity with the prevalence-collapse
+policy + 6549/HLADR exclusions → cell_type tree with CD20-B-within-CD45+ → app integration).**
 
 **Authoritative level-2 pair web (user, superseded the earlier sketch):** 27 markers / 30 pairs =
 `PANEL_31 − {BActin, NaKATPase, BCatenin, ColIV, epCAM, KRT8-18}`. Counterparts: immune→ECAD (retires

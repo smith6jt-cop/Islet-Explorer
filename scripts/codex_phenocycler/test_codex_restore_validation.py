@@ -36,8 +36,10 @@ def test_codex_screens_thirty_pairs_cd20_is_a_target():
 
 
 def test_clip_groups_partition_the_pairs():
-    assert len(crv.CLIP_0995_PAIRS) == 17
-    assert len(crv.CLIP_UNCLIPPED_PAIRS) == 13
+    # 18 clipped / 12 unclipped after PDPN moved to the 0.995 group (image-review correction).
+    assert len(crv.CLIP_0995_PAIRS) == 18
+    assert len(crv.CLIP_UNCLIPPED_PAIRS) == 12
+    assert ("PDPN", "ECAD") in crv.CLIP_0995_PAIRS
     assert set(crv.CLIP_0995_PAIRS).isdisjoint(crv.CLIP_UNCLIPPED_PAIRS)
     assert set(crv.CLIP_0995_PAIRS) | set(crv.CLIP_UNCLIPPED_PAIRS) == set(crv.CODEX_PAIRS)
     # a pair is unclipped iff its TARGET is clip-sensitive

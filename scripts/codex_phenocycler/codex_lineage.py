@@ -298,16 +298,23 @@ IMMUNE_SCREEN_UPPER_QUANTILE = 1.0  # the unclipped group value (kept name for b
 # TARGET is here; otherwise the 0.995 group. MEASURED by `codex_floors.py` (2026-07-24, all 15 donors
 # RAW) -- this literal is the single source of truth for the clip split.
 #
-# These 11 markers have min(p99.5/median) < 7 AND prev_max < 10%: their bright positive population sits
+# These 10 markers have min(p99.5/median) < 7 AND prev_max < 10%: their bright positive population sits
 # in the tail ABOVE the p99.5 clip on the low-rate donors, so a clipped 2-component Otsu bisects
 # background. Note two SPARSE markers are NOT here: CD20 (prev 14.5% at its low stray-signal floor ->
 # abundant-at-floor, not clipped-out) and GAP43 (min_dynrange 13.6 -> long tail, clip is safe). Both
 # still ride the borrow/global-divisor prevalence-collapse policy (PREVALENCE_COLLAPSE_MARKERS), which
 # is a positivity-step concern, not a clip concern.
+#
+# PDPN was REMOVED from this set (2026-07-24, image review): the clip_sensitive HEURISTIC flagged it
+# (min_dynrange 2.2), but a clip sweep proved unclipping is the WORST choice for it -- unclipped gives
+# 0.18% median called with 3 zero-donors + degeneracy, while 0.995 gives 0.43% median (up to 5.2%),
+# all 15 donors stable. PDPN's positives are NOT hidden above the clip (the CD8a/HLADR mechanism);
+# unclipping just raises its divisor and starves the fit. So PDPN rides the 0.995 group. (Two donors
+# read ~0 PDPN at every clip -- genuinely PDPN-absent scenes, handled by the prevalence policy.)
 CLIP_UNCLIPPED_TARGETS = frozenset({
     "CD3e", "CD4", "CD8a", "HLADR",           # lymphocyte/activation
     "CD35", "KRT14", "SST", "INS",            # sparse subtype targets (INS bright, sparse cohort-wide)
-    "PDPN", "CD44", "LGALS3",                 # low-dynamic-range state/dual-use targets
+    "CD44", "LGALS3",                         # low-dynamic-range state/dual-use targets
 })
 
 # Targets whose POSITIVE mode collapses on some donors: RESTORE's 2-component fit then splits the
