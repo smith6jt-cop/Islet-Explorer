@@ -133,19 +133,52 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
     })
 
     # ---- Phenotype filter ----
-    output$phenotype_filter <- renderUI({
+    #
+    # Choices come from the CANONICAL vocabulary (`canonical_phenotype_order()`,
+    # backed by PHENOTYPE_COLORS), never from `unique(donor_cells()$phenotype)`.
+    # Deriving them per-donor is why "CD4 Tcell" was missing: the default donor
+    # (112) has zero CD4 cells, as do 6533 and 6534, so the checkbox simply did
+    # not exist on first load. Phenotypes with no cells for the current donor are
+    # still listed, annotated with their count, so the list never changes shape
+    # when the donor changes.
+    PHENO_HIDE_DEFAULT <- c("Acinar", "Ductal", "Endocrine", "T cell", "Unknown")
+
+    # Canonical choices + this donor's per-phenotype counts.
+    pheno_choice_info <- reactive({
       cells <- tryCatch(donor_cells(), error = function(e) NULL)
-      if (is.null(cells)) return(NULL)
-      phenos <- sort(unique(cells$phenotype))
+      observed <- if (is.null(cells)) character(0) else cells$phenotype
+      phenos <- canonical_phenotype_order(observed)
+      counts <- table(factor(observed, levels = phenos))
+      list(phenos = phenos, counts = counts)
+    })
+
+    output$phenotype_filter <- renderUI({
+      info <- pheno_choice_info()
+      phenos <- info$phenos
       if (length(phenos) == 0) return(NULL)
-      # Preserve previous selections if available (donor change shouldn't reset)
+      counts <- info$counts
+
+      # Labels carry the donor's count so a zero-cell phenotype is visibly
+      # present-but-empty rather than silently absent. Values stay canonical.
+      choice_names <- lapply(phenos, function(p) {
+        n <- suppressWarnings(as.integer(counts[p]))
+        if (!is.finite(n)) n <- 0L
+        if (n == 0) {
+          tags$span(p, tags$span(" (0)", style = "color: #999;"),
+                    style = "color: #999;")
+        } else {
+          tags$span(p)
+        }
+      })
+
+      # First render applies the hide-by-default set; afterwards the user's
+      # selection is preserved verbatim. The old code did
+      # `intersect(prev, phenos)` against a per-donor choice list, which left any
+      # newly-appearing phenotype permanently unchecked. With a donor-independent
+      # list there is nothing to intersect away.
       prev <- isolate(input$pheno_filter)
-      if (!is.null(prev)) {
-        selected_phenos <- intersect(prev, phenos)
-      } else {
-        hide_default <- c("Acinar", "Ductal", "Endocrine", "T cell", "Unknown")
-        selected_phenos <- setdiff(phenos, hide_default)
-      }
+      selected_phenos <- if (!is.null(prev)) prev else setdiff(phenos, PHENO_HIDE_DEFAULT)
+
       tagList(
         div(style = "display: flex; align-items: center; gap: 6px; margin-bottom: 4px;",
           tags$label("Phenotypes", style = "font-weight: 600; font-size: 13px; margin: 0;"),
@@ -155,18 +188,17 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         ),
         div(style = "column-count: 2; column-gap: 8px;",
           checkboxGroupInput(ns("pheno_filter"), NULL,
-                             choices = phenos, selected = selected_phenos,
+                             choiceNames = choice_names,
+                             choiceValues = as.list(phenos),
+                             selected = selected_phenos,
                              inline = FALSE)
         )
       )
     })
 
     observeEvent(input$pheno_all, {
-      cells <- tryCatch(donor_cells(), error = function(e) NULL)
-      if (!is.null(cells)) {
-        phenos <- sort(unique(cells$phenotype))
-        updateCheckboxGroupInput(session, "pheno_filter", selected = phenos)
-      }
+      updateCheckboxGroupInput(session, "pheno_filter",
+                               selected = pheno_choice_info()$phenos)
     })
 
     observeEvent(input$pheno_none, {
@@ -408,7 +440,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         stringsAsFactors = FALSE
       )
       plot_df <- plot_df[is.finite(plot_df$umap1) & is.finite(plot_df$umap2), , drop = FALSE]
-      if (nrow(plot_df) == 0) return(plotly_empty() %>% layout(title = "No UMAP data"))
+      if (nrow(plot_df) == 0) return(plotly_islet_empty("No UMAP data"))
 
       # Sort cluster levels numerically
       cluster_levels <- sort(unique(plot_df$cluster))
@@ -513,13 +545,13 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       # Get phenotype proportion columns (prop_*), filtered by selected phenotypes
       prop_cols <- grep("^prop_", colnames(plot_comp), value = TRUE)
       if (length(prop_cols) == 0) {
-        return(plotly_empty() %>% layout(title = "No phenotype proportion data"))
+        return(plotly_islet_empty("No phenotype proportion data"))
       }
       if (!is.null(input$pheno_filter) && length(input$pheno_filter) > 0) {
         keep_cols <- paste0("prop_", input$pheno_filter)
         prop_cols <- intersect(prop_cols, keep_cols)
         if (length(prop_cols) == 0) {
-          return(plotly_empty() %>% layout(title = "No matching phenotypes selected"))
+          return(plotly_islet_empty("No matching phenotypes selected"))
         }
       }
 
@@ -577,33 +609,61 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                        tickfont = fonts$axis_tick),
           yaxis = list(title = list(text = "Mean Proportion", font = fonts$axis_title),
                        tickfont = fonts$axis_tick, range = c(0, 1)),
-          legend = list(font = list(size = max(ISLET_FONT_SIZES$dense_min,
-                                                ISLET_FONT_SIZES$legend_text - 2)),
+          # Up to 21 phenotype entries — use the dense floor directly rather than
+          # a max() formula that already evaluates to it.
+          legend = list(font = list(size = ISLET_FONT_SIZES$dense_min),
                         title = list(text = "", font = fonts$legend_title))
         ) %>%
         plotly_islet_config("cluster_composition")
     })
 
     # ---- Download handler ----
+    #
+    # This CSV used to correspond to NO plot on the page. It re-derived its own
+    # subset from prepared()$comp instead of the shared `nbr_comp()` reactive
+    # every on-screen card uses, so it:
+    #   * ignored `nbr_min_cells`   -> exported islets the cards had dropped
+    #   * applied `total_cells_peri > 0`, which the cards do NOT -> dropped
+    #     islets the cards keep
+    #   * ignored `pheno_filter`    -> dumped every phenotype's columns
+    #   * carried no outlier flags and no provenance header at all
+    # It now consumes nbr_comp() and records what produced it.
     output$download_spatial <- downloadHandler(
       filename = function() {
         paste0("spatial_neighborhood_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".csv")
       },
       content = function(file) {
-        pd <- prepared()
-        df <- pd$comp
-        if (is.null(df) || nrow(df) == 0) { df <- data.frame() }
-        else {
-          if (!is.null(input$groups) && "Donor Status" %in% colnames(df))
-            df <- df[df$`Donor Status` %in% input$groups, , drop = FALSE]
-          if ("total_cells_peri" %in% colnames(df))
-            df <- df[!is.na(df$total_cells_peri) & df$total_cells_peri > 0, , drop = FALSE]
+        df <- tryCatch(nbr_comp(), error = function(e) NULL)
+        sel_phenos <- input$pheno_filter
+
+        nbr <- get_nbr_columns(colnames(df %||% data.frame()))
+        metric_cols <- unlist(nbr, use.names = FALSE)
+
+        # Restrict the per-phenotype metric families to the selected phenotypes,
+        # matching the tissue scatter and Card B composition. Columns that carry
+        # no phenotype (immune_frac_*, leiden_*, totals) always pass through.
+        if (!is.null(sel_phenos) && length(sel_phenos) > 0) {
+          metric_cols <- metric_cols[vapply(metric_cols, function(cl) {
+            ph <- extract_phenotype_from_column(cl)
+            is.null(ph) || identical(ph, cl) || ph %in% sel_phenos
+          }, logical(1))]
         }
-        nbr <- get_nbr_columns(colnames(df))
+
         keep_cols <- c("Case ID", "Donor Status", "islet_key", "islet_diam_um",
-                       unlist(nbr, use.names = FALSE))
-        keep_cols <- intersect(keep_cols, colnames(df))
-        write.csv(df[, keep_cols, drop = FALSE], file, row.names = FALSE)
+                       "total_cells_core", "total_cells_peri", metric_cols)
+        keep_cols <- intersect(unique(keep_cols), colnames(df %||% data.frame()))
+        out <- if (is.null(df)) NULL else df[, keep_cols, drop = FALSE]
+
+        write_islet_csv(file, out, islet_csv_header(
+          "Spatial Neighborhood — per-islet metrics",
+          paste("Donor groups:", paste(input$groups %||% "(all)", collapse = ", ")),
+          paste("Min cells per islet (core+peri):", input$nbr_min_cells %||% 1),
+          paste("Phenotypes:", if (is.null(sel_phenos) || length(sel_phenos) == 0)
+                                 "(none selected — no per-phenotype columns)"
+                               else paste(sel_phenos, collapse = ", ")),
+          paste("Rows:", if (is.null(out)) 0 else nrow(out), "islets"),
+          "Scope: all donors in the selected groups (the tissue scatter above shows one donor at a time)."
+        ))
       }
     )
 
@@ -650,7 +710,12 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           safe
         ))
         prop_core_col <- NA_character_
-        label <- safe
+        # Fallback label: the shared un-sanitiser, NOT the raw safe-name. If the
+        # prop_* probe below fails (Excel fallback path, a reticulate name
+        # mangle, a phenotype with no core column) the label previously degraded
+        # to "CD4_Tcell" / "ECADplus" and the tab silently spoke a different
+        # dialect from the rest of the app.
+        label <- extract_phenotype_from_column(ez) %||% safe
         for (cand in candidates) {
           pc <- paste0("prop_", cand)
           if (pc %in% cn) { prop_core_col <- pc; label <- cand; break }
@@ -756,6 +821,46 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       do.call(rbind, rows)
     })
 
+    # Card B CSV: exactly the donor-aggregated matrix both the bar chart and the
+    # heatmap render (enrich_summary()), not the pre-aggregation islet rows.
+    output$dl_enrichment_csv <- downloadHandler(
+      filename = function() paste0("spatial_enrichment_",
+                                   format(Sys.time(), "%Y%m%d_%H%M%S"), ".csv"),
+      content = function(file) {
+        es <- tryCatch(enrich_summary(), error = function(e) NULL)
+        region <- input$enrich_region %||% "peri"
+        stat_mode <- input$enrich_stat %||% "Median"
+        out <- NULL
+        if (!is.null(es) && nrow(es) > 0) {
+          out <- data.frame(
+            phenotype    = es$cell_type,
+            donor_status = es$donor_status,
+            source_column = es$col,
+            summary      = es$z_summary,
+            lo           = es$z_lo,
+            hi           = es$z_hi,
+            n_donors     = es$n,
+            stringsAsFactors = FALSE)
+          # Name the interval columns after the statistic that produced them.
+          names(out)[names(out) == "summary"] <-
+            if (stat_mode == "Median") "median_of_donor_means" else "mean_of_donor_means"
+          names(out)[names(out) == "lo"] <- if (stat_mode == "Median") "q25" else "mean_minus_sem"
+          names(out)[names(out) == "hi"] <- if (stat_mode == "Median") "q75" else "mean_plus_sem"
+        }
+        write_islet_csv(file, out, islet_csv_header(
+          "Spatial Card B — phenotype enrichment / proportion by donor status",
+          paste("Region:", switch(region, peri = "peri-islet enrichment z-score",
+                                  core = "core proportion", "peri-islet proportion")),
+          paste("Statistic:", stat_mode, "of per-donor means"),
+          paste("Donor groups:", paste(input$groups %||% "(all)", collapse = ", ")),
+          paste("Min cells per islet (core+peri):", input$nbr_min_cells %||% 1),
+          paste("Phenotypes shown:", paste(input$enrich_phenos %||% "(none)", collapse = ", ")),
+          paste("Display clip to z in [-5, 5]:", if (isTRUE(input$enrich_clip)) "ON" else "OFF"),
+          "Values are aggregated to per-donor means FIRST, then summarised across donors (avoids pseudoreplication)."
+        ))
+      }
+    )
+
     # ---- Card B phenotype filter (checkbox group shared by bar chart + heatmap) ----
     # Mirrors the tissue-scatter output$phenotype_filter. Choices are the
     # phenotype_options() labels (so they match enrich_summary()'s itm$label).
@@ -851,9 +956,12 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                 checkboxInput(ns("infiltration_show_outlier_table"),
                               "Show excluded-outlier table", value = FALSE),
                 tags$small(style = "color: #666; flex-basis: 100%;",
-                  "Outlier exclusion follows the global toggle above (Tukey 1.5×IQR per donor status on non-zero values, to tolerate phenotypes absent from many islets).")
+                  "Outlier exclusion follows the global toggle above (Tukey 1.5×IQR per donor status — enrichment z is already standardised, so the IQR fence is used instead of the modified z-score).")
               ),
               plotlyOutput(ns("infiltration_bars"), height = "400px"),
+              div(style = "margin-top: 6px;",
+                downloadButton(ns("dl_infiltration_csv"), "Download CSV",
+                               style = "font-size: 12px; padding: 3px 10px;")),
               uiOutput(ns("infiltration_outlier_info"))
             )
           ),
@@ -908,7 +1016,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                   checkboxInput(ns("enrich_clip"), "Clip extreme z > 5", value = TRUE)
                 )
               ),
-              plotlyOutput(ns("enrichment_bars"), height = "420px")
+              plotlyOutput(ns("enrichment_bars"), height = "500px")
             )
           ),
           column(6,
@@ -917,7 +1025,10 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                 h5("Heatmap", style = "font-size: 15px; margin-top: 0; margin-bottom: 0;"),
                 checkboxInput(ns("enrich_show_values"), "Show values", value = TRUE)
               ),
-              plotlyOutput(ns("enrichment_heatmap"), height = "420px")
+              plotlyOutput(ns("enrichment_heatmap"), height = "520px"),
+              div(style = "margin-top: 6px;",
+                downloadButton(ns("dl_enrichment_csv"), "Download CSV",
+                               style = "font-size: 12px; padding: 3px 10px;"))
             )
           )
         ),
@@ -944,6 +1055,9 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
               tags$small(style = "color: #666;",
                 "Outlier exclusion follows the global toggle above (robust |z| from median/MAD on log(1+distance), per donor status — two-sided; threshold from the slider). Excluded points still appear as faint × markers."),
               plotlyOutput(ns("distance_boxplot"), height = "420px"),
+              div(style = "margin-top: 6px;",
+                downloadButton(ns("dl_distance_csv"), "Download CSV",
+                               style = "font-size: 12px; padding: 3px 10px;")),
               uiOutput(ns("distance_outlier_info"))
             )
           ),
@@ -1225,7 +1339,10 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
     })
 
     # ==== Card A-Left: Per-phenotype peri-zone enrichment z-score (donor-level) ====
-    output$infiltration_bars <- renderPlotly({
+    # Card A data, extracted from the renderer so `dl_infiltration_csv` exports
+    # exactly what is plotted (same outlier flags, same donor aggregation)
+    # rather than re-deriving a parallel version that can drift.
+    infiltration_data <- reactive({
       comp <- nbr_comp()
       req(comp, "Donor Status" %in% colnames(comp), "Case ID" %in% colnames(comp))
       opts <- phenotype_options()
@@ -1242,45 +1359,40 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         value = comp[[metric]],
         status = comp$`Donor Status`,
         case_id = comp$`Case ID`,
+        islet_key = if ("islet_key" %in% colnames(comp)) comp$islet_key else NA_character_,
         stringsAsFactors = FALSE
       )
       df <- df[is.finite(df$value), , drop = FALSE]
-      if (nrow(df) == 0) return(plotly_empty() %>% layout(title = "No data"))
+      if (nrow(df) == 0) return(list(empty = "No data", label = metric_label, itm = itm))
 
-      # Outlier handling via shared helper. Phenotype enrichment z-scores are
-      # zero-inflated for phenotypes absent from many islets, so we keep the
-      # Tukey IQR rule with zero-aware fences (zeros never excluded).
+      # Outlier handling via shared helper. Tukey IQR (not the modified z) because
+      # enrichment z is already a standardised, roughly symmetric quantity.
+      #
+      # This previously passed `exclude_zeros = TRUE` on the belief that
+      # enrichment z-scores are zero-inflated. They are not: enrich_z is a Poisson
+      # z, (observed - expected) / sqrt(expected) (compute_neighborhood_metrics.py),
+      # so a phenotype absent from an islet's peri zone yields z = -sqrt(expected),
+      # a negative continuum — never exactly 0. Measured across all 5,214 islets,
+      # every enrich_z_* column contains zero exact zeros, so the flag was a no-op.
+      # (The real zero-inflation lives in peri_prop_*, which this card doesn't plot.)
       df <- flag_outliers(df, value_col = "value", group_col = "status",
                           method = "iqr", threshold = 1.5,
-                          exclude_zeros = TRUE,
                           enabled = isTRUE(remove_outliers()))
       filter_summary <- summarize_outlier_filter(df)
-      filter_summary$label <- if (filter_summary$enabled) "Tukey 1.5×IQR per donor status (zero-aware)" else filter_summary$label
       df_full <- df
 
-      # Populate the per-card outlier table reactiveVal (consumed by the
-      # `infiltration_outlier_info` renderUI below).
       flagged <- df_full[isTRUE(attr(df_full, "outlier_enabled")) & df_full$is_outlier, , drop = FALSE]
       if (!isTRUE(attr(df_full, "outlier_enabled"))) {
         flagged <- df_full[df_full$is_outlier, , drop = FALSE]
-      }
-      if (nrow(flagged) > 0) {
-        infiltration_outliers(data.frame(
-          Phenotype          = itm$label,
-          Case_ID            = flagged$case_id,
-          Donor_Status       = flagged$status,
-          Value              = round(flagged$value, 3),
-          Fence_Distance_IQR = round(flagged$outlier_score, 2),
-          stringsAsFactors   = FALSE
-        ))
-      } else {
-        infiltration_outliers(NULL)
       }
 
       if (isTRUE(remove_outliers())) {
         df <- df[!df$is_outlier | is.na(df$is_outlier), , drop = FALSE]
       }
-      if (nrow(df) == 0) return(plotly_empty() %>% layout(title = "No data after outlier removal"))
+      if (nrow(df) == 0) {
+        return(list(empty = "No data after outlier removal", label = metric_label,
+                    itm = itm, islets = df_full, flagged = flagged))
+      }
 
       # Aggregate to donor-level means
       donor_df <- df %>%
@@ -1301,14 +1413,43 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           .groups = "drop"
         )
 
-      dcols <- donor_colors_reactive()
-
       # Kruskal-Wallis on donor-level means (N=15)
       kw_p <- tryCatch({
         kt <- kruskal.test(value ~ status, data = donor_df)
         kt$p.value
       }, error = function(e) NA_real_)
-      p_label <- if (is.finite(kw_p)) paste0("KW p = ", formatC(kw_p, format = "g", digits = 3)) else ""
+
+      list(itm = itm, label = metric_label, islets = df_full, kept = df,
+           flagged = flagged, donor_df = donor_df, summary_df = summary_df,
+           kw_p = kw_p, filter_summary = filter_summary)
+    })
+
+    output$infiltration_bars <- renderPlotly({
+      d <- infiltration_data()
+      req(d)
+
+      # Populate the per-card outlier table reactiveVal (consumed by the
+      # `infiltration_outlier_info` renderUI below).
+      if (!is.null(d$flagged) && nrow(d$flagged) > 0) {
+        infiltration_outliers(data.frame(
+          Phenotype          = d$itm$label,
+          Case_ID            = d$flagged$case_id,
+          Donor_Status       = d$flagged$status,
+          Value              = round(d$flagged$value, 3),
+          Fence_Distance_IQR = round(d$flagged$outlier_score, 2),
+          stringsAsFactors   = FALSE
+        ))
+      } else {
+        infiltration_outliers(NULL)
+      }
+      if (!is.null(d$empty)) return(plotly_islet_empty(d$empty))
+
+      itm <- d$itm; metric_label <- d$label
+      donor_df <- d$donor_df; summary_df <- d$summary_df
+      filter_summary <- d$filter_summary
+      dcols <- donor_colors_reactive()
+      p_label <- if (is.finite(d$kw_p))
+        paste0("KW p = ", formatC(d$kw_p, format = "g", digits = 3)) else ""
 
       p <- plot_ly()
       for (s in levels(summary_df$status)) {
@@ -1364,6 +1505,57 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         plotly_islet_config(paste0("spatial_infiltration_", itm$safe))
     })
 
+    # Card A CSV: the per-islet values behind the bars, carrying the outlier
+    # flags, plus the donor-level means the bars actually plot.
+    output$dl_infiltration_csv <- downloadHandler(
+      filename = function() paste0("spatial_infiltration_",
+                                   format(Sys.time(), "%Y%m%d_%H%M%S"), ".csv"),
+      content = function(file) {
+        d <- tryCatch(infiltration_data(), error = function(e) NULL)
+        out <- NULL
+        if (!is.null(d) && !is.null(d$islets)) {
+          isl <- d$islets
+          out <- data.frame(
+            level        = "islet",
+            phenotype    = d$itm$label,
+            case_id      = isl$case_id,
+            donor_status = isl$status,
+            islet_key    = isl$islet_key,
+            enrich_z     = isl$value,
+            is_outlier   = isl$is_outlier,
+            fence_dist_iqr = isl$outlier_score,
+            stringsAsFactors = FALSE)
+          if (!is.null(d$donor_df) && nrow(d$donor_df) > 0) {
+            out <- rbind(out, data.frame(
+              level        = "donor_mean",
+              phenotype    = d$itm$label,
+              case_id      = d$donor_df$case_id,
+              donor_status = as.character(d$donor_df$status),
+              islet_key    = NA_character_,
+              enrich_z     = d$donor_df$value,
+              is_outlier   = NA,
+              fence_dist_iqr = NA_real_,
+              stringsAsFactors = FALSE))
+          }
+        }
+        fs <- if (is.null(d)) NULL else d$filter_summary
+        write_islet_csv(file, out, islet_csv_header(
+          "Spatial Card A — peri-islet enrichment by donor status",
+          paste("Phenotype:", if (is.null(d)) "(none)" else d$itm$label),
+          paste("Donor groups:", paste(input$groups %||% "(all)", collapse = ", ")),
+          paste("Min cells per islet (core+peri):", input$nbr_min_cells %||% 1),
+          paste("Outlier rule:", if (is.null(fs)) "n/a"
+                                 else if (isTRUE(fs$enabled))
+                                   paste0(fs$label, "; ", fs$n_excluded, " of ", fs$n_total, " excluded")
+                                 else "OFF"),
+          paste("Kruskal-Wallis p (donor-level means):",
+                if (is.null(d) || !is.finite(d$kw_p)) "N/A"
+                else formatC(d$kw_p, format = "g", digits = 4)),
+          "Rows: level=islet are the per-islet values (is_outlier marks the ghost x markers); level=donor_mean are the values the bars aggregate."
+        ))
+      }
+    )
+
     # ==== Card A-Right: Peri vs Core Proportion Scatter ====
     output$infiltration_scatter <- renderPlotly({
       comp <- nbr_comp()
@@ -1390,7 +1582,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         stringsAsFactors = FALSE
       )
       df <- df[is.finite(df$peri) & is.finite(df$core), , drop = FALSE]
-      if (nrow(df) == 0) return(plotly_empty() %>% layout(title = "No data"))
+      if (nrow(df) == 0) return(plotly_islet_empty("No data"))
 
       # Apply sqrt transform if requested
       if (use_sqrt) {
@@ -1528,11 +1720,11 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         title = list(text = paste0(title_prefix, "<br><sup>Donor-level means, ", error_label, " (N=donors)</sup>"),
                      font = fonts$title),
         xaxis = list(title = list(text = "", font = fonts$axis_title),
-                     tickfont = fonts$axis_tick, tickangle = -30,
+                     tickfont = fonts$axis_tick, tickangle = -30, automargin = TRUE,
                      categoryorder = "array",
                      categoryarray = unique(es$cell_type)),
         yaxis = list(title = list(text = y_label, font = fonts$axis_title),
-                     tickfont = fonts$axis_tick),
+                     tickfont = fonts$axis_tick, automargin = TRUE),
         legend = list(title = list(text = "Status", font = fonts$legend_title),
                       font = fonts$legend_text),
         shapes = shapes
@@ -1604,16 +1796,22 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       ) %>% layout(
         font = fonts$global,
         title = list(text = title_text, font = fonts$title),
+        # automargin: phenotype names are long and angled at -30 deg, so without
+        # it plotly clips them against a fixed margin — which reads as "the font
+        # is too small" when the real problem is the label is cut off.
         xaxis = list(title = list(text = "", font = fonts$axis_title),
-                     tickfont = fonts$axis_tick, tickangle = -30),
+                     tickfont = fonts$axis_tick, tickangle = -30, automargin = TRUE),
         yaxis = list(title = list(text = "", font = fonts$axis_title),
-                     tickfont = fonts$axis_tick, autorange = "reversed")
+                     tickfont = fonts$axis_tick, autorange = "reversed",
+                     automargin = TRUE)
       ) %>%
         plotly_islet_config("spatial_enrichment_heatmap")
     })
 
     # ==== Card C-Left: Distance Box Plots ====
-    output$distance_boxplot <- renderPlotly({
+    # Card C-Left data, extracted so `dl_distance_csv` exports the same per-islet
+    # rows and outlier flags the box plot draws.
+    distance_data <- reactive({
       comp <- nbr_comp()
       req(comp, "Donor Status" %in% colnames(comp))
       metric <- input$distance_metric %||% "min_dist_immune_mean"
@@ -1644,7 +1842,10 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       na_rate <- 1 - sum(is.finite(df$value)) / nrow(df)
 
       df <- df[is.finite(df$value), , drop = FALSE]
-      if (nrow(df) == 0) return(plotly_empty() %>% layout(title = paste0(metric_label, " \u2014 all NA")))
+      if (nrow(df) == 0) {
+        return(list(empty = paste0(metric_label, " \u2014 all NA"),
+                    label = metric_label, metric = metric))
+      }
 
       # Outlier handling via shared helper, applied to log1p(distance) to
       # tame the long right tail; ghost \u00d7 markers preserve visibility.
@@ -1658,10 +1859,20 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                 suppressWarnings(as.numeric(outlier_threshold())))
       } else filter_summary$label
 
+      list(label = metric_label, metric = metric, islets = df,
+           filter_summary = filter_summary, status_order = status_order,
+           n_total = n_total, n_valid = n_valid, na_rate = na_rate)
+    })
+
+    output$distance_boxplot <- renderPlotly({
+      d <- distance_data()
+      req(d)
+      metric_label <- d$label
+
       # Populate the per-card outlier table reactiveVal (consumed by the
       # `distance_outlier_info` renderUI below).
-      flagged <- df[df$is_outlier, , drop = FALSE]
-      if (nrow(flagged) > 0) {
+      flagged <- if (is.null(d$islets)) NULL else d$islets[d$islets$is_outlier, , drop = FALSE]
+      if (!is.null(flagged) && nrow(flagged) > 0) {
         distance_outliers(data.frame(
           Phenotype     = metric_label,
           Case_ID       = flagged$case_id,
@@ -1674,6 +1885,11 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       } else {
         distance_outliers(NULL)
       }
+      if (!is.null(d$empty)) return(plotly_islet_empty(d$empty))
+
+      df <- d$islets; filter_summary <- d$filter_summary
+      status_order <- d$status_order
+      n_total <- d$n_total; n_valid <- d$n_valid; na_rate <- d$na_rate
 
       df_ghost <- df[df$is_outlier, , drop = FALSE]
       df_box   <- if (isTRUE(remove_outliers())) df[!df$is_outlier, , drop = FALSE] else df
@@ -1750,8 +1966,42 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                      tickfont = fonts$axis_tick),
         showlegend = FALSE
       ) %>%
-        plotly_islet_config(paste0("spatial_distance_box_", gsub("[^A-Za-z0-9_]", "_", metric)))
+        plotly_islet_config(paste0("spatial_distance_box_", gsub("[^A-Za-z0-9_]", "_", d$metric)))
     })
+
+    # Card C-Left CSV: per-islet distances with the log1p outlier flags.
+    output$dl_distance_csv <- downloadHandler(
+      filename = function() paste0("spatial_distance_",
+                                   format(Sys.time(), "%Y%m%d_%H%M%S"), ".csv"),
+      content = function(file) {
+        d <- tryCatch(distance_data(), error = function(e) NULL)
+        out <- NULL
+        if (!is.null(d) && !is.null(d$islets)) {
+          isl <- d$islets
+          out <- data.frame(
+            metric        = d$label,
+            case_id       = isl$case_id,
+            islet_key     = isl$islet_key,
+            donor_status  = isl$status,
+            distance_um   = isl$value,
+            is_outlier    = isl$is_outlier,
+            z_log1p       = isl$outlier_score,
+            stringsAsFactors = FALSE)
+        }
+        fs <- if (is.null(d)) NULL else d$filter_summary
+        write_islet_csv(file, out, islet_csv_header(
+          "Spatial Card C — min distance to nearest cell of type, per islet",
+          paste("Metric:", if (is.null(d)) "(none)" else d$label),
+          paste("Donor groups:", paste(input$groups %||% "(all)", collapse = ", ")),
+          paste("Min cells per islet (core+peri):", input$nbr_min_cells %||% 1),
+          paste("Outlier rule:", if (is.null(fs)) "n/a"
+                                 else if (isTRUE(fs$enabled))
+                                   paste0(fs$label, "; ", fs$n_excluded, " of ", fs$n_total, " excluded")
+                                 else "OFF"),
+          "is_outlier marks the ghost x markers; rows are NOT dropped from this file so the full distribution is exportable."
+        ))
+      }
+    )
 
     # ==== Card C-Right: two views selected by input$dist_view ====
     #  "kde"      = donor-averaged signed-distance KDE over islet-associated

@@ -88,7 +88,7 @@ spatial_ui <- function(id) {
           fluidRow(
             column(6,
               h5("Leiden Clustering", style = "font-size: 13px; margin-top: 0;"),
-              plotlyOutput(ns("leiden_umap"), height = "300px")
+              plotlyOutput(ns("leiden_umap"), height = "400px")
             ),
             column(6,
               h5("Donor Status", style = "font-size: 13px; margin-top: 0;"),
@@ -100,7 +100,7 @@ spatial_ui <- function(id) {
           ),
           hr(style = "margin: 8px 0;"),
           h5("Cluster Composition", style = "font-size: 15px;"),
-          plotlyOutput(ns("cluster_composition"), height = "350px")
+          plotlyOutput(ns("cluster_composition"), height = "450px")
         )
       )
     ),

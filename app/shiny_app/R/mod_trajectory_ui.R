@@ -94,6 +94,8 @@ trajectory_ui <- function(id) {
           ),
           plotOutput(ns("traj_multi_heatmap"), height = "auto"),
           div(style = "text-align: right; margin-top: 8px;",
+            downloadButton(ns("dl_multi_heatmap_csv"), "Download CSV",
+                           class = "btn-sm btn-outline-secondary"),
             downloadButton(ns("dl_multi_heatmap"), "Download PNG",
                            class = "btn-sm btn-outline-primary"))
         )
@@ -113,6 +115,8 @@ trajectory_ui <- function(id) {
               h5("UMAP: Selected Feature", style = "font-size: 13px; margin-top: 0;"),
               plotOutput(ns("traj_umap_feature"), height = 500),
               div(style = "text-align: right; margin-top: 6px;",
+                downloadButton(ns("dl_umap_csv"), "Download CSV",
+                               class = "btn-sm btn-outline-secondary"),
                 downloadButton(ns("dl_umap_feature"), "Download PNG",
                                class = "btn-sm btn-outline-primary"))
             )

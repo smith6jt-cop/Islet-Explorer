@@ -180,7 +180,7 @@ statistics_ui <- function(id) {
           tags$small(style = "color: #888; display: block; margin-bottom: 8px;",
             "Pairwise Cohen's d on donor means with 95% CI. Magnitude and its uncertainty ",
             "carry more information than a p-value alone, especially with N=5 per group."),
-          plotlyOutput(ns("forest_plot"), height = "350px")
+          plotlyOutput(ns("forest_plot"), height = "430px")
         )
       )
     ),
@@ -235,7 +235,7 @@ statistics_ui <- function(id) {
             tags$small(style = "color: #888; display: block; margin-bottom: 8px;",
               "Trapezoidal integral of the binned mean feature value across islet diameters, ",
               "per group. Descriptive summary — no inferential test."),
-            plotlyOutput(ns("auc_plot"), height = "280px"),
+            plotlyOutput(ns("auc_plot"), height = "380px"),
             hr(style = "margin: 10px 0;"),
             tableOutput(ns("auc_table")),
             uiOutput(ns("auc_interpretation"))
@@ -248,7 +248,7 @@ statistics_ui <- function(id) {
               "Donor-level means within each fixed 50 µm size bin. ",
               "P-values are BH-corrected across bins. ",
               "Bins with <2 donors per group are greyed out (untestable)."),
-            plotlyOutput(ns("bin_heatmap"), height = "400px")
+            plotlyOutput(ns("bin_heatmap"), height = "520px")
           )
         ),
         column(4,

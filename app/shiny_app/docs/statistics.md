@@ -63,7 +63,6 @@ The app has 5,214 islets from only **15 donors** (5 per group). Islets within a 
 - `normality_tests(ddf)` -- Shapiro-Wilk per group, returns data.frame with `W`, `p_value`, `is_normal`
 - `cohens_d(x, y)` -- returns `list(d, ci_lo, ci_hi)` (NOT `ci_lower`/`ci_upper`)
 - `eta_squared(fit)` -- from `anova()` output
-- `pairwise_wilcox(df, group_col, value_col)` -- returns data.frame with columns `group1`, `group2`, `p_value` (NOT `p.adj`/`statistic`)
 - `flag_outliers(df, value_col, group_col, method, threshold, transform, exclude_zeros, enabled)` -- Single source of truth for outlier flagging. Appends `is_outlier` (logical) and `outlier_score` (z or fence-distance) columns. Attributes carry method/threshold/enabled for downstream summaries.
 - `summarize_outlier_filter(df)` -- Compact summary list for badges: `n_total`, `n_excluded`, `n_kept`, `method`, `threshold`, `enabled`, `label`.
 - `outlier_title_suffix(summary)` -- Formats the `" — N outliers excluded (label)"` string for plot titles. Returns `""` when no exclusion.
@@ -76,7 +75,7 @@ The app has 5,214 islets from only **15 donors** (5 per group). Islets within a 
 - Defaults: **OFF** for all four checkboxes (raw distribution renders out of the box; users opt in to outlier exclusion). z-threshold slider default 3.0, range 0.5–10, step 0.5, on every tab. Toggling the Plot sidebar propagates to Trajectory and Spatial but leaves Statistics alone (and vice versa); same for the slider.
 - Plot, Trajectory, Statistics, Spatial Card C: `flag_outliers(method = "zscore", threshold = outlier_threshold())` per donor status — threshold pulled from the live slider. Card C transforms via `log1p` to handle the long-tailed distance distribution.
 - **Robust two-sided z (May 15)**: the `method = "zscore"` branch uses the Iglewicz–Hoaglin modified z-score, `0.6745·(x − median)/MAD`, instead of the classical mean/SD z. Because every metric in this app is non-negative and right-skewed, mean/SD pushed the achievable lower z toward 0 and the rule only flagged the upper tail in practice. Median/MAD is symmetric and genuinely two-sided. Fallback: when `MAD = 0` (zero-inflated groups), the function reverts per-group to classical mean/SD. The threshold slider scale is unchanged; the 0.6745 rescale keeps `|z| > 3` roughly equivalent to the old classical cutoff. The active rule is exposed on `attr(df, "outlier_statistic")` (`"modified_z"`, `"classical_z"`, or `"modified_z (classical_z fallback used for some groups)"`).
-- Spatial Card A: `flag_outliers(method = "iqr", threshold = 1.5, exclude_zeros = TRUE)` per donor status. Keeps the Tukey logic because phenotype enrichment is zero-inflated; intentionally NOT routed through the slider (different scale).
+- Spatial Card A: `flag_outliers(method = "iqr", threshold = 1.5)` per donor status. Uses the Tukey fence rather than the modified z because enrichment z is already a standardised, roughly symmetric quantity; intentionally NOT routed through the slider (different scale). It previously passed `exclude_zeros = TRUE` on the belief that enrichment is zero-inflated — it isn't. `enrich_z` is a Poisson z, `(observed − expected)/sqrt(expected)`, so an absent phenotype yields `−sqrt(expected)`, never exactly 0; measured across all 5,214 islets every `enrich_z_*` column has zero exact zeros, making the flag a no-op. The real zero-inflation is in `peri_prop_*`, which this card does not plot.
 - Visual surfacing: every affected plot shows a **count badge** in its title or subtitle and renders excluded points as **shape=4 grey × ghost markers** (Plot, Trajectory, Spatial Card C). Stats forest plot title shows the badge; the Statistics outlier checkbox carries a small caption beneath it reporting `N excluded last Run` (or a yellow "Filter OFF" notice). Statistics Methods Reference paragraph names the local rule and cites the exact `n_excluded` for the current Run. Download CSV header records `Outlier rule: …` and the count.
 - Spatial Card B's "Clip z > 5" checkbox is a **display saturation only** (caps the colour scale) — left alone, NOT an outlier control. Documented as such in `docs/user_guide.md`.
 - Trajectory bug fix: previously discarded outliers silently before plotting and logged only to console; now drawn as ghosts and counted in a badge above the scatter.
@@ -89,19 +88,21 @@ The app has 5,214 islets from only **15 donors** (5 per group). Islets within a 
 - `lme4` (1.1.37) -- `VarCorr()` for ICC computation
 
 ### Shared Sidebar Architecture
-The Plot sidebar (mode, feature, region, donor status, AAb, age, gender filters) is visible on both the Plot and Statistics tabs. Achieved via `conditionalPanel` condition `"input.tabs == 'Plot' || input.tabs == 'Statistics'"` and matching JS `adjustLayout()` logic in `app.R`. The Statistics module consumes `plot_returns$raw_df` and `plot_returns$summary_df` directly -- no data duplication.
+The Plot sidebar (mode, feature, region, donor status, AAb, age, sex filters) is visible on both the Plot and Statistics tabs. Achieved via `conditionalPanel` condition `"input.tabs == 'Plot' || input.tabs == 'Statistics'"` and matching JS `adjustLayout()` logic in `app.R`. The Statistics module consumes `plot_returns$raw_df` and `plot_returns$summary_df` directly -- no data duplication.
 
 ### Zero-Value Exclusion (May 2026)
 - UI: `stats_exclude_zero` checkbox in Section 1 controls row (`mod_statistics_ui.R`). Default OFF.
 - Server: `stats_run()` filters `value != 0` immediately after outlier flagging and before min-cells / diameter / aggregation. State and drop count (`zero_dropped`) propagate through the result list.
 - Scope: applies to mixed-effects model, donor-level ANOVA / Kruskal, pairwise Cohen's d, per-bin tests, demographics regressions, and the covariate-adjusted model. Does NOT alter AUC (read from the Plot tab's `summary_df`) or the normality table (computed before filtering would change power conclusions for a comparison user's reference).
 - Surfacing: overview banner shows an orange "Zero-valued excluded (N dropped)" badge; forest plot title appends `— N zero-valued dropped`; Methods Reference inserts a dedicated paragraph; CSV header records `Zero-value filter: ON/OFF; N dropped = …`.
-- Use case: zero-inflated features (rare phenotypes, peri-islet enrichment z-scores) where many islets register exactly 0. Lets users sanity-check whether group differences survive on the non-zero subset.
+- Use case: zero-inflated features — rare phenotypes whose core (`prop_*`) or peri-islet (`peri_prop_*`) proportion is exactly 0 in most islets. Lets users sanity-check whether group differences survive on the non-zero subset. (Enrichment z-scores are *not* zero-inflated — see the Card A note above.)
+- **Ordering (Jul 2026)**: the zero filter runs BEFORE `flag_outliers()`, so the robust median/MAD are computed on the values that actually enter the tests. It previously ran after, deriving the MAD from a zero-inflated vector and then discarding the zeros — a different outlier set from the Plot tab's, which has always filtered first.
+- **Decoupled from the Plot tab (Jul 2026)**: the Statistics module consumes `plot_returns$raw_df_prezero` (= the Plot module's `raw_df_base`), not `raw_df`. Previously it consumed `raw_df`, which had already applied the *Plot sidebar's* `exclude_zero_top` checkbox — so a control on another tab silently altered every test while the CSV header still reported `Zero-value filter: OFF`. `stats_exclude_zero` is now the only zero filter applied to the statistics.
 
 ### Sex-Stratified Tests — BH Correction (May 2026)
 - Pairwise tests within each sex are run UNADJUSTED (`p.adjust.method = "none"`) and then BH-corrected across all 6 contrasts (3 pairs × 2 sexes) in `gender_strat$p_adj`. Replaces the prior "minimum raw p, no correction" reporting.
 - `gender_plot` subtitle reports minimum BH-adjusted q per sex with a `(BH-corrected across 6 contrasts)` annotation. The `low_power` flag (n=2-3 donors per sex × group) remains as a separate badge.
-- CSV export includes a `# Sex-Stratified Pairwise (BH-corrected across 6 contrasts: 3 pairs x 2 sexes)` section.
+- CSV export includes a `# Post-hoc: Sex-Stratified Pairwise (BH-corrected across 6 contrasts: 3 pairs x 2 sexes)` section. Its column is written as **`sex`** (the in-memory data column stays `gender`).
 
 ### 5-Section Narrative Layout
 
@@ -116,7 +117,27 @@ A "About this tab" banner above Section 1 describes the tab's purpose, primary t
 5. **Methods Reference** -- "Design safeguards against p-hacking" summary, pseudoreplication, donor-level aggregation, ICC, mixed-effects, normality-driven auto test selection, fixed α / bin width, zero-value exclusion state, and honest correction scope.
 
 ### Multiple Testing Correction
-- Per-bin ANOVA, Kendall τ, and pairwise tests are BH-corrected across bins via `p.adjust(method = "BH")`. Heatmap shows `-log10(q)` (corrected) with star annotations using corrected values.
+- Per-bin ANOVA, Kendall τ, and pairwise tests are BH-corrected across bins via `p.adjust(method = "BH")`. Heatmap shows `-log10(q)` (corrected) with star annotations using corrected values. All three reach the CSV (see below) — the pairwise family previously did not, so 3 of the heatmap's 5 rows could not be reproduced from the export.
+
+### Download CSV contents (Jul 2026)
+
+The export is a stacked multi-section CSV: a `#` provenance/methodology header, then one `# <Section>` block per result table. **Every post-hoc family that appears on screen is now exported**; three were previously computed, plotted, and silently dropped:
+
+| Section | Source | Was exported before? |
+|---|---|---|
+| `# Shapiro-Wilk Normality Tests` | `norm_result` | yes |
+| `# Donor-Level Means` | `donor_df` (`gender` → **`sex`** on export) | yes |
+| `# Post-hoc: Mixed-Effects Pairwise (emmeans, Tukey-adjusted)` | `lmer_pairwise` — `contrast, estimate, SE, df, t/z.ratio, p_tukey, sig` | **NO** — this is the post-hoc for the tab's own PRIMARY test; only the omnibus p and ICC survived, as header comments, so per-contrast primary results were unrecoverable |
+| `# Post-hoc: Pairwise Comparisons (donor-level, BH across 3)` | `pairwise_df` | yes |
+| `# Covariate-Adjusted Model` | `age_model_p` from `lm(value ~ donor_status + age + sex)` | **NO** |
+| `# Per-Bin ANOVA` / `# Per-Bin Kendall` | `bin_anova` / `bin_kendall` | yes |
+| `# Post-hoc: Per-Bin Pairwise (BH across bins)` | `bin_pairwise` — rows 2-4 of `bin_heatmap` | **NO** |
+| `# AUC by Donor Group`, `# Demographics Summary`, `# Age-Feature Correlation`, `# Post-hoc: Sex-Stratified Pairwise`, `# Autoantibody Profile` | — | yes |
+
+Header notes:
+- `get_selection_description()` belongs to the **Plot** module, so its `Bin Width` and `Diameter Range` lines describe the *Plot sidebar*. The Statistics handler strips those two and restates the values that actually applied: the fixed `STATS_BIN_WIDTH_UM` and `input$stats_diam_range`. `stats_min_cells` is recorded too — the UI promises "every setting is recorded in the downloaded CSV header" and these three were the omissions.
+- `stats_run()` is an `eventReactive(..., ignoreInit = TRUE)`, so before Run it **raises** rather than returning NULL. `content()` wraps it in `tryCatch` — clicking Download before Run now writes the `# No results computed` fallback instead of failing the download.
+- On screen, the emmeans `p.value` is Tukey-adjusted and is displayed under **`p (adj)`**; it was previously printed under `p-value` with `p (adj)` showing `-`, which read as uncorrected.
 - Donor-level pairwise contrasts are BH-corrected across the 3 pairs.
 - Sex-stratified pairwise contrasts are BH-corrected across all 6 contrasts (3 pairs × 2 sexes).
 - **Scope caveat (Jul 2026)**: BH is applied *within* each family only — NOT across families, and NOT across the many features a user may test. The Methods text states this honestly (the earlier "BH correction applied to pairwise p-values" wording overstated coverage), and Sections 3–4 are labelled exploratory / hypothesis-generating. Confirmatory claims should come from the Section 2 primary test on a single pre-specified feature.

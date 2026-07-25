@@ -509,7 +509,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
     output$traj_scatter <- renderPlotly({
       df <- traj_data_clean()
       if (is.null(df) || nrow(df) == 0) {
-        return(plotly_empty() %>% layout(title = "No trajectory data available"))
+        return(plotly_islet_empty("No trajectory data available"))
       }
 
       # Flag outliers via the shared helper. Excluded points are drawn as
@@ -920,7 +920,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         }
       }
 
-      # Build title: "Islet_N (case_id, status, age, gender)"
+      # Build title: "Islet_N (case_id, status, age, sex)"
       title_detail <- info$case_id
       if (!is.null(info$donor_status)) title_detail <- paste0(title_detail, ", ", info$donor_status)
       if (!is.null(info$donor_age) && !is.na(info$donor_age)) title_detail <- paste0(title_detail, ", age ", round(info$donor_age))
@@ -1197,7 +1197,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
 
       if (all(is.na(df$umap_1)) || all(is.na(df$umap_2))) {
         return(ggplot() +
-          annotate("text", x = 0.5, y = 0.5, label = "UMAP coordinates not available", size = 5) +
+          annotate("text", x = 0.5, y = 0.5, label = "UMAP coordinates not available", size = ISLET_ANNOTATE_SIZE) +
           theme_void())
       }
 
@@ -1233,7 +1233,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
 
       if (all(is.na(df$umap_1)) || all(is.na(df$umap_2))) {
         return(ggplot() +
-          annotate("text", x = 0.5, y = 0.5, label = "UMAP coordinates not available", size = 5) +
+          annotate("text", x = 0.5, y = 0.5, label = "UMAP coordinates not available", size = ISLET_ANNOTATE_SIZE) +
           theme_void())
       }
 
@@ -1438,8 +1438,10 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       list(data = result, markers = valid)
     })
 
-    # Multi-row heatmap renderPlot
-    traj_multi_heatmap_plot <- reactive({
+    # The z-scored bin x marker matrix behind the multi-feature heatmap.
+    # Extracted from the plot reactive so `dl_multi_heatmap_csv` exports the
+    # exact numbers rendered (same binning, same clamp) instead of recomputing.
+    traj_multi_heatmap_matrix <- reactive({
       mfd <- traj_multi_feature_data()
       if (is.null(mfd)) return(NULL)
 
@@ -1480,6 +1482,8 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
             marker = mk,
             x = all_mids[i] * (pt_range[2] - pt_range[1]) + pt_range[1],
             z = z[i],
+            bin_mean = bin_means[i],
+            n_islets = bin_counts[i],
             stringsAsFactors = FALSE
           )
         }
@@ -1495,7 +1499,14 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       marker_order <- c(hormone_order, immune_order, other_order)
       hm$marker <- factor(hm$marker, levels = rev(marker_order))
 
-      n_markers <- length(marker_order)
+      list(hm = hm, marker_order = marker_order, pt_range = pt_range, n_bins = nb)
+    })
+
+    # Multi-row heatmap renderPlot
+    traj_multi_heatmap_plot <- reactive({
+      mm <- traj_multi_heatmap_matrix()
+      if (is.null(mm)) return(NULL)
+      hm <- mm$hm; pt_range <- mm$pt_range
 
       ggplot(hm, aes(x = x, y = marker, fill = z)) +
         geom_tile() +
@@ -1508,13 +1519,14 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         theme(
           panel.grid = element_blank(),
           plot.title = element_text(hjust = 0.5),
-          axis.text.y = element_text(size = max(ISLET_FONT_SIZES$dense_min, ISLET_FONT_SIZES$axis_text - 2))
+          axis.text.y = element_text(size = ISLET_FONT_SIZES$dense_min)
         )
     })
     output$traj_multi_heatmap <- renderPlot({ traj_multi_heatmap_plot() },
       height = function() {
         n <- length(input$multi_heatmap_markers %||% character(0))
-        max(220, 60 + n * 36)
+        # 44 px/row (was 36) so the dense-floor row labels have vertical room.
+        max(260, 70 + n * 44)
       })
     output$dl_multi_heatmap <- downloadHandler(
       filename = function() islet_png_filename("trajectory_multi_heatmap"),
@@ -1525,6 +1537,65 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         ggplot2::ggsave(file, plot = p,
                         width = ISLET_HEATMAP_PNG_DIMS$width, height = h,
                         dpi = ISLET_HEATMAP_PNG_DIMS$dpi, units = ISLET_HEATMAP_PNG_DIMS$units)
+      }
+    )
+
+    # The heatmap's underlying matrix. `z` is the plotted (clamped) value;
+    # `bin_mean` is the raw per-bin mean it was standardised from, so the
+    # z-scoring is reproducible from the file.
+    output$dl_multi_heatmap_csv <- downloadHandler(
+      filename = function() paste0("trajectory_multi_heatmap_",
+                                   format(Sys.time(), "%Y%m%d_%H%M%S"), ".csv"),
+      content = function(file) {
+        mm <- tryCatch(traj_multi_heatmap_matrix(), error = function(e) NULL)
+        out <- NULL
+        if (!is.null(mm) && !is.null(mm$hm)) {
+          out <- data.frame(
+            marker           = as.character(mm$hm$marker),
+            pseudotime_mid   = mm$hm$x,
+            bin_mean         = mm$hm$bin_mean,
+            z_clamped        = mm$hm$z,
+            n_islets_in_bin  = mm$hm$n_islets,
+            stringsAsFactors = FALSE)
+          out <- out[order(match(out$marker, mm$marker_order), out$pseudotime_mid), , drop = FALSE]
+        }
+        write_islet_csv(file, out, islet_csv_header(
+          "Trajectory — multi-feature expression along pseudotime",
+          paste("Pseudotime mode:", input$pt_mode %||% "dpt_pseudotime"),
+          paste("Markers:", paste(input$multi_heatmap_markers %||% "(none)", collapse = ", ")),
+          paste("Pseudotime bins:", if (is.null(mm)) NA else mm$n_bins),
+          "z_clamped = (bin_mean - mean of that marker's bin means) / sd, clamped to [-2.5, 2.5]. Z-scoring is ACROSS BINS within a marker, not across islets."
+        ))
+      }
+    )
+
+    # UMAP coordinates + donor status + the selected feature, i.e. everything
+    # the two UMAP panels encode.
+    output$dl_umap_csv <- downloadHandler(
+      filename = function() paste0("trajectory_umap_",
+                                   format(Sys.time(), "%Y%m%d_%H%M%S"), ".csv"),
+      content = function(file) {
+        td <- tryCatch(traj_data_clean(), error = function(e) NULL)
+        out <- NULL
+        if (!is.null(td) && is.data.frame(td) && nrow(td) > 0) {
+          want <- c("case_id", "islet_key", "combined_islet_id", "donor_status",
+                    "umap_1", "umap_2", "pt", "pt_rank",
+                    "feature_name", "value", "total_cells", "islet_diam_um")
+          keep <- intersect(want, colnames(td))
+          if (length(keep) > 0) {
+            out <- td[, keep, drop = FALSE]
+            # `pt` / `value` are opaque outside the app.
+            names(out)[names(out) == "pt"]    <- "pseudotime"
+            names(out)[names(out) == "value"] <- "feature_value"
+          }
+        }
+        write_islet_csv(file, out, islet_csv_header(
+          "Trajectory — UMAP coordinates and per-islet trajectory values",
+          paste("Pseudotime mode:", input$pt_mode %||% "dpt_pseudotime"),
+          paste("Selected feature:", input$traj_feature %||% "(none)"),
+          paste("Min cells per islet:", input$traj_min_cells %||% 1),
+          paste("Rows:", if (is.null(out)) 0 else nrow(out), "islets")
+        ))
       }
     )
 

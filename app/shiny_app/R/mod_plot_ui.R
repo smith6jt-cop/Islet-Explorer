@@ -143,7 +143,12 @@ plot_main_ui <- function(id, extra_panel = NULL) {
     column(4,
       div(class = "card",
           style = "margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; height: clamp(715px, 84.5vh - 97px, 1560px); display: flex; flex-direction: column; gap: 12px;",
-        h5("Distribution Comparison", style = "margin-top: 0; color: #333;"),
+        div(style = "display: flex; align-items: center; justify-content: space-between; margin-top: 0;",
+          h5("Distribution Comparison", style = "margin: 0; color: #333;"),
+          downloadButton(ns("dl_distribution_csv"), "CSV",
+                         class = "btn-sm btn-outline-secondary",
+                         style = "font-size: 11px; padding: 2px 8px;")
+        ),
         div(style = "flex: 1; min-height: 0; display: flex;",
           plotlyOutput(ns("dist"), height = "100%")
         ),

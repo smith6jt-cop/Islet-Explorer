@@ -117,7 +117,15 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
             choices[["Core — Phenotype Proportions (scVI)"]] <- setNames(prop_cols, prop_labels)
           }
           if (length(peri_prop_cols) > 0) {
-            peri_labels <- gsub("^peri_prop_", "", peri_prop_cols)
+            # `peri_prop_*` columns are sanitised (space -> _, + -> plus), so a
+            # bare gsub of the prefix displayed "CD4_Tcell" / "ECADplus" /
+            # "SMAplus" in the very same dropdown where the Core and Core+Peri
+            # groups displayed "CD4 Tcell" / "ECAD+" / "SMA+". Route the labels
+            # through the shared un-sanitiser so all three groups agree; the
+            # VALUES stay the raw column names, so nothing downstream changes.
+            peri_labels <- vapply(peri_prop_cols,
+                                  function(cl) extract_phenotype_from_column(cl) %||% cl,
+                                  character(1), USE.NAMES = FALSE)
             choices[["Peri-Islet — Phenotype Proportions (scVI)"]] <- setNames(peri_prop_cols, peri_labels)
           }
           if (length(combined_vals) > 0) {
@@ -210,7 +218,8 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       }
     })
 
-    # ---- Age & Gender filter UIs (visible only when demographics available) ----
+    # ---- Age & Sex filter UIs (visible only when demographics available) ----
+    # (data column is `gender`; user-facing label is "Sex")
     output$age_filter_ui <- renderUI({
       pd <- prepared()
       if (is.null(pd$comp) || !("age" %in% colnames(pd$comp))) return(NULL)
@@ -227,7 +236,16 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       if (is.null(pd$comp) || !("gender" %in% colnames(pd$comp))) return(NULL)
       genders <- sort(unique(na.omit(as.character(pd$comp$gender))))
       if (length(genders) == 0) return(NULL)
-      checkboxGroupInput(ns("gender_filter"), "Gender", choices = genders, selected = genders, inline = TRUE)
+      # User-facing label is "Sex" (project convention); the underlying data
+      # column stays `gender` for backwards compatibility. This sidebar is shared
+      # by the Plot AND Statistics tabs, so it was the one place in the live UI
+      # still showing the word "Gender". Values stay M/F — only the labels change.
+      sex_labels <- c(F = "Female", M = "Male")
+      checkboxGroupInput(ns("gender_filter"), "Sex",
+                         choiceNames  = unname(ifelse(genders %in% names(sex_labels),
+                                                      sex_labels[genders], genders)),
+                         choiceValues = as.list(genders),
+                         selected = genders, inline = TRUE)
     })
 
     # ===========================================================================
@@ -429,7 +447,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
                    as.numeric(out$age) >= input$age_range[1] &
                    as.numeric(out$age) <= input$age_range[2], , drop = FALSE]
       }
-      # Gender filter
+      # Sex filter (data column is `gender`)
       if (!is.null(input$gender_filter) && "gender" %in% colnames(out)) {
         out <- out[as.character(out$gender) %in% input$gender_filter, , drop = FALSE]
       }
@@ -558,7 +576,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
     output$plt <- renderPlotly({
       sm <- summary_df()
       if (is.null(sm) || !nrow(sm)) {
-        return(plotly_empty() %>% layout(title = "Loading data..."))
+        return(plotly_islet_empty("Loading data..."))
       }
 
       grp_levels <- c("ND", "Aab+", "T1D")
@@ -868,20 +886,14 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
     # flagged on the dist-specific subset so the helper sees the same
     # distribution it is summarising, and ghost \u00d7 markers render at positions
     # consistent with the current zero-exclusion state.
-    output$dist <- renderPlotly({
+    # Distribution-panel data, extracted from the renderer so `dl_distribution_csv`
+    # exports exactly what this panel shows. NOTE it reads `raw_df_base()` and its
+    # OWN `exclude_zero_dist` — it is deliberately independent of the main
+    # scatter's `exclude_zero_top`, so exporting `raw_df()` here would be wrong.
+    dist_data <- reactive({
       rdf <- raw_df_base()
       if (is.null(rdf) || nrow(rdf) == 0) return(NULL)
-
       req(input$mode, input$which)
-
-      # Force reactivity on distribution-specific controls
-      dist_color_by_val <- input$dist_color_by
-      dist_show_points_val <- input$dist_show_points
-
-      cat(sprintf("[DIST] Rendering with mode=%s, which=%s, color_by=%s\n",
-                  input$mode %||% "NULL",
-                  input$which %||% "NULL",
-                  dist_color_by_val %||% "NULL"))
 
       # Independent zero-exclusion for the Distribution panel.
       if (isTRUE(input$exclude_zero_dist)) {
@@ -889,16 +901,10 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       }
 
       color_by <- input$dist_color_by %||% "donor_status"
-
-      # Factor ordering
       rdf$donor_status <- factor(rdf$donor_status, levels = c("ND", "Aab+", "T1D"))
 
-      # Create donor_id column before it's needed
       if (color_by == "donor_id" && "Case ID" %in% colnames(rdf)) {
         rdf$donor_id <- factor(rdf$`Case ID`)
-        cat(sprintf("[DIST] Created donor_id with %d levels: %s\n",
-                    length(levels(rdf$donor_id)),
-                    paste(levels(rdf$donor_id), collapse = ", ")))
       }
 
       # Flag outliers on the dist-specific subset so badges and ghost markers
@@ -908,7 +914,20 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       rdf <- flag_outliers(rdf, value_col = "value", group_col = "donor_status",
                            method = "zscore", threshold = outlier_threshold(),
                            enabled = isTRUE(remove_outliers()))
-      dist_summary <- summarize_outlier_filter(rdf)
+      list(all = rdf, summary = summarize_outlier_filter(rdf))
+    })
+
+    output$dist <- renderPlotly({
+      dd <- dist_data()
+      if (is.null(dd)) return(NULL)
+
+      # Force reactivity on distribution-specific controls
+      dist_color_by_val <- input$dist_color_by
+      dist_show_points_val <- input$dist_show_points
+
+      color_by <- input$dist_color_by %||% "donor_status"
+      rdf <- dd$all
+      dist_summary <- dd$summary
       rdf_ghost <- rdf[rdf$is_outlier, , drop = FALSE]
       rdf <- rdf[!rdf$is_outlier | is.na(rdf$is_outlier), , drop = FALSE]
       if (nrow(rdf_ghost) > 0 && !is.null(rdf_ghost$donor_status)) {
@@ -1173,7 +1192,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         }
       }
 
-      # Build title: "Islet_N (case_id, status, age, gender)"
+      # Build title: "Islet_N (case_id, status, age, sex)"
       title_detail <- info$case_id
       if (!is.null(info$donor_status)) title_detail <- paste0(title_detail, ", ", info$donor_status)
       if (!is.null(info$donor_age) && !is.na(info$donor_age)) title_detail <- paste0(title_detail, ", age ", round(info$donor_age))
@@ -1281,15 +1300,50 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         paste0("summary_", gsub("[^0-9A-Za-z]+", "_", Sys.time()), ".csv")
       },
       content = function(file) {
-        df <- summary_df()
-        if (is.null(df) || nrow(df) == 0) df <- data.frame()
+        df <- tryCatch(summary_df(), error = function(e) NULL)
+        write_islet_csv(file, df, c(
+          "Plot — binned summary curve (the lines/points drawn on the scatter)",
+          get_selection_description(),
+          "Rows are per (donor status x diameter bin). y/ymin/ymax are the plotted values for the chosen Statistic.",
+          "Individual islet points are NOT in this file — use the Distribution CSV for per-islet values."
+        ))
+      }
+    )
 
-        descriptions <- get_selection_description()
-
-        # Write descriptions as comments, then the data
-        writeLines(paste("#", descriptions), file)
-        writeLines("", file, sep = "\n")
-        write.table(df, file, append = TRUE, sep = ",", row.names = FALSE)
+    # Per-islet values behind the Distribution Comparison panel. This panel has
+    # its OWN zero-exclusion checkbox (`exclude_zero_dist`), independent of the
+    # main scatter's, so its export must come from `dist_data()` and not from
+    # the summary chain above.
+    output$dl_distribution_csv <- downloadHandler(
+      filename = function() {
+        paste0("distribution_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".csv")
+      },
+      content = function(file) {
+        dd <- tryCatch(dist_data(), error = function(e) NULL)
+        out <- NULL
+        if (!is.null(dd) && !is.null(dd$all) && nrow(dd$all) > 0) {
+          rdf <- dd$all
+          want <- c("Case ID", "islet_key", "donor_status", "value",
+                    "islet_diam_um", "total_cells_core", "total_cells_peri",
+                    "is_outlier", "outlier_score")
+          out <- rdf[, intersect(want, colnames(rdf)), drop = FALSE]
+        }
+        fs <- if (is.null(dd)) NULL else dd$summary
+        desc <- tryCatch(get_selection_description(), error = function(e) character(0))
+        # This panel's zero toggle is its own; restate it so the header is not
+        # contradicted by the main scatter's line.
+        desc <- desc[!grepl("^Zero-value exclusion:", desc)]
+        write_islet_csv(file, out, c(
+          "Plot — Distribution Comparison panel, per-islet values",
+          desc,
+          paste("Zero-value exclusion (Distribution panel):",
+                if (isTRUE(input$exclude_zero_dist)) "ON" else "OFF"),
+          paste("Outlier rule:", if (is.null(fs)) "n/a"
+                                 else if (isTRUE(fs$enabled))
+                                   paste0(fs$label, "; ", fs$n_excluded, " of ", fs$n_total, " flagged")
+                                 else "OFF"),
+          "is_outlier marks the ghost x markers. Rows are NOT dropped, so the full distribution is exportable."
+        ))
       }
     )
 
@@ -1317,12 +1371,36 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         }
       }
 
+      # Demographic + size filters. These CHANGE WHICH ISLETS ARE IN THE FILE,
+      # so omitting them made two CSVs with different row sets look identical in
+      # provenance. `min_cells`, age, and sex were all silently absent.
+      desc <- c(desc, paste("Min cells per islet (core+peri):", input$min_cells %||% 1))
+      if (!is.null(input$age_range) && length(input$age_range) == 2) {
+        desc <- c(desc, paste("Donor Age Range:",
+                              input$age_range[1], "-", input$age_range[2], "years"))
+      }
+      if (!is.null(input$gender_filter)) {
+        sex_labels <- c(F = "Female", M = "Male")
+        sel <- input$gender_filter
+        desc <- c(desc, paste("Sex:", paste(ifelse(sel %in% names(sex_labels),
+                                                   sex_labels[sel], sel), collapse = ", ")))
+      }
+
       desc <- c(desc, paste("Statistic:", input$stat %||% "mean_se"))
       desc <- c(desc, paste("Bin Width:", input$binwidth %||% "50", "\u00b5m"))
       if (!is.null(input$diam_range) && length(input$diam_range) == 2) {
         desc <- c(desc, paste("Diameter Range:",
                               input$diam_range[1], "-", input$diam_range[2], "\u00b5m"))
       }
+
+      # Analysis-rule state. Without these a file with 17 outliers removed is
+      # indistinguishable from one with none.
+      desc <- c(desc, paste("Zero-value exclusion:",
+                            if (isTRUE(input$exclude_zero_top)) "ON" else "OFF"))
+      desc <- c(desc, paste("Outlier filter:",
+                            if (isTRUE(remove_outliers()))
+                              paste0("ON (|z| > ", outlier_threshold(), " per donor status)")
+                            else "OFF"))
 
       return(desc)
     }
@@ -1335,8 +1413,14 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
     # Return values for other modules (Statistics, etc.)
     # ===========================================================================
 
+    # `raw_df_prezero` is `raw_df_base` — the per-islet frame with every sidebar
+    # filter applied but BEFORE `input$exclude_zero_top`. The Statistics tab
+    # consumes this one so the Plot sidebar's zero checkbox cannot silently
+    # alter statistical results; Statistics applies its own `stats_exclude_zero`
+    # and reports it truthfully in the CSV header.
     list(
       raw_df                  = raw_df,
+      raw_df_prezero          = raw_df_base,
       summary_df              = summary_df,
       get_selection_description = get_selection_description
     )

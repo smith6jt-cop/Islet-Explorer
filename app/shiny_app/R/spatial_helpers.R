@@ -19,6 +19,23 @@ get_available_donors <- function() {
   gsub("\\.csv$", "", files)
 }
 
+#' Canonical phenotype vocabulary, in `PHENOTYPE_COLORS` order.
+#'
+#' Selectors must NOT derive their choices from whichever slice of data happens
+#' to be loaded — that is how "CD4 Tcell" disappeared from the Spatial tab, since
+#' the default donor (112) has zero CD4 cells and two other donors (6533, 6534)
+#' do too. `PHENOTYPE_COLORS` (drilldown_helpers.R) is the documented single
+#' source of truth for phenotype labels; `extra` lets an unexpected value from
+#' the data still appear rather than being silently dropped.
+#'
+#' @param extra Optional character vector of phenotypes observed in the data.
+#' @return Canonical names first (PHENOTYPE_COLORS order), then any extras.
+canonical_phenotype_order <- function(extra = character(0)) {
+  canon <- names(PHENOTYPE_COLORS)
+  extra <- unique(as.character(extra[!is.na(extra) & nzchar(extra)]))
+  c(canon, sort(setdiff(extra, canon)))
+}
+
 #' Load per-donor tissue cells with caching
 #' @param imageid Donor image ID (e.g., "6505")
 #' @return data.frame with X_centroid, Y_centroid, phenotype, cell_region, islet_name
@@ -105,11 +122,13 @@ load_cell_distance <- function() {
   df
 }
 
-#' Distinct phenotypes present in the cell-distance data (drops "Unknown").
+#' Distinct phenotypes present in the cell-distance data, in canonical order.
+#' "Unknown" IS included — every phenotype must be reachable from every
+#' selector; it is simply left unselected by default (see `dist_comp_items`).
 cell_distance_phenotypes <- function() {
   df <- load_cell_distance()
   if (is.null(df)) return(character(0))
-  sort(unique(df$phenotype[df$phenotype != "Unknown"]))
+  canonical_phenotype_order(unique(df$phenotype))
 }
 
 #' Lineage markers with per-cell positivity (`{m}_pos` columns, scimap X>0.5).

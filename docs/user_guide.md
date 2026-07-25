@@ -33,7 +33,7 @@ The app loads from a single enriched H5AD file (`data/islet_explorer.h5ad`, ~70 
 - **31 protein markers** (mean expression per islet)
 - **Pseudotime trajectory** (DPT with INS root, scVI-corrected)
 - **21 phenotype proportions** (from single-cell phenotyping)
-- **Donor demographics** (age, gender, autoantibody status)
+- **Donor demographics** (age, sex, autoantibody status)
 - **62 neighborhood metrics** (peri-islet composition, immune infiltration, enrichment z-scores, distances)
 - **QuPath groovy data** (targets, markers, composition, LGALS3)
 

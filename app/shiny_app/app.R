@@ -544,8 +544,9 @@ server <- function(input, output, session) {
   # Global outlier z-threshold slider (synced across Plot / Trajectory /
   # Spatial). Default 3.0 (legacy behavior). Range 0.5–10, step 0.5. Feeds
   # `flag_outliers(threshold = …)` for every z-score site. Spatial Card A's
-  # IQR rule (1.5×) is intentionally NOT routed through this — different
-  # scale, kept fixed for zero-inflated phenotype enrichment.
+  # IQR rule (1.5×) is intentionally NOT routed through this — enrichment z is
+  # already a standardised quantity, so it uses a fixed Tukey fence on a
+  # different scale.
   outlier_z_rv <- reactiveVal(3.0)
 
   observeEvent(input$sidebar_outlier_z, {
@@ -580,7 +581,7 @@ server <- function(input, output, session) {
     if (is.finite(val) && val >= 0.5) val else 3.0
   })
 
-  # Plot module: returns list(raw_df, summary_df, get_selection_description)
+  # Plot module: returns list(raw_df, raw_df_prezero, summary_df, get_selection_description)
   plot_returns <- plot_server("plot", prepared, selected_islet, active_tab, active_donor_colors,
                               remove_outliers = remove_outliers_global,
                               outlier_threshold = outlier_z_global)
@@ -593,9 +594,13 @@ server <- function(input, output, session) {
   # Viewer module
   viewer_server("viewer", forced_image, reactive(input$tabs))
 
-  # Statistics module: wired to Plot module's reactive outputs
+  # Statistics module: wired to Plot module's reactive outputs.
+  # NOTE: `raw_df_prezero` (not `raw_df`) — the Statistics tab owns its own
+  # zero-value exclusion via `stats_exclude_zero`. Passing the Plot tab's
+  # post-zero-filter frame would let a control on another tab silently change
+  # every test while the CSV header still reported "Zero-value filter: OFF".
   statistics_server("stats",
-                    raw_df                  = plot_returns$raw_df,
+                    raw_df                  = plot_returns$raw_df_prezero,
                     summary_df              = plot_returns$summary_df,
                     get_selection_description = plot_returns$get_selection_description,
                     donor_colors             = active_donor_colors,
@@ -631,7 +636,7 @@ server <- function(input, output, session) {
             ggplot2::ggplot() +
               ggplot2::annotate("text", x = 0.5, y = 0.5,
                                 label = paste("Render error:", conditionMessage(e)),
-                                size = 4, color = "red") +
+                                size = ISLET_ANNOTATE_SIZE, color = "red") +
               ggplot2::theme_void() + ggplot2::xlim(0, 1) + ggplot2::ylim(0, 1)
           }
         ))
@@ -646,7 +651,7 @@ server <- function(input, output, session) {
         ggplot2::ggplot() +
           ggplot2::annotate("text", x = 0.5, y = 0.5,
                             label = paste("Render error:", conditionMessage(e)),
-                            size = 4, color = "red") +
+                            size = ISLET_ANNOTATE_SIZE, color = "red") +
           ggplot2::theme_void() + ggplot2::xlim(0, 1) + ggplot2::ylim(0, 1)
       }
     )

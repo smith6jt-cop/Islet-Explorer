@@ -23,7 +23,7 @@
 | Outlier detection | >3 SD flagged, displayed at 1.2x size, optional summary table |
 | Scale options | Pseudo-log Y (zeros preserved at 0), log2 X, exclude-zeros toggle |
 | Click-to-segmentation | Click any point → embedded QuPath GeoJSON segmentation map with islet/peri-islet/nerve/capillary/lymphatic polygons |
-| Filtering | Donor status, autoantibody subtype (GADA/IA2A/ZnT8A/IAA/mIAA), diameter range, age slider, gender checkboxes |
+| Filtering | Donor status, autoantibody subtype (GADA/IA2A/ZnT8A/IAA/mIAA), diameter range, age slider, sex checkboxes |
 | Color modes | By donor status (fixed palette) or by individual donor ID |
 | Summary statistics | Mean±SE, Mean±SD, or Median+IQR |
 | Export | Annotated CSV with full filter state metadata |
@@ -58,7 +58,7 @@
 | Hypothesis testing | ANOVA or Kruskal-Wallis (global) + pairwise t-test/Wilcoxon with BH correction, Cohen's d + 95% CI, forest plot |
 | Per-bin heatmap | Plotly heatmap of -log10(p) across diameter bins x test type, with significance stars |
 | Trend analysis | Kendall tau per bin, color-coded significance, overall direction statement |
-| Demographics | Age scatter with per-group regression, gender-stratified tests, covariate-adjusted model (conditional on H5AD data) |
+| Demographics | Age scatter with per-group regression, sex-stratified tests, covariate-adjusted model (conditional on H5AD data) |
 | AUC analysis | Trapezoidal AUC by donor group with % change interpretation |
 | Methods | Dynamic text describing all tests, corrections, and assumptions used |
 | Export | Full annotated CSV with all statistical results |

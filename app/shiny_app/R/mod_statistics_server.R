@@ -10,7 +10,7 @@
 #   aggregate_to_donor, lmer_test_donor              -- utils_stats.R
 #   per_bin_donor_anova, per_bin_donor_kendall       -- utils_stats.R
 #   normality_tests                                  -- utils_stats.R
-#   cohens_d, eta_squared, pairwise_wilcox           -- utils_stats.R
+#   cohens_d, eta_squared                            -- utils_stats.R
 #   bin_islet_sizes                                  -- data_loading.R
 
 # Fixed per-bin width for the Section 3 size-stratified analysis. Intentionally a
@@ -71,6 +71,29 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
       # below. The manual Parametric/Non-parametric toggle was removed because flipping
       # it to chase significance is a classic garden-of-forking-paths move.
 
+      # ---- Zero-value exclusion (sensitivity for zero-inflated features) ----
+      # Removes rows whose feature value == 0 before outlier flagging, donor-level
+      # aggregation, mixed-effects modelling, demographics, and per-bin tests.
+      # AUC is read from the Plot tab's summary_df and is NOT affected.
+      #
+      # ORDER MATTERS: this runs BEFORE flag_outliers() so the robust centre and
+      # scale (median / MAD) are computed on the values that actually enter the
+      # tests. Flagging first would derive the MAD from a zero-inflated vector
+      # and then discard the zeros — a different, and wrong, outlier set. This
+      # also matches the Plot tab, which filters zeros in raw_df() before
+      # plot_df() calls flag_outliers().
+      #
+      # `raw_df` here is the Plot module's `raw_df_prezero` (see app.R), so this
+      # toggle is the ONLY zero filter applied to the statistics.
+      exclude_zero <- isTRUE(input$stats_exclude_zero)
+      zero_dropped <- 0L
+      if (exclude_zero) {
+        n_before <- nrow(rdf)
+        rdf <- rdf[is.finite(rdf$value) & rdf$value != 0, , drop = FALSE]
+        zero_dropped <- as.integer(n_before - nrow(rdf))
+      }
+      if (nrow(rdf) == 0) return(NULL)
+
       # ---- Outlier removal via shared helper (controlled by LOCAL toggle) ----
       # `stats_remove_outliers` lives in the Statistics tab Section 1 controls
       # and is independent of the Plot / Trajectory / Spatial synced toggle.
@@ -90,18 +113,6 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
         rdf <- rdf[!rdf$is_outlier | is.na(rdf$is_outlier), , drop = FALSE]
       }
 
-      # ---- Zero-value exclusion (sensitivity for zero-inflated features) ----
-      # Removes rows whose feature value == 0 before any donor-level aggregation,
-      # mixed-effects modelling, demographics, and per-bin tests. AUC is read
-      # from the Plot tab's summary_df and is NOT affected.
-      exclude_zero <- isTRUE(input$stats_exclude_zero)
-      zero_dropped <- 0L
-      if (exclude_zero) {
-        n_before <- nrow(rdf)
-        rdf <- rdf[is.finite(rdf$value) & rdf$value != 0, , drop = FALSE]
-        zero_dropped <- as.integer(n_before - nrow(rdf))
-      }
-
       # ---- Min-cells filter (like spatial tab) ----
       min_cells <- input$stats_min_cells %||% 1
       if (min_cells > 1 &&
@@ -115,10 +126,15 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
       }
 
       # ---- Diameter range filter (from Stats inline controls) ----
+      # NOTE: this is `stats_diam_range`, NOT the Plot sidebar's `diam_range`.
+      # Recorded on the result list so the CSV header can cite the range that
+      # was actually applied (see the download handler).
+      diam_range_used <- NULL
       if (!is.null(input$stats_diam_range) && length(input$stats_diam_range) == 2) {
         dmin <- as.numeric(input$stats_diam_range[1])
         dmax <- as.numeric(input$stats_diam_range[2])
         if (is.finite(dmin) && is.finite(dmax)) {
+          diam_range_used <- c(dmin, dmax)
           rdf <- rdf[is.finite(rdf$islet_diam_um) &
                       rdf$islet_diam_um >= dmin &
                       rdf$islet_diam_um <= dmax, , drop = FALSE]
@@ -459,7 +475,13 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
         rdf              = rdf,
         outlier_summary  = outlier_summary_pre,
         exclude_zero     = exclude_zero,
-        zero_dropped     = zero_dropped
+        zero_dropped     = zero_dropped,
+        # Data-subset knobs, recorded so the CSV header can report the settings
+        # that actually produced this run. The UI promises "every setting is
+        # recorded in the downloaded CSV header" (mod_statistics_ui.R) — these
+        # two were the ones it silently omitted.
+        min_cells        = min_cells,
+        diam_range       = diam_range_used
       )
     }, ignoreInit = TRUE)
 
@@ -674,10 +696,14 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
       # Pairwise from mixed model (estimated marginal means)
       lmer_pw <- st$lmer_pairwise
       if (!is.null(lmer_pw) && nrow(lmer_pw) > 0) {
+        # emmeans(pairwise ~ ...) Tukey-adjusts `p.value` by default, so this
+        # column belongs under "p (adj)". It was previously printed under
+        # "p-value" with "p (adj)" showing "-", which read as an uncorrected
+        # result and understated the correction that had in fact been applied.
         lmer_pw_rows <- data.frame(
-          Contrast = paste0(lmer_pw$contrast, " (mixed-effects pairwise)"),
-          `p-value` = fmt_p(lmer_pw$p.value),
-          `p (adj)` = "-",
+          Contrast = paste0(lmer_pw$contrast, " (mixed-effects pairwise, Tukey)"),
+          `p-value` = "-",
+          `p (adj)` = fmt_p(lmer_pw$p.value),
           `Cohen's d` = "-",
           `95% CI` = "-",
           Sig = ifelse(!is.na(lmer_pw$p.value) & lmer_pw$p.value < st$alpha, "*", ""),
@@ -837,14 +863,17 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
         layout(
           font = fonts$global,
           xaxis = list(title = list(text = "Diameter bin midpoint (\u00b5m)", font = fonts$axis_title),
-                       tickfont = fonts$axis_tick, tickangle = -45),
+                       tickfont = fonts$axis_tick, tickangle = -45, automargin = TRUE),
           yaxis = list(title = list(text = "", font = fonts$axis_title),
-                       tickfont = fonts$axis_tick,
+                       tickfont = fonts$axis_tick, automargin = TRUE,
                        categoryorder = "array", categoryarray = rev(row_names)),
           title = list(text = "Stratified Significance (BH-corrected, donor-level)",
                        font = fonts$title)
         ) %>%
-        plotly_islet_config("statistics_bin_heatmap")
+        # "show", not the default "hide": these are single-glyph significance
+        # stars. A hidden star reads as "not significant" \u2014 the one failure mode
+        # this plot cannot afford.
+        plotly_islet_config("statistics_bin_heatmap", uniform_text_mode = "show")
     })
 
     # ===========================================================================
@@ -908,7 +937,7 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
               tableOutput(ns("aab_donor_table"))
             ),
             column(6,
-              plotlyOutput(ns("aab_plot"), height = "260px")
+              plotlyOutput(ns("aab_plot"), height = "380px")
             )
           )
         )
@@ -924,11 +953,11 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
           fluidRow(
             column(6,
               h6("Age vs Feature (islet-level)", style = "color: #555; margin-bottom: 10px;"),
-              plotlyOutput(ns("age_scatter"), height = "300px")
+              plotlyOutput(ns("age_scatter"), height = "420px")
             ),
             column(6,
               h6("Sex vs Feature", style = "color: #555; margin-bottom: 10px;"),
-              plotlyOutput(ns("gender_plot"), height = "300px")
+              plotlyOutput(ns("gender_plot"), height = "420px")
             )
           )
         ),
@@ -986,9 +1015,16 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
       fonts <- plotly_islet_fonts()
       ggplotly(g, tooltip = c("x", "y", "colour")) %>%
         layout(font = fonts$global,
-               title = list(font = fonts$title),
-               xaxis = list(title = list(font = fonts$axis_title), tickfont = fonts$axis_tick),
-               yaxis = list(title = list(font = fonts$axis_title), tickfont = fonts$axis_tick),
+               # ggplotly drops labs(subtitle=), so `corr_label` — the whole
+               # point of this plot — never reached the page. Re-attach it here.
+               title = list(text = plotly_title_with_sub("Age vs Feature (all islets)",
+                                                         corr_label),
+                            font = fonts$title),
+               margin = list(t = 80),
+               xaxis = list(title = list(font = fonts$axis_title),
+                            tickfont = fonts$axis_tick, automargin = TRUE),
+               yaxis = list(title = list(font = fonts$axis_title),
+                            tickfont = fonts$axis_tick, automargin = TRUE),
                legend = list(orientation = "h", x = 0.2, y = -0.2,
                              font = fonts$legend_text,
                              title = list(font = fonts$legend_title))) %>%
@@ -1044,11 +1080,20 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
 
       fonts <- plotly_islet_fonts()
       ggplotly(g, tooltip = c("y")) %>%
+        # This is the app's only facet. ggplotly turns the "Male"/"Female" strip
+        # labels into layout annotations that neither layout(font=) nor
+        # theme_islet()'s strip.text reaches, so they rendered at plotly's ~11px
+        # annotation default.
+        plotly_islet_strip_fonts() %>%
         layout(font = fonts$global,
-               title = list(font = fonts$title),
-               xaxis = list(title = list(font = fonts$axis_title), tickfont = fonts$axis_tick),
-               yaxis = list(title = list(font = fonts$axis_title), tickfont = fonts$axis_tick),
-               margin = list(b = 60)) %>%
+               title = list(text = plotly_title_with_sub("Feature by Donor Status & Sex",
+                                                         sub_label),
+                            font = fonts$title),
+               margin = list(b = 60, t = 80),
+               xaxis = list(title = list(font = fonts$axis_title),
+                            tickfont = fonts$axis_tick, automargin = TRUE),
+               yaxis = list(title = list(font = fonts$axis_title),
+                            tickfont = fonts$axis_tick, automargin = TRUE)) %>%
         plotly_islet_config("statistics_sex_box")
     })
 
@@ -1091,22 +1136,30 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
       kt <- tryCatch(kruskal.test(value ~ aab_group, data = aab_df), error = function(e) NULL)
       p_label <- if (!is.null(kt)) sprintf("KW p = %s", formatC(kt$p.value, format = "e", digits = 1)) else ""
 
+      aab_sub <- paste0("N = ", nrow(aab_df), " islets from ",
+                        length(unique(aab_df$`Case ID`)), " Aab+ donors. ", p_label)
+
       g <- ggplot(aab_df, aes(x = aab_group, y = value, fill = aab_group)) +
         geom_boxplot(alpha = 0.7, outlier.size = 0.8) +
         scale_fill_brewer(palette = "Set2") +
         labs(x = "Number of Autoantibodies", y = st$feature_name,
              title = "Feature by AAb Count (Aab+ islets)",
-             subtitle = paste0("N = ", nrow(aab_df), " islets from ",
-                               length(unique(aab_df$`Case ID`)), " Aab+ donors. ", p_label)) +
+             subtitle = aab_sub) +
         theme_islet() +
         theme(legend.position = "none")
 
       fonts <- plotly_islet_fonts()
       ggplotly(g, tooltip = c("y")) %>%
         layout(font = fonts$global,
-               title = list(font = fonts$title),
-               xaxis = list(title = list(font = fonts$axis_title), tickfont = fonts$axis_tick),
-               yaxis = list(title = list(font = fonts$axis_title), tickfont = fonts$axis_tick)) %>%
+               # ggplotly drops labs(subtitle=) — re-attach the N + KW p-value.
+               title = list(text = plotly_title_with_sub("Feature by AAb Count (Aab+ islets)",
+                                                         aab_sub),
+                            font = fonts$title),
+               margin = list(t = 80),
+               xaxis = list(title = list(font = fonts$axis_title),
+                            tickfont = fonts$axis_tick, automargin = TRUE),
+               yaxis = list(title = list(font = fonts$axis_title),
+                            tickfont = fonts$axis_tick, automargin = TRUE)) %>%
         plotly_islet_config("statistics_aab_plot")
     })
 
@@ -1252,7 +1305,7 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
                     os$n_excluded, if (os$n_excluded == 1) "" else "s", os$label),
             "The control is local to the Statistics tab (Section 1 ", tags$em("Exclude outliers"),
             " checkbox + threshold slider); the Plot / Trajectory / Spatial tabs share their own synced controls. ",
-            "Spatial Card A uses Tukey 1.5×IQR per donor status to tolerate zero-inflated phenotypes.",
+            "Spatial Card A uses Tukey 1.5×IQR per donor status, since enrichment z is already a standardised quantity.",
             tags$br()
           )
         } else {
@@ -1271,7 +1324,7 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
           sprintf("This run dropped %s islet%s with value == 0 before donor-level aggregation, mixed-effects modelling, demographics, and per-bin tests. ",
                   formatC(st$zero_dropped, format = "d", big.mark = ","),
                   if (st$zero_dropped == 1) "" else "s"),
-          "Useful for zero-inflated features (rare phenotypes or peri-islet enrichment z-scores where many islets register 0). ",
+          "Useful for zero-inflated features — rare phenotypes whose core or peri-islet proportion is exactly 0 in most islets. ",
           tags$strong("Note: "), "AUC is computed from the Plot-tab summary curves and is not affected by this filter.",
           tags$br()
         )
@@ -1380,8 +1433,17 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
         paste0("statistics_", gsub("[^0-9A-Za-z]+", "_", Sys.time()), ".csv")
       },
       content = function(file) {
-        st <- stats_run()
-        descriptions <- get_selection_description()
+        # `stats_run` is an eventReactive(..., ignoreInit = TRUE): before the Run
+        # button is pressed it raises rather than returning NULL, which crashed
+        # the download instead of producing the "no results" fallback below.
+        st <- tryCatch(stats_run(), error = function(e) NULL)
+
+        # get_selection_description() belongs to the PLOT module, so its
+        # "Bin Width" and "Diameter Range" lines describe the Plot sidebar — not
+        # this tab, which bins at a fixed STATS_BIN_WIDTH_UM and filters on
+        # `stats_diam_range`. Drop those two and restate them correctly below.
+        descriptions <- tryCatch(get_selection_description(), error = function(e) character(0))
+        descriptions <- descriptions[!grepl("^(Bin Width|Diameter Range):", descriptions)]
 
         lines <- c(paste("#", descriptions))
         lines <- c(lines, "")
@@ -1403,7 +1465,13 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
           }
           lines <- c(lines, paste0("# Zero-value filter: ",
                                    if (isTRUE(st$exclude_zero)) "ON" else "OFF",
-                                   "; N dropped = ", st$zero_dropped))
+                                   "; N dropped = ", st$zero_dropped,
+                                   ". (This tab owns its own zero filter; the Plot",
+                                   " sidebar's checkbox does not affect these results.)"))
+          lines <- c(lines, paste0("# Min cells per islet (core+peri): ", st$min_cells %||% 1))
+          lines <- c(lines, paste0("# Diameter range (Statistics tab): ",
+                                   if (is.null(st$diam_range)) "no filter"
+                                   else paste0(st$diam_range[1], " - ", st$diam_range[2], " um")))
           lines <- c(lines, paste0("# Total islets: ",
                                    formatC(st$n_islets, big.mark = ","),
                                    ", Donors: ", st$n_donors))
@@ -1429,17 +1497,62 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
             write.table(st$norm_result, file, append = TRUE, sep = ",", row.names = FALSE, quote = TRUE)
           }
 
+          # `gender` is the DATA column name (H5AD obs) and stays that way
+          # in memory; on export it becomes `sex` to match every user-facing
+          # label in the app.
+          as_sex <- function(df) {
+            if (!is.null(df) && "gender" %in% colnames(df)) {
+              colnames(df)[colnames(df) == "gender"] <- "sex"
+            }
+            df
+          }
+
           # Donor-level data
           if (!is.null(st$donor_df)) {
             cat("\n# Donor-Level Means\n", file = file, append = TRUE)
-            write.table(st$donor_df, file, append = TRUE, sep = ",", row.names = FALSE, quote = TRUE)
+            write.table(as_sex(st$donor_df), file, append = TRUE, sep = ",",
+                        row.names = FALSE, quote = TRUE)
+          }
+
+          # ---- POST-HOC: mixed-effects pairwise (the PRIMARY test's post-hoc) --
+          # emmeans(pairwise ~ donor_status) on the lmer fit. `pairwise ~` applies
+          # a Tukey adjustment to p.value by default, so that column IS adjusted.
+          # These contrasts are shown on screen but were never exported: only the
+          # omnibus p and ICC survived, as header comments — which made the
+          # per-contrast primary results unrecoverable from the CSV.
+          lpw <- st$lmer_pairwise
+          if (!is.null(lpw) && nrow(lpw) > 0) {
+            lpw_out <- lpw
+            # `p.value` from emmeans pairwise is Tukey-adjusted; name it so.
+            if ("p.value" %in% colnames(lpw_out)) {
+              colnames(lpw_out)[colnames(lpw_out) == "p.value"] <- "p_tukey"
+              lpw_out$sig <- !is.na(lpw_out$p_tukey) & lpw_out$p_tukey < st$alpha
+            }
+            cat("\n# Post-hoc: Mixed-Effects Pairwise (emmeans, Tukey-adjusted) -- post-hoc for the PRIMARY test\n",
+                file = file, append = TRUE)
+            write.table(lpw_out, file, append = TRUE, sep = ",",
+                        row.names = FALSE, quote = TRUE)
           }
 
           # Pairwise
-          cat("\n# Pairwise Comparisons (donor-level)\n", file = file, append = TRUE)
+          cat("\n# Post-hoc: Pairwise Comparisons (donor-level, BH-corrected across 3 contrasts)\n",
+              file = file, append = TRUE)
           pw <- st$pairwise_df
           if (!is.null(pw) && nrow(pw) > 0) {
             write.table(pw, file, append = TRUE, sep = ",", row.names = FALSE, quote = TRUE)
+          }
+
+          # Covariate-adjusted model (donor-level). Rendered on screen but never
+          # exported.
+          if (!is.null(st$age_model_p)) {
+            cat("\n# Covariate-Adjusted Model: lm(value ~ donor_status + age + sex), donor-level\n",
+                file = file, append = TRUE)
+            write.table(
+              data.frame(term = "donor_status",
+                         p_value = st$age_model_p,
+                         sig = !is.na(st$age_model_p) && st$age_model_p < st$alpha,
+                         stringsAsFactors = FALSE),
+              file, append = TRUE, sep = ",", row.names = FALSE, quote = TRUE)
           }
 
           # Per-bin ANOVA
@@ -1452,6 +1565,18 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
           if (!is.null(st$bin_kendall) && nrow(st$bin_kendall) > 0) {
             cat("\n# Per-Bin Kendall (donor-level)\n", file = file, append = TRUE)
             write.table(st$bin_kendall, file, append = TRUE, sep = ",", row.names = FALSE, quote = TRUE)
+          }
+
+          # ---- POST-HOC: per-bin pairwise ------------------------------------
+          # Rows 2-4 of the on-screen bin_heatmap (rows 1 and 5 are the ANOVA and
+          # Kendall sections above). Computed, BH-corrected and plotted, but
+          # previously absent from the export — so three fifths of that figure
+          # could not be reproduced from the CSV.
+          if (!is.null(st$bin_pairwise) && nrow(st$bin_pairwise) > 0) {
+            cat("\n# Post-hoc: Per-Bin Pairwise (donor-level, BH-corrected across bins)\n",
+                file = file, append = TRUE)
+            write.table(st$bin_pairwise, file, append = TRUE, sep = ",",
+                        row.names = FALSE, quote = TRUE)
           }
 
           # AUC
@@ -1472,9 +1597,10 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
           }
 
           if (!is.null(st$gender_strat) && nrow(st$gender_strat) > 0) {
-            cat("\n# Sex-Stratified Pairwise (BH-corrected across 6 contrasts: 3 pairs x 2 sexes)\n",
+            cat("\n# Post-hoc: Sex-Stratified Pairwise (BH-corrected across 6 contrasts: 3 pairs x 2 sexes)\n",
                 file = file, append = TRUE)
-            write.table(st$gender_strat, file, append = TRUE, sep = ",", row.names = FALSE, quote = TRUE)
+            write.table(as_sex(st$gender_strat), file, append = TRUE, sep = ",",
+                        row.names = FALSE, quote = TRUE)
           }
 
           if (!is.null(st$aab_donor_summary)) {

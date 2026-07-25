@@ -18,7 +18,7 @@ See [`docs/spatial.md`](docs/spatial.md) for full details — peri-islet metrics
 ### Islet Viewer Panel (Segmentation + Drill-Down)
 
 When an islet is clicked, the viewer panel shows with controls on the left sidebar:
-- **Title**: `Islet_N (case_id, status, age, gender)` — donor info from `prepared()$comp`
+- **Title**: `Islet_N (case_id, status, age, sex)` — donor info from `prepared()$comp`
 - **Left sidebar (col-2)**: Layer toggles (Single Cells, Peri Boundary, Structures), Color-by dropdown, Phenotype Palette, Show peri-islet cells.
 - **Center plot (col-6)**: Segmentation map with GeoJSON boundaries + optional single-cell overlay
 - **Right sidebar (col-4)**: Cell composition bar chart + cell count table (when Single Cells enabled)
@@ -291,10 +291,25 @@ wire the inline link.
 
 Single source of truth in `R/00_globals.R`:
 
-- `ISLET_FONT_SIZES` — named list with `base=16`, `title=18`, `subtitle=14`, `axis_title=16`, `axis_text=14`, `legend_title=16`, `legend_text=14`, `strip=14`, `dense_min=12` (heatmap rows).
-- `theme_islet(base_size = 16)` — ggplot theme extending `theme_minimal()`. Use on every `renderPlot` / inline `ggplot()` that is also handed to `ggplotly()`.
-- `plotly_islet_fonts()` — returns a named list of `list(size = N)` font specs (keys: `global`, `title`, `axis_title`, `axis_tick`, `legend_title`, `legend_text`, `colorbar_title`). Splice into `layout(font=..., title=list(font=...), xaxis=list(title=list(font=...), tickfont=...), yaxis=..., legend=list(font=..., title=list(font=...)))`. `ggplotly()` does **not** fully respect ggplot themes — the explicit `layout(...)` overlay is required after every `ggplotly()` call.
-- `plotly_islet_config(p, filename_root, width=1400, height=900, scale=2)` — pipe with `%>%` after `layout()`. Sets `toImageButtonOptions` so the modebar camera icon exports a 2800 × 1800 px PNG and disables the plotly logo. Apply to **every** plotly output except deliberate UI strips like the trajectory pseudotime heatmap (`mod_trajectory_server.R:1284` uses `config(displayModeBar = FALSE)` and is left as-is).
+- `ISLET_FONT_SIZES` — named list with `base=18`, `title=18`, `subtitle=15`, `axis_title=16`, `axis_text=16`, `legend_title=16`, `legend_text=16`, `strip=16`, `dense_min=14` (heatmap rows / in-cell values), `hover=15`, `annotation=15`. (Raised from the May 2026 16/14/12 scale in Jul 2026.)
+- `theme_islet(base_size = 18)` — ggplot theme extending `theme_minimal()`. Use on every `renderPlot` / inline `ggplot()` that is also handed to `ggplotly()`.
+- `plotly_islet_fonts()` — returns a named list of `list(size = N)` font specs (keys: `global`, `title`, `axis_title`, `axis_tick`, `legend_title`, `legend_text`, `colorbar_title`, `hover`, `annotation`). Splice into `layout(font=..., title=list(font=...), xaxis=list(title=list(font=...), tickfont=...), yaxis=..., legend=list(font=..., title=list(font=...)))`. `ggplotly()` does **not** fully respect ggplot themes — the explicit `layout(...)` overlay is required after every `ggplotly()` call.
+- `plotly_islet_config(p, filename_root, width=1400, height=900, scale=2, uniform_text_mode="hide")` — pipe with `%>%` after `layout()`. Sets `toImageButtonOptions` (modebar camera exports 2800 × 1800 px PNG), disables the plotly logo, **and applies the two in-plot text settings `layout(font=)` does not cascade to** (see below). Apply to **every** plotly output except deliberate UI strips like the trajectory pseudotime heatmap (`mod_trajectory_server.R` uses `config(displayModeBar = FALSE)` and is left as-is).
+
+**In-plot plotly text — the settings `layout(font=)` does NOT reach (Jul 2026).** Three separate mechanisms, all previously unset on every plot in the app, and collectively the reason text still read small after the May 2026 pass:
+
+- **`hoverlabel.font`** — tooltips render at plotly's ~13px default no matter what `layout(font=)` says. Several plots (Leiden UMAP, tissue scatter, Card A bars) are read *primarily* via hover. Now applied centrally by `plotly_islet_config()`.
+- **`uniformtext`** — for `bar` and `heatmap` traces plotly silently **shrinks** in-cell text to fit the box, so a `textfont = list(size = 14)` can render at 8px. `minsize` sets the floor; `mode` decides the overflow behaviour: `"hide"` (default) drops the label — right for numeric heatmap values, which overlap illegibly — and `"show"` forces it, which is required for the Statistics `bin_heatmap` significance stars (a hidden star reads as "not significant"). Pass `uniform_text_mode = "show"` there.
+- **`automargin = TRUE`** — required on any axis with `tickangle` or long category names, else plotly clips the labels against a fixed margin. Clipped labels read as "the font is too small" when the label is really just cut off. Set on the enrichment bars/heatmap, the bin heatmap, and the ggplotly-converted Statistics plots.
+
+**Two ggplotly conversion losses** (both silent, both fixed centrally):
+
+- **`labs(subtitle = ...)` is DROPPED.** Three Statistics plots put their correlation / BH-correction / Kruskal-Wallis p-values there, so those lines never reached the page at all. Use `plotly_title_with_sub(title, subtitle)` to rebuild the title as `"<title><br><sup><subtitle></sup>"` and pass it to `layout(title = list(text = ...))`. Add `margin = list(t = 80)` so the two-line title has room.
+- **Faceting relocates axis titles into `layout.annotations`.** For an unfaceted plot ggplotly keeps them in `layout.xaxis.title`, so the usual overlay works. Add a facet and *both* the strip labels and the axis titles move to `annotations`, where the overlay is ignored and they render at ~14.6px. `plotly_islet_strip_fonts(gg)` restyles both — strips get `strip`, `annotationType == "axis"` entries get `axis_title`. Pipe it directly after `ggplotly()`, before `layout()`.
+
+**`annotate()` / `geom_text()` `size` is MILLIMETRES, not points.** `size = 4` is 11.4pt and `size = 5` is 14.2pt — both *below* the 18pt base, which is what the five placeholder annotations in this app were using. Use `ISLET_ANNOTATE_SIZE` (= `ISLET_FONT_SIZES$base / ggplot2::.pt`) instead of a literal.
+
+**Empty states**: use `plotly_islet_empty(msg)` rather than `plotly_empty() %>% layout(title = msg)` — the latter renders its title at plotly's default size.
 - `ISLET_PNG_DIMS` (10 × 7 in @ 300 dpi → 3000 × 2100 px) and `ISLET_HEATMAP_PNG_DIMS` (12 × 8 in) for `ggsave()` in `downloadHandler()` `content` functions.
 - `islet_png_filename(stem)` — `<stem>_YYYYMMDD_HHMMSS.png`.
 
@@ -302,4 +317,18 @@ Single source of truth in `R/00_globals.R`:
 
 **Download button placement** — non-namespaced `downloadButton("dl_islet_segmentation_view", ...)` for root-level outputs (segmentation, drilldown) lives inside each module's `segmentation_viewer_panel` renderUI alongside the plotOutput; namespaced `downloadButton(ns("dl_..."), ...)` for module-local plots lives in the module UI immediately under the plotOutput. Render handlers for the non-namespaced download buttons sit at root in `app.R`; namespaced ones live in the module server.
 
-**Don't** mix the helper with manual `font = list(size = X)` per-key calls — the helper is the entire convention. When you need a smaller font for dense rows (e.g., heatmap text annotations) reach for `ISLET_FONT_SIZES$dense_min`, not a fresh literal.
+## CSV Downloads (Jul 2026)
+
+Nine CSV exports: Plot `dl_summary` + `dl_distribution_csv`; Spatial `download_spatial` + `dl_infiltration_csv` + `dl_enrichment_csv` + `dl_distance_csv`; Trajectory `dl_multi_heatmap_csv` + `dl_umap_csv`; Statistics `download_stats`. Two rules, both learned from bugs:
+
+**1. A CSV must export the plot's own reactive, never a re-derivation.** `download_spatial` used to build its own subset from `prepared()$comp` instead of the shared `nbr_comp()` every card consumes — so it ignored `nbr_min_cells` and `pheno_filter`, applied a `total_cells_peri > 0` filter the cards do *not*, and carried no outlier flags. The result corresponded to **no plot on the page**. When a card's data is computed inline in `renderPlotly`, extract it into a reactive first and have the renderer consume it (`infiltration_data()`, `distance_data()`, `dist_data()`, `traj_multi_heatmap_matrix()` were all extracted for exactly this). Then the export cannot drift.
+
+Watch for panels with their *own* filter state: the Plot Distribution panel reads `raw_df_base()` plus its own `exclude_zero_dist`, independent of the main scatter's `exclude_zero_top` — exporting `raw_df()` there would be wrong.
+
+**2. Every CSV carries a `#` provenance header.** Use `write_islet_csv(file, df, header)` and `islet_csv_header(title, ...)` from `00_globals.R`. Writing to an open connection also avoids R's "appending column names to file" warning that `writeLines()` + `write.table(append = TRUE)` produces. The header must name **everything that changes which rows are in the file** — donor groups, min-cells, phenotype filter, diameter/age/sex filters, and the outlier + zero-exclusion state. `get_selection_description()` (Plot module) omitted min-cells, age, sex, outlier and zero state, so two files with different row sets looked identical in provenance.
+
+**Column naming**: user-facing headers only. The `gender` data column is renamed to `sex` at export time (in-memory it stays `gender` so `lm()` / `aggregate_to_donor()` are untouched). Per-islet exports keep `is_outlier` / `outlier_score` and do **not** drop flagged rows, so the full distribution stays recoverable.
+
+**Don't** mix the helper with manual `font = list(size = X)` per-key calls — the helper is the entire convention. When you need a smaller font for dense rows (e.g., heatmap text annotations) reach for `ISLET_FONT_SIZES$dense_min`, not a fresh literal, and not a `max(dense_min, other - 2)` formula (two of those existed and both evaluated to exactly `dense_min`).
+
+**Container height is part of font sizing.** 18pt in a 260px box is the same complaint as an 11pt label. The Jul 2026 pass grew the cramped ones: Statistics AAb 260→380, age scatter / sex box 300→420, AUC 280→380, forest 350→430, bin heatmap 400→520; Spatial Leiden UMAP 300→400, cluster composition 350→450, enrichment bars 420→500, enrichment heatmap 420→520; Trajectory multi-heatmap 36→44 px per marker row. When adding a plot, size the container to the text, not the other way round.

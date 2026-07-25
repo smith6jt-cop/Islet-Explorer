@@ -76,18 +76,6 @@ test_that("normality_tests reports per-group W/p and flags undersized groups", {
   expect_false(is.na(nd$W))
 })
 
-test_that("pairwise_wilcox returns group1/group2/p_value (not p.adj/statistic)", {
-  set.seed(3)
-  df <- data.frame(
-    grp = rep(c("ND", "Aab+", "T1D"), each = 6),
-    val = c(rnorm(6, 0), rnorm(6, 2), rnorm(6, 4))
-  )
-  pw <- pairwise_wilcox(df, "grp", "val")
-  expect_true(all(c("group1", "group2", "p_value") %in% names(pw)))
-  expect_false(any(c("p.adj", "statistic") %in% names(pw)))
-  expect_true(all(is.finite(pw$p_value)))
-})
-
 test_that("flag_outliers flags extreme values per group and honours enabled=FALSE", {
   # 1..9 are inliers, 100 is a clear outlier (modified z >> 3 with MAD > 0)
   df <- data.frame(donor_status = rep("ND", 10), value = c(1:9, 100))
@@ -102,6 +90,59 @@ test_that("flag_outliers flags extreme values per group and honours enabled=FALS
   # empty df -> zero-length flag columns, no error
   empty <- flag_outliers(data.frame(donor_status = character(), value = numeric()))
   expect_length(empty$is_outlier, 0)
+})
+
+test_that("flag_outliers(exclude_zeros=TRUE) removes zeros from the scoring population", {
+  # 12 zeros + the inlier run 1..9 + one clear outlier. With zeros included the
+  # median/MAD collapse toward 0; excluding them must derive the scale from the
+  # non-zero values only.
+  df <- data.frame(donor_status = rep("ND", 22),
+                   value = c(rep(0, 12), 1:9, 100))
+  fl <- flag_outliers(df, "value", "donor_status", method = "zscore",
+                      threshold = 3, exclude_zeros = TRUE, enabled = TRUE)
+
+  # Zeros are not evaluated at all: no score, never flagged.
+  expect_true(all(is.na(fl$outlier_score[1:12])))
+  expect_false(any(fl$is_outlier[1:12]))
+
+  # Non-zero rows are scored, and 100 is still the outlier.
+  expect_true(all(is.finite(fl$outlier_score[13:22])))
+  expect_true(fl$is_outlier[22])
+  expect_false(any(fl$is_outlier[13:21]))
+
+  # Centre/scale come from the non-zero subset, not the full vector.
+  nz <- c(1:9, 100)
+  med <- median(nz); mad_nz <- median(abs(nz - med))
+  expect_equal(fl$outlier_score[13], 0.6745 * (1 - med) / mad_nz)
+
+  # Contrast: with zeros included the MAD collapses to 0, so the helper falls
+  # back to classical mean/SD — a different statistic on a different scale.
+  incl <- flag_outliers(df, "value", "donor_status", method = "zscore",
+                        threshold = 3, exclude_zeros = FALSE, enabled = TRUE)
+  expect_equal(attr(fl, "outlier_statistic"), "modified_z")
+  expect_equal(attr(incl, "outlier_statistic"), "classical_z")
+  expect_true(all(is.finite(incl$outlier_score)))          # zeros ARE scored here
+  # Same rows, different scores — this is why the filter order matters.
+  expect_false(isTRUE(all.equal(incl$outlier_score[13:22], fl$outlier_score[13:22])))
+})
+
+test_that("flag_outliers(exclude_zeros=TRUE, method='iqr') fences on the non-zero subset", {
+  df <- data.frame(donor_status = rep("ND", 20),
+                   value = c(rep(0, 10), 10, 11, 12, 13, 14, 15, 16, 17, 18, 500))
+  fl <- flag_outliers(df, "value", "donor_status", method = "iqr",
+                      threshold = 1.5, exclude_zeros = TRUE, enabled = TRUE)
+  expect_true(all(is.na(fl$outlier_score[1:10])))
+  expect_false(any(fl$is_outlier[1:10]))
+  expect_true(fl$is_outlier[20])          # 500 is beyond the upper fence
+  expect_false(any(fl$is_outlier[11:19]))
+})
+
+test_that("flag_outliers(exclude_zeros=TRUE) skips groups with <3 non-zero values", {
+  df <- data.frame(donor_status = rep("ND", 8), value = c(rep(0, 6), 1, 99))
+  fl <- flag_outliers(df, "value", "donor_status", method = "zscore",
+                      threshold = 3, exclude_zeros = TRUE, enabled = TRUE)
+  expect_true(all(is.na(fl$outlier_score)))
+  expect_false(any(fl$is_outlier))
 })
 
 test_that("summarize_outlier_filter + outlier_title_suffix report exclusion counts", {

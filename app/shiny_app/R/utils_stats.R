@@ -6,9 +6,16 @@
 #   For each donor_status group (ND, Aab+, T1D), exclude rows whose value is
 #   more than `threshold` SDs from that group's mean. Outliers are flagged on
 #   the returned data.frame; downstream code decides whether to render them as
-#   ghost points or drop them. The IQR fallback is kept for cards that need to
-#   tolerate zero-inflated distributions (Spatial Card A on phenotypes that are
-#   absent from most islets).
+#   ghost points or drop them. The IQR fallback is kept for cards plotting an
+#   already-standardised, roughly symmetric quantity (Spatial Card A on
+#   enrichment z-scores).
+#
+# `exclude_zeros = TRUE` removes zero-valued rows from the scoring population
+# entirely — they neither contribute to the centre/scale nor receive a score
+# (their outlier_score stays NA). Use it for genuinely zero-inflated features
+# where a spike at 0 would collapse the MAD; do NOT use it on quantities that
+# merely take negative values (e.g. enrichment z-scores contain no exact zeros,
+# so the flag is a no-op there).
 #
 # Returns the input df with two appended columns:
 #   is_outlier    -- logical, TRUE for rows beyond the threshold
@@ -101,29 +108,37 @@ flag_outliers <- function(df,
     }
 
     if (exclude_zeros) {
-      nz_idx <- idx[grp_vals != 0]
+      # Zeros are removed from the SCORING POPULATION entirely: they neither
+      # contribute to the centre/scale nor receive a score. Scoring a zero
+      # against a distribution it was excluded from produces a large spurious
+      # negative (e.g. 0.6745 * (0 - median_nz) / MAD_nz) that then surfaces in
+      # the outlier tables and tooltips as if it meant something. NA is the
+      # honest answer: "not evaluated under this rule".
+      is_zero <- vals[idx] == 0
+      nz_idx <- idx[!is_zero]
       nz_vals <- vals[nz_idx]
-      if (length(nz_vals) < 4) next
+      # Same minimum-group rule as the default path below (>= 3 scorable values).
+      if (length(nz_vals) < 3) next
       if (method == "zscore") {
-        rz <- robust_zscore(nz_vals, vals[idx])
+        rz <- robust_zscore(nz_vals, vals[nz_idx])
         if (is.null(rz)) next
         z <- rz$z
         stat_seen <- unique(c(stat_seen, rz$statistic))
-        df$outlier_score[idx] <- z
-        df$is_outlier[idx] <- !is.na(z) & (vals[idx] != 0) & abs(z) > threshold
+        df$outlier_score[nz_idx] <- z
+        df$is_outlier[nz_idx] <- !is.na(z) & abs(z) > threshold
       } else {
         q <- stats::quantile(nz_vals, c(0.25, 0.75), na.rm = TRUE)
         iqr <- q[2] - q[1]
         if (!is.finite(iqr) || iqr == 0) next
         lo <- q[1] - threshold * iqr
         hi <- q[2] + threshold * iqr
-        fence_dist <- ifelse(vals[idx] < q[1],
-                             (vals[idx] - q[1]) / iqr,
-                             ifelse(vals[idx] > q[2], (vals[idx] - q[2]) / iqr, 0))
-        df$outlier_score[idx] <- fence_dist
-        df$is_outlier[idx] <- !is.na(vals[idx]) & (vals[idx] != 0) &
-                              (vals[idx] < lo | vals[idx] > hi)
+        fence_dist <- ifelse(nz_vals < q[1],
+                             (nz_vals - q[1]) / iqr,
+                             ifelse(nz_vals > q[2], (nz_vals - q[2]) / iqr, 0))
+        df$outlier_score[nz_idx] <- fence_dist
+        df$is_outlier[nz_idx] <- !is.na(nz_vals) & (nz_vals < lo | nz_vals > hi)
       }
+      # Zero rows keep the initialised is_outlier = FALSE / outlier_score = NA.
     } else {
       if (method == "zscore") {
         rz <- robust_zscore(grp_vals, grp_vals)
@@ -208,8 +223,9 @@ GLOBAL_OUTLIER_TOOLTIP <- paste0(
   "(zero-inflated groups), the rule falls back to classical mean/SD. Excluded ",
   "points still appear on scatter and box plots as faint grey × markers; counts ",
   "are shown next to each plot title. Spatial Card A (infiltration) uses Tukey ",
-  "1.5×IQR instead, to tolerate zero-inflated phenotypes; Spatial Card C distance ",
-  "plots apply the z-score rule on log(1 + distance)."
+  "1.5×IQR instead, since enrichment z-scores are already a standardised, ",
+  "roughly symmetric quantity; Spatial Card C distance plots apply the z-score ",
+  "rule on log(1 + distance)."
 )
 
 # ---------- Plotly hover-text scrubber ----------
@@ -577,20 +593,4 @@ eta_squared <- function(fit) {
   ss <- at[["Sum Sq"]]
   if (length(ss) < 2) return(NA_real_)
   ss[1] / sum(ss)
-}
-
-#' Non-parametric pairwise Wilcoxon tests with BH correction
-#' Returns data.frame with group1, group2, p_value columns
-pairwise_wilcox <- function(df, group_col, value_col) {
-  pw <- tryCatch(
-    pairwise.wilcox.test(df[[value_col]], df[[group_col]], p.adjust.method = "BH", exact = FALSE),
-    error = function(e) NULL
-  )
-  if (is.null(pw)) return(data.frame(group1 = character(), group2 = character(), p_value = numeric(), stringsAsFactors = FALSE))
-  mat <- as.data.frame(as.table(pw$p.value))
-  colnames(mat) <- c("group1", "group2", "p_value")
-  mat <- mat[!is.na(mat$p_value), , drop = FALSE]
-  mat$group1 <- as.character(mat$group1)
-  mat$group2 <- as.character(mat$group2)
-  mat
 }
