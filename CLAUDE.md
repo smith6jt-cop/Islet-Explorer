@@ -38,8 +38,14 @@ app/shiny_app/
     mod_spatial_ui.R / mod_spatial_server.R     # Spatial tab (3-panel: sidebar controls, tissue scatter, Leiden panel)
     mod_ai_assistant_ui.R / mod_ai_assistant_server.R  # AI chat panel
   www/                         # Static assets (images, logos)
-  app_original.R               # Backup of pre-modularization monolithic app (5,397 lines)
 ```
+
+`app.R` is the ONLY entrypoint — it contains no `source()` calls; Shiny auto-sources `R/`.
+The superseded `app_original.R` (pre-modularization monolith) and `app_modular.R` (stale
+entrypoint snapshot) were moved to `archive/shiny_app/` in Jul 2026: Shiny never loaded
+them, but they sat in the deployed directory where 5,400 lines of dead code read as live.
+**`www/logo.png` is a symlink to `app/docs/logo.png`** — that file is a live asset, not a
+stray doc.
 
 ### Data Loading (H5AD with Excel Fallback)
 
@@ -197,6 +203,12 @@ python scripts/build_h5ad_for_app.py          # ~1 min: merge into app H5AD
 See `islet_analysis/CLAUDE.md` for the Python analysis pipeline (phenotyping, aggregation, trajectory).
 See `data/DATA_PROVENANCE.md` for full data lineage documentation.
 See `docs/user_guide.md` for end-user documentation.
+
+## Handoffs & Archive
+
+- `docs/HANDOFF.md` — Shiny app correctness pass (Jul 2026): zero-exclusion z-scores, phenotype availability, plotly in-plot text settings, Sex/Gender, CSV exports + statistics post-hoc. Includes the deployment procedure and the chromote gotchas (selectize, nested `.plotly`).
+- `scripts/codex_phenocycler/docs/HANDOFF.md` — **active** handoff for the in-flight CODEX Phenocycler port. Read it before touching that workstream's gates, floors, or pairs.
+- `archive/README.md` — what was retired and why. Nothing there is loaded, sourced, or served; delete freely.
 
 ## Cross-Session Knowledge
 
