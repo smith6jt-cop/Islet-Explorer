@@ -184,8 +184,12 @@ statistics_ui <- function(id) {
         div(class = "card", style = "padding: 15px; margin-bottom: 15px; height: 100%;",
           h5("Effect Size Forest Plot"),
           tags$small(style = "color: #888; display: block; margin-bottom: 8px;",
-            "Pairwise Cohen's d on donor means with 95% CI. Magnitude and its uncertainty ",
-            "carry more information than a p-value alone, especially with N=5 per group."),
+            "Pairwise difference between donor means, in the feature's own units, with a ",
+            "Welch 95% CI. Magnitude and its uncertainty carry more information than a ",
+            "p-value alone, especially with N=5 per group. The unstandardised difference ",
+            "leads because a pooled-SD effect size (Cohen's d) needs the groups to have ",
+            "comparable spread, and they often do not here \u2014 d and the Glass's \u0394 range it ",
+            "sits inside are in the Sensitivity check table."),
           plotlyOutput(ns("forest_plot"), height = "430px")
         )
       )
@@ -253,8 +257,12 @@ statistics_ui <- function(id) {
             tags$small(style = "color: #888; display: block; margin-bottom: 8px;",
               "Donor-level means within each fixed 50 µm size bin. ",
               "P-values are BH-corrected across bins. ",
-              "Bins with <2 donors per group are greyed out (untestable)."),
-            plotlyOutput(ns("bin_heatmap"), height = "520px")
+              "Axis labels carry each bin's donor / islet count, and hovering a cell shows ",
+              "the per-group coverage behind that specific test — the large-diameter bins ",
+              "can rest on a handful of islets from two donors. ",
+              "Bins with <2 donors per group are listed below the plot, not silently dropped."),
+            plotlyOutput(ns("bin_heatmap"), height = "520px"),
+            uiOutput(ns("bin_coverage_note"))
           )
         ),
         column(4,

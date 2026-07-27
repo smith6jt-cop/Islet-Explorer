@@ -189,3 +189,58 @@ lmer Satterthwaite p and ICC match independent `lmerTest` / `VarCorr` to 10 sign
 - The covariate card prints "does NOT survive adjustment for age and sex" even when donor status was never significant (Capillary: 0.348 → 0.387).
 - Raw column encodings leak into the UI as the feature name (`prop_Beta cell`, `peri_prop_CD8a_Tcell`, `Capillary|islet_core`).
 - `outlier_summary` is measured before the min-cells / diameter filters, so "N islets excluded last Run" is counted against a superset of what was tested.
+
+## Jul 2026 — group-comparability pass (islet number & size distribution)
+
+Follow-up to the correctness pass above, answering: *the tests resist pseudoreplication, but do they account for differences in islet number and distribution between disease groups?* Measured, not assumed.
+
+### What was already sound (leave it alone)
+
+- **Islet-count imbalance is neutralised by the random intercept.** Raw counts run 121–981 per donor (8.1:1) and 2,300 / 1,666 / 1,246 per group. But effective independent observations saturate at ~1/ICC: `n_eff = n / (1 + (n-1)·ICC)`. At the observed ICC = 0.139 that is **6.87–7.17** per donor — an effective ratio of **1.04:1**, and effective N per group of 35.3 / 35.4 / 35.1. Even at ICC = 0.03 the effective ratio is only 1.23:1. Donor 6356's 981 islets do *not* dominate ND.
+- **Donor counts are balanced 5/5/5**, so the donor-level sensitivity test is balanced by construction.
+- **No detectable differential islet sampling**: islets per donor does not differ by status (Kruskal-Wallis p = 0.44; low power at n=5/group, and there is no imaged-tissue-area column to normalise by).
+- **Residual heteroscedasticity does not move the tests.** Residual variance is ND 378 / Aab+ 318 / T1D 7.4 (51:1; Levene-equivalent F = 721, p < 2.2e-16). Refitting with `nlme::lme(..., weights = varIdent(~1|donor_status))` moves the omnibus 0.0039 → 0.0036 and the contrasts 0.0031 → 0.0029 and 0.0493 → 0.0470. Negligible, because contrast SEs are driven by between-donor variance, not residual. Donor-level pairwise already use Welch `t.test`. **No variance-structure change was made** — it would add a dependency and a fit for no measurable benefit.
+
+### What was fixed
+
+**1. Effect sizes were pooled across a 50:1 variance gap.** For prop_Beta cell the donor-level SDs are ND 4.06 / Aab+ 10.75 / T1D 0.575. Cohen's d pools these into 2.90, giving ND vs T1D d = 6.15 with CI [3.18, 9.12] — while Glass's Δ is **4.39** against the ND SD and **31.03** against T1D's. d = 6.15 was an arbitrary point in that range, plotted with a CI implying precision it does not have, on the one figure Section 2 foregrounds *over* the p-value.
+
+- `cohens_d()` (`utils_stats.R`) now also returns `raw_diff` + a **Welch CI**, per-group means/SDs, both Glass's Δ, and `var_ratio` / `var_ratio_warn` (ratio > 4).
+- The **forest plot now shows the unstandardised difference** in the feature's own units with the Welch CI. d and the Glass range moved into the Sensitivity-check table; contrasts with >4× variance ratio are marked `†`.
+- The **primary card gained a per-group donors / islets / mean / SD table**, plus an amber note when spreads differ more than 4-fold.
+- Worth knowing what this surfaces: for Aab+ vs T1D the Wilcoxon `p_adj` = 0.032 while the Welch CI on the mean difference is [−2.08, 24.6] — it crosses zero. A rank test and a mean-difference CI genuinely disagree at n=5 with a floor effect, and the table now shows both rather than only the one that reads as significant.
+
+**2. Islet size: strong predictor, group-different distribution, and an unreported interaction.**
+
+- Diameter distributions differ (ND vs T1D KS D = 0.091, p = 2.9e-06; medians 29.6 / 28.8 / 31.3 µm).
+- Diameter is a strong predictor (p = 1.6e-141 for prop_Beta cell).
+- Adding diameter as a covariate barely moves the omnibus — 0.0039 → 0.0049 (β-cell), 0.3476 → 0.3479 (Capillary). **The size shift is not confounding the group comparison.**
+- But `donor_status × diameter` is **1.2e-93** for prop_Beta cell, 1.2e-50 for Ins_any, 1.1e-08 for Nerve|islet_band — and non-significant for Capillary (0.73), Lymphatic (0.36), peri CD8a (0.30). The slope of feature-on-size genuinely differs by status for some features. Where it does, the single omnibus p is a *marginal average over a size mix that itself differs by group* — an estimand issue, not bias.
+
+`size_companion_models()` (`utils_stats.R`) fits `value ~ donor_status + diam_c + (1|donor)` and `value ~ donor_status * diam_c + (1|donor)` on the same filtered data, with diameter **mean-centred** so the Type III `donor_status` term is the difference at the mean islet diameter rather than at diameter zero. Results appear in the primary card, as two indented rows in the hypothesis table, and in the CSV header. When the interaction is significant a red box says the group difference depends on islet size and that Section 3 is part of the primary reading. Cost: 3 `lmer` fits instead of 1 — full `stats_run()` is ~3.1 s.
+
+**3. Per-bin coverage was group-dependent and invisible.**
+
+```
+bin   donors ND/Aab+/T1D   islets ND/Aab+/T1D
+ 25       5 / 5 / 5         1915 / 1346 / 1021
+175       3 / 5 / 5           12 /   35 /   22
+225       2 / 5 / 3            4 /   14 /    6   ← tested, previously same visual weight as bin 25
+275       1 / 3 / 2            1 /    4 /    3   ← no omnibus row, but pairwise still shown
+```
+
+- Axis tick labels carry each bin's donor / islet totals.
+- Cell hover shows the per-group coverage **behind that specific cell** — for a pairwise row, only the two groups in that contrast.
+- New `bin_coverage_note` output under the heatmap names every bin without an omnibus row, with the reason and its actual status.
+
+That note exposed a real inconsistency worth stating plainly: `per_bin_donor_anova()` requires ≥2 groups present **and every present group** to have ≥2 donors, while `per_bin_donor_pairwise()` only requires ≥2 donors in the two groups being compared. So bin 275 (ND has 1 donor) gets no ANOVA/Kendall row but still contributes an `Aab+ vs T1D` pairwise star. The note now says so per bin ("no ANOVA / Kendall; pairwise still shown for …") rather than calling the bin untested, which would contradict the star already drawn there. The methods text was corrected to match.
+
+### Still open
+
+- The two per-bin coverage rules remain inconsistent (documented above rather than silently reconciled — changing either alters which bins appear).
+- The donor-level estimand is still undeclared: unweighted donor means give p = 0.00374, precision-weighting by islet count gives p = 0.00855. Both defensible ("average donor" vs "average islet").
+- Everything in the previous section's "Known, still open" list.
+
+### Gotcha for future edits
+
+`isTRUE(x)` on a **vector** collapses to a single `FALSE` — it is not vectorised. Both the `†` table marker and the forest-plot title suffix were written with `isTRUE(pw$var_ratio_warn)` and silently never fired. Use `x %in% TRUE` for element-wise NA-safe truth. Also: `renderTable(align = ...)` needs exactly one character per column; adding two effect-size columns without widening `"lccccc"` throws at render time, not at parse time.

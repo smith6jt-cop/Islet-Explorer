@@ -279,6 +279,18 @@ statistics_server <- function(id, raw_df, get_selection_description,
           cohens_d = cd$d,
           d_ci_lo = cd$ci_lo,
           d_ci_hi = cd$ci_hi,
+          # Unstandardised difference + Welch CI, in the feature's own units.
+          # This is what the forest plot now shows: it does not depend on which
+          # SD you standardise by, which matters because the group SDs here can
+          # differ by 50x (floor effects) and the pooled-SD d then lands at an
+          # arbitrary point between the two Glass deltas.
+          raw_diff = cd$raw_diff,
+          raw_ci_lo = cd$raw_ci_lo,
+          raw_ci_hi = cd$raw_ci_hi,
+          sd1 = cd$sd1, sd2 = cd$sd2,
+          glass1 = cd$glass1, glass2 = cd$glass2,
+          var_ratio = cd$var_ratio,
+          var_ratio_warn = cd$var_ratio_warn,
           n1 = length(g1_vals[is.finite(g1_vals)]),
           n2 = length(g2_vals[is.finite(g2_vals)]),
           stringsAsFactors = FALSE
@@ -292,6 +304,31 @@ statistics_server <- function(id, raw_df, get_selection_description,
                                   pairwise_df$p_adj < alpha_num,
                                   FALSE)
       }
+
+      # ---- Per-group descriptive summary (donor level) ----
+      # The spread within each group is what makes a standardised effect size
+      # readable, and on this cohort it is wildly unequal (donor-mean SDs of
+      # 4.06 / 10.75 / 0.575 for prop_Beta cell). Surfacing it next to the
+      # effect sizes is the difference between "d = 6.15" meaning something and
+      # meaning nothing.
+      group_summary <- tryCatch({
+        ddf %>%
+          dplyr::group_by(donor_status) %>%
+          dplyr::summarise(
+            n_donors = dplyr::n(),
+            n_islets = sum(n_islets, na.rm = TRUE),
+            mean = mean(value, na.rm = TRUE),
+            sd = stats::sd(value, na.rm = TRUE),
+            median = stats::median(value, na.rm = TRUE),
+            .groups = "drop"
+          )
+      }, error = function(e) NULL)
+
+      # ---- Islet-size companion models ----
+      # See size_companion_models() in utils_stats.R for why: the primary model
+      # conditions on neither diameter nor a group-varying size slope, yet both
+      # matter, and the diameter distribution differs by group.
+      size_models <- size_companion_models(rdf)
 
       # ---- Per-bin analysis (exploratory, Section 3) ----
       # Bin width is FIXED at STATS_BIN_WIDTH_UM — a tunable width is a
@@ -310,6 +347,66 @@ statistics_server <- function(id, raw_df, get_selection_description,
         bin_kendall <- per_bin_donor_kendall(rdf_binned, "diam_bin", "donor_status", "value")
         bin_pairwise <- per_bin_donor_pairwise(rdf_binned, "diam_bin", "donor_status", "value",
                                                 parametric = is_parametric)
+
+        # ---- Per-bin coverage, so the heatmap can state what each cell rests on ----
+        # Coverage is strongly group-dependent at the large-diameter end: bin 225
+        # is carried by 4 ND islets from 2 donors versus 14 Aab+ islets from 5,
+        # and it rendered with exactly the same visual weight as bin 25's 4,282
+        # islets from 15 donors. Bins failing the >=2 groups x >=2 donors rule
+        # were dropped silently, so the size range actually compared was capped
+        # by whichever group ran out of large islets first — invisibly.
+        bin_coverage <- tryCatch({
+          rdf_binned %>%
+            dplyr::filter(is.finite(diam_mid)) %>%
+            dplyr::group_by(diam_mid, donor_status) %>%
+            dplyr::summarise(n_donors = dplyr::n_distinct(`Case ID`),
+                             n_islets = dplyr::n(), .groups = "drop")
+        }, error = function(e) NULL)
+
+        # Bins with no omnibus row, and WHY.
+        #
+        # The reason has to match the rule as implemented in
+        # per_bin_donor_anova(): >= 2 groups present AND *every* group present in
+        # the bin having >= 2 donors. So a bin with ND=1, Aab+=3, T1D=2 donors is
+        # dropped on ND's single donor even though Aab+ vs T1D is perfectly
+        # testable — and per_bin_donor_pairwise() has no such rule, so it goes
+        # ahead and tests that pair anyway. That inconsistency is real; the note
+        # reports it ("pairwise only") instead of calling such a bin untested,
+        # which would contradict the star the heatmap is already drawing there.
+        bin_dropped <- tryCatch({
+          if (is.null(bin_coverage)) NULL else {
+            tested <- if (!is.null(bin_anova)) bin_anova$mid else numeric(0)
+            pw_mids <- if (!is.null(bin_pairwise) && nrow(bin_pairwise) > 0)
+              unique(bin_pairwise$mid) else numeric(0)
+            miss <- setdiff(sort(unique(bin_coverage$diam_mid)), tested)
+            if (!length(miss)) NULL else {
+              do.call(rbind, lapply(miss, function(m) {
+                cv <- bin_coverage[bin_coverage$diam_mid == m, , drop = FALSE]
+                thin <- cv$donor_status[cv$n_donors < 2]
+                reason <- if (nrow(cv) < 2) {
+                  sprintf("only %d donor-status group%s present (need 2)",
+                          nrow(cv), if (nrow(cv) == 1) "" else "s")
+                } else if (length(thin)) {
+                  sprintf("%s below 2 donors; the omnibus rule requires every group present in the bin to have >= 2",
+                          paste(as.character(thin), collapse = " and "))
+                } else "coverage rule not met"
+                pairs_here <- if (m %in% pw_mids)
+                  bin_pairwise$pair[bin_pairwise$mid == m] else character(0)
+                data.frame(
+                  mid = m,
+                  n_islets = sum(cv$n_islets),
+                  detail = paste(sprintf("%s %dd/%di", cv$donor_status,
+                                         cv$n_donors, cv$n_islets), collapse = ", "),
+                  reason = reason,
+                  status = if (length(pairs_here))
+                    paste0("no ANOVA / Kendall; pairwise still shown for ",
+                           paste(pairs_here, collapse = ", "))
+                  else "not tested at all",
+                  stringsAsFactors = FALSE)
+              }))
+            }
+          }
+        }, error = function(e) NULL)
 
         # BH correction across bins to control false discovery rate
         if (!is.null(bin_anova) && nrow(bin_anova) > 0) {
@@ -556,6 +653,10 @@ statistics_server <- function(id, raw_df, get_selection_description,
         bin_anova        = bin_anova,
         bin_kendall      = bin_kendall,
         bin_pairwise     = bin_pairwise,
+        bin_coverage     = bin_coverage,
+        bin_dropped      = bin_dropped,
+        group_summary    = group_summary,
+        size_models      = size_models,
         auc_by_group     = auc_by_group,
         demo_summary     = demo_summary,
         age_corr         = age_corr,
@@ -664,6 +765,74 @@ statistics_server <- function(id, raw_df, get_selection_description,
       p_col <- if (is.na(primary_p)) "#999" else if (sig) "#d62728" else "#2e7d32"
       icc_str <- if (is.na(st$icc)) "N/A" else sprintf("%.2f", st$icc)
 
+      # ---- Per-group mean / SD / n, with an unequal-spread flag ----
+      gs <- st$group_summary
+      group_block <- if (!is.null(gs) && nrow(gs) > 0) {
+        vr <- {
+          v <- gs$sd[is.finite(gs$sd) & gs$sd > 0]^2
+          if (length(v) >= 2) max(v) / min(v) else NA_real_
+        }
+        spread_note <- if (is.finite(vr) && vr > 4) {
+          tags$div(style = paste0("margin-top: 6px; padding: 6px 8px; background: #fff8e1;",
+                                  " border-left: 3px solid #f0ad4e; border-radius: 3px;",
+                                  " font-size: 11px; color: #6a5200; line-height: 1.4;"),
+            sprintf("Group spreads differ %.0f-fold. ", vr),
+            "A pooled-SD effect size (Cohen's d) divides by a common scale that does not ",
+            "exist here — read the raw difference in the forest plot, and treat d as indicative only.")
+        } else NULL
+        tagList(
+          tags$div(style = "margin-top: 12px; font-size: 12px; color: #555;",
+            tags$strong("Group spread (donor means):"),
+            tags$table(style = "width: 100%; margin-top: 4px; font-size: 12px; border-collapse: collapse;",
+              tags$tr(style = "color: #888; text-align: right;",
+                tags$th(style = "text-align: left; font-weight: 600;", ""),
+                tags$th(style = "font-weight: 600;", "donors"),
+                tags$th(style = "font-weight: 600;", "islets"),
+                tags$th(style = "font-weight: 600;", "mean"),
+                tags$th(style = "font-weight: 600;", "SD")),
+              lapply(seq_len(nrow(gs)), function(i) {
+                tags$tr(style = "text-align: right;",
+                  tags$td(style = "text-align: left; font-weight: 600;",
+                          as.character(gs$donor_status[i])),
+                  tags$td(gs$n_donors[i]),
+                  tags$td(formatC(gs$n_islets[i], format = "d", big.mark = ",")),
+                  tags$td(sprintf("%.3g", gs$mean[i])),
+                  tags$td(if (is.finite(gs$sd[i])) sprintf("%.3g", gs$sd[i]) else "—"))
+              }))),
+          spread_note)
+      } else NULL
+
+      # ---- Islet-size companion models ----
+      sm <- st$size_models
+      size_block <- if (!is.null(sm) && any(is.finite(c(sm$p_status_adj, sm$p_interaction)))) {
+        interaction_hit <- is.finite(sm$p_interaction) && sm$p_interaction < st$alpha
+        warn <- if (interaction_hit) {
+          tags$div(style = paste0("margin-top: 6px; padding: 6px 8px; background: #fdecea;",
+                                  " border-left: 3px solid #d9534f; border-radius: 3px;",
+                                  " font-size: 11px; color: #8a1c12; line-height: 1.4;"),
+            tags$strong("The group difference depends on islet size. "),
+            "The feature-vs-diameter slope differs by donor status, so the single p above is a ",
+            "marginal average over a size distribution that itself differs between groups. ",
+            "Read the size-stratified analysis in Section 3 alongside it, not as an afterthought.")
+        } else NULL
+        tagList(
+          tags$div(style = "margin-top: 12px; font-size: 12px; color: #555; line-height: 1.6;",
+            tags$strong("Islet-size companions:"), tags$br(),
+            tags$span(style = "color: #888;", "diameter effect: "),
+            format_p_value(sm$p_diam), tags$br(),
+            tags$span(style = "color: #888;", "donor status adjusted for diameter: "),
+            format_p_value(sm$p_status_adj),
+            tags$span(style = "color: #888;",
+                      sprintf(" (vs %s unadjusted)", format_p_value(primary_p))), tags$br(),
+            tags$span(style = "color: #888;", "status × diameter interaction: "),
+            tags$strong(style = if (interaction_hit) "color: #d9534f;" else "",
+                        format_p_value(sm$p_interaction))),
+          warn)
+      } else if (!is.null(sm) && !is.null(sm$error_msg)) {
+        tags$div(style = "margin-top: 10px; font-size: 11px; color: #999;",
+                 "Islet-size companion models unavailable: ", sm$error_msg)
+      } else NULL
+
       tags$div(
         tags$div(style = "font-size: 13px; color: #555; margin-bottom: 8px; line-height: 1.4;",
           "Linear mixed-effects model — donor status with a per-donor random intercept ",
@@ -686,7 +855,16 @@ statistics_server <- function(id, raw_df, get_selection_description,
         tags$div(style = "margin-top: 6px; font-size: 12px; color: #777; line-height: 1.4;",
           "Sensitivity test auto-selected from normality: ", tags$strong(st$donor_test),
           " on donor means. Full secondary tests are in the ",
-          tags$em("Sensitivity check"), " panel below.")
+          tags$em("Sensitivity check"), " panel below."),
+
+        # ---- Per-group spread ----
+        # Effect sizes below are unreadable without it: a standardised d divides
+        # by a pooled SD, which only means something when the group SDs are
+        # comparable. Show them so the reader can judge that themselves.
+        group_block,
+
+        # ---- Islet-size companion models ----
+        size_block
       )
     })
 
@@ -809,22 +987,42 @@ statistics_server <- function(id, raw_df, get_selection_description,
       fmt_p <- function(x) format_p_value(x)
       fmt_d <- function(x) ifelse(is.na(x), "N/A", sprintf("%.2f", x))
 
+      # Effect-size columns: the unstandardised difference leads (it does not
+      # depend on which SD you standardise by), Cohen's d follows as the
+      # standardised companion, and Glass's delta shows the range d is picking a
+      # point inside of when the group SDs differ.
+      blank_row <- function(contrast, p, padj, sig) data.frame(
+        Contrast = contrast, `p-value` = p, `p (adj)` = padj,
+        `Diff (raw)` = "-", `95% CI (raw)` = "-",
+        `Cohen's d` = "-", `Glass's d range` = "-", Sig = sig,
+        check.names = FALSE, stringsAsFactors = FALSE)
+
       rows <- data.frame(
         Contrast = character(), `p-value` = character(), `p (adj)` = character(),
-        `Cohen's d` = character(), `95% CI` = character(), Sig = character(),
+        `Diff (raw)` = character(), `95% CI (raw)` = character(),
+        `Cohen's d` = character(), `Glass's d range` = character(), Sig = character(),
         check.names = FALSE, stringsAsFactors = FALSE
       )
 
       # PRIMARY: Mixed-effects global (islet-level, donor as random intercept)
-      rows <- rbind(rows, data.frame(
-        Contrast = "Overall (mixed-effects, donor random intercept)",
-        `p-value` = fmt_p(st$lmer_p),
-        `p (adj)` = "-",
-        `Cohen's d` = "-",
-        `95% CI` = "-",
-        Sig = if (!is.na(st$lmer_p) && st$lmer_p < st$alpha) "*" else "",
-        check.names = FALSE, stringsAsFactors = FALSE
-      ))
+      rows <- rbind(rows, blank_row(
+        "Overall (mixed-effects, donor random intercept)",
+        fmt_p(st$lmer_p), "-",
+        if (!is.na(st$lmer_p) && st$lmer_p < st$alpha) "*" else ""))
+
+      # Size companions, so the primary block states what it does and does not
+      # condition on right where the primary p is read.
+      sm <- st$size_models
+      if (!is.null(sm) && any(is.finite(c(sm$p_status_adj, sm$p_interaction)))) {
+        rows <- rbind(rows, blank_row(
+          "  \u21b3 donor status adjusted for islet diameter",
+          fmt_p(sm$p_status_adj), "-",
+          if (is.finite(sm$p_status_adj) && sm$p_status_adj < st$alpha) "*" else ""))
+        rows <- rbind(rows, blank_row(
+          "  \u21b3 donor status \u00d7 islet diameter (is the effect size-dependent?)",
+          fmt_p(sm$p_interaction), "-",
+          if (is.finite(sm$p_interaction) && sm$p_interaction < st$alpha) "*" else ""))
+      }
 
       # Pairwise from mixed model (estimated marginal means)
       lmer_pw <- st$lmer_pairwise
@@ -833,40 +1031,41 @@ statistics_server <- function(id, raw_df, get_selection_description,
         # column belongs under "p (adj)". It was previously printed under
         # "p-value" with "p (adj)" showing "-", which read as an uncorrected
         # result and understated the correction that had in fact been applied.
-        lmer_pw_rows <- data.frame(
-          Contrast = paste0(lmer_pw$contrast, " (mixed-effects pairwise, Tukey)"),
-          `p-value` = "-",
-          `p (adj)` = fmt_p(lmer_pw$p.value),
-          `Cohen's d` = "-",
-          `95% CI` = "-",
-          Sig = ifelse(!is.na(lmer_pw$p.value) & lmer_pw$p.value < st$alpha, "*", ""),
-          check.names = FALSE, stringsAsFactors = FALSE
-        )
+        lmer_pw_rows <- blank_row(
+          paste0(lmer_pw$contrast, " (mixed-effects pairwise, Tukey)"),
+          "-", fmt_p(lmer_pw$p.value),
+          ifelse(!is.na(lmer_pw$p.value) & lmer_pw$p.value < st$alpha, "*", ""))
         rows <- rbind(rows, lmer_pw_rows)
       }
 
       # SENSITIVITY: Donor-level means (collapses islets to one value per donor)
-      rows <- rbind(rows, data.frame(
-        Contrast = paste0("Donor-level means (", st$donor_test, ", N=", st$n_donors, " donors)"),
-        `p-value` = fmt_p(st$donor_p),
-        `p (adj)` = "-",
-        `Cohen's d` = "-",
-        `95% CI` = "-",
-        Sig = if (!is.na(st$donor_p) && st$donor_p < st$alpha) "*" else "",
-        check.names = FALSE, stringsAsFactors = FALSE
-      ))
+      rows <- rbind(rows, blank_row(
+        paste0("Donor-level means (", st$donor_test, ", N=", st$n_donors, " donors)"),
+        fmt_p(st$donor_p), "-",
+        if (!is.na(st$donor_p) && st$donor_p < st$alpha) "*" else ""))
 
       # Donor-level pairwise with effect sizes
       pw <- st$pairwise_df
       if (!is.null(pw) && nrow(pw) > 0) {
         test_label <- if (st$is_parametric) "t-test" else "Wilcoxon"
+        # A dagger marks contrasts whose group variances differ more than 4-fold:
+        # there the pooled-SD d is not on a meaningful common scale, and the raw
+        # difference is the number to read.
         pw_rows <- data.frame(
-          Contrast = paste0(pw$contrast, " (donor-level ", test_label, ")"),
+          Contrast = paste0(pw$contrast, " (donor-level ", test_label, ")",
+                            # NB: isTRUE() collapses a vector to a single FALSE,
+                            # so the marker never fired. Compare element-wise.
+                            ifelse(pw$var_ratio_warn %in% TRUE, " \u2020", "")),
           `p-value` = fmt_p(pw$p_value),
           `p (adj)` = fmt_p(pw$p_adj),
+          `Diff (raw)` = ifelse(is.na(pw$raw_diff), "N/A", sprintf("%.3g", pw$raw_diff)),
+          `95% CI (raw)` = ifelse(is.na(pw$raw_ci_lo), "N/A",
+                                  paste0("[", sprintf("%.3g", pw$raw_ci_lo), ", ",
+                                         sprintf("%.3g", pw$raw_ci_hi), "]")),
           `Cohen's d` = fmt_d(pw$cohens_d),
-          `95% CI` = ifelse(is.na(pw$d_ci_lo), "N/A",
-                            paste0("[", sprintf("%.2f", pw$d_ci_lo), ", ", sprintf("%.2f", pw$d_ci_hi), "]")),
+          `Glass's d range` = ifelse(is.na(pw$glass1) | is.na(pw$glass2), "N/A",
+                                     paste0(sprintf("%.2f", pmin(pw$glass1, pw$glass2)),
+                                            " to ", sprintf("%.2f", pmax(pw$glass1, pw$glass2)))),
           Sig = ifelse(!is.na(pw$p_adj) & pw$p_adj < st$alpha, "*", ""),
           check.names = FALSE, stringsAsFactors = FALSE
         )
@@ -874,41 +1073,62 @@ statistics_server <- function(id, raw_df, get_selection_description,
       }
 
       rows
-    }, striped = TRUE, bordered = TRUE, spacing = "s", align = "lccccc")
+    # 8 columns: Contrast, p-value, p (adj), Diff (raw), 95% CI (raw),
+    # Cohen's d, Glass's d range, Sig. `align` must have exactly one character
+    # per column or renderTable errors.
+    }, striped = TRUE, bordered = TRUE, spacing = "s", align = "lccccccc")
 
     output$forest_plot <- renderPlotly({
       st <- stats_run()
       if (is.null(st)) return(NULL)
       pw <- st$pairwise_df
-      if (is.null(pw) || nrow(pw) == 0 || all(is.na(pw$cohens_d))) return(NULL)
+      if (is.null(pw) || nrow(pw) == 0 || all(is.na(pw$raw_diff))) return(NULL)
 
-      pw <- pw[!is.na(pw$cohens_d), , drop = FALSE]
+      # Plot the UNSTANDARDISED difference with a Welch CI, in the feature's own
+      # units. It used to plot Cohen's d — but d divides by a pooled SD, and when
+      # the group SDs differ 50-fold (routine here: floor effects put a whole
+      # group at ~0 with almost no spread) the pooled SD is not a common scale.
+      # d = 6.15 with CI [3.18, 9.12] looked precise while Glass's delta ranged
+      # 4.39 to 31.03 for the same contrast. The raw difference has no such
+      # ambiguity; d and the Glass range stay in the table beside it.
+      pw <- pw[!is.na(pw$raw_diff), , drop = FALSE]
       pw$contrast <- factor(pw$contrast, levels = rev(pw$contrast))
       pw$sig_label <- ifelse(pw$sig, "Significant", "NS")
+      pw$hover <- sprintf(
+        "%s<br>difference: %.3g<br>95%% CI: [%.3g, %.3g]<br>Cohen's d: %s<br>SDs: %.3g vs %.3g (ratio %.1f)",
+        as.character(pw$contrast), pw$raw_diff, pw$raw_ci_lo, pw$raw_ci_hi,
+        ifelse(is.na(pw$cohens_d), "N/A", sprintf("%.2f", pw$cohens_d)),
+        pw$sd1, pw$sd2, pw$var_ratio)
 
       zero_suffix <- if (isTRUE(st$exclude_zero) && st$zero_dropped > 0) {
         sprintf(" — %s zero-valued dropped",
                 formatC(st$zero_dropped, format = "d", big.mark = ","))
       } else ""
-      forest_title <- paste0("Pairwise Effect Sizes (conservative)",
+      warn_suffix <- if (any(pw$var_ratio_warn %in% TRUE)) {
+        " — † group SDs differ >4×"
+      } else ""
+      forest_title <- paste0("Pairwise Differences (donor means)",
                              outlier_title_suffix(st$outlier_summary),
-                             zero_suffix)
-      g <- ggplot(pw, aes(x = cohens_d, y = contrast, color = sig_label)) +
+                             zero_suffix, warn_suffix)
+      g <- ggplot(pw, aes(x = raw_diff, y = contrast, color = sig_label, text = hover)) +
         geom_vline(xintercept = 0, linetype = "dashed", color = "#999") +
         geom_point(size = 3) +
-        geom_errorbarh(aes(xmin = d_ci_lo, xmax = d_ci_hi), height = 0.2) +
+        geom_errorbarh(aes(xmin = raw_ci_lo, xmax = raw_ci_hi), height = 0.2) +
         scale_color_manual(values = c("Significant" = "#d62728", "NS" = "#1f77b4"),
                            name = "") +
-        labs(x = "Cohen's d (donor means)", y = NULL, title = forest_title) +
+        labs(x = paste0("Difference in ", st$feature_name, " (Welch 95% CI)"),
+             y = NULL, title = forest_title) +
         theme_islet() +
         theme(legend.position = "none")
 
       fonts <- plotly_islet_fonts()
-      ggplotly(g, tooltip = c("x", "y", "colour")) %>%
+      ggplotly(g, tooltip = "text") %>%
         layout(font = fonts$global,
                title = list(font = fonts$title),
-               xaxis = list(title = list(font = fonts$axis_title), tickfont = fonts$axis_tick),
-               yaxis = list(title = list(font = fonts$axis_title), tickfont = fonts$axis_tick),
+               xaxis = list(title = list(font = fonts$axis_title), tickfont = fonts$axis_tick,
+                            automargin = TRUE),
+               yaxis = list(title = list(font = fonts$axis_title), tickfont = fonts$axis_tick,
+                            automargin = TRUE),
                margin = list(b = 80),
                legend = list(orientation = "h", x = 0.5, xanchor = "center", y = -0.25,
                              font = fonts$legend_text,
@@ -980,7 +1200,40 @@ statistics_server <- function(id, raw_df, get_selection_description,
       z_mat <- do.call(rbind, lapply(all_p, to_z))
       text_mat <- do.call(rbind, lapply(all_p, star_fn))
 
-      mid_labels <- as.character(round(all_mids))
+      # ---- Per-CELL coverage, so a cell states what it rests on ----
+      # Coverage is group-dependent at the large-diameter end (bin 225 was 4 ND
+      # islets from 2 donors vs 14 Aab+ from 5) yet every cell rendered with the
+      # same visual weight as bin 25's 4,282 islets from 15 donors. The
+      # granularity is genuinely per-cell, not per-column: for a pairwise row
+      # only the two groups in that contrast matter.
+      cov <- st$bin_coverage
+      cov_for <- function(mid, groups) {
+        if (is.null(cov)) return("")
+        sub <- cov[cov$diam_mid == mid & as.character(cov$donor_status) %in% groups, , drop = FALSE]
+        if (!nrow(sub)) return("no donors in this bin")
+        paste(sprintf("%s: %d donor%s, %d islet%s", as.character(sub$donor_status),
+                      sub$n_donors, ifelse(sub$n_donors == 1, "", "s"),
+                      sub$n_islets, ifelse(sub$n_islets == 1, "", "s")),
+              collapse = "<br>")
+      }
+      all_groups <- c("ND", "Aab+", "T1D")
+      row_groups <- list(all_groups,                       # ANOVA
+                         c("ND", "Aab+"), c("ND", "T1D"), c("Aab+", "T1D"),  # pairwise
+                         all_groups)                       # Kendall
+      cover_mat <- do.call(rbind, lapply(row_groups, function(gs) {
+        vapply(all_mids, function(m) cov_for(m, gs), character(1))
+      }))
+
+      # Column totals go into the tick label so the thin bins are obvious without
+      # hovering \u2014 a reader scanning for stars never hovers the empty cells.
+      tick_totals <- vapply(all_mids, function(m) {
+        if (is.null(cov)) return("")
+        sub <- cov[cov$diam_mid == m, , drop = FALSE]
+        if (!nrow(sub)) return("")
+        sprintf("<br><span style='font-size:11px'>%dd / %si</span>",
+                sum(sub$n_donors), formatC(sum(sub$n_islets), format = "d", big.mark = ","))
+      }, character(1))
+      mid_labels <- paste0(as.character(round(all_mids)), tick_totals)
 
       fonts <- plotly_islet_fonts()
       plot_ly(
@@ -991,11 +1244,14 @@ statistics_server <- function(id, raw_df, get_selection_description,
                         tickfont = fonts$axis_tick),
         text = text_mat, texttemplate = "%{text}",
         textfont = list(size = ISLET_FONT_SIZES$dense_min),
-        hovertemplate = "Bin: %{x} \u00b5m<br>Test: %{y}<br>-log10(q): %{z:.2f}<extra></extra>"
+        customdata = cover_mat,
+        hovertemplate = paste0("Bin: %{x} \u00b5m<br>Test: %{y}<br>-log10(q): %{z:.2f}",
+                               "<br><br>%{customdata}<extra></extra>")
       ) %>%
         layout(
           font = fonts$global,
-          xaxis = list(title = list(text = "Diameter bin midpoint (\u00b5m)", font = fonts$axis_title),
+          xaxis = list(title = list(text = "Diameter bin midpoint (\u00b5m) \u2014 donors / islets",
+                                    font = fonts$axis_title),
                        tickfont = fonts$axis_tick, tickangle = -45, automargin = TRUE),
           yaxis = list(title = list(text = "", font = fonts$axis_title),
                        tickfont = fonts$axis_tick, automargin = TRUE,
@@ -1007,6 +1263,40 @@ statistics_server <- function(id, raw_df, get_selection_description,
         # stars. A hidden star reads as "not significant" \u2014 the one failure mode
         # this plot cannot afford.
         plotly_islet_config("statistics_bin_heatmap", uniform_text_mode = "show")
+    })
+
+    # Name the bins that exist in the data but were never tested. They used to
+    # just be absent from the heatmap, which reads as "there are no islets that
+    # big" rather than "the coverage rule excluded them" — and because ND runs
+    # out of large islets first, the size range actually compared was being
+    # capped by the narrowest group, silently.
+    output$bin_coverage_note <- renderUI({
+      st <- tryCatch(stats_run(), error = function(e) NULL)
+      if (is.null(st)) return(NULL)
+      bd <- st$bin_dropped
+      if (is.null(bd) || nrow(bd) == 0) {
+        return(tags$p(style = "font-size: 11px; color: #888; margin: 6px 0 0 0;",
+                      "Every diameter bin present in this subset met the coverage rule ",
+                      "(≥ 2 donor-status groups with ≥ 2 donors each)."))
+      }
+      tags$div(style = paste0("margin-top: 8px; padding: 8px 10px; background: #fbfcfd;",
+                              " border: 1px solid #e0e0e0; border-radius: 4px;",
+                              " font-size: 11px; color: #666; line-height: 1.5;"),
+        tags$strong(sprintf("%d diameter bin%s without an omnibus (ANOVA / Kendall) row",
+                            nrow(bd), if (nrow(bd) == 1) "" else "s")),
+        tags$span(":"),
+        tags$ul(style = "margin: 4px 0 0 0; padding-left: 18px;",
+          lapply(seq_len(nrow(bd)), function(i) {
+            tags$li(
+              tags$strong(sprintf("%g µm", bd$mid[i])),
+              sprintf(" — %d islet%s (%s). %s. ",
+                      bd$n_islets[i], if (bd$n_islets[i] == 1) "" else "s",
+                      bd$detail[i], bd$reason[i]),
+              tags$em(bd$status[i]))
+          })),
+        tags$p(style = "margin: 6px 0 0 0; font-style: italic;",
+          "The compared size range is therefore capped by whichever group runs out of ",
+          "islets first — usually ND at the large end."))
     })
 
     # ===========================================================================
@@ -1528,8 +1818,33 @@ statistics_server <- function(id, raw_df, get_selection_description,
           tags$br(),
           tags$strong("Significance threshold: "), paste0("\u03b1 = ", alpha_str, " (fixed)"),
           tags$br(),
-          tags$strong("Effect sizes: "), "Cohen's d with 95% CI computed on donor-level means. ",
-          "These are conservative estimates.",
+          tags$strong("Effect sizes: "),
+          "The forest plot reports the ", tags$strong("unstandardised difference"),
+          " between donor-level group means, in the feature's own units, with a Welch 95% CI ",
+          "(no equal-variance assumption). Cohen's d and the Glass's \u0394 range are reported ",
+          "alongside in the Sensitivity check table. d divides by a ", tags$em("pooled"),
+          " SD, which is only a meaningful common scale when the groups have comparable ",
+          "spread \u2014 on this cohort they frequently do not (floor effects can leave one group ",
+          "at ~0 with almost no variance, giving 50-fold variance ratios). Where that happens ",
+          "the contrast is marked \u2020 and d should be read as indicative only; the raw ",
+          "difference is the quantity that does not depend on which SD you standardise by. ",
+          "Per-group means and SDs are shown in the primary card so this is checkable.",
+          tags$br(), tags$br(),
+          tags$strong("Islet size (companion models): "),
+          "The primary model conditions on neither islet diameter nor a group-varying size ",
+          "slope, but both matter: diameter is a strong predictor of most features, and the ",
+          "diameter distribution itself differs between donor groups. Two companions are ",
+          "therefore fitted on the same data and reported next to the primary p \u2014 ",
+          tags$code("value ~ donor_status + diameter + (1|donor)"), " (is the group difference ",
+          "still there at a common islet size?) and ",
+          tags$code("value ~ donor_status \u00d7 diameter + (1|donor)"),
+          " (does the group difference depend on size?). Diameter is mean-centred, so the ",
+          "adjusted donor-status term is the difference at the mean islet diameter. ",
+          tags$strong("When the interaction is significant, the single omnibus p is a marginal ",
+          "average over a size distribution that differs between groups"),
+          " \u2014 the size-stratified analysis in Section 3 is then part of the primary reading, ",
+          "not an optional extra. Neither companion replaces the pre-specified primary test; ",
+          "they are reported to make its scope explicit.",
           tags$br(),
           tags$strong("Normality: "), "Shapiro-Wilk test on donor-level means per group. ",
           "With n = 5, this test has limited power, so failure to reject normality does not guarantee it.",
@@ -1538,7 +1853,12 @@ statistics_server <- function(id, raw_df, get_selection_description,
           "Kendall \u03c4 correlates disease stage (ND=0, Aab+=1, T1D=2) with the feature value: ",
           "\u03c4 > 0 means the feature increases with disease progression, \u03c4 < 0 means it decreases. ",
           "P-values are BH-corrected across bins. A bin is tested only if at least 2 donor-status groups ",
-          "each have \u2265 2 donors with finite values (same rule for the heatmap and the trend plot).",
+          "each have \u2265 2 donors with finite values (same rule for the heatmap and the trend plot). ",
+          "Coverage is group-dependent \u2014 the large-diameter bins can rest on a handful of islets ",
+          "from two donors while the smallest bin carries thousands from all fifteen \u2014 so each ",
+          "bin's donor / islet count is on the axis label, the per-group coverage behind each ",
+          "individual cell is in its hover, and bins that failed the rule are listed under the ",
+          "plot with the reason rather than silently omitted.",
           tags$br(),
           tags$strong("Multiple comparisons: "),
           "Benjamini-Hochberg (FDR) correction is applied ", tags$em("within"),
@@ -1645,6 +1965,20 @@ statistics_server <- function(id, raw_df, get_selection_description,
                                    if (is.na(st$lmer_p)) "N/A" else formatC(st$lmer_p, format = "e", digits = 4)))
           lines <- c(lines, paste0("# Mixed-effects pairwise d.f. method: ",
                                    st$lmer_pairwise_df_method %||% "N/A"))
+          sm <- st$size_models
+          if (!is.null(sm)) {
+            lines <- c(lines, paste0("# Size companion - diameter effect p: ",
+                                     format_p_value(sm$p_diam)))
+            lines <- c(lines, paste0("# Size companion - donor_status adjusted for diameter p: ",
+                                     format_p_value(sm$p_status_adj)))
+            lines <- c(lines, paste0("# Size companion - donor_status x diameter interaction p: ",
+                                     format_p_value(sm$p_interaction),
+                                     if (is.finite(sm$p_interaction) && sm$p_interaction < st$alpha)
+                                       "  *** effect is size-dependent; the omnibus p is a marginal average ***"
+                                     else ""))
+            lines <- c(lines, paste0("# Size companion - diameter mean-centred at: ",
+                                     if (is.finite(sm$mean_diam)) sprintf("%.2f um", sm$mean_diam) else "N/A"))
+          }
           lines <- c(lines, "")
 
           # Sensitivity test
@@ -1671,6 +2005,30 @@ statistics_server <- function(id, raw_df, get_selection_description,
               colnames(df)[colnames(df) == "gender"] <- "sex"
             }
             df
+          }
+
+          # Per-group descriptive summary — the spread needed to read the effect sizes
+          if (!is.null(st$group_summary)) {
+            cat("\n# Group Summary (donor level; SD is across donor means)\n",
+                file = file, append = TRUE)
+            write.table(st$group_summary, file, append = TRUE, sep = ",",
+                        row.names = FALSE, quote = TRUE)
+          }
+
+          # Per-bin coverage + the bins that failed the coverage rule
+          if (!is.null(st$bin_coverage)) {
+            cat("\n# Per-Bin Coverage (donors and islets per group in each diameter bin)\n",
+                file = file, append = TRUE)
+            write.table(st$bin_coverage, file, append = TRUE, sep = ",",
+                        row.names = FALSE, quote = TRUE)
+          }
+          if (!is.null(st$bin_dropped) && nrow(st$bin_dropped) > 0) {
+            cat(paste0("\n# Bins Without An Omnibus Row (the per-bin ANOVA/Kendall rule needs >= 2 groups\n",
+                       "#   present AND every present group to have >= 2 donors; per-bin PAIRWISE has no\n",
+                       "#   such rule, so some of these bins still contribute pairwise contrasts)\n"),
+                file = file, append = TRUE)
+            write.table(st$bin_dropped, file, append = TRUE, sep = ",",
+                        row.names = FALSE, quote = TRUE)
           }
 
           # Donor-level data

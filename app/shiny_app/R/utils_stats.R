@@ -436,6 +436,81 @@ lmer_test_donor <- function(rdf) {
   list(p_value = p_val, icc = icc, fit = fit, error_msg = error_msg)
 }
 
+#' Islet-size companion models to the primary mixed-effects test.
+#'
+#' The primary model is `value ~ donor_status + (1|donor)` — it conditions on
+#' neither islet diameter nor a group-varying size slope. Both matter on this
+#' cohort:
+#'   * diameter is a strong predictor (main effect p < 2e-16 for most features);
+#'   * the diameter DISTRIBUTION differs by group (ND vs T1D Kolmogorov-Smirnov
+#'     D = 0.091, p = 2.9e-06);
+#'   * and for some features the feature-vs-size SLOPE differs by disease status
+#'     (donor_status x diameter p < 2e-16 for prop_Beta cell and Ins_any).
+#'
+#' The third point is the important one. When the interaction is significant the
+#' group difference is not a single number — it depends on islet size — and the
+#' primary omnibus p is a marginal average over a size mix that is itself
+#' group-dependent. That is an estimand issue, not bias, but it has to be visible
+#' rather than left for the user to infer from the Section 3 per-bin views.
+#'
+#' Diameter is MEAN-CENTRED so that, under lmerTest's Type III anova, the
+#' `donor_status` term in the additive model is the group difference at the mean
+#' islet diameter rather than at the unobservable diameter of zero.
+#'
+#' Returns list(p_status_adj, p_diam, p_interaction, mean_diam, error_msg) with
+#' NA fields on failure — never NULL, so callers can render unconditionally.
+size_companion_models <- function(rdf, diam_col = "islet_diam_um") {
+  out <- list(p_status_adj = NA_real_, p_diam = NA_real_, p_interaction = NA_real_,
+              mean_diam = NA_real_, error_msg = NULL)
+  if (!requireNamespace("lmerTest", quietly = TRUE)) {
+    out$error_msg <- "lmerTest not installed"; return(out)
+  }
+  if (!all(c(diam_col, "Case ID", "value", "donor_status") %in% colnames(rdf))) {
+    out$error_msg <- "required columns missing"; return(out)
+  }
+  d <- rdf
+  d$.diam <- suppressWarnings(as.numeric(d[[diam_col]]))
+  d <- d[is.finite(d$.diam) & is.finite(d$value), , drop = FALSE]
+  # Need at least 2 donor-status levels present and some size spread.
+  if (nrow(d) < 10 || dplyr::n_distinct(d$donor_status) < 2 ||
+      !is.finite(stats::sd(d$.diam)) || stats::sd(d$.diam) == 0) {
+    out$error_msg <- "insufficient data or no diameter variation"; return(out)
+  }
+  out$mean_diam <- mean(d$.diam)
+  d$.diam_c <- d$.diam - out$mean_diam
+  d$.cf <- factor(d$`Case ID`)
+  d$donor_status <- droplevels(factor(d$donor_status))
+
+  p_of <- function(fit, term) {
+    tryCatch({
+      at <- anova(fit)
+      if (term %in% rownames(at)) as.numeric(at[term, "Pr(>F)"]) else NA_real_
+    }, error = function(e) NA_real_)
+  }
+
+  fit_add <- tryCatch(
+    lmerTest::lmer(value ~ donor_status + .diam_c + (1 | .cf), data = d),
+    error = function(e) e)
+  if (inherits(fit_add, "error")) {
+    out$error_msg <- paste("size-adjusted model failed:", fit_add$message)
+  } else {
+    out$p_status_adj <- p_of(fit_add, "donor_status")
+    out$p_diam <- p_of(fit_add, ".diam_c")
+  }
+
+  fit_int <- tryCatch(
+    lmerTest::lmer(value ~ donor_status * .diam_c + (1 | .cf), data = d),
+    error = function(e) e)
+  if (inherits(fit_int, "error")) {
+    out$error_msg <- paste(c(out$error_msg,
+                             paste("interaction model failed:", fit_int$message)),
+                           collapse = "; ")
+  } else {
+    out$p_interaction <- p_of(fit_int, "donor_status:.diam_c")
+  }
+  out
+}
+
 #' Per-bin ANOVA on donor-level means within each bin
 #
 # Shared coverage rule (used by per_bin_donor_anova and per_bin_donor_kendall):
@@ -595,17 +670,72 @@ format_p_value <- function(x, digits = 2, sci_below = 1e-4, na = "N/A") {
 
 # ---------- Effect size utilities (Statistics tab) ----------
 
-#' Cohen's d for two-sample comparison with 95% CI (normal approximation)
+#' Effect size for a two-sample comparison.
+#'
+#' Returns Cohen's d (pooled SD, 95% CI by normal approximation) AND the
+#' unstandardised difference with a Welch CI, plus the per-group SDs and their
+#' variance ratio.
+#'
+#' Why the extra fields: Cohen's d divides by a POOLED SD, which is only
+#' meaningful when the two groups have comparable spread. On this cohort they
+#' routinely do not — for prop_Beta cell the donor-level SDs are ND 4.06 vs
+#' T1D 0.575, a 50:1 variance ratio (a floor effect: T1D beta-cell proportions
+#' sit at ~0). The pooled SD lands at 2.90, giving d = 6.15 with CI [3.18, 9.12]
+#' — but Glass's delta is 4.39 against the ND SD and 31.03 against the T1D SD.
+#' d = 6.15 is an arbitrary point in that range, presented with a CI that implies
+#' precision it does not have. `raw_diff` (17.85 percentage points here) is the
+#' quantity that does not depend on which SD you standardise by.
+#'
+#' `var_ratio_warn` flags var ratio > 4, the point past which the pooled SD is
+#' not a reasonable common scale.
+#'
+#' Backwards compatible: `$d`, `$ci_lo`, `$ci_hi` are unchanged.
 cohens_d <- function(x, y) {
   x <- x[is.finite(x)]
   y <- y[is.finite(y)]
   n1 <- length(x); n2 <- length(y)
-  if (n1 < 2 || n2 < 2) return(list(d = NA_real_, ci_lo = NA_real_, ci_hi = NA_real_))
-  pooled_sd <- sqrt(((n1 - 1) * var(x) + (n2 - 1) * var(y)) / (n1 + n2 - 2))
-  if (!is.finite(pooled_sd) || pooled_sd == 0) return(list(d = NA_real_, ci_lo = NA_real_, ci_hi = NA_real_))
-  d <- (mean(x) - mean(y)) / pooled_sd
+  empty <- list(d = NA_real_, ci_lo = NA_real_, ci_hi = NA_real_,
+                raw_diff = NA_real_, raw_ci_lo = NA_real_, raw_ci_hi = NA_real_,
+                mean1 = NA_real_, mean2 = NA_real_, sd1 = NA_real_, sd2 = NA_real_,
+                glass1 = NA_real_, glass2 = NA_real_,
+                var_ratio = NA_real_, var_ratio_warn = FALSE)
+  if (n1 < 2 || n2 < 2) return(empty)
+
+  m1 <- mean(x); m2 <- mean(y)
+  s1 <- sd(x);   s2 <- sd(y)
+  raw_diff <- m1 - m2
+
+  # Welch CI on the raw difference — does not assume equal variances.
+  wc <- tryCatch(t.test(x, y)$conf.int, error = function(e) c(NA_real_, NA_real_))
+
+  v1 <- var(x); v2 <- var(y)
+  var_ratio <- if (is.finite(v1) && is.finite(v2) && min(v1, v2) > 0) {
+    max(v1, v2) / min(v1, v2)
+  } else NA_real_
+
+  # Glass's delta against each group's SD in turn — the two ends of the range
+  # the pooled-SD d silently picks a point inside of.
+  glass1 <- if (is.finite(s1) && s1 > 0) raw_diff / s1 else NA_real_
+  glass2 <- if (is.finite(s2) && s2 > 0) raw_diff / s2 else NA_real_
+
+  pooled_sd <- sqrt(((n1 - 1) * v1 + (n2 - 1) * v2) / (n1 + n2 - 2))
+  if (!is.finite(pooled_sd) || pooled_sd == 0) {
+    out <- empty
+    out$raw_diff <- raw_diff; out$raw_ci_lo <- wc[1]; out$raw_ci_hi <- wc[2]
+    out$mean1 <- m1; out$mean2 <- m2; out$sd1 <- s1; out$sd2 <- s2
+    out$glass1 <- glass1; out$glass2 <- glass2
+    out$var_ratio <- var_ratio
+    out$var_ratio_warn <- isTRUE(var_ratio > 4)
+    return(out)
+  }
+  d <- raw_diff / pooled_sd
   se_d <- sqrt((n1 + n2) / (n1 * n2) + d^2 / (2 * (n1 + n2)))
-  list(d = d, ci_lo = d - 1.96 * se_d, ci_hi = d + 1.96 * se_d)
+
+  list(d = d, ci_lo = d - 1.96 * se_d, ci_hi = d + 1.96 * se_d,
+       raw_diff = raw_diff, raw_ci_lo = wc[1], raw_ci_hi = wc[2],
+       mean1 = m1, mean2 = m2, sd1 = s1, sd2 = s2,
+       glass1 = glass1, glass2 = glass2,
+       var_ratio = var_ratio, var_ratio_warn = isTRUE(var_ratio > 4))
 }
 
 #' Eta-squared from anova() output: SS_effect / SS_total for the first factor
