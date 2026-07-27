@@ -88,12 +88,14 @@ The app has 5,214 islets from only **15 donors** (5 per group). Islets within a 
 - `lme4` (1.1.37) -- `VarCorr()` for ICC computation
 
 ### Shared Sidebar Architecture
-The Plot sidebar (mode, feature, region, donor status, AAb, age, sex filters) is visible on both the Plot and Statistics tabs. Achieved via `conditionalPanel` condition `"input.tabs == 'Plot' || input.tabs == 'Statistics'"` and matching JS `adjustLayout()` logic in `app.R`. The Statistics module consumes `plot_returns$raw_df` and `plot_returns$summary_df` directly -- no data duplication.
+The Plot sidebar (mode, feature, region, donor status, AAb, age, sex filters) is visible on both the Plot and Statistics tabs. Achieved via `conditionalPanel` condition `"input.tabs == 'Plot' || input.tabs == 'Statistics'"` and matching JS `adjustLayout()` logic in `app.R`. The Statistics module consumes `plot_returns$raw_df_prezero` only. **It no longer takes `summary_df`** (Jul 2026) — see "AUC is computed on this tab's own data" below.
+
+**The sidebar's own filters run upstream and its controls are hidden here.** `min_cells`, `stat`, `binwidth`, and the outlier controls sit inside `conditionalPanel("input.tabs != 'Statistics'")`, but a `conditionalPanel` only hides the DOM — the inputs keep their values and keep filtering `raw_df_base()`. Setting the Plot sidebar's min-cells to 50 changes the Statistics run from 5,212 to 1,900 islets (lmer p 0.0039 → 0.0027) with nothing on the Statistics page to say so, and the sex filter can silently take the cohort from 15 donors to 7. `stats_run()` therefore captures `get_selection_description()` as `plot_subset_desc`; the overview banner renders it in a **"Data subset inherited from the Plot sidebar"** `<details>`, and the CSV header prints it under an explicit `# DATA SUBSET FROM THE PLOT SIDEBAR` heading. Corollary: the Statistics diameter slider is applied *on top of* the Plot sidebar's, so it can only ever narrow — widening it past the sidebar range does nothing.
 
 ### Zero-Value Exclusion (May 2026)
 - UI: `stats_exclude_zero` checkbox in Section 1 controls row (`mod_statistics_ui.R`). Default OFF.
 - Server: `stats_run()` filters `value != 0` immediately after outlier flagging and before min-cells / diameter / aggregation. State and drop count (`zero_dropped`) propagate through the result list.
-- Scope: applies to mixed-effects model, donor-level ANOVA / Kruskal, pairwise Cohen's d, per-bin tests, demographics regressions, and the covariate-adjusted model. Does NOT alter AUC (read from the Plot tab's `summary_df`) or the normality table (computed before filtering would change power conclusions for a comparison user's reference).
+- Scope: applies to mixed-effects model, donor-level ANOVA / Kruskal, pairwise Cohen's d, per-bin tests, demographics regressions, and the covariate-adjusted model. Alters AUC too (recomputed on the same subset since Jul 2026). Does NOT alter the normality table (computed before filtering would change power conclusions for a comparison user's reference).
 - Surfacing: overview banner shows an orange "Zero-valued excluded (N dropped)" badge; forest plot title appends `— N zero-valued dropped`; Methods Reference inserts a dedicated paragraph; CSV header records `Zero-value filter: ON/OFF; N dropped = …`.
 - Use case: zero-inflated features — rare phenotypes whose core (`prop_*`) or peri-islet (`peri_prop_*`) proportion is exactly 0 in most islets. Lets users sanity-check whether group differences survive on the non-zero subset. (Enrichment z-scores are *not* zero-inflated — see the Card A note above.)
 - **Ordering (Jul 2026)**: the zero filter runs BEFORE `flag_outliers()`, so the robust median/MAD are computed on the values that actually enter the tests. It previously ran after, deriving the MAD from a zero-inflated vector and then discarding the zeros — a different outlier set from the Plot tab's, which has always filtered first.
@@ -135,7 +137,7 @@ The export is a stacked multi-section CSV: a `#` provenance/methodology header, 
 | `# AUC by Donor Group`, `# Demographics Summary`, `# Age-Feature Correlation`, `# Post-hoc: Sex-Stratified Pairwise`, `# Autoantibody Profile` | — | yes |
 
 Header notes:
-- `get_selection_description()` belongs to the **Plot** module, so its `Bin Width` and `Diameter Range` lines describe the *Plot sidebar*. The Statistics handler strips those two and restates the values that actually applied: the fixed `STATS_BIN_WIDTH_UM` and `input$stats_diam_range`. `stats_min_cells` is recorded too — the UI promises "every setting is recorded in the downloaded CSV header" and these three were the omissions.
+- `get_selection_description()` belongs to the **Plot** module, so its lines describe the *Plot sidebar*, which filters the data before this tab sees it. Both blocks used to emit a bare `Min cells per islet (core+peri): N` line, so one file could carry two contradictory values for the same named quantity (Plot 50 / Statistics 1) with nothing saying which bound. Both are now attributed: the Plot lines sit under `# DATA SUBSET FROM THE PLOT SIDEBAR (applied upstream of this tab)`, this tab's under `# [Statistics tab] …`. Only `Bin Width` is dropped — it controls the Plot scatter alone and no longer reaches any number here.
 - `stats_run()` is an `eventReactive(..., ignoreInit = TRUE)`, so before Run it **raises** rather than returning NULL. `content()` wraps it in `tryCatch` — clicking Download before Run now writes the `# No results computed` fallback instead of failing the download.
 - On screen, the emmeans `p.value` is Tukey-adjusted and is displayed under **`p (adj)`**; it was previously printed under `p-value` with `p (adj)` showing `-`, which read as uncorrected.
 - Donor-level pairwise contrasts are BH-corrected across the 3 pairs.
@@ -145,3 +147,45 @@ Header notes:
 ### Plotly Legend Positioning
 Forest plot uses `theme(legend.position = "none")` in ggplot (prevents ggplotly auto-placement), then `layout(margin = list(b = 60), legend = list(orientation = "h", x = 0.5, xanchor = "center", y = -0.25))` in plotly. The `margin(b=60)` creates room below the x-axis title to prevent overlap. The trend plot uses `margin(b=100)` with legend at `y = -0.3`.
 
+
+## Jul 2026 correctness pass (statistics accuracy audit)
+
+Six defects found by driving the real modules headlessly (`shiny::testServer`) against the live H5AD across every input and Advanced/sensitivity setting.
+
+### 1. "Min cells/islet" was a silent no-op in Microenvironment mode
+`prep_data()` built `targets_all` (the Microenvironment source) with a fixed `select()` that never carried `total_cells_core` / `total_cells_peri`; both the Plot sidebar filter and `stats_run()` are guarded on those column names, so the filter *skipped* rather than erroring. `Capillary|islet_core` at min-cells 1 → 200 stayed at 5,380 islets and p = 0.3476 throughout, while the exported CSV still recorded the value the user set.
+
+**Fix:** `data_loading.R` joins the per-islet cell counts from `comp` onto `targets_all` by `(Case ID, islet_key)` — many-to-one, row count asserted unchanged. Microenvironment now matches Cell Populations islet-for-islet at every threshold (5,193 / 5,061 / 4,244 / 1,900 / 687 / 307). This also fixes the identical silent skip on the **Plot** tab. Where counts are genuinely unavailable (Excel fallback), `min_cells_applied = FALSE` drives a red banner badge and a `*** NOT APPLIED ***` marker in the CSV — never a silent skip again.
+
+### 2. The headline p-value was always in scientific notation
+`formatC(format = "e")` unconditionally, so p = 0.3476 rendered as **`p = 3.48e-01`** — one misread order of magnitude from 0.0348 — while the hypothesis table three lines below printed `0.3476`. `format_p_value()` (`utils_stats.R`) is now the single rule everywhere: fixed to 4 dp down to 1e-4, scientific below.
+
+### 3. Mixed-effects pairwise contrasts silently switched inference method at 3,000 islets
+emmeans caps its d.f. machinery at `pbkrtest.limit` / `lmerTest.limit` = 3000 and drops to **asymptotic z-tests (df = Inf)** above it — badly anti-conservative for a 15-donor design. Same feature, same model: p(ND−T1D) = **0.00007** at 5,212 islets (z) vs **0.0027** at 2,874 islets (t, df ≈ 12). The method flipped on dataset size alone with nothing on screen to say so.
+
+**Fix:** request `lmer.df = "satterthwaite"` with both limits raised past `nrow(rdf)` — the same approximation `lmerTest::anova()` uses for the omnibus p, so the contrasts are now consistent with the headline (Kenward-Roger, emmeans' default, is far too expensive at this N). The method used is recorded as `lmer_pairwise_df_method`, surfaced in the Methods Reference and the CSV header, so a regression to df = Inf is visible rather than invisible.
+
+### 4. The autoantibody Kruskal-Wallis was pseudoreplicated
+AAb count is a **donor** attribute, but the test ran across islets: p = **1.6e-15** from 1,666 islets belonging to just **5 donors** split 1 / 3 / 1 across the count groups. Donor-level: p = **0.67**. The one test on a tab built to eliminate pseudoreplication that reintroduced it, uncaveated.
+
+**Fix:** `aab_kw` is computed in `stats_run()` on donor means and carries `donors_per_group` + an `underpowered` flag (any group with < 2 donors). The subtitle now states the test level, the donors behind each box, and a descriptive-only warning; the result is exported (it never was).
+
+### 5. AUC ignored every Statistics filter and obeyed hidden Plot controls
+It integrated the Plot module's `summary_df()`, so it: ignored all four Advanced filters (with 5,212 islets cut to 131, AUC was byte-identical to the unfiltered run, and "T1D shows X% decrease" described data the rest of the page had discarded); obeyed the Plot `binwidth` slider (ND 9,639 → 10,483 → 9,124 across 10/50/75 µm) while Section 3 advertises a fixed 50 µm width; and obeyed the Plot Mean/Median radio, integrating medians while the card said "mean" (T1D 465 → 186).
+
+**Fix:** AUC derives from `rdf_binned` — this tab's filtered frame at `STATS_BIN_WIDTH_UM`. `summary_df` is removed from the module signature and from the `app.R` call site so the coupling cannot come back.
+
+### 6. Clearing the min-cells box crashed the whole run
+`%||%` only catches NULL; an emptied `numericInput` sends `NA`, so `if (NA > 1 && TRUE)` aborted the `eventReactive` with *"missing value where TRUE/FALSE needed"*, blanking every card. Now coerced to a finite value ≥ 1.
+
+### Verified unchanged
+lmer Satterthwaite p and ICC match independent `lmerTest` / `VarCorr` to 10 significant figures; donor-level ANOVA / Kruskal-Wallis match; BH correction is correct and NA-safe (R's lazy `n = length(p)` excludes NAs, so 2-group subsets are not over-corrected); Cohen's d and CIs correct; zero-exclusion still runs before `flag_outliers()`; `eventReactive` isolation holds — only the Run button recomputes.
+
+### Known, still open
+- `eta_sq` for the Kruskal-Wallis branch is **epsilon-squared** (`H/(n−1)`), exported under the name `eta_sq`.
+- Sex-stratified tests use pooled-SD `pairwise.t.test` while Section 2 uses Welch `t.test` (Males ND-vs-T1D: 0.104 vs 0.088); contrast labels are also reversed (`Aab+ vs ND` vs `ND vs Aab+`).
+- `per_bin_donor_pairwise()` has no coverage rule beyond n ≥ 2 per pair, so the heatmap can show a pairwise star in a bin whose ANOVA/Kendall cells are blank — contradicting the "same rule for the heatmap and the trend plot" claim in the methods text.
+- An over-restrictive filter returns `NULL`, and every card reverts to the pre-run placeholder — indistinguishable from "you haven't clicked Run".
+- The covariate card prints "does NOT survive adjustment for age and sex" even when donor status was never significant (Capillary: 0.348 → 0.387).
+- Raw column encodings leak into the UI as the feature name (`prop_Beta cell`, `peri_prop_CD8a_Tcell`, `Capillary|islet_core`).
+- `outlier_summary` is measured before the min-cells / diameter filters, so "N islets excluded last Run" is counted against a superset of what was tested.

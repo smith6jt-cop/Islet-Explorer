@@ -10,7 +10,7 @@ Interactive Shiny app for exploring pancreatic islet CODEX multiplexed imaging d
 
 - `app/shiny_app/CLAUDE.md` — per-tab feature details (Drill-Down, Trajectory, Plot, AI Assistant) + conventions including the May 2026 font-standardisation system
   - `app/shiny_app/docs/spatial.md` — Spatial Neighborhood Analysis deep reference (split out May 2026)
-  - `app/shiny_app/docs/statistics.md` — Statistics Tab deep reference (split out May 2026)
+  - `app/shiny_app/docs/statistics.md` — Statistics Tab deep reference (split out May 2026; Jul 2026 correctness pass at the end: min-cells no-op, p-value notation, emmeans d.f. fallback, AAb pseudoreplication, AUC decoupling)
 - `scripts/CLAUDE.md` — pipeline scripts, batch correction, pseudotime modes
 - `islet_analysis/CLAUDE.md` — Python analysis pipeline (phenotyping, aggregation, trajectory)
 
@@ -159,6 +159,7 @@ Per-tab implementation details — Spatial Neighborhood Analysis (Phase 7), Sing
 - **Plot defaults**: Point size = 3.0, transparency = 0.6
 - **Plot fonts & downloads**: Every plot uses `theme_islet()` (ggplot) and `plotly_islet_fonts()` + `plotly_islet_config()` (plotly) — single source of truth in `app/shiny_app/R/00_globals.R`. Base 16pt / titles 18pt / axes 14-16pt / legends 14-16pt / heatmap rows 12pt min. Plotly modebar PNG downloads ship 2800 × 1800 px (scale=2). ggplot `renderPlot` outputs that should be downloadable are refactored into a `reactive()` consumed by both `renderPlot` and a `downloadHandler` using `ggsave(..., width=10, height=7, dpi=300)` (heatmaps 12 × 8). See `app/shiny_app/CLAUDE.md` § "Plot Fonts & Publication-Quality Downloads".
 - **Phenotype marker rules in UI**: `data/phenotype_rules.csv` is parsed once at startup into `PHENOTYPE_RULES_CSV` in `00_globals.R`, with hierarchical composition (sub-phenotypes inherit parent constraints) and an alias map for the four PHENOTYPE_COLORS-vs-CSV naming mismatches (`CD8a Tcell` ↔ `CD8 T cell`, etc.). Surfaced via (1) inline blue hint under every phenotype `selectInput` showing the active rule, (2) global "Phenotype rules — marker definitions" button at the top of every tab opening a reference modal listing all 21 phenotypes + markers, (3) expandable rules list in the drill-down composition panel naming each phenotype present in the clicked islet. See `app/shiny_app/CLAUDE.md` § "Phenotype Rules — Marker Definitions in the UI".
+- **`targets_all` carries per-islet cell counts** (Jul 2026): `prep_data()` joins `total_cells_core` / `total_cells_peri` from `comp` onto `targets_all`. Without them the "Min cells/islet" filter — guarded on those column names in both `mod_plot_server.R::raw_df_base()` and `mod_statistics_server.R::stats_run()` — *silently did nothing* in Microenvironment mode instead of erroring, while the exported CSV still reported the value the user set. Any new filter guarded on a column's presence must surface the skip (see `min_cells_applied`), never swallow it.
 - **Peri-islet data guard**: Always check `total_cells_peri > 0` before using peri metrics
 - **Column name sanitization**: Phenotype names use `_` for spaces, `plus` for `+` in peri-islet columns
 - **Single-cell Parent column**: `Islet_N` = core cells, `Islet_N_exp20um` = peri-islet cells

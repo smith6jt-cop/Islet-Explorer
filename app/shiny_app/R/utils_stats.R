@@ -571,6 +571,28 @@ normality_tests <- function(ddf) {
   do.call(rbind, rows)
 }
 
+# ---------- p-value formatting ----------
+
+#' Format a p-value for display — one rule, used everywhere.
+#'
+#' Scientific notation is only readable when the exponent is large. The
+#' Statistics headline used to call formatC(format = "e") unconditionally, so
+#' p = 0.3476 rendered as "3.48e-01" — one keystroke away from being read as
+#' 0.0348 — while the hypothesis table three lines below printed the same number
+#' as "0.3476". Fixed notation down to `sci_below`, scientific under it.
+#'
+#' @param x numeric p-value (NA-safe, vectorised)
+#' @param digits significant digits for the scientific branch
+#' @param sci_below switch to scientific notation below this value
+#' @param na label for NA / non-finite input
+format_p_value <- function(x, digits = 2, sci_below = 1e-4, na = "N/A") {
+  x <- suppressWarnings(as.numeric(x))
+  ifelse(!is.finite(x), na,
+         ifelse(x < sci_below,
+                formatC(x, format = "e", digits = digits),
+                formatC(x, format = "f", digits = 4)))
+}
+
 # ---------- Effect size utilities (Statistics tab) ----------
 
 #' Cohen's d for two-sample comparison with 95% CI (normal approximation)

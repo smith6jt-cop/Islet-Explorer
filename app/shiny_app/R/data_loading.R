@@ -243,6 +243,37 @@ prep_data <- function(master) {
     message("[prep-data] Merged ", ncol(master$neighborhood) - 2, " neighborhood columns into comp")
   }
 
+  # Carry the per-islet cell counts onto targets_all so the Microenvironment
+  # mode can honour the "Min cells/islet" filter.
+  #
+  # `total_cells_core` / `total_cells_peri` arrive on `comp` via the neighborhood
+  # merge above, but `targets_all` is built from the targets sheet with a fixed
+  # select() that never had them. Both the Plot sidebar filter
+  # (mod_plot_server.R::raw_df_base) and the Statistics tab filter
+  # (mod_statistics_server.R::stats_run) are guarded on those column names, so in
+  # Microenvironment mode the filter did not error — it silently did nothing,
+  # while the exported CSV header still reported the min-cells value the user set.
+  # Joining by (Case ID, islet_key) matches the phenotype / neighborhood joins
+  # above; islet_key is unique within a donor, so this is many-to-one and cannot
+  # grow targets_all.
+  if (all(c("total_cells_core", "total_cells_peri") %in% colnames(comp))) {
+    cell_counts <- comp %>%
+      dplyr::select(`Case ID`, islet_key, total_cells_core, total_cells_peri) %>%
+      dplyr::distinct(`Case ID`, islet_key, .keep_all = TRUE)
+    n_before <- nrow(targets_all)
+    targets_all <- targets_all %>%
+      dplyr::select(-dplyr::any_of(c("total_cells_core", "total_cells_peri"))) %>%
+      { safe_left_join(., cell_counts, by = c("Case ID", "islet_key"),
+                       context = "targets_all:cell_counts") }
+    if (nrow(targets_all) != n_before) {
+      warning(sprintf("[prep-data] targets_all row count changed on cell-count join: %d -> %d",
+                      n_before, nrow(targets_all)))
+    }
+    message("[prep-data] Joined per-islet cell counts onto targets_all (",
+            sum(is.finite(suppressWarnings(as.numeric(targets_all$total_cells_core)))),
+            " of ", nrow(targets_all), " rows matched)")
+  }
+
   # Merge donor demographics into all dataframes (H5AD only; NULL from Excel path)
   if (!is.null(master$donor_demographics) && nrow(master$donor_demographics) > 0) {
     targets_all <- safe_left_join(targets_all, master$donor_demographics, by = "Case ID", context = "targets_all:demographics")

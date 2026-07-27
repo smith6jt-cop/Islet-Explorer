@@ -1,5 +1,11 @@
 # ---------- Statistics module server ----------
-# Exports: statistics_server(id, raw_df, summary_df, get_selection_description)
+# Exports: statistics_server(id, raw_df, get_selection_description)
+#
+# NOTE: the module no longer takes the Plot module's `summary_df`. AUC used to be
+# integrated from it, which made that one card obey the Plot sidebar's bin-width
+# and Mean/Median controls (hidden on this tab) while ignoring every filter set
+# here. AUC is now computed from this tab's own filtered frame at the fixed
+# STATS_BIN_WIDTH_UM. Do not reintroduce a cross-tab data dependency.
 #
 # Phase 16: Donor-level aggregation to fix pseudoreplication.
 # Tests use donor-level means (N~15) instead of islet-level (N~5,214).
@@ -19,7 +25,7 @@
 # the methods text / CSV header.
 STATS_BIN_WIDTH_UM <- 50L
 
-statistics_server <- function(id, raw_df, summary_df, get_selection_description,
+statistics_server <- function(id, raw_df, get_selection_description,
                               donor_colors = reactive(DONOR_COLORS),
                               remove_outliers = reactive(TRUE)) {
   moduleServer(id, function(input, output, session) {
@@ -74,7 +80,7 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
       # ---- Zero-value exclusion (sensitivity for zero-inflated features) ----
       # Removes rows whose feature value == 0 before outlier flagging, donor-level
       # aggregation, mixed-effects modelling, demographics, and per-bin tests.
-      # AUC is read from the Plot tab's summary_df and is NOT affected.
+      # AUC is recomputed from the same filtered frame, so it IS affected.
       #
       # ORDER MATTERS: this runs BEFORE flag_outliers() so the robust centre and
       # scale (median / MAD) are computed on the values that actually enter the
@@ -114,7 +120,20 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
       }
 
       # ---- Min-cells filter (like spatial tab) ----
-      min_cells <- input$stats_min_cells %||% 1
+      # `%||%` only catches NULL; clearing the numericInput sends NA, and
+      # `if (NA > 1 && TRUE)` aborts the whole eventReactive with "missing value
+      # where TRUE/FALSE needed", blanking every card on the tab. Coerce to a
+      # usable number first.
+      min_cells <- {
+        v <- suppressWarnings(as.numeric(input$stats_min_cells %||% 1))
+        if (length(v) == 1 && is.finite(v) && v >= 1) v else 1
+      }
+      # `total_cells_*` are joined onto BOTH comp and targets_all by prep_data(),
+      # so this filter now applies in Microenvironment mode too. The guard stays
+      # for the Excel fallback path, where the neighborhood sheet is absent —
+      # but it is no longer silent: see `min_cells_applied` below.
+      min_cells_applied <- !(min_cells > 1) ||
+        all(c("total_cells_core", "total_cells_peri") %in% colnames(rdf))
       if (min_cells > 1 &&
           "total_cells_core" %in% colnames(rdf) &&
           "total_cells_peri" %in% colnames(rdf)) {
@@ -179,14 +198,42 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
       lmer_error <- lmer_result$error_msg  # NULL if no error
 
       # Pairwise from mixed model via emmeans
+      #
+      # CRITICAL: emmeans caps its degrees-of-freedom machinery at
+      # `pbkrtest.limit` / `lmerTest.limit` = 3000 observations. Above that it
+      # silently drops to ASYMPTOTIC inference (z-tests, df = Inf), which for a
+      # 15-donor design is badly anti-conservative — the same feature gave
+      # p(ND-T1D) = 0.00007 at 5,212 islets (z) versus 0.0027 at 2,874 islets
+      # (t, df ~ 12). The method therefore flipped on dataset size alone, with
+      # nothing on screen to say so.
+      #
+      # Fix: request Satterthwaite explicitly with the limit raised past the row
+      # count. Satterthwaite is also what lmerTest::anova() uses for the omnibus
+      # p in the headline, so the pairwise contrasts are now consistent with it
+      # (Kenward-Roger, emmeans' default, is far more expensive at this N).
+      # `df_method` is recorded so the methods text can state it and so a silent
+      # regression to df = Inf is visible rather than invisible.
       lmer_pairwise <- NULL
+      lmer_pairwise_df_method <- NA_character_
       if (!is.null(lmer_result) && !is.null(lmer_result$fit)) {
+        n_obs <- nrow(rdf)
         lmer_pairwise <- tryCatch({
-          emm <- emmeans::emmeans(lmer_result$fit, pairwise ~ donor_status)
-          ct <- as.data.frame(emm$contrasts)
-          # ct has columns: contrast, estimate, SE, df, t.ratio, p.value
-          ct
-        }, error = function(e) NULL)
+          emm <- emmeans::emmeans(lmer_result$fit, pairwise ~ donor_status,
+                                  lmer.df = "satterthwaite",
+                                  lmerTest.limit = n_obs + 1L,
+                                  pbkrtest.limit = n_obs + 1L)
+          as.data.frame(emm$contrasts)
+        }, error = function(e) {
+          # Fall back to emmeans' own default rather than losing the contrasts
+          tryCatch(as.data.frame(
+            emmeans::emmeans(lmer_result$fit, pairwise ~ donor_status)$contrasts),
+            error = function(e2) NULL)
+        })
+        if (!is.null(lmer_pairwise) && "df" %in% colnames(lmer_pairwise)) {
+          lmer_pairwise_df_method <- if (all(!is.finite(lmer_pairwise$df))) {
+            "asymptotic (z-test, df = Inf)"
+          } else "Satterthwaite"
+        }
       }
 
       # ---- SENSITIVITY: Donor-level test (conservative — collapses size variation) ----
@@ -397,15 +444,46 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
       aab_avail <- intersect(aab_cols, colnames(rdf))
       aab_summary <- NULL
       aab_donor_summary <- NULL
+      aab_kw <- NULL
 
       if (length(aab_avail) > 0) {
         aab_sub <- rdf[rdf$donor_status == "Aab+", , drop = FALSE]
         if (nrow(aab_sub) > 0) {
-          # Count AAbs per islet (same for all islets from same donor)
-          aab_sub$n_aab <- rowSums(sapply(aab_avail, function(col) {
-            as.numeric(as.logical(aab_sub[[col]]))
-          }), na.rm = TRUE)
+          # Count AAbs per islet (same for all islets from same donor).
+          # `sapply` returns a plain vector when only one AAb column survives the
+          # intersect above, which rowSums() cannot take — force a matrix.
+          aab_sub$n_aab <- rowSums(
+            matrix(unlist(lapply(aab_avail, function(col) as.numeric(as.logical(aab_sub[[col]])))),
+                   nrow = nrow(aab_sub), ncol = length(aab_avail)),
+            na.rm = TRUE)
           aab_summary <- aab_sub
+
+          # ---- AAb-count test, at the DONOR level ----
+          # The AAb count is a donor attribute: every islet from a donor carries
+          # the same value. Testing it across islets is pure pseudoreplication —
+          # on this cohort that produced KW p = 1.6e-15 from 1,666 islets that
+          # come from just 5 donors split 1 / 3 / 1 across the count groups,
+          # while the donor-level test gives p = 0.67. Aggregate first, and carry
+          # the per-group donor counts so the plot can state how thin this is.
+          aab_kw <- tryCatch({
+            grp_of <- function(n) ifelse(n >= 3, "3+", as.character(n))
+            ddf_aab <- aab_sub %>%
+              dplyr::mutate(.aab_group = grp_of(n_aab)) %>%
+              dplyr::group_by(`Case ID`, .aab_group) %>%
+              dplyr::summarise(value = mean(value, na.rm = TRUE), .groups = "drop")
+            n_donor_per_group <- table(ddf_aab$.aab_group)
+            p_val <- if (length(n_donor_per_group) >= 2) {
+              kt <- kruskal.test(value ~ factor(.aab_group), data = ddf_aab)
+              unname(kt$p.value)
+            } else NA_real_
+            list(p_value = p_val,
+                 n_donors = nrow(ddf_aab),
+                 n_islets = nrow(aab_sub),
+                 donors_per_group = n_donor_per_group,
+                 # Any group carried by a single donor makes the comparison a
+                 # between-donor difference of one, not a group effect.
+                 underpowered = any(n_donor_per_group < 2))
+          }, error = function(e) NULL)
 
           # Per-donor AAb profile table
           aab_donor_rows <- lapply(unique(aab_sub$`Case ID`), function(cid) {
@@ -428,20 +506,34 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
         }
       }
 
-      # ---- AUC: trapezoidal integration of binned summary curve per donor group ----
-      sdf <- summary_df()
+      # ---- AUC: trapezoidal integration of the binned mean, per donor group ----
+      #
+      # Computed from THIS tab's filtered frame (`rdf_binned`, fixed
+      # STATS_BIN_WIDTH_UM). It used to integrate the Plot module's summary_df(),
+      # which made it the one card on the page that answered a different
+      # question than everything above it:
+      #   * it ignored every Advanced filter — with min-cells + diameter + zero +
+      #     outlier filters cutting 5,212 islets to 131, the AUC was byte-identical
+      #     to the unfiltered run, and the "T1D shows X% decrease" sentence
+      #     described a dataset the rest of the page had discarded;
+      #   * it obeyed the Plot sidebar's `binwidth` slider (hidden on this tab),
+      #     swinging ND from 9,639 to 10,483 to 9,124 across 10/50/75 µm, while
+      #     Section 3 advertises a fixed 50 µm bin width;
+      #   * it obeyed the Plot sidebar's Mean/Median radio, so with "Median + IQR"
+      #     selected it integrated medians while the card said "mean" (T1D 465 -> 186).
       auc_by_group <- tryCatch({
-        if (is.null(sdf) || nrow(sdf) == 0) NULL
-        else {
-          sdf %>%
-            dplyr::group_by(donor_status) %>%
-            dplyr::arrange(diam_mid) %>%
-            dplyr::summarise(
-              auc = if (n() < 2) 0 else sum(diff(diam_mid) * (head(y, -1) + tail(y, -1))) / 2,
-              n_bins = n(),
-              .groups = "drop"
-            )
-        }
+        rdf_binned %>%
+          dplyr::filter(is.finite(diam_mid), is.finite(value)) %>%
+          dplyr::group_by(donor_status, diam_mid) %>%
+          dplyr::summarise(y = mean(value, na.rm = TRUE), .groups = "drop") %>%
+          dplyr::arrange(donor_status, diam_mid) %>%
+          dplyr::group_by(donor_status) %>%
+          dplyr::summarise(
+            auc = if (dplyr::n() < 2) 0
+                  else sum(diff(diam_mid) * (head(y, -1) + tail(y, -1))) / 2,
+            n_bins = dplyr::n(),
+            .groups = "drop"
+          )
       }, error = function(e) NULL)
 
       list(
@@ -472,6 +564,7 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
         norm_result      = norm_result,
         aab_summary      = aab_summary,
         aab_donor_summary = aab_donor_summary,
+        aab_kw           = aab_kw,
         rdf              = rdf,
         outlier_summary  = outlier_summary_pre,
         exclude_zero     = exclude_zero,
@@ -481,7 +574,17 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
         # recorded in the downloaded CSV header" (mod_statistics_ui.R) — these
         # two were the ones it silently omitted.
         min_cells        = min_cells,
-        diam_range       = diam_range_used
+        min_cells_applied = min_cells_applied,
+        diam_range       = diam_range_used,
+        # df method actually used for the mixed-effects pairwise contrasts
+        lmer_pairwise_df_method = lmer_pairwise_df_method,
+        # The Plot sidebar's own filters run BEFORE this tab sees the data
+        # (`raw_df_prezero`), and its controls are hidden while the Statistics tab
+        # is active — so donor groups, min-cells, diameter, age and sex set over
+        # there silently change every number here. Capture the description so the
+        # banner and the CSV can name the inherited subset instead of leaving the
+        # user to infer it.
+        plot_subset_desc = tryCatch(get_selection_description(), error = function(e) character(0))
       )
     }, ignoreInit = TRUE)
 
@@ -505,15 +608,43 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
                           if (st$zero_dropped == 1) "" else "s"))
       } else NULL
 
-      tags$div(style = "display: flex; gap: 15px; align-items: center; flex-wrap: wrap;",
-        tags$span(style = "background: #e3f2fd; padding: 4px 10px; border-radius: 4px; font-weight: 600;",
-                  st$feature_name),
-        tags$span(style = "padding: 4px 10px;",
-                  paste0(formatC(st$n_islets, format = "d", big.mark = ","),
-                         " islets, ", st$n_donors, " donors")),
-        tags$span(style = "color: #888; font-size: 12px;",
-                  "Primary result is shown in Section 2 below."),
-        zero_badge
+      # Warn when a min-cells value was typed but could not be honoured (Excel
+      # fallback path, where the per-islet cell counts are unavailable). Silently
+      # ignoring it is what made the Microenvironment min-cells bug invisible.
+      min_cells_warn <- if (!isTRUE(st$min_cells_applied)) {
+        tags$span(style = paste0("background: #fdecea; color: #8a1c12; padding: 4px 10px; ",
+                                 "border: 1px solid #f5b7b1; border-radius: 4px;"),
+                  sprintf("Min cells/islet = %g NOT applied — per-islet cell counts unavailable for this data source",
+                          st$min_cells))
+      } else NULL
+
+      # Filters set on the Plot sidebar run upstream of this tab and its controls
+      # are hidden here, so name them rather than letting them act invisibly.
+      inherited <- st$plot_subset_desc
+      inherited <- inherited[!grepl("^Bin Width:", inherited)]
+      inherited_block <- if (length(inherited)) {
+        tags$details(style = "margin-top: 8px; width: 100%; font-size: 12px;",
+          tags$summary(style = "cursor: pointer; color: #4477AA; font-weight: 600;",
+            "Data subset inherited from the Plot sidebar ",
+            tags$span(style = "font-weight: 400; color: #999;",
+                      "— applied before this tab's filters")),
+          tags$ul(style = "margin: 6px 0 0 0; padding-left: 20px; color: #666;",
+                  lapply(inherited, tags$li)))
+      } else NULL
+
+      tags$div(
+        tags$div(style = "display: flex; gap: 15px; align-items: center; flex-wrap: wrap;",
+          tags$span(style = "background: #e3f2fd; padding: 4px 10px; border-radius: 4px; font-weight: 600;",
+                    st$feature_name),
+          tags$span(style = "padding: 4px 10px;",
+                    paste0(formatC(st$n_islets, format = "d", big.mark = ","),
+                           " islets, ", st$n_donors, " donors")),
+          tags$span(style = "color: #888; font-size: 12px;",
+                    "Primary result is shown in Section 2 below."),
+          zero_badge,
+          min_cells_warn
+        ),
+        inherited_block
       )
     })
 
@@ -540,7 +671,11 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
         tags$div(style = paste0("display: inline-block; background: ", p_col,
                                 "; color: white; padding: 8px 16px; border-radius: 6px;",
                                 " font-size: 20px; font-weight: 700;"),
-          paste0("p = ", if (is.na(primary_p)) "N/A" else formatC(primary_p, format = "e", digits = 2))),
+          # format_p_value(): fixed notation down to 1e-4, scientific below.
+          # This used to be an unconditional formatC(format = "e"), so p = 0.3476
+          # rendered as "3.48e-01" — trivially misread as 0.0348 — while the
+          # hypothesis table below printed the same value as "0.3476".
+          paste0("p = ", format_p_value(primary_p))),
         tags$span(style = "margin-left: 10px; font-size: 14px; color: #555;",
           paste0(if (is.na(primary_p)) "—" else if (sig) "Significant" else "Not significant",
                  " at α = ", st$alpha, " (fixed)")),
@@ -620,7 +755,7 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
 
       icc_str <- if (is.na(st$icc)) "N/A" else sprintf("%.2f", st$icc)
       donor_str <- if (is.na(st$donor_p)) "N/A" else
-        paste0("p = ", formatC(st$donor_p, format = "e", digits = 2))
+        paste0("p = ", format_p_value(st$donor_p))
 
       icc_interp <- if (!is.na(st$icc) && st$icc > 0.3) {
         " — substantial clustering: donor identity explains much of the variance."
@@ -669,11 +804,9 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
       st <- stats_run()
       if (is.null(st)) return(NULL)
 
-      fmt_p <- function(x) {
-        ifelse(is.na(x), "N/A",
-               ifelse(x < 1e-5, formatC(x, format = "e", digits = 2),
-                      sprintf("%.4f", x)))
-      }
+      # Shared with the Section 2 headline so the same p never appears in two
+      # different notations on one page.
+      fmt_p <- function(x) format_p_value(x)
       fmt_d <- function(x) ifelse(is.na(x), "N/A", sprintf("%.2f", x))
 
       rows <- data.frame(
@@ -999,7 +1132,7 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
 
       corr_label <- sprintf("r = %.2f, p = %s (N=%d islets; correlated within donors)",
                             st$age_corr$cor,
-                            formatC(st$age_corr$p_value, format = "e", digits = 2),
+                            format_p_value(st$age_corr$p_value),
                             st$age_corr$n)
 
       g <- ggplot(rdf_plot, aes(x = age_num, y = value, color = donor_status)) +
@@ -1061,7 +1194,7 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
             lp <- sub_gs$low_power[1]
             suffix <- if (isTRUE(lp)) " (low power)" else ""
             p_labels <- c(p_labels, sprintf("%s: min q=%s%s", gen,
-                                            formatC(min_p, format = "e", digits = 1), suffix))
+                                            format_p_value(min_p), suffix))
           }
         }
         sub_label <- paste0(paste(p_labels, collapse = "  |  "),
@@ -1132,12 +1265,28 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
         return(NULL)
       }
 
-      # Kruskal-Wallis test for trend
-      kt <- tryCatch(kruskal.test(value ~ aab_group, data = aab_df), error = function(e) NULL)
-      p_label <- if (!is.null(kt)) sprintf("KW p = %s", formatC(kt$p.value, format = "e", digits = 1)) else ""
+      # Kruskal-Wallis on DONOR means (computed in stats_run as st$aab_kw).
+      # This box plot shows the islet-level spread — but the AAb count is a donor
+      # attribute, so a test across islets is pseudoreplicated: on this cohort it
+      # returned p = 1.6e-15 from 1,666 islets belonging to 5 donors, where the
+      # donor-level test gives p = 0.67. The subtitle now states both the level
+      # the test was run at and how many donors sit behind each box.
+      kw <- st$aab_kw
+      p_label <- if (!is.null(kw) && is.finite(kw$p_value)) {
+        sprintf("Kruskal-Wallis on donor means: p = %s.", format_p_value(kw$p_value))
+      } else "Donor-level test not computable (fewer than 2 AAb-count groups)."
+      donors_label <- if (!is.null(kw) && length(kw$donors_per_group)) {
+        paste0(" Donors per group: ",
+               paste(sprintf("%s=%d", names(kw$donors_per_group),
+                             as.integer(kw$donors_per_group)), collapse = ", "), ".")
+      } else ""
+      power_label <- if (!is.null(kw) && isTRUE(kw$underpowered)) {
+        " At least one group is a single donor — treat as descriptive only."
+      } else ""
 
-      aab_sub <- paste0("N = ", nrow(aab_df), " islets from ",
-                        length(unique(aab_df$`Case ID`)), " Aab+ donors. ", p_label)
+      aab_sub <- paste0("Boxes show ", nrow(aab_df), " islets from ",
+                        length(unique(aab_df$`Case ID`)), " Aab+ donors. ",
+                        p_label, donors_label, power_label)
 
       g <- ggplot(aab_df, aes(x = aab_group, y = value, fill = aab_group)) +
         geom_boxplot(alpha = 0.7, outlier.size = 0.8) +
@@ -1172,7 +1321,7 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
         tags$strong("Covariate-Adjusted Model (donor-level)"),
         tags$p(style = "margin: 5px 0 0 0;",
           paste0("lm(value ~ donor_status + age + sex, data = donor_means): donor_status p = ",
-                 if (is.na(p_cov)) "N/A" else formatC(p_cov, format = "e", digits = 2)),
+                 format_p_value(p_cov)),
           tags$br(),
           if (survived) {
             tags$span(style = "color: #d62728; font-weight: 600;",
@@ -1325,7 +1474,7 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
                   formatC(st$zero_dropped, format = "d", big.mark = ","),
                   if (st$zero_dropped == 1) "" else "s"),
           "Useful for zero-inflated features — rare phenotypes whose core or peri-islet proportion is exactly 0 in most islets. ",
-          tags$strong("Note: "), "AUC is computed from the Plot-tab summary curves and is not affected by this filter.",
+          tags$strong("Note: "), "AUC is recomputed from this same filtered subset, so it moves with this filter too.",
           tags$br()
         )
       } else {
@@ -1359,7 +1508,12 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
                  "This accounts for the fact that islets from the same donor share biology, tissue processing, and imaging conditions, ",
                  "while still leveraging the full islet-level variation — important because islets of different sizes are ",
                  "structurally and functionally distinct. ",
-                 "Pairwise group comparisons use estimated marginal means from the mixed model."),
+                 "Pairwise group comparisons use estimated marginal means from the mixed model, ",
+                 "with Satterthwaite degrees of freedom \u2014 the same approximation lmerTest uses for ",
+                 "the omnibus p above. (emmeans defaults to asymptotic z-tests once the model exceeds ",
+                 "3,000 observations, which is anti-conservative for a 15-donor design; that limit is ",
+                 "raised explicitly so the method does not change with dataset size.) ",
+                 "This run used: ", st$lmer_pairwise_df_method %||% "N/A", "."),
           tags$br(), tags$br(),
           tags$strong("ICC (intra-class correlation): "),
           "Measures what fraction of total variation is explained by donor identity. ",
@@ -1394,7 +1548,7 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
           "The Section 3–4 exploratory views are therefore hypothesis-generating, not confirmatory; ",
           "confirm any finding with the Section 2 primary test on a single, pre-specified feature.",
           tags$br(),
-          tags$strong("AUC (exploratory): "), "Area under curve computed by trapezoidal integration of binned mean values across islet diameters, per donor group. Descriptive summary — no inferential test."
+          tags$strong("AUC (exploratory): "), paste0("Area under curve computed by trapezoidal integration of the per-status mean feature value across fixed ", STATS_BIN_WIDTH_UM, " \u00b5m islet-diameter bins, on the same filtered subset as every test above. Descriptive summary \u2014 no inferential test.")
         ),
         if (!is.null(st$demo_summary)) {
           tags$p(style = "margin-top: 8px;",
@@ -1409,7 +1563,7 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
               ""
             },
             if (!is.null(st$aab_summary)) {
-              " Autoantibody analysis shows feature distribution by AAb count (number of positive AAbs) for Aab+ donors only."
+              paste0(" Autoantibody analysis shows the islet-level feature distribution by AAb count (number of positive AAbs) for Aab+ donors only; the accompanying Kruskal-Wallis p is computed on DONOR means, because AAb count is a donor attribute and testing it across islets is pseudoreplication.")
             } else {
               ""
             }
@@ -1438,14 +1592,19 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
         # the download instead of producing the "no results" fallback below.
         st <- tryCatch(stats_run(), error = function(e) NULL)
 
-        # get_selection_description() belongs to the PLOT module, so its
-        # "Bin Width" and "Diameter Range" lines describe the Plot sidebar — not
-        # this tab, which bins at a fixed STATS_BIN_WIDTH_UM and filters on
-        # `stats_diam_range`. Drop those two and restate them correctly below.
-        descriptions <- tryCatch(get_selection_description(), error = function(e) character(0))
-        descriptions <- descriptions[!grepl("^(Bin Width|Diameter Range):", descriptions)]
+        # get_selection_description() belongs to the PLOT module: its lines
+        # describe the Plot sidebar, which filters the data BEFORE this tab sees
+        # it. Both blocks used to emit a bare "Min cells per islet (core+peri): N"
+        # line, so a file could carry two contradictory values for the same named
+        # quantity (Plot 50 / Statistics 1) with nothing to say which one bound.
+        # Both blocks are now explicitly attributed. "Bin Width" is dropped: it
+        # controls only the Plot scatter and no longer reaches any number here.
+        descriptions <- if (!is.null(st)) st$plot_subset_desc else
+          tryCatch(get_selection_description(), error = function(e) character(0))
+        descriptions <- descriptions[!grepl("^Bin Width:", descriptions)]
 
-        lines <- c(paste("#", descriptions))
+        lines <- c("# DATA SUBSET FROM THE PLOT SIDEBAR (applied upstream of this tab)",
+                   paste("#  ", descriptions))
         lines <- c(lines, "")
 
         if (!is.null(st)) {
@@ -1468,10 +1627,15 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
                                    "; N dropped = ", st$zero_dropped,
                                    ". (This tab owns its own zero filter; the Plot",
                                    " sidebar's checkbox does not affect these results.)"))
-          lines <- c(lines, paste0("# Min cells per islet (core+peri): ", st$min_cells %||% 1))
-          lines <- c(lines, paste0("# Diameter range (Statistics tab): ",
+          lines <- c(lines, paste0("# [Statistics tab] Min cells per islet (core+peri): ",
+                                   st$min_cells %||% 1,
+                                   if (!isTRUE(st$min_cells_applied))
+                                     "  *** NOT APPLIED: per-islet cell counts unavailable for this data source ***"
+                                   else ""))
+          lines <- c(lines, paste0("# [Statistics tab] Diameter range: ",
                                    if (is.null(st$diam_range)) "no filter"
-                                   else paste0(st$diam_range[1], " - ", st$diam_range[2], " um")))
+                                   else paste0(st$diam_range[1], " - ", st$diam_range[2],
+                                               " um (intersected with the Plot sidebar range above)")))
           lines <- c(lines, paste0("# Total islets: ",
                                    formatC(st$n_islets, big.mark = ","),
                                    ", Donors: ", st$n_donors))
@@ -1479,6 +1643,8 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
                                    if (is.na(st$icc)) "N/A" else sprintf("%.4f", st$icc)))
           lines <- c(lines, paste0("# Mixed-effects p-value (primary): ",
                                    if (is.na(st$lmer_p)) "N/A" else formatC(st$lmer_p, format = "e", digits = 4)))
+          lines <- c(lines, paste0("# Mixed-effects pairwise d.f. method: ",
+                                   st$lmer_pairwise_df_method %||% "N/A"))
           lines <- c(lines, "")
 
           # Sensitivity test
@@ -1606,6 +1772,24 @@ statistics_server <- function(id, raw_df, summary_df, get_selection_description,
           if (!is.null(st$aab_donor_summary)) {
             cat("\n# Autoantibody Profile (Aab+ donors)\n", file = file, append = TRUE)
             write.table(st$aab_donor_summary, file, append = TRUE, sep = ",", row.names = FALSE, quote = TRUE)
+          }
+
+          # AAb-count test — donor-level, matching the on-screen subtitle. The
+          # plot showed a p-value that was never exported, so the figure could
+          # not be reproduced from the CSV.
+          kw <- st$aab_kw
+          if (!is.null(kw)) {
+            cat("\n# AAb Count Test (Kruskal-Wallis on DONOR means; the box plot shows islets)\n",
+                file = file, append = TRUE)
+            write.table(
+              data.frame(p_value = kw$p_value, n_donors = kw$n_donors,
+                         n_islets = kw$n_islets,
+                         donors_per_group = paste(sprintf("%s=%d", names(kw$donors_per_group),
+                                                          as.integer(kw$donors_per_group)),
+                                                  collapse = "; "),
+                         underpowered = kw$underpowered,
+                         stringsAsFactors = FALSE),
+              file, append = TRUE, sep = ",", row.names = FALSE, quote = TRUE)
           }
         } else {
           writeLines(c(lines, "# No results computed"), file)

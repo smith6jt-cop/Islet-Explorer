@@ -137,20 +137,26 @@ statistics_ui <- function(id) {
                 tags$small(style = "color: #888; display: block; margin-top: -6px; line-height: 1.3;",
                   "Filters value == 0 before all tests. ",
                   "Useful for zero-inflated features. ",
-                  "AUC reads the Plot summary and is not affected.")
+                  "AUC is recomputed on the same subset, so it moves too.")
               ),
               column(3,
                 numericInput(ns("stats_min_cells"), "Min cells/islet",
                              value = 1, min = 1, max = 200, step = 1),
                 tags$small(style = "color: #888; display: block; margin-top: -6px; line-height: 1.3;",
-                  "Drops islets with fewer than this many core+peri cells.")
+                  "Drops islets with fewer than this many core+peri cells. ",
+                  "Applies in every mode, including Microenvironment. If the cell ",
+                  "counts are unavailable the overview banner says so rather than ",
+                  "ignoring the value silently.")
               ),
               column(3,
                 sliderInput(ns("stats_diam_range"), "Diameter range (µm)",
                             min = 0, max = 500, value = c(0, 350), step = 10,
                             width = "100%"),
                 tags$small(style = "color: #888; display: block; margin-top: -6px; line-height: 1.3;",
-                  "Restrict islets to a diameter window before testing.")
+                  "Restrict islets to a diameter window before testing. Applied on ",
+                  "top of the Plot sidebar's own diameter range, so it can only ",
+                  "narrow further \u2014 widening past that range has no effect. The ",
+                  "inherited range is listed in the overview banner above.")
               )
             )
           )

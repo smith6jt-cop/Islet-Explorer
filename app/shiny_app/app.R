@@ -599,9 +599,12 @@ server <- function(input, output, session) {
   # zero-value exclusion via `stats_exclude_zero`. Passing the Plot tab's
   # post-zero-filter frame would let a control on another tab silently change
   # every test while the CSV header still reported "Zero-value filter: OFF".
+  # `summary_df` is deliberately NOT passed: the Statistics AUC used to integrate
+  # it, which tied that card to the Plot sidebar's bin-width and Mean/Median
+  # controls (hidden while this tab is open) and made it ignore the Statistics
+  # tab's own filters. AUC now derives from `raw_df_prezero` inside the module.
   statistics_server("stats",
                     raw_df                  = plot_returns$raw_df_prezero,
-                    summary_df              = plot_returns$summary_df,
                     get_selection_description = plot_returns$get_selection_description,
                     donor_colors             = active_donor_colors,
                     remove_outliers          = remove_outliers_global)
