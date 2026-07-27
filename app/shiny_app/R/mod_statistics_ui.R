@@ -255,12 +255,12 @@ statistics_ui <- function(id) {
           div(class = "card", style = "padding: 15px; margin-bottom: 15px; height: 100%;",
             h5("Stratified Tests by Islet Diameter"),
             tags$small(style = "color: #888; display: block; margin-bottom: 8px;",
-              "Donor-level means within each fixed 50 µm size bin. ",
-              "P-values are BH-corrected across bins. ",
-              "Axis labels carry each bin's donor / islet count, and hovering a cell shows ",
-              "the per-group coverage behind that specific test — the large-diameter bins ",
-              "can rest on a handful of islets from two donors. ",
-              "Bins with <2 donors per group are listed below the plot, not silently dropped."),
+              "Donor-level means within each fixed 50 µm size bin, BH-corrected across bins. ",
+              "Hover a cell for the per-group coverage behind that specific test. ",
+              "A bin needs \u2265 2 groups with \u2265 2 donors each; the same rule gates the ANOVA, ",
+              "Kendall \u03c4 and the pairwise rows, so no pairwise contrast appears without an ",
+              "omnibus behind it. Counts per bin, and any bins that failed the rule, are ",
+              "listed below the plot."),
             plotlyOutput(ns("bin_heatmap"), height = "520px"),
             uiOutput(ns("bin_coverage_note"))
           )

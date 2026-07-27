@@ -365,14 +365,16 @@ statistics_server <- function(id, raw_df, get_selection_description,
 
         # Bins with no omnibus row, and WHY.
         #
-        # The reason has to match the rule as implemented in
-        # per_bin_donor_anova(): >= 2 groups present AND *every* group present in
-        # the bin having >= 2 donors. So a bin with ND=1, Aab+=3, T1D=2 donors is
-        # dropped on ND's single donor even though Aab+ vs T1D is perfectly
-        # testable — and per_bin_donor_pairwise() has no such rule, so it goes
-        # ahead and tests that pair anyway. That inconsistency is real; the note
-        # reports it ("pairwise only") instead of calling such a bin untested,
-        # which would contradict the star the heatmap is already drawing there.
+        # The reason matches bin_coverage_ok() in utils_stats.R, which all three
+        # per-bin tests now gate on: >= 2 groups present AND *every* group present
+        # in the bin having >= 2 donors. A bin with ND=1, Aab+=3, T1D=2 donors is
+        # dropped on ND's single donor, and — since pairwise is gated on the same
+        # rule — contributes no contrasts either. No pairwise post-hoc runs in a
+        # bin with no omnibus behind it.
+        #
+        # The `status` field stays as a DRIFT ASSERTION: it should now always read
+        # "not tested at all". If it ever reports surviving pairwise contrasts,
+        # the three rules have diverged again.
         bin_dropped <- tryCatch({
           if (is.null(bin_coverage)) NULL else {
             tested <- if (!is.null(bin_anova)) bin_anova$mid else numeric(0)
@@ -399,8 +401,9 @@ statistics_server <- function(id, raw_df, get_selection_description,
                                          cv$n_donors, cv$n_islets), collapse = ", "),
                   reason = reason,
                   status = if (length(pairs_here))
-                    paste0("no ANOVA / Kendall; pairwise still shown for ",
-                           paste(pairs_here, collapse = ", "))
+                    paste0("BUG: pairwise contrasts survived without an omnibus (",
+                           paste(pairs_here, collapse = ", "),
+                           ") — the per-bin coverage rules have diverged")
                   else "not tested at all",
                   stringsAsFactors = FALSE)
               }))
@@ -1224,16 +1227,13 @@ statistics_server <- function(id, raw_df, get_selection_description,
         vapply(all_mids, function(m) cov_for(m, gs), character(1))
       }))
 
-      # Column totals go into the tick label so the thin bins are obvious without
-      # hovering \u2014 a reader scanning for stars never hovers the empty cells.
-      tick_totals <- vapply(all_mids, function(m) {
-        if (is.null(cov)) return("")
-        sub <- cov[cov$diam_mid == m, , drop = FALSE]
-        if (!nrow(sub)) return("")
-        sprintf("<br><span style='font-size:11px'>%dd / %si</span>",
-                sum(sub$n_donors), formatC(sum(sub$n_islets), format = "d", big.mark = ","))
-      }, character(1))
-      mid_labels <- paste0(as.character(round(all_mids)), tick_totals)
+      # Bin midpoints only. Stacking "15d / 4,424i" under each midpoint was tried
+      # and reverted: at this card's ~400 px width the second line of adjacent
+      # bins collides into an unreadable run ("15d / 4,4285 / 216i / 168i / 24i")
+      # and the taller tick block pushed the x-axis title off the canvas and over
+      # the coverage note below. The per-bin counts live in the cell hover and in
+      # the coverage strip under the plot, both of which have room for them.
+      mid_labels <- as.character(round(all_mids))
 
       fonts <- plotly_islet_fonts()
       plot_ly(
@@ -1250,14 +1250,39 @@ statistics_server <- function(id, raw_df, get_selection_description,
       ) %>%
         layout(
           font = fonts$global,
-          xaxis = list(title = list(text = "Diameter bin midpoint (\u00b5m) \u2014 donors / islets",
+          # Layout notes \u2014 this plot lives in a col-4 (~400 px) card, which is
+          # the binding constraint and the reason three things were clipped:
+          #   * tickangle 0, NOT -45. The tick labels became two lines when the
+          #     donor/islet counts were added; rotating a two-line label made
+          #     them 76 px tall, which swallowed the bottom margin and pushed
+          #     the x-axis title 23 px below the 520 px canvas. Horizontal,
+          #     5-7 short labels fit fine across 400 px.
+          #   * explicit `margin`, not automargin alone. automargin does not
+          #     measure HTML-styled multi-line ticks reliably, and it never
+          #     reserves room for the plot title.
+          #   * no in-plot title. "Stratified Significance (BH-corrected,
+          #     donor-level)" rendered 453 px wide in a 401 px plot and was
+          #     clipped at BOTH ends. The card h5 already names the plot and
+          #     the caption already states the BH correction, so the in-plot
+          #     title was redundant as well as broken.
+          margin = list(t = 20, b = 105, l = 70, r = 20),
+          # type = "category" is REQUIRED. The tick labels are numeric-looking
+          # strings ("25", "75", ...), so plotly auto-detects a linear axis and
+          # draws its own ticks (0, 100, 200) that no longer line up one-to-one
+          # with the heatmap columns. Forcing category gives exactly one tick per
+          # bin. (This was masked while the labels carried HTML, which is never
+          # numeric.)
+          xaxis = list(title = list(text = "Diameter bin midpoint (\u00b5m)",
                                     font = fonts$axis_title),
+                       type = "category",
+                       # -45 is fine now that the labels are ONE line. Five 3-digit
+                       # midpoints collide horizontally in this ~400 px card when
+                       # laid flat ("125175225"). The earlier clipping came from
+                       # rotating a TWO-line label, not from the rotation itself.
                        tickfont = fonts$axis_tick, tickangle = -45, automargin = TRUE),
           yaxis = list(title = list(text = "", font = fonts$axis_title),
                        tickfont = fonts$axis_tick, automargin = TRUE,
-                       categoryorder = "array", categoryarray = rev(row_names)),
-          title = list(text = "Stratified Significance (BH-corrected, donor-level)",
-                       font = fonts$title)
+                       categoryorder = "array", categoryarray = rev(row_names))
         ) %>%
         # "show", not the default "hide": these are single-glyph significance
         # stars. A hidden star reads as "not significant" \u2014 the one failure mode
@@ -1274,17 +1299,39 @@ statistics_server <- function(id, raw_df, get_selection_description,
       st <- tryCatch(stats_run(), error = function(e) NULL)
       if (is.null(st)) return(NULL)
       bd <- st$bin_dropped
+
+      # Per-bin donor / islet counts. These were tried as a second line on each
+      # x-axis tick and were unreadable at this card's width (adjacent bins'
+      # counts collided into one run and shoved the axis title off the canvas).
+      # As a collapsible text strip they get the full column width to lay out in.
+      cov <- st$bin_coverage
+      cov_strip <- if (!is.null(cov) && nrow(cov) > 0) {
+        per_bin <- lapply(sort(unique(cov$diam_mid)), function(m) {
+          sub <- cov[cov$diam_mid == m, , drop = FALSE]
+          tags$li(tags$strong(sprintf("%g µm: ", m)),
+                  paste(sprintf("%s %dd/%di", as.character(sub$donor_status),
+                                sub$n_donors, sub$n_islets), collapse = ", "))
+        })
+        tags$details(style = "margin-top: 10px; font-size: 11px; color: #666;",
+          tags$summary(style = "cursor: pointer; color: #4477AA; font-weight: 600;",
+                       "Donors / islets per bin"),
+          tags$ul(style = "margin: 4px 0 0 0; padding-left: 18px; line-height: 1.5;",
+                  per_bin))
+      } else NULL
+
       if (is.null(bd) || nrow(bd) == 0) {
-        return(tags$p(style = "font-size: 11px; color: #888; margin: 6px 0 0 0;",
-                      "Every diameter bin present in this subset met the coverage rule ",
-                      "(≥ 2 donor-status groups with ≥ 2 donors each)."))
+        return(tagList(
+          cov_strip,
+          tags$p(style = "font-size: 11px; color: #888; margin: 6px 0 0 0;",
+                 "Every diameter bin present in this subset met the coverage rule ",
+                 "(≥ 2 donor-status groups with ≥ 2 donors each).")))
       }
+      tagList(cov_strip,
       tags$div(style = paste0("margin-top: 8px; padding: 8px 10px; background: #fbfcfd;",
                               " border: 1px solid #e0e0e0; border-radius: 4px;",
                               " font-size: 11px; color: #666; line-height: 1.5;"),
-        tags$strong(sprintf("%d diameter bin%s without an omnibus (ANOVA / Kendall) row",
+        tags$strong(sprintf("%d diameter bin%s without an omnibus (ANOVA / Kendall) row:",
                             nrow(bd), if (nrow(bd) == 1) "" else "s")),
-        tags$span(":"),
         tags$ul(style = "margin: 4px 0 0 0; padding-left: 18px;",
           lapply(seq_len(nrow(bd)), function(i) {
             tags$li(
@@ -1296,7 +1343,7 @@ statistics_server <- function(id, raw_df, get_selection_description,
           })),
         tags$p(style = "margin: 6px 0 0 0; font-style: italic;",
           "The compared size range is therefore capped by whichever group runs out of ",
-          "islets first — usually ND at the large end."))
+          "islets first — usually ND at the large end.")))
     })
 
     # ===========================================================================
@@ -1638,17 +1685,24 @@ statistics_server <- function(id, raw_df, get_selection_description,
       g <- ggplot(auc_df, aes(x = donor_status, y = auc, fill = donor_status)) +
         geom_col(width = 0.7, color = "black", alpha = 0.8) +
         scale_fill_manual(values = donor_colors()) +
-        labs(x = "Donor Status", y = "Area Under Curve (AUC)",
-             title = "Integrated Area by Donor Group") +
+        # No in-plot title: at 18 pt "Integrated Area by Donor Group" measured
+        # 340 px inside this 401 px col-4 card and was clipped at both ends. The
+        # card's h5 ("Area Under Curve by Donor Group") already names it.
+        labs(x = "Donor Status", y = "Area Under Curve (AUC)") +
         theme_islet() +
         theme(legend.position = "none")
 
       fonts <- plotly_islet_fonts()
       ggplotly(g, tooltip = c("x", "y")) %>%
+        # ggplotly does not reserve room for the axis titles at this font size in
+        # a narrow card: the x-axis title rendered 28 px BELOW the 380 px canvas.
+        # Explicit margins, same fix as the bin heatmap beside it.
         layout(font = fonts$global,
-               title = list(font = fonts$title),
-               xaxis = list(title = list(font = fonts$axis_title), tickfont = fonts$axis_tick),
-               yaxis = list(title = list(font = fonts$axis_title), tickfont = fonts$axis_tick)) %>%
+               margin = list(t = 20, b = 95, l = 80, r = 20),
+               xaxis = list(title = list(font = fonts$axis_title),
+                            tickfont = fonts$axis_tick, automargin = TRUE),
+               yaxis = list(title = list(font = fonts$axis_title),
+                            tickfont = fonts$axis_tick, automargin = TRUE)) %>%
         plotly_islet_config("statistics_auc_plot")
     })
 
@@ -1854,6 +1908,8 @@ statistics_server <- function(id, raw_df, get_selection_description,
           "\u03c4 > 0 means the feature increases with disease progression, \u03c4 < 0 means it decreases. ",
           "P-values are BH-corrected across bins. A bin is tested only if at least 2 donor-status groups ",
           "each have \u2265 2 donors with finite values (same rule for the heatmap and the trend plot). ",
+          "The same rule gates the per-bin ANOVA, Kendall \u03c4 AND the pairwise contrasts: a pairwise ",
+          "post-hoc is never reported for a bin that has no omnibus test behind it. ",
           "Coverage is group-dependent \u2014 the large-diameter bins can rest on a handful of islets ",
           "from two donors while the smallest bin carries thousands from all fifteen \u2014 so each ",
           "bin's donor / islet count is on the axis label, the per-group coverage behind each ",
@@ -2023,9 +2079,9 @@ statistics_server <- function(id, raw_df, get_selection_description,
                         row.names = FALSE, quote = TRUE)
           }
           if (!is.null(st$bin_dropped) && nrow(st$bin_dropped) > 0) {
-            cat(paste0("\n# Bins Without An Omnibus Row (the per-bin ANOVA/Kendall rule needs >= 2 groups\n",
-                       "#   present AND every present group to have >= 2 donors; per-bin PAIRWISE has no\n",
-                       "#   such rule, so some of these bins still contribute pairwise contrasts)\n"),
+            cat(paste0("\n# Bins Not Tested (coverage rule: >= 2 donor-status groups present AND every\n",
+                       "#   group present in the bin having >= 2 donors). ANOVA, Kendall and pairwise all\n",
+                       "#   gate on this rule, so these bins contribute nothing to the stratified analysis.\n"),
                 file = file, append = TRUE)
             write.table(st$bin_dropped, file, append = TRUE, sep = ",",
                         row.names = FALSE, quote = TRUE)

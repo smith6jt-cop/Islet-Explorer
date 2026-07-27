@@ -511,13 +511,38 @@ size_companion_models <- function(rdf, diam_col = "islet_diam_um") {
   out
 }
 
+#' Shared per-bin coverage rule — the single definition of "this bin is analysable".
+#'
+#' A bin qualifies only if, after aggregating to donor means within the bin, at
+#' least 2 donor_status groups are present AND every group present in the bin has
+#' >= 2 donors.
+#'
+#' This lives in one function because it previously did not. `per_bin_donor_anova`
+#' required every present group to clear 2 donors; `per_bin_donor_kendall` applied
+#' an equivalent rule on the status codes; but `per_bin_donor_pairwise` had no bin
+#' rule at all and only checked the two groups in the contrast. The 275 µm bin
+#' (ND = 1 donor, Aab+ = 3, T1D = 2) therefore produced an `Aab+ vs T1D` star on
+#' the stratified heatmap with no ANOVA or Kendall row above it — a pairwise
+#' post-hoc with no omnibus behind it.
+#'
+#' All three now gate on this function, so a bin either supports the whole
+#' stratified analysis or contributes nothing to it.
+#'
+#' @param group_values donor_status labels, one per DONOR (already aggregated)
+#' @return TRUE if the bin can be analysed
+bin_coverage_ok <- function(group_values) {
+  g <- as.character(group_values)
+  g <- g[!is.na(g) & nzchar(g)]
+  if (!length(g)) return(FALSE)
+  n_per <- table(g)
+  length(n_per) >= 2 && all(n_per >= 2)
+}
+
 #' Per-bin ANOVA on donor-level means within each bin
 #
-# Shared coverage rule (used by per_bin_donor_anova and per_bin_donor_kendall):
-#   A bin is tested only if, after aggregating to donor means within the bin,
-#   at least 2 donor_status groups each have >= 2 donors. Bins that fail this
-#   rule are silently omitted so the heatmap (ANOVA + pairwise rows) and the
-#   trend plot (Kendall tau) include the same bins.
+# Coverage: bin_coverage_ok() — see there. Bins that fail are omitted, so the
+# heatmap (ANOVA + pairwise rows) and the trend plot (Kendall tau) cover exactly
+# the same bins.
 per_bin_donor_anova <- function(df, bin_col, group_col, value_col, mid_col = "diam_mid") {
   if (nrow(df) == 0) return(tibble(bin = character(), mid = numeric(), p_anova = numeric()))
   if (!"Case ID" %in% colnames(df)) return(per_bin_anova(df, bin_col, group_col, value_col, mid_col))
@@ -532,9 +557,7 @@ per_bin_donor_anova <- function(df, bin_col, group_col, value_col, mid_col = "di
       dplyr::group_by(`Case ID`, .data[[group_col]]) %>%
       dplyr::summarise(value = mean(.data[[value_col]], na.rm = TRUE), .groups = "drop")
     colnames(ddf)[colnames(ddf) == group_col] <- "grp"
-    # Need >= 2 groups with >= 2 donors each
-    grp_n <- ddf %>% dplyr::group_by(grp) %>% dplyr::summarise(n = dplyr::n(), .groups = "drop")
-    if (nrow(grp_n) < 2 || any(grp_n$n < 2)) return(NULL)
+    if (!bin_coverage_ok(ddf$grp)) return(NULL)
     fit <- tryCatch(aov(value ~ grp, data = ddf), error = function(e) NULL)
     if (is.null(fit)) return(NULL)
     pval <- tryCatch({
@@ -565,17 +588,13 @@ per_bin_donor_kendall <- function(df, bin_col, group_col, value_col, mid_col = "
     ddf <- sub %>%
       dplyr::group_by(`Case ID`, .data[[group_col]]) %>%
       dplyr::summarise(value = mean(.data[[value_col]], na.rm = TRUE), .groups = "drop")
+    grp <- as.character(ddf[[group_col]])
     x <- code_donor_status(ddf[[group_col]])
     y <- ddf$value
     keep <- is.finite(x) & is.finite(y)
-    x <- x[keep]; y <- y[keep]
+    x <- x[keep]; y <- y[keep]; grp <- grp[keep]
     if (length(y) < 3) return(NULL)
-    # Match per_bin_donor_anova coverage: at least 2 distinct groups present,
-    # each present group with >= 2 donors. ANOVA cannot estimate within-group
-    # variance otherwise; we apply the same rule here so the heatmap and trend
-    # plot include the same bins.
-    code_counts <- table(x)
-    if (length(code_counts) < 2 || any(code_counts < 2)) return(NULL)
+    if (!bin_coverage_ok(grp)) return(NULL)
     ct <- tryCatch(cor.test(x, y, method = "kendall", exact = FALSE), error = function(e) NULL)
     if (is.null(ct)) return(NULL)
     tibble(bin = as.character(b), mid = bmeta$mid[i], p_kendall = unname(ct$p.value), tau = unname(ct$estimate))
@@ -602,6 +621,10 @@ per_bin_donor_pairwise <- function(df, bin_col, group_col, value_col,
     ddf <- sub %>%
       dplyr::group_by(`Case ID`, .data[[group_col]]) %>%
       dplyr::summarise(value = mean(.data[[value_col]], na.rm = TRUE), .groups = "drop")
+    # Gate the whole bin on the omnibus coverage rule: a pairwise post-hoc does
+    # not run in a bin that has no ANOVA behind it. Without this the heatmap drew
+    # pairwise stars in bins whose omnibus row was blank.
+    if (!bin_coverage_ok(ddf[[group_col]])) return(NULL)
     pair_rows <- lapply(pairs_list, function(pair) {
       g1 <- ddf$value[ddf[[group_col]] == pair[1]]
       g2 <- ddf$value[ddf[[group_col]] == pair[2]]

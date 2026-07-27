@@ -233,14 +233,89 @@ bin   donors ND/Aab+/T1D   islets ND/Aab+/T1D
 - Cell hover shows the per-group coverage **behind that specific cell** — for a pairwise row, only the two groups in that contrast.
 - New `bin_coverage_note` output under the heatmap names every bin without an omnibus row, with the reason and its actual status.
 
-That note exposed a real inconsistency worth stating plainly: `per_bin_donor_anova()` requires ≥2 groups present **and every present group** to have ≥2 donors, while `per_bin_donor_pairwise()` only requires ≥2 donors in the two groups being compared. So bin 275 (ND has 1 donor) gets no ANOVA/Kendall row but still contributes an `Aab+ vs T1D` pairwise star. The note now says so per bin ("no ANOVA / Kendall; pairwise still shown for …") rather than calling the bin untested, which would contradict the star already drawn there. The methods text was corrected to match.
+That note exposed a real inconsistency: `per_bin_donor_anova()` required ≥2 groups present **and every present group** to have ≥2 donors, while `per_bin_donor_pairwise()` only required ≥2 donors in the two groups being compared. Bin 275 (ND = 1 donor) therefore got no ANOVA/Kendall row but still drew an `Aab+ vs T1D` pairwise star — a post-hoc with no omnibus behind it. **Resolved (see below).**
 
 ### Still open
 
-- The two per-bin coverage rules remain inconsistent (documented above rather than silently reconciled — changing either alters which bins appear).
 - The donor-level estimand is still undeclared: unweighted donor means give p = 0.00374, precision-weighting by islet count gives p = 0.00855. Both defensible ("average donor" vs "average islet").
 - Everything in the previous section's "Known, still open" list.
 
 ### Gotcha for future edits
 
 `isTRUE(x)` on a **vector** collapses to a single `FALSE` — it is not vectorised. Both the `†` table marker and the forest-plot title suffix were written with `isTRUE(pw$var_ratio_warn)` and silently never fired. Use `x %in% TRUE` for element-wise NA-safe truth. Also: `renderTable(align = ...)` needs exactly one character per column; adding two effect-size columns without widening `"lccccc"` throws at render time, not at parse time.
+
+## Jul 2026 — per-bin coverage rules unified (no pairwise without an omnibus)
+
+Resolution of the inconsistency documented above, per an explicit call: *no pairwise should take place without the ANOVA.*
+
+`bin_coverage_ok(group_values)` in `utils_stats.R` is now the **single definition** of "this bin is analysable" — ≥ 2 donor-status groups present AND every group present in the bin having ≥ 2 donors. All three per-bin tests gate on it:
+
+| function | before | after |
+|---|---|---|
+| `per_bin_donor_anova()` | inline `nrow(grp_n) < 2 \|\| any(grp_n$n < 2)` | `bin_coverage_ok()` |
+| `per_bin_donor_kendall()` | equivalent rule re-derived on the status *codes* | `bin_coverage_ok()` |
+| `per_bin_donor_pairwise()` | **no bin rule** — only `length(g1) >= 2 && length(g2) >= 2` per pair | `bin_coverage_ok()` gates the whole bin before any pair is tested |
+
+A pairwise post-hoc is therefore never reported for a bin with no omnibus behind it.
+
+**Verified** on prop_Beta cell / Ins_any / prop_Macrophage: the three families now cover an identical bin set (25, 75, 125, 175, 225), and the orphan bin-275 `Aab+ vs T1D` contrast is gone.
+
+**Consequence for the BH family** — the per-bin pairwise family shrank 16 → 15 tests, so every `p_adj` in it moved slightly *down*:
+
+```
+bin  contrast          p        q (before, n=16)   q (after, n=15)
+ 25  ND vs T1D         0.0112      0.0382             0.0358
+ 25  Aab+ vs T1D       0.0345      0.0656             0.0615
+125  Aab+ vs T1D       0.0119      0.0382             0.0358
+```
+
+No conclusion flipped at α = 0.05, but the numbers do change — expected, and the right direction (fewer tests in the family).
+
+**Drift assertion.** The `bin_dropped$status` field still checks whether any pairwise contrast survived in a bin without an omnibus row. It should now always read `"not tested at all"`; if it ever reports `"BUG: pairwise contrasts survived without an omnibus …"`, the three gates have diverged again. Cheap self-check — keep it.
+
+**Not implemented:** the stricter *protected* variant, where pairwise runs only if the bin's omnibus is **significant**. What is implemented gates on the omnibus being *computable*, which is what was asked for. The protected form would further shrink the BH family and is a one-line change in `per_bin_donor_pairwise()` if wanted.
+
+## Jul 2026 — Section 3 layout: text clipped in the col-4 cards
+
+Reported as "text in the Stratified Tests by Islet Diameter card is cut off on top and under the x-axis labels". Diagnosed by measuring the rendered DOM through chromote rather than eyeballing, which is the only way the three separate causes separated cleanly.
+
+**The binding constraint is card width.** Section 3's three cards are `column(4, ...)`, ~**401 px** at a 1600 px viewport. Everything below follows from that.
+
+Measured before the fix (`getBoundingClientRect`, relative to the 520 px plot):
+
+```
+title_w 453 in a 401 px plot, left -26 / right +427   → clipped at BOTH ends
+xtick_h 76 (two lines, rotated -45°)
+xtitle_bottom 543 vs plot height 520                  → axis title 23 px off-canvas
+```
+
+Three causes, three fixes:
+
+1. **In-plot titles that don't fit.** `"Stratified Significance (BH-corrected, donor-level)"` measured 453 px at 18 pt. Plotly does not wrap titles — it clips them. **Removed**; the card's own `h5` already names the plot and the caption already states the BH correction. The AUC card had the same defect (`"Integrated Area by Donor Group"`, 340 px, overflowing 21 px) and its title was removed too.
+2. **No explicit `margin`.** `automargin = TRUE` does not measure HTML-styled multi-line tick labels reliably and never reserves room for a title. Both plots now set `margin` explicitly (`b = 105` heatmap, `b = 95` AUC). Tune by measurement — `xtitle_overflow_y` should be 0.
+3. **Donor/islet counts stacked under each tick.** This was the Jul 2026 coverage work's idea and it does not survive 401 px: adjacent bins' second lines collide into an unreadable run (`15d / 4,4285 / 216i / 168i / 24i`) and the 76 px tick block pushed the axis title off-canvas and over the note below. **Reverted to plain bin midpoints.** The counts moved to a collapsible "Donors / islets per bin" strip above the coverage note, which has the full column width, and remain in the per-cell hover.
+
+Two follow-on traps hit while fixing it:
+
+- **`type = "category"` is required on the heatmap x-axis.** Once the labels became plain `"25"`, `"75"`, … plotly auto-detected a *linear* axis and drew its own ticks (0, 100, 200) that no longer corresponded to the heatmap columns. The HTML in the old labels had been masking this by making them non-numeric.
+- **`tickangle = -45` was never the problem** — rotating a *two-line* label was. With single-line labels the rotation is required: five 3-digit midpoints collide flat (`125175225`).
+
+Final state, all three Section 3 plots: `xtitle_overflow_y = 0`, no in-plot titles, ticks one-per-bin and legible.
+
+### Method note
+
+`chromote` measurement beats screenshots for this, but check both — the geometry said "no overflow" while the picture still showed the illegible colliding tick labels, and only the picture caught it. Working recipe:
+
+```r
+b <- ChromoteSession$new(width = 1600, height = 1400)
+b$Page$navigate(url); Sys.sleep(12)
+# click the tab by anchor text, click Run Statistics, wait ~30 s for the lmer fits
+b$Runtime$evaluate("<JS returning JSON.stringify(getBoundingClientRect deltas)>")$result$value
+```
+
+`b$screenshot(selector=)` proved unreliable here (wrote nothing, and `region=` takes a keyword not a rect in this chromote version). Use raw CDP instead, and note it races `b$close()`:
+
+```r
+png <- b$Page$captureScreenshot(format = "png", clip = list(x=, y=, width=, height=, scale=1))
+writeBin(jsonlite::base64_dec(png$data), out)
+```
