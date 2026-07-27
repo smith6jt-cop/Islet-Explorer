@@ -511,6 +511,80 @@ size_companion_models <- function(rdf, diam_col = "islet_diam_um") {
   out
 }
 
+#' Age-group companion to the primary mixed-effects test.
+#'
+#' Fits `value ~ donor_status + age_group + (1 | donor)`, the covariate form used
+#' by Steenbuck et al. 2025 (Bodenmiller lab, bioRxiv 2025.03.05.641526) to test
+#' whether disease-stage differences survive adjustment for age-associated
+#' endotypes. They pooled donors at 13 years; that cut is data-supported on this
+#' cohort rather than arbitrary, because our ages are bimodal with a gap from
+#' 4.22 to 14.56 years and 13 falls inside it.
+#'
+#' Age is read from the H5AD `age` column, NOT from the nPOD metadata join. The
+#' two disagree for exactly one donor (112: H5AD 3.00 vs nPOD 3.72) and the H5AD
+#' value is canonical for modelling so existing results do not shift. Both fall
+#' under 13, so the binning is identical either way — but the rule matters if
+#' another donor is ever added.
+#'
+#' Deliberately NOT offered here: HbA1c and C-peptide. Both are downstream
+#' consequences of beta-cell loss rather than confounders of it, so adjusting for
+#' them is mediator adjustment and would bias the disease effect toward the null.
+#' They belong in the demographics table and as external-validity checks (does
+#' clinical C-peptide track our imaging-derived beta-cell proportion?), not in
+#' this model. Age, sex and BMI are the legitimate confounders.
+#'
+#' Returns list(p_status_adj, p_age_group, n_young, n_old, cell_counts,
+#' error_msg) with NA fields on failure — never NULL, so callers can render
+#' unconditionally.
+age_group_companion_model <- function(rdf, cut = 13) {
+  out <- list(p_status_adj = NA_real_, p_age_group = NA_real_,
+              n_young = NA_integer_, n_old = NA_integer_,
+              cell_counts = NULL, cut = cut, error_msg = NULL)
+  if (!requireNamespace("lmerTest", quietly = TRUE)) {
+    out$error_msg <- "lmerTest not installed"; return(out)
+  }
+  if (!all(c("age", "Case ID", "value", "donor_status") %in% colnames(rdf))) {
+    out$error_msg <- "age / Case ID column missing"; return(out)
+  }
+  d <- rdf
+  d$.age <- suppressWarnings(as.numeric(d$age))
+  d <- d[is.finite(d$.age) & is.finite(d$value), , drop = FALSE]
+  if (nrow(d) < 10) { out$error_msg <- "too few rows with a finite age"; return(out) }
+
+  # ">=13" first so it is the reference level: the age_group coefficient then
+  # reads as the effect of being in the young group.
+  d$age_group <- factor(ifelse(d$.age < cut, "<13", ">=13"), levels = c(">=13", "<13"))
+  d$donor_status <- droplevels(factor(d$donor_status))
+  d$.cf <- factor(d$`Case ID`)
+
+  donors <- unique(d[, c("Case ID", "donor_status", "age_group")])
+  out$cell_counts <- table(donors$age_group, donors$donor_status)
+  out$n_young <- sum(donors$age_group == "<13")
+  out$n_old <- sum(donors$age_group == ">=13")
+
+  if (dplyr::n_distinct(d$age_group) < 2) {
+    out$error_msg <- sprintf("all donors fall on one side of the %g-year cut", cut)
+    return(out)
+  }
+  if (dplyr::n_distinct(d$donor_status) < 2) {
+    out$error_msg <- "fewer than 2 donor-status groups"; return(out)
+  }
+
+  fit <- tryCatch(
+    lmerTest::lmer(value ~ donor_status + age_group + (1 | .cf), data = d),
+    error = function(e) e)
+  if (inherits(fit, "error")) {
+    out$error_msg <- paste("age-adjusted model failed:", fit$message); return(out)
+  }
+  p_of <- function(term) tryCatch({
+    at <- anova(fit)
+    if (term %in% rownames(at)) as.numeric(at[term, "Pr(>F)"]) else NA_real_
+  }, error = function(e) NA_real_)
+  out$p_status_adj <- p_of("donor_status")
+  out$p_age_group <- p_of("age_group")
+  out
+}
+
 #' Shared per-bin coverage rule — the single definition of "this bin is analysable".
 #'
 #' A bin qualifies only if, after aggregating to donor means within the bin, at

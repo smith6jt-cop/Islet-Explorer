@@ -119,6 +119,45 @@ Sidebar radio labels and axis titles are unit-explicit — never use the bare wo
 
 A `helpText` block under the Plot metric selector restates the active mode's denominator. Keep this phrasing if you add new metrics. The y-axis class name is parsed from `input$which` (encoded as `className|region`).
 
+## Inflammation Tab (Jul 2026)
+
+Sixth tab, `mod_inflammation_ui.R` / `mod_inflammation_server.R`, wired in `app.R` after Spatial.
+Carries two cohort-level analyses adapted from Steenbuck et al. 2025 (Bodenmiller lab, bioRxiv
+2025.03.05.641526) that do not fit the Statistics tab's one-feature-at-a-time flow — both test
+**every cell type at once**.
+
+- **Card A — Donor cohort.** `data/donor_metadata.csv` per donor: age, sex, age group, T1D
+  duration, BMI, HbA1c, C-peptide, AAb profile. States the cohort scope (all T1D donors
+  recent-onset) and surfaces the donor-112 age discrepancy rather than hiding it.
+- **Card B — edgeR differential abundance.** Per-donor cell-type counts → `filterByExpr` →
+  `calcNormFactors` → `estimateDisp` → `glmQLFit` → `glmQLFTest`; three contrasts, three cell
+  regions, volcano + table + CSV. **Counts, not proportions:** proportions are compositionally
+  constrained, so the β-cell collapse in T1D inflates every other type's proportion; the
+  library-size offset separates that artefact from a real abundance change. T1D vs ND gives
+  Beta cell logFC −5.55 (FDR 0.0011), CD8a Tcell +2.71 (0.0013), Delta −2.88, Immune +3.23.
+- **Card C — Infiltration score.** `1` inside the islet, `1/d` outside (d = µm from the edge,
+  floored at 1 µm), normalised by the donor's total cell count. The paper normalises per imaging
+  ROI; this cohort has whole sections, so the denominator is the donor. Kruskal-Wallis across
+  stages plus pairwise Wilcoxon on donor-level scores.
+
+The tab is deliberately **absent** from the sidebar-visibility condition in `app.R`'s layout JS,
+so the Plot sidebar stays hidden — these analyses read `data/cell_distance.csv` through the cached
+`load_cell_distance()` in `spatial_helpers.R`, not the Plot module's islet frame, so sidebar
+filters genuinely do not apply.
+
+### Conventions this tab established (worth copying)
+
+- **`shiny::validate(shiny::need(...))`, never the bare form.** `jsonlite` masks `validate` on this
+  app's search path; the bare call resolves to the wrong function and dies with
+  `is.character(txt) is not TRUE`. `app.R:420` already used the namespaced form for this reason.
+- **FDR runs across everything present, not the display selection.** The infiltration card's
+  phenotype picker is a display filter only; correcting across the ticked subset would let
+  unticking phenotypes shrink the correction and manufacture significance. (Same lesson as the
+  Spatial Card B filter: filter the summary, never the test.)
+- **Plotly legend `y` is a fraction of the PLOT AREA**, which shrinks as the bottom margin grows —
+  so enlarging `margin$b` alone never fixes a legend that hangs off the canvas. Move the legend
+  (reduce `|y|`) as well. Measured, not guessed.
+
 ## AI Assistant (Phase 10, Feb 2026)
 
 ### Architecture

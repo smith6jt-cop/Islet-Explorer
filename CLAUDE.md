@@ -36,6 +36,8 @@ app/shiny_app/
     mod_statistics_ui.R / mod_statistics_server.R  # Statistics tab (5-section narrative)
     spatial_helpers.R           # Per-donor tissue CSV loader with new.env() caching
     mod_spatial_ui.R / mod_spatial_server.R     # Spatial tab (3-panel: sidebar controls, tissue scatter, Leiden panel)
+    mod_inflammation_ui.R / mod_inflammation_server.R  # Inflammation tab (edgeR abundance,
+                                #   Bodenmiller infiltration score, nPOD donor cohort table)
     mod_ai_assistant_ui.R / mod_ai_assistant_server.R  # AI chat panel
   www/                         # Static assets (images, logos)
 ```
@@ -107,6 +109,10 @@ These are read by the root-level `renderPlot` outputs in `app.R`.
 - `data/donors/*.csv` - Per-donor tissue-wide cell CSVs for Spatial tab scatter (15 files, ~78 MB total)
 - `data/islet_spatial_lookup.csv` - Centroid coordinates for segmentation viewer
 - `data/json/*.geojson` / `data/gson/*.geojson.gz` - QuPath segmentation boundaries
+- `data/donor_metadata.csv` - Per-donor nPOD clinical metadata (15 rows): T1D duration, BMI, HbA1c,
+  C-peptide, AAb results, age group. Built by `scripts/build_donor_metadata.py` from an nPOD
+  "All-Download" xlsx that is **deliberately gitignored** (741 donors of free-text clinical
+  narrative); only the derived CSV is committed. Donor `112` is filed under `HDL112` upstream.
 - `data/DATA_PROVENANCE.md` - Documents canonical H5AD lineage and data sources
 
 ## Data Pipeline
@@ -135,6 +141,14 @@ single_cell_analysis/CODEX_scvi_BioCov_phenotyped_newDuctal.h5ad  (2.6M cells, 3
   +-- scripts/build_h5ad_for_app.py (trajectory + groovy + donor + neighborhood + Leiden)
         -> data/islet_explorer.h5ad  (all app data in one file, incl. leiden_* + leiden_umap_*)
 ```
+
+Separately, `scripts/build_donor_metadata.py` derives `data/donor_metadata.csv` from an nPOD
+"All-Download" spreadsheet (gitignored). `prep_data()` joins it onto `comp` / `targets_all` /
+`markers_all`. **The join drops any column the target already has** — the H5AD and the nPOD sheet
+both supply `AAb_GADA/IA2A/ZnT8A/mIAA`, and letting dplyr suffix them `.x`/`.y` silently turned the
+Plot sidebar's AAb filter into a no-op (every lookup in this app is by exact column name, so a
+collision disables a feature rather than erroring). The two sources agree on all 15 donors x 4
+assays, so keeping the existing column loses nothing.
 
 `scripts/reaggregate_islets.py` replaces the manual notebook workflow (aggregation + trajectory + Leiden in one script). `islet_analysis/islets_core_clustered.h5ad` provides Leiden clustering (4 resolutions) + UMAP coords, merged by `build_h5ad_for_app.py` step 4.7.
 

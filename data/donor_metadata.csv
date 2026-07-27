@@ -1,0 +1,16 @@
+case_id,npod_case_id,donor_type,age_years_npod,age_group,t1d_duration_years,sex,BMI,HbA1c_percent,C_peptide_ng_mL,C_peptide_censored,AAb_GADA,AAb_IA2A,AAb_mIAA,AAb_ZnT8A,n_aab
+6549,6549,Autoantibody Positive,4.22,<13,,Male,19.0,6.2,1.17,False,True,False,True,False,2
+6538,6538,Autoantibody Positive,19.14,>=13,,Male,32.9,5.8,11.33,False,True,False,False,False,1
+6521,6521,Autoantibody Positive,19.77,>=13,,Male,24.1,5.8,7.44,False,True,True,False,True,3
+6505,6505,Autoantibody Positive,20.59,>=13,,Female,22.4,5.1,20.8,False,True,False,True,False,2
+6450,6450,Autoantibody Positive,22.0,>=13,,Female,24.4,5.7,5.47,False,True,False,False,True,2
+6356,6356,No Diabetes,1.58,<13,,Female,17.1,5.3,1.65,False,False,False,False,False,0
+112,HDL112,No Diabetes,3.72,<13,,Female,17.0,5.1,1.2,False,False,False,False,False,0
+6548,6548,No Diabetes,20.24,>=13,,Male,23.8,5.7,4.04,False,False,False,False,False,0
+6516,6516,No Diabetes,20.75,>=13,,Male,28.8,5.5,8.91,False,False,False,False,False,0
+6479,6479,No Diabetes,21.67,>=13,,Female,20.9,5.0,1.74,False,False,False,False,False,0
+6533,6533,Type 1 Diabetes,3.75,<13,0.0,Female,17.7,11.4,0.17,False,False,True,True,True,3
+6534,6534,Type 1 Diabetes,4.19,<13,0.0,Female,22.6,15.6,0.05,False,False,True,False,False,1
+6563,6563,Type 1 Diabetes,14.56,>=13,0.0,Female,25.5,9.6,1.04,False,False,True,False,False,1
+6551,6551,Type 1 Diabetes,20.7,>=13,0.58,Male,23.1,6.4,0.11,False,True,True,True,True,4
+6550,6550,Type 1 Diabetes,25.06,>=13,0.0,Male,16.4,14.0,0.02,True,True,False,False,True,2

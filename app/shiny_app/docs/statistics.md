@@ -319,3 +319,49 @@ b$Runtime$evaluate("<JS returning JSON.stringify(getBoundingClientRect deltas)>"
 png <- b$Page$captureScreenshot(format = "png", clip = list(x=, y=, width=, height=, scale=1))
 writeBin(jsonlite::base64_dec(png$data), out)
 ```
+
+## Jul 2026 — age-group companion model
+
+Third companion to the primary mixed-effects test, alongside the two size models.
+`age_group_companion_model()` (`utils_stats.R`) fits `value ~ donor_status + age_group + (1|donor)`
+— the covariate form used by Steenbuck et al. 2025 (Bodenmiller lab, bioRxiv 2025.03.05.641526)
+to test whether disease-stage differences survive adjustment for age-associated endotypes.
+
+**Why it matters here:** 5 of the 15 donors are under 5 years old, so "disease effect or age
+effect?" is a live question, not a formality.
+
+**The <13 / ≥13 cut is data-supported, not inherited blindly.** Our ages are bimodal — a cluster
+at 1.58–4.22 and one at 14.56–25.06 — with nothing between. The paper's cut of 13 falls inside
+that gap.
+
+**Age source.** The H5AD `age` column, not the nPOD join. The two disagree for exactly one donor
+(112: H5AD 3.00 vs nPOD 3.72; the other 14 match to the decimal), and the H5AD value stays
+canonical so existing results do not shift. Both values fall under 13, so the binning is identical
+either way — but the rule matters if the cohort ever grows.
+
+Measured: adjustment barely moves the disease effect and age never carries it —
+
+```
+                  status p    +age_group    age_group p
+prop_Beta cell      0.0039      0.0043         0.329
+Ins_any             0.0095      0.0135         0.777
+prop_CD8a Tcell     0.0196      0.0218         0.308
+prop_Macrophage     0.2374      0.2122         0.357
+```
+
+Surfaced in the primary card (with a red warning if `age_group` itself reaches α), as two indented
+rows in the hypothesis table, and in the CSV header.
+
+### Why HbA1c and C-peptide are NOT adjustment covariates
+
+The nPOD join makes them available, and using them would be a mistake. Both are **downstream
+consequences of β-cell loss**, not confounders of it. Conditioning on a mediator absorbs the very
+effect under study and biases it toward the null. Age, sex and BMI are the legitimate confounders.
+
+C-peptide is still valuable — as an **external-validity check**: does the clinical measure of
+β-cell function track our imaging-derived β-cell proportion? That is a validation question, not an
+adjustment. It lives in the Inflammation tab's donor table.
+
+**Disease duration** is likewise descriptor-only: all five T1D donors are recent-onset (0, 0, 0,
+0.58, 0 years) and non-diabetic donors have no value, so there is no variance to model. It
+establishes cohort scope — we have no long-duration donors — and nothing more.

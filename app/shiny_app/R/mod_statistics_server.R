@@ -330,6 +330,12 @@ statistics_server <- function(id, raw_df, get_selection_description,
       # matter, and the diameter distribution differs by group.
       size_models <- size_companion_models(rdf)
 
+      # ---- Age-group companion (Steenbuck et al. 2025 covariate form) ----
+      # `value ~ donor_status + age_group + (1|donor)`. See
+      # age_group_companion_model() in utils_stats.R for why HbA1c and
+      # C-peptide are deliberately excluded (mediators, not confounders).
+      age_models <- age_group_companion_model(rdf)
+
       # ---- Per-bin analysis (exploratory, Section 3) ----
       # Bin width is FIXED at STATS_BIN_WIDTH_UM — a tunable width is a
       # multiple-comparison p-hacking surface. Always computed; the Section 3 "Show
@@ -660,6 +666,7 @@ statistics_server <- function(id, raw_df, get_selection_description,
         bin_dropped      = bin_dropped,
         group_summary    = group_summary,
         size_models      = size_models,
+        age_models       = age_models,
         auc_by_group     = auc_by_group,
         demo_summary     = demo_summary,
         age_corr         = age_corr,
@@ -836,6 +843,38 @@ statistics_server <- function(id, raw_df, get_selection_description,
                  "Islet-size companion models unavailable: ", sm$error_msg)
       } else NULL
 
+      # ---- Age-group companion ----
+      # 5 of our 15 donors are under 5 years old, so "is this a disease effect or
+      # an age effect?" is a live question rather than a formality.
+      am <- st$age_models
+      age_block <- if (!is.null(am) && is.finite(am$p_status_adj)) {
+        age_drives <- is.finite(am$p_age_group) && am$p_age_group < st$alpha
+        tagList(
+          tags$div(style = "margin-top: 12px; font-size: 12px; color: #555; line-height: 1.6;",
+            tags$strong("Age-group companion:"),
+            tags$span(style = "color: #888;",
+                      sprintf(" (<%g y: %d donors | \u2265%g y: %d donors)",
+                              am$cut, am$n_young, am$cut, am$n_old)), tags$br(),
+            tags$span(style = "color: #888;", "donor status adjusted for age group: "),
+            format_p_value(am$p_status_adj),
+            tags$span(style = "color: #888;",
+                      sprintf(" (vs %s unadjusted)", format_p_value(primary_p))), tags$br(),
+            tags$span(style = "color: #888;", "age group alone: "),
+            tags$strong(style = if (age_drives) "color: #d9534f;" else "",
+                        format_p_value(am$p_age_group))),
+          if (age_drives) {
+            tags$div(style = paste0("margin-top: 6px; padding: 6px 8px; background: #fdecea;",
+                                    " border-left: 3px solid #d9534f; border-radius: 3px;",
+                                    " font-size: 11px; color: #8a1c12; line-height: 1.4;"),
+              tags$strong("Age group independently predicts this feature. "),
+              "With 5 of 15 donors under 5 years old, read the adjusted p above as the ",
+              "disease-stage result and treat the unadjusted headline with caution.")
+          } else NULL)
+      } else if (!is.null(am) && !is.null(am$error_msg)) {
+        tags$div(style = "margin-top: 10px; font-size: 11px; color: #999;",
+                 "Age-group companion unavailable: ", am$error_msg)
+      } else NULL
+
       tags$div(
         tags$div(style = "font-size: 13px; color: #555; margin-bottom: 8px; line-height: 1.4;",
           "Linear mixed-effects model — donor status with a per-donor random intercept ",
@@ -867,7 +906,10 @@ statistics_server <- function(id, raw_df, get_selection_description,
         group_block,
 
         # ---- Islet-size companion models ----
-        size_block
+        size_block,
+
+        # ---- Age-group companion model ----
+        age_block
       )
     })
 
@@ -1025,6 +1067,18 @@ statistics_server <- function(id, raw_df, get_selection_description,
           "  \u21b3 donor status \u00d7 islet diameter (is the effect size-dependent?)",
           fmt_p(sm$p_interaction), "-",
           if (is.finite(sm$p_interaction) && sm$p_interaction < st$alpha) "*" else ""))
+      }
+
+      am <- st$age_models
+      if (!is.null(am) && is.finite(am$p_status_adj)) {
+        rows <- rbind(rows, blank_row(
+          "  \u21b3 donor status adjusted for age group (<13 / \u226513 y)",
+          fmt_p(am$p_status_adj), "-",
+          if (is.finite(am$p_status_adj) && am$p_status_adj < st$alpha) "*" else ""))
+        rows <- rbind(rows, blank_row(
+          "  \u21b3 age group (does age itself predict the feature?)",
+          fmt_p(am$p_age_group), "-",
+          if (is.finite(am$p_age_group) && am$p_age_group < st$alpha) "*" else ""))
       }
 
       # Pairwise from mixed model (estimated marginal means)
@@ -1899,6 +1953,23 @@ statistics_server <- function(id, raw_df, get_selection_description,
           " \u2014 the size-stratified analysis in Section 3 is then part of the primary reading, ",
           "not an optional extra. Neither companion replaces the pre-specified primary test; ",
           "they are reported to make its scope explicit.",
+          tags$br(), tags$br(),
+          tags$strong("Age (companion model): "),
+          "5 of the 15 donors are under 5 years old, so a companion model fits ",
+          tags$code("value ~ donor_status + age_group + (1|donor)"),
+          " following Steenbuck et al. 2025, who used the same form to test whether ",
+          "disease-stage differences survive adjustment for age-associated endotypes. ",
+          "Their <13 / \u226513 year cut is data-supported on this cohort rather than ",
+          "arbitrary: our ages are bimodal with a gap from 4.22 to 14.56 years, and 13 ",
+          "falls inside it. Age comes from the H5AD, which is canonical for modelling ",
+          "(it disagrees with the nPOD record for one donor, both under the cut). ",
+          tags$strong("HbA1c and C-peptide are deliberately NOT adjusted for: "),
+          "both are downstream consequences of beta-cell loss rather than confounders ",
+          "of it, so conditioning on them is mediator adjustment and would bias the ",
+          "disease effect toward the null. They appear in the demographics table and ",
+          "are useful as external-validity checks, not as covariates. Disease duration ",
+          "is likewise a cohort descriptor only \u2014 all T1D donors here are ",
+          "recent-onset (<1 year), which leaves it no variance to model.",
           tags$br(),
           tags$strong("Normality: "), "Shapiro-Wilk test on donor-level means per group. ",
           "With n = 5, this test has limited power, so failure to reject normality does not guarantee it.",
@@ -2034,6 +2105,20 @@ statistics_server <- function(id, raw_df, get_selection_description,
                                      else ""))
             lines <- c(lines, paste0("# Size companion - diameter mean-centred at: ",
                                      if (is.finite(sm$mean_diam)) sprintf("%.2f um", sm$mean_diam) else "N/A"))
+          }
+          am <- st$age_models
+          if (!is.null(am)) {
+            lines <- c(lines, paste0("# Age companion - donor_status adjusted for age_group p: ",
+                                     format_p_value(am$p_status_adj)))
+            lines <- c(lines, paste0("# Age companion - age_group (<", am$cut, " / >=", am$cut,
+                                     " y) p: ", format_p_value(am$p_age_group),
+                                     "   donors: ", am$n_young, " young / ", am$n_old, " old"))
+            lines <- c(lines, paste0("# Age companion - NOT adjusted for HbA1c or C-peptide:",
+                                     " both are consequences of beta-cell loss, so adjusting",
+                                     " for them is mediator adjustment and biases toward null."))
+            if (!is.null(am$error_msg)) {
+              lines <- c(lines, paste0("# Age companion - note: ", am$error_msg))
+            }
           }
           lines <- c(lines, "")
 

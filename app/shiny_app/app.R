@@ -395,6 +395,9 @@ ui <- fluidPage(
         ),
         tabPanel("Spatial",
           spatial_ui("spatial")
+        ),
+        tabPanel("Inflammation",
+          inflammation_ui("inflam")
         )
       )
     )
@@ -614,6 +617,13 @@ server <- function(input, output, session) {
                  remove_outliers = remove_outliers_global,
                  outlier_threshold = outlier_z_global)
 
+  # Inflammation module — cohort-level edgeR abundance + infiltration score.
+  # Reads data/cell_distance.csv directly (via the cached load_cell_distance()
+  # in spatial_helpers.R), not the Plot module's islet frame, so no sidebar
+  # filters apply. The tab is intentionally absent from the sidebar-visibility
+  # condition in the layout JS above, so the sidebar stays hidden here.
+  inflammation_server("inflam", prepared, active_donor_colors)
+
   # AI Assistant module (self-contained)
   ai_assistant_server("ai")
 
@@ -756,6 +766,7 @@ server <- function(input, output, session) {
                "show_phenotype_rules_traj",
                "show_phenotype_rules_spatial",
                "show_phenotype_rules_stats",
+               "show_phenotype_rules_inflam",
                "show_phenotype_rules_viewer")) {
     local({
       input_id <- id

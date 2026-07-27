@@ -282,6 +282,66 @@ prep_data <- function(master) {
     message("[prep-data] Merged donor demographics (age, gender)")
   }
 
+  # ---- nPOD clinical metadata (disease duration, BMI, HbA1c, C-peptide, AAb) ----
+  # Built by scripts/build_donor_metadata.py from the nPOD "All-Download" export,
+  # which is deliberately NOT in git (741 donors of free-text clinical narrative;
+  # `*.xlsx` is gitignored). Only the derived 15-row CSV is committed.
+  #
+  # `age` from the H5AD stays the canonical modelling variable — this join adds
+  # `age_years_npod` alongside it rather than overwriting, because donor 112's
+  # nPOD age (3.72) disagrees with the H5AD (3.00) while the other 14 match
+  # exactly. Overwriting would silently shift existing results.
+  #
+  # Absent file is a normal state (Excel fallback path, fresh checkout before the
+  # script is run) — skip quietly, every consumer already guards on the columns.
+  donor_meta_path <- file.path("..", "..", "data", "donor_metadata.csv")
+  if (file.exists(donor_meta_path)) {
+    donor_meta <- tryCatch({
+      dm <- utils::read.csv(donor_meta_path, stringsAsFactors = FALSE,
+                            check.names = FALSE)
+      dm$`Case ID` <- suppressWarnings(as.integer(dm$case_id))
+      # `sex`/`donor_type` duplicate columns the app already carries under other
+      # names (gender / Donor Status).
+      dm[, setdiff(colnames(dm), c("case_id", "sex", "donor_type")), drop = FALSE]
+    }, error = function(e) {
+      message("[prep-data] donor_metadata.csv unreadable: ", e$message); NULL
+    })
+    if (!is.null(donor_meta) && nrow(donor_meta) > 0) {
+      # Drop any column the target frame ALREADY has, keeping the existing one.
+      #
+      # dplyr suffixes name collisions .x/.y rather than erroring, and every
+      # downstream lookup in this app is by exact name — so a collision does not
+      # fail loudly, it silently disables a feature. The AAb flags are the live
+      # example: the H5AD already supplies AAb_GADA/IA2A/ZnT8A/mIAA, the nPOD
+      # sheet supplies the same four, and joining both renamed all of them to
+      # .x/.y. That turned the Plot sidebar's AAb filter into a no-op, because
+      # it resolves columns via intersect(flags, colnames(df)) and matched none.
+      # `n_aab` survives here because it is genuinely new.
+      drop_dupes <- function(df, target) {
+        dupes <- setdiff(intersect(colnames(df), colnames(target)), "Case ID")
+        if (length(dupes)) {
+          message("[prep-data] donor_metadata: keeping existing ",
+                  paste(dupes, collapse = ", "), " (not overwriting)")
+        }
+        df[, setdiff(colnames(df), dupes), drop = FALSE]
+      }
+      n_before <- c(nrow(targets_all), nrow(markers_all), nrow(comp))
+      targets_all <- safe_left_join(targets_all, drop_dupes(donor_meta, targets_all),
+                                    by = "Case ID", context = "targets_all:donor_metadata")
+      markers_all <- safe_left_join(markers_all, drop_dupes(donor_meta, markers_all),
+                                    by = "Case ID", context = "markers_all:donor_metadata")
+      comp <- safe_left_join(comp, drop_dupes(donor_meta, comp),
+                             by = "Case ID", context = "comp:donor_metadata")
+      n_after <- c(nrow(targets_all), nrow(markers_all), nrow(comp))
+      if (!identical(n_before, n_after)) {
+        warning(sprintf("[prep-data] donor_metadata join changed row counts: %s -> %s",
+                        paste(n_before, collapse = "/"), paste(n_after, collapse = "/")))
+      }
+      message("[prep-data] Merged nPOD donor metadata (", nrow(donor_meta),
+              " donors, ", ncol(donor_meta) - 1, " columns)")
+    }
+  }
+
   # Combined (core+peri) phenotype pair table. peri_prop_* columns sanitize
   # the phenotype name (spaces -> _, + -> plus) but prop_* columns keep the
   # original label, so a direct stem intersection misses ~half the pairs. Build
