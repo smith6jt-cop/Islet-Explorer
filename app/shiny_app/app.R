@@ -109,11 +109,10 @@ ui <- bslib::page_fillable(
           # mod_trajectory_server.R are still required.
           bslib::navset_hidden(
             id = "panels",
-            bslib::nav_panel_hidden("plot",
-              fluidRow(
-                plot_main_ui("plot", extra_panel = column(2, ai_assistant_ui("ai")))
-              )
-            ),
+            # `extra_panel` used to carry column(2, ai_assistant_ui("ai")). The
+            # AI chat card was removed Jul 2026 at the user's request; the Plot
+            # tab's two cards now take the full width.
+            bslib::nav_panel_hidden("plot", fluidRow(plot_main_ui("plot"))),
             bslib::nav_panel_hidden("trajectory",   trajectory_ui("traj")),
             bslib::nav_panel_hidden("statistics",   statistics_ui("stats")),
             bslib::nav_panel_hidden("spatial",      spatial_ui("spatial")),
@@ -351,8 +350,10 @@ server <- function(input, output, session) {
   # condition in the layout JS above, so the sidebar stays hidden here.
   inflammation_server("inflam", prepared, active_donor_colors)
 
-  # AI Assistant module (self-contained)
-  ai_assistant_server("ai")
+  # AI Assistant: removed from the UI Jul 2026 at the user's request. The module
+  # files remain under R/ (unreferenced) and ai_helpers.R still loads the UF
+  # Navigator credentials; nothing mounts them. Delete R/mod_ai_assistant_*.R
+  # and R/ai_helpers.R to remove it entirely.
 
   # ---- Unified segmentation + drilldown plot (root-level, used by both Plot and Trajectory panels) ----
   islet_segmentation_view_plot <- reactive({

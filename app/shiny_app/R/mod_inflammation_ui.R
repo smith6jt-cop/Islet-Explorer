@@ -6,9 +6,13 @@
 # tests ONE selected feature at a time: both cards here test every cell type at
 # once and answer a cohort question rather than a per-islet one.
 #
-#   Card A  Donor cohort         nPOD clinical metadata incl. T1D duration
-#   Card B  edgeR abundance      negative-binomial DA on per-donor cell counts
-#   Card C  Infiltration score   distance-weighted immune localisation
+#   Card 1  Cell-type composition  donor-level tests on centred log-ratios
+#   Card 2  Infiltration score     distance-weighted immune localisation
+#
+# The donor-cohort table (nPOD clinical metadata) and the edgeR count model were
+# both removed Jul 2026 -- the first at the user's request, the second because
+# its calibrations assume a transcriptome. See the Methods card and
+# mod_inflammation_server.R's comp_fit().
 #
 # Layout note: every plot here sits in a col-6 or wider container. The Statistics
 # tab's col-4 cards clipped their titles and axis labels (a 453 px title in a
@@ -68,55 +72,40 @@ inflammation_ui <- function(id) {
         "long-duration donors, so nothing here speaks to established disease.")
     ),
 
-    # ===== SECTION 1: Donor cohort =====
-    section_heading("1", "Donor Cohort",
-                    "Clinical metadata for all 15 donors, from the nPOD record.",
-                    tip = paste0("Age, sex, BMI, HbA1c, C-peptide, autoantibody profile and ",
-                                 "T1D duration. Duration is a descriptor only — it has too ",
-                                 "little variance in this cohort to model.")),
-    fluidRow(
-      column(12,
-        div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow-x: auto;",
-          uiOutput(ns("cohort_note")),
-          tableOutput(ns("cohort_table")),
-          downloadButton(ns("dl_cohort"), "Download cohort CSV")
-        )
-      )
-    ),
-
-    # ===== SECTION 2: edgeR =====
-    section_heading("2", "Differential Abundance (edgeR)",
-                    "Which cell types change in number between disease stages?",
-                    tip = paste0("Negative-binomial GLM with quasi-likelihood F-tests on ",
-                                 "per-donor cell counts, library-size normalised. ",
-                                 "Benjamini-Hochberg across cell types.")),
+    # ===== SECTION 1: cell-type composition =====
+    section_heading("1", "Cell-Type Composition",
+                    "Which cell types shift between disease stages?",
+                    tip = paste0("Per donor, the cell-type vector is closed to a composition ",
+                                 "and centred-log-ratio transformed; each type is then tested ",
+                                 "across stage on one value per donor, with Benjamini-Hochberg ",
+                                 "across cell types.")),
     div(style = paste0("background: #eef6ee; border-left: 4px solid #2e7d32; border-radius: 4px; ",
                        "padding: 10px 14px; margin-bottom: 12px; font-size: 13px; line-height: 1.5; color: #1b4620;"),
-      tags$strong("Why counts, not proportions. "),
-      "Proportions are compositionally constrained: they must sum to 1, so a collapse in ",
-      "β-cell number mechanically inflates every other cell type's proportion even when ",
-      "that type's absolute abundance is unchanged. edgeR models raw counts with a ",
-      "library-size offset, which separates a real abundance change from that artefact. ",
-      "The Statistics tab tests proportions and is subject to this; these results are not."),
+      tags$strong("Why the log-ratio, not raw proportions or a count model. "),
+      "Proportions are compositionally constrained — they must sum to 1, so the loss of β cells ",
+      "in T1D mechanically inflates every other cell type's share even when that type has not ",
+      "moved. The centred log-ratio removes that: each value is a cell type's abundance ",
+      "relative to that donor's own geometric mean, which is also invariant to how much tissue ",
+      "was imaged. ",
+      tags$strong("This replaced an edgeR count model in Jul 2026"), " — the counts were real, ",
+      "but edgeR's dispersion moderation, TMM normalisation and library-size offset are all ",
+      "calibrated for a 20,000-gene transcriptome and do not transfer to 21 cell types from 15 ",
+      "donors. See Methods."),
     fluidRow(
       column(12,
         div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible;",
           fluidRow(
-            column(4,
-              selectInput(ns("edger_contrast"), "Contrast",
-                          choices = c("T1D vs ND" = "t1d_nd",
-                                      "Aab+ vs ND" = "aab_nd",
-                                      "T1D vs Aab+" = "t1d_aab"),
-                          selected = "t1d_nd")
-            ),
-            column(4,
+            column(5,
               selectInput(ns("edger_region"), "Cells included",
                           choices = c("Islet core + peri-islet" = "core_peri",
                                       "Islet core only" = "core",
                                       "All tissue" = "all"),
                           selected = "core_peri")
             ),
-            column(4, style = "padding-top: 25px;",
+            # The pairwise Contrast selector is gone: this is a single omnibus
+            # across every stage present, so there is no contrast to pick. The
+            # table reports the log-ratio difference between the extreme stages.
+            column(5, style = "padding-top: 25px;",
               downloadButton(ns("dl_edger"), "Download results CSV")
             )
           ),
@@ -135,8 +124,8 @@ inflammation_ui <- function(id) {
       )
     ),
 
-    # ===== SECTION 3: Infiltration score =====
-    section_heading("3", "Infiltration Score",
+    # ===== SECTION 2: Infiltration score =====
+    section_heading("2", "Infiltration Score",
                     "Distance-weighted immune localisation relative to the islet edge.",
                     tip = paste0("Score = 1 for cells inside an islet and 1/d for cells ",
                                  "outside it (d = µm from the islet edge), normalised by ",
@@ -198,8 +187,8 @@ inflammation_ui <- function(id) {
       )
     ),
 
-    # ===== SECTION 4: Methods =====
-    section_heading("4", "Methods Reference",
+    # ===== SECTION 3: Methods =====
+    section_heading("3", "Methods Reference",
                     "Definitions, corrections and the adaptations made for this cohort."),
     fluidRow(
       column(12,

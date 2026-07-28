@@ -198,104 +198,190 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
            region = region, n_cells = nrow(sub))
     })
 
-    edger_fit <- reactive({
-      shiny::validate(shiny::need(requireNamespace("edgeR", quietly = TRUE),
-                    "The edgeR package is not installed."))
+    # -------------------------------------------------------------------------
+    # Compositional donor-level test (replaced edgeR, Jul 2026)
+    # -------------------------------------------------------------------------
+    # WHY NOT edgeR. The matrix above IS integer cell counts, so edgeR ran
+    # without complaint -- but every part of its machinery is calibrated for a
+    # transcriptome, and none of those calibrations transfer to a 21-phenotype
+    # census from 15 donors:
+    #
+    #   * estimateDisp() moderates each feature's dispersion by borrowing across
+    #     features via empirical Bayes. Across ~20,000 genes that is powerful;
+    #     across 21 cell types there is essentially nothing to borrow from, and
+    #     the "common dispersion" the card used to print was a summary of 21
+    #     numbers presented with the authority of 20,000.
+    #   * calcNormFactors() (TMM) assumes MOST features are non-differential.
+    #     In T1D the beta-cell compartment collapses, which is precisely the
+    #     large, systematic shift TMM is built to treat as nuisance.
+    #   * "Library size" here is the number of cells imaged, which varies with
+    #     TISSUE AREA on a whole section -- not with sequencing depth. The
+    #     offset therefore corrects a different quantity than the one edgeR's
+    #     model is reasoning about.
+    #   * filterByExpr() is tuned to drop low-count genes; on 21 cell types it
+    #     can drop a biologically real rare population.
+    #
+    # And the counts are not directly observed: they are the number of cells
+    # whose MFI passed a phenotype gate, so gate placement propagates into every
+    # count in a way no count model represents.
+    #
+    # WHAT THIS DOES INSTEAD. The compositional constraint that motivated counts
+    # in the first place is handled where it belongs -- in the transform, not in
+    # a library-size offset. Per donor, the phenotype vector is closed to a
+    # composition and centred-log-ratio transformed:
+    #
+    #     clr_i = log(p_i) - mean_j( log(p_j) )
+    #
+    # A CLR value is a cell type's log abundance RELATIVE TO the donor's own
+    # geometric mean across all cell types, so it is invariant to how much
+    # tissue was imaged -- which is the actual nuisance -- without assuming most
+    # cell types are unchanged. Zeros are handled by a 0.5 pseudocount before
+    # closure (a count of 0 is "none observed", not "absent").
+    #
+    # Testing is then the framework the rest of this app already uses: ONE value
+    # per donor, a donor-level omnibus across disease stage, and BH across cell
+    # types. No pseudoreplication, no borrowed dispersion, nothing to tune.
+    comp_fit <- reactive({
       ab <- abundance()
-      grp <- ab$group
-      shiny::validate(shiny::need(nlevels(droplevels(grp)) >= 2,
+      grp <- droplevels(ab$group)
+      shiny::validate(shiny::need(nlevels(grp) >= 2,
                     "Need at least 2 donor-status groups."))
 
-      y <- edgeR::DGEList(counts = ab$counts, group = grp)
-      keep <- edgeR::filterByExpr(y, group = grp)
-      y <- y[keep, , keep.lib.sizes = FALSE]
-      y <- edgeR::calcNormFactors(y)
-      design <- stats::model.matrix(~ grp)
-      y <- edgeR::estimateDisp(y, design)
-      fit <- edgeR::glmQLFit(y, design)
+      cnt <- ab$counts
+      # Drop cell types absent from EVERY donor: a row of zeros carries no
+      # information and its CLR is constant. This is the only filtering; unlike
+      # filterByExpr, a type present in even one donor is kept.
+      keep <- rowSums(cnt) > 0
+      dropped <- rownames(cnt)[!keep]
+      cnt <- cnt[keep, , drop = FALSE]
+      shiny::validate(shiny::need(nrow(cnt) >= 2, "Fewer than 2 cell types present."))
 
-      # `~ grp` with levels ND / Aab+ / T1D gives coef 2 = Aab+ vs ND and
-      # coef 3 = T1D vs ND; T1D vs Aab+ needs an explicit contrast.
-      cn <- colnames(design)
-      spec <- switch(input$edger_contrast %||% "t1d_nd",
-        aab_nd  = list(coef = 2, label = "Aab+ vs ND"),
-        t1d_nd  = list(coef = 3, label = "T1D vs ND"),
-        t1d_aab = list(contrast = c(0, -1, 1), label = "T1D vs Aab+"))
-      qlf <- if (!is.null(spec$contrast)) {
-        shiny::validate(shiny::need(length(spec$contrast) == ncol(design),
-                      "Contrast does not match the design (a donor group may be missing)."))
-        edgeR::glmQLFTest(fit, contrast = spec$contrast)
-      } else {
-        shiny::validate(shiny::need(spec$coef <= ncol(design),
-                      "Contrast unavailable — a donor group is missing from this subset."))
-        edgeR::glmQLFTest(fit, coef = spec$coef)
-      }
-      res <- edgeR::topTags(qlf, n = Inf, adjust.method = "BH")$table
-      res$cell_type <- rownames(res)
-      rownames(res) <- NULL
+      # closure + CLR, per donor (column)
+      clr <- apply(cnt + 0.5, 2, function(x) {
+        p <- x / sum(x)
+        log(p) - mean(log(p))
+      })
+      clr <- matrix(clr, nrow = nrow(cnt), dimnames = dimnames(cnt))
+
+      # Parametric or rank test, decided once for the whole family from the
+      # pooled CLR residuals rather than per cell type -- picking per feature
+      # would be a hidden multiple-comparison.
+      resid <- as.vector(clr - rowMeans(clr))
+      sw <- tryCatch(stats::shapiro.test(if (length(resid) > 5000)
+                       sample(resid, 5000) else resid)$p.value,
+                     error = function(e) NA_real_)
+      parametric <- is.finite(sw) && sw > 0.05
+
+      rows <- lapply(seq_len(nrow(clr)), function(i) {
+        v <- clr[i, ]
+        d <- data.frame(value = as.numeric(v), grp = grp, stringsAsFactors = FALSE)
+        d <- d[is.finite(d$value), , drop = FALSE]
+        n_per <- table(droplevels(d$grp))
+        if (length(n_per) < 2 || any(n_per < 2)) return(NULL)
+        p <- if (parametric) {
+          tryCatch(stats::anova(stats::lm(value ~ grp, data = d))[["Pr(>F)"]][1],
+                   error = function(e) NA_real_)
+        } else {
+          tryCatch(stats::kruskal.test(value ~ grp, data = d)$p.value,
+                   error = function(e) NA_real_)
+        }
+        mg <- tapply(d$value, droplevels(d$grp), mean)
+        # Effect size in the CLR's own units: the difference between the two
+        # extreme stages present, which is a log-ratio contrast, NOT a log2FC.
+        lv <- levels(droplevels(d$grp))
+        data.frame(cell_type = rownames(clr)[i],
+                   clr_diff  = unname(mg[lv[length(lv)]] - mg[lv[1]]),
+                   contrast  = paste(lv[length(lv)], "vs", lv[1]),
+                   mean_clr  = mean(d$value),
+                   PValue    = p,
+                   stringsAsFactors = FALSE)
+      })
+      res <- do.call(rbind, Filter(Negate(is.null), rows))
+      shiny::validate(shiny::need(!is.null(res) && nrow(res) > 0,
+                    "No cell type had at least 2 donors in 2 groups."))
+      res$FDR <- stats::p.adjust(res$PValue, method = "BH")
+
+      # The floor BH can reach at this cohort size, so a null reads as
+      # underpowered rather than as no effect. Same reasoning as the
+      # infiltration card's power_ceiling().
+      n_per_grp <- as.numeric(table(grp))
+      best_p <- tryCatch({
+        g <- rep(seq_along(n_per_grp), n_per_grp)
+        x <- seq_along(g)                       # perfect separation
+        if (parametric) stats::anova(stats::lm(x ~ factor(g)))[["Pr(>F)"]][1]
+        else stats::kruskal.test(x ~ factor(g))$p.value
+      }, error = function(e) NA_real_)
+
       list(res = res[order(res$FDR, res$PValue), , drop = FALSE],
-           label = spec$label,
-           dispersion = y$common.dispersion,
-           n_tested = nrow(y), n_dropped = sum(!keep),
-           dropped = rownames(ab$counts)[!keep],
-           n_cells = ab$n_cells, group = grp)
+           label = paste(levels(grp), collapse = " / "),
+           test = if (parametric) "ANOVA on donor CLR" else "Kruskal-Wallis on donor CLR",
+           shapiro_p = sw, n_tested = nrow(res),
+           n_dropped = length(dropped), dropped = dropped,
+           n_cells = ab$n_cells, n_donors = length(grp), group = grp,
+           best_p = best_p, best_q = if (is.finite(best_p)) best_p * nrow(res) / 1 else NA_real_)
     })
 
     output$edger_note <- renderUI({
-      e <- edger_fit()
+      e <- comp_fit()
       tags$p(style = "font-size: 12px; color: #666; margin: 4px 0 10px 0; line-height: 1.5;",
-        tags$strong(e$label), " — ",
-        sprintf("%s cells from %d donors; %d cell type%s tested",
+        tags$strong(e$test), " — ",
+        sprintf("%s cells from %d donors (%s); %d cell type%s tested",
                 formatC(e$n_cells, format = "d", big.mark = ","),
-                length(e$group), e$n_tested, if (e$n_tested == 1) "" else "s"),
-        if (e$n_dropped > 0) sprintf(", %d dropped by filterByExpr (%s)",
+                e$n_donors, e$label, e$n_tested, if (e$n_tested == 1) "" else "s"),
+        if (e$n_dropped > 0) sprintf(", %d absent from every donor (%s)",
                                      e$n_dropped, paste(e$dropped, collapse = ", ")) else "",
-        sprintf(". Common dispersion %.3f (BCV %.2f).", e$dispersion, sqrt(e$dispersion)),
         tags$br(),
         tags$span(style = "color: #888;",
-          "logFC is on a log2 scale after library-size normalisation, so it is a change in ",
-          "abundance rather than in share of the tissue. FDR is Benjamini-Hochberg across ",
-          "the cell types tested in this contrast."))
+          "Values are centred log-ratios: each cell type's log abundance relative to ",
+          "that donor's own geometric mean across all cell types, so the result does not ",
+          "depend on how much tissue was imaged. One value per donor, so no ",
+          "pseudoreplication. FDR is Benjamini-Hochberg across the cell types tested."),
+        if (is.finite(e$best_p)) tagList(tags$br(),
+          tags$span(style = "color: #8a6a12;",
+            sprintf("Power ceiling at these group sizes: the smallest attainable p is %s, so BH across %d cell types floors at q = %s. A null here is underpowered, not negative.",
+                    format_p_value(e$best_p), e$n_tested,
+                    format_p_value(min(1, e$best_p * e$n_tested)))))
+      )
     })
 
     output$edger_table <- renderTable({
-      e <- edger_fit()
+      e <- comp_fit()
       r <- e$res
       data.frame(
         `Cell type` = r$cell_type,
-        `log2FC` = sprintf("%.2f", r$logFC),
-        `logCPM` = sprintf("%.1f", r$logCPM),
+        `CLR diff` = sprintf("%+.2f", r$clr_diff),
+        Contrast = r$contrast,
         `p` = format_p_value(r$PValue),
         `FDR` = format_p_value(r$FDR),
-        Sig = ifelse(r$FDR < 0.05, "*", ""),
+        Sig = ifelse(r$FDR %in% TRUE & r$FDR < 0.05, "*", ""),
         check.names = FALSE, stringsAsFactors = FALSE
       )
     }, striped = TRUE, bordered = TRUE, spacing = "s", align = "lccccc")
 
     output$edger_volcano <- renderPlotly({
-      e <- edger_fit()
+      e <- comp_fit()
       r <- e$res
       r$neglog10 <- -log10(pmax(r$FDR, .Machine$double.xmin))
       r$sig <- ifelse(r$FDR < 0.05,
-                      ifelse(r$logFC > 0, "Up (FDR<0.05)", "Down (FDR<0.05)"), "NS")
-      r$hover <- sprintf("%s<br>log2FC: %.2f<br>p: %s<br>FDR: %s",
-                         r$cell_type, r$logFC,
+                      ifelse(r$clr_diff > 0, "Higher (FDR<0.05)", "Lower (FDR<0.05)"), "NS")
+      r$hover <- sprintf("%s<br>CLR difference: %+.2f (%s)<br>p: %s<br>FDR: %s",
+                         r$cell_type, r$clr_diff, r$contrast,
                          format_p_value(r$PValue), format_p_value(r$FDR))
-      g <- ggplot(r, aes(x = logFC, y = neglog10, colour = sig, text = hover)) +
+      g <- ggplot(r, aes(x = clr_diff, y = neglog10, colour = sig, text = hover)) +
         geom_hline(yintercept = -log10(0.05), linetype = "dashed", colour = "#999") +
         geom_vline(xintercept = 0, linetype = "dashed", colour = "#999") +
         geom_point(size = 3, alpha = 0.85) +
-        scale_colour_manual(values = c("Up (FDR<0.05)" = "#d62728",
-                                       "Down (FDR<0.05)" = "#1f77b4",
+        scale_colour_manual(values = c("Higher (FDR<0.05)" = IE_ACCENT_700,
+                                       "Lower (FDR<0.05)"  = "#1f77b4",
                                        "NS" = "#bbbbbb"), name = NULL) +
-        labs(x = paste0("log2 fold change — ", e$label),
+        labs(x = paste0("Difference in centred log-ratio — ",
+                        if (nrow(r)) r$contrast[1] else ""),
              y = "-log10(FDR)") +
         theme_islet() +
         theme(legend.position = "bottom")
       # No in-plot point labels: they collide with each other and with the y-axis
-      # ("3Beta cell") at every width tried, and the results table sits directly
-      # beside this plot listing every cell type ordered by FDR. Identity comes
-      # from the hover instead.
+      # at every width tried, and the results table sits directly beside this plot
+      # listing every cell type ordered by FDR. Identity comes from the hover.
 
       fonts <- plotly_islet_fonts()
       ggplotly(g, tooltip = "text") %>%
@@ -311,23 +397,29 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
                # margin grows -- so enlarging the margin alone never fixed this.
                legend = list(orientation = "h", x = 0.5, xanchor = "center", y = -0.14,
                              font = fonts$legend_text)) %>%
-        plotly_islet_config("inflammation_edger_volcano")
+        plotly_islet_config("inflammation_composition_volcano")
     })
 
     output$dl_edger <- downloadHandler(
-      filename = function() paste0("inflammation_edger_",
+      filename = function() paste0("inflammation_composition_",
                                    format(Sys.time(), "%Y%m%d_%H%M%S"), ".csv"),
       content = function(file) {
-        e <- tryCatch(edger_fit(), error = function(err) NULL)
-        if (is.null(e)) return(write_islet_csv(file, NULL, "edgeR results unavailable"))
+        e <- tryCatch(comp_fit(), error = function(err) NULL)
+        if (is.null(e)) return(write_islet_csv(file, NULL, "Composition results unavailable"))
         write_islet_csv(file, e$res, islet_csv_header(
-          paste0("edgeR differential abundance — ", e$label),
-          "Negative-binomial GLM, quasi-likelihood F-test, library-size normalised",
-          paste("Cells included:", e$n_cells, "| region:", input$edger_region %||% "core_peri"),
+          "Cell-type composition by disease stage (donor-level, centred log-ratio)",
+          paste0("Test: ", e$test, "; normality screen on pooled CLR residuals p = ",
+                 format_p_value(e$shapiro_p)),
+          "clr_i = log(p_i) - mean_j(log(p_j)) per donor, with a 0.5 pseudocount before closure",
+          paste("Cells included:", e$n_cells, "| region:", input$edger_region %||% "core_peri",
+                "| donors:", e$n_donors),
           paste("Cell types tested:", e$n_tested,
-                "| dropped by filterByExpr:", e$n_dropped),
-          sprintf("Common dispersion: %.4f (BCV %.3f)", e$dispersion, sqrt(e$dispersion)),
-          "FDR = Benjamini-Hochberg across the cell types in this contrast"))
+                "| absent from every donor:", e$n_dropped),
+          "clr_diff is a log-ratio contrast between the extreme stages present - NOT a log2 fold change",
+          "FDR = Benjamini-Hochberg across the cell types tested",
+          if (is.finite(e$best_p))
+            sprintf("Power ceiling: smallest attainable p = %s at these group sizes",
+                    format_p_value(e$best_p)) else "Power ceiling: not computable"))
       }
     )
 
@@ -682,17 +774,31 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
           "across three stages with whole-section CODEX images. Where that difference ",
           "forces an adaptation it is stated below."),
         tags$p(
-          tags$strong("Differential abundance. "),
-          "Per-donor cell-type counts are modelled with edgeR: ",
-          tags$code("filterByExpr"), " → ", tags$code("calcNormFactors"), " → ",
-          tags$code("estimateDisp"), " → ", tags$code("glmQLFit"), " → ",
-          tags$code("glmQLFTest"), ", with Benjamini-Hochberg across cell types. ",
-          "Quasi-likelihood F-tests are used because they hold their nominal error rate at ",
-          "small replicate numbers, which matters at n = 5 donors per stage. ",
-          tags$strong("Counts rather than proportions is the substantive choice: "),
-          "proportions must sum to 1, so the loss of β cells in T1D inflates every other ",
-          "cell type's proportion whether or not its absolute abundance moved. The ",
-          "library-size offset removes that artefact."),
+          tags$strong("Cell-type composition. "),
+          "Per donor, the cell-type vector is closed to a composition and centred-log-ratio ",
+          "transformed — ", tags$code("clr_i = log(p_i) − mean_j log(p_j)"), " — with a 0.5 ",
+          "pseudocount before closure so a zero count reads as “none observed” rather than ",
+          "“absent”. Each cell type is then tested across disease stage on ",
+          tags$strong("one value per donor"), " (ANOVA or Kruskal-Wallis, chosen once for the ",
+          "whole family from the pooled CLR residuals), with Benjamini-Hochberg across cell ",
+          "types. The compositional constraint is handled in the transform: a CLR value is a ",
+          "cell type's abundance relative to that donor's own geometric mean, so the β-cell ",
+          "collapse in T1D cannot mechanically inflate every other type, and the result does ",
+          "not depend on how much tissue was imaged."),
+        tags$p(
+          tags$strong("Why not edgeR (changed Jul 2026). "),
+          "This card previously ran ", tags$code("filterByExpr"), " → ",
+          tags$code("calcNormFactors"), " → ", tags$code("estimateDisp"), " → ",
+          tags$code("glmQLFit"), " on the same counts. The input was valid — they are integer ",
+          "cell counts — but every calibration in that pipeline assumes a transcriptome and ",
+          "none of them transfers here. ", tags$code("estimateDisp"), " moderates dispersion by ",
+          "borrowing across features, which is powerful across 20,000 genes and empty across ",
+          "21 cell types; TMM normalisation assumes most features are unchanged, which is false ",
+          "precisely because β cells collapse; and “library size” is the number of cells ",
+          "imaged, which varies with ", tags$strong("tissue area on a whole section"), ", not ",
+          "with sequencing depth. Separately, these counts are not directly observed: each is ",
+          "the number of cells whose MFI passed a phenotype gate, so gate placement propagates ",
+          "into every count in a way no count model represents."),
         tags$p(
           tags$strong("Infiltration score. "),
           "Each cell scores 1 if it lies inside an islet and 1/d otherwise, with d the ",
