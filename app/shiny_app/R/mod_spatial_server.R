@@ -472,8 +472,18 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
               marker = list(size = 3, opacity = 0.7)) %>%
         layout(
           font = fonts$global,
-          title = list(text = paste0("Leiden ", res_label, " (", nrow(plot_df), " islets)"),
-                       font = fonts$title),
+          # No in-plot title. It rendered ON TOP of its own modebar -- the title
+          # sits inside the plot while the modebar lives in the 28px strip
+          # reserved above it -- and it duplicated the "Leiden Clustering"
+          # heading on the card. The resolution and islet count moved to the
+          # axis subtitle below, where nothing overlaps them.
+          title = NULL,
+          annotations = list(list(
+            text = paste0("Leiden ", res_label, " · ",
+                          formatC(nrow(plot_df), format = "d", big.mark = ","), " islets"),
+            showarrow = FALSE, xref = "paper", yref = "paper",
+            x = 0, xanchor = "left", y = -0.13, yanchor = "top",
+            font = fonts$annotation)),
           xaxis = list(title = list(text = "UMAP 1", font = fonts$axis_title),
                        zeroline = FALSE, showgrid = FALSE, showticklabels = FALSE,
                        showline = FALSE, constrain = "domain"),
