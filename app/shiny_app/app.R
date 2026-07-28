@@ -19,24 +19,6 @@ ui <- fluidPage(
     tags$link(rel = "apple-touch-icon", sizes = "180x180", href = "apple-touch-icon.png"),
     tags$link(rel = "shortcut icon", type = "image/x-icon", href = "favicon.ico"),
     tags$style(HTML("
-    /* Viewer and trajectory mode styles - fix tab positioning */
-    body.viewer-mode .col-sm-2 {
-      display: none !important;
-    }
-    body.viewer-mode .col-sm-10 {
-      width: 100% !important;
-      max-width: 100% !important;
-      flex: 0 0 100%;
-    }
-    body.trajectory-mode .container-fluid > .row > .col-sm-3 {
-      display: none !important;
-    }
-    body.trajectory-mode .container-fluid > .row > .col-sm-9 {
-      width: 100% !important;
-      max-width: 100% !important;
-      flex: 0 0 100%;
-    }
-
     /* Global biomedical theme styling */
     body {
       background-color: #f8f9fa;
@@ -53,17 +35,6 @@ ui <- fluidPage(
       margin: 10px;
       padding: 20px;
       min-width: 1180px;
-    }
-
-    /* Logo header styling */
-    .logo-header {
-      display: flex;
-      justify-content: flex-end;
-      align-items: center;
-      padding: 10px 0;
-      margin-bottom: 10px;
-      background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
-      border-bottom: 2px solid #e3f2fd;
     }
 
     /* Enhanced card styling with biomedical color scheme */
@@ -140,29 +111,13 @@ ui <- fluidPage(
       transform: translateY(-1px);
     }
 
-    /* Tab styling */
+    /* Tab styling. NOTE: the `.nav-tabs .nav-link` rules that used to sit here
+       were dead. `.nav-link` is a Bootstrap 4/5 class; shiny's tabsetPanel
+       emits `ul.nav-tabs > li > a` in BOTH frameworks (measured, and also
+       under bslib's navset_tab/navset_hidden, which route through the same
+       buildTabset). They never matched anything. `.nav-tabs` itself IS live. */
     .nav-tabs {
       border-bottom: 2px solid #e3f2fd;
-    }
-
-    .nav-tabs .nav-link {
-      color: #2c5aa0;
-      font-weight: 500;
-      border: none;
-      border-radius: 8px 8px 0 0;
-      margin-right: 4px;
-      background-color: #f8f9fa;
-    }
-
-    .nav-tabs .nav-link.active {
-      background: linear-gradient(145deg, #2c5aa0 0%, #1e3a72 100%);
-      color: white;
-      border-bottom: 3px solid #66b3ff;
-    }
-
-    .nav-tabs .nav-link:hover {
-      background-color: #e3f2fd;
-      color: #1e3a72;
     }
 
     /* Form controls styling */
@@ -324,16 +279,7 @@ ui <- fluidPage(
       height: calc(100vh - 40px);
       overflow-y: auto;
     }
-    /* AI chat panel - match card heights */
-    .ai-chat-panel-container {
-      height: calc(100vh - 100px);
-      display: flex;
-      flex-direction: column;
-      overflow-y: auto;
-      margin-top: 20px;
-    }
   "))),
-  uiOutput("theme_css"),
   tags$script(HTML("
     $(document).on('shiny:connected', function() {
       function adjustLayout() {
@@ -370,6 +316,15 @@ ui <- fluidPage(
   ")),
   fluidRow(class = "equal-height-row",
     # Left Sidebar Panel (Plot controls, hidden on other tabs via JS)
+    #
+    # MEASURED, Jul 2026: `width = 1.4` / `10.6` emit `col-sm-1.4` /
+    # `col-sm-10.6`, which are not Bootstrap classes in any version -- NEITHER
+    # column takes any width from CSS. The sidebar has no declared width at all;
+    # the main panel is pinned by the jQuery above (inline flex: 0 0 88.333%)
+    # and the sidebar absorbs the flex remainder (181px at a 1600px viewport,
+    # 144px at 1280px -- pure content sizing). Do not "round" these to 2/10
+    # without re-measuring: it would change the live layout. Both go away with
+    # the shell port, which gives the sidebar a real fixed width.
     column(width = 1.4, class = "equal-height-panel",
       conditionalPanel(
         condition = "input.tabs == 'Plot' || input.tabs == 'Statistics'",
@@ -437,15 +392,17 @@ server <- function(input, output, session) {
     pd
   })
 
-  # ---- Theme CSS (light/dark toggle, if theme_bg input exists) ----
-  output$theme_css <- renderUI({
-    if (!is.null(input$theme_bg) && input$theme_bg == "Dark") {
-      tags$style(HTML("body { background-color: #000000; color: #e6e6e6; }
-                       .well { background-color: #111111; }"))
-    } else {
-      tags$style(HTML("body { background-color: #ffffff; color: #111111; }"))
-    }
-  })
+  # NOTE: `output$theme_css` used to live here, mounted at the top of the UI. It
+  # branched on `input$theme_bg`, an input that exists NOWHERE in this app -- so
+  # the else branch always fired and injected
+  #     body { background-color: #ffffff; color: #111111; }
+  # from a renderUI in the BODY. htmltools puts head links before the body, so
+  # at equal specificity that declaration won against every stylesheet: it has
+  # been silently overriding the `background-color: #f8f9fa` declared a few
+  # dozen lines above for as long as both have existed. Deleted rather than
+  # repointed -- a real dark mode belongs in the CSS layer as a token swap on a
+  # `data-theme` attribute, never as a body-level renderUI, which by
+  # construction outranks the stylesheet that owns the ground colour.
 
   # ---- Module servers ----
 
@@ -476,7 +433,6 @@ server <- function(input, output, session) {
 
   # Active donor color palette (global, consumed by Plot, Trajectory, Statistics, Spatial)
   donor_palette_name <- reactiveVal("Bright")
-  DONOR_PALETTE_CHOICES <- names(DONOR_PALETTES)
 
   # Sync all donor palette selectors (Plot sidebar, Trajectory, Spatial)
   observeEvent(input$sidebar_donor_palette, {
