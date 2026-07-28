@@ -212,8 +212,11 @@ IE_PIPELINE <- list(
        sub = "Tissue map · Leiden"),
   list(key = "neighborhood", num = "05", label = "Neighborhoods",
        sub = "Enrichment · proximity"),
-  list(key = "inflammation", num = "06", label = "Inflammation",
-       sub = "edgeR · infiltration")
+  # Renamed from "Inflammation": the tab holds a cell-type composition test and
+  # a distance-weighted infiltration score, neither of which is an inflammation
+  # measurement. The key stays `inflammation` so no guard or panel id moves.
+  list(key = "inflammation", num = "06", label = "Composition & Infiltration",
+       sub = "Cell types · immune localisation")
 )
 IE_REFERENCE <- list(
   list(key = "viewer", label = "Viewer", sub = "Image review · no data edits")

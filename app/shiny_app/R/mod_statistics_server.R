@@ -772,7 +772,12 @@ statistics_server <- function(id, raw_df, get_selection_description,
 
       primary_p <- st$lmer_p
       sig <- !is.na(primary_p) && primary_p < st$alpha
-      p_col <- if (is.na(primary_p)) "#999" else if (sig) "#d62728" else "#2e7d32"
+      # Significance is marked with a STAR, never with colour. Red/green reads as
+      # stop/go and bad/good, and a p-value crossing a threshold is neither -- it
+      # is a statement about evidence, not about whether the result is welcome.
+      # The ink is the same whatever the number says.
+      p_col <- if (is.na(primary_p)) "#999" else IE_INK
+      sig_star <- if (sig) " *" else ""
       icc_str <- if (is.na(st$icc)) "N/A" else sprintf("%.2f", st$icc)
 
       # ---- Per-group mean / SD / n, with an unequal-spread flag ----
@@ -886,9 +891,9 @@ statistics_server <- function(id, raw_df, get_selection_description,
           # This used to be an unconditional formatC(format = "e"), so p = 0.3476
           # rendered as "3.48e-01" — trivially misread as 0.0348 — while the
           # hypothesis table below printed the same value as "0.3476".
-          paste0("p = ", format_p_value(primary_p))),
+          paste0("p = ", format_p_value(primary_p), sig_star)),
         tags$span(style = "margin-left: 10px; font-size: 14px",
-          paste0(if (is.na(primary_p)) "—" else if (sig) "Significant" else "Not significant",
+          paste0(if (is.na(primary_p)) "—" else if (sig) "* Significant" else "Not significant",
                  " at α = ", st$alpha, " (fixed)")),
         tags$div(style = "margin-top: 12px; font-size: 13px",
           tags$strong("ICC = "), icc_str,
@@ -1150,7 +1155,7 @@ statistics_server <- function(id, raw_df, get_selection_description,
       # ambiguity; d and the Glass range stay in the table beside it.
       pw <- pw[!is.na(pw$raw_diff), , drop = FALSE]
       pw$contrast <- factor(pw$contrast, levels = rev(pw$contrast))
-      pw$sig_label <- ifelse(pw$sig, "Significant", "NS")
+      pw$sig_star <- ifelse(pw$sig %in% TRUE, "*", "")
       pw$hover <- sprintf(
         "%s<br>difference: %.3g<br>95%% CI: [%.3g, %.3g]<br>Cohen's d: %s<br>SDs: %.3g vs %.3g (ratio %.1f)",
         as.character(pw$contrast), pw$raw_diff, pw$raw_ci_lo, pw$raw_ci_hi,
@@ -1167,12 +1172,16 @@ statistics_server <- function(id, raw_df, get_selection_description,
       forest_title <- paste0("Pairwise Differences (donor means)",
                              outlier_title_suffix(st$outlier_summary),
                              zero_suffix, warn_suffix)
-      g <- ggplot(pw, aes(x = raw_diff, y = contrast, color = sig_label, text = hover)) +
+      # One ink colour for every contrast; a star beside the point marks
+      # significance. Colour here encoded stop/go, which a p-value is not.
+      g <- ggplot(pw, aes(x = raw_diff, y = contrast, text = hover)) +
         geom_vline(xintercept = 0, linetype = "dashed", color = "#999") +
-        geom_point(size = 3) +
-        geom_errorbarh(aes(xmin = raw_ci_lo, xmax = raw_ci_hi), height = 0.2) +
-        scale_color_manual(values = c("Significant" = "#d62728", "NS" = "#1f77b4"),
-                           name = "") +
+        geom_point(size = 3, colour = IE_INK) +
+        geom_errorbarh(aes(xmin = raw_ci_lo, xmax = raw_ci_hi), height = 0.2,
+                       colour = IE_INK) +
+        geom_text(aes(x = raw_ci_hi, label = sig_star), hjust = -0.6, vjust = 0.75,
+                  size = ISLET_ANNOTATE_SIZE, colour = IE_INK, na.rm = TRUE) +
+        scale_x_continuous(expand = ggplot2::expansion(mult = c(0.05, 0.12))) +
         labs(x = paste0("Difference in ", st$feature_name, " (Welch 95% CI)"),
              y = NULL, title = forest_title) +
         theme_islet() +
@@ -1410,13 +1419,15 @@ statistics_server <- function(id, raw_df, get_selection_description,
       bk <- st$bin_kendall
       if (is.null(bk) || nrow(bk) == 0) return(NULL)
 
-      bk$sig_label <- ifelse(!is.na(bk$p_adj) & bk$p_adj < st$alpha, "Significant", "NS")
+      bk$sig_star <- ifelse(!is.na(bk$p_adj) & bk$p_adj < st$alpha, "*", "")
 
-      g <- ggplot(bk, aes(x = mid, y = tau, color = sig_label)) +
+      # One ink colour; a star above the point marks significance.
+      g <- ggplot(bk, aes(x = mid, y = tau)) +
         geom_hline(yintercept = 0, linetype = "dashed", color = "#999") +
         geom_line(color = "#333", alpha = 0.4) +
-        geom_point(size = 3) +
-        scale_color_manual(values = c("Significant" = "#d62728", "NS" = "#aaaaaa"), name = "") +
+        geom_point(size = 3, colour = IE_INK) +
+        geom_text(aes(label = sig_star), vjust = -0.5, size = ISLET_ANNOTATE_SIZE,
+                  colour = IE_INK, na.rm = TRUE) +
         labs(x = "Diameter bin midpoint (\u00b5m)", y = "Kendall \u03c4") +
         theme_islet() +
         theme(legend.position = "none")

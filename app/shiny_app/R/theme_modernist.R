@@ -104,16 +104,18 @@ scale_colour_leiden <- function(n = NULL, name = "Cluster",
   ggplot2::scale_colour_manual(values = v, name = name, na.value = na.value, ...)
 }
 
-#' Significant / not-significant emphasis scale for statistics output.
+#' DEPRECATED. Significance is marked with a STAR, never with colour.
 #'
-#' Uses the 700 ramp step, not IE_CRIMSON -- see IE_ACCENT_700 above. Level
-#' names are parameters because the three existing call sites use three
-#' different encodings ("TRUE"/"FALSE", "Significant"/"NS", "Up (FDR<0.05)").
-scale_colour_significance <- function(sig = "TRUE", ns = "FALSE",
-                                      labels = NULL, name = NULL, ...) {
-  v <- stats::setNames(c(IE_ACCENT_700, "#9b9693"), c(sig, ns))
-  ggplot2::scale_colour_manual(values = v, labels = labels, name = name,
-                               drop = FALSE, ...)
+#' Red/green reads as stop/go and bad/good; a p-value crossing a threshold is
+#' neither -- it is a statement about evidence, not about whether the result is
+#' welcome. Every site that used this now draws in one ink colour and appends a
+#' star. Kept as an identity scale so any straggler call site degrades to "no
+#' colour encoding" rather than erroring.
+scale_colour_significance <- function(...) {
+  warning("scale_colour_significance() is deprecated: mark significance with a star, not colour.",
+          call. = FALSE)
+  ggplot2::scale_colour_manual(values = c(`TRUE` = IE_INK, `FALSE` = IE_INK),
+                               guide = "none", drop = FALSE)
 }
 
 # ---- theme_modernist -------------------------------------------------------
