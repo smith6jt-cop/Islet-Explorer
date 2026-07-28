@@ -186,6 +186,67 @@ VIEWER_DEBUG_ENABLED <- identical(Sys.getenv("VIEWER_DEBUG", "0"), "1")
 # downloads as a presentation/publication-ready PNG. "Presentation-first"
 # baseline: base 16pt, 18pt titles, 14pt legends, 12pt minimum for dense rows.
 
+# ---- Plot font -------------------------------------------------------------
+# Archivo is vendored under www/fonts/ for the browser (see www/fonts/archivo.css).
+# ggplot needs the same face registered with systemfonts so ragg can rasterise
+# it. Both plot paths on this machine already go through ragg -- shiny:::startPNG
+# selects ragg::agg_png, and ggplot2:::validate_device does too -- so ONE
+# registration covers the screen and the 300-dpi download handlers alike, with
+# no device change anywhere.
+#
+# NOT showtext/sysfonts, which is what the delivered redesign used. Neither is
+# installed here; font_add_google() needs network access the server may not
+# have; and showtext_opts(dpi = 96) would silently fight
+# ggsave(dpi = ISLET_PNG_DIMS$dpi = 300) in every downloadHandler, shipping
+# publication PNGs with text at roughly a third scale.
+#
+# NOT the .woff2 either: that file is a VARIABLE font (Google serves Archivo's
+# 400/600/800 as one byte-identical file) and FreeType's WOFF2 support depends
+# on a brotli-enabled build. The three static TTFs sidestep both questions.
+#
+# Returns the family name, or NULL when the TTFs are missing. Callers pass the
+# result straight to `base_family`, where NULL means "device default" -- so a
+# missing font degrades to today's appearance with no warning and no error,
+# which is the right failure mode for a production app. Verified: an
+# unresolvable family produces no warning from ragg.
+ie_register_plot_font <- function(family = "Archivo") {
+  if (!requireNamespace("systemfonts", quietly = TRUE)) return(NULL)
+  # CWD is the app dir under shiny-server and under runApp("."), but not when a
+  # script is sourced from the repo root -- probe both.
+  dirs <- c(file.path("www", "fonts"), file.path("app", "shiny_app", "www", "fonts"))
+  dir <- Find(function(d) file.exists(file.path(d, "Archivo-Regular.ttf")), dirs)
+  if (is.null(dir)) {
+    message("[FONT] Archivo TTFs not found - plots use the device default face")
+    return(NULL)
+  }
+  p <- function(f) file.path(dir, f)
+  ok <- try(systemfonts::register_font(
+    name       = family,
+    plain      = p("Archivo-Regular.ttf"),
+    bold       = p("Archivo-ExtraBold.ttf"),   # Modernist headings are weight 800
+    italic     = p("Archivo-Regular.ttf"),     # Archivo ships no italic here
+    bolditalic = p("Archivo-ExtraBold.ttf")
+  ), silent = TRUE)
+  if (inherits(ok, "try-error")) {
+    message("[FONT] register_font failed: ", conditionMessage(attr(ok, "condition")))
+    return(NULL)
+  }
+  message("[FONT] Registered plot family '", family, "' from ", dir)
+  family
+}
+
+ISLET_PLOT_FAMILY <- ie_register_plot_font()
+
+# Plotly resolves fonts in the BROWSER, so it needs a CSS stack rather than an R
+# family name; the browser matches it against the @font-face in
+# www/fonts/archivo.css. `system-ui` is deliberately NOT first -- on Ubuntu it
+# resolves to Ubuntu/Cantarell, a humanist face that reads noticeably softer
+# than Archivo.
+IE_PLOTLY_FAMILY <- paste0(
+  if (is.null(ISLET_PLOT_FAMILY)) "" else paste0("'", ISLET_PLOT_FAMILY, "', "),
+  "'Liberation Sans', 'Helvetica Neue', Helvetica, Arial, system-ui, sans-serif"
+)
+
 ISLET_FONT_SIZES <- list(
   base         = 18,
   title        = 18,
@@ -208,8 +269,11 @@ ISLET_ANNOTATE_SIZE <- ISLET_FONT_SIZES$base / ggplot2::.pt
 
 # Standard ggplot theme. Use directly: `theme_islet()` or extend with
 # additional `theme(...)` calls for plot-specific overrides.
-theme_islet <- function(base_size = ISLET_FONT_SIZES$base) {
-  ggplot2::theme_minimal(base_size = base_size) +
+theme_islet <- function(base_size = ISLET_FONT_SIZES$base,
+                        family    = ISLET_PLOT_FAMILY) {
+  # `family = NULL` -> "" -> the device default, so an unregistered Archivo is
+  # a no-op rather than a per-plot warning.
+  ggplot2::theme_minimal(base_size = base_size, base_family = family %||% "") +
     ggplot2::theme(
       plot.title    = ggplot2::element_text(size = ISLET_FONT_SIZES$title, face = "bold"),
       plot.subtitle = ggplot2::element_text(size = ISLET_FONT_SIZES$subtitle, color = "#555"),
@@ -224,17 +288,23 @@ theme_islet <- function(base_size = ISLET_FONT_SIZES$base) {
 # Named list of plotly `list(size = N)` font specs ready to splice into
 # layout() calls. Keys: global, title, axis_title, axis_tick, legend_title,
 # legend_text, colorbar_title.
-plotly_islet_fonts <- function() {
+# `family` was previously unset on every key, so all ~21 plotly outputs rendered
+# in plotly's own default face regardless of what theme_islet() did on the
+# ggplot side -- a mismatch that predates the redesign. Passing NULL restores
+# that behaviour if the webfont is ever removed.
+plotly_islet_fonts <- function(family = IE_PLOTLY_FAMILY) {
+  f <- function(size) if (is.null(family)) list(size = size)
+                      else list(size = size, family = family)
   list(
-    global         = list(size = ISLET_FONT_SIZES$base),
-    title          = list(size = ISLET_FONT_SIZES$title),
-    axis_title     = list(size = ISLET_FONT_SIZES$axis_title),
-    axis_tick      = list(size = ISLET_FONT_SIZES$axis_text),
-    legend_title   = list(size = ISLET_FONT_SIZES$legend_title),
-    legend_text    = list(size = ISLET_FONT_SIZES$legend_text),
-    colorbar_title = list(size = ISLET_FONT_SIZES$legend_title),
-    hover          = list(size = ISLET_FONT_SIZES$hover),
-    annotation     = list(size = ISLET_FONT_SIZES$annotation)
+    global         = f(ISLET_FONT_SIZES$base),
+    title          = f(ISLET_FONT_SIZES$title),
+    axis_title     = f(ISLET_FONT_SIZES$axis_title),
+    axis_tick      = f(ISLET_FONT_SIZES$axis_text),
+    legend_title   = f(ISLET_FONT_SIZES$legend_title),
+    legend_text    = f(ISLET_FONT_SIZES$legend_text),
+    colorbar_title = f(ISLET_FONT_SIZES$legend_title),
+    hover          = f(ISLET_FONT_SIZES$hover),
+    annotation     = f(ISLET_FONT_SIZES$annotation)
   )
 }
 
@@ -260,7 +330,9 @@ plotly_islet_config <- function(p, filename_root = "islet_explorer_plot",
                                 width = 1400, height = 900, scale = 2,
                                 uniform_text_mode = "hide") {
   p <- plotly::layout(p,
-    hoverlabel  = list(font = list(size = ISLET_FONT_SIZES$hover)),
+    # Carries the family too, not just the size: several plots (Leiden UMAP,
+    # tissue scatter, Card A bars) are read primarily via hover.
+    hoverlabel  = list(font = plotly_islet_fonts()$hover),
     uniformtext = list(minsize = ISLET_FONT_SIZES$dense_min,
                        mode    = uniform_text_mode)
   )

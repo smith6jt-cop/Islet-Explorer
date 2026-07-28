@@ -45,7 +45,14 @@ apply_pt_scale <- function(df, pt_scale) {
   df
 }
 
-trajectory_server <- function(id, prepared, selected_islet, forced_image, active_tab = reactive("Trajectory"),
+# NOTE: `forced_image` used to sit between `selected_islet` and `active_tab`
+# here. It was never read anywhere in this file -- it entered at the Feb 2026
+# modularisation (230af4d) and `git log -p -S forced_image` on this file shows
+# exactly one hit ever: the signature line. It was speculative wiring for a
+# Trajectory -> Viewer hand-off that was never built. Removed rather than kept,
+# because a parameter that is passed and ignored reads as a live dependency.
+# The reactiveVal itself stays in app.R and the Viewer still reads it.
+trajectory_server <- function(id, prepared, selected_islet, active_tab = reactive("Trajectory"),
                               donor_colors_reactive = reactive(DONOR_COLORS_BRIGHT),
                               remove_outliers = reactive(FALSE),
                               outlier_threshold = reactive(3.0)) {
@@ -1564,6 +1571,10 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
           paste("Pseudotime mode:", input$pt_mode %||% "dpt_pseudotime"),
           paste("Markers:", paste(input$multi_heatmap_markers %||% "(none)", collapse = ", ")),
           paste("Pseudotime bins:", if (is.null(mm)) NA else mm$n_bins),
+          # traj_multi_heatmap_data() filters on this at line 1422; the header
+          # omitted it entirely, so two exports with different row sets looked
+          # identical in provenance.
+          paste("Min cells per islet:", input$min_cells %||% 1),
           "z_clamped = (bin_mean - mean of that marker's bin means) / sd, clamped to [-2.5, 2.5]. Z-scoring is ACROSS BINS within a marker, not across islets."
         ))
       }
@@ -1593,7 +1604,13 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
           "Trajectory — UMAP coordinates and per-islet trajectory values",
           paste("Pseudotime mode:", input$pt_mode %||% "dpt_pseudotime"),
           paste("Selected feature:", input$traj_feature %||% "(none)"),
-          paste("Min cells per islet:", input$traj_min_cells %||% 1),
+          # `traj_min_cells` is not an input and never has been. The UI declares
+          # ns("min_cells") (mod_trajectory_ui.R:70), so inside moduleServer the
+          # id is `min_cells` -- which is what the FILTER reads (line 446). The
+          # `%||% 1` swallowed the NULL, so this line printed "1" at every slider
+          # position while the file's rows were genuinely filtered: a provenance
+          # header that contradicted its own contents.
+          paste("Min cells per islet:", input$min_cells %||% 1),
           paste("Rows:", if (is.null(out)) 0 else nrow(out), "islets")
         ))
       }

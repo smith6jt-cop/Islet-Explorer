@@ -545,12 +545,20 @@ server <- function(input, output, session) {
                               remove_outliers = remove_outliers_global,
                               outlier_threshold = outlier_z_global)
 
-  # Trajectory module
-  trajectory_server("traj", prepared, selected_islet, forced_image, active_tab, active_donor_colors,
+  # Trajectory module. `forced_image` used to be passed here as the 4th
+  # positional argument and was never read in that module -- dropped, which
+  # shifts `active_tab` and `active_donor_colors` up one position.
+  trajectory_server("traj", prepared, selected_islet, active_tab, active_donor_colors,
                     remove_outliers = remove_outliers_global,
                     outlier_threshold = outlier_z_global)
 
-  # Viewer module
+  # Viewer module.
+  # NOTE on `forced_image`: nothing in this app WRITES it. app.R creates the
+  # reactiveVal, the Viewer reads it (mod_viewer_server.R:28), and no caller
+  # ever sets it -- so the Viewer's forced-image branch is currently
+  # unreachable. Kept because it is the correct hook for the Trajectory -> Viewer
+  # hand-off, but it is a hook, not a live path. (Root CLAUDE.md described it as
+  # "written by Trajectory, read by Viewer"; the first half was never true.)
   viewer_server("viewer", forced_image, reactive(input$tabs))
 
   # Statistics module: wired to Plot module's reactive outputs.
