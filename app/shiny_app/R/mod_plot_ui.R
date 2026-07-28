@@ -28,14 +28,14 @@ plot_sidebar_ui <- function(id) {
                        selected = c("ND", "Aab+", "T1D"),
                        inline = TRUE),
     conditionalPanel(
-      condition = "input.tabs != 'Statistics'", ns = NS(NULL),
+      condition = "input.panels != 'statistics'", ns = NS(NULL),
       numericInput(ns("min_cells"), "Min cells/islet",
                    value = 1, min = 1, max = 200, step = 1)
     ),
     uiOutput(ns("age_filter_ui")),
     uiOutput(ns("gender_filter_ui")),
     conditionalPanel(
-      condition = "input.tabs != 'Statistics'", ns = NS(NULL),
+      condition = "input.panels != 'statistics'", ns = NS(NULL),
       radioButtons(ns("stat"), "Statistic",
                    choices = c("Mean\u00b1SE" = "mean_se",
                                "Mean\u00b1SD" = "mean_sd",
@@ -60,7 +60,7 @@ plot_sidebar_ui <- function(id) {
       uiOutput(ns("plot_outlier_info"))
     ),
     conditionalPanel(
-      condition = "input.tabs != 'Statistics'", ns = NS(NULL),
+      condition = "input.panels != 'statistics'", ns = NS(NULL),
       hr(),
       h5("Color Palettes"),
       # Non-namespaced: global donor palette choice synced via app.R observers
@@ -69,7 +69,7 @@ plot_sidebar_ui <- function(id) {
                   selected = "Bright")
     ),
     conditionalPanel(
-      condition = "input.tabs != 'Statistics'", ns = NS(NULL),
+      condition = "input.panels != 'statistics'", ns = NS(NULL),
       hr(),
       h5("Export"),
       downloadButton(ns("dl_summary"), "Download summary CSV")

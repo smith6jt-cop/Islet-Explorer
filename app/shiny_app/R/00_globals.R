@@ -180,6 +180,46 @@ DEBUG_CREDS <- isTRUE(as.logical(Sys.getenv("DEBUG_CREDENTIALS", "0")))
 VIEWER_DEBUG_ENABLED <- identical(Sys.getenv("VIEWER_DEBUG", "0"), "1")
 
 # ============================================================================
+# Tab identity (Jul 2026 shell port)
+# ============================================================================
+# `navset_hidden(id = "panels")` reports the nav_panel_hidden VALUE -- the
+# lowercase key below -- NOT the display label. Under the old
+# `tabsetPanel(id = "tabs")` the panels were declared with titles only, so
+# `input$tabs` returned "Plot" / "Trajectory" / ...; everything keyed on tab
+# identity had to move together when that changed.
+#
+# The keys are load-bearing in three places that fail SILENTLY if they drift:
+#   * the drill-down duplicate-output guards in mod_plot_server.R and
+#     mod_trajectory_server.R. navset_hidden mounts ALL panels simultaneously
+#     (measured -- same .tab-pane structure as tabsetPanel, CSS visibility
+#     only), so both modules emit the same six non-namespaced drilldown inputs
+#     and the same plotOutput("islet_segmentation_view"). Only the active-tab
+#     check keeps one of them out of the DOM. A drifted key does not error --
+#     it greys a panel out.
+#   * mod_viewer_server.R, which skips work when the Viewer is not showing.
+#   * the conditionalPanel expressions that gate the Plot sidebar.
+#
+# app.R asserts this list against its nav_panel_hidden() calls at startup, so a
+# rename fails loudly instead of quietly.
+IE_PIPELINE <- list(
+  list(key = "plot",         num = "01", label = "Plot",
+       sub = "Islet size · composition"),
+  list(key = "trajectory",   num = "02", label = "Trajectory",
+       sub = "Pseudotime · UMAP"),
+  list(key = "statistics",   num = "03", label = "Statistics",
+       sub = "Mixed-effects tests"),
+  list(key = "spatial",      num = "04", label = "Spatial",
+       sub = "Neighborhoods · Leiden"),
+  list(key = "inflammation", num = "05", label = "Inflammation",
+       sub = "edgeR · infiltration")
+)
+IE_REFERENCE <- list(
+  list(key = "viewer", label = "Viewer", sub = "Image review · no data edits")
+)
+IE_TAB_KEYS <- c(vapply(IE_PIPELINE,  `[[`, "", "key"),
+                 vapply(IE_REFERENCE, `[[`, "", "key"))
+
+# ============================================================================
 # Plot font + theme helpers (May 2026)
 # ============================================================================
 # Centralised font sizing so every plot in the app reads clearly on screen and

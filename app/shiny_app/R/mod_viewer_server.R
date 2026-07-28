@@ -132,7 +132,7 @@ viewer_server <- function(id, forced_image, current_tab) {
     # ---- Image picker (mounts once; independent of the iframe) --------------
     output$image_selector <- renderUI({
       tab <- current_tab()
-      if (is.null(tab) || tab != "Viewer") return(NULL)
+      if (!identical(tab, "viewer")) return(NULL)
       if (is.null(avivator_base)) return(NULL)  # missing-build message lives in viewer_frame
 
       available_images <- available_images_r()
@@ -180,7 +180,7 @@ viewer_server <- function(id, forced_image, current_tab) {
     # ---- Avivator iframe (mounts once when an image first becomes available) -
     output$viewer_frame <- renderUI({
       tab <- current_tab()
-      if (is.null(tab) || tab != "Viewer") return(NULL)
+      if (!identical(tab, "viewer")) return(NULL)
 
       if (is.null(avivator_base)) {
         return(tagList(

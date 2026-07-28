@@ -52,7 +52,7 @@ apply_pt_scale <- function(df, pt_scale) {
 # Trajectory -> Viewer hand-off that was never built. Removed rather than kept,
 # because a parameter that is passed and ignored reads as a live dependency.
 # The reactiveVal itself stays in app.R and the Viewer still reads it.
-trajectory_server <- function(id, prepared, selected_islet, active_tab = reactive("Trajectory"),
+trajectory_server <- function(id, prepared, selected_islet, active_tab = reactive("trajectory"),
                               donor_colors_reactive = reactive(DONOR_COLORS_BRIGHT),
                               remove_outliers = reactive(FALSE),
                               outlier_threshold = reactive(3.0)) {
@@ -907,7 +907,7 @@ trajectory_server <- function(id, prepared, selected_islet, active_tab = reactiv
     # ---------- Segmentation viewer panel ----------
     output$segmentation_viewer_panel <- renderUI({
       # Only render when Trajectory tab is active to avoid duplicate non-namespaced output IDs
-      if (active_tab() != "Trajectory") return(NULL)
+      if (!identical(active_tab(), "trajectory")) return(NULL)
       info <- selected_islet()
       if (is.null(info)) return(NULL)
 

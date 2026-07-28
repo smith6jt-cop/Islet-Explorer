@@ -11,9 +11,9 @@
 #   id              -- module namespace id
 #   prepared        -- reactive returning list(targets_all, markers_all, comp)
 #   selected_islet  -- reactiveVal for cross-module click-to-segmentation
-#   active_tab      -- reactive returning current tab name (e.g. "Plot")
+#   active_tab      -- reactive returning the current nav key (e.g. "plot")
 
-plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plot"),
+plot_server <- function(id, prepared, selected_islet, active_tab = reactive("plot"),
                         donor_colors_reactive = reactive(DONOR_COLORS_BRIGHT),
                         remove_outliers = reactive(FALSE),
                         outlier_threshold = reactive(3.0)) {
@@ -1172,7 +1172,10 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
     # ---- Embedded segmentation viewer panel (below Distribution card) ----
     output$segmentation_viewer_panel <- renderUI({
       # Only render when Plot tab is active to avoid duplicate non-namespaced output IDs
-      if (active_tab() != "Plot") return(NULL)
+      # !identical() rather than != : NULL != "plot" is logical(0), which
+      # throws in `if`. Safe today only because input$panels is populated
+      # before selected_islet() can fire -- do not rely on that twice.
+      if (!identical(active_tab(), "plot")) return(NULL)
       info <- selected_islet()
       if (is.null(info)) return(NULL)
 

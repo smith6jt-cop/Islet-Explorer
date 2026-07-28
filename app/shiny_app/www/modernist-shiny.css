@@ -71,15 +71,19 @@
      and silently won against every stylesheet — see app.R history). */
   --color-ground: #d9d7d4;
 
-  /* Width budget, from measurement: rail 232 + sidebar 208 + main-content floor
-     1042 (today's 1180 x 88.33%) + .ie-panels padding 60 = 1542. So the floor
-     rises from today's 1200px; the media query at the end of this file collapses
-     the rail to 56px below it, recovering 176px -> 1366px, which covers the
-     common laptop. */
-  --shell-min-w: 1540px;
-  --sidebar-w: 208px;
+  /* Width budget. The rail is new horizontal cost the pre-port layout did not
+     pay, and this app is content-hungry (it was already min-width 1200). So the
+     rail and sidebar are trimmed to the smallest width their content actually
+     needs -- measured, not guessed: the longest rail label is "Inflammation"
+     at 14px plus the numeral and 41px of padding, and the sidebar was 181px
+     content-driven before the port.
+       rail 204 + sidebar 196 + panels padding 48 + content floor 1042 = 1490.
+     The media query at the end of this file collapses the rail to 56px below
+     that, recovering 148px -> 1342px, which covers the common laptop. */
+  --shell-min-w: 1490px;
+  --sidebar-w: 196px;
 
-  --rail-w: 232px;
+  --rail-w: 204px;
   --rail-bg: #241419;
   --rail-fg: #efe9e9;
   --rail-muted: #8f857f;
@@ -139,14 +143,27 @@ body:has(.ie-shell) { overflow-x: auto; overflow-y: hidden; }
   flex: 1 1 auto; min-width: 0;
   display: flex; flex-direction: column; overflow: hidden;
 }
+/* Sidebar and panels are SIBLINGS in a flex row, each with its own scroller.
+   Nesting the sidebar inside .ie-panels was measured to break containment: the
+   Plot sidebar is ~1720px of controls, so sharing a scroller made the whole
+   document 1750px tall against a 1000px viewport and the shell stopped
+   containing anything. Two scrollers, matching what .equal-height-panel gave
+   both of them before the port. */
+.ie-body {
+  flex: 1 1 auto;
+  min-height: 0;          /* see below */
+  display: flex; align-items: stretch;
+  overflow: hidden;
+}
 .ie-panels {
   flex: 1 1 auto;
+  min-width: 0;
   /* LOAD-BEARING. A flex item defaults to min-height:auto, which refuses to
      shrink below its content — that turns overflow-y:auto into a no-op and
      pushes the page past the viewport. */
   min-height: 0;
   overflow: auto;
-  padding: 26px 30px 40px;
+  padding: 22px 24px 36px;
 }
 /* NOT `.ie-panels > .tab-content` — navset_hidden emits a .tabbable wrapper in
    between (.ie-panels > .tabbable > .tab-content > .tab-pane), so the delivered
@@ -160,15 +177,18 @@ body:has(.ie-shell) { overflow-x: auto; overflow-y: hidden; }
 .ie-sidebar {
   flex: 0 0 var(--sidebar-w);
   min-width: var(--sidebar-w);
+  min-height: 0;          /* same flex-item rule as .ie-panels */
   overflow-y: auto;
   border-right: 2px solid var(--color-neutral-300);
   background: var(--color-bg);
 }
-/* Under BS5 Shiny gives conditionalPanel `display: contents` via
-   .shiny-panel-conditional:has(> *); harmless, but it means the wrapper is
-   layout-transparent inside a flex parent. Hiding still works — Shiny sets an
-   inline display:none, which wins. */
-.ie-sidebar > .shiny-panel-conditional { display: contents; }
+/* The sidebar is wrapped IN a conditionalPanel (see app.R), and under BS5 Shiny
+   gives that wrapper `display: contents` via .shiny-panel-conditional:has(> *).
+   That is exactly what is wanted here: the wrapper becomes layout-transparent
+   so .ie-sidebar is a direct flex item of .ie-body, and when the condition is
+   false Shiny's inline display:none removes the whole subtree from the row
+   rather than leaving a blank gutter. */
+.ie-body > .shiny-panel-conditional { display: contents; }
 
 /* ==========================================================================
    Left rail
@@ -451,3 +471,23 @@ body:has(.ie-shell) { overflow-x: auto; overflow-y: hidden; }
 }
 .ie-viewer-frame { background: #0b0b0d; padding: 2px; margin-top: 14px; }
 .ie-viewer-frame iframe { display: block; width: 100%; height: 620px; border: 0; }
+
+/* ==========================================================================
+   Rail collapse
+   Below the shell's min width the rail drops to an icon strip: numerals only,
+   no labels, no footer. Recovers 148px, which brings the effective floor to
+   ~1342px and covers the common 1366-wide laptop. Below THAT the body scrolls
+   horizontally, as it did before the port.
+   ========================================================================== */
+@media (max-width: 1490px) {
+  :root { --rail-w: 56px; --shell-min-w: 1342px; }
+  .ie-rail-brand .ie-brandtext,
+  .ie-rail-meta,
+  .ie-rail-heading,
+  .ie-rail-footer,
+  .ie-nav-text { display: none; }
+  .ie-rail-brand { padding: 18px 0; display: flex; justify-content: center; }
+  .ie-nav-body { justify-content: center; padding: 13px 0; gap: 0; border-left-width: 3px; }
+  .ie-nav-num { min-width: 0; font-size: 12px; }
+  .ie-rail-divider { margin: 14px 12px 0; }
+}
