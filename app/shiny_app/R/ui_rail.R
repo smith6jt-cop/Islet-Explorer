@@ -49,6 +49,7 @@ rail_row <- function(group, key, selected = FALSE, num = NULL,
 rail_heading <- function(text) div(class = "ie-rail-heading", text)
 
 railUI <- function(id, pipeline, reference = list(),
+                   reference_heading = "The images themselves",
                    brand = "Panc Floyd", logo = "logo.png",
                    meta = NULL, help = NULL, footer = NULL) {
   ns <- NS(id)
@@ -83,7 +84,7 @@ railUI <- function(id, pipeline, reference = list(),
 
       if (length(reference)) tagList(
         div(class = "ie-rail-divider"),
-        rail_heading("Reference · read-only"),
+        rail_heading(reference_heading),
         lapply(reference, function(it) {
           rail_row(ns("tab"), it$key, FALSE,
                    marker = "◇", label = it$label, sub = it$sub)

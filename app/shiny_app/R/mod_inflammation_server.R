@@ -557,9 +557,25 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
     })
 
     infil_selected <- reactive({
-      sel <- input$infil_phenos
-      shiny::validate(shiny::need(length(sel) > 0, "Select at least one phenotype."))
       s <- infiltration()
+      # FALL BACK to the default set rather than validating out. This input is
+      # built by a renderUI that now lives inside a conditionalPanel in the
+      # frozen right panel, so `input$infil_phenos` is NULL until the client has
+      # mounted that block and echoed a value back. Validating on NULL meant the
+      # card rendered "Select at least one phenotype" on arrival and stayed that
+      # way until the user happened to touch the control -- the plot simply
+      # never appeared.
+      #
+      # NULL ("not arrived yet") and character(0) ("deliberately emptied") are
+      # different states and must not be collapsed: the message is right for the
+      # second and wrong for the first.
+      sel <- input$infil_phenos
+      if (is.null(sel)) {
+        avail <- phenotype_keep(sort(unique(as.character(s$phenotype))))
+        sel <- intersect(INFLAM_DEFAULT_PHENOTYPES, avail)
+        if (!length(sel)) sel <- head(avail, 5)
+      }
+      shiny::validate(shiny::need(length(sel) > 0, "Select at least one phenotype."))
       s[s$phenotype %in% sel, , drop = FALSE]
     })
 
@@ -627,9 +643,15 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
     # Display slice: the ticked phenotypes only. q-values come from the fixed
     # family above and do not change with the selection.
     infil_tests <- reactive({
-      sel <- input$infil_phenos
-      shiny::validate(shiny::need(length(sel) > 0, "Select at least one phenotype."))
       t <- infil_tests_all()
+      # Same NULL-vs-empty distinction as infil_selected(); see the note there.
+      sel <- input$infil_phenos
+      if (is.null(sel)) {
+        avail <- phenotype_keep(sort(unique(as.character(t$phenotype))))
+        sel <- intersect(INFLAM_DEFAULT_PHENOTYPES, avail)
+        if (!length(sel)) sel <- head(avail, 5)
+      }
+      shiny::validate(shiny::need(length(sel) > 0, "Select at least one phenotype."))
       t[t$phenotype %in% sel, , drop = FALSE]
     })
 

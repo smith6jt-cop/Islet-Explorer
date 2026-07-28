@@ -111,14 +111,17 @@ ui <- bslib::page_fillable(
             # `extra_panel` used to carry column(2, ai_assistant_ui("ai")). The
             # AI chat card was removed Jul 2026 at the user's request; the Plot
             # tab's two cards now take the full width.
-            bslib::nav_panel_hidden("plot", fluidRow(plot_main_ui("plot"))),
-            bslib::nav_panel_hidden("trajectory",   trajectory_ui("traj")),
-            bslib::nav_panel_hidden("statistics",   statistics_ui("stats")),
+            # Order matches IE_PIPELINE: navset_hidden selects its FIRST panel
+            # by default, and railUI checks its first row, so if these two
+            # disagree the app opens on one tab with the other lit in the rail.
             bslib::nav_panel_hidden("spatial",      spatial_ui("spatial")),
             # Same module namespace -- a relocation of the three neighborhood
             # cards, not a second module.
             bslib::nav_panel_hidden("neighborhood", spatial_neighborhood_ui("spatial")),
             bslib::nav_panel_hidden("inflammation", inflammation_ui("inflam")),
+            bslib::nav_panel_hidden("trajectory",   trajectory_ui("traj")),
+            bslib::nav_panel_hidden("plot", fluidRow(plot_main_ui("plot"))),
+            bslib::nav_panel_hidden("statistics",   statistics_ui("stats")),
             bslib::nav_panel_hidden("viewer",       viewer_ui("viewer"))
           )
         ),
@@ -600,7 +603,16 @@ server <- function(input, output, session) {
                "accumulation and penalises distal accumulation, which a plain density ",
                "cannot. The denominator is the ROI analogue: normalising by the whole ",
                "section instead adds 4\u201323\u00d7 donor-to-donor variance.")),
-      viewer = tags$p("Click inside the viewer to enable pan and zoom. This tab is read-only \u2014 nothing here changes the data."),
+      viewer = tagList(
+        tags$p(tags$strong("The raw imaging data."), " Every OME-TIFF at full ",
+               "resolution, all 31 channels, rendered by Avivator. Click inside ",
+               "the frame to enable pan and zoom; scroll to zoom."),
+        tags$p(tags$strong("Range requests are required."), " Avivator reads the ",
+               "file tile by tile with HTTP byte ranges. A server that ignores ",
+               "them answers every tile fetch with the whole 7 GB file and the ",
+               "viewer stays blank -- which is why the image origin is pinned via ",
+               "IMAGE_BASE_URL rather than inherited from whichever URL you ",
+               "opened the app with.")),
       tags$p("No notes for this tab.")
     )
     showModal(modalDialog(title = "Tips for this tab", tips,

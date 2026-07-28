@@ -116,6 +116,31 @@ inflammation_ui <- function(id) {
                                  "accumulation, penalises distal accumulation. FDR runs ",
                                  "across all phenotypes present, not the display selection.")),
 
+    # The card body was removed by an over-broad regex during the Jul 2026 prose
+    # strip -- it took the plot, table, note and export along with the
+    # explanatory box it was meant to remove, leaving a section heading with
+    # nothing under it. Rebuilt to match the composition card above; the
+    # denominator / numerator-matching / log-axis / phenotype controls stay in
+    # the frozen right panel where they were moved to.
+    fluidRow(
+      column(12,
+        div(class = "card",
+          div(style = "margin-bottom: 10px",
+            downloadButton(ns("dl_infil"), "Download scores CSV")
+          ),
+          uiOutput(ns("infil_note")),
+          fluidRow(style = "display: flex; flex-wrap: wrap",
+            column(7, plotlyOutput(ns("infil_plot"), height = "460px")),
+            column(5,
+              div(style = "max-height: 460px; overflow-y: auto",
+                tableOutput(ns("infil_table"))
+              )
+            )
+          )
+        )
+      )
+    ),
+
     # ===== SECTION 3: Methods =====
     section_heading("3", "Methods Reference",
                     "Definitions, corrections and the adaptations made for this cohort."),

@@ -202,24 +202,28 @@ VIEWER_DEBUG_ENABLED <- identical(Sys.getenv("VIEWER_DEBUG", "0"), "1")
 # app.R asserts this list against its nav_panel_hidden() calls at startup, so a
 # rename fails loudly instead of quietly.
 IE_PIPELINE <- list(
-  list(key = "plot",         num = "01", label = "Plot",
-       sub = "Islet size · composition"),
-  list(key = "trajectory",   num = "02", label = "Trajectory",
-       sub = "Pseudotime · UMAP"),
-  list(key = "statistics",   num = "03", label = "Statistics",
-       sub = "Mixed-effects tests"),
-  list(key = "spatial",      num = "04", label = "Spatial",
+  # Order is the ORDER OF WORK, not the order these tabs were built in: start
+  # from the tissue, narrow to the neighbourhood, then to composition, then to
+  # the per-islet trajectory and distributions, and only then to the tests.
+  # The FIRST entry is what opens, and it is also what navset_hidden selects by
+  # default -- app.R's nav_panel_hidden order is kept in step so the two agree
+  # rather than one silently correcting the other on the first rail click.
+  list(key = "spatial",      num = "01", label = "Spatial",
        sub = "Tissue map · Leiden"),
-  list(key = "neighborhood", num = "05", label = "Neighborhoods",
+  list(key = "neighborhood", num = "02", label = "Neighborhoods",
        sub = "Enrichment · proximity"),
-  # Renamed from "Inflammation": the tab holds a cell-type composition test and
-  # a distance-weighted infiltration score, neither of which is an inflammation
-  # measurement. The key stays `inflammation` so no guard or panel id moves.
-  list(key = "inflammation", num = "06", label = "Composition & Infiltration",
-       sub = "Cell types · immune localisation")
+  list(key = "inflammation", num = "03", label = "Composition & Infiltration",
+       sub = "Cell types · immune localisation"),
+  list(key = "trajectory",   num = "04", label = "Trajectory",
+       sub = "Pseudotime · UMAP"),
+  list(key = "plot",         num = "05", label = "Plot",
+       sub = "Islet size · composition"),
+  list(key = "statistics",   num = "06", label = "Statistics",
+       sub = "Mixed-effects tests")
 )
 IE_REFERENCE <- list(
-  list(key = "viewer", label = "Viewer", sub = "Image review · no data edits")
+  list(key = "viewer", label = "Viewer",
+       sub = "31 channels at full resolution")
 )
 IE_TAB_KEYS <- c(vapply(IE_PIPELINE,  `[[`, "", "key"),
                  vapply(IE_REFERENCE, `[[`, "", "key"))
