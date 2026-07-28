@@ -193,11 +193,39 @@ outside it display uncorrected and marked `‡` with `q = NA`. The pairwise colu
 **raw** — a corrected pairwise column could never contain a significant value at this cohort size,
 so printing one would be a guaranteed false negative dressed as a result.
 
-Two smaller contributors, noted but not fixed: 16–20% of our cells sit >200 µm from any islet (44%
-for donor 6548) contributing <1% of score mass but their full share of any whole-section
-denominator; and `signed_dist` is to the *nearest* islet, so on a whole slide a peri-ductal immune
-aggregate can be credited as islet infiltration in a way a single-islet ROI makes impossible
-(unquantified).
+**4. Numerator/denominator population mismatch — exposed, not hidden.** Steenbuck et al. sum the
+weights over the *same* cells they divide by, so their score is a per-cell mean over one population.
+Changing only the denominator makes ours a ratio of two populations: **29% of the numerator mass
+lies outside the islet+peri denominator**. The unmatched form is the default *deliberately* —
+matching to islet+peri confines the `1/d` gradient to the 20 µm peri band and guts the weighting the
+score exists for (a T cell 25 µm out would contribute nothing). The *Match numerator to denominator*
+checkbox restores the paper's exact statistic:
+
+```
+denominator   matched   CD8a     T cell   Immune   n surviving FDR
+isletperi     FALSE     0.0108   0.0081   0.0207        4   <- default
+isletperi     TRUE      0.0092   0.0140   0.0750        3
+near100       FALSE     0.0122   0.0209   0.0358        3
+near100       TRUE      0.0148   0.0209   0.0493        0
+all           either    0.0271   0.1845   0.1119        0
+```
+
+Neither form is wrong; they answer slightly different questions, so the choice is a control rather
+than a silent assumption.
+
+**5. Nearest-islet attribution — checked, not a confounder.** On a whole slide `signed_dist` is to
+the *nearest* islet, so in principle a peri-ductal or perivascular aggregate could be credited as
+islet infiltration in a way a single-islet ROI makes impossible. Tested: islet crowding (mean
+centroid nearest-neighbour distance) and islet count do not differ by stage (Kruskal-Wallis p = 0.83
+and 0.53), and the score correlates weakly with islet geometry (|rho| ≤ 0.35 vs islet count, ≤ 0.26
+vs crowding). What correlation exists is *negative* — more islets means a bigger denominator, not
+accidental credit. Caveat: `islet_spatial_lookup.csv` holds 10,736 records for the 5,214 analysed
+islets (roughly two entries per islet), so the crowding figure is valid for between-donor comparison
+but not as an absolute distance.
+
+Still unaddressed: 16–20% of our cells sit >200 µm from any islet (44% for donor 6548). Under the
+default denominator they are excluded from it but still contribute to the numerator — that is the
+mismatch quantified in point 4.
 
 ### Conventions this tab established (worth copying)
 

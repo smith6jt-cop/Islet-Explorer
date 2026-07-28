@@ -174,6 +174,11 @@ inflammation_ui <- function(id) {
               uiOutput(ns("infil_pheno_ui"))
             ),
             column(3, style = "padding-top: 25px;",
+              checkboxInput(ns("infil_match_numer"),
+                            "Match numerator to denominator", value = FALSE),
+              tags$small(style = "color: #888; display: block; margin-top: -8px; line-height: 1.35;",
+                "Restores the paper's exact per-cell mean. Off by default because matching ",
+                "confines the 1/d gradient to the 20 µm peri band."),
               checkboxInput(ns("infil_log"), "Log10 y-axis", value = TRUE),
               downloadButton(ns("dl_infil"), "Download scores CSV")
             )

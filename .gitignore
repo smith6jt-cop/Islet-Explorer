@@ -25,7 +25,13 @@ local_images/
 app/shiny_app/www/segmentation_data/
 AI_Markdown/
 analysis_output/*
-islet_analysis/
+# Same pattern as data/*: git never descends into an excluded DIRECTORY, so a
+# !islet_analysis/CLAUDE.md negation is inert under the bare directory form. The
+# root CLAUDE.md cites this file as the canonical reference for the Python
+# analysis pipeline, but the blanket rule kept it out of every clone. Everything
+# else here (h5ad, tsv, png, .venv) stays ignored.
+islet_analysis/*
+!islet_analysis/CLAUDE.md
 literature/*
 
 # R workspace and environment files

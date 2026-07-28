@@ -374,15 +374,30 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
       score <- ifelse(!is.finite(d), NA_real_,
                       ifelse(d <= 0, 1, 1 / pmax(d, 1)))
       keep <- is.finite(score)
-      agg <- stats::aggregate(list(score = score[keep]),
-                              by = list(case_id = df$case_id[keep],
-                                        donor_status = df$donor_status[keep],
-                                        phenotype = as.character(df$phenotype)[keep]),
-                              FUN = sum)
       in_denom <- switch(mode,
         isletperi = keep & df$cell_region %in% c("core", "peri"),
         near100   = keep & is.finite(d) & d <= 100,
         keep)
+      # NUMERATOR SCOPE. Steenbuck et al. sum over the SAME population they
+      # divide by (all cells in the ROI), so their score is a clean per-cell
+      # mean. Restricting only the denominator, as we do by default, makes it a
+      # ratio of two different populations: 29% of the numerator mass sits
+      # outside the islet+peri denominator. That is a units mismatch, not a bias
+      # -- but it is not the paper's statistic either, so it is stated rather
+      # than assumed.
+      #
+      # Default is the unmatched form on purpose: matching to islet+peri confines
+      # the 1/d gradient to the 20 um peri band, which guts the very weighting
+      # the score exists for (a T cell 25 um out would contribute nothing).
+      # Matching costs Immune (KW p 0.021 -> 0.075) and T cell (0.008 -> 0.014)
+      # while slightly helping CD8a (0.011 -> 0.009).
+      in_numer <- if (isTRUE(input$infil_match_numer)) in_denom else keep
+      shiny::validate(shiny::need(sum(in_numer) > 0, "No cells in the numerator scope."))
+      agg <- stats::aggregate(list(score = score[in_numer]),
+                              by = list(case_id = df$case_id[in_numer],
+                                        donor_status = df$donor_status[in_numer],
+                                        phenotype = as.character(df$phenotype)[in_numer]),
+                              FUN = sum)
       shiny::validate(shiny::need(sum(in_denom) > 0, "No cells in the chosen denominator."))
       tot <- stats::aggregate(list(n_cells = rep(1L, sum(in_denom))),
                               by = list(case_id = df$case_id[in_denom]), FUN = sum)
@@ -390,6 +405,7 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
       out$infiltration_score <- out$score / out$n_cells
       out$donor_status <- factor(as.character(out$donor_status), levels = status_levels)
       attr(out, "denom_mode") <- mode
+      attr(out, "matched") <- isTRUE(input$infil_match_numer)
       out
     })
 
@@ -533,7 +549,10 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
           "within a ", tags$strong("pre-specified family of the ", length(INFLAM_FDR_FAMILY),
                                    " immune phenotypes"),
           " fixed in source \u2014 not across whatever is ticked, and not across all 21 phenotypes. ",
-          "Denominator: ", tags$strong(denom_lbl), ". ",
+          "Denominator: ", tags$strong(denom_lbl),
+          if (isTRUE(input$infil_match_numer))
+            " (numerator matched to it \u2014 the paper's per-cell mean). "
+          else " (numerator over all cells \u2014 see Methods). ",
           "Pairwise columns are ", tags$strong("uncorrected"),
           " and exploratory; see the power note below for why a corrected pairwise column would be ",
           "meaningless here.",
@@ -614,6 +633,9 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
         hdr <- islet_csv_header(
           "Infiltration score (Steenbuck et al. 2025 definition)",
           "score = 1 inside the islet, 1/d outside (d = um from the islet edge, floored at 1)",
+          paste("numerator scope:", if (isTRUE(input$infil_match_numer))
+                "matched to the denominator (Steenbuck et al. per-cell mean)"
+                else "all cells on the section (preserves the full 1/d gradient)"),
           paste("denominator:", switch(input$infil_denom %||% "isletperi",
                 isletperi = "islet + peri-islet cells (ROI analogue, default)",
                 near100   = "cells within 100 um of an islet",
@@ -701,6 +723,28 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
           "omnibus family is small enough (7) to have genuine headroom: its floor is q = 0.014. ",
           "The card states these limits next to the table so a null reads as ",
           tags$em("underpowered"), ", not as ", tags$em("no effect"), "."),
+        tags$p(
+          tags$strong("Numerator scope, and where we depart from the paper. "),
+          "Steenbuck et al. sum the weights over the same cells they divide by, so their score is a ",
+          "per-cell mean over one population. Changing only the denominator makes ours a ratio of ",
+          "two populations \u2014 29% of the numerator mass lies outside the islet+peri denominator. ",
+          "We default to that unmatched form deliberately: matching to islet+peri would confine the ",
+          tags$code("1/d"), " gradient to the 20 µm peri band and gut the weighting the score exists ",
+          "for (a T cell 25 µm out would contribute nothing). The ",
+          tags$em("Match numerator to denominator"), " box restores the paper's exact statistic; it ",
+          "costs Immune (p 0.021 \u2192 0.075) and T cell (0.008 \u2192 0.014) and slightly helps ",
+          "CD8a (0.011 \u2192 0.009). Neither form is wrong; they answer slightly different questions, ",
+          "so the choice is exposed rather than hidden."),
+        tags$p(
+          tags$strong("Nearest-islet attribution (checked, not a confounder). "),
+          "On a whole slide, ", tags$code("signed_dist"), " is the distance to the ",
+          tags$em("nearest"), " islet, so in principle a peri-ductal or perivascular immune ",
+          "aggregate could be credited as islet infiltration in a way a single-islet ROI makes ",
+          "impossible. Tested: islet crowding and islet count do not differ by disease stage ",
+          "(Kruskal-Wallis p = 0.83 and 0.53), and the score correlates weakly with islet geometry ",
+          "(|rho| \u2264 0.35 against islet count, \u2264 0.26 against crowding). The correlations ",
+          "that exist are negative \u2014 more islets means a larger denominator, not accidental ",
+          "credit. The ambiguity is real but does not drive these results."),
         tags$p(
           tags$strong("Why the denominator is islet-proximal. "),
           "Steenbuck et al. image 75 islet-centred ROIs per donor, so their per-image ",

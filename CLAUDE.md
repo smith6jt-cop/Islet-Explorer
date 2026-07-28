@@ -12,7 +12,7 @@ Interactive Shiny app for exploring pancreatic islet CODEX multiplexed imaging d
   - `app/shiny_app/docs/spatial.md` — Spatial Neighborhood Analysis deep reference (split out May 2026)
   - `app/shiny_app/docs/statistics.md` — Statistics Tab deep reference (split out May 2026; Jul 2026 correctness pass at the end: min-cells no-op, p-value notation, emmeans d.f. fallback, AAb pseudoreplication, AUC decoupling)
 - `scripts/CLAUDE.md` — pipeline scripts, batch correction, pseudotime modes
-- `islet_analysis/CLAUDE.md` — Python analysis pipeline (phenotyping, aggregation, trajectory)
+- `islet_analysis/CLAUDE.md` — Python analysis pipeline (phenotyping, aggregation, trajectory). Tracked via a `!` exception; the rest of `islet_analysis/` is ignored.
 
 ## App Architecture (Modular - Feb 2026)
 
