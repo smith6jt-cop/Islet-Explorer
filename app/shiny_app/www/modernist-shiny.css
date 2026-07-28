@@ -201,16 +201,20 @@ body:has(.ie-shell) { overflow-x: auto; overflow-y: hidden; }
   display: flex; flex-direction: column;
   overflow-y: auto;
 }
-.ie-rail-brand { padding: 20px 18px 16px; }
-.ie-brandmark { display: flex; align-items: center; gap: 11px; }
-/* The logo is a colour mark on a near-black rail, so it gets a light plate
+.ie-rail-brand { padding: 22px 18px 18px; }
+/* STACKED, not side by side. The rail is 204px wide with 18px padding, leaving
+   168px of content: a logo big enough to read plus "Panc Floyd" at 19px does
+   not fit on one line. Stacking gives the mark the full column width and keeps
+   both flush left, which is the system's rule anyway. */
+.ie-brandmark { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
+/* The logo is a colour mark on a near-black rail, so it sits on a light plate
    rather than being left to fight the ground. */
 .ie-brandlogo {
-  width: 38px; height: 38px; flex: none; object-fit: contain;
-  background: #f6f4f2; padding: 4px;
+  width: 100%; max-width: 132px; height: auto; flex: none; object-fit: contain;
+  background: #f6f4f2; padding: 8px;
 }
 .ie-brandtext {
-  font-family: var(--font-heading); font-weight: 800; font-size: 19px;
+  font-family: var(--font-heading); font-weight: 800; font-size: 21px;
   line-height: 1.05; letter-spacing: -0.015em; color: #f6f4f2;
 }
 
@@ -506,7 +510,7 @@ body:has(.ie-shell) { overflow-x: auto; overflow-y: hidden; }
   .ie-rail-footer,
   .ie-nav-text { display: none; }
   .ie-rail-brand { padding: 14px 0; display: flex; justify-content: center; }
-  .ie-brandlogo { width: 30px; height: 30px; }
+  .ie-brandlogo { width: 36px; max-width: 36px; padding: 4px; }
   .ie-rail-helplink { justify-content: center; padding: 11px 0; gap: 0; }
   .ie-nav-body { justify-content: center; padding: 13px 0; gap: 0; border-left-width: 3px; }
   .ie-nav-num { min-width: 0; font-size: 12px; }
