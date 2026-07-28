@@ -14,8 +14,13 @@ test_that("cohens_d returns d with ci_lo/ci_hi and guards small samples", {
   x <- c(1, 2, 3, 4, 5)
   y <- c(2, 3, 4, 5, 6)
   res <- cohens_d(x, y)
-  # contract: names are d / ci_lo / ci_hi (NOT ci_lower / ci_upper)
-  expect_named(res, c("d", "ci_lo", "ci_hi"))
+  # Contract: d / ci_lo / ci_hi must EXIST under those names (NOT ci_lower /
+  # ci_upper). This is a SUBSET assertion, not an exact-names one: the Jul 2026
+  # group-comparability pass grew cohens_d() to 14 fields (raw_diff + Welch CI,
+  # per-group means/SDs, both Glass's deltas, var_ratio) because pooling a 50:1
+  # variance gap made d alone misleading. An expect_named() here pinned the old
+  # arity and had been failing on the branch ever since.
+  expect_true(all(c("d", "ci_lo", "ci_hi") %in% names(res)))
   # pooled SD = sqrt(2.5); mean diff = -1  =>  d = -1 / sqrt(2.5)
   expect_equal(res$d, -1 / sqrt(2.5), tolerance = 1e-6)
   expect_lt(res$ci_lo, res$d)
