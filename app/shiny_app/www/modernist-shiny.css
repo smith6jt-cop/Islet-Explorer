@@ -82,7 +82,7 @@
      that, recovering 148px -> 1342px, which covers the common laptop. */
   --shell-min-w: 1490px;
   --sidebar-w: 196px;
-  --aside-w: 260px;
+  --aside-w: 240px;
 
   --rail-w: 204px;
   --rail-bg: #241419;
@@ -201,12 +201,12 @@ body:has(.ie-shell) { overflow-x: auto; overflow-y: hidden; }
   display: flex; flex-direction: column;
   overflow-y: auto;
 }
-.ie-rail-brand { padding: 22px 18px 18px; }
+.ie-rail-brand { padding: 20px 18px 14px; }
 /* STACKED, not side by side. The rail is 204px wide with 18px padding, leaving
    168px of content: a logo big enough to read plus "Panc Floyd" at 19px does
    not fit on one line. Stacking gives the mark the full column width and keeps
    both flush left, which is the system's rule anyway. */
-.ie-brandmark { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
+.ie-brandmark { display: flex; flex-direction: column; align-items: flex-start; }
 /* The logo is a colour mark on a near-black rail, so it sits on a light plate
    rather than being left to fight the ground. */
 .ie-brandlogo {
@@ -575,7 +575,7 @@ body:has(.ie-shell) { overflow-x: auto; overflow-y: hidden; }
    rail 204 + panels + aside 260 + padding. Below the shell floor the aside
    drops to the bottom of the flex row rather than squeezing the content. */
 @media (max-width: 1600px) {
-  :root { --aside-w: 236px; }
+  :root { --aside-w: 220px; }
 }
 
 /* --- checkboxes and radios outside the segmented control ------------------
@@ -723,3 +723,33 @@ body:has(.ie-shell) { overflow-x: auto; overflow-y: hidden; }
   border-bottom: 2px solid var(--color-neutral-300);
   padding-bottom: 8px; margin: 0 0 14px;
 }
+
+/* ==========================================================================
+   Frozen top bar
+   The controls that are IDENTICAL on every tab. Horizontal, fixed above the
+   panels, its own scroll-free strip -- the eye learns to stop seeing it, which
+   is the point. Tab-specific controls stay in the right panel.
+   ========================================================================== */
+.ie-topbar {
+  flex: 0 0 auto;
+  display: flex; align-items: flex-end; flex-wrap: wrap;
+  gap: 12px 20px;
+  padding: 12px 24px;
+  border-bottom: 2px solid var(--color-neutral-300);
+  background: var(--color-bg);
+}
+.ie-topbar .ie-field { margin-bottom: 0; gap: 5px; }
+.ie-topbar .ie-field > .form-group,
+.ie-topbar .ie-field > .shiny-input-container { margin-bottom: 0; width: auto; }
+.ie-topbar .form-group { margin-bottom: 0; }
+.ie-topbar .shiny-input-container { width: auto !important; }
+/* Horizontal strip: option groups run across, not down. */
+.ie-topbar .shiny-options-group { flex-direction: row; flex-wrap: wrap; gap: 3px 12px; }
+.ie-topbar .irs--shiny { width: 170px; }
+.ie-topbar .form-control, .ie-topbar .selectize-input { min-width: 90px; }
+.ie-topbar .ie-aside-readout {
+  margin-left: auto; align-self: flex-end; margin-top: 0;
+  padding-top: 0; border-top: 0; white-space: nowrap;
+}
+/* The conditionalPanel wrapper must not become a flex item of .ie-main. */
+.ie-main > .shiny-panel-conditional { display: contents; }

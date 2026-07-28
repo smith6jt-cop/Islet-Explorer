@@ -63,7 +63,6 @@ ui <- bslib::page_fillable(
     railUI(
       "rail", IE_PIPELINE, IE_REFERENCE,
       brand = "Panc Floyd", logo = "logo.png",
-      meta = "5,214 islets · 15 donors<br>nPOD CODEX · 31 markers",
       help = tagList(
         rail_help_link("help_rules", "Phenotype rules", "Marker definitions"),
         rail_help_link("help_tips",  "Tips for this tab", "How to read it")
@@ -81,6 +80,17 @@ ui <- bslib::page_fillable(
 
     div(
       class = "ie-main",
+
+      # ---- Frozen TOP bar: what is identical on every tab ----------------
+      # The split between here and the right panel is by SIMILARITY, not by
+      # kind: the cohort filter is the same eight controls everywhere, so it
+      # earns a fixed horizontal strip the eye stops seeing; the right panel
+      # carries what changes tab to tab, so it stays where attention goes.
+      # Hidden on the Viewer, which reads none of it.
+      conditionalPanel(
+        condition = "input.panels != 'viewer'",
+        div(class = "ie-topbar", cohortFilterUI("cohort"))
+      ),
 
       # The sidebar and the panels are SIBLINGS with independent scrollers, not
       # nested. That matches what .equal-height-panel gave both of them before
@@ -105,6 +115,9 @@ ui <- bslib::page_fillable(
             bslib::nav_panel_hidden("trajectory",   trajectory_ui("traj")),
             bslib::nav_panel_hidden("statistics",   statistics_ui("stats")),
             bslib::nav_panel_hidden("spatial",      spatial_ui("spatial")),
+            # Same module namespace -- a relocation of the three neighborhood
+            # cards, not a second module.
+            bslib::nav_panel_hidden("neighborhood", spatial_neighborhood_ui("spatial")),
             bslib::nav_panel_hidden("inflammation", inflammation_ui("inflam")),
             bslib::nav_panel_hidden("viewer",       viewer_ui("viewer"))
           )
@@ -126,7 +139,8 @@ ui <- bslib::page_fillable(
             class = "ie-aside",
 
             div(class = "ie-aside-block",
-              div(class = "ie-aside-head", "Selection"),
+              # Tab-specific only; the cohort filter moved to the top bar.
+              div(class = "ie-aside-head", "This tab"),
               # Each tab mounts its own selectors here. They stay namespaced to
               # their module, so nothing about the modules' wiring changes --
               # only where the controls are rendered.
@@ -134,15 +148,10 @@ ui <- bslib::page_fillable(
                                plot_selection_ui("plot")),
               conditionalPanel("input.panels == 'trajectory'",
                                trajectory_selection_ui("traj")),
-              conditionalPanel("input.panels == 'spatial'",
+              conditionalPanel("input.panels == 'spatial' || input.panels == 'neighborhood'",
                                spatial_selection_ui("spatial")),
               conditionalPanel("input.panels == 'inflammation'",
                                inflammation_selection_ui("inflam"))
-            ),
-
-            div(class = "ie-aside-block",
-              div(class = "ie-aside-head", "Cohort filter"),
-              cohortFilterUI("cohort")
             ),
 
             div(class = "ie-aside-block ie-aside-foot",
@@ -161,7 +170,8 @@ ui <- bslib::page_fillable(
 # exactly the failure the active-tab guard exists to prevent.
 stopifnot(setequal(
   IE_TAB_KEYS,
-  c("plot", "trajectory", "statistics", "spatial", "inflammation", "viewer")
+  c("plot", "trajectory", "statistics", "spatial", "neighborhood",
+    "inflammation", "viewer")
 ))
 
 # ---------- Server ----------
@@ -379,7 +389,8 @@ server <- function(input, output, session) {
   # Spatial Neighborhood module
   spatial_server("spatial", prepared, active_palette, active_donor_colors,
                  remove_outliers = remove_outliers_global,
-                 outlier_threshold = outlier_z_global)
+                 outlier_threshold = outlier_z_global,
+                 cohort = cohort)
 
   # Inflammation module — cohort-level edgeR abundance + infiltration score.
   # Reads data/cell_distance.csv directly (via the cached load_cell_distance()
@@ -561,8 +572,34 @@ server <- function(input, output, session) {
         tags$p(tags$strong("Drag to zoom."), " Double-click to reset. The tissue scatter draws every cell in the donor, so it is a ggplot rather than a plotly figure."),
         tags$p(tags$strong("Card B filters the summary, not the test."), " Unticking a phenotype changes what is drawn; the correction still runs across everything present.")),
       inflammation = tagList(
-        tags$p(tags$strong("Cohort-level, not per-islet."), " Both cards read the tissue-wide single-cell table and test every cell type at once."),
-        tags$p(tags$strong("Granularity matters."), " Four of the 21 labels are parents of other labels; the selector controls whether they are dropped, rolled up, or tested as given.")),
+        tags$p(tags$strong("Cohort-level, not per-islet."), " Both cards read the ",
+               "tissue-wide single-cell table (~2.65 M cells), not the islet frame the ",
+               "Statistics tab uses. They answer donor-level questions \u2014 which cell ",
+               "types shift, and which immune cells move toward islets."),
+        tags$p(tags$strong("Cohort scope."), " All five T1D donors are recent-onset ",
+               "(duration < 1 year). There are no long-duration donors, so nothing here ",
+               "speaks to established disease. Both analyses are adapted from Steenbuck ",
+               "et al. 2025 (Bodenmiller lab, bioRxiv 2025.03.05.641526), whose cohort is ",
+               "88 donors with 75 islet-centred ROIs each against our 15 with whole sections."),
+        tags$p(tags$strong("Card 1 \u2014 why the log-ratio."), " Proportions are ",
+               "compositionally constrained: they sum to 1, so the loss of \u03b2 cells in ",
+               "T1D mechanically inflates every other type's share even when that type has ",
+               "not moved. The centred log-ratio removes that \u2014 each value is a cell ",
+               "type's abundance relative to that donor's own geometric mean, which is also ",
+               "invariant to how much tissue was imaged."),
+        tags$p(tags$strong("Card 1 \u2014 what is reported."), " Eight pre-specified ",
+               "endocrine and immune types, every pairwise stage contrast, and RAW ",
+               "p-values. The three residual labels (Endocrine, Immune, T cell) are ",
+               "excluded: each is a parent of other labels, so it measures gate failure ",
+               "rather than biology, and it moves opposite its own children when a gate is ",
+               "retuned. This replaced an edgeR count model, whose dispersion moderation ",
+               "and library-size offset are calibrated for a 20,000-gene transcriptome."),
+        tags$p(tags$strong("Card 2 \u2014 the infiltration score."), " Each cell scores 1 ",
+               "inside an islet and 1/d outside it (d = \u00b5m from the edge), summed per ",
+               "donor and divided by that donor's cell count. It rewards peri-islet ",
+               "accumulation and penalises distal accumulation, which a plain density ",
+               "cannot. The denominator is the ROI analogue: normalising by the whole ",
+               "section instead adds 4\u201323\u00d7 donor-to-donor variance.")),
       viewer = tags$p("Click inside the viewer to enable pan and zoom. This tab is read-only \u2014 nothing here changes the data."),
       tags$p("No notes for this tab.")
     )

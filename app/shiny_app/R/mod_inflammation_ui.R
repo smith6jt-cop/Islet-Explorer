@@ -33,23 +33,8 @@
 inflammation_selection_ui <- function(id) {
   ns <- NS(id)
   tagList(
-    # The 21 labels span three levels of a hierarchy and four of them are
-    # PARENTS of other labels in the same set (Immune, T cell, Endocrine,
-    # Endothelial). scimap assigns one label per cell so the set is a valid
-    # partition, but those four are gate-failure residuals rather than
-    # biological categories -- and a parent moves opposite its own child when a
-    # gate is retuned. Let the analysis pick its level instead of assuming flat.
-    ie_field("Composition: granularity",
-      selectInput(ns("comp_level"), NULL,
-                  choices = c("Specific only (drop residual parents)" = "specific",
-                              "Lineage (roll children up)" = "lineage",
-                              "As labelled (all 21)" = "asis"),
-                  # `specific` is the default: it removes the four gate-failure
-                  # residuals without collapsing anything. `lineage` trades
-                  # resolution for family size -- it folds CD8a/CD4/B/Macrophage
-                  # into one `Immune` row, which is exactly the distinction the
-                  # card exists to show.
-                  selected = "specific", width = "100%")),
+    # Scope is fixed to the endocrine and immune specific types; the
+    # granularity selector it replaced is gone with it.
     uiOutput(ns("comp_level_note")),
     ie_field("Composition: cells included",
       selectInput(ns("edger_region"), NULL,
@@ -87,29 +72,7 @@ inflammation_ui <- function(id) {
   tagList(
 
 
-    # ===== Banner =====
-    div(class = "card",
-        style = paste0("padding: 14px 18px; margin-bottom: 18px; ",
-                       "background: linear-gradient(135deg, #f4f8fc 0%, #eaf2fa 100%); ",
-                       "border-left: 4px solid #4477AA;"),
-      h4("About this tab", style = "margin: 0 0 6px 0; font-size: 16px"),
-      p(style = "margin: 0 0 6px 0; font-size: 13px; line-height: 1.5",
-        tags$strong("What it does."), " Two cohort-level analyses adapted from ",
-        tags$em("Steenbuck et al. 2025"), " (Bodenmiller lab, bioRxiv 2025.03.05.641526), ",
-        "an imaging-mass-cytometry study of 88 nPOD donors across T1D progression. ",
-        "Unlike the Statistics tab, which tests one selected feature, both cards here ",
-        "test ", tags$strong("every cell type at once"), " and are corrected across them."),
-      p(style = "margin: 0 0 6px 0; font-size: 13px; line-height: 1.5",
-        tags$strong("Why it is separate."), " These are donor-level questions — ",
-        "“which cell types change in abundance?” and “which immune cells move ",
-        "toward islets?” — not per-islet ones. They read the tissue-wide single-cell ",
-        "table (~2.65 M cells), not the islet-level frame the Statistics tab uses, so ",
-        "the Plot sidebar's filters do not apply here."),
-      p(style = "margin: 0; font-size: 13px; line-height: 1.5",
-        tags$strong("Cohort scope."), " All five T1D donors in this cohort are ",
-        tags$strong("recent-onset"), " (disease duration < 1 year). There are no ",
-        "long-duration donors, so nothing here speaks to established disease.")
-    ),
+    # Banner text moved to the rail's "Tips for this tab".
 
     # ===== SECTION 1: cell-type composition =====
     section_heading("1", "Cell-Type Composition",
@@ -118,18 +81,6 @@ inflammation_ui <- function(id) {
                                  "and centred-log-ratio transformed; each type is then tested ",
                                  "across stage on one value per donor, with Benjamini-Hochberg ",
                                  "across cell types.")),
-    div(style = paste0("background: #eef6ee; border-left: 4px solid #2e7d32; border-radius: 4px; ",
-                       "padding: 10px 14px; margin-bottom: 12px; font-size: 13px; line-height: 1.5; color: #1b4620;"),
-      tags$strong("Why the log-ratio, not raw proportions or a count model. "),
-      "Proportions are compositionally constrained — they must sum to 1, so the loss of β cells ",
-      "in T1D mechanically inflates every other cell type's share even when that type has not ",
-      "moved. The centred log-ratio removes that: each value is a cell type's abundance ",
-      "relative to that donor's own geometric mean, which is also invariant to how much tissue ",
-      "was imaged. ",
-      tags$strong("This replaced an edgeR count model in Jul 2026"), " — the counts were real, ",
-      "but edgeR's dispersion moderation, TMM normalisation and library-size offset are all ",
-      "calibrated for a 20,000-gene transcriptome and do not transfer to 21 cell types from 15 ",
-      "donors. See Methods."),
     fluidRow(
       column(12,
         div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible",
@@ -164,41 +115,6 @@ inflammation_ui <- function(id) {
                                  "the donor's total cell count. Rewards peri-islet ",
                                  "accumulation, penalises distal accumulation. FDR runs ",
                                  "across all phenotypes present, not the display selection.")),
-    div(style = paste0("background: #f4f8fc; border-left: 4px solid #4477AA; border-radius: 4px; ",
-                       "padding: 10px 14px; margin-bottom: 12px; font-size: 13px; line-height: 1.5; color: #2c4760;"),
-      tags$strong("Definition. "),
-      "Every cell scores ", tags$code("1"), " if it lies inside an islet and ",
-      tags$code("1/d"), " if outside, with ", tags$em("d"),
-      " the distance in µm from the islet edge; the per-donor sum is divided by that ",
-      "donor's total cell count. Steenbuck et al. normalise per imaging ROI — this ",
-      "cohort has whole-section CODEX images rather than ROIs, so the ROI analogue \u2014 ",
-      "islet + peri-islet cells \u2014 is the default denominator here. Distances come from ",
-      tags$code("data/cell_distance.csv"), " (negative = inside the islet). ",
-      tags$strong("Multiple testing is corrected within a pre-specified family of 7 immune ",
-                  "phenotypes"), ", fixed in source so it cannot be resized after seeing results."),
-    fluidRow(
-      column(12,
-        div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible",
-          # Denominator, numerator matching, log axis and the phenotype picker
-          # all moved to inflammation_selection_ui(). Their explanatory notes go
-          # with them; what is left here is the export.
-          div(style = "margin-bottom: 10px",
-            downloadButton(ns("dl_infil"), "Download scores CSV")
-          ),
-          fluidRow(style = "display: flex; flex-wrap: wrap",
-            column(7,
-              plotlyOutput(ns("infil_plot"), height = "460px")
-            ),
-            column(5,
-              div(style = "max-height: 460px; overflow-y: auto",
-                tableOutput(ns("infil_table"))
-              )
-            )
-          ),
-          uiOutput(ns("infil_note"))
-        )
-      )
-    ),
 
     # ===== SECTION 3: Methods =====
     section_heading("3", "Methods Reference",

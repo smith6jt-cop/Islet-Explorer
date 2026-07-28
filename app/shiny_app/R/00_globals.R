@@ -209,8 +209,10 @@ IE_PIPELINE <- list(
   list(key = "statistics",   num = "03", label = "Statistics",
        sub = "Mixed-effects tests"),
   list(key = "spatial",      num = "04", label = "Spatial",
-       sub = "Neighborhoods · Leiden"),
-  list(key = "inflammation", num = "05", label = "Inflammation",
+       sub = "Tissue map · Leiden"),
+  list(key = "neighborhood", num = "05", label = "Neighborhoods",
+       sub = "Enrichment · proximity"),
+  list(key = "inflammation", num = "06", label = "Inflammation",
        sub = "edgeR · infiltration")
 )
 IE_REFERENCE <- list(
@@ -991,4 +993,41 @@ phenotype_lineage <- function(present) {
     out[[p]] <- cur
   }
   out
+}
+
+# ============================================================================
+# Retired phenotypes (Jul 2026)
+# ============================================================================
+# Nine labels are excluded from the app everywhere a phenotype is listed,
+# coloured, selected or tested. Two reasons, and they are the same reason twice:
+#
+#   Endocrine, Immune, T cell, Endothelial   parents of other labels in the set,
+#                                            so they are gate-failure residuals
+#                                            ("immune, not resolvable further")
+#                                            whose abundance tracks gate quality
+#   Structural, Unknown                      `-rest` catch-alls, the same thing
+#                                            without children to give them away
+#   Acinar, ECAD+, APCs                      retired with them
+#
+# Excluded rather than deleted from PHENOTYPE_COLORS: the DATA still carries
+# these labels, and every lookup in this app is by exact name, so a palette
+# without them would return NA and silently grey out real cells. Keeping the
+# colours and filtering at the point of USE means a stray row is dropped, not
+# mis-drawn.
+#
+# `phenotype_keep()` is the single gate. Anything enumerating phenotypes for a
+# selector, a legend, a family or a test goes through it.
+PHENOTYPE_RETIRED <- c("Endocrine", "Acinar", "Endothelial", "T cell",
+                       "Immune", "Unknown", "ECAD+", "Structural", "APCs")
+
+#' Drop retired phenotypes from a character vector of labels.
+phenotype_keep <- function(x) setdiff(x, PHENOTYPE_RETIRED)
+
+#' TRUE for rows whose phenotype is still in use. NA-safe.
+phenotype_is_kept <- function(x) !(as.character(x) %in% PHENOTYPE_RETIRED)
+
+#' Drop retired phenotypes from a data frame with a phenotype column.
+phenotype_filter_rows <- function(df, col = "phenotype") {
+  if (is.null(df) || !is.data.frame(df) || !(col %in% names(df))) return(df)
+  df[phenotype_is_kept(df[[col]]), , drop = FALSE]
 }

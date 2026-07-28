@@ -95,6 +95,19 @@ spatial_ui <- function(id) {
     ),
 
     # ==== ROW 2: Card A — Immune Infiltration Overview ====
-    uiOutput(ns("neighborhood_cards"))
+    # The three neighborhood cards moved to their own tab -- see
+    # spatial_neighborhood_ui(). One tab was carrying a tissue scatter, two
+    # UMAPs, a composition chart AND three analysis cards, which is more than
+    # one panel can hold at any width.
   )
+}
+
+#' Neighborhood analysis: the three cards that used to sit below the tissue map.
+#'
+#' Same module namespace as spatial_ui(), so every server output and input id is
+#' unchanged -- this is a relocation, not a rewrite. `neighborhood_cards` is a
+#' single renderUI holding all three cards, so it mounts here intact.
+spatial_neighborhood_ui <- function(id) {
+  ns <- NS(id)
+  tagList(uiOutput(ns("neighborhood_cards")))
 }

@@ -657,7 +657,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         write_islet_csv(file, out, islet_csv_header(
           "Spatial Neighborhood — per-islet metrics",
           paste("Donor groups:", paste(input$groups %||% "(all)", collapse = ", ")),
-          paste("Min cells per islet (core+peri):", input$nbr_min_cells %||% 1),
+          paste("Min cells per islet (core+peri):", cohort_min_cells()),
           paste("Phenotypes:", if (is.null(sel_phenos) || length(sel_phenos) == 0)
                                  "(none selected — no per-phenotype columns)"
                                else paste(sel_phenos, collapse = ", ")),
@@ -679,7 +679,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       if (!is.null(input$groups) && "Donor Status" %in% colnames(comp))
         comp <- comp[comp$`Donor Status` %in% input$groups, , drop = FALSE]
       # Global min cells filter
-      min_cells <- input$nbr_min_cells %||% 1
+      min_cells <- cohort_min_cells()
       if (min_cells > 1) {
         tc_core <- if ("total_cells_core" %in% colnames(comp)) comp$total_cells_core else NA
         tc_peri <- if ("total_cells_peri" %in% colnames(comp)) comp$total_cells_peri else NA
@@ -853,7 +853,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                                   core = "core proportion", "peri-islet proportion")),
           paste("Statistic:", stat_mode, "of per-donor means"),
           paste("Donor groups:", paste(input$groups %||% "(all)", collapse = ", ")),
-          paste("Min cells per islet (core+peri):", input$nbr_min_cells %||% 1),
+          paste("Min cells per islet (core+peri):", cohort_min_cells()),
           paste("Phenotypes shown:", paste(input$enrich_phenos %||% "(none)", collapse = ", ")),
           paste("Display clip to z in [-5, 5]:", if (isTRUE(input$enrich_clip)) "ON" else "OFF"),
           "Values are aggregated to per-donor means FIRST, then summarised across donors (avoids pseudoreplication)."
@@ -913,19 +913,14 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         # display saturation, kept separate.
         fluidRow(column(12,
           div(class = "card", style = "padding: 12px 15px; margin-bottom: 10px; margin-top: 10px; display: flex; align-items: center; gap: 20px; overflow: visible",
+            # Min-cells and the outlier toggle + z-threshold used to sit here.
+            # They are the frozen TOP BAR's now -- three of the four controls in
+            # this row were duplicates of it, differing only in id, and one of
+            # them (nbr_min_cells) was never synced with the Plot tab's copy.
+            # What is left is per-plot aesthetics, which belong with the plot.
             span(style = "font-weight: 600; font-size: 15px; white-space: nowrap", "Neighborhood Analysis"),
-            numericInput(ns("nbr_min_cells"), "Min cells/islet", value = 1, min = 1, max = 100, step = 1, width = "130px"),
             sliderInput(ns("nbr_pt_size"), "Point size", min = 2, max = 12, value = 5, step = 1, width = "150px"),
             sliderInput(ns("nbr_pt_alpha"), "Point transparency", min = 0, max = 0.95, value = 0.6, step = 0.05, width = "150px"),
-            tags$div(title = GLOBAL_OUTLIER_TOOLTIP, style = "min-width: 200px",
-              checkboxInput("spatial_remove_outliers",
-                            "Exclude outliers",
-                            value = FALSE)
-            ),
-            tags$div(style = "min-width: 230px",
-              sliderInput("spatial_outlier_z", "Outlier z-threshold",
-                          min = 0.5, max = 10, value = 3, step = 0.5, width = "220px")
-            ),
             uiOutput(ns("nbr_islet_count"))
           )
         )),
@@ -1535,7 +1530,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           "Spatial Card A — peri-islet enrichment by donor status",
           paste("Phenotype:", if (is.null(d)) "(none)" else d$itm$label),
           paste("Donor groups:", paste(input$groups %||% "(all)", collapse = ", ")),
-          paste("Min cells per islet (core+peri):", input$nbr_min_cells %||% 1),
+          paste("Min cells per islet (core+peri):", cohort_min_cells()),
           paste("Outlier rule:", if (is.null(fs)) "n/a"
                                  else if (isTRUE(fs$enabled))
                                    paste0(fs$label, "; ", fs$n_excluded, " of ", fs$n_total, " excluded")
@@ -1985,7 +1980,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           "Spatial Card C — min distance to nearest cell of type, per islet",
           paste("Metric:", if (is.null(d)) "(none)" else d$label),
           paste("Donor groups:", paste(input$groups %||% "(all)", collapse = ", ")),
-          paste("Min cells per islet (core+peri):", input$nbr_min_cells %||% 1),
+          paste("Min cells per islet (core+peri):", cohort_min_cells()),
           paste("Outlier rule:", if (is.null(fs)) "n/a"
                                  else if (isTRUE(fs$enabled))
                                    paste0(fs$label, "; ", fs$n_excluded, " of ", fs$n_total, " excluded")

@@ -58,11 +58,13 @@ railUI <- function(id, pipeline, reference = list(),
     class = "ie-rail",
     div(
       class = "ie-rail-brand",
+      # Logo only. The mark already carries the wordmark, so a text line under
+      # it read as a duplicate; `brand` survives as the alt text.
       div(
         class = "ie-brandmark",
         if (!is.null(logo))
-          tags$img(class = "ie-brandlogo", src = logo, alt = paste(brand, "logo")),
-        div(class = "ie-brandtext", brand)
+          tags$img(class = "ie-brandlogo", src = logo, alt = paste(brand, "logo"))
+        else div(class = "ie-brandtext", brand)
       ),
       if (!is.null(meta)) div(class = "ie-rail-meta", HTML(meta))
     ),

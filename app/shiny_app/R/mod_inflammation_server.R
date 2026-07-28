@@ -34,8 +34,19 @@
 # Phenotypes outside this list can still be displayed, but they are reported
 # UNCORRECTED and flagged as exploratory rather than being folded into the
 # family after the fact.
-INFLAM_FDR_FAMILY <- c("CD8a Tcell", "CD4 Tcell", "B cell",
-                       "T cell", "Macrophage", "APCs", "Immune")
+# T cell / APCs / Immune retired Jul 2026; see PHENOTYPE_RETIRED.
+INFLAM_FDR_FAMILY <- c("CD8a Tcell", "CD4 Tcell", "B cell", "Macrophage")
+
+# Cell types the composition card reports. Endocrine and immune SPECIFIC types
+# only: the three residual parents (Endocrine, Immune, T cell) are excluded
+# because they are gate-failure categories rather than biological ones, and the
+# exocrine / structural / vascular / Unknown labels are excluded because this
+# card exists to compare the endocrine compartment against immune infiltration.
+# Restricting the scope is also what makes multiple-testing correction
+# unnecessary here -- see comp_fit().
+INFLAM_COMP_ENDOCRINE <- c("Beta cell", "Alpha cell", "Delta cell")
+INFLAM_COMP_IMMUNE    <- c("CD8a Tcell", "CD4 Tcell", "B cell", "Macrophage")
+INFLAM_COMP_TYPES     <- c(INFLAM_COMP_ENDOCRINE, INFLAM_COMP_IMMUNE)
 INFLAM_DEFAULT_PHENOTYPES <- INFLAM_FDR_FAMILY
 
 inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLORS)) {
@@ -191,42 +202,32 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
       tab <- table(sub$phenotype, sub$case_id)
       mat <- matrix(as.integer(tab), nrow = nrow(tab),
                     dimnames = list(rownames(tab), colnames(tab)))
-      # ---- Granularity ----------------------------------------------------
-      # Four of the 21 labels are PARENTS of other labels in the same set
-      # (Immune, T cell, Endocrine, Endothelial). scimap assigns one label per
-      # cell, so the set is a valid partition -- but those four are residuals:
-      # "immune, not resolvable further". Testing them alongside their own
-      # children means (a) a gate change moves parent and child in opposite
-      # directions for a purely technical reason, and (b) the BH family is
-      # inflated by categories carrying no independent biological claim.
+      # ---- Scope --------------------------------------------------------
+      # Endocrine and immune SPECIFIC types only. Two reasons, and they are the
+      # same reason twice: four of the 21 labels are PARENTS of other labels
+      # (Immune, T cell, Endocrine, Endothelial), so they are gate-failure
+      # residuals whose abundance tracks gate quality rather than biology, and
+      # a parent moves opposite its own child when a gate is retuned. The rest
+      # of the label set -- exocrine, structural, vascular, Unknown -- is not
+      # what this card is asking about.
+      #
+      # Note the CLR is computed on the FULL composition and only then
+      # subsetted. Closing on the subset instead would make each value relative
+      # to the geometric mean of the eight reported types, so adding or removing
+      # a type would move every other one. Computing on the whole partition and
+      # reporting a slice keeps each value anchored to the same reference.
       present <- rownames(mat)
-      resid   <- phenotype_residual_parents(present)
-      level   <- input$comp_level %||% "specific"
-      note    <- ""
-      if (level == "lineage" && length(resid)) {
-        # Sum each label into the highest ancestor also present, so a lineage is
-        # tested once. Counts are additive, so this is exact -- no re-derivation
-        # from the cell table needed.
-        lin <- phenotype_lineage(present)
-        mat <- rowsum(mat, group = unname(lin[present]))
-        note <- sprintf("Rolled %d labels into %d lineages; %s no longer compete with their own children.",
-                        length(present), nrow(mat), paste(resid, collapse = ", "))
-      } else if (level == "specific" && length(resid)) {
-        mat <- mat[!(present %in% resid), , drop = FALSE]
-        note <- sprintf("Dropped %d residual parent%s (%s). Their cells are excluded, not redistributed \u2014 a cell labelled \"Immune\" could not be resolved further, so there is no child to assign it to.",
-                        length(resid), if (length(resid) == 1) "" else "s",
-                        paste(resid, collapse = ", "))
-      } else if (length(resid)) {
-        note <- sprintf("Testing all %d labels as given. %s are parents of other rows in this table, so they are gate-failure residuals rather than biological categories.",
-                        length(present), paste(resid, collapse = ", "))
-      }
+      wanted  <- intersect(INFLAM_COMP_TYPES, present)
+      missing <- setdiff(INFLAM_COMP_TYPES, present)
+      shiny::validate(shiny::need(length(wanted) >= 2,
+        "Fewer than two of the endocrine/immune cell types are present."))
 
       meta <- unique(sub[, c("case_id", "donor_status")])
       meta <- meta[match(colnames(mat), as.character(meta$case_id)), , drop = FALSE]
       list(counts = mat,
            group = factor(as.character(meta$donor_status), levels = status_levels),
            region = region, n_cells = nrow(sub),
-           level = level, residuals = resid, level_note = note)
+           wanted = wanted, missing = missing)
     })
 
     # -------------------------------------------------------------------------
@@ -279,167 +280,160 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
                     "Need at least 2 donor-status groups."))
 
       cnt <- ab$counts
-      # Drop cell types absent from EVERY donor: a row of zeros carries no
-      # information and its CLR is constant. This is the only filtering; unlike
-      # filterByExpr, a type present in even one donor is kept.
       keep <- rowSums(cnt) > 0
-      dropped <- rownames(cnt)[!keep]
       cnt <- cnt[keep, , drop = FALSE]
-      shiny::validate(shiny::need(nrow(cnt) >= 2, "Fewer than 2 cell types present."))
 
-      # closure + CLR, per donor (column)
-      clr <- apply(cnt + 0.5, 2, function(x) {
-        p <- x / sum(x)
-        log(p) - mean(log(p))
+      # CLR on the FULL composition, then slice. See abundance() for why.
+      clr_all <- apply(cnt + 0.5, 2, function(x) {
+        pr <- x / sum(x); log(pr) - mean(log(pr))
       })
-      clr <- matrix(clr, nrow = nrow(cnt), dimnames = dimnames(cnt))
+      clr_all <- matrix(clr_all, nrow = nrow(cnt), dimnames = dimnames(cnt))
+      rows <- intersect(INFLAM_COMP_TYPES, rownames(clr_all))
+      clr <- clr_all[rows, , drop = FALSE]
 
-      # Parametric or rank test, decided once for the whole family from the
-      # pooled CLR residuals rather than per cell type -- picking per feature
-      # would be a hidden multiple-comparison.
-      resid <- as.vector(clr - rowMeans(clr))
-      sw <- tryCatch(stats::shapiro.test(if (length(resid) > 5000)
-                       sample(resid, 5000) else resid)$p.value,
-                     error = function(e) NA_real_)
-      parametric <- is.finite(sw) && sw > 0.05
+      lv <- levels(grp)
+      pairs <- utils::combn(lv, 2, simplify = FALSE)
 
-      rows <- lapply(seq_len(nrow(clr)), function(i) {
-        v <- clr[i, ]
+      out <- lapply(rownames(clr), function(ct) {
+        v <- clr[ct, ]
         d <- data.frame(value = as.numeric(v), grp = grp, stringsAsFactors = FALSE)
         d <- d[is.finite(d$value), , drop = FALSE]
-        n_per <- table(droplevels(d$grp))
-        if (length(n_per) < 2 || any(n_per < 2)) return(NULL)
-        p <- if (parametric) {
-          tryCatch(stats::anova(stats::lm(value ~ grp, data = d))[["Pr(>F)"]][1],
-                   error = function(e) NA_real_)
-        } else {
-          tryCatch(stats::kruskal.test(value ~ grp, data = d)$p.value,
-                   error = function(e) NA_real_)
-        }
         mg <- tapply(d$value, droplevels(d$grp), mean)
-        # Effect size in the CLR's own units: the difference between the two
-        # extreme stages present, which is a log-ratio contrast, NOT a log2FC.
-        lv <- levels(droplevels(d$grp))
-        data.frame(cell_type = rownames(clr)[i],
-                   clr_diff  = unname(mg[lv[length(lv)]] - mg[lv[1]]),
-                   contrast  = paste(lv[length(lv)], "vs", lv[1]),
-                   mean_clr  = mean(d$value),
-                   PValue    = p,
-                   stringsAsFactors = FALSE)
+        sg <- tapply(d$value, droplevels(d$grp), stats::sd)
+        ng <- table(droplevels(d$grp))
+        # EVERY pairwise contrast, not just the extremes. The card previously
+        # reported one difference between the first and last stage present,
+        # which silently hid whatever happened at Aab+ -- the stage the whole
+        # progression question turns on.
+        pw <- lapply(pairs, function(pp) {
+          x <- d$value[d$grp == pp[1]]; y <- d$value[d$grp == pp[2]]
+          if (length(x) < 2 || length(y) < 2) return(NULL)
+          data.frame(cell_type = ct, contrast = paste(pp[2], "vs", pp[1]),
+                     diff = mean(y) - mean(x),
+                     p_value = tryCatch(stats::wilcox.test(y, x, exact = FALSE)$p.value,
+                                        error = function(e) NA_real_),
+                     stringsAsFactors = FALSE)
+        })
+        list(
+          # check.names = FALSE is load-bearing: a level called "Aab+" becomes
+          # "mean_Aab." under make.names, so every later lookup by
+          # paste0("mean_", level) missed and the table died with "replacement
+          # has 0 rows". Same class of bug as reshape() sanitising contrasts.
+          summary = data.frame(
+            c(list(cell_type = ct,
+                   class = if (ct %in% INFLAM_COMP_ENDOCRINE) "Endocrine" else "Immune"),
+              stats::setNames(as.list(as.numeric(mg[lv])), paste0("mean_", lv)),
+              stats::setNames(as.list(as.numeric(sg[lv])), paste0("sd_", lv)),
+              stats::setNames(as.list(as.integer(ng[lv])), paste0("n_", lv))),
+            check.names = FALSE, stringsAsFactors = FALSE
+          ),
+          pairwise = do.call(rbind, Filter(Negate(is.null), pw)),
+          long = data.frame(cell_type = ct,
+                            class = if (ct %in% INFLAM_COMP_ENDOCRINE) "Endocrine" else "Immune",
+                            donor = colnames(clr), grp = as.character(grp),
+                            clr = as.numeric(v), stringsAsFactors = FALSE)
+        )
       })
-      res <- do.call(rbind, Filter(Negate(is.null), rows))
-      shiny::validate(shiny::need(!is.null(res) && nrow(res) > 0,
-                    "No cell type had at least 2 donors in 2 groups."))
-      res$FDR <- stats::p.adjust(res$PValue, method = "BH")
 
-      # The floor BH can reach at this cohort size, so a null reads as
-      # underpowered rather than as no effect. Same reasoning as the
-      # infiltration card's power_ceiling().
-      n_per_grp <- as.numeric(table(grp))
-      best_p <- tryCatch({
-        g <- rep(seq_along(n_per_grp), n_per_grp)
-        x <- seq_along(g)                       # perfect separation
-        if (parametric) stats::anova(stats::lm(x ~ factor(g)))[["Pr(>F)"]][1]
-        else stats::kruskal.test(x ~ factor(g))$p.value
-      }, error = function(e) NA_real_)
-
-      list(res = res[order(res$FDR, res$PValue), , drop = FALSE],
-           label = paste(levels(grp), collapse = " / "),
-           test = if (parametric) "ANOVA on donor CLR" else "Kruskal-Wallis on donor CLR",
-           shapiro_p = sw, n_tested = nrow(res),
-           n_dropped = length(dropped), dropped = dropped,
-           n_cells = ab$n_cells, n_donors = length(grp), group = grp,
-           level = ab$level, residuals = ab$residuals, level_note = ab$level_note,
-           best_p = best_p, best_q = if (is.finite(best_p)) best_p * nrow(res) / 1 else NA_real_)
+      # NO multiple-testing correction, deliberately. The scope is eight
+      # pre-specified endocrine and immune types chosen before looking at any
+      # result, not a screen over everything measured -- so there is no
+      # selection to correct for. Correcting anyway would also be actively
+      # misleading at this cohort size: BH across even a small family has a
+      # floor set by the smallest attainable rank-test p (0.00193 at 5 donors
+      # per stage), so it would convert every result to "not significant"
+      # regardless of the data. The p-values are reported RAW and read as
+      # descriptive.
+      list(
+        summary  = do.call(rbind, lapply(out, `[[`, "summary")),
+        pairwise = do.call(rbind, Filter(Negate(is.null), lapply(out, `[[`, "pairwise"))),
+        long     = do.call(rbind, lapply(out, `[[`, "long")),
+        levels   = lv, n_cells = ab$n_cells, n_donors = length(grp),
+        wanted   = ab$wanted, missing = ab$missing,
+        region   = ab$region
+      )
     })
 
-    # Sits under the granularity selector in the frozen panel, so the
-    # consequence of the choice is visible where the choice is made.
     output$comp_level_note <- renderUI({
       e <- tryCatch(comp_fit(), error = function(err) NULL)
-      if (is.null(e) || !nzchar(e$level_note %||% "")) return(NULL)
-      tags$small(style = "display: block; margin: -4px 0 10px; line-height: 1.35",
-                 e$level_note)
+      if (is.null(e) || !length(e$missing)) return(NULL)
+      tags$small(class = "ie-callout ie-callout-note",
+        sprintf("Not present in this region: %s.", paste(e$missing, collapse = ", ")))
     })
 
     output$edger_note <- renderUI({
       e <- comp_fit()
-      tags$p(style = "font-size: 12px; margin: 4px 0 10px 0; line-height: 1.5",
-        tags$strong(e$test), " — ",
-        sprintf("%s cells from %d donors (%s); %d cell type%s tested",
+      tags$p(class = "ie-note",
+        sprintf("%s cells, %d donors, %d cell types.",
                 formatC(e$n_cells, format = "d", big.mark = ","),
-                e$n_donors, e$label, e$n_tested, if (e$n_tested == 1) "" else "s"),
-        if (e$n_dropped > 0) sprintf(", %d absent from every donor (%s)",
-                                     e$n_dropped, paste(e$dropped, collapse = ", ")) else "",
+                e$n_donors, nrow(e$summary)),
         tags$br(),
         tags$span(
-          "Values are centred log-ratios: each cell type's log abundance relative to ",
-          "that donor's own geometric mean across all cell types, so the result does not ",
-          "depend on how much tissue was imaged. One value per donor, so no ",
-          "pseudoreplication. FDR is Benjamini-Hochberg across the cell types tested."),
-        if (is.finite(e$best_p)) tagList(tags$br(),
-          tags$span(
-            sprintf("Power ceiling at these group sizes: the smallest attainable p is %s, so BH across %d cell types floors at q = %s. A null here is underpowered, not negative.",
-                    format_p_value(e$best_p), e$n_tested,
-                    format_p_value(min(1, e$best_p * e$n_tested)))))
-      )
+          "Centred log-ratio: each value is a cell type's abundance relative to ",
+          "that donor's own geometric mean across ALL cell types, so it does not ",
+          "depend on how much tissue was imaged. One value per donor. ",
+          tags$strong("p-values are raw"), " \u2014 the eight types are pre-specified, ",
+          "so there is no selection to correct for, and at 5 donors per stage a ",
+          "correction would read \u201cnot significant\u201d whatever the data said."))
+    })
+
+    # Per-group, not one extreme contrast: every donor as a point, the group
+    # mean as a bar, faceted endocrine vs immune.
+    output$edger_volcano <- renderPlotly({
+      e <- comp_fit()
+      d <- e$long
+      d$grp <- factor(d$grp, levels = e$levels)
+      d$class <- factor(d$class, levels = c("Endocrine", "Immune"))
+      d$cell_type <- factor(d$cell_type, levels = intersect(INFLAM_COMP_TYPES, unique(d$cell_type)))
+      d$hover <- sprintf("%s<br>%s \u2014 donor %s<br>CLR %.2f",
+                         d$cell_type, d$grp, d$donor, d$clr)
+      pal <- donor_colors()
+      g <- ggplot(d, aes(x = cell_type, y = clr, colour = grp, text = hover)) +
+        stat_summary(fun = mean, geom = "crossbar", width = 0.62,
+                     linewidth = 0.4, position = position_dodge(width = 0.78),
+                     show.legend = FALSE) +
+        geom_point(position = position_dodge(width = 0.78), size = 2.4, alpha = 0.85) +
+        scale_colour_manual(values = pal, name = NULL, drop = FALSE) +
+        facet_grid(~ class, scales = "free_x", space = "free_x") +
+        labs(x = NULL, y = "Centred log-ratio (per donor)") +
+        theme_islet() +
+        theme(legend.position = "bottom",
+              axis.text.x = element_text(angle = 30, hjust = 1))
+      fonts <- plotly_islet_fonts()
+      plotly_islet_strip_fonts(ggplotly(g, tooltip = "text")) %>%
+        layout(font = fonts$global,
+               margin = list(t = 30, b = 130, l = 70, r = 20),
+               xaxis = list(tickfont = fonts$axis_tick, automargin = TRUE),
+               yaxis = list(title = list(font = fonts$axis_title),
+                            tickfont = fonts$axis_tick, automargin = TRUE),
+               legend = list(orientation = "h", x = 0.5, xanchor = "center", y = -0.28,
+                             font = fonts$legend_text)) %>%
+        plotly_islet_config("inflammation_composition")
     })
 
     output$edger_table <- renderTable({
       e <- comp_fit()
-      r <- e$res
-      data.frame(
-        `Cell type` = r$cell_type,
-        `CLR diff` = sprintf("%+.2f", r$clr_diff),
-        Contrast = r$contrast,
-        `p` = format_p_value(r$PValue),
-        `FDR` = format_p_value(r$FDR),
-        Sig = ifelse(r$FDR %in% TRUE & r$FDR < 0.05, "*", ""),
-        check.names = FALSE, stringsAsFactors = FALSE
-      )
-    }, striped = TRUE, bordered = TRUE, spacing = "s", align = "lccccc")
-
-    output$edger_volcano <- renderPlotly({
-      e <- comp_fit()
-      r <- e$res
-      r$neglog10 <- -log10(pmax(r$FDR, .Machine$double.xmin))
-      r$sig <- ifelse(r$FDR < 0.05,
-                      ifelse(r$clr_diff > 0, "Higher (FDR<0.05)", "Lower (FDR<0.05)"), "NS")
-      r$hover <- sprintf("%s<br>CLR difference: %+.2f (%s)<br>p: %s<br>FDR: %s",
-                         r$cell_type, r$clr_diff, r$contrast,
-                         format_p_value(r$PValue), format_p_value(r$FDR))
-      g <- ggplot(r, aes(x = clr_diff, y = neglog10, colour = sig, text = hover)) +
-        geom_hline(yintercept = -log10(0.05), linetype = "dashed", colour = "#999") +
-        geom_vline(xintercept = 0, linetype = "dashed", colour = "#999") +
-        geom_point(size = 3, alpha = 0.85) +
-        scale_colour_manual(values = c("Higher (FDR<0.05)" = IE_ACCENT_700,
-                                       "Lower (FDR<0.05)"  = "#1f77b4",
-                                       "NS" = "#bbbbbb"), name = NULL) +
-        labs(x = paste0("Difference in centred log-ratio — ",
-                        if (nrow(r)) r$contrast[1] else ""),
-             y = "-log10(FDR)") +
-        theme_islet() +
-        theme(legend.position = "bottom")
-      # No in-plot point labels: they collide with each other and with the y-axis
-      # at every width tried, and the results table sits directly beside this plot
-      # listing every cell type ordered by FDR. Identity comes from the hover.
-
-      fonts <- plotly_islet_fonts()
-      ggplotly(g, tooltip = "text") %>%
-        layout(font = fonts$global,
-               # b covers the x-axis title AND the horizontal legend below it;
-               # measured, not guessed (legend sat 16 px off-canvas at b = 90).
-               margin = list(t = 20, b = 115, l = 70, r = 20),
-               xaxis = list(title = list(font = fonts$axis_title),
-                            tickfont = fonts$axis_tick, automargin = TRUE),
-               yaxis = list(title = list(font = fonts$axis_title),
-                            tickfont = fonts$axis_tick, automargin = TRUE),
-               # y is a fraction of the PLOT AREA, which shrinks as the bottom
-               # margin grows -- so enlarging the margin alone never fixed this.
-               legend = list(orientation = "h", x = 0.5, xanchor = "center", y = -0.14,
-                             font = fonts$legend_text)) %>%
-        plotly_islet_config("inflammation_composition_volcano")
-    })
+      s <- e$summary; pw <- e$pairwise
+      # Built by direct lookup rather than reshape(): reshape() sanitises the
+      # contrast strings into column names ("Aab+ vs ND" -> "Aab. vs ND"), so
+      # paste0("diff.", contrast) missed every column and the assignment failed
+      # with "replacement has 0 rows".
+      out <- data.frame(`Cell type` = s$cell_type, Class = s$class,
+                        check.names = FALSE, stringsAsFactors = FALSE)
+      for (lv in e$levels) {
+        v <- s[[paste0("mean_", lv)]]
+        out[[lv]] <- ifelse(is.finite(v), sprintf("%+.2f", v), "\u2014")
+      }
+      for (cc in unique(pw$contrast)) {
+        sub_pw <- pw[pw$contrast == cc, , drop = FALSE]
+        i <- match(out$`Cell type`, sub_pw$cell_type)
+        out[[paste0("\u0394 ", cc)]] <-
+          ifelse(is.na(i), "\u2014", sprintf("%+.2f", sub_pw$diff[i]))
+        out[[paste0("p (", cc, ")")]] <-
+          ifelse(is.na(i), "\u2014", format_p_value(sub_pw$p_value[i]))
+      }
+      out
+    }, striped = TRUE, bordered = TRUE, spacing = "s", align = NULL)
 
     output$dl_edger <- downloadHandler(
       filename = function() paste0("inflammation_composition_",
@@ -447,20 +441,15 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
       content = function(file) {
         e <- tryCatch(comp_fit(), error = function(err) NULL)
         if (is.null(e)) return(write_islet_csv(file, NULL, "Composition results unavailable"))
-        write_islet_csv(file, e$res, islet_csv_header(
-          "Cell-type composition by disease stage (donor-level, centred log-ratio)",
-          paste0("Test: ", e$test, "; normality screen on pooled CLR residuals p = ",
-                 format_p_value(e$shapiro_p)),
-          "clr_i = log(p_i) - mean_j(log(p_j)) per donor, with a 0.5 pseudocount before closure",
-          paste("Cells included:", e$n_cells, "| region:", input$edger_region %||% "core_peri",
-                "| donors:", e$n_donors),
-          paste("Cell types tested:", e$n_tested,
-                "| absent from every donor:", e$n_dropped),
-          "clr_diff is a log-ratio contrast between the extreme stages present - NOT a log2 fold change",
-          "FDR = Benjamini-Hochberg across the cell types tested",
-          if (is.finite(e$best_p))
-            sprintf("Power ceiling: smallest attainable p = %s at these group sizes",
-                    format_p_value(e$best_p)) else "Power ceiling: not computable"))
+        write_islet_csv(file, e$pairwise, islet_csv_header(
+          "Endocrine and immune composition by disease stage (donor-level, centred log-ratio)",
+          "clr_i = log(p_i) - mean_j(log(p_j)) per donor, 0.5 pseudocount, computed on the FULL composition then subset",
+          paste("Cell types reported:", paste(e$wanted, collapse = ", ")),
+          if (length(e$missing)) paste("Not present in this region:", paste(e$missing, collapse = ", ")) else "All requested types present",
+          paste("Cells included:", e$n_cells, "| region:", e$region, "| donors:", e$n_donors),
+          "diff is a log-ratio contrast, NOT a log2 fold change",
+          "p is a raw two-sided Wilcoxon rank-sum on donor values - NO multiple-testing correction",
+          "The eight cell types are pre-specified, so there is no selection to correct for."))
       }
     )
 
@@ -470,7 +459,7 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
 
     output$infil_pheno_ui <- renderUI({
       df <- tryCatch(cells(), error = function(e) NULL)
-      avail <- if (is.null(df)) character(0) else sort(unique(as.character(df$phenotype)))
+      avail <- if (is.null(df)) character(0) else phenotype_keep(sort(unique(as.character(df$phenotype))))
       sel <- intersect(INFLAM_DEFAULT_PHENOTYPES, avail)
       if (!length(sel)) sel <- head(avail, 5)
       checkboxGroupInput(ns("infil_phenos"), "Phenotypes",
