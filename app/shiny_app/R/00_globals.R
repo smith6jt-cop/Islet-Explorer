@@ -910,3 +910,66 @@ phenotype_hint_ui <- function(name, prefix = "Markers:",
     link
   )
 }
+
+# ============================================================================
+# Phenotype hierarchy (Jul 2026)
+# ============================================================================
+# The 21 labels in the data span three levels of a hierarchy, and four of them
+# are PARENTS of other labels in the same set:
+#
+#   Immune      -> Macrophage, APCs, B cell, T cell
+#   T cell      -> CD8a Tcell, CD4 Tcell
+#   Endocrine   -> Beta cell, Alpha cell, Delta cell
+#   Endothelial -> Blood Vessel, Lymphatic
+#
+# scimap assigns exactly ONE label per cell, so the set is still a valid
+# partition and a compositional transform over it is mathematically sound. But
+# those four labels are not biological categories: they are RESIDUALS -- "immune
+# but not resolvable to macrophage / APC / T / B", "T cell but not CD4 or CD8".
+# Their abundance measures gate failure, not biology. Two consequences for any
+# test run over the whole set:
+#
+#   * A parent and its child are mechanically ANTI-CORRELATED. Tighten the CD8a
+#     gate and cells move out of `CD8a Tcell` into `T cell`; both move, in
+#     opposite directions, for a purely technical reason.
+#   * The multiple-testing family is inflated by categories that carry no
+#     independent biological claim, which lowers the attainable q for the
+#     categories that do.
+#
+# These helpers let an analysis choose its level rather than silently assuming
+# the label set is flat. They read the same parent chain the rules modal uses,
+# so they stay correct when the gates are revised.
+
+#' Immediate parent of a phenotype, in the DATA's label vocabulary, or NA.
+phenotype_parent <- function(name) {
+  r <- tryCatch(get_phenotype_rule(name), error = function(e) NULL)
+  p <- if (is.null(r)) NULL else r$parent
+  if (is.null(p) || !nzchar(p) || identical(p, "all")) return(NA_character_)
+  phenotype_display_label(p)
+}
+
+#' Which of `present` are parents of something else in `present`?
+#' These are the residual categories.
+phenotype_residual_parents <- function(present) {
+  parents <- vapply(present, phenotype_parent, character(1), USE.NAMES = TRUE)
+  intersect(present, unique(stats::na.omit(unname(parents))))
+}
+
+#' Map each phenotype to the top of its chain WITHIN `present`.
+#'
+#' Walks the parent chain and stops at the highest ancestor that is itself a
+#' label in the data, so `CD8a Tcell` -> `Immune` when Immune is present, and
+#' stays `CD8a Tcell` when it is not. Cycle-guarded.
+phenotype_lineage <- function(present) {
+  out <- stats::setNames(present, present)
+  for (p in present) {
+    cur <- p; seen <- p
+    repeat {
+      par <- phenotype_parent(cur)
+      if (is.na(par) || !(par %in% present) || par %in% seen) break
+      cur <- par; seen <- c(seen, par)
+    }
+    out[[p]] <- cur
+  }
+  out
+}

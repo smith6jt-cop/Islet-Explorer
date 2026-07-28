@@ -33,6 +33,24 @@
 inflammation_selection_ui <- function(id) {
   ns <- NS(id)
   tagList(
+    # The 21 labels span three levels of a hierarchy and four of them are
+    # PARENTS of other labels in the same set (Immune, T cell, Endocrine,
+    # Endothelial). scimap assigns one label per cell so the set is a valid
+    # partition, but those four are gate-failure residuals rather than
+    # biological categories -- and a parent moves opposite its own child when a
+    # gate is retuned. Let the analysis pick its level instead of assuming flat.
+    ie_field("Composition: granularity",
+      selectInput(ns("comp_level"), NULL,
+                  choices = c("Specific only (drop residual parents)" = "specific",
+                              "Lineage (roll children up)" = "lineage",
+                              "As labelled (all 21)" = "asis"),
+                  # `specific` is the default: it removes the four gate-failure
+                  # residuals without collapsing anything. `lineage` trades
+                  # resolution for family size -- it folds CD8a/CD4/B/Macrophage
+                  # into one `Immune` row, which is exactly the distinction the
+                  # card exists to show.
+                  selected = "specific", width = "100%")),
+    uiOutput(ns("comp_level_note")),
     ie_field("Composition: cells included",
       selectInput(ns("edger_region"), NULL,
                   choices = c("Islet core + peri-islet" = "core_peri",

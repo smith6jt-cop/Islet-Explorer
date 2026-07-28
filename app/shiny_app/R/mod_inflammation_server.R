@@ -191,11 +191,42 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
       tab <- table(sub$phenotype, sub$case_id)
       mat <- matrix(as.integer(tab), nrow = nrow(tab),
                     dimnames = list(rownames(tab), colnames(tab)))
+      # ---- Granularity ----------------------------------------------------
+      # Four of the 21 labels are PARENTS of other labels in the same set
+      # (Immune, T cell, Endocrine, Endothelial). scimap assigns one label per
+      # cell, so the set is a valid partition -- but those four are residuals:
+      # "immune, not resolvable further". Testing them alongside their own
+      # children means (a) a gate change moves parent and child in opposite
+      # directions for a purely technical reason, and (b) the BH family is
+      # inflated by categories carrying no independent biological claim.
+      present <- rownames(mat)
+      resid   <- phenotype_residual_parents(present)
+      level   <- input$comp_level %||% "specific"
+      note    <- ""
+      if (level == "lineage" && length(resid)) {
+        # Sum each label into the highest ancestor also present, so a lineage is
+        # tested once. Counts are additive, so this is exact -- no re-derivation
+        # from the cell table needed.
+        lin <- phenotype_lineage(present)
+        mat <- rowsum(mat, group = unname(lin[present]))
+        note <- sprintf("Rolled %d labels into %d lineages; %s no longer compete with their own children.",
+                        length(present), nrow(mat), paste(resid, collapse = ", "))
+      } else if (level == "specific" && length(resid)) {
+        mat <- mat[!(present %in% resid), , drop = FALSE]
+        note <- sprintf("Dropped %d residual parent%s (%s). Their cells are excluded, not redistributed \u2014 a cell labelled \"Immune\" could not be resolved further, so there is no child to assign it to.",
+                        length(resid), if (length(resid) == 1) "" else "s",
+                        paste(resid, collapse = ", "))
+      } else if (length(resid)) {
+        note <- sprintf("Testing all %d labels as given. %s are parents of other rows in this table, so they are gate-failure residuals rather than biological categories.",
+                        length(present), paste(resid, collapse = ", "))
+      }
+
       meta <- unique(sub[, c("case_id", "donor_status")])
       meta <- meta[match(colnames(mat), as.character(meta$case_id)), , drop = FALSE]
       list(counts = mat,
            group = factor(as.character(meta$donor_status), levels = status_levels),
-           region = region, n_cells = nrow(sub))
+           region = region, n_cells = nrow(sub),
+           level = level, residuals = resid, level_note = note)
     })
 
     # -------------------------------------------------------------------------
@@ -318,7 +349,17 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
            shapiro_p = sw, n_tested = nrow(res),
            n_dropped = length(dropped), dropped = dropped,
            n_cells = ab$n_cells, n_donors = length(grp), group = grp,
+           level = ab$level, residuals = ab$residuals, level_note = ab$level_note,
            best_p = best_p, best_q = if (is.finite(best_p)) best_p * nrow(res) / 1 else NA_real_)
+    })
+
+    # Sits under the granularity selector in the frozen panel, so the
+    # consequence of the choice is visible where the choice is made.
+    output$comp_level_note <- renderUI({
+      e <- tryCatch(comp_fit(), error = function(err) NULL)
+      if (is.null(e) || !nzchar(e$level_note %||% "")) return(NULL)
+      tags$small(style = "color: #888; display: block; margin: -4px 0 10px; line-height: 1.35;",
+                 e$level_note)
     })
 
     output$edger_note <- renderUI({
