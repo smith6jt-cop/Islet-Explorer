@@ -46,9 +46,7 @@ trajectory_selection_ui <- function(id) {
 trajectory_ui <- function(id) {
   ns <- NS(id)
   tagList(
-    div(style = "background-color: #e8f4fd; border: 1px solid #b8daff; border-radius: 5px; padding: 10px 15px; margin-bottom: 15px; color: #004085; font-size: 13px;",
-      "Click any point on the pseudotime scatter plot to view the segmentation map for that islet."
-    ),
+    # Hint strip moved to the rail's Help section.
     uiOutput(ns("traj_status")),
     fluidRow(
       # Left card: Scatterplot and heatmaps (narrowed from col-8)

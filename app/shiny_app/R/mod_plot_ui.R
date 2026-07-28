@@ -51,23 +51,13 @@ plot_selection_ui <- function(id) {
 plot_main_ui <- function(id, extra_panel = NULL) {
   ns <- NS(id)
   tagList(
-    column(10,
-      phenotype_rules_button("show_phenotype_rules_plot"),
-      div(style = "display: flex; gap: 10px; margin-bottom: 15px;",
-        div(style = "flex: 1; background-color: #e8f4fd; border: 1px solid #b8daff; border-radius: 5px; padding: 10px 12px; color: #004085; font-size: 13px;",
-          "Enable \"Show individual points\" then click any point on the ",
-          tags$strong("Islet Size Distribution"), " scatter to view its segmentation map below."
-        ),
-        div(style = "flex: 1; background-color: #e8f4fd; border: 1px solid #b8daff; border-radius: 5px; padding: 10px 12px; color: #004085; font-size: 13px;",
-          "Enable \"Show individual points\" and set \"Color points by\" to Donor ID, then click a donor in the legend to show/hide it."
-        ),
-        div(style = "flex: 1; background-color: #e8f4fd; border: 1px solid #b8daff; border-radius: 5px; padding: 10px 12px; color: #004085; font-size: 13px;",
-          "Use browser zoom (Ctrl +/\u2212) to resize cards. Scroll within cards to reveal hidden controls."
-        )
-      )
-    ),
-    # Left card: Main scatter plot
-    column(6,
+    # The three blue hint strips that sat here moved to the rail's
+    # "Tips for this tab". They took a full row above the cards on every
+    # visit, and the cards now start at the top of the panel.
+    # Left card: Main scatter plot. Was col-6 with col-4 beside it and
+    # col-2 held for the AI panel; with that gone the two cards split the
+    # full width instead of leaving a sixth of the panel empty.
+    column(7,
       div(class = "card",
           style = "margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; height: clamp(715px, 84.5vh - 97px, 1560px); display: flex; flex-direction: column; gap: 12px;",
         h5("Islet Size Distribution", style = "margin-top: 0; color: #333;"),
@@ -107,7 +97,7 @@ plot_main_ui <- function(id, extra_panel = NULL) {
       )
     ),
     # Right card: Distribution comparison
-    column(4,
+    column(5,
       div(class = "card",
           style = "margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; height: clamp(715px, 84.5vh - 97px, 1560px); display: flex; flex-direction: column; gap: 12px;",
         div(style = "display: flex; align-items: center; justify-content: space-between; margin-top: 0;",

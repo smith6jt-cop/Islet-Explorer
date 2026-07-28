@@ -49,7 +49,8 @@ rail_row <- function(group, key, selected = FALSE, num = NULL,
 rail_heading <- function(text) div(class = "ie-rail-heading", text)
 
 railUI <- function(id, pipeline, reference = list(),
-                   title = c("ISLET", "EXPLORER"), meta = NULL, footer = NULL) {
+                   brand = "Panc Floyd", logo = "logo.png",
+                   meta = NULL, help = NULL, footer = NULL) {
   ns <- NS(id)
   first <- pipeline[[1]]$key
 
@@ -59,8 +60,9 @@ railUI <- function(id, pipeline, reference = list(),
       class = "ie-rail-brand",
       div(
         class = "ie-brandmark",
-        tags$span(class = "ie-brandbar"),
-        div(class = "ie-brandtext", HTML(paste(title, collapse = "<br>")))
+        if (!is.null(logo))
+          tags$img(class = "ie-brandlogo", src = logo, alt = paste(brand, "logo")),
+        div(class = "ie-brandtext", brand)
       ),
       if (!is.null(meta)) div(class = "ie-rail-meta", HTML(meta))
     ),
@@ -87,8 +89,28 @@ railUI <- function(id, pipeline, reference = list(),
       )
     ),
 
+    # Help lives here rather than at the top of each tab. Six copies of the
+    # phenotype-rules pill and a row of blue hint strips were taking the first
+    # 120px of every panel; one place, always reachable, no vertical cost.
+    if (!is.null(help)) tagList(
+      div(class = "ie-rail-divider"),
+      rail_heading("Help"),
+      div(class = "ie-rail-help", help)
+    ),
+
     if (!is.null(footer)) div(class = "ie-rail-footer", footer)
   )
+}
+
+#' A help entry in the rail. An actionLink, so the server opens a modal.
+rail_help_link <- function(inputId, label, sub = NULL) {
+  actionLink(inputId, class = "ie-rail-helplink",
+    label = tagList(
+      tags$span(class = "ie-nav-num", "?"),
+      tags$span(class = "ie-nav-text",
+        tags$span(label),
+        if (!is.null(sub)) tags$span(class = "ie-nav-sub", sub))
+    ))
 }
 
 #' A labelled control in the rail footer.

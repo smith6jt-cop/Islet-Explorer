@@ -102,7 +102,6 @@ inflammation_ui <- function(id) {
 
   tagList(
 
-    phenotype_rules_button("show_phenotype_rules_inflam"),
 
     # ===== Banner =====
     div(class = "card",

@@ -201,16 +201,33 @@ body:has(.ie-shell) { overflow-x: auto; overflow-y: hidden; }
   display: flex; flex-direction: column;
   overflow-y: auto;
 }
-.ie-rail-brand { padding: 24px 22px 18px; }
-.ie-brandmark { display: flex; align-items: center; gap: 9px; }
-.ie-brandbar {
-  width: 12px; height: 22px;
-  background: var(--rail-active); display: inline-block;
+.ie-rail-brand { padding: 20px 18px 16px; }
+.ie-brandmark { display: flex; align-items: center; gap: 11px; }
+/* The logo is a colour mark on a near-black rail, so it gets a light plate
+   rather than being left to fight the ground. */
+.ie-brandlogo {
+  width: 38px; height: 38px; flex: none; object-fit: contain;
+  background: #f6f4f2; padding: 4px;
 }
 .ie-brandtext {
-  font-family: var(--font-heading); font-weight: 800; font-size: 18px;
-  line-height: 1; letter-spacing: -0.01em; color: #f6f4f2;
+  font-family: var(--font-heading); font-weight: 800; font-size: 19px;
+  line-height: 1.05; letter-spacing: -0.015em; color: #f6f4f2;
 }
+
+/* --- help block ------------------------------------------------------- */
+.ie-rail-help { display: flex; flex-direction: column; }
+.ie-rail-helplink {
+  display: flex; align-items: center; gap: 12px;
+  padding: 9px 22px 9px 19px;
+  border-left: 3px solid transparent;
+  color: var(--rail-fg); text-decoration: none; font-size: 14px;
+  transition: background 120ms linear;
+}
+.ie-rail-helplink:hover, .ie-rail-helplink:focus {
+  background: rgba(255,255,255,0.05); color: var(--rail-fg);
+  text-decoration: none; border-left-color: var(--rail-active);
+}
+.ie-rail-helplink .ie-nav-num { color: var(--rail-active); opacity: 0.75; }
 .ie-rail-meta {
   font-size: 11px; color: var(--rail-muted);
   margin-top: 13px; line-height: 1.55;
@@ -483,11 +500,14 @@ body:has(.ie-shell) { overflow-x: auto; overflow-y: hidden; }
 @media (max-width: 1490px) {
   :root { --rail-w: 56px; --shell-min-w: 1342px; }
   .ie-rail-brand .ie-brandtext,
+  .ie-rail-help .ie-nav-text,
   .ie-rail-meta,
   .ie-rail-heading,
   .ie-rail-footer,
   .ie-nav-text { display: none; }
-  .ie-rail-brand { padding: 18px 0; display: flex; justify-content: center; }
+  .ie-rail-brand { padding: 14px 0; display: flex; justify-content: center; }
+  .ie-brandlogo { width: 30px; height: 30px; }
+  .ie-rail-helplink { justify-content: center; padding: 11px 0; gap: 0; }
   .ie-nav-body { justify-content: center; padding: 13px 0; gap: 0; border-left-width: 3px; }
   .ie-nav-num { min-width: 0; font-size: 12px; }
   .ie-rail-divider { margin: 14px 12px 0; }
@@ -615,3 +635,17 @@ body:has(.ie-shell) { overflow-x: auto; overflow-y: hidden; }
   color: var(--color-neutral-700); margin: 0 0 6px;
 }
 .ie-aside .ie-field .control-label { display: none; }  /* ie_field supplies it */
+
+/* ==========================================================================
+   Plot backgrounds
+   Transparent, so figures sit IN the card rather than as white rectangles on
+   it. theme_islet() already sets plot.background and panel.background to NA;
+   these are the container and the widget, which paint their own white.
+   ========================================================================== */
+.shiny-plot-output, .shiny-plot-output img,
+.js-plotly-plot, .js-plotly-plot .plot-container,
+.js-plotly-plot .svg-container,
+.js-plotly-plot .main-svg { background: transparent !important; }
+/* plotly draws the paper as an SVG rect; paper_bgcolor handles it, but the
+   layer beneath is set in CSS. */
+.js-plotly-plot .bg { fill: transparent !important; }

@@ -237,7 +237,7 @@ IE_TAB_KEYS <- c(vapply(IE_PIPELINE,  `[[`, "", "key"),
 # NOT showtext/sysfonts, which is what the delivered redesign used. Neither is
 # installed here; font_add_google() needs network access the server may not
 # have; and showtext_opts(dpi = 96) would silently fight
-# ggsave(dpi = ISLET_PNG_DIMS$dpi = 300) in every downloadHandler, shipping
+# ggsave(dpi = ISLET_PNG_DIMS$dpi = 300, bg = "transparent") in every downloadHandler, shipping
 # publication PNGs with text at roughly a third scale.
 #
 # NOT the .woff2 either: that file is a VARIABLE font (Google serves Archivo's
@@ -374,7 +374,15 @@ plotly_islet_config <- function(p, filename_root = "islet_explorer_plot",
     # tissue scatter, Card A bars) are read primarily via hover.
     hoverlabel  = list(font = plotly_islet_fonts()$hover),
     uniformtext = list(minsize = ISLET_FONT_SIZES$dense_min,
-                       mode    = uniform_text_mode)
+                       mode    = uniform_text_mode),
+    # TRANSPARENT, not white. plotly paints an opaque white paper and plot area
+    # by default, so every figure sat as a white rectangle on the card ground
+    # rather than in it. `rgba(0,0,0,0)` lets the card show through on screen --
+    # and because the modebar PNG export re-renders from the same layout, the
+    # downloaded image is transparent too, which is what a figure dropped into a
+    # manuscript or a slide wants.
+    paper_bgcolor = "rgba(0,0,0,0)",
+    plot_bgcolor  = "rgba(0,0,0,0)"
   )
   plotly::config(p,
     toImageButtonOptions = list(

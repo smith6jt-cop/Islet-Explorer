@@ -1222,7 +1222,7 @@ trajectory_server <- function(id, prepared, selected_islet, active_tab = reactiv
         theme(axis.text = element_blank(), axis.ticks = element_blank(),
               panel.grid = element_blank(), axis.line = element_blank())
     })
-    output$traj_umap_donor <- renderPlot({ traj_umap_donor_plot() })
+    output$traj_umap_donor <- renderPlot({ traj_umap_donor_plot() }, bg = "transparent")
     output$dl_umap_donor <- downloadHandler(
       filename = function() islet_png_filename("trajectory_umap_donor"),
       content = function(file) {
@@ -1265,7 +1265,7 @@ trajectory_server <- function(id, prepared, selected_islet, active_tab = reactiv
 
       g
     })
-    output$traj_umap_feature <- renderPlot({ traj_umap_feature_plot() })
+    output$traj_umap_feature <- renderPlot({ traj_umap_feature_plot() }, bg = "transparent")
     output$dl_umap_feature <- downloadHandler(
       filename = function() islet_png_filename("trajectory_umap_feature"),
       content = function(file) {
@@ -1529,7 +1529,7 @@ trajectory_server <- function(id, prepared, selected_islet, active_tab = reactiv
           axis.text.y = element_text(size = ISLET_FONT_SIZES$dense_min)
         )
     })
-    output$traj_multi_heatmap <- renderPlot({ traj_multi_heatmap_plot() },
+    output$traj_multi_heatmap <- renderPlot({ traj_multi_heatmap_plot() }, bg = "transparent",
       height = function() {
         n <- length(input$multi_heatmap_markers %||% character(0))
         # 44 px/row (was 36) so the dense-floor row labels have vertical room.

@@ -62,7 +62,12 @@ ui <- bslib::page_fillable(
 
     railUI(
       "rail", IE_PIPELINE, IE_REFERENCE,
+      brand = "Panc Floyd", logo = "logo.png",
       meta = "5,214 islets · 15 donors<br>nPOD CODEX · 31 markers",
+      help = tagList(
+        rail_help_link("help_rules", "Phenotype rules", "Marker definitions"),
+        rail_help_link("help_tips",  "Tips for this tab", "How to read it")
+      ),
       footer = tagList(
         # Real controls, not the delivered static text. These are the ONLY
         # writers of either palette; the sync-observer triads they replace are
@@ -141,7 +146,6 @@ ui <- bslib::page_fillable(
             ),
 
             div(class = "ie-aside-block ie-aside-foot",
-              phenotype_rules_button("show_phenotype_rules_aside"),
               uiOutput("aside_export")
             )
           )
@@ -441,7 +445,8 @@ server <- function(input, output, session) {
       }
     )
   })
-  output$islet_segmentation_view <- renderPlot({ islet_segmentation_view_plot() })
+  output$islet_segmentation_view <- renderPlot({ islet_segmentation_view_plot() },
+                                               bg = "transparent")
   output$dl_islet_segmentation_view <- downloadHandler(
     filename = function() {
       info <- selected_islet()
@@ -467,7 +472,8 @@ server <- function(input, output, session) {
     }
     tryCatch(render_drilldown_summary(cells, palette = active_palette()), error = function(e) NULL)
   })
-  output$islet_drilldown_summary <- renderPlot({ islet_drilldown_summary_plot() })
+  output$islet_drilldown_summary <- renderPlot({ islet_drilldown_summary_plot() },
+                                               bg = "transparent")
   output$dl_islet_drilldown_summary <- downloadHandler(
     filename = function() {
       info <- selected_islet()
@@ -530,23 +536,39 @@ server <- function(input, output, session) {
     }
   }, striped = TRUE, spacing = "s")
 
-  # ---- Phenotype Rules modal (shared across all tabs) ----
-  # Each tab's `phenotype_rules_button("show_phenotype_rules_<tab>")` fires one
-  # of these observers; they all open the same modal so users see a single
-  # source of truth for marker -> celltype gating.
-  for (id in c("show_phenotype_rules_aside",
-               "show_phenotype_rules_plot",
-               "show_phenotype_rules_traj",
-               "show_phenotype_rules_spatial",
-               "show_phenotype_rules_stats",
-               "show_phenotype_rules_inflam",
-               "show_phenotype_rules_viewer")) {
-    local({
-      input_id <- id
-      observeEvent(input[[input_id]], { showModal(phenotype_rules_modal_ui()) },
-                   ignoreInit = TRUE)
-    })
-  }
+  # ---- Help (rail) ----
+  # Was six `phenotype_rules_button("show_phenotype_rules_<tab>")` pills, one per
+  # tab, plus a row of blue hint strips at the top of Plot and Trajectory. All of
+  # it is in the rail now: one place, always reachable, and the first ~120px of
+  # every panel goes back to the content.
+  observeEvent(input$help_rules, showModal(phenotype_rules_modal_ui()), ignoreInit = TRUE)
+
+  # Per-tab reading notes, previously a row of blue strips eating the first
+  # ~120px of the Plot and Trajectory panels.
+  observeEvent(input$help_tips, {
+    tips <- switch(active_tab() %||% "plot",
+      plot = tagList(
+        tags$p(tags$strong("Click an islet."), " Turn on \u201cShow individual points\u201d, then click any point on the Islet Size Distribution scatter to open its segmentation map below."),
+        tags$p(tags$strong("Isolate a donor."), " Set \u201cColour points by\u201d to Donor ID, then click a donor in the legend to show or hide it."),
+        tags$p(tags$strong("Denominators are explicit."), " \u201c% of core cells\u201d, \u201ccells per islet\u201d and \u201ccells per mm\u00b2\u201d are different questions; the note under the metric selector names the denominator in force.")),
+      trajectory = tagList(
+        tags$p(tags$strong("Click an islet."), " Click any point on the pseudotime scatter to open its segmentation map."),
+        tags$p(tags$strong("Rank vs raw DPT."), " Rank spreads islets evenly; raw shows true spacing, so where islets actually concentrate is visible. Trend curvature on the rank axis is partly an artifact of the transform.")),
+      statistics = tagList(
+        tags$p(tags$strong("One principled path."), " Test type is auto-selected from normality and \u03b1 is fixed at 0.05 \u2014 both were classic \u201cmove until significant\u201d levers. The sensitivity knobs sit behind a collapsed panel on purpose."),
+        tags$p(tags$strong("Section 3 is exploratory."), " The per-bin analysis is hypothesis-generating, not confirmatory.")),
+      spatial = tagList(
+        tags$p(tags$strong("Drag to zoom."), " Double-click to reset. The tissue scatter draws every cell in the donor, so it is a ggplot rather than a plotly figure."),
+        tags$p(tags$strong("Card B filters the summary, not the test."), " Unticking a phenotype changes what is drawn; the correction still runs across everything present.")),
+      inflammation = tagList(
+        tags$p(tags$strong("Cohort-level, not per-islet."), " Both cards read the tissue-wide single-cell table and test every cell type at once."),
+        tags$p(tags$strong("Granularity matters."), " Four of the 21 labels are parents of other labels; the selector controls whether they are dropped, rolled up, or tested as given.")),
+      viewer = tags$p("Click inside the viewer to enable pan and zoom. This tab is read-only \u2014 nothing here changes the data."),
+      tags$p("No notes for this tab.")
+    )
+    showModal(modalDialog(title = "Tips for this tab", tips,
+                          easyClose = TRUE, footer = modalButton("Close")))
+  }, ignoreInit = TRUE)
 }
 
 shinyApp(ui, server)

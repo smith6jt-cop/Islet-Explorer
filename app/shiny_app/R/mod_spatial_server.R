@@ -390,7 +390,8 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         )
     })
 
-    output$tissue_scatter <- shiny::renderPlot({ spatial_tissue_scatter_plot() }, height = 800)
+    output$tissue_scatter <- shiny::renderPlot({ spatial_tissue_scatter_plot() },
+                                               height = 800, bg = "transparent")
     output$dl_tissue_scatter <- shiny::downloadHandler(
       filename = function() islet_png_filename(paste0("spatial_tissue_donor_", input$donor %||% "all")),
       content = function(file) {
@@ -513,7 +514,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         theme(axis.text = element_blank(), axis.ticks = element_blank(),
               panel.grid = element_blank(), axis.line = element_blank())
     })
-    output$spatial_umap_donor <- renderPlot({ spatial_umap_donor_plot() })
+    output$spatial_umap_donor <- renderPlot({ spatial_umap_donor_plot() }, bg = "transparent")
     output$dl_spatial_umap_donor <- downloadHandler(
       filename = function() islet_png_filename("spatial_umap_donor"),
       content = function(file) {
