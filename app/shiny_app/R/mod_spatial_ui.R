@@ -74,6 +74,11 @@ spatial_ui <- function(id) {
         div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible; height: 100%",
           h5("Islet-Level UMAPs"),
           uiOutput(ns("leiden_not_available")),
+          # The two UMAPs were offset three ways: 400px vs 300px, one carrying a
+          # download-button row the other did not, and the plotly one reserving
+          # a 28px modebar strip its ggplot neighbour has no equivalent for.
+          # Equal plot areas, and the export moved to a shared row beneath BOTH
+          # so neither column ends up taller.
           fluidRow(
             column(6,
               h5("Leiden Clustering", style = "font-size: 13px; margin-top: 0"),
@@ -81,12 +86,15 @@ spatial_ui <- function(id) {
             ),
             column(6,
               h5("Donor Status", style = "font-size: 13px; margin-top: 0"),
-              plotOutput(ns("spatial_umap_donor"), height = 300),
-              div(style = "text-align: right; margin-top: 6px",
-                downloadButton(ns("dl_spatial_umap_donor"), "Download PNG",
-                               class = "btn-sm btn-outline-primary"))
+              # +28px matches the .js-plotly-plot modebar padding on the left,
+              # so both plot areas start at the same y.
+              div(style = "padding-top: 28px",
+                plotOutput(ns("spatial_umap_donor"), height = 372))
             )
           ),
+          div(style = "text-align: right; margin-top: 6px",
+            downloadButton(ns("dl_spatial_umap_donor"), "Download PNG",
+                           class = "btn-sm btn-outline-primary")),
           hr(style = "margin: 8px 0;"),
           h5("Cluster Composition", style = "font-size: 15px"),
           plotlyOutput(ns("cluster_composition"), height = "450px")

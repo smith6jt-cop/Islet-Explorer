@@ -201,7 +201,7 @@ body:has(.ie-shell) { overflow-x: auto; overflow-y: hidden; }
   display: flex; flex-direction: column;
   overflow-y: auto;
 }
-.ie-rail-brand { padding: 20px 18px 14px; }
+.ie-rail-brand { padding: 16px 18px 12px; }
 /* STACKED, not side by side. The rail is 204px wide with 18px padding, leaving
    168px of content: a logo big enough to read plus "Panc Floyd" at 19px does
    not fit on one line. Stacking gives the mark the full column width and keeps
@@ -210,7 +210,7 @@ body:has(.ie-shell) { overflow-x: auto; overflow-y: hidden; }
 /* The logo is a colour mark on a near-black rail, so it sits on a light plate
    rather than being left to fight the ground. */
 .ie-brandlogo {
-  width: 100%; max-width: 132px; height: auto; flex: none; object-fit: contain;
+  width: 100%; max-width: 112px; height: auto; flex: none; object-fit: contain;
   background: #f6f4f2; padding: 8px;
 }
 .ie-brandtext {
@@ -222,7 +222,7 @@ body:has(.ie-shell) { overflow-x: auto; overflow-y: hidden; }
 .ie-rail-help { display: flex; flex-direction: column; }
 .ie-rail-helplink {
   display: flex; align-items: center; gap: 12px;
-  padding: 9px 22px 9px 19px;
+  padding: 7px 22px 7px 19px;
   border-left: 3px solid transparent;
   color: var(--rail-fg); text-decoration: none; font-size: 14px;
   transition: background 120ms linear;
@@ -254,7 +254,7 @@ body:has(.ie-shell) { overflow-x: auto; overflow-y: hidden; }
 .ie-nav input { position: absolute; opacity: 0; width: 0; height: 0; pointer-events: none; }
 .ie-nav-body {
   display: flex; align-items: center; gap: 12px;
-  padding: 11px 22px 11px 19px;
+  padding: 9px 22px 9px 19px;
   font-size: 14px;
   border-left: 3px solid transparent;
   transition: background 120ms linear;
@@ -276,9 +276,12 @@ body:has(.ie-shell) { overflow-x: auto; overflow-y: hidden; }
 .ie-nav-text { display: flex; flex-direction: column; line-height: 1.25; }
 .ie-nav-sub { font-size: 10.5px; color: var(--rail-muted); font-weight: 400; }
 
+/* NOT margin-top:auto. Pinning the footer to the bottom pushed the two palette
+   dropdowns below the fold on a 1000px viewport, so opening one scrolled the
+   rail. They sit directly under Help now and the rail never needs to scroll. */
 .ie-rail-footer {
-  margin-top: auto; padding: 22px;
-  display: flex; flex-direction: column; gap: 13px;
+  margin-top: 2px; padding: 12px 22px 16px;
+  display: flex; flex-direction: column; gap: 10px;
   border-top: 2px solid rgba(255,255,255,0.08);
 }
 .ie-rail-footer-label {
@@ -730,15 +733,22 @@ body:has(.ie-shell) { overflow-x: auto; overflow-y: hidden; }
    panels, its own scroll-free strip -- the eye learns to stop seeing it, which
    is the point. Tab-specific controls stay in the right panel.
    ========================================================================== */
+/* align-items:flex-START, not flex-end. Ending the items aligned their BOTTOM
+   edges, so a slider and a checkbox group -- different heights -- put their
+   titles at different y. Starting them puts every .ie-field-label on one
+   baseline and lets the controls hang to whatever height they need. */
 .ie-topbar {
   flex: 0 0 auto;
-  display: flex; align-items: flex-end; flex-wrap: wrap;
-  gap: 12px 20px;
-  padding: 12px 24px;
+  display: flex; align-items: flex-start; flex-wrap: wrap;
+  gap: 14px 38px;
+  padding: 14px 26px 16px;
   border-bottom: 2px solid var(--color-neutral-300);
   background: var(--color-bg);
 }
-.ie-topbar .ie-field { margin-bottom: 0; gap: 5px; }
+.ie-topbar .ie-field { margin-bottom: 0; gap: 7px; }
+/* One fixed label height so a one-line and a two-line title still leave
+   their controls on the same row. */
+.ie-topbar .ie-field-label { min-height: 13px; line-height: 1.15; }
 .ie-topbar .ie-field > .form-group,
 .ie-topbar .ie-field > .shiny-input-container { margin-bottom: 0; width: auto; }
 .ie-topbar .form-group { margin-bottom: 0; }
