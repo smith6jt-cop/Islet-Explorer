@@ -20,6 +20,44 @@
 # explicitly rather than trusting `automargin`, and use `type = "category"` on
 # any axis whose labels are numeric-looking strings.
 
+#' Selection block for the frozen right-hand panel.
+#'
+#' This tab reads the tissue-wide single-cell table, not the islet frame, so its
+#' selectors are about which CELLS enter each card. The explanatory notes that
+#' sat under each control come with them.
+#'
+#' The cohort filter reaches this tab as a donor keep-list only: groups, age and
+#' sex resolve against the islet table and land as an id membership test, while
+#' min-cells and diameter are islet-level and are reported as not-applied rather
+#' than silently ignored.
+inflammation_selection_ui <- function(id) {
+  ns <- NS(id)
+  tagList(
+    ie_field("Composition: cells included",
+      selectInput(ns("edger_region"), NULL,
+                  choices = c("Islet core + peri-islet" = "core_peri",
+                              "Islet core only" = "core",
+                              "All tissue" = "all"),
+                  selected = "core_peri", width = "100%")),
+    ie_field("Infiltration: denominator",
+      selectInput(ns("infil_denom"), NULL,
+                  choices = c("Islet + peri-islet cells" = "isletperi",
+                              "Cells within 100 µm of an islet" = "near100",
+                              "All cells on the section" = "all"),
+                  selected = "isletperi", width = "100%")),
+    tags$small(style = "color: #888; display: block; margin: -4px 0 10px; line-height: 1.35;",
+      "The ROI analogue. Steenbuck et al. normalise per islet-centred ROI; ",
+      "normalising by the whole section instead adds 4–23× donor-to-donor ",
+      "variance and hid three phenotypes that are significant under the default."),
+    checkboxInput(ns("infil_match_numer"), "Match numerator to denominator", value = FALSE),
+    tags$small(style = "color: #888; display: block; margin: -6px 0 10px; line-height: 1.35;",
+      "Restores the paper's exact per-cell mean. Off by default because matching ",
+      "confines the 1/d gradient to the 20 µm peri band."),
+    checkboxInput(ns("infil_log"), "Log10 y-axis", value = TRUE),
+    uiOutput(ns("infil_pheno_ui"))
+  )
+}
+
 inflammation_ui <- function(id) {
   ns <- NS(id)
 
@@ -94,20 +132,13 @@ inflammation_ui <- function(id) {
     fluidRow(
       column(12,
         div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible;",
-          fluidRow(
-            column(5,
-              selectInput(ns("edger_region"), "Cells included",
-                          choices = c("Islet core + peri-islet" = "core_peri",
-                                      "Islet core only" = "core",
-                                      "All tissue" = "all"),
-                          selected = "core_peri")
-            ),
-            # The pairwise Contrast selector is gone: this is a single omnibus
-            # across every stage present, so there is no contrast to pick. The
-            # table reports the log-ratio difference between the extreme stages.
-            column(5, style = "padding-top: 25px;",
-              downloadButton(ns("dl_edger"), "Download results CSV")
-            )
+          # "Cells included" moved to inflammation_selection_ui() in the frozen
+          # right-hand panel. The pairwise Contrast selector is gone entirely:
+          # this is one omnibus across every stage present, so there is no
+          # contrast to pick -- the table reports the log-ratio difference
+          # between the extreme stages.
+          div(style = "margin-bottom: 10px;",
+            downloadButton(ns("dl_edger"), "Download results CSV")
           ),
           uiOutput(ns("edger_note")),
           fluidRow(style = "display: flex; flex-wrap: wrap;",
@@ -147,30 +178,11 @@ inflammation_ui <- function(id) {
     fluidRow(
       column(12,
         div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible;",
-          fluidRow(
-            column(5,
-              selectInput(ns("infil_denom"), "Normalise by (denominator)",
-                          choices = c("Islet + peri-islet cells" = "isletperi",
-                                      "Cells within 100 µm of an islet" = "near100",
-                                      "All cells on the section" = "all"),
-                          selected = "isletperi"),
-              tags$small(style = "color: #888; display: block; margin-top: -10px; line-height: 1.35;",
-                "The ROI analogue. Steenbuck et al. normalise per islet-centred ROI; ",
-                "normalising by the whole section instead adds 4\u201323\u00d7 donor-to-donor ",
-                "variance and hid three phenotypes that are significant under the default.")
-            ),
-            column(4,
-              uiOutput(ns("infil_pheno_ui"))
-            ),
-            column(3, style = "padding-top: 25px;",
-              checkboxInput(ns("infil_match_numer"),
-                            "Match numerator to denominator", value = FALSE),
-              tags$small(style = "color: #888; display: block; margin-top: -8px; line-height: 1.35;",
-                "Restores the paper's exact per-cell mean. Off by default because matching ",
-                "confines the 1/d gradient to the 20 µm peri band."),
-              checkboxInput(ns("infil_log"), "Log10 y-axis", value = TRUE),
-              downloadButton(ns("dl_infil"), "Download scores CSV")
-            )
+          # Denominator, numerator matching, log axis and the phenotype picker
+          # all moved to inflammation_selection_ui(). Their explanatory notes go
+          # with them; what is left here is the export.
+          div(style = "margin-bottom: 10px;",
+            downloadButton(ns("dl_infil"), "Download scores CSV")
           ),
           fluidRow(style = "display: flex; flex-wrap: wrap;",
             column(7,

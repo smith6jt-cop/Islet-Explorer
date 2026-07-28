@@ -3,6 +3,31 @@
 # Layout: Controls sidebar (col-2) + Tissue Scatter (col-6) + Leiden Panel (col-4)
 # + 3 neighborhood analysis card rows below (A: Infiltration, B: Enrichment, C: Proximity)
 
+#' Selection block for the frozen right-hand panel.
+#'
+#' These controls used to sit in a col-2 card at the left of the tab. Moving
+#' them means Spatial's selectors appear in the same place as every other tab's.
+#' Dropped on the way: `groups` (the cohort filter owns donor status now, for
+#' all tabs) and the two palette selectInputs, which the rail footer owns.
+spatial_selection_ui <- function(id) {
+  ns <- NS(id)
+  tagList(
+    uiOutput(ns("donor_selector")),
+    ie_field("Colour cells by",
+      selectInput(ns("color_by"), NULL,
+                  choices = c("Phenotype" = "phenotype", "Leiden Cluster" = "leiden"),
+                  selected = "phenotype", width = "100%")),
+    uiOutput(ns("leiden_res_selector")),
+    ie_field("Show cells",
+      radioButtons(ns("region_filter"), NULL,
+                   choices = c("All" = "all", "Core + Peri" = "core_peri", "Core Only" = "core"),
+                   selected = "all", inline = FALSE)),
+    checkboxInput(ns("color_background"), "Colour background cells", value = FALSE),
+    uiOutput(ns("phenotype_filter")),
+    downloadButton(ns("download_spatial"), "Download CSV", class = "btn-block")
+  )
+}
+
 spatial_ui <- function(id) {
   ns <- NS(id)
 
@@ -24,43 +49,6 @@ spatial_ui <- function(id) {
     phenotype_rules_button("show_phenotype_rules_spatial"),
     # ==== ROW 1 (existing): Controls + Scatter + Leiden ====
     fluidRow(style = "display: flex; flex-wrap: wrap;",
-      # ---- Left sidebar: Controls ----
-      column(2,
-        div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible; height: 100%;",
-          h5("Spatial Tissue Map", style = "margin-top: 0;"),
-          uiOutput(ns("donor_selector")),
-          hr(style = "margin: 8px 0;"),
-          selectInput(ns("color_by"), "Color by",
-                      choices = c("Phenotype" = "phenotype",
-                                  "Leiden Cluster" = "leiden"),
-                      selected = "phenotype"),
-          uiOutput(ns("leiden_res_selector")),
-          hr(style = "margin: 8px 0;"),
-          radioButtons(ns("region_filter"), "Show Cells",
-                       choices = c("All" = "all",
-                                   "Core + Peri" = "core_peri",
-                                   "Core Only" = "core"),
-                       selected = "all", inline = FALSE),
-          checkboxInput(ns("color_background"), "Color background cells", value = FALSE),
-          hr(style = "margin: 8px 0;"),
-          uiOutput(ns("phenotype_filter")),
-          hr(style = "margin: 8px 0;"),
-          checkboxGroupInput(ns("groups"), "Donor Status",
-                             choices = c("ND", "Aab+", "T1D"),
-                             selected = c("ND", "Aab+", "T1D"), inline = FALSE),
-          hr(style = "margin: 8px 0;"),
-          h5("Palettes", style = "font-size: 14px; margin-bottom: 8px;"),
-          selectInput("spatial_palette", "Phenotype",
-                      choices = c("Original", "High Contrast", "Colorblind Safe", "Maximum Distinction"),
-                      selected = "High Contrast"),
-          selectInput("spatial_donor_palette", "Donor Status",
-                      choices = names(DONOR_PALETTES),
-                      selected = "Bright"),
-          hr(style = "margin: 8px 0;"),
-          downloadButton(ns("download_spatial"), "Download CSV", style = "width: 100%; font-size: 13px;")
-        )
-      ),
-
       # ---- Center: Tissue Scatter ----
       column(6,
         div(class = "card", style = "padding: 15px; margin-bottom: 15px; height: 100%;",

@@ -85,22 +85,6 @@ ui <- bslib::page_fillable(
       div(
         class = "ie-body",
 
-        # The Plot sidebar stays OUTSIDE the navset. statistics_server consumes
-        # plot_returns$raw_df_prezero, so these inputs must remain mounted AND
-        # visible on the Statistics tab; the conditionalPanels inside
-        # plot_sidebar_ui hide the controls that do not apply there. Replaces
-        # the old column(width = 1.4), which emitted an invalid col-sm-1.4 and
-        # took its width entirely from the deleted jQuery.
-        # conditionalPanel wraps the SIDEBAR, not the other way round. Inside it,
-        # the controls are hidden but .ie-sidebar is still a flex item, so every
-        # tab that does not use the sidebar showed a 208px blank gutter. Wrapped
-        # this way, Shiny's inline display:none removes the whole thing from the
-        # flex row and the panels take the full width.
-        conditionalPanel(
-          condition = "input.panels == 'plot' || input.panels == 'statistics'",
-          div(class = "ie-sidebar", plot_sidebar_ui("plot"))
-        ),
-
         div(
           class = "ie-panels",
           # navset_hidden mounts EVERY panel and toggles CSS visibility, just
@@ -118,6 +102,48 @@ ui <- bslib::page_fillable(
             bslib::nav_panel_hidden("spatial",      spatial_ui("spatial")),
             bslib::nav_panel_hidden("inflammation", inflammation_ui("inflam")),
             bslib::nav_panel_hidden("viewer",       viewer_ui("viewer"))
+          )
+        ),
+
+        # ---- Frozen control panel ----------------------------------------
+        # One control surface for the whole app, in the same place on every
+        # tab. Two blocks, and the split is the point: SELECTION is what each
+        # analysis plots and is per-tab; FILTER is which islets are in scope and
+        # is identical everywhere. Before this, donor status lived under three
+        # different ids, min-cells under four with no syncing at all, and
+        # Trajectory and Inflammation had no cohort filter whatsoever.
+        #
+        # Hidden on the Viewer, which is a read-only image surface that reads
+        # none of this.
+        conditionalPanel(
+          condition = "input.panels != 'viewer'",
+          tags$aside(
+            class = "ie-aside",
+
+            div(class = "ie-aside-block",
+              div(class = "ie-aside-head", "Selection"),
+              # Each tab mounts its own selectors here. They stay namespaced to
+              # their module, so nothing about the modules' wiring changes --
+              # only where the controls are rendered.
+              conditionalPanel("input.panels == 'plot' || input.panels == 'statistics'",
+                               plot_selection_ui("plot")),
+              conditionalPanel("input.panels == 'trajectory'",
+                               trajectory_selection_ui("traj")),
+              conditionalPanel("input.panels == 'spatial'",
+                               spatial_selection_ui("spatial")),
+              conditionalPanel("input.panels == 'inflammation'",
+                               inflammation_selection_ui("inflam"))
+            ),
+
+            div(class = "ie-aside-block",
+              div(class = "ie-aside-head", "Cohort filter"),
+              cohortFilterUI("cohort")
+            ),
+
+            div(class = "ie-aside-block ie-aside-foot",
+              phenotype_rules_button("show_phenotype_rules_aside"),
+              uiOutput("aside_export")
+            )
           )
         )
       )
@@ -178,6 +204,13 @@ server <- function(input, output, session) {
   # repointed -- a real dark mode belongs in the CSS layer as a token swap on a
   # `data-theme` attribute, never as a body-level renderUI, which by
   # construction outranks the stylesheet that owns the ground colour.
+
+  # ---- Shared cohort filter (frozen right-hand panel) ----
+  # One filter for every tab. Before this, donor status lived under three ids,
+  # min-cells under four with no syncing at all (and Trajectory's bound to a
+  # different denominator), and Trajectory and Inflammation had no cohort filter
+  # whatsoever.
+  cohort <- cohortFilterServer("cohort", prepared)
 
   # ---- Module servers ----
 
@@ -305,7 +338,8 @@ server <- function(input, output, session) {
   # Plot module: returns list(raw_df, raw_df_prezero, summary_df, get_selection_description)
   plot_returns <- plot_server("plot", prepared, selected_islet, active_tab, active_donor_colors,
                               remove_outliers = remove_outliers_global,
-                              outlier_threshold = outlier_z_global)
+                              outlier_threshold = outlier_z_global,
+                              cohort = cohort)
 
   # Trajectory module. `forced_image` used to be passed here as the 4th
   # positional argument and was never read in that module -- dropped, which
@@ -354,6 +388,16 @@ server <- function(input, output, session) {
   # files remain under R/ (unreferenced) and ai_helpers.R still loads the UF
   # Navigator credentials; nothing mounts them. Delete R/mod_ai_assistant_*.R
   # and R/ai_helpers.R to remove it entirely.
+
+  # Footer of the frozen panel: the cohort readout is rendered by the module;
+  # this slot carries the tab-appropriate export.
+  output$aside_export <- renderUI({
+    tab <- active_tab()
+    tags$div(style = "margin-top: 10px; font-size: 11px; color: #777; line-height: 1.5;",
+      "Filters above apply to every analysis tab. Cell-level tabs (Spatial, ",
+      "Inflammation) receive donor scope only \u2014 min-cells and diameter are ",
+      "islet-level and are reported as not applied rather than ignored.")
+  })
 
   # ---- Unified segmentation + drilldown plot (root-level, used by both Plot and Trajectory panels) ----
   islet_segmentation_view_plot <- reactive({
@@ -490,7 +534,8 @@ server <- function(input, output, session) {
   # Each tab's `phenotype_rules_button("show_phenotype_rules_<tab>")` fires one
   # of these observers; they all open the same modal so users see a single
   # source of truth for marker -> celltype gating.
-  for (id in c("show_phenotype_rules_plot",
+  for (id in c("show_phenotype_rules_aside",
+               "show_phenotype_rules_plot",
                "show_phenotype_rules_traj",
                "show_phenotype_rules_spatial",
                "show_phenotype_rules_stats",

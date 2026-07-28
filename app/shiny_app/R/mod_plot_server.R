@@ -16,7 +16,12 @@
 plot_server <- function(id, prepared, selected_islet, active_tab = reactive("plot"),
                         donor_colors_reactive = reactive(DONOR_COLORS_BRIGHT),
                         remove_outliers = reactive(FALSE),
-                        outlier_threshold = reactive(3.0)) {
+                        outlier_threshold = reactive(3.0),
+                        # The shared cohort filter. Default keeps headless
+                        # testServer runs working without mounting the module.
+                        cohort = list(apply = function(df, ...) df,
+                                      spec = function() cohort_spec_default(),
+                                      provenance = function(...) character(0))) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
@@ -207,7 +212,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("plo
       df <- raw_df_base()
       if (!is.null(df) && nrow(df) > 0) {
         aabp_donors <- df %>% dplyr::filter(donor_status == "Aab+")
-        if (nrow(aabp_donors) == 0 && "Aab+" %in% input$groups) {
+        if (nrow(aabp_donors) == 0 && "Aab+" %in% cohort$spec()$groups) {
           div(style = "color: #d9534f; font-weight: bold; margin-bottom: 10px;",
               "\u26a0 No matching donors.")
         } else {
@@ -256,10 +261,9 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("plo
     raw_df_base <- reactive({
       pd <- prepared()
       mode <- input$mode %||% "Cell Populations"
-      groups <- input$groups
-      if (is.null(groups) || !length(groups)) {
-        groups <- c("ND", "Aab+", "T1D")
-      }
+      # Donor status is the cohort filter's now, not this module's.
+      groups <- cohort$spec()$groups
+      if (is.null(groups) || !length(groups)) groups <- GROUP_LEVELS
       w <- input$which
       if (is.null(w) || length(w) == 0) w <- NA_character_
 
@@ -417,64 +421,17 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("plo
         dplyr::mutate(donor_status = `Donor Status`) %>%
         dplyr::filter(!is.na(value))
 
-      # Apply min cells/islet filter
-      min_cells <- input$min_cells %||% 1
-      if (min_cells > 1 &&
-          "total_cells_core" %in% colnames(out) &&
-          "total_cells_peri" %in% colnames(out)) {
-        tc_core <- suppressWarnings(as.numeric(out$total_cells_core))
-        tc_peri <- suppressWarnings(as.numeric(out$total_cells_peri))
-        tc_core <- ifelse(is.finite(tc_core), tc_core, 0)
-        tc_peri <- ifelse(is.finite(tc_peri), tc_peri, 0)
-        out <- out[is.finite(tc_core + tc_peri) & (tc_core + tc_peri) >= min_cells, , drop = FALSE]
-      }
+      # ONE filter, shared by every tab. This block used to inline six separate
+      # filters -- min-cells, diameter, age, sex, AAb, and donor status upstream
+      # -- each of which was re-implemented slightly differently on the other
+      # tabs. The ordering (groups -> age -> sex -> AAb -> min-cells -> diameter)
+      # and the skip audit now live in R/cohort_filter.R, so a filter that
+      # cannot bind to a column reports itself instead of silently doing
+      # nothing. That failure mode is not hypothetical: min-cells held Capillary
+      # at 5,380 islets and p = 0.3476 from min-cells 1 through 200 while the
+      # CSV header still reported the value the user had set.
+      out <- cohort$apply(out)
 
-      # Apply diameter range filter
-      if (!is.null(input$diam_range) && length(input$diam_range) == 2) {
-        diam_min <- as.numeric(input$diam_range[1])
-        diam_max <- as.numeric(input$diam_range[2])
-        if (is.finite(diam_min) && is.finite(diam_max)) {
-          out <- out %>%
-            dplyr::filter(is.finite(islet_diam_um) &
-                          islet_diam_um >= diam_min &
-                          islet_diam_um <= diam_max)
-        }
-      }
-
-      # Age filter
-      if (!is.null(input$age_range) && length(input$age_range) == 2 && "age" %in% colnames(out)) {
-        out <- out[is.finite(as.numeric(out$age)) &
-                   as.numeric(out$age) >= input$age_range[1] &
-                   as.numeric(out$age) <= input$age_range[2], , drop = FALSE]
-      }
-      # Sex filter (data column is `gender`)
-      if (!is.null(input$gender_filter) && "gender" %in% colnames(out)) {
-        out <- out[as.character(out$gender) %in% input$gender_filter, , drop = FALSE]
-      }
-
-      # Apply AAb filters (only within Aab+ donor group)
-      flags <- input$aab_flags
-      all_aab_cols <- c("AAb_GADA", "AAb_IA2A", "AAb_ZnT8A", "AAb_IAA", "AAb_mIAA")
-
-      others <- out %>% dplyr::filter(donor_status != "Aab+")
-      aabp   <- out %>% dplyr::filter(donor_status == "Aab+")
-
-      if (nrow(aabp) > 0) {
-        if (is.null(flags) || length(flags) == 0) {
-          aabp <- aabp[0, , drop = FALSE]
-        } else {
-          unchecked <- setdiff(all_aab_cols, flags)
-          unchecked_avail <- intersect(unchecked, colnames(aabp))
-          if (length(unchecked_avail) > 0) {
-            exclude_mat <- as.data.frame(aabp[, unchecked_avail, drop = FALSE])
-            for (cc in colnames(exclude_mat)) exclude_mat[[cc]] <- as.logical(exclude_mat[[cc]])
-            has_unchecked <- rowSums(exclude_mat, na.rm = TRUE) > 0
-            aabp <- aabp[!has_unchecked, , drop = FALSE]
-          }
-        }
-      }
-
-      out <- dplyr::bind_rows(others, aabp)
       attr(out, "selection_used") <- w
       attr(out, "mode_used") <- mode
       out
@@ -1361,40 +1318,17 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("plo
       desc <- c(desc, paste("Selection:", input$which %||% "Unknown"))
       desc <- c(desc, paste("Metric:", input$metric %||% "Unknown"))
 
-      desc <- c(desc, paste("Donor Groups:", paste(input$groups %||% c(), collapse = ", ")))
-
-      if (length(input$aab_flags) > 0) {
-        all_aab <- c("AAb_GADA", "AAb_IA2A", "AAb_ZnT8A", "AAb_IAA", "AAb_mIAA")
-        excluded <- setdiff(all_aab, input$aab_flags)
-        if (length(excluded) > 0) {
-          aab_desc <- paste("AAb Filter: Excluding donors with", paste(excluded, collapse = ", "))
-          desc <- c(desc, aab_desc)
-        } else {
-          desc <- c(desc, "AAb Filter: All Aab+ donors included")
-        }
-      }
-
-      # Demographic + size filters. These CHANGE WHICH ISLETS ARE IN THE FILE,
-      # so omitting them made two CSVs with different row sets look identical in
-      # provenance. `min_cells`, age, and sex were all silently absent.
-      desc <- c(desc, paste("Min cells per islet (core+peri):", input$min_cells %||% 1))
-      if (!is.null(input$age_range) && length(input$age_range) == 2) {
-        desc <- c(desc, paste("Donor Age Range:",
-                              input$age_range[1], "-", input$age_range[2], "years"))
-      }
-      if (!is.null(input$gender_filter)) {
-        sex_labels <- c(F = "Female", M = "Male")
-        sel <- input$gender_filter
-        desc <- c(desc, paste("Sex:", paste(ifelse(sel %in% names(sex_labels),
-                                                   sex_labels[sel], sel), collapse = ", ")))
-      }
-
+      # Cohort scope comes from ONE generator, built from the shared filter's
+      # spec plus its audit -- so an export cannot omit a filter the panel owns,
+      # and cannot report one that was silently skipped. Hand-writing these
+      # lines is what let min_cells, age and sex go missing from the header
+      # while genuinely changing which rows were in the file.
+      desc <- c(desc, "", cohort$provenance(attr(raw_df_base(), "cohort_audit")), "")
+      desc <- c(desc, "[PLOT TAB] Controls owned by this panel:")
       desc <- c(desc, paste("Statistic:", input$stat %||% "mean_se"))
       desc <- c(desc, paste("Bin Width:", input$binwidth %||% "50", "\u00b5m"))
-      if (!is.null(input$diam_range) && length(input$diam_range) == 2) {
-        desc <- c(desc, paste("Diameter Range:",
-                              input$diam_range[1], "-", input$diam_range[2], "\u00b5m"))
-      }
+      # Diameter range now appears in the cohort block above -- it is a shared
+      # filter, so it is generated rather than hand-written here.
 
       # Analysis-rule state. Without these a file with 17 outliers removed is
       # indistinguishable from one with none.

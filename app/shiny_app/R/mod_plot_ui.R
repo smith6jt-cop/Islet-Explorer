@@ -1,79 +1,48 @@
 # ---------- Plot module UI ----------
-# Exports: plot_sidebar_ui(id), plot_main_ui(id)
+# Exports: plot_selection_ui(id), plot_main_ui(id)
 # All Plot-related inputs are namespaced by this module.
 
-#' Sidebar UI for the Plot tab
-#' Contains data filters, autoantibody filters, statistic selector, and export controls.
-plot_sidebar_ui <- function(id) {
+#' Selection block for the frozen right-hand panel.
+#'
+#' Replaces plot_sidebar_ui(). What it kept is what SELECTS the data: the data
+#' layer, the feature within it, the metric, and the summary statistic drawn on
+#' the scatter. What it lost went to the shared cohort filter, which now owns
+#' the same controls for every tab:
+#'
+#'   groups / age_range / gender_filter / aab_flags / min_cells / diam_range
+#'   sidebar_remove_outliers / sidebar_outlier_z / sidebar_donor_palette
+#'
+#' `sidebar_donor_palette` moved to the rail footer with the phenotype palette.
+#' The four conditionalPanels that used to hide half of these on the Statistics
+#' tab are gone with them -- Statistics shares this selection block, because it
+#' has always consumed the Plot module's frame.
+plot_selection_ui <- function(id) {
   ns <- NS(id)
-  div(class = "sidebar", style = "height: 100%;",
-    h4("Data & Filters"),
-    selectInput(ns("mode"), "Data Layer",
-                choices = c("Microenvironment", "Cell Populations"),
-                selected = "Cell Populations"),
+  tagList(
+    ie_field("Data layer",
+      selectInput(ns("mode"), NULL,
+                  choices = c("Microenvironment", "Cell Populations"),
+                  selected = "Cell Populations", width = "100%")),
     uiOutput(ns("dynamic_selector")),
     uiOutput(ns("metric_selector")),
-    hr(),
-    h5("Autoantibody filter (Aab+ donors only)"),
+    # radioButtons carries its OWN label rather than being wrapped in ie_field.
+    # Inside ie_field's flex column the Bootstrap-3-compat hanging indent
+    # (label padding-left:20px with the input at margin-left:-20px) pushed the
+    # radio circles outside the 236px panel, so the options rendered as bare
+    # indented text with no visible control at all. The aside styles
+    # .control-label to match .ie-field-label, so this looks identical.
+    radioButtons(ns("stat"), "Summary statistic",
+                 choices = c("Mean\u00b1SE" = "mean_se",
+                             "Mean\u00b1SD" = "mean_sd",
+                             "Median + IQR" = "median_iqr"),
+                 selected = "mean_se"),
     uiOutput(ns("aab_warning")),
-    checkboxGroupInput(ns("aab_flags"), NULL,
-                       choices = c("GADA" = "AAb_GADA",
-                                   "IA2A" = "AAb_IA2A",
-                                   "ZnT8A" = "AAb_ZnT8A",
-                                   "IAA" = "AAb_IAA",
-                                   "mIAA" = "AAb_mIAA"),
-                       selected = c("AAb_GADA", "AAb_IA2A", "AAb_ZnT8A", "AAb_IAA", "AAb_mIAA")),
-    checkboxGroupInput(ns("groups"), "Donor Status",
-                       choices = c("ND", "Aab+", "T1D"),
-                       selected = c("ND", "Aab+", "T1D"),
-                       inline = TRUE),
-    conditionalPanel(
-      condition = "input.panels != 'statistics'", ns = NS(NULL),
-      numericInput(ns("min_cells"), "Min cells/islet",
-                   value = 1, min = 1, max = 200, step = 1)
-    ),
-    uiOutput(ns("age_filter_ui")),
-    uiOutput(ns("gender_filter_ui")),
-    conditionalPanel(
-      condition = "input.panels != 'statistics'", ns = NS(NULL),
-      radioButtons(ns("stat"), "Statistic",
-                   choices = c("Mean\u00b1SE" = "mean_se",
-                               "Mean\u00b1SD" = "mean_sd",
-                               "Median + IQR" = "median_iqr"),
-                   selected = "mean_se"),
-      # Global outlier toggle + z-threshold slider (non-namespaced so they
-      # can be synced with the mirrored controls on the Trajectory and Spatial
-      # tabs). Defaults to OFF; the threshold slider value (default 3, range
-      # 0.5–10, step 0.5) feeds the z-score `flag_outliers()` calls across all
-      # three tabs. Title attribute carries the global tooltip.
-      tags$div(
-        title = GLOBAL_OUTLIER_TOOLTIP,
-        checkboxInput("sidebar_remove_outliers",
-                      "Exclude outliers",
-                      value = FALSE),
-        sliderInput("sidebar_outlier_z", "Outlier z-threshold",
-                    min = 0.5, max = 10, value = 3, step = 0.5)
-      ),
-      checkboxInput(ns("show_outlier_table"),
-                    "Show excluded-outlier table",
-                    value = FALSE),
-      uiOutput(ns("plot_outlier_info"))
-    ),
-    conditionalPanel(
-      condition = "input.panels != 'statistics'", ns = NS(NULL),
-      hr(),
-      h5("Color Palettes"),
-      # Non-namespaced: global donor palette choice synced via app.R observers
-      selectInput("sidebar_donor_palette", "Donor Status Colors",
-                  choices = names(DONOR_PALETTES),
-                  selected = "Bright")
-    ),
-    conditionalPanel(
-      condition = "input.panels != 'statistics'", ns = NS(NULL),
-      hr(),
-      h5("Export"),
-      downloadButton(ns("dl_summary"), "Download summary CSV")
-    )
+    ie_field("Diameter bin width",
+      sliderInput(ns("binwidth"), NULL, min = 10, max = 100, value = 50, step = 5,
+                  post = " \u00b5m", ticks = FALSE, width = "100%")),
+    checkboxInput(ns("show_outlier_table"), "Show excluded-outlier table", value = FALSE),
+    uiOutput(ns("plot_outlier_info")),
+    downloadButton(ns("dl_summary"), "Download summary CSV", class = "btn-block")
   )
 }
 
@@ -109,10 +78,8 @@ plot_main_ui <- function(id, extra_panel = NULL) {
           div(style = "display: flex; gap: 18px; align-items: stretch;",
             # Slider column 1
             div(style = "flex: 1; min-width: 0; display: flex; flex-direction: column;",
-              sliderInput(ns("binwidth"), "Diameter bin width (\u00b5m)",
-                          min = 1, max = 75, value = 50, step = 1),
-              sliderInput(ns("diam_range"), "Islet diameter range (\u00b5m)",
-                          min = 0, max = 500, value = c(0, 350), step = 10),
+              # binwidth moved to the selection block; islet diameter range is
+              # now the cohort filter's, shared with every other tab.
               selectInput(ns("plot_color_by"), "Color points by:",
                           choices = c("Donor Status" = "donor_status",
                                       "Donor ID" = "donor_id"),
