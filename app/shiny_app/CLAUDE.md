@@ -136,14 +136,68 @@ Carries two cohort-level analyses adapted from Steenbuck et al. 2025 (Bodenmille
   library-size offset separates that artefact from a real abundance change. T1D vs ND gives
   Beta cell logFC −5.55 (FDR 0.0011), CD8a Tcell +2.71 (0.0013), Delta −2.88, Immune +3.23.
 - **Card C — Infiltration score.** `1` inside the islet, `1/d` outside (d = µm from the edge,
-  floored at 1 µm), normalised by the donor's total cell count. The paper normalises per imaging
-  ROI; this cohort has whole sections, so the denominator is the donor. Kruskal-Wallis across
-  stages plus pairwise Wilcoxon on donor-level scores.
+  floored at 1 µm). See "Whole-slide false negatives" below — the denominator, the FDR family and
+  the pairwise columns all had to be reworked for whole-slide data.
 
 The tab is deliberately **absent** from the sidebar-visibility condition in `app.R`'s layout JS,
 so the Plot sidebar stays hidden — these analyses read `data/cell_distance.csv` through the cached
 `load_cell_distance()` in `spatial_helpers.R`, not the Plot module's islet frame, so sidebar
 filters genuinely do not apply.
+
+### Whole-slide false negatives in the infiltration score (Jul 2026)
+
+Steenbuck et al. image **75 islet-centred ROIs per donor**; we image **whole sections**. Three
+consequences, all of which suppress real signal, all measured:
+
+**1. The denominator was the dominant defect.** Their per-image denominator is islet-local by
+construction. Ours was every cell on the section — and the ratio of all cells to islet-proximal
+cells ranges **4.1× to 23.2×** across our 15 donors. That variation is technical and is *not*
+confounded with disease stage (Kruskal-Wallis p = 0.53 on the dilution factor), so it does not bias
+direction — it inflates variance and costs power. Measured effect of switching the denominator from
+whole-section to islet+peri:
+
+```
+              whole-section   islet+peri
+T cell           0.1845         0.0081
+Immune           0.1119         0.0207
+B cell           0.0652         0.0155
+CD8a Tcell       0.0271         0.0108
+n surviving FDR      0             4
+```
+
+Four of seven family phenotypes cross from null to significant **on the denominator alone**. The
+default is now `isletperi` (the ROI analogue); `near100` and `all` remain selectable, the last
+labelled as a comparison rather than a baseline.
+
+The **numerator needed no change**: 87.8% of the CD8a score mass already comes from within 20 µm of
+an islet although only 16% of CD8a cells are there, so the `1/d` weight works as intended. Capping
+the numerator at 100 µm changes p by nothing.
+
+**2. There is a hard power ceiling, computed and displayed.** At 5 donors per stage the best
+attainable Kruskal-Wallis p is **0.00193** and the best attainable pairwise Wilcoxon p is
+**0.00794**, both requiring perfect separation of every donor. BH multiplies that floor by family
+size:
+
+```
+KW family, m=21 phenotypes  -> best possible q = 0.041   (only a perfect result clears 0.05)
+KW family, m=7  immune      -> best possible q = 0.014   (real headroom)
+pairwise, m=21 contrasts    -> best possible q = 0.167   NOTHING can ever clear 0.05
+```
+
+`power_ceiling()` computes this from the actual group sizes and the card prints it beside the table,
+so a null reads as *underpowered* rather than *no effect*.
+
+**3. Therefore: pre-specified family, uncorrected pairwise.** `INFLAM_FDR_FAMILY` fixes the seven
+immune phenotypes **in source** so the family cannot be resized after seeing results; phenotypes
+outside it display uncorrected and marked `‡` with `q = NA`. The pairwise columns are reported
+**raw** — a corrected pairwise column could never contain a significant value at this cohort size,
+so printing one would be a guaranteed false negative dressed as a result.
+
+Two smaller contributors, noted but not fixed: 16–20% of our cells sit >200 µm from any islet (44%
+for donor 6548) contributing <1% of score mass but their full share of any whole-section
+denominator; and `signed_dist` is to the *nearest* islet, so on a whole slide a peri-ductal immune
+aggregate can be credited as islet infiltration in a way a single-islet ROI makes impossible
+(unquantified).
 
 ### Conventions this tab established (worth copying)
 
@@ -154,6 +208,8 @@ filters genuinely do not apply.
   phenotype picker is a display filter only; correcting across the ticked subset would let
   unticking phenotypes shrink the correction and manufacture significance. (Same lesson as the
   Spatial Card B filter: filter the summary, never the test.)
+- **`renderTable(align = )` needs exactly one character per column and fails at RENDER time, not
+  parse time.** Bitten twice in one session; recount when columns change.
 - **Plotly legend `y` is a fraction of the PLOT AREA**, which shrinks as the bottom margin grows —
   so enlarging `margin$b` alone never fixes a legend that hangs off the canvas. Move the legend
   (reduce `|y|`) as well. Measured, not guessed.

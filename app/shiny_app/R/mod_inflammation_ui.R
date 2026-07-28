@@ -150,17 +150,30 @@ inflammation_ui <- function(id) {
       tags$code("1/d"), " if outside, with ", tags$em("d"),
       " the distance in µm from the islet edge; the per-donor sum is divided by that ",
       "donor's total cell count. Steenbuck et al. normalise per imaging ROI — this ",
-      "cohort has whole-section CODEX images rather than ROIs, so the denominator here ",
-      "is the donor section. Distances come from ", tags$code("data/cell_distance.csv"),
-      " (negative = inside the islet)."),
+      "cohort has whole-section CODEX images rather than ROIs, so the ROI analogue \u2014 ",
+      "islet + peri-islet cells \u2014 is the default denominator here. Distances come from ",
+      tags$code("data/cell_distance.csv"), " (negative = inside the islet). ",
+      tags$strong("Multiple testing is corrected within a pre-specified family of 7 immune ",
+                  "phenotypes"), ", fixed in source so it cannot be resized after seeing results."),
     fluidRow(
       column(12,
         div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible;",
           fluidRow(
-            column(8,
+            column(5,
+              selectInput(ns("infil_denom"), "Normalise by (denominator)",
+                          choices = c("Islet + peri-islet cells" = "isletperi",
+                                      "Cells within 100 µm of an islet" = "near100",
+                                      "All cells on the section" = "all"),
+                          selected = "isletperi"),
+              tags$small(style = "color: #888; display: block; margin-top: -10px; line-height: 1.35;",
+                "The ROI analogue. Steenbuck et al. normalise per islet-centred ROI; ",
+                "normalising by the whole section instead adds 4\u201323\u00d7 donor-to-donor ",
+                "variance and hid three phenotypes that are significant under the default.")
+            ),
+            column(4,
               uiOutput(ns("infil_pheno_ui"))
             ),
-            column(4, style = "padding-top: 25px;",
+            column(3, style = "padding-top: 25px;",
               checkboxInput(ns("infil_log"), "Log10 y-axis", value = TRUE),
               downloadButton(ns("dl_infil"), "Download scores CSV")
             )

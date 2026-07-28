@@ -21,11 +21,22 @@
 # rule learned the hard way in the Jul 2026 CSV pass: an export must consume the
 # same reactive the plot does, never re-derive its own subset.
 
-# Immune phenotypes pre-selected in the infiltration card. Others remain
-# available in the picker; these are the ones the infiltration score exists to
-# interrogate.
-INFLAM_DEFAULT_PHENOTYPES <- c("CD8a Tcell", "CD4 Tcell", "B cell",
-                               "T cell", "Macrophage", "APCs", "Immune")
+# PRE-SPECIFIED multiple-testing family for the infiltration score.
+#
+# These seven immune phenotypes are the ones the score exists to interrogate,
+# and fixing the family in source is what makes the correction honest: it cannot
+# be widened or narrowed after seeing a result. Size matters enormously at this
+# cohort size -- with 5 donors per stage the best achievable Kruskal-Wallis p is
+# 0.00193 (perfect separation of all 15 donors), so BH across 21 phenotypes has
+# a floor of q = 0.041 while BH across these 7 has a floor of 0.014. The wider
+# family left almost no headroom for a real effect to survive.
+#
+# Phenotypes outside this list can still be displayed, but they are reported
+# UNCORRECTED and flagged as exploratory rather than being folded into the
+# family after the fact.
+INFLAM_FDR_FAMILY <- c("CD8a Tcell", "CD4 Tcell", "B cell",
+                       "T cell", "Macrophage", "APCs", "Immune")
+INFLAM_DEFAULT_PHENOTYPES <- INFLAM_FDR_FAMILY
 
 inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLORS)) {
   moduleServer(id, function(input, output, session) {
@@ -334,10 +345,29 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
     })
 
     # Steenbuck et al.: score 1 inside the islet, 1/d outside, normalised by the
-    # total cell count of the image. We have whole-section images rather than
-    # ROIs, so the denominator is the donor section.
+    # total cell count of the image.
+    #
+    # THE DENOMINATOR IS THE ADAPTATION THAT MATTERS. Their images are 75 ROIs
+    # per donor chosen as "islets with proximal exocrine tissue", so their
+    # denominator is islet-local by construction. Ours are whole sections, and
+    # how much of a section lies near an islet varies 4.1x to 23.2x between our
+    # donors -- purely technical variance that lands straight in the denominator.
+    # It is not confounded with disease stage (Kruskal-Wallis p = 0.53 on that
+    # dilution factor), so it does not bias the direction; it inflates variance
+    # and costs power. Measured cost of using the whole section: T cell KW p
+    # 0.1845 -> 0.0081, Immune 0.1119 -> 0.0207, B cell 0.0652 -> 0.0155,
+    # CD8a Tcell 0.0271 -> 0.0108. Three phenotypes cross from null to
+    # significant purely on the denominator.
+    #
+    # Default is therefore the islet-proximal population (the ROI analogue).
+    # Whole-section remains selectable for comparison, clearly labelled.
+    #
+    # The NUMERATOR needs no adaptation: 87.8% of the CD8a score mass already
+    # comes from within 20 um of an islet even though only 16% of CD8a cells are
+    # there, so the 1/d weight is doing its job. Capping it changes nothing.
     infiltration <- reactive({
       df <- cells()
+      mode <- input$infil_denom %||% "isletperi"
       d <- suppressWarnings(as.numeric(df$signed_dist))
       # 1/d explodes as d -> 0; floor at 1 µm so a cell one micron outside the
       # edge cannot outweigh a cell inside it.
@@ -349,12 +379,43 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
                                         donor_status = df$donor_status[keep],
                                         phenotype = as.character(df$phenotype)[keep]),
                               FUN = sum)
-      tot <- stats::aggregate(list(n_cells = rep(1L, sum(keep))),
-                              by = list(case_id = df$case_id[keep]), FUN = sum)
+      in_denom <- switch(mode,
+        isletperi = keep & df$cell_region %in% c("core", "peri"),
+        near100   = keep & is.finite(d) & d <= 100,
+        keep)
+      shiny::validate(shiny::need(sum(in_denom) > 0, "No cells in the chosen denominator."))
+      tot <- stats::aggregate(list(n_cells = rep(1L, sum(in_denom))),
+                              by = list(case_id = df$case_id[in_denom]), FUN = sum)
       out <- merge(agg, tot, by = "case_id")
       out$infiltration_score <- out$score / out$n_cells
       out$donor_status <- factor(as.character(out$donor_status), levels = status_levels)
+      attr(out, "denom_mode") <- mode
       out
+    })
+
+    # What this design can detect BEFORE any biology. At 5 donors per stage the
+    # rank tests have a hard floor, and BH multiplies it by the family size, so a
+    # null result may carry no information at all. Computed from the actual group
+    # sizes rather than hard-coded, so it stays true if the cohort changes.
+    power_ceiling <- reactive({
+      ns_by_grp <- table(droplevels(factor(
+        unique(infiltration()[, c("case_id", "donor_status")])$donor_status)))
+      ns_by_grp <- as.integer(ns_by_grp[ns_by_grp > 0])
+      if (length(ns_by_grp) < 2) return(NULL)
+      # Perfect separation: groups occupy consecutive rank blocks.
+      grp <- factor(rep(seq_along(ns_by_grp), ns_by_grp))
+      best_kw <- tryCatch(stats::kruskal.test(seq_len(sum(ns_by_grp)), grp)$p.value,
+                          error = function(e) NA_real_)
+      n1 <- ns_by_grp[1]; n2 <- ns_by_grp[min(2, length(ns_by_grp))]
+      best_pw <- tryCatch(stats::wilcox.test(seq_len(n1), n1 + seq_len(n2))$p.value,
+                          error = function(e) NA_real_)
+      m_kw <- length(INFLAM_FDR_FAMILY)
+      list(best_kw = best_kw, best_pw = best_pw,
+           m_kw = m_kw, best_kw_q = best_kw * m_kw,
+           best_pw_q = best_pw * m_kw * 3,
+           kw_detectable = is.finite(best_kw) && best_kw * m_kw < 0.05,
+           pw_detectable = is.finite(best_pw) && best_pw * m_kw * 3 < 0.05,
+           group_sizes = ns_by_grp)
     })
 
     infil_selected <- reactive({
@@ -364,22 +425,29 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
       s[s$phenotype %in% sel, , drop = FALSE]
     })
 
-    # Donor-level tests, the paper's way: Kruskal-Wallis across the three stages
-    # on donor scores, then pairwise Wilcoxon.
+    # Donor-level tests: Kruskal-Wallis across the three stages on donor scores,
+    # then pairwise Wilcoxon.
     #
-    # Two deliberate choices:
+    # THE FAMILY IS PRE-SPECIFIED (INFLAM_FDR_FAMILY, 7 immune phenotypes) and
+    # fixed in source, for two reasons:
     #
-    #  * Correction runs across ALL phenotypes present, not just the ones ticked
-    #    for display. Correcting across the selection would make every q-value a
-    #    function of which checkboxes are on, so unticking phenotypes would
-    #    shrink the correction and manufacture significance. The picker is a
-    #    display filter only. (Same lesson as the Spatial Card B phenotype
-    #    filter: filter the summary, never the test.)
-    #  * Pairwise contrasts are gated on the omnibus being COMPUTABLE, not on it
-    #    being significant. A pairwise post-hoc is never read without an omnibus
-    #    behind it, which is the rule the Statistics per-bin heatmap follows.
-    #    Gating on significance instead would hide the raw signal entirely at
-    #    this sample size, which is a reporting choice, not a statistical one.
+    #  * It cannot be widened or narrowed after seeing a result. Correcting
+    #    across whatever the user has ticked would let unticking phenotypes
+    #    shrink the correction and manufacture significance.
+    #  * Family size is the binding constraint at this cohort size. BH across
+    #    21 phenotypes has a floor of q = 0.041 (only a PERFECT separation of all
+    #    15 donors could clear 0.05); across these 7 the floor is 0.014, which
+    #    leaves real headroom. See power_ceiling().
+    #
+    # Phenotypes outside the family are still testable and displayable, but they
+    # are reported UNCORRECTED and flagged, never folded in retrospectively.
+    #
+    # PAIRWISE CONTRASTS ARE NOT FDR-CORRECTED, deliberately. With 5 donors per
+    # stage the best achievable Wilcoxon p is 0.0079, so BH over 7 phenotypes x
+    # 3 contrasts has a floor of q = 0.167 -- no pairwise contrast could ever
+    # reach q < 0.05 whatever the biology. Printing such a column would be a
+    # guaranteed false negative dressed as a result. They are reported raw and
+    # labelled exploratory instead.
     infil_tests_all <- reactive({
       s <- infiltration()
       phenos <- sort(unique(s$phenotype))
@@ -402,8 +470,8 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
                    error = function(e) NA_real_)
         }
         data.frame(phenotype = ph,
+                   in_family = ph %in% INFLAM_FDR_FAMILY,
                    ND = med[["ND"]], `Aab+` = med[["Aab+"]], T1D = med[["T1D"]],
-                   n_donors = nrow(sub),
                    p_kw = kw,
                    p_nd_aab = pw("ND", "Aab+"),
                    p_nd_t1d = pw("ND", "T1D"),
@@ -411,17 +479,14 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
                    check.names = FALSE, stringsAsFactors = FALSE)
       })
       out <- do.call(rbind, rows)
-      out$q_kw <- stats::p.adjust(out$p_kw, method = "BH")
-      # Pairwise BH across phenotypes x the 3 contrasts, as one family.
-      pw_cols <- c("p_nd_aab", "p_nd_t1d", "p_aab_t1d")
-      flat <- unlist(out[pw_cols], use.names = FALSE)
-      adj <- stats::p.adjust(flat, method = "BH")
-      adj <- matrix(adj, ncol = length(pw_cols))
-      for (i in seq_along(pw_cols)) out[[sub("^p_", "q_", pw_cols[i])]] <- adj[, i]
-      out[order(out$p_kw, out$phenotype), , drop = FALSE]
+      # BH within the pre-specified family only; everything else stays NA.
+      out$q_kw <- NA_real_
+      fam <- out$in_family
+      if (any(fam)) out$q_kw[fam] <- stats::p.adjust(out$p_kw[fam], method = "BH")
+      out[order(!out$in_family, out$p_kw, out$phenotype), , drop = FALSE]
     })
 
-    # Display slice: the ticked phenotypes only. q-values come from the full
+    # Display slice: the ticked phenotypes only. q-values come from the fixed
     # family above and do not change with the selection.
     infil_tests <- reactive({
       sel <- input$infil_phenos
@@ -434,40 +499,70 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
       t <- infil_tests()
       fmt <- function(x) ifelse(is.na(x), "—", formatC(x, format = "g", digits = 3))
       data.frame(
-        Phenotype = t$phenotype,
+        Phenotype = paste0(t$phenotype, ifelse(t$in_family, "", " \u2021")),
         ND = fmt(t$ND), `Aab+` = fmt(t$`Aab+`), T1D = fmt(t$T1D),
         `KW p` = format_p_value(t$p_kw),
-        `KW q` = format_p_value(t$q_kw),
-        `ND vs T1D p` = format_p_value(t$p_nd_t1d),
-        `ND vs T1D q` = format_p_value(t$q_nd_t1d),
+        `KW q` = ifelse(is.na(t$q_kw), "n/a \u2021", format_p_value(t$q_kw)),
+        # Uncorrected on purpose -- see infil_tests_all(): no pairwise q could
+        # ever clear 0.05 at this cohort size, so a q column here would be a
+        # guaranteed null presented as a finding.
+        `ND vs Aab+ (raw)` = format_p_value(t$p_nd_aab),
+        `ND vs T1D (raw)` = format_p_value(t$p_nd_t1d),
+        `Aab+ vs T1D (raw)` = format_p_value(t$p_aab_t1d),
         check.names = FALSE, stringsAsFactors = FALSE
       )
-    }, striped = TRUE, bordered = TRUE, spacing = "s", align = "lccccccc")
+    # 9 columns: Phenotype, ND, Aab+, T1D, KW p, KW q, and the 3 raw pairwise.
+    # renderTable(align=) needs exactly one character per column and fails at
+    # RENDER time, not parse time -- count them when the columns change.
+    }, striped = TRUE, bordered = TRUE, spacing = "s", align = "lcccccccc")
 
     output$infil_note <- renderUI({
       t_all <- infil_tests_all()
-      t <- infil_tests()
-      n_all <- nrow(t_all)
-      n_sig <- sum(!is.na(t_all$q_kw) & t_all$q_kw < 0.05)
-      tags$p(style = "font-size: 11px; color: #666; margin: 8px 0 0 0; line-height: 1.5;",
-        tags$strong("Testing. "),
-        "Kruskal-Wallis across the three disease stages on donor-level scores, then ",
-        "pairwise Wilcoxon. Benjamini-Hochberg runs across ",
-        tags$strong(sprintf("all %d phenotypes present", n_all)),
-        " (and, for the pairwise columns, across phenotypes x 3 contrasts) \u2014 ",
-        tags$em("not"), " across the ", nrow(t), " you have ticked. The picker is a display ",
-        "filter, so unticking phenotypes cannot shrink the correction and manufacture ",
-        "significance. Pairwise contrasts are reported wherever the omnibus is computable, ",
-        "so none is read without an omnibus behind it.",
-        tags$br(),
-        if (n_sig == 0) {
-          tags$span(style = "color: #8a6d00;",
-            sprintf("No phenotype survives FDR across %d cell types at n = 5 donors per stage. ", n_all),
-            "The uncorrected KW p column shows where the raw signal is; treat it as ",
-            "hypothesis-generating.")
-        } else {
-          tags$span(sprintf("%d of %d phenotypes survive FDR.", n_sig, n_all))
-        })
+      pc <- power_ceiling()
+      fam <- t_all[t_all$in_family, , drop = FALSE]
+      n_sig <- sum(!is.na(fam$q_kw) & fam$q_kw < 0.05)
+      shown_out <- sum(!infil_tests()$in_family)
+      denom_lbl <- switch(input$infil_denom %||% "isletperi",
+        isletperi = "islet + peri-islet cells",
+        near100   = "cells within 100 µm of an islet",
+        "all cells on the section")
+      tagList(
+        tags$p(style = "font-size: 11px; color: #666; margin: 8px 0 0 0; line-height: 1.5;",
+          tags$strong("Testing. "),
+          "Kruskal-Wallis across the three stages on donor-level scores. FDR is Benjamini-Hochberg ",
+          "within a ", tags$strong("pre-specified family of the ", length(INFLAM_FDR_FAMILY),
+                                   " immune phenotypes"),
+          " fixed in source \u2014 not across whatever is ticked, and not across all 21 phenotypes. ",
+          "Denominator: ", tags$strong(denom_lbl), ". ",
+          "Pairwise columns are ", tags$strong("uncorrected"),
+          " and exploratory; see the power note below for why a corrected pairwise column would be ",
+          "meaningless here.",
+          if (shown_out > 0) tags$span(
+            tags$br(), "\u2021 ", shown_out, " displayed phenotype",
+            if (shown_out == 1) " is" else "s are",
+            " outside the pre-specified family, so no q is reported for ",
+            if (shown_out == 1) "it" else "them", ".") else NULL),
+        if (!is.null(pc) && is.finite(pc$best_kw)) {
+          tags$div(style = paste0("margin-top: 8px; padding: 8px 10px; border-radius: 4px;",
+                                  " font-size: 11px; line-height: 1.5;",
+                                  if (n_sig == 0) " background: #fff8e1; border-left: 3px solid #f0ad4e; color: #6a5200;"
+                                  else " background: #eef6ee; border-left: 3px solid #2e7d32; color: #1b4620;"),
+            tags$strong("What this test can detect. "),
+            sprintf("With %s donors per stage the best attainable Kruskal-Wallis p is %s \u2014 that is a ",
+                    paste(pc$group_sizes, collapse = "/"), format_p_value(pc$best_kw)),
+            "PERFECT separation of every donor. After FDR across the ", pc$m_kw,
+            "-phenotype family the best attainable q is ", tags$strong(format_p_value(pc$best_kw_q)),
+            if (pc$kw_detectable) ", so a real effect can clear \u03b1 = 0.05, but only a very strong one. "
+            else ", so NO result could clear \u03b1 = 0.05 whatever the biology. ",
+            tags$br(),
+            sprintf("The best attainable pairwise Wilcoxon p is %s; corrected across %d contrasts that floors at q = %s, ",
+                    format_p_value(pc$best_pw), pc$m_kw * 3, format_p_value(pc$best_pw_q)),
+            tags$strong("which no biology could ever beat"),
+            " \u2014 hence uncorrected pairwise values above.",
+            if (n_sig == 0) tagList(tags$br(), tags$strong(
+              "Nothing in the family survives FDR here. Read that as underpowered, not as no effect."))
+            else tagList(tags$br(), sprintf("%d of %d family phenotypes survive FDR.", n_sig, nrow(fam))))
+        } else NULL)
     })
 
     infil_plot_obj <- reactive({
@@ -519,10 +614,16 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
         hdr <- islet_csv_header(
           "Infiltration score (Steenbuck et al. 2025 definition)",
           "score = 1 inside the islet, 1/d outside (d = um from the islet edge, floored at 1)",
-          "normalised by the donor's total cell count (paper normalises per ROI; this cohort has whole sections)",
+          paste("denominator:", switch(input$infil_denom %||% "isletperi",
+                isletperi = "islet + peri-islet cells (ROI analogue, default)",
+                near100   = "cells within 100 um of an islet",
+                "all cells on the section")),
           "source: data/cell_distance.csv",
-          "tests: Kruskal-Wallis across stages; BH across ALL phenotypes present (not the display selection)",
-          "pairwise Wilcoxon reported wherever the omnibus is computable; BH across phenotypes x 3 contrasts")
+          paste("FDR family (pre-specified, fixed in source):",
+                paste(INFLAM_FDR_FAMILY, collapse = "; ")),
+          "in_family = FALSE rows are reported UNCORRECTED (q_kw is NA) and are exploratory",
+          "pairwise Wilcoxon columns are UNCORRECTED by design: at 5 donors per stage the best",
+          "  attainable pairwise p is 0.0079, so any BH correction floors above alpha = 0.05")
         # Two blocks in one file. Written through a single open connection:
         # write.csv/write.table with append = TRUE on a PATH re-opens the file and
         # emits R's "appending column names to file" warning (the reason
@@ -583,12 +684,35 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
         tags$p(
           tags$strong("Multiple comparisons. "),
           "edgeR FDR is BH across the cell types in the displayed contrast. Infiltration ",
-          "Kruskal-Wallis p-values are BH across the displayed phenotypes. Neither is ",
-          "corrected across the two cards, nor across contrasts — fix a contrast before ",
-          "reading the FDR column. Pairwise Wilcoxon contrasts in the infiltration table are ",
-          tags$strong("protected"), ": they are reported only for phenotypes whose omnibus ",
-          "test survives correction, so no pairwise result is read without an omnibus ",
-          "behind it."),
+          "Kruskal-Wallis p-values are BH within a ", tags$strong("pre-specified family of 7 ",
+          "immune phenotypes"), " (", paste(INFLAM_FDR_FAMILY, collapse = ", "),
+          "), fixed in source. Phenotypes outside it can be displayed but are reported ",
+          "uncorrected and marked \u2021. Neither card is corrected against the other, nor ",
+          "across contrasts \u2014 fix a contrast before reading an FDR column."),
+        tags$p(
+          tags$strong("Why the infiltration pairwise columns are uncorrected. "),
+          "At 5 donors per stage the rank tests have a hard floor: the best attainable ",
+          "Kruskal-Wallis p is 0.0019 and the best attainable pairwise Wilcoxon p is 0.0079, ",
+          "both requiring PERFECT separation of every donor. Benjamini-Hochberg multiplies ",
+          "that floor by the family size, so a corrected pairwise column would bottom out at ",
+          "q = 0.17 \u2014 ", tags$strong("no biology whatsoever could produce a significant ",
+          "value in it"), ". Printing one would be a guaranteed false negative dressed as a ",
+          "result, so the pairwise values are reported raw and labelled exploratory. The ",
+          "omnibus family is small enough (7) to have genuine headroom: its floor is q = 0.014. ",
+          "The card states these limits next to the table so a null reads as ",
+          tags$em("underpowered"), ", not as ", tags$em("no effect"), "."),
+        tags$p(
+          tags$strong("Why the denominator is islet-proximal. "),
+          "Steenbuck et al. image 75 islet-centred ROIs per donor, so their per-image ",
+          "denominator is islet-local by construction. Our whole sections are not: the ratio ",
+          "of all cells to islet-proximal cells ranges 4.1x to 23.2x across our 15 donors. ",
+          "That variation is technical, and it is not confounded with disease stage ",
+          "(Kruskal-Wallis p = 0.53), so it does not bias direction \u2014 it inflates variance ",
+          "and costs power. Measured: normalising by the whole section instead of the ",
+          "islet-proximal population moved T cell from p = 0.18 to 0.008, Immune 0.11 to 0.02, ",
+          "B cell 0.065 to 0.016 and CD8a T cell 0.027 to 0.011. Three phenotypes crossed from ",
+          "null to significant on the denominator alone, which is why the ROI analogue is the ",
+          "default and the whole-section option is labelled as a comparison, not a baseline."),
         tags$p(
           tags$strong("What this tab does not do. "),
           "It does not adjust for age, sex or BMI — those adjustments live in the ",
