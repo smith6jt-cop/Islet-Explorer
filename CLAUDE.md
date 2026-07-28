@@ -221,7 +221,11 @@ See `docs/user_guide.md` for end-user documentation.
 
 ## Handoffs & Archive
 
-- `docs/HANDOFF.md` — Shiny app correctness pass (Jul 2026): zero-exclusion z-scores, phenotype availability, plotly in-plot text settings, Sex/Gender, CSV exports + statistics post-hoc. Includes the deployment procedure and the chromote gotchas (selectize, nested `.plotly`).
+- `docs/HANDOFF.md` — **current** handoff (Jul 2026): Statistics-tab correctness audit, group-comparability
+  companions, nPOD donor metadata, the new Inflammation tab, and the whole-slide infiltration-score fixes.
+  Includes the deployment procedure and what is still open.
+- `archive/docs/HANDOFF_2026-07-25_shiny-correctness-pass.md` — superseded predecessor; retains the plotly
+  in-plot text findings and the chromote selectize gotcha.
 - `scripts/codex_phenocycler/docs/HANDOFF.md` — **active** handoff for the in-flight CODEX Phenocycler port. Read it before touching that workstream's gates, floors, or pairs.
 - `archive/README.md` — what was retired and why. Nothing there is loaded, sourced, or served; delete freely.
 

@@ -6,6 +6,17 @@ with `git mv`, so `git log --follow archive/<path>` shows its full past.
 
 Delete anything here freely; the app does not depend on it.
 
+## docs/
+
+`HANDOFF_2026-07-25_shiny-correctness-pass.md` — the Shiny app correctness pass of
+2026-07-24/25 (zero-exclusion z-scores, phenotype availability, plotly in-plot text,
+Sex/Gender, CSV exports). Superseded by `docs/HANDOFF.md` (2026-07-27/28), which
+reworked the same Statistics code and closed this document's one open item (the
+uncommitted Phenocycler divisor files — rejected, see `63f07a8`).
+
+Kept because it still holds the only write-up of the plotly in-plot text findings
+(`hoverlabel.font`, `uniformtext`, `automargin`) and the chromote selectize gotcha.
+
 ## shiny_app/
 
 Superseded Shiny entrypoints. The app has used a modular architecture since
