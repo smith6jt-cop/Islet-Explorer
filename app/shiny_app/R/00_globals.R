@@ -321,7 +321,18 @@ theme_islet <- function(base_size = ISLET_FONT_SIZES$base,
       axis.text     = ggplot2::element_text(size = ISLET_FONT_SIZES$axis_text),
       legend.title  = ggplot2::element_text(size = ISLET_FONT_SIZES$legend_title, face = "bold"),
       legend.text   = ggplot2::element_text(size = ISLET_FONT_SIZES$legend_text),
-      strip.text    = ggplot2::element_text(size = ISLET_FONT_SIZES$strip, face = "bold")
+      strip.text    = ggplot2::element_text(size = ISLET_FONT_SIZES$strip, face = "bold"),
+      # TRANSPARENT, not white. theme_minimal() sets plot.background to an
+      # opaque white rect, so every figure painted its own white rectangle no
+      # matter what the device or the CSS said -- which is exactly what made the
+      # "transparent plots" change look like it had not applied. panel.background
+      # is already element_blank() from theme_minimal; this is the outer one.
+      # Screen ground comes from the card; downloads come out transparent, which
+      # is what a figure dropped into a manuscript or a slide wants.
+      plot.background  = ggplot2::element_rect(fill = NA, colour = NA),
+      panel.background = ggplot2::element_rect(fill = NA, colour = NA),
+      legend.background = ggplot2::element_rect(fill = NA, colour = NA),
+      legend.key        = ggplot2::element_rect(fill = NA, colour = NA)
     )
 }
 
@@ -802,19 +813,19 @@ phenotype_rules_table_df <- function() {
 phenotype_rules_modal_ui <- function() {
   df <- phenotype_rules_table_df()
   header_row <- shiny::tags$tr(
-    shiny::tags$th("Phenotype",          style = "text-align:left; padding:6px 10px;"),
-    shiny::tags$th("Category",           style = "text-align:left; padding:6px 10px;"),
-    shiny::tags$th("Positive markers",   style = "text-align:left; padding:6px 10px;"),
-    shiny::tags$th("Negative markers",   style = "text-align:left; padding:6px 10px;"),
-    shiny::tags$th("Notes",              style = "text-align:left; padding:6px 10px;")
+    shiny::tags$th("Phenotype",          style = "text-align:left; padding:6px 10px"),
+    shiny::tags$th("Category",           style = "text-align:left; padding:6px 10px"),
+    shiny::tags$th("Positive markers",   style = "text-align:left; padding:6px 10px"),
+    shiny::tags$th("Negative markers",   style = "text-align:left; padding:6px 10px"),
+    shiny::tags$th("Notes",              style = "text-align:left; padding:6px 10px")
   )
   body_rows <- lapply(seq_len(nrow(df)), function(i) {
     shiny::tags$tr(
-      shiny::tags$td(shiny::tags$strong(df$Phenotype[i]), style = "padding:6px 10px;"),
-      shiny::tags$td(df$Category[i],                       style = "padding:6px 10px; color:#555;"),
-      shiny::tags$td(df$Positive[i],                       style = "padding:6px 10px;"),
-      shiny::tags$td(df$Negative[i],                       style = "padding:6px 10px; color:#666;"),
-      shiny::tags$td(df$Notes[i],                          style = "padding:6px 10px; color:#444; font-size: 13px;")
+      shiny::tags$td(shiny::tags$strong(df$Phenotype[i]), style = "padding:6px 10px"),
+      shiny::tags$td(df$Category[i],                       style = "padding:6px 10px"),
+      shiny::tags$td(df$Positive[i],                       style = "padding:6px 10px"),
+      shiny::tags$td(df$Negative[i],                       style = "padding:6px 10px"),
+      shiny::tags$td(df$Notes[i],                          style = "padding:6px 10px; font-size: 13px")
     )
   })
   shiny::modalDialog(
@@ -829,20 +840,20 @@ phenotype_rules_modal_ui <- function() {
       shiny::tags$code("−"),
       " means it must be negative. “any of X+ / Y+” means at least one of the listed markers must be positive."
     ),
-    shiny::tags$div(style = "max-height: 60vh; overflow-y: auto; border-top: 1px solid #ddd;",
+    shiny::tags$div(style = "max-height: 60vh; overflow-y: auto",
       shiny::tags$table(
         class = "table table-striped",
-        style = "width: 100%; font-size: 14px; margin: 0;",
+        style = "width: 100%; font-size: 14px; margin: 0",
         shiny::tags$thead(header_row),
         shiny::tags$tbody(body_rows)
       )
     ),
-    shiny::tags$p(style = "margin-top: 10px; font-size: 12px; color: #777;",
+    shiny::tags$p(style = "margin-top: 10px; font-size: 12px",
       "Rule source: ",
       shiny::tags$code("data/phenotype_rules.csv"),
       " (15 markers: INS, GCG, SST, SMA, CD20, CD3e, CD68, CD163, CD8a, CD4, HLADR, PDPN, CD34, CD31, B3TUBB)."
     ),
-    shiny::tags$p(style = "margin-top: 6px; font-size: 12px; color: #777;",
+    shiny::tags$p(style = "margin-top: 6px; font-size: 12px",
       shiny::tags$strong("Data vs. rules: "),
       "this table is the gating spec. A few rule phenotypes have no cells in the ",
       "shipped dataset because the upstream scVI labeling merged or renamed them ",
@@ -852,7 +863,7 @@ phenotype_rules_modal_ui <- function() {
       " is an HLADR+ myeloid aggregate created upstream, not itself a ",
       shiny::tags$code("phenotype_rules.csv"), " row."
     ),
-    shiny::tags$p(style = "margin-top: 6px; font-size: 12px; color: #777;",
+    shiny::tags$p(style = "margin-top: 6px; font-size: 12px",
       shiny::tags$strong("Panel note: "),
       "the original Rules1 template also listed ", shiny::tags$code("CD99"),
       " (Endocrine) and ", shiny::tags$code("CD56"),
@@ -887,12 +898,12 @@ extract_phenotype_from_column <- function(col) {
 phenotype_rules_button <- function(input_id,
                                    label = "Phenotype rules — marker definitions") {
   shiny::tags$div(
-    style = "margin-bottom: 12px; padding: 8px 14px; background-color: #eef4fb; border: 1px solid #c8d8e9; border-radius: 6px; display: inline-block;",
+    style = "margin-bottom: 12px; padding: 8px 14px; display: inline-block",
     shiny::actionLink(input_id,
-      shiny::tagList(shiny::icon("dna", style = "color:#4477AA;"),
-                     shiny::tags$span(style = "margin-left:6px; color:#2a4d75; font-weight:600;",
+      shiny::tagList(shiny::icon("dna"),
+                     shiny::tags$span(style = "margin-left:6px; font-weight:600",
                                       label)),
-      style = "text-decoration: none;")
+      style = "text-decoration: none")
   )
 }
 
@@ -906,14 +917,14 @@ phenotype_hint_ui <- function(name, prefix = "Markers:",
   rule_html <- format_phenotype_rule(name, "html")
   link <- if (!is.null(show_modal_link)) {
     shiny::tagList(
-      shiny::tags$span(style = "color:#888;", " · "),
+      shiny::tags$span(" · "),
       shiny::actionLink(show_modal_link, "see all rules →",
-                        style = "font-size: 12px; color: #4477AA;")
+                        style = "font-size: 12px")
     )
   }
   shiny::tags$div(
-    style = "margin-top: -6px; margin-bottom: 8px; padding: 6px 10px; background-color: #f7f9fc; border-left: 3px solid #4477AA; border-radius: 3px; font-size: 13px; color: #333; line-height: 1.4;",
-    shiny::tags$strong(style = "color:#4477AA;", paste0(prefix, " ")),
+    style = "margin-top: -6px; margin-bottom: 8px; padding: 6px 10px; font-size: 13px; line-height: 1.4",
+    shiny::tags$strong(paste0(prefix, " ")),
     shiny::tags$span(rule_html),
     link
   )

@@ -649,3 +649,73 @@ body:has(.ie-shell) { overflow-x: auto; overflow-y: hidden; }
 /* plotly draws the paper as an SVG rect; paper_bgcolor handles it, but the
    layer beneath is set in CSS. */
 .js-plotly-plot .bg { fill: transparent !important; }
+
+/* ==========================================================================
+   Shared UI blocks
+   Replace four inline copies of a gradient section heading and two of the
+   "About this tab" banner. See R/ui_modernist_bits.R.
+   ========================================================================== */
+.ie-section {
+  margin: 26px 0 16px; padding-bottom: 9px;
+  border-bottom: 2px solid var(--color-neutral-300);
+}
+.ie-section:first-child { margin-top: 0; }
+.ie-section-row { display: flex; align-items: baseline; gap: 10px; }
+.ie-section-num {
+  font-family: var(--font-heading); font-weight: 800; font-size: 11px;
+  letter-spacing: .06em; color: var(--color-bg); background: var(--color-text);
+  padding: 3px 8px; min-width: 24px; text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.ie-section-title {
+  font-family: var(--font-heading); font-weight: 800; font-size: 16px;
+  letter-spacing: -.01em; color: var(--color-text);
+}
+.ie-section-tip {
+  font-family: var(--font-heading); font-weight: 800; font-size: 10px;
+  width: 17px; height: 17px; line-height: 17px; text-align: center; cursor: help;
+  color: var(--color-accent-700); border: 1px solid var(--color-accent-300);
+}
+.ie-section-sub { margin: 6px 0 0; font-size: 12.5px; color: var(--color-neutral-600); }
+
+.ie-callout {
+  padding: 11px 14px; margin-bottom: 14px;
+  font-size: 12.5px; line-height: 1.55;
+  background: var(--color-neutral-100);
+  border-left: 3px solid var(--color-neutral-400);
+}
+.ie-callout p:last-child { margin-bottom: 0; }
+.ie-callout-info { border-left-color: var(--color-text); }
+.ie-callout-note { border-left-color: var(--color-neutral-400); }
+.ie-callout-warn { border-left-color: var(--color-accent); background: var(--color-accent-100); }
+
+.ie-legend-box {
+  border: 1px solid var(--color-neutral-300);
+  background: var(--color-neutral-100);
+  padding: 10px 12px; min-height: 100px;
+}
+.ie-legend-title {
+  font-family: var(--font-heading); font-weight: 800; font-size: 10px;
+  letter-spacing: .12em; text-transform: uppercase;
+  color: var(--color-neutral-700); margin-bottom: 8px;
+}
+
+/* The app's own .card, kept from the pre-port sheet's 32 call sites. It
+   name-collides with styles.css's flex card, which would re-stack every control
+   row, so it is re-specified here rather than inherited. */
+.card {
+  display: block;
+  background: var(--color-bg); background-image: none;
+  border: 2px solid var(--color-neutral-300);
+  box-shadow: none; transform: none; transition: none;
+  padding: 16px 18px; margin-bottom: 18px;
+  overflow: visible;              /* selectize menus must not be clipped */
+}
+.card:hover { box-shadow: none; transform: none; }
+.card h4, .card h5 {
+  font-family: var(--font-heading); font-weight: 800;
+  font-size: 12px; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--color-text);
+  border-bottom: 2px solid var(--color-neutral-300);
+  padding-bottom: 8px; margin: 0 0 14px;
+}

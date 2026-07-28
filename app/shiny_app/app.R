@@ -397,7 +397,7 @@ server <- function(input, output, session) {
   # this slot carries the tab-appropriate export.
   output$aside_export <- renderUI({
     tab <- active_tab()
-    tags$div(style = "margin-top: 10px; font-size: 11px; color: #777; line-height: 1.5;",
+    tags$div(style = "margin-top: 10px; font-size: 11px; line-height: 1.5",
       "Filters above apply to every analysis tab. Cell-level tabs (Spatial, ",
       "Inflammation) receive donor scope only \u2014 min-cells and diameter are ",
       "islet-level and are reported as not applied rather than ignored.")
@@ -501,19 +501,19 @@ server <- function(input, output, session) {
       colour <- if (!is.null(pal) && nm %in% names(pal)) pal[[nm]] else "#CCCCCC"
       rule_html <- format_phenotype_rule(nm, "html")
       tags$div(
-        style = "display: flex; align-items: flex-start; gap: 8px; padding: 4px 0; border-bottom: 1px solid #eef0f3;",
+        style = "display: flex; align-items: flex-start; gap: 8px; padding: 4px 0",
         tags$span(style = sprintf("display:inline-block; width:12px; height:12px; min-width:12px; margin-top:4px; background:%s; border:1px solid #888; border-radius:2px;", colour)),
         tags$div(
-          tags$div(style = "font-weight:600; color:#333; font-size:13px;", nm),
-          tags$div(style = "font-size:12px; color:#444; line-height:1.35;", rule_html)
+          tags$div(style = "font-weight:600; font-size:13px", nm),
+          tags$div(style = "font-size:12px; line-height:1.35", rule_html)
         )
       )
     })
     tags$details(
-      style = "margin-top: 10px; padding: 8px 10px; background:#fafbfd; border:1px solid #e2e8f0; border-radius: 4px; font-size: 13px;",
-      tags$summary(style = "cursor: pointer; font-weight: 600; color: #4477AA;",
+      style = "margin-top: 10px; padding: 8px 10px; font-size: 13px",
+      tags$summary(style = "cursor: pointer; font-weight: 600",
                    "Marker rules for phenotypes in this islet"),
-      tags$div(style = "margin-top: 8px;", rows)
+      tags$div(style = "margin-top: 8px", rows)
     )
   })
 

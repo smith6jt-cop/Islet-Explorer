@@ -105,13 +105,13 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
         d$`Case ID`[is.finite(a) & is.finite(b) & abs(a - b) > 0.01]
       } else character(0)
       tagList(
-        tags$p(style = "font-size: 12px; color: #555; margin: 0 0 8px 0; line-height: 1.5;",
+        tags$p(style = "font-size: 12px; margin: 0 0 8px 0; line-height: 1.5",
           tags$strong("Scope. "), dur_txt,
           " This cohort therefore corresponds to the Steenbuck et al. “Onset” group; ",
           "it contains no long-duration T1D donors. Disease duration has too little ",
           "variance to serve as a covariate — it is reported here as a descriptor."),
         if (length(mism)) {
-          tags$p(style = "font-size: 11px; color: #8a6d00; margin: 0 0 8px 0;",
+          tags$p(style = "font-size: 11px; margin: 0 0 8px 0",
             tags$strong("Note: "),
             sprintf("donor %s has a different age in the H5AD (%s) than in the nPOD record (%s). ",
                     paste(mism, collapse = ", "),
@@ -358,13 +358,13 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
     output$comp_level_note <- renderUI({
       e <- tryCatch(comp_fit(), error = function(err) NULL)
       if (is.null(e) || !nzchar(e$level_note %||% "")) return(NULL)
-      tags$small(style = "color: #888; display: block; margin: -4px 0 10px; line-height: 1.35;",
+      tags$small(style = "display: block; margin: -4px 0 10px; line-height: 1.35",
                  e$level_note)
     })
 
     output$edger_note <- renderUI({
       e <- comp_fit()
-      tags$p(style = "font-size: 12px; color: #666; margin: 4px 0 10px 0; line-height: 1.5;",
+      tags$p(style = "font-size: 12px; margin: 4px 0 10px 0; line-height: 1.5",
         tags$strong(e$test), " — ",
         sprintf("%s cells from %d donors (%s); %d cell type%s tested",
                 formatC(e$n_cells, format = "d", big.mark = ","),
@@ -372,13 +372,13 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
         if (e$n_dropped > 0) sprintf(", %d absent from every donor (%s)",
                                      e$n_dropped, paste(e$dropped, collapse = ", ")) else "",
         tags$br(),
-        tags$span(style = "color: #888;",
+        tags$span(
           "Values are centred log-ratios: each cell type's log abundance relative to ",
           "that donor's own geometric mean across all cell types, so the result does not ",
           "depend on how much tissue was imaged. One value per donor, so no ",
           "pseudoreplication. FDR is Benjamini-Hochberg across the cell types tested."),
         if (is.finite(e$best_p)) tagList(tags$br(),
-          tags$span(style = "color: #8a6a12;",
+          tags$span(
             sprintf("Power ceiling at these group sizes: the smallest attainable p is %s, so BH across %d cell types floors at q = %s. A null here is underpowered, not negative.",
                     format_p_value(e$best_p), e$n_tested,
                     format_p_value(min(1, e$best_p * e$n_tested)))))
@@ -676,7 +676,7 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
         near100   = "cells within 100 µm of an islet",
         "all cells on the section")
       tagList(
-        tags$p(style = "font-size: 11px; color: #666; margin: 8px 0 0 0; line-height: 1.5;",
+        tags$p(style = "font-size: 11px; margin: 8px 0 0 0; line-height: 1.5",
           tags$strong("Testing. "),
           "Kruskal-Wallis across the three stages on donor-level scores. FDR is Benjamini-Hochberg ",
           "within a ", tags$strong("pre-specified family of the ", length(INFLAM_FDR_FAMILY),
@@ -804,7 +804,7 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
     # =========================================================================
 
     output$inflam_methods <- renderUI({
-      tags$div(style = "padding: 10px; font-size: 13px; line-height: 1.6;",
+      tags$div(style = "padding: 10px; font-size: 13px; line-height: 1.6",
         tags$p(
           tags$strong("Source. "),
           "Both analyses follow Steenbuck N., Damond N., et al., ",

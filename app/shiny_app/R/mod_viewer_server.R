@@ -151,7 +151,7 @@ viewer_server <- function(id, forced_image, current_tab) {
           )
         } else {
           tags$div(
-            style = "padding: 10px; background-color: #fff3cd; border: 1px solid #ffc107; margin-bottom: 10px;",
+            style = "padding: 10px; margin-bottom: 10px",
             tags$strong("No images found."),
             " Place OME-TIFF files in ", tags$code("app/shiny_app/www/local_images/"),
             " or set ", tags$code("LOCAL_IMAGE_ROOT"), " environment variable."
@@ -160,10 +160,10 @@ viewer_server <- function(id, forced_image, current_tab) {
         if (VIEWER_DEBUG_ENABLED) {
           vi <- isolate(viewer_info())
           tags$details(
-            style = "margin: 10px 0;",
+            style = "margin: 10px 0",
             tags$summary("Viewer debug info"),
             tags$pre(
-              style = "max-height:200px; overflow:auto;",
+              style = "max-height:200px; overflow:auto",
               jsonlite::toJSON(list(
                 env = vi$env, image_rel = vi$image_rel,
                 image_app = vi$image_app_url %||% vi$image_url,
@@ -184,8 +184,8 @@ viewer_server <- function(id, forced_image, current_tab) {
 
       if (is.null(avivator_base)) {
         return(tagList(
-          tags$div(style = "color:#b00;", "Local Avivator static build not found under shiny/www/avivator."),
-          tags$div(style = "color:#666; font-size:90%;",
+          tags$div("Local Avivator static build not found under shiny/www/avivator."),
+          tags$div(style = "font-size:90%",
                    "To install: run scripts/install_avivator.sh (requires Node >= 18) or place a prebuilt bundle under shiny/www/avivator.")
         ))
       }
@@ -196,7 +196,7 @@ viewer_server <- function(id, forced_image, current_tab) {
       ready <- has_image_stable()
       if (!isTRUE(ready)) {
         return(tags$div(
-          style = "padding: 20px; text-align: center; color: #666;",
+          style = "padding: 20px; text-align: center",
           "Select an image from the dropdown above to view it in AVIVATOR."
         ))
       }
@@ -204,23 +204,23 @@ viewer_server <- function(id, forced_image, current_tab) {
       src0 <- isolate(viewer_info()$iframe_src)
       if (is.null(src0) || !nzchar(src0)) {
         return(tags$div(
-          style = "padding: 20px; text-align: center; color: #666;",
+          style = "padding: 20px; text-align: center",
           "Select an image from the dropdown above to view it in AVIVATOR."
         ))
       }
 
       tags$div(
         id = wrap_id,
-        style = "position: relative;",
+        style = "position: relative",
         tags$div(
-          style = "padding: 6px 10px; background-color: #f6f8fa; color: #666; font-size: 90%; margin-bottom: 6px; border: 1px solid #e1e4e8; border-radius: 3px;",
+          style = "padding: 6px 10px; font-size: 90%; margin-bottom: 6px",
           "Click inside the viewer to enable pan/zoom and wheel zoom."
         ),
         tags$iframe(
           id = iframe_id, src = src0, `data-relsrc` = src0,
           width = "100%", frameBorder = 0, allowfullscreen = NA,
           tabindex = "0", allow = "fullscreen",
-          style = "width:100%; height:calc(100vh - 180px); border:0;"
+          style = "width:100%; height:calc(100vh - 180px)"
         ),
         tags$script(HTML(sprintf("(function(){
   var wrap = document.getElementById('%s');

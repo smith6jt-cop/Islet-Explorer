@@ -21,7 +21,7 @@ trajectory_selection_ui <- function(id) {
       selectInput(ns("pt_scale"), NULL,
                   choices = c("Rank-normalized" = "rank", "Raw DPT" = "raw"),
                   selected = "rank", width = "100%")),
-    tags$small(style = "color: #888; display: block; margin: -4px 0 10px; line-height: 1.35;",
+    tags$small(style = "display: block; margin: -4px 0 10px; line-height: 1.35",
       "Rank spreads islets evenly; raw shows true DPT spacing, so where islets ",
       "actually concentrate is visible. Trend curvature on the rank axis is ",
       "partly an artifact of the transform."),
@@ -51,13 +51,15 @@ trajectory_ui <- function(id) {
     fluidRow(
       # Left card: Scatterplot and heatmaps (narrowed from col-8)
       column(7,
-        div(class = "card", style = "padding: 15px; margin-bottom: 20px;",
+        div(class = "card", style = "padding: 15px; margin-bottom: 20px",
           fluidRow(
             # The feature / pseudotime / colour selectors that used to fill the
             # first column here moved to trajectory_selection_ui(), in the frozen
             # right-hand panel. What remains is per-plot aesthetics, which stay
             # with the plot they affect.
-            column(4,
+            # 4+3+3 = 10 of 12 after the feature/pseudotime/colour selectors
+            # moved to the frozen panel. Rebalanced to fill the row.
+            column(5,
               selectInput(ns("traj_point_size"), "Point size by:",
                          choices = c("Cell Count" = "total_cells",
                                      "Islet Diameter" = "islet_diam_um",
@@ -75,9 +77,9 @@ trajectory_ui <- function(id) {
               checkboxInput(ns("traj_trend_ci"), "95% CI band on trends",
                            value = TRUE)
             ),
-            column(3,
-              div(style = "border: 1px solid #ddd; padding: 10px; border-radius: 5px; background-color: #f9f9f9; min-height: 100px;",
-                h5("Legend", style = "margin-top: 0; margin-bottom: 10px; font-weight: bold; color: #333; font-size: 15px;"),
+            column(4,
+              div(class = "ie-legend-box",
+                h5("Legend", style = "margin-top: 0; margin-bottom: 10px; font-weight: bold; font-size: 15px"),
                 uiOutput(ns("traj_legend"))
               ),
               selectInput("traj_donor_palette", "Donor Status Colors",
@@ -90,13 +92,13 @@ trajectory_ui <- function(id) {
           br(),
           plotlyOutput(ns("traj_heatmap"), height = 100),
           hr(),
-          h5("Multi-Feature Heatmap", style = "color: #2c5aa0;"),
+          h5("Multi-Feature Heatmap"),
           fluidRow(
             column(8, uiOutput(ns("multi_heatmap_marker_selector"))),
             column(4, sliderInput(ns("multi_heatmap_nbins"), "Number of bins:", min = 10, max = 40, value = 20, step = 5))
           ),
           plotOutput(ns("traj_multi_heatmap"), height = "auto"),
-          div(style = "text-align: right; margin-top: 8px;",
+          div(style = "text-align: right; margin-top: 8px",
             downloadButton(ns("dl_multi_heatmap_csv"), "Download CSV",
                            class = "btn-sm btn-outline-secondary"),
             downloadButton(ns("dl_multi_heatmap"), "Download PNG",
@@ -105,19 +107,19 @@ trajectory_ui <- function(id) {
       ),
       # Right column: UMAPs stacked + segmentation viewer below
       column(5,
-        div(class = "card", style = "padding: 15px; margin-bottom: 20px;",
+        div(class = "card", style = "padding: 15px; margin-bottom: 20px",
           fluidRow(
             column(6,
-              h5("UMAP: Donor Status", style = "font-size: 13px; margin-top: 0;"),
+              h5("UMAP: Donor Status", style = "font-size: 13px; margin-top: 0"),
               plotOutput(ns("traj_umap_donor"), height = 500),
-              div(style = "text-align: right; margin-top: 6px;",
+              div(style = "text-align: right; margin-top: 6px",
                 downloadButton(ns("dl_umap_donor"), "Download PNG",
                                class = "btn-sm btn-outline-primary"))
             ),
             column(6,
-              h5("UMAP: Selected Feature", style = "font-size: 13px; margin-top: 0;"),
+              h5("UMAP: Selected Feature", style = "font-size: 13px; margin-top: 0"),
               plotOutput(ns("traj_umap_feature"), height = 500),
-              div(style = "text-align: right; margin-top: 6px;",
+              div(style = "text-align: right; margin-top: 6px",
                 downloadButton(ns("dl_umap_csv"), "Download CSV",
                                class = "btn-sm btn-outline-secondary"),
                 downloadButton(ns("dl_umap_feature"), "Download PNG",

@@ -63,12 +63,12 @@ inflammation_selection_ui <- function(id) {
                               "Cells within 100 µm of an islet" = "near100",
                               "All cells on the section" = "all"),
                   selected = "isletperi", width = "100%")),
-    tags$small(style = "color: #888; display: block; margin: -4px 0 10px; line-height: 1.35;",
+    tags$small(style = "display: block; margin: -4px 0 10px; line-height: 1.35",
       "The ROI analogue. Steenbuck et al. normalise per islet-centred ROI; ",
       "normalising by the whole section instead adds 4–23× donor-to-donor ",
       "variance and hid three phenotypes that are significant under the default."),
     checkboxInput(ns("infil_match_numer"), "Match numerator to denominator", value = FALSE),
-    tags$small(style = "color: #888; display: block; margin: -6px 0 10px; line-height: 1.35;",
+    tags$small(style = "display: block; margin: -6px 0 10px; line-height: 1.35",
       "Restores the paper's exact per-cell mean. Off by default because matching ",
       "confines the 1/d gradient to the 20 µm peri band."),
     checkboxInput(ns("infil_log"), "Log10 y-axis", value = TRUE),
@@ -79,26 +79,10 @@ inflammation_selection_ui <- function(id) {
 inflammation_ui <- function(id) {
   ns <- NS(id)
 
-  section_heading <- function(step, title, subtitle, tip = NULL) {
-    tip_icon <- if (!is.null(tip) && nzchar(tip)) {
-      span("?", title = tip,
-           style = paste0("display: inline-block; margin-left: 6px; width: 18px; height: 18px;",
-                          " line-height: 18px; text-align: center; font-size: 12px; font-weight: 700;",
-                          " color: #4477AA; background: #eaf2fa; border: 1px solid #c0d4e8;",
-                          " border-radius: 50%; cursor: help;"))
-    } else NULL
-    div(style = "margin-bottom: 14px; margin-top: 22px; padding-bottom: 8px; border-bottom: 2px solid #d0e0f0;",
-      div(style = "display: flex; align-items: baseline; gap: 10px;",
-        span(step,
-             style = paste0("display: inline-block; background: linear-gradient(135deg, #4477AA, #5599CC);",
-                            " color: white; font-weight: 700; font-size: 14px; padding: 2px 10px;",
-                            " border-radius: 12px; min-width: 24px; text-align: center;")),
-        span(title, style = "font-weight: 700; font-size: 17px; color: #333;"),
-        tip_icon
-      ),
-      p(subtitle, style = "margin: 4px 0 0 0; color: #777; font-size: 13px;")
-    )
-  }
+  # `section_heading()` was defined locally here (and in three other
+  # files) with the same hardcoded blue gradient inline. Replaced by
+  # ie_section_heading() in R/ui_modernist_bits.R.
+  section_heading <- ie_section_heading
 
   tagList(
 
@@ -108,20 +92,20 @@ inflammation_ui <- function(id) {
         style = paste0("padding: 14px 18px; margin-bottom: 18px; ",
                        "background: linear-gradient(135deg, #f4f8fc 0%, #eaf2fa 100%); ",
                        "border-left: 4px solid #4477AA;"),
-      h4("About this tab", style = "margin: 0 0 6px 0; font-size: 16px; color: #2c4760;"),
-      p(style = "margin: 0 0 6px 0; font-size: 13px; line-height: 1.5; color: #333;",
+      h4("About this tab", style = "margin: 0 0 6px 0; font-size: 16px"),
+      p(style = "margin: 0 0 6px 0; font-size: 13px; line-height: 1.5",
         tags$strong("What it does."), " Two cohort-level analyses adapted from ",
         tags$em("Steenbuck et al. 2025"), " (Bodenmiller lab, bioRxiv 2025.03.05.641526), ",
         "an imaging-mass-cytometry study of 88 nPOD donors across T1D progression. ",
         "Unlike the Statistics tab, which tests one selected feature, both cards here ",
         "test ", tags$strong("every cell type at once"), " and are corrected across them."),
-      p(style = "margin: 0 0 6px 0; font-size: 13px; line-height: 1.5; color: #333;",
+      p(style = "margin: 0 0 6px 0; font-size: 13px; line-height: 1.5",
         tags$strong("Why it is separate."), " These are donor-level questions — ",
         "“which cell types change in abundance?” and “which immune cells move ",
         "toward islets?” — not per-islet ones. They read the tissue-wide single-cell ",
         "table (~2.65 M cells), not the islet-level frame the Statistics tab uses, so ",
         "the Plot sidebar's filters do not apply here."),
-      p(style = "margin: 0; font-size: 13px; line-height: 1.5; color: #333;",
+      p(style = "margin: 0; font-size: 13px; line-height: 1.5",
         tags$strong("Cohort scope."), " All five T1D donors in this cohort are ",
         tags$strong("recent-onset"), " (disease duration < 1 year). There are no ",
         "long-duration donors, so nothing here speaks to established disease.")
@@ -148,22 +132,22 @@ inflammation_ui <- function(id) {
       "donors. See Methods."),
     fluidRow(
       column(12,
-        div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible;",
+        div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible",
           # "Cells included" moved to inflammation_selection_ui() in the frozen
           # right-hand panel. The pairwise Contrast selector is gone entirely:
           # this is one omnibus across every stage present, so there is no
           # contrast to pick -- the table reports the log-ratio difference
           # between the extreme stages.
-          div(style = "margin-bottom: 10px;",
+          div(style = "margin-bottom: 10px",
             downloadButton(ns("dl_edger"), "Download results CSV")
           ),
           uiOutput(ns("edger_note")),
-          fluidRow(style = "display: flex; flex-wrap: wrap;",
+          fluidRow(style = "display: flex; flex-wrap: wrap",
             column(6,
               plotlyOutput(ns("edger_volcano"), height = "460px")
             ),
             column(6,
-              div(style = "max-height: 460px; overflow-y: auto;",
+              div(style = "max-height: 460px; overflow-y: auto",
                 tableOutput(ns("edger_table"))
               )
             )
@@ -194,19 +178,19 @@ inflammation_ui <- function(id) {
                   "phenotypes"), ", fixed in source so it cannot be resized after seeing results."),
     fluidRow(
       column(12,
-        div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible;",
+        div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible",
           # Denominator, numerator matching, log axis and the phenotype picker
           # all moved to inflammation_selection_ui(). Their explanatory notes go
           # with them; what is left here is the export.
-          div(style = "margin-bottom: 10px;",
+          div(style = "margin-bottom: 10px",
             downloadButton(ns("dl_infil"), "Download scores CSV")
           ),
-          fluidRow(style = "display: flex; flex-wrap: wrap;",
+          fluidRow(style = "display: flex; flex-wrap: wrap",
             column(7,
               plotlyOutput(ns("infil_plot"), height = "460px")
             ),
             column(5,
-              div(style = "max-height: 460px; overflow-y: auto;",
+              div(style = "max-height: 460px; overflow-y: auto",
                 tableOutput(ns("infil_table"))
               )
             )
@@ -221,7 +205,7 @@ inflammation_ui <- function(id) {
                     "Definitions, corrections and the adaptations made for this cohort."),
     fluidRow(
       column(12,
-        div(class = "card", style = "padding: 15px; margin-bottom: 15px; background: #f8f9fa;",
+        div(class = "card", style = "padding: 15px; margin-bottom: 15px",
           uiOutput(ns("inflam_methods"))
         )
       )
