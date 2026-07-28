@@ -1,0 +1,118 @@
+diff --git a/scripts/codex_phenocycler/codex_lineage.py b/scripts/codex_phenocycler/codex_lineage.py
+index 1806df1..77926cb 100644
+--- a/scripts/codex_phenocycler/codex_lineage.py
++++ b/scripts/codex_phenocycler/codex_lineage.py
+@@ -328,6 +328,39 @@ CLIP_UNCLIPPED_TARGETS = frozenset({
+ # cohort-wide only if NO donor has an adequate positive cluster.
+ PREVALENCE_COLLAPSE_MARKERS = ("KRT14", "CD35", "CD20", "SST", "GAP43")
+ 
++# --- Adaptive (outlier-robust) RESTORE divisor (2026-07-24, image review) ------------------------
++# Upstream's divisor is the raw MAXIMUM of the reference-positive/target-negative control
++# (negative_control_statistics: `divisor = values.max()`), and positivity is `value > divisor`. That
++# is outlier-fragile: ONE contaminating bright cell in the control (e.g. an ECAD+ ductal cell with
++# T1D-upregulated HLA-II, or a bright artifact) pins the divisor at ~p99.99 of the marker, so EVERY
++# real positive below it is uncalled -> a ZERO call for a marker that is present in every image. That
++# is a method failure, not biology (user directive: "there should never be a zero for any marker").
++#
++# FIX: keep the control max by default (so the reviewer-accepted clean pairs are unchanged -- their
++# control max is only ~1.4-2.5x their q99), but when the max is an EXTREME OUTLIER relative to the
++# control's own q99 (the contamination signature: HLADR 6521 max/q99 = 18x, PDPN 6479 = 175x), fall
++# back to a robust control quantile. Self-contained in the control values, so it drops into
++# negative_control_statistics (patched CODEX-side; see codex_restore_validation.patch_upstream).
++DIVISOR_OUTLIER_K = 5.0            # max > K * q99(control) => contaminated => use the fallback quantile
++DIVISOR_Q99 = 0.99                # the outlier-detection reference quantile
++DIVISOR_FALLBACK_QUANTILE = 0.995  # the robust divisor when the control is contaminated
++
++
++def robust_control_divisor(values):
++    """Adaptive RESTORE divisor: control max, unless max is an extreme outlier (contamination) ->
++    control q99.5. Returns (divisor, robustified). Fixes the 'zero call for a present marker' failure.
++    """
++    import numpy as np
++    v = np.asarray(values, dtype=float)
++    v = v[np.isfinite(v)]
++    if v.size == 0:
++        raise ValueError("negative-control population is empty")
++    mx = float(v.max())
++    q99 = float(np.quantile(v, DIVISOR_Q99))
++    if q99 > 0 and mx > DIVISOR_OUTLIER_K * q99:
++        return float(np.quantile(v, DIVISOR_FALLBACK_QUANTILE)), True
++    return mx, False
++
+ CLIP_ARTIFACT_DONORS = {          # marker: donors where the p99.5 clip broke plain Otsu (RAW)
+     "CD8a":  ["112", "6356"],
+     "HLADR": ["6516", "6356", "6505"],
+diff --git a/scripts/codex_phenocycler/codex_restore_validation.py b/scripts/codex_phenocycler/codex_restore_validation.py
+index 1f4c715..0c452c4 100644
+--- a/scripts/codex_phenocycler/codex_restore_validation.py
++++ b/scripts/codex_phenocycler/codex_restore_validation.py
+@@ -93,6 +93,32 @@ def _upstream_sha() -> str | None:
+         return None
+ 
+ 
++def _codex_negative_control_statistics(values):
++    """CODEX-adaptive replacement for rv.negative_control_statistics (the divisor computation).
++
++    Upstream uses the control MAXIMUM as the divisor, which one contaminating bright cell inflates to
++    ~p99.99 -> a zero call for a present marker (HLADR/PDPN). This keeps the max for clean controls but
++    falls back to the control q99.5 when the max is an extreme outlier (cl.robust_control_divisor).
++    The `normalize <= 1` assertion is only enforced when the max is used (a quantile divisor legitimately
++    has control cells above it). Same return keys as upstream so every caller is unaffected.
++    """
++    import numpy as np
++    v = np.asarray(values, dtype=float)
++    v = v[np.isfinite(v)]
++    if v.size == 0:
++        raise ValueError("negative-control population is empty")
++    if np.any(v < 0):
++        raise ValueError("RESTORE requires nonnegative linear intensities")
++    divisor, robustified = cl.robust_control_divisor(v)
++    if divisor <= 0:
++        raise ValueError("negative-control divisor must be positive")
++    if not robustified and np.any(v / divisor > 1 + 1e-12):
++        raise AssertionError("negative controls must normalize to <= 1")
++    return {"n": int(v.size), "maximum": divisor,
++            "mean_plus_3sd": float(v.mean() + 3.0 * v.std(ddof=0)),
++            "median": float(np.median(v)), "p95": float(np.quantile(v, 0.95))}
++
++
+ def patch_upstream() -> None:
+     """Inject CODEX's marker vocabulary, floor methods and pair set into upstream's frozen globals.
+ 
+@@ -125,6 +151,10 @@ def patch_upstream() -> None:
+     rv.QUPATH_MARKERS = {m: m for m in SCREENED_MARKERS}                       # identity (CODEX names)
+     rv.MARKER_INPUT_FLOOR_METHODS = {m: cl.MARKER_INPUT_FLOOR_METHODS[m] for m in SCREENED_MARKERS}
+     rv.CANDIDATE_PAIRS = tuple(CODEX_PAIRS)
++    # Adaptive outlier-robust divisor (image-review directive: never a zero for a present marker).
++    # Replaces the raw control-max divisor; clean controls keep max, contaminated ones fall back to
++    # q99.5. See _codex_negative_control_statistics + cl.robust_control_divisor.
++    rv.negative_control_statistics = _codex_negative_control_statistics
+ 
+     # Upstream's own invariant (tests/test_restore_validation.py): one floor method per screened marker.
+     if set(rv.MARKER_INPUT_FLOOR_METHODS) != set(rv.QUPATH_MARKERS):
+diff --git a/scripts/codex_phenocycler/test_codex_restore_validation.py b/scripts/codex_phenocycler/test_codex_restore_validation.py
+index a4ed108..c4d430e 100644
+--- a/scripts/codex_phenocycler/test_codex_restore_validation.py
++++ b/scripts/codex_phenocycler/test_codex_restore_validation.py
+@@ -95,6 +95,21 @@ def test_faithful_feature_space_not_cell_only():
+     assert rv.PairValidationConfig().feature_compartments == ("Membrane", "Cell")
+ 
+ 
++def test_adaptive_divisor_robustifies_only_outliers():
++    import numpy as np
++    rng = np.random.default_rng(0)
++    clean = rng.gamma(2.0, 100.0, 5000)
++    div_clean, robustified = cl.robust_control_divisor(clean)
++    assert not robustified and div_clean == float(clean.max()), "clean control must keep the max"
++    contaminated = np.append(clean, clean.max() * 30.0)   # one 30x outlier
++    div_cont, robustified = cl.robust_control_divisor(contaminated)
++    assert robustified and div_cont < float(contaminated.max()), "an outlier control must fall back"
++    assert div_cont == float(np.quantile(contaminated, cl.DIVISOR_FALLBACK_QUANTILE))
++    # the patched scorer must be installed by patch_upstream (so every screen uses it)
++    crv.patch_upstream()
++    assert rv.negative_control_statistics.__name__ == "_codex_negative_control_statistics"
++
++
+ def test_reference_selection_adapter_rebinds_the_import_copies():
+     crs.patch_reference_selection()
+     assert set(rs.CANDIDATE_PAIRS) == set(crv.CODEX_PAIRS)            # 30 candidates

@@ -6,6 +6,61 @@ Plans: `~/.claude/plans/continue-from-handoff-parsed-kay.md` (Phase 0, DONE belo
 
 ---
 
+## 2026-07-28 — adaptive RESTORE divisor REJECTED (read before re-proposing it)
+
+An uncommitted working-tree change (dated 2026-07-24, 78 lines across `codex_lineage.py`,
+`codex_restore_validation.py` and its test) proposed an **outlier-robust RESTORE divisor**: keep
+upstream's control `max()` unless `max > 5 x q99(control)`, in which case fall back to the control
+q99.5. It was installed CODEX-side by rebinding `rv.negative_control_statistics` in
+`patch_upstream()`. Its stated motivation was that one contaminating bright cell pins the divisor
+and produces a zero call for a present marker (HLADR, PDPN).
+
+**Verdict: rejected and reverted.** The patch is preserved verbatim at
+`docs/rejected/adaptive_restore_divisor.patch` (verified to be the exact working-tree delta);
+`git apply` it to restore. Its test passed and the idea is sound in the abstract — it fails on
+*this* data and against decisions already recorded above.
+
+**1. It does not fix the cases it was written for.** Using the shipped screens' recorded divisors
+(`candidate_full_maximum` vs `target_sample_maximum_q05` as an outlier proxy):
+
+- **HLADR** — the three "no plotted points" donors from image-review round 1 (6521, 6534, 6551)
+  have ratios **1.46 / 1.47 / 1.94**, nowhere near the `k = 5` trigger. The rule never fires on
+  them. The three donors it *would* fire on (6450, 6505, 6563 — ratios 5.31 / 5.20 / 7.46) are
+  already `PAIR_REVIEW_PENDING`, i.e. working.
+- **PDPN** — the two genuine zero-donors named above (6479, 6538) have ratios **2.12 / 1.00**; the
+  rule never fires there either. It would instead change 6356, 6450, 6516, 6549 and 6550, which are
+  fine.
+
+**2. It contradicts two reviewed decisions in this handoff.** The HLADR zeros were investigated and
+recorded as *"genuine, not a bug"*, with the agreed remedy being the prevalence-collapse policy at
+Phase H. PDPN's undercall was root-caused to a `clip_sensitive` mis-flag and already fixed by moving
+it to the 0.995 clipped group. The patch re-solves both with a third mechanism.
+
+**3. Its blast radius is markers nobody flagged.** Ranked by the same proxy, the most affected
+targets are **SMA (median ratio 9.35, so it fires on over half the donors), B3TUBB 6.39, PGP9.5
+4.84, CD163 4.38, GAP43 4.17** — the reviewer-accepted set, not the immune markers it was written
+for. CD20 is safe (ratios 1.03–1.56), so the "do NOT drop the CD20 divisor" decision is not
+violated — but only by luck, since the rule can only ever *lower* a divisor and CD20's problem is
+that its divisor is already too low.
+
+**4. It defeats this project's own divisor tripwire, by construction.** `patch_upstream()` raises
+when `rv.METHOD_VERSION != cl.EXPECTED_METHOD_VERSION`, and that check's own message says *"a
+floor/pair/divisor change is not [contract-safe]"*. Because the patch rebinds the scorer CODEX-side
+rather than changing upstream, `METHOD_VERSION` is untouched and the guard cannot see it — a divisor
+change would ship silently past the mechanism built to catch divisor changes.
+
+**If the idea is revived**, it needs: a real `max/q99` computation on the control populations rather
+than the proxy used here; a `METHOD_VERSION`/`EXPECTED_METHOD_VERSION` bump so the tripwire fires; a
+full 15-donor re-screen diffed against the pinned `55b904d` baseline; and a reconciliation with the
+prevalence-collapse policy, which already owns the zero-call problem.
+
+Caveat on the numbers above: `candidate_full_maximum / target_sample_maximum_q05` is the same *kind*
+of quantity as the patch's `max/q99` but not identical, so the per-donor firing predictions are
+indicative. The conclusion is robust regardless — the named failure donors sit at ratios 1.0–2.1,
+far from any plausible threshold.
+
+---
+
 ## 2026-07-24 (later) — Level-2 build A–G DONE, at the user image-review gate (READ FIRST)
 
 Executed the approved plan `~/.claude/plans/make-a-plan-to-gleaming-parrot.md`, Phases A–G. The
