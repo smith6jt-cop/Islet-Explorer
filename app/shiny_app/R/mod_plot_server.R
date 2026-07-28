@@ -227,33 +227,9 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("plo
 
     # ---- Age & Sex filter UIs (visible only when demographics available) ----
     # (data column is `gender`; user-facing label is "Sex")
-    output$age_filter_ui <- renderUI({
-      pd <- prepared()
-      if (is.null(pd$comp) || !("age" %in% colnames(pd$comp))) return(NULL)
-      age_vals <- as.numeric(pd$comp$age)
-      age_vals <- age_vals[is.finite(age_vals)]
-      if (length(age_vals) == 0) return(NULL)
-      sliderInput(ns("age_range"), "Donor Age (years)",
-                  min = floor(min(age_vals)), max = ceiling(max(age_vals)),
-                  value = c(floor(min(age_vals)), ceiling(max(age_vals))), step = 1)
-    })
+    # `output$age_filter_ui` removed: age/sex moved to the shared cohort filter.
 
-    output$gender_filter_ui <- renderUI({
-      pd <- prepared()
-      if (is.null(pd$comp) || !("gender" %in% colnames(pd$comp))) return(NULL)
-      genders <- sort(unique(na.omit(as.character(pd$comp$gender))))
-      if (length(genders) == 0) return(NULL)
-      # User-facing label is "Sex" (project convention); the underlying data
-      # column stays `gender` for backwards compatibility. This sidebar is shared
-      # by the Plot AND Statistics tabs, so it was the one place in the live UI
-      # still showing the word "Gender". Values stay M/F — only the labels change.
-      sex_labels <- c(F = "Female", M = "Male")
-      checkboxGroupInput(ns("gender_filter"), "Sex",
-                         choiceNames  = unname(ifelse(genders %in% names(sex_labels),
-                                                      sex_labels[genders], genders)),
-                         choiceValues = as.list(genders),
-                         selected = genders, inline = TRUE)
-    })
+    # `output$gender_filter_ui` removed: age/sex moved to the shared cohort filter.
 
     # ===========================================================================
     # Reactive data chain:  raw_df_base -> raw_df -> plot_df -> summary_df

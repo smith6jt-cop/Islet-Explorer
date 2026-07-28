@@ -90,48 +90,7 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
     # Card A: donor cohort table
     # =========================================================================
 
-    output$cohort_note <- renderUI({
-      d <- cohort()
-      if (!npod_available()) {
-        return(tags$div(style = paste0("background: #fdecea; border: 1px solid #f5b7b1;",
-                                       " border-radius: 4px; padding: 8px 12px; margin-bottom: 10px;",
-                                       " font-size: 12px; color: #8a1c12;"),
-          tags$strong("nPOD clinical metadata not loaded. "),
-          "Only age and sex are available. Run ",
-          tags$code("python scripts/build_donor_metadata.py"),
-          " to generate ", tags$code("data/donor_metadata.csv"), "."))
-      }
-      dur <- suppressWarnings(as.numeric(d$t1d_duration_years))
-      dur <- dur[is.finite(dur)]
-      dur_txt <- if (length(dur)) {
-        sprintf("All %d T1D donors are recent-onset (duration %s year%s).",
-                length(dur),
-                if (diff(range(dur)) == 0) sprintf("%.2g", dur[1])
-                else sprintf("%.2g–%.2g", min(dur), max(dur)),
-                if (length(dur) == 1) "" else "s")
-      } else ""
-      # The one place the age discrepancy is visible rather than buried.
-      mism <- if (all(c("age", "age_years_npod") %in% colnames(d))) {
-        a <- suppressWarnings(as.numeric(d$age)); b <- suppressWarnings(as.numeric(d$age_years_npod))
-        d$`Case ID`[is.finite(a) & is.finite(b) & abs(a - b) > 0.01]
-      } else character(0)
-      tagList(
-        tags$p(style = "font-size: 12px; margin: 0 0 8px 0; line-height: 1.5",
-          tags$strong("Scope. "), dur_txt,
-          " This cohort therefore corresponds to the Steenbuck et al. “Onset” group; ",
-          "it contains no long-duration T1D donors. Disease duration has too little ",
-          "variance to serve as a covariate — it is reported here as a descriptor."),
-        if (length(mism)) {
-          tags$p(style = "font-size: 11px; margin: 0 0 8px 0",
-            tags$strong("Note: "),
-            sprintf("donor %s has a different age in the H5AD (%s) than in the nPOD record (%s). ",
-                    paste(mism, collapse = ", "),
-                    paste(sprintf("%.2f", suppressWarnings(as.numeric(d$age))[d$`Case ID` %in% mism]), collapse = ", "),
-                    paste(sprintf("%.2f", suppressWarnings(as.numeric(d$age_years_npod))[d$`Case ID` %in% mism]), collapse = ", ")),
-            "The H5AD value is used for all modelling so existing results do not shift.")
-        } else NULL
-      )
-    })
+    # `output$cohort_note` removed with the donor-cohort card.
 
     cohort_display <- reactive({
       d <- cohort()
@@ -169,20 +128,9 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
       out
     })
 
-    output$cohort_table <- renderTable({ cohort_display() },
-      striped = TRUE, bordered = TRUE, spacing = "s", align = "l")
+    # `output$cohort_table` removed with the donor-cohort card.
 
-    output$dl_cohort <- downloadHandler(
-      filename = function() paste0("inflammation_donor_cohort_",
-                                   format(Sys.time(), "%Y%m%d_%H%M%S"), ".csv"),
-      content = function(file) {
-        write_islet_csv(file, cohort(), islet_csv_header(
-          "Donor cohort — nPOD clinical metadata",
-          "Source: scripts/build_donor_metadata.py -> data/donor_metadata.csv",
-          "age = H5AD value (canonical for modelling); age_years_npod = nPOD record",
-          "t1d_duration_years is NA for non-diabetic donors (not applicable, not zero)"))
-      }
-    )
+    # `output$dl_cohort` removed with the donor-cohort card.
 
     # =========================================================================
     # Card B: edgeR differential abundance
