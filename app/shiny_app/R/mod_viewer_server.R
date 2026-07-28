@@ -88,8 +88,29 @@ viewer_server <- function(id, forced_image, current_tab) {
         info$image_public_url <- resolved_public_url
       }
 
+      # ---- HTTP RANGE IS THE WHOLE BALLGAME ----------------------------
+      # Avivator reads an OME-TIFF tile by tile via byte-range requests. A
+      # server that ignores `Range` answers each tile fetch with the ENTIRE
+      # file -- 7.1 GB here -- and the fetch fails. Measured on this host:
+      #
+      #   nginx        :8080/islet-explorer/  ->  206 Partial Content  works
+      #   shiny-server :3838                  ->  200, whole file      fails
+      #   runApp       :7780                  ->  200, whole file      fails
+      #
+      # The URL is otherwise derived from session$clientData -- from whichever
+      # origin the browser happened to use -- so the Viewer worked or silently
+      # failed depending on how the app was opened, with no message either way.
+      # IMAGE_BASE_URL pins it to an origin known to support Range.
       sel_url <- NULL
-      if (!is.null(resolved_public_url) && nzchar(resolved_public_url)) {
+      img_base <- Sys.getenv("IMAGE_BASE_URL", unset = "")
+      if (nzchar(img_base) && !is.null(rel_url) && nzchar(rel_url)) {
+        sel_url <- paste0(sub("/+$", "", img_base), "/", sub("^/+", "", rel_url))
+      }
+      # Fall back to the session origin ONLY if the pin above did not apply --
+      # unguarded, this chain immediately overwrote it.
+      if (!is.null(sel_url)) {
+        # already pinned to a Range-capable origin
+      } else if (!is.null(resolved_public_url) && nzchar(resolved_public_url)) {
         sel_url <- resolved_public_url
       } else if (!is.null(resolved_app_url) && nzchar(resolved_app_url)) {
         sel_url <- resolved_app_url
@@ -100,7 +121,9 @@ viewer_server <- function(id, forced_image, current_tab) {
       params <- list()
       if (!is.null(sel_url)) {
         params[["image_url"]] <- utils::URLencode(sel_url, reserved = FALSE)
-        info$image_url <- resolved_app_url %||% sel_url
+        # `sel_url`, not resolved_app_url: the debug readout must show the URL
+        # actually handed to Avivator, otherwise a pinned origin is invisible.
+        info$image_url <- sel_url
       }
 
       ch_b64 <- tryCatch(build_channel_config_b64(channel_names_vec), error = function(e) NULL)

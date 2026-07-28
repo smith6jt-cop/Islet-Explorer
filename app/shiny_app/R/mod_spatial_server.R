@@ -10,10 +10,20 @@
 spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                            donor_colors_reactive = reactive(DONOR_COLORS_BRIGHT),
                            remove_outliers = reactive(FALSE),
-                           outlier_threshold = reactive(3.0)) {
+                           outlier_threshold = reactive(3.0),
+                           cohort = NULL) {
 
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
+
+    # The Neighborhood cards used to carry their own `nbr_min_cells`, which was
+    # never synced with the Plot tab's copy. The frozen top bar owns it now;
+    # this shim keeps the five read sites unchanged, and defaults to 1 when the
+    # module is driven headlessly without a cohort, as testServer does.
+    cohort_min_cells <- function() {
+      if (is.null(cohort)) return(1)
+      cohort$spec()$min_cells %||% 1
+    }
 
     # ---- Outlier-table reactiveVals (parity with Plot/Trajectory) ----
     # Populated inside the Card A and Card C renderPlotly bodies, consumed by
