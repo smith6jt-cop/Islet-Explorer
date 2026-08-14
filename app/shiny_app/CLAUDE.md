@@ -62,6 +62,11 @@ See [`docs/statistics.md`](docs/statistics.md) for full details — the Jul 2026
 
 ## Trajectory Tab Features
 
+> **Accuracy reference: [`docs/trajectory.md`](docs/trajectory.md)** — measured ground truth
+> for the shipped H5AD, the confirmed/refuted/non-viable ledger from the pseudotime audit, and
+> the fixed defects (unstable rank axis, CSV provenance, DC1 trivial eigenvector, `obsp`
+> mismatch, pseudoreplicated Step 6). Consult it before changing pseudotime handling.
+
 ### Cell-Count-Weighted Trajectory (Phase 12, Mar 2026)
 
 #### Problem
@@ -119,7 +124,15 @@ Sidebar radio labels and axis titles are unit-explicit — never use the bare wo
 
 A `helpText` block under the Plot metric selector restates the active mode's denominator. Keep this phrasing if you add new metrics. The y-axis class name is parsed from `input$which` (encoded as `className|region`).
 
-## Inflammation Tab (Jul 2026)
+## Inflammation Tab (Jul 2026) — **currently hidden**
+
+> **Hidden in the live app since Aug 2026**, at the user's request. Gated on
+> `SHOW_INFLAMMATION_TAB` (`00_globals.R`), which defaults to `0`; both the `tabPanel` and the
+> `inflammation_server()` call in `app.R` check it, so nothing is wired up while it is off. The
+> module, its data and this documentation are unchanged. To bring it back, set
+> `SHOW_INFLAMMATION_TAB=1` in `app/shiny_app/.Renviron` and `touch restart.txt` — no code edit.
+> (The `show_phenotype_rules_inflam` observer in `app.R` is deliberately left registered; an
+> `observeEvent` on an input that never exists never fires.)
 
 Sixth tab, `mod_inflammation_ui.R` / `mod_inflammation_server.R`, wired in `app.R` after Spatial.
 Carries two cohort-level analyses adapted from Steenbuck et al. 2025 (Bodenmiller lab, bioRxiv

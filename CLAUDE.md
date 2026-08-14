@@ -11,6 +11,7 @@ Interactive Shiny app for exploring pancreatic islet CODEX multiplexed imaging d
 - `app/shiny_app/CLAUDE.md` — per-tab feature details (Drill-Down, Trajectory, Plot, AI Assistant) + conventions including the May 2026 font-standardisation system
   - `app/shiny_app/docs/spatial.md` — Spatial Neighborhood Analysis deep reference (split out May 2026)
   - `app/shiny_app/docs/statistics.md` — Statistics Tab deep reference (split out May 2026; Jul 2026 correctness pass at the end: min-cells no-op, p-value notation, emmeans d.f. fallback, AAb pseudoreplication, AUC decoupling)
+  - `app/shiny_app/docs/trajectory.md` — **Trajectory/pseudotime accuracy reference** (Aug 2026). Ground-truth measurements of the shipped H5AD, what the audit confirmed (donor η² = 2.05× status; ND vs Aab+ never separable), three refuted claims and two non-viable directions that keep being re-proposed, and the axis/CSV/H5AD-integrity defects that were fixed. **Read before quoting any trajectory parameter — `scripts/CLAUDE.md` was stale until Aug 2026.**
 - `scripts/CLAUDE.md` — pipeline scripts, batch correction, pseudotime modes
 - `islet_analysis/CLAUDE.md` — Python analysis pipeline (phenotyping, aggregation, trajectory). Tracked via a `!` exception; the rest of `islet_analysis/` is ignored.
 
@@ -38,6 +39,8 @@ app/shiny_app/
     mod_spatial_ui.R / mod_spatial_server.R     # Spatial tab (3-panel: sidebar controls, tissue scatter, Leiden panel)
     mod_inflammation_ui.R / mod_inflammation_server.R  # Inflammation tab (edgeR abundance,
                                 #   Bodenmiller infiltration score, nPOD donor cohort table)
+                                #   HIDDEN since Aug 2026 — gated on SHOW_INFLAMMATION_TAB
+                                #   (00_globals.R, default 0). Set =1 in .Renviron to restore.
     mod_ai_assistant_ui.R / mod_ai_assistant_server.R  # AI chat panel
   www/                         # Static assets (images, logos)
 ```

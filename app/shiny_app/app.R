@@ -396,9 +396,13 @@ ui <- fluidPage(
         tabPanel("Spatial",
           spatial_ui("spatial")
         ),
-        tabPanel("Inflammation",
-          inflammation_ui("inflam")
-        )
+        # Hidden unless SHOW_INFLAMMATION_TAB=1 (see 00_globals.R).
+        # tabsetPanel drops NULL entries, so this mounts nothing when off.
+        if (SHOW_INFLAMMATION_TAB) {
+          tabPanel("Inflammation",
+            inflammation_ui("inflam")
+          )
+        }
       )
     )
   )
@@ -622,7 +626,11 @@ server <- function(input, output, session) {
   # in spatial_helpers.R), not the Plot module's islet frame, so no sidebar
   # filters apply. The tab is intentionally absent from the sidebar-visibility
   # condition in the layout JS above, so the sidebar stays hidden here.
-  inflammation_server("inflam", prepared, active_donor_colors)
+  # Gated on the same flag as its tabPanel (see 00_globals.R) so the module is
+  # not wired up when the tab is hidden.
+  if (SHOW_INFLAMMATION_TAB) {
+    inflammation_server("inflam", prepared, active_donor_colors)
+  }
 
   # AI Assistant module (self-contained)
   ai_assistant_server("ai")
@@ -762,6 +770,9 @@ server <- function(input, output, session) {
   # Each tab's `phenotype_rules_button("show_phenotype_rules_<tab>")` fires one
   # of these observers; they all open the same modal so users see a single
   # source of truth for marker -> celltype gating.
+  # `_inflam` stays listed even while the Inflammation tab is hidden: an
+  # observeEvent on an input that never exists simply never fires, and keeping
+  # it means flipping SHOW_INFLAMMATION_TAB back on needs no second edit here.
   for (id in c("show_phenotype_rules_plot",
                "show_phenotype_rules_traj",
                "show_phenotype_rules_spatial",
