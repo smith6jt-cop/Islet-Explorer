@@ -60,14 +60,23 @@ For production rebuilds, prefer `scripts/reaggregate_islets.py` which runs
 aggregation + trajectory + Leiden in a single script.
 
 ### Trajectory Analysis
+
+> **Historical sketch — this is NOT what shipped.** Both the neighbor settings and the root
+> rule below were superseded. `data/adata_ins_root.h5ad` was built with
+> `use_rep='X_scVI_harmony_pt'` (Harmony θ=0.1), `n_neighbors=30`, and a **medoid-of-top-50-ND**
+> root — not `n_neighbors=15` on raw `X_scVI_mean` with a single-islet `argmax(INS)`.
+> `scripts/reaggregate_islets.py` Step 5 is the authoritative implementation and
+> `scripts/CLAUDE.md` § Step 5 the authoritative description. Kept only to show the
+> original shape of the analysis.
+
 ```python
-# Neighbors from scVI latent (used for trajectory/DPT; NOT batch-corrected).
-# For Leiden clustering the reaggregate pipeline applies Harmony first.
+# SUPERSEDED — see the note above.
 sc.pp.neighbors(adata, n_neighbors=15, use_rep='X_scVI_mean', metric='cosine')
 sc.tl.paga(adata, groups='donor_status')
 sc.tl.umap(adata, init_pos='paga')
 
 # Pseudotime: root at ND islet with highest INS
+# (superseded — a single-islet argmax is brittle to staining outliers)
 ins_idx = list(adata.var_names).index('INS')
 nd_mask = adata.obs['donor_status'] == 'ND'
 root_idx = np.where(nd_mask)[0][np.argmax(adata.X[nd_mask, ins_idx])]

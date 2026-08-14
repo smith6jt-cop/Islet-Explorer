@@ -32,6 +32,18 @@ traj_pt_extent <- function(pt, jitter_frac = 0.012) {
 # Shared by traj_data_clean() and traj_multi_feature_data(), which are two independent
 # extraction paths; a divergence here silently desynchronizes the scatter from the
 # multi-feature heatmap's x-axis.
+# Coerce the "Min cells/islet" numericInput to a usable threshold.
+#
+# `%||%` catches NULL but NOT NA, and a cleared numericInput sends NA — so
+# `if (min_cells > 1)` aborts the reactive with "missing value where TRUE/FALSE
+# needed". This is the same defect that blanked every card on the Statistics tab
+# (see mod_statistics_server.R); the two filter sites and the CSV provenance
+# header all route through here so they cannot disagree.
+traj_min_cells_value <- function(x) {
+  v <- suppressWarnings(as.numeric(x %||% 1))
+  if (length(v) == 1 && is.finite(v) && v >= 1) v else 1
+}
+
 apply_pt_scale <- function(df, pt_scale) {
   df$pt_raw <- df$pt
   if (identical(pt_scale, "raw")) {
@@ -442,8 +454,12 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
 
       result_df <- result_df[valid_idx, , drop = FALSE]
 
-      # Apply min cells/islet filter
-      min_cells <- input$min_cells %||% 1
+      # Apply min cells/islet filter.
+      # `%||%` catches NULL but NOT NA: an emptied numericInput sends NA, and
+      # `if (NA > 1)` aborts the whole reactive with "missing value where
+      # TRUE/FALSE needed". Same defect that blanked the Statistics tab; use the
+      # same coercion (see mod_statistics_server.R).
+      min_cells <- traj_min_cells_value(input$min_cells)
       if (min_cells > 1 && "total_cells" %in% colnames(result_df)) {
         tc <- suppressWarnings(as.integer(result_df$total_cells))
         result_df <- result_df[is.finite(tc) & tc >= min_cells, , drop = FALSE]
@@ -1419,7 +1435,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       result <- result[is.finite(result$pt_raw), , drop = FALSE]
 
       # Apply min cells/islet filter (matches traj_data_clean)
-      min_cells <- input$min_cells %||% 1
+      min_cells <- traj_min_cells_value(input$min_cells)
       if (min_cells > 1) {
         result <- result[is.finite(result$total_cells) & result$total_cells >= min_cells, , drop = FALSE]
         if (nrow(result) == 0) return(NULL)
@@ -1593,7 +1609,11 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
           "Trajectory — UMAP coordinates and per-islet trajectory values",
           paste("Pseudotime mode:", input$pt_mode %||% "dpt_pseudotime"),
           paste("Selected feature:", input$traj_feature %||% "(none)"),
-          paste("Min cells per islet:", input$traj_min_cells %||% 1),
+          # The input is `min_cells` (mod_trajectory_ui.R), NOT `traj_min_cells`.
+          # Reading the wrong id made `%||% 1` fire every time, so this header
+          # always claimed 1 no matter what the user set — the provenance line
+          # silently contradicted the rows in the file.
+          paste("Min cells per islet:", traj_min_cells_value(input$min_cells)),
           paste("Rows:", if (is.null(out)) 0 else nrow(out), "islets")
         ))
       }

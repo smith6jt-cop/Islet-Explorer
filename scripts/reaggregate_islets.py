@@ -40,6 +40,128 @@ DEFAULT_ISLET_DIR = os.path.join(PROJECT_ROOT, 'islet_analysis')
 DEFAULT_TRAJECTORY_OUT = os.path.join(PROJECT_ROOT, 'data', 'adata_ins_root.h5ad')
 
 
+def _eta2_donor_within_status(pt, iid, status_col, stt, min_islets=3):
+    """Fraction of within-status pseudotime variance explained by donor identity."""
+    m = status_col == stt
+    pt_s, d_s = pt[m], iid[m]
+    groups = [pt_s[d_s == d] for d in np.unique(d_s) if (d_s == d).sum() >= min_islets]
+    if len(groups) < 2:
+        return None
+    gm = pt_s.mean()
+    ss_total = float(np.sum((pt_s - gm) ** 2))
+    if ss_total <= 0:
+        return 0.0
+    ss_between = float(sum(len(g) * (g.mean() - gm) ** 2 for g in groups))
+    return ss_between / ss_total
+
+
+def _validate_one_pseudotime(adata, pt_col, ins_idx, label):
+    """Validation gates for a single pseudotime column. Returns True if all pass.
+
+    Checks 1-2 (marker correlations) are necessarily islet-level -- they ask
+    whether expression tracks the axis. Check 3 (disease ordering) is run at
+    DONOR level: with 5,214 islets from only 15 donors, an islet-level mean is
+    pseudoreplicated, and the ordering is a claim about donors. The islet-level
+    means are still printed for reference, but they do not decide the gate.
+    """
+    if pt_col not in adata.obs:
+        print(f"\n[{label}] column '{pt_col}' absent -- SKIPPED")
+        return True
+
+    print(f"\n--- {label} ({pt_col}) ---")
+    pt = adata.obs[pt_col].values
+    valid = ~np.isnan(pt)
+    if valid.sum() == 0:
+        print("  no finite pseudotime values -> FAIL")
+        return False
+
+    # Check 1: INS negatively correlated with pseudotime
+    ins_expr = adata.X[:, ins_idx]
+    r_ins, p_ins = stats.spearmanr(pt[valid], ins_expr[valid])
+    pass_ins = r_ins < -0.3
+    print(f"1. INS vs pseudotime: r={r_ins:.3f}, p={p_ins:.2e} -> {'PASS' if pass_ins else 'FAIL'}")
+
+    # Check 2: GCG positively correlated.
+    # NOTE: the 0.1 threshold is RELAXED from an original 0.2 and the shipped
+    # data clears it only narrowly (core r~0.143, combined r~0.103). It is
+    # justified by a judgement that the genuine shared effect is ~0.14, which
+    # nothing independent confirms. Treat a GCG pass as weak evidence.
+    pass_gcg = True
+    if 'GCG' in adata.var_names:
+        gcg_idx = list(adata.var_names).index('GCG')
+        r_gcg, p_gcg = stats.spearmanr(pt[valid], adata.X[valid, gcg_idx])
+        pass_gcg = r_gcg > 0.1
+        margin = r_gcg - 0.1
+        note = "  <-- NARROW" if 0 <= margin < 0.05 else ""
+        print(f"2. GCG vs pseudotime: r={r_gcg:.3f}, p={p_gcg:.2e} -> "
+              f"{'PASS' if pass_gcg else 'FAIL'}{note}")
+
+    # Check 3: disease ordering, at DONOR level (see docstring)
+    iid = adata.obs['imageid'].astype(str).values
+    status_col = adata.obs['donor_status'].values
+    donor_means, islet_means = [], []
+    for status in ['ND', 'Aab+', 'T1D']:
+        mask = status_col == status
+        if not mask.any():
+            continue
+        islet_means.append(np.nanmean(pt[mask]))
+        per_donor = [np.nanmean(pt[mask & (iid == d)]) for d in np.unique(iid[mask])]
+        per_donor = [x for x in per_donor if np.isfinite(x)]
+        donor_means.append(np.mean(per_donor) if per_donor else np.nan)
+        print(f"   {status:5s}: donor-mean {donor_means[-1]:.4f} "
+              f"(n={len(per_donor)} donors) | islet-mean {islet_means[-1]:.4f} "
+              f"(n={mask.sum()} islets)")
+    ordering_ok = all(donor_means[i] <= donor_means[i + 1]
+                      for i in range(len(donor_means) - 1))
+    print(f"3. Donor-level ordering ND <= Aab+ <= T1D: {'PASS' if ordering_ok else 'FAIL'}")
+
+    # Check 4: per-status donor eta^2 (ND/T1D <= 0.15, Aab+ <= 0.25).
+    # Aab+ is relaxed because those donors genuinely span heterogeneous islet
+    # types -- biology, not technical noise.
+    donor_bias_ok = True
+    print("4. Donor eta^2 within status (ND/T1D <= 0.15, Aab+ <= 0.25):")
+    for stt in ['ND', 'Aab+', 'T1D']:
+        eta2 = _eta2_donor_within_status(pt, iid, status_col, stt)
+        if eta2 is None:
+            print(f"   {stt}: (skip, too few donor groups)")
+            continue
+        thresh = 0.25 if stt == 'Aab+' else 0.15
+        ok = eta2 <= thresh
+        print(f"   {stt:5s}: eta^2 = {eta2:.3f} (thresh {thresh}) -> {'PASS' if ok else 'FAIL'}")
+        donor_bias_ok = donor_bias_ok and ok
+
+    return bool(pass_ins and pass_gcg and ordering_ok and donor_bias_ok)
+
+
+def _validate_trajectory(adata, ins_idx):
+    """Validate BOTH pseudotime modes. Returns True if every gate passes.
+
+    Combined mode used to go completely unvalidated, so a regression there was
+    invisible -- and it is the mode with the thinnest GCG margin.
+    """
+    ok_core = _validate_one_pseudotime(adata, 'dpt_pseudotime', ins_idx, 'CORE')
+    ok_comb = _validate_one_pseudotime(adata, 'dpt_pseudotime_combined', ins_idx, 'COMBINED')
+
+    # Cohort composition check (mode-independent)
+    has_6533 = any('6533' in str(x) for x in adata.obs['imageid'].unique())
+    print(f"\n5. Donor 6533 included: {'PASS' if has_6533 else 'FAIL'}")
+
+    # Agreement between the two modes -- descriptive, not a gate. They are
+    # different estimands; a low value means they are not interchangeable.
+    if 'dpt_pseudotime_combined' in adata.obs:
+        a = adata.obs['dpt_pseudotime'].values
+        b = adata.obs['dpt_pseudotime_combined'].values
+        both = ~np.isnan(a) & ~np.isnan(b)
+        if both.sum() > 2:
+            rho = stats.spearmanr(a[both], b[both])[0]
+            print(f"6. Core vs combined agreement: Spearman rho = {rho:.3f} "
+                  f"(descriptive; modes are not interchangeable)")
+
+    all_pass = bool(ok_core and ok_comb and has_6533)
+    print(f"\nOverall: {'ALL PASSED' if all_pass else 'SOME CHECKS FAILED'}")
+    return all_pass
+
+
 def reaggregate(sc_path, islet_dir, trajectory_out, min_cells=0):
     """Run full reaggregation pipeline."""
     import scanpy as sc
@@ -204,8 +326,14 @@ def reaggregate(sc_path, islet_dir, trajectory_out, min_cells=0):
     print(f"Pseudotime range: [{adata_islet.obs['dpt_pseudotime'].min():.3f}, "
           f"{adata_islet.obs['dpt_pseudotime'].max():.3f}]")
 
-    adata_islet.obs['DC1'] = adata_islet.obsm['X_diffmap'][:, 0]
-    adata_islet.obs['DC2'] = adata_islet.obsm['X_diffmap'][:, 1]
+    # Scanpy's X_diffmap column 0 is the TRIVIAL lambda=1 eigenvector (the
+    # stationary distribution): constant-sign, near-zero variance, carrying no
+    # trajectory information. Measured on the previously shipped file it had
+    # std 0.000814 and spanned only 0.0112-0.0163, while the real first
+    # diffusion component (column 1) has std 0.0138 -- ~17x larger.
+    # The informative components start at column 1, so DC1/DC2 are columns 1/2.
+    adata_islet.obs['DC1'] = adata_islet.obsm['X_diffmap'][:, 1]
+    adata_islet.obs['DC2'] = adata_islet.obsm['X_diffmap'][:, 2]
 
     # ---------------------------------------------------------------
     # Step 5b: Peri+structures-augmented pseudotime
@@ -240,12 +368,24 @@ def reaggregate(sc_path, islet_dir, trajectory_out, min_cells=0):
     import pandas as pd
     import anndata
     import harmonypy as hm
-    # Stash core-only pseudotime + diffmap before recomputing
+    # Stash core-only pseudotime + diffmap before recomputing.
+    #
+    # `sc.pp.neighbors` below OVERWRITES obsp['distances'] / obsp['connectivities']
+    # in place. Restoring only obs/obsm/uns (as this block used to) left the saved
+    # file carrying the COMBINED neighbor graph while uns['neighbors']['params']
+    # advertised the core embedding -- so anyone re-running scanpy on
+    # adata_ins_root.h5ad silently got combined-mode results. Measured overlap of
+    # the shipped obsp was 96.6% with the combined graph vs 34.6% with core.
+    # Stash obsp and iroot too, and restore all four together.
     core_pt   = adata_islet.obs['dpt_pseudotime'].values.copy()
-    core_dc1  = adata_islet.obsm['X_diffmap'][:, 0].copy()
-    core_dc2  = adata_islet.obsm['X_diffmap'][:, 1].copy()
+    core_dc1  = adata_islet.obsm['X_diffmap'][:, 1].copy()
+    core_dc2  = adata_islet.obsm['X_diffmap'][:, 2].copy()
     core_dmap = adata_islet.obsm['X_diffmap'].copy()
     core_neigh_uns = adata_islet.uns.get('neighbors', None)
+    core_iroot = adata_islet.uns.get('iroot', None)
+    core_evals = adata_islet.uns.get('diffmap_evals', None)
+    core_obsp = {k: adata_islet.obsp[k].copy() for k in ('distances', 'connectivities')
+                 if k in adata_islet.obsp}
 
     def _zscore(a):
         return (a - a.mean(axis=0)) / (a.std(axis=0) + 1e-8)
@@ -345,18 +485,27 @@ def reaggregate(sc_path, islet_dir, trajectory_out, min_cells=0):
         sc.tl.diffmap(adata_islet, n_comps=10)
         sc.tl.dpt(adata_islet)
         comb_pt  = adata_islet.obs['dpt_pseudotime'].values.copy()
-        comb_dc1 = adata_islet.obsm['X_diffmap'][:, 0].copy()
-        comb_dc2 = adata_islet.obsm['X_diffmap'][:, 1].copy()
+        # Columns 1/2 -- column 0 is the trivial lambda=1 eigenvector (see Step 5).
+        comb_dc1 = adata_islet.obsm['X_diffmap'][:, 1].copy()
+        comb_dc2 = adata_islet.obsm['X_diffmap'][:, 2].copy()
         print(f"  Combined pseudotime range: [{np.nanmin(comb_pt):.3f}, {np.nanmax(comb_pt):.3f}]")
 
-        # Restore core results as the default (dpt_pseudotime, DC1, DC2)
-        # and store combined under explicit suffix
+        # Restore core results as the default (dpt_pseudotime, DC1, DC2) and store
+        # combined under an explicit suffix. Everything sc.pp.neighbors / diffmap
+        # touched must be restored together, or the saved file describes one mode
+        # while carrying another's graph.
         adata_islet.obs['dpt_pseudotime'] = core_pt
         adata_islet.obs['DC1'] = core_dc1
         adata_islet.obs['DC2'] = core_dc2
         adata_islet.obsm['X_diffmap'] = core_dmap
         if core_neigh_uns is not None:
             adata_islet.uns['neighbors'] = core_neigh_uns
+        if core_iroot is not None:
+            adata_islet.uns['iroot'] = core_iroot
+        if core_evals is not None:
+            adata_islet.uns['diffmap_evals'] = core_evals
+        for _k, _v in core_obsp.items():
+            adata_islet.obsp[_k] = _v
 
         adata_islet.obs['dpt_pseudotime_combined'] = comb_pt
         adata_islet.obs['DC1_combined'] = comb_dc1
@@ -369,74 +518,12 @@ def reaggregate(sc_path, islet_dir, trajectory_out, min_cells=0):
     print("STEP 6: Validating trajectory")
     print("=" * 60)
 
-    pt = adata_islet.obs['dpt_pseudotime'].values
-    valid = ~np.isnan(pt)
-
-    # Check 1: INS negatively correlated with pseudotime
-    ins_expr = adata_islet.X[:, ins_idx]
-    r_ins, p_ins = stats.spearmanr(pt[valid], ins_expr[valid])
-    pass_ins = r_ins < -0.3
-    print(f"1. INS vs pseudotime: r={r_ins:.3f}, p={p_ins:.2e} -> {'PASS' if pass_ins else 'FAIL'}")
-
-    # Check 2: GCG positively correlated. Threshold 0.1 (relaxed) because
-    # light Harmony (theta=0.1) removes donor-amplified GCG signal; the
-    # genuine shared effect is r ~= 0.14.
-    pass_gcg = True
-    if 'GCG' in adata_islet.var_names:
-        gcg_idx = list(adata_islet.var_names).index('GCG')
-        gcg_expr = adata_islet.X[:, gcg_idx]
-        r_gcg, p_gcg = stats.spearmanr(pt[valid], gcg_expr[valid])
-        pass_gcg = r_gcg > 0.1
-        print(f"2. GCG vs pseudotime: r={r_gcg:.3f}, p={p_gcg:.2e} -> {'PASS' if pass_gcg else 'FAIL'}")
-
-    # Check 3: Donor status ordering (ND < Aab+ < T1D)
-    status_means = []
-    for status in ['ND', 'Aab+', 'T1D']:
-        mask = adata_islet.obs['donor_status'] == status
-        if mask.any():
-            mean_pt = pt[mask].mean()
-            std_pt = pt[mask].std()
-            status_means.append(mean_pt)
-            print(f"   {status:5s}: {mean_pt:.3f} +/- {std_pt:.3f} (n={mask.sum()})")
-    ordering_ok = all(status_means[i] <= status_means[i+1] for i in range(len(status_means)-1))
-    print(f"3. Donor ordering ND < Aab+ < T1D: {'PASS' if ordering_ok else 'FAIL'}")
-
-    # Check 4: Per-status donor eta^2 (pseudotime variance explained by donor).
-    # Thresholds: ND/T1D <= 0.15, Aab+ <= 0.25.
-    # The relaxed Aab+ threshold reflects known biology: Aab+ donors exhibit
-    # a heterogeneous range of islet types (genuine biology, not technical
-    # noise), so some within-status donor variance there is expected and OK.
-    donor_bias_ok = True
-    iid = adata_islet.obs['imageid'].astype(str).values
-    status_col = adata_islet.obs['donor_status'].values
-    print("4. Donor eta^2 within status (ND/T1D <= 0.15, Aab+ <= 0.25):")
-    for stt in ['ND', 'Aab+', 'T1D']:
-        m = status_col == stt
-        pt_s = pt[m]
-        d_s = iid[m]
-        groups = [pt_s[d_s == d] for d in np.unique(d_s) if (d_s == d).sum() >= 3]
-        if len(groups) < 2:
-            print(f"   {stt}: (skip, too few donor groups)")
-            continue
-        gm = pt_s.mean()
-        ss_total = float(np.sum((pt_s - gm) ** 2))
-        ss_between = float(sum(len(g) * (g.mean() - gm) ** 2 for g in groups))
-        eta2 = ss_between / ss_total if ss_total > 0 else 0.0
-        thresh = 0.25 if stt == 'Aab+' else 0.15
-        ok = eta2 <= thresh
-        print(f"   {stt:5s}: eta^2 = {eta2:.3f} (thresh {thresh}) -> {'PASS' if ok else 'FAIL'}")
-        if not ok:
-            donor_bias_ok = False
-
-    # Check 5: 6533 included
-    has_6533 = any('6533' in str(x) for x in adata_islet.obs['imageid'].unique())
-    print(f"5. Donor 6533 included: {'PASS' if has_6533 else 'FAIL'}")
-
-    all_pass = pass_ins and pass_gcg and ordering_ok and donor_bias_ok and has_6533
-    print(f"\nOverall: {'ALL PASSED' if all_pass else 'SOME CHECKS FAILED'}")
+    all_pass = _validate_trajectory(adata_islet, ins_idx)
 
     if not all_pass:
-        print("WARNING: Some validation checks failed. Outputs will still be saved.")
+        print("\nWARNING: Some validation checks failed. Outputs will still be saved "
+              "(a failed gate should not discard a ~15 min run), but this script will "
+              "exit non-zero so automation does not treat the rebuild as clean.")
 
     # Visualization UMAP from raw marker expression.
     # scVI (SCVI_CODEX_v2.ipynb) was trained with Age/Gender as categorical
@@ -546,6 +633,14 @@ def reaggregate(sc_path, islet_dir, trajectory_out, min_cells=0):
     print(f"  python scripts/extract_per_islet_cells.py")
     print(f"  python scripts/build_h5ad_for_app.py")
 
+    if not all_pass:
+        print("\n" + "!" * 60)
+        print("VALIDATION FAILED — see STEP 6 above. Outputs were written, but do "
+              "NOT promote them without understanding which gate failed.")
+        print("!" * 60)
+
+    return all_pass
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -578,7 +673,11 @@ def main():
     os.makedirs(args.islet_dir, exist_ok=True)
     os.makedirs(os.path.dirname(args.trajectory_out), exist_ok=True)
 
-    reaggregate(args.input, args.islet_dir, args.trajectory_out, args.min_cells)
+    # Exit non-zero on a failed validation gate so automation cannot mistake a
+    # degraded rebuild for a clean one. Outputs are still written first -- see
+    # the Step 6 note; discarding a ~15 min run makes the gate expensive to keep.
+    ok = reaggregate(args.input, args.islet_dir, args.trajectory_out, args.min_cells)
+    sys.exit(0 if ok else 2)
 
 
 if __name__ == '__main__':

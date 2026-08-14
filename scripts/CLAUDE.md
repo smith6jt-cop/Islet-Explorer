@@ -14,9 +14,24 @@ Pipeline scripts that build the data files consumed by the Shiny app. The top-le
 
 `scripts/reaggregate_islets.py` Step 8 applies `harmonypy.run_harmony` on `X_scVI_mean` with `batch=imageid`, `theta=2.0` before `sc.pp.neighbors`. Embedding stored as `obsm['X_scVI_harmony']`. Goal: donor-invariant islet cell-types. Post-fix metrics: Cramer's V dropped from 0.38 → 0.135, donor 6356's worst-cluster fraction 0.83 → 0.29, AMI(donor) 0.19 → 0.028. Status-orthogonality is fine/desired (clusters are cell-types, disease lives on pseudotime).
 
-### Step 5: Trajectory pseudotime (raw scVI core, robust medoid root)
+### Step 5: Trajectory pseudotime (Harmony θ=0.1 core, robust medoid root)
 
-Step 5 uses **raw `X_scVI_mean`** (no Harmony) for the default core-only pseudotime. Empirical sweep showed even θ=0.1 compressed ND→T1D span more than it bought in donor noise reduction. Aab+ donor variance accepted as biology (Aab+ donors exhibit a heterogeneous range of islet types).
+**The shipped `data/adata_ins_root.h5ad` was built with light Harmony (θ=0.1), not raw scVI.**
+Measured from the file itself: `uns['neighbors']['params']` = `{use_rep: 'X_scVI_harmony_pt',
+n_neighbors: 30, metric: 'cosine'}`. An earlier revision of this section claimed "raw
+`X_scVI_mean` (no Harmony)" and `n_neighbors=15`; both were stale — never updated after θ=0.1
+was adopted — and the numbers quoted below the old text belonged to the raw variant. The θ
+sweep that drove the choice is recorded as a comment at `reaggregate_islets.py:124-134`; the
+shipped values match its θ=0.1 row exactly.
+
+Aab+ donor variance accepted as biology (Aab+ donors exhibit a heterogeneous range of islet
+types).
+
+**Verify rather than trust this paragraph** — read the file:
+
+```bash
+python -c "import anndata as ad; a=ad.read_h5ad('data/adata_ins_root.h5ad'); print(a.uns['neighbors']['params'])"
+```
 
 **Robust root selection** (replaces single-islet `argmax(INS)` over ND): root = medoid of top-50 ND islets by INS in scVI space. Anchored by the centre-of-mass of "healthy ND, INS-high" islets and naturally draws from multiple donors. Current root: index 703, donor 6516, INS 0.663 (99.7th percentile).
 
@@ -26,15 +41,58 @@ Computes a SECOND pseudotime saved as `dpt_pseudotime_combined`. Input matrix: `
 
 ### Step 6 validation thresholds
 
-- INS Spearman r < −0.3 (PASS at −0.69 raw / −0.55 combined)
-- GCG Spearman r > 0.1 (relaxed from 0.2 because raw donor-amplified ~0.27 dropped post-fix)
+- INS Spearman r < −0.3
+- GCG Spearman r > 0.1 (relaxed from 0.2 — see the caveat below)
 - ND<Aab+<T1D mean ordering
 - Donor eta² within status: ≤ 0.15 for ND/T1D, **≤ 0.25 for Aab+** (relaxed because Aab+ donors genuinely span heterogeneous islet types)
 - 6533 included
 
+**Measured on the shipped file** (not the stale figures this section used to carry — it
+claimed INS −0.69 raw / −0.55 combined and GCG ~0.27):
+
+| | core (`dpt_pseudotime`) | combined (`dpt_pseudotime_combined`) |
+|---|---|---|
+| INS Spearman | **−0.570** | −0.511 |
+| GCG Spearman | **0.143** | **0.103** |
+| SST Spearman | −0.206 | −0.225 |
+| ND / Aab+ / T1D mean | 0.3040 / 0.3634 / 0.3883 | 0.2245 / 0.2619 / 0.2867 |
+
+Core-vs-combined agreement is only Spearman ρ = **0.846** — the two modes are not
+interchangeable.
+
+⚠️ **The GCG gate is the weak one.** At r = 0.143 (core) and 0.103 (combined) it clears
+only the *relaxed* 0.1 threshold and would **FAIL the original 0.2**. The relaxation is
+justified solely by a comment at `reaggregate_islets.py:381-383` ("genuine shared effect is
+r ≈ 0.14"); nothing independent backs that number. Combined mode sits 0.003 above the
+threshold — and Step 6 never actually tests combined mode (it validates `dpt_pseudotime`
+only), so that margin is unmonitored.
+
+⚠️ **Step 6 is advisory and islet-level.** On failure it prints a warning and saves anyway,
+and it aggregates islets rather than donors — so the gate is itself pseudoreplicated. See
+`app/shiny_app/docs/trajectory.md`.
+
 ### Important: don't claim "scVI is batch-corrected"
 
 Old comments in `reaggregate_islets.py` and `islet_analysis/CLAUDE.md` claimed "scVI latent has donor-level variation corrected out (Age+Gender covariates bijectively map to donors)". This is wrong — Age/Gender as `categorical_covariate_keys` don't activate batch correction; only `batch_key` does. Comments updated Apr 2026.
+
+**Reconciling this with `data/DATA_PROVENANCE.md`.** That file reports a controlled retrain
+experiment (`scripts/retrain_scvi_no_covariates.py`) showing the Age/Gender model *beats* a
+no-covariate model on 4 of 5 donor-mixing metrics — donor η² 0.291 vs 0.405, PC0 pseudotime
+gradient r = 0.712 vs 0.101. Read alongside this section that can look contradictory. It is
+not. Both are true, and they answer different questions:
+
+- **Do the Age/Gender covariates absorb *some* donor variance?** Yes — they are one-hot fed
+  to the encoder/decoder and Age is a bijection to donor, so they demonstrably do. That is
+  what the retrain experiment measured, and it is why removing them made things worse.
+- **Is that the same thing as scVI batch correction?** **No.** scVI's batch decoder is
+  activated only by `batch_key`, which was never passed. The residual donor structure that
+  survived (donor 6356 as a standalone Leiden cluster at 80–92% dominance, Cramér's V ≈ 0.4)
+  is what Phase 17's downstream Harmony exists to fix.
+
+So: the covariates help and should stay; they are **not** batch correction; and the latent
+feeding DPT is best described as *partially* donor-corrected by covariates plus explicitly
+Harmony-corrected at θ=0.1 for the trajectory. Do not write "scVI is batch-corrected", and do
+not write "the covariates do nothing".
 
 ## Pipeline Scripts & Notebooks
 

@@ -23,13 +23,16 @@ islets_core_fixed.h5ad  (5,214 islets, core only)
   Key fields: .obsm['X_scVI_mean'], .obsm['phenotype_proportions'], .obs['donor_status']
   │
   ↓ (trajectory computed within reaggregate_islets.py)
-  │   (scVI neighbors n=15 cosine, PAGA → UMAP, DPT with INS root)
+  │   (neighbors n=30 cosine on X_scVI_harmony_pt, PAGA → UMAP, DPT with INS root)
   │
 data/adata_ins_root.h5ad  (5,214 islets + pseudotime + UMAP)
   Location: data/
   Contents: Trajectory-annotated islet data
   Key fields: .obs['dpt_pseudotime'], .obsm['X_umap'], .obsm['X_diffmap']
-  Validation: INS r=-0.601, GCG r=0.260, donor ordering PASS, 6533 PASS (191 islets)
+  Validation: INS r=-0.570, GCG r=0.143, donor ordering PASS, 6533 PASS (191 islets)
+  NOTE: measured from the file 2026-08-14. Earlier revisions of this block said
+    "n=15" and "INS r=-0.601, GCG r=0.260" — both stale (they described a raw-scVI
+    variant that is not what shipped). See scripts/CLAUDE.md § Step 5.
   │
   ↓ scripts/build_h5ad_for_app.py  (executed 2026-02-23)
   │   (+ groovy TSV data + donor metadata + neighborhood + Leiden)
@@ -117,7 +120,17 @@ The canonical single-cell H5AD uses scVI (v1.4.0) with the following configurati
 - **Training**: max_epochs=400, early_stopping patience=45, NVIDIA RTX 4000 Ada GPU
 
 ### Why Age/Gender Covariates?
-Each of the 15 nPOD donors has a unique Age value (float64 precision, e.g., 20.59 vs 20.70 vs 20.75). Combined with Gender, Age+Gender forms a perfect bijection to donor identity. This provides **soft donor correction** via the categorical covariate mechanism (one-hot encoded to encoder/decoder) without aggressively removing disease-associated biological signal — which `batch_key=imageid` would do, since imageid is 1:1 with donor_status (5 ND, 5 Aab+, 5 T1D).
+Each of the 15 nPOD donors has a unique Age value (float64 precision, e.g., 20.59 vs 20.70 vs 20.75). Combined with Gender, Age+Gender forms a perfect bijection to donor identity. This provides **partial donor correction** via the categorical covariate mechanism (one-hot encoded to encoder/decoder) without aggressively removing disease-associated biological signal.
+
+> **Do not read this as "scVI is batch-corrected".** The covariates absorb *some* donor
+> variance — the retrain experiment below proves it — but scVI's batch decoder is activated
+> only by `batch_key`, which was never passed. Enough donor structure survived to make donor
+> 6356 a standalone Leiden cluster (80–92% dominance, Cramér's V ≈ 0.4), which is exactly why
+> Phase 17 added downstream Harmony. The original wording here also asserted that
+> `batch_key=imageid` "would" remove disease signal because imageid is 1:1 with
+> donor_status — that was never tested, only asserted, and it should not be cited as a
+> finding. See `scripts/CLAUDE.md` § "don't claim scVI is batch-corrected" for the full
+> reconciliation.
 
 ### Validation: Covariate vs No-Covariate Comparison
 A full retraining experiment (scripts/retrain_scvi_no_covariates.py) compared the original model (with Age/Gender) against an identically-configured model without any covariates:
@@ -311,7 +324,7 @@ Leiden clustering: 5/8/12/15 clusters at resolutions 0.3/0.5/0.8/1.0.
 Root-cause: `single_cell_analysis/SCVI_CODEX_v2.ipynb` cell 16 trained scVI without `batch_key="imageid"` (only Age/Gender as covariates). Donor-specific technical variance (especially donor 6356, ND, 18.8% of cells) leaked into `X_scVI_mean`, manifesting as donor-dominated Leiden clusters (Cramer's V ≈ 0.4, AMI(donor) > AMI(status)) and a noisy pseudotime within Aab+ status.
 
 #### Reaggregation v2 (`scripts/reaggregate_islets.py` Apr 2026 rebuild)
-- [PASS] Step 5 (core pseudotime): raw scVI + medoid-of-top-50-ND root (idx=703, donor=6516, INS=0.663). INS r=−0.694, GCG r=0.274.
+- [PASS] Step 5 (core pseudotime): medoid-of-top-50-ND root (idx=703, donor=6516, INS=0.663). **INS r=−0.570, GCG r=0.143** on the shipped file, built on `X_scVI_harmony_pt` (Harmony θ=0.1), n_neighbors=30. The figures previously recorded here — "raw scVI", INS −0.694, GCG 0.274 — described a raw-scVI variant that did not ship; re-measured 2026-08-14.
 - [PASS] Step 5b (combined pseudotime): 36-d input [core scVI(10) | peri scVI(10) | α·z(struct(16))], α=0.15, Harmony θ=0.1 on imageid. INS r=−0.51, CD8a r=+0.225 (vs +0.190 core), CD3e r=+0.178 (vs +0.125 core), CD31 r=+0.131, CD34 r=+0.204, PDPN r=+0.073.
 - [PASS] Step 6 validation: ND<Aab+<T1D ordering, eta²(donor|pt) per status — ND 0.033, Aab+ 0.090, T1D 0.024.
 - [PASS] Step 8 (Leiden): Harmony θ=2 on imageid. Cramer's V donor↔cluster (leiden_0.5) 0.38 → 0.135; donor 6356 worst-cluster fraction 0.83 → 0.29; AMI(donor) 0.19 → 0.028; 0 clusters with ≥60% one donor.
