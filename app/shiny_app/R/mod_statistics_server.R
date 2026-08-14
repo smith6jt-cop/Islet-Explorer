@@ -64,9 +64,26 @@ statistics_server <- function(id, raw_df, get_selection_description,
     # Core computation: eventReactive triggered by Run button
     # ===========================================================================
 
+    # Why the last Run produced no result. `stats_run()` returns NULL when the
+    # filters leave nothing to test, and every card then falls back to its
+    # pre-run placeholder ("click Run Statistics") -- indistinguishable from
+    # never having clicked Run. This carries the reason so the banner can say
+    # which filter emptied the frame. Cleared on every successful run.
+    stats_empty_reason <- reactiveVal(NULL)
+
     stats_run <- eventReactive(input$run_tests, {
+      empty <- function(reason) {
+        stats_empty_reason(reason)
+        showNotification(paste("No results:", reason), type = "warning", duration = 8)
+        NULL
+      }
+      stats_empty_reason(NULL)
+
       rdf <- raw_df()
-      if (is.null(rdf) || !nrow(rdf)) return(NULL)
+      if (is.null(rdf) || !nrow(rdf)) {
+        return(empty(paste("the Plot sidebar's filters returned no islets, so this tab",
+                           "received an empty data set. Widen them and Run again.")))
+      }
 
       # Alpha is FIXED at 0.05 — a user-movable threshold is a p-hacking lever
       # (lower it post hoc to reframe a null, or to move a goalpost). Documented in
@@ -98,7 +115,11 @@ statistics_server <- function(id, raw_df, get_selection_description,
         rdf <- rdf[is.finite(rdf$value) & rdf$value != 0, , drop = FALSE]
         zero_dropped <- as.integer(n_before - nrow(rdf))
       }
-      if (nrow(rdf) == 0) return(NULL)
+      if (nrow(rdf) == 0) {
+        return(empty(sprintf(paste("excluding zero-valued islets removed all %s of them.",
+                                   "Untick 'Exclude zero values' in Advanced / sensitivity",
+                                   "settings."), format(zero_dropped, big.mark = ","))))
+      }
 
       # ---- Outlier removal via shared helper (controlled by LOCAL toggle) ----
       # `stats_remove_outliers` lives in the Statistics tab Section 1 controls
@@ -114,10 +135,14 @@ statistics_server <- function(id, raw_df, get_selection_description,
       rdf <- flag_outliers(rdf, value_col = "value", group_col = "donor_status",
                            method = "zscore", threshold = stats_z_threshold,
                            enabled = stats_filter_on)
-      outlier_summary_pre <- summarize_outlier_filter(rdf)
-      if (stats_filter_on) {
-        rdf <- rdf[!rdf$is_outlier | is.na(rdf$is_outlier), , drop = FALSE]
-      }
+      # NOTE the ordering. Flagging stays HERE, on the pre-min-cells/pre-diameter
+      # population, so the z-scores (median/MAD per donor_status) are unchanged
+      # by those filters -- moving it would silently change which rows are
+      # flagged. But the *drop* and the *count* are deferred until after them:
+      # `outlier_summary` used to be measured at this point and then reported as
+      # "N islets excluded last Run", counting exclusions against a superset of
+      # what was actually tested. Summarising post-filter makes the reported
+      # count refer to the analysed set. See `outlier_summary` below.
 
       # ---- Min-cells filter (like spatial tab) ----
       # `%||%` only catches NULL; clearing the numericInput sends NA, and
@@ -160,13 +185,43 @@ statistics_server <- function(id, raw_df, get_selection_description,
         }
       }
 
-      if (nrow(rdf) == 0) return(NULL)
+      # Check emptiness BEFORE the outlier drop so the message can name the
+      # filter that actually emptied the frame, and so summarize_outlier_filter()
+      # is never handed a zero-row data frame.
+      if (nrow(rdf) == 0) {
+        bits <- c(if (min_cells > 1) sprintf("min cells/islet = %g", min_cells),
+                  if (!is.null(diam_range_used))
+                    sprintf("diameter %g-%g um", diam_range_used[1], diam_range_used[2]))
+        return(empty(paste0("no islets passed the Advanced / sensitivity filters",
+                            if (length(bits)) paste0(" (", paste(bits, collapse = "; "), ")"),
+                            ". Relax them and Run again.")))
+      }
+
+      # ---- Apply the deferred outlier drop (see the flagging block above) ----
+      # Summarise first, so the count describes the rows that survived every
+      # other filter -- i.e. the population actually tested.
+      outlier_summary_pre <- summarize_outlier_filter(rdf)
+      if (stats_filter_on) {
+        rdf <- rdf[!rdf$is_outlier | is.na(rdf$is_outlier), , drop = FALSE]
+      }
+
+      if (nrow(rdf) == 0) {
+        return(empty(sprintf(paste("the outlier filter (z > %s) removed every remaining",
+                                   "islet. Raise the threshold or untick 'Remove outliers'."),
+                             format(stats_z_threshold))))
+      }
 
       rdf$donor_status <- factor(rdf$donor_status, levels = c("ND", "Aab+", "T1D"))
       n_islets_filtered <- nrow(rdf)
 
-      # Detect feature name from raw_df attributes
-      feature_name <- attr(raw_df(), "selection_used") %||% "Unknown"
+      # Detect feature name from raw_df attributes.
+      # `selection_used` is the RAW column encoding ("prop_Beta cell",
+      # "Capillary|islet_core"), which used to reach plot axes and card titles
+      # verbatim. `feature_display_label()` resolves it to a readable name and
+      # returns anything it does not recognise unchanged. The raw form is kept
+      # as `feature_col` for the CSV, where the exact column matters.
+      feature_col  <- attr(raw_df(), "selection_used") %||% "Unknown"
+      feature_name <- feature_display_label(feature_col)
 
       # ---- Donor-level aggregation (conservative sensitivity) ----
       ddf <- aggregate_to_donor(rdf, agg_fn = "mean")
@@ -240,6 +295,14 @@ statistics_server <- function(id, raw_df, get_selection_description,
       donor_test <- if (is_parametric) "ANOVA" else "Kruskal-Wallis"
       donor_p <- NA_real_
       eta_sq <- NA_real_
+      # The two branches do NOT compute the same statistic. ANOVA gives eta^2
+      # (SS_between / SS_total); Kruskal-Wallis gives epsilon^2 (H / (n-1)),
+      # a different quantity on a different scale. Both used to be reported
+      # under the single name "eta_sq" on screen and in the CSV, which misnames
+      # the non-parametric result. The value stays in `eta_sq` (so nothing
+      # reading the result list positionally breaks), but every place that
+      # DISPLAYS or EXPORTS it now labels it with `eta_sq_label`.
+      eta_sq_label <- if (is_parametric) "eta_sq" else "epsilon_sq"
 
       if (is_parametric) {
         fit <- tryCatch(lm(value ~ donor_status, data = ddf), error = function(e) NULL)
@@ -251,7 +314,7 @@ statistics_server <- function(id, raw_df, get_selection_description,
       } else {
         kt <- tryCatch(kruskal.test(value ~ donor_status, data = ddf), error = function(e) NULL)
         if (!is.null(kt)) donor_p <- kt$p.value
-        if (!is.null(kt) && n_donors > 1) eta_sq <- kt$statistic / (n_donors - 1)
+        if (!is.null(kt) && n_donors > 1) eta_sq <- unname(kt$statistic / (n_donors - 1))
       }
 
       # ---- Pairwise comparisons with effect sizes (donor-level, conservative) ----
@@ -514,22 +577,48 @@ statistics_server <- function(id, raw_df, get_selection_description,
             n_per_grp <- table(sub$donor_status)
             low_power <- any(n_per_grp[n_per_grp > 0] < 3)
             pw <- if (is_parametric) {
+              # Welch t-tests over the SAME contrast list Section 2 uses, not
+              # `pairwise.t.test`. Two reasons, both measured:
+              #  1. `pairwise.t.test` pools the SD across ALL groups. Donor-level
+              #     SDs here differ by up to 50:1 (ND 4.06 / Aab+ 10.75 / T1D
+              #     0.575 for prop_Beta cell), so pooling is exactly the wrong
+              #     assumption -- and it disagreed with Section 2's Welch result
+              #     (Males ND-vs-T1D 0.104 pooled vs 0.088 Welch).
+              #  2. Its p-value matrix is indexed [later, earlier], so unpacking
+              #     it with as.table() produced reversed labels ("Aab+ vs ND"
+              #     where the rest of the tab says "ND vs Aab+").
+              # Iterating `pairs` fixes the statistic and the label together.
               tryCatch({
-                pt <- pairwise.t.test(sub$value, sub$donor_status, p.adjust.method = "none")
-                mat <- as.data.frame(as.table(pt$p.value))
-                colnames(mat) <- c("group1", "group2", "p_value")
-                mat[!is.na(mat$p_value), , drop = FALSE]
+                rows <- lapply(pairs, function(pair) {
+                  v1 <- sub$value[sub$donor_status == pair[1]]
+                  v2 <- sub$value[sub$donor_status == pair[2]]
+                  if (length(v1) < 2 || length(v2) < 2) return(NULL)
+                  tt <- tryCatch(t.test(v1, v2), error = function(e) NULL)
+                  if (is.null(tt)) return(NULL)
+                  data.frame(group1 = pair[1], group2 = pair[2],
+                             p_value = unname(tt$p.value),
+                             stringsAsFactors = FALSE)
+                })
+                mat <- do.call(rbind, Filter(Negate(is.null), rows))
+                if (is.null(mat)) NULL else mat[!is.na(mat$p_value), , drop = FALSE]
               }, error = function(e) NULL)
             } else {
+              # Same [later, earlier] matrix orientation as pairwise.t.test, so
+              # iterate `pairs` here too and keep the labels in level order.
               tryCatch({
-                pw_raw <- pairwise.wilcox.test(sub$value, sub$donor_status,
-                                               p.adjust.method = "none", exact = FALSE)
-                mat <- as.data.frame(as.table(pw_raw$p.value))
-                colnames(mat) <- c("group1", "group2", "p_value")
-                mat <- mat[!is.na(mat$p_value), , drop = FALSE]
-                mat$group1 <- as.character(mat$group1)
-                mat$group2 <- as.character(mat$group2)
-                mat
+                rows <- lapply(pairs, function(pair) {
+                  v1 <- sub$value[sub$donor_status == pair[1]]
+                  v2 <- sub$value[sub$donor_status == pair[2]]
+                  if (length(v1) < 1 || length(v2) < 1) return(NULL)
+                  wt <- tryCatch(wilcox.test(v1, v2, exact = FALSE),
+                                 error = function(e) NULL)
+                  if (is.null(wt)) return(NULL)
+                  data.frame(group1 = pair[1], group2 = pair[2],
+                             p_value = unname(wt$p.value),
+                             stringsAsFactors = FALSE)
+                })
+                mat <- do.call(rbind, Filter(Negate(is.null), rows))
+                if (is.null(mat)) NULL else mat[!is.na(mat$p_value), , drop = FALSE]
               }, error = function(e) NULL)
             }
             if (is.null(pw) || nrow(pw) == 0) return(NULL)
@@ -647,6 +736,7 @@ statistics_server <- function(id, raw_df, get_selection_description,
         n_donors         = n_donors,
         donor_df         = ddf,
         feature_name     = feature_name,
+        feature_col      = feature_col,
         # Primary test: mixed-effects
         lmer_p           = lmer_p,
         icc              = icc,
@@ -656,6 +746,7 @@ statistics_server <- function(id, raw_df, get_selection_description,
         donor_test       = donor_test,
         donor_p          = donor_p,
         eta_sq           = eta_sq,
+        eta_sq_label     = eta_sq_label,
         alpha            = alpha_num,
         is_parametric    = is_parametric,
         pairwise_df      = pairwise_df,
@@ -706,6 +797,17 @@ statistics_server <- function(id, raw_df, get_selection_description,
     output$overview_banner <- renderUI({
       st <- stats_run()
       if (is.null(st)) {
+        # Distinguish "not run yet" from "ran, but the filters left nothing".
+        # Both used to render the same grey "click Run Statistics" line, so an
+        # over-restrictive filter looked exactly like an idle tab.
+        reason <- stats_empty_reason()
+        if (!is.null(reason)) {
+          return(tags$div(
+            style = paste0("padding: 10px 14px; background: #fdecea; ",
+                           "border: 1px solid #f5c6cb; border-radius: 5px; color: #721c24;"),
+            tags$strong("Statistics ran, but produced no result."), tags$br(),
+            tags$span(paste0("Reason: ", reason))))
+        }
         return(tags$p(style = "color: #666; margin: 0;",
                       "Select a feature in the sidebar, then click 'Run Statistics'."))
       }
@@ -1708,18 +1810,34 @@ statistics_server <- function(id, raw_df, get_selection_description,
       if (is.null(st) || is.null(st$age_model_p)) return(NULL)
       p_cov <- st$age_model_p
       survived <- !is.na(p_cov) && p_cov < st$alpha
+      # "Survives adjustment" only means something if there was an effect to
+      # survive. When the UNADJUSTED donor-level test was already null, the old
+      # wording ("does NOT survive adjustment for age and sex") read as though
+      # adjustment had destroyed a real effect -- e.g. Capillary, 0.348
+      # unadjusted -> 0.387 adjusted, where nothing was ever there. Branch on
+      # the unadjusted result so the three cases read differently.
+      p_unadj <- st$donor_p
+      had_effect <- !is.na(p_unadj) && p_unadj < st$alpha
       tags$div(style = "margin-top: 10px; padding: 10px; background: #f8f9fa; border-radius: 5px;",
         tags$strong("Covariate-Adjusted Model (donor-level)"),
         tags$p(style = "margin: 5px 0 0 0;",
           paste0("lm(value ~ donor_status + age + sex, data = donor_means): donor_status p = ",
                  format_p_value(p_cov)),
           tags$br(),
-          if (survived) {
+          if (!had_effect) {
+            tags$span(style = "color: #666;",
+                      paste0("No effect to adjust away — the unadjusted donor-level ",
+                             st$donor_test, " was already non-significant (p = ",
+                             format_p_value(p_unadj), "). This model neither ",
+                             "supports nor refutes a disease-stage effect."))
+          } else if (survived) {
             tags$span(style = "color: #d62728; font-weight: 600;",
                       "Donor status effect SURVIVES adjustment for age and sex.")
           } else {
             tags$span(style = "color: #666;",
-                      "Donor status effect does NOT survive adjustment for age and sex.")
+                      paste0("Donor status effect does NOT survive adjustment for age ",
+                             "and sex (unadjusted p = ", format_p_value(p_unadj),
+                             "), so age/sex may account for it."))
           }
         )
       )
@@ -2057,6 +2175,10 @@ statistics_server <- function(id, raw_df, get_selection_description,
         if (!is.null(st)) {
           # Methodology notes
           lines <- c(lines, "# METHODOLOGY")
+          # Record BOTH forms: the readable label matches what is on screen, the
+          # raw column is what an analyst needs to reproduce the selection.
+          lines <- c(lines, paste0("# Feature: ", st$feature_name,
+                                   "  [column: ", st$feature_col %||% "unknown", "]"))
           lines <- c(lines, paste0("# Primary: mixed-effects lmer (islet-level with donor random intercept)"))
           lines <- c(lines, paste0("# Alpha (fixed): ", st$alpha))
           lines <- c(lines, paste0("# Sensitivity test (auto-selected from normality): ", st$donor_test,
@@ -2124,9 +2246,15 @@ statistics_server <- function(id, raw_df, get_selection_description,
 
           # Sensitivity test
           lines <- c(lines, "# Sensitivity: Donor-Level Test (conservative)")
+          # `format_p_value()` is the single p-formatting rule (see the Jul 2026
+          # correctness pass): fixed to 4 dp down to 1e-4, scientific below. A
+          # bare formatC(format="e") here rendered p = 0.3476 as "3.48e-01".
+          # The effect size is named by its branch -- ANOVA gives eta^2,
+          # Kruskal-Wallis gives epsilon^2; they are not the same statistic.
           lines <- c(lines, paste0("# ", st$donor_test, ", p = ",
-                                   formatC(st$donor_p, format = "e", digits = 4),
-                                   ", eta_sq = ", round(st$eta_sq, 4)))
+                                   format_p_value(st$donor_p),
+                                   ", ", st$eta_sq_label %||% "eta_sq", " = ",
+                                   round(st$eta_sq, 4)))
           lines <- c(lines, "")
 
           # Write header lines

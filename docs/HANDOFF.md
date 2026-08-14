@@ -167,13 +167,21 @@ been tracked** despite `CLAUDE.md` citing both as canonical. Both are now in the
 - **`app_redesign.R`** (repo root, untracked, created 2026-07-28). Not mine; never read or touched.
 - **Phenocycler workstream** continues at its own handoff — Phases H–K, the CD8a/HLADR prevalence
   problem, and the container that has never been built.
-- **The Statistics tab's remaining known issues** are catalogued at the end of
-  `app/shiny_app/docs/statistics.md` ("Known, still open"): the KW branch reports epsilon-squared
-  under the name `eta_sq`; sex-stratified tests use pooled-SD `pairwise.t.test` while Section 2 uses
-  Welch; an over-restrictive filter returns `NULL` and every card silently reverts to the pre-run
-  placeholder; the covariate card says "does NOT survive adjustment" even when nothing was
-  significant to begin with; raw column encodings (`prop_Beta cell`, `Capillary|islet_core`) leak
-  into the UI as feature names.
+- ~~**The Statistics tab's remaining known issues**~~ — **all closed 2026-08-14.** The
+  `eta_sq`/epsilon-squared misnomer, the pooled-SD-vs-Welch mismatch (and its reversed contrast
+  labels), the silent `NULL`→placeholder revert, the covariate-card wording, the raw column
+  encodings, and the `outlier_summary` ordering are all fixed; resolutions are recorded inline in
+  `app/shiny_app/docs/statistics.md` § "Known, still open". One item remains genuinely open: the
+  **donor-level estimand is undeclared** (unweighted donor means p = 0.00374 vs islet-count-weighted
+  p = 0.00855) — a choice to state, not a bug.
+- **Trajectory**: an equivalent audit had been done but never written into the repo. It now lives at
+  `app/shiny_app/docs/trajectory.md`, along with four defects fixed the same day — the Trajectory
+  CSV's provenance header naming a non-existent input (so it always claimed "Min cells per islet: 1"),
+  the same `NA`-from-a-cleared-`numericInput` crash the Statistics tab had, `DC1`/`DC2` storing the
+  trivial λ=1 eigenvector, and `obsp` carrying the combined neighbor graph while `uns` advertised
+  core. Step 6 validation is now donor-level, covers both pseudotime modes, and exits non-zero.
+  **`scripts/CLAUDE.md` and `DATA_PROVENANCE.md` were stale** — they described raw scVI / n=15 /
+  INS −0.69, where the shipped file is Harmony θ=0.1 / n=30 / INS −0.570 / GCG 0.143; both corrected.
 - **Infiltration**: 16–20% of cells sit >200 µm from any islet (44% for donor 6548) — excluded from
   the default denominator but still in the numerator; that is the 29% mismatch quantified above.
 
@@ -181,8 +189,9 @@ been tracked** despite `CLAUDE.md` citing both as canonical. Both are now in the
 
 ```bash
 # headless module tests (two-stage: drive plot_server, feed its frame to the module under test)
-#   see memory note `shiny_testserver_audit_harness`
-Rscript -e 'shiny::testServer(...)'          # scratchpad harness, not committed
+# COMMITTED as of 2026-08-14 — was a scratchpad harness, now a standing regression net.
+# 26 checks pinning all six Jul 2026 defects; reproduces the audit's own numbers.
+cd app/shiny_app && Rscript tests/manual/stats_audit.R
 
 cd app/shiny_app
 Rscript -e 'for (f in c("app.R", list.files("R","[.]R$",full.names=TRUE))) parse(f)'

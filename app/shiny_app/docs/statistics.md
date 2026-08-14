@@ -182,13 +182,17 @@ It integrated the Plot module's `summary_df()`, so it: ignored all four Advanced
 lmer Satterthwaite p and ICC match independent `lmerTest` / `VarCorr` to 10 significant figures; donor-level ANOVA / Kruskal-Wallis match; BH correction is correct and NA-safe (R's lazy `n = length(p)` excludes NAs, so 2-group subsets are not over-corrected); Cohen's d and CIs correct; zero-exclusion still runs before `flag_outliers()`; `eventReactive` isolation holds — only the Run button recomputes.
 
 ### Known, still open
-- `eta_sq` for the Kruskal-Wallis branch is **epsilon-squared** (`H/(n−1)`), exported under the name `eta_sq`.
-- Sex-stratified tests use pooled-SD `pairwise.t.test` while Section 2 uses Welch `t.test` (Males ND-vs-T1D: 0.104 vs 0.088); contrast labels are also reversed (`Aab+ vs ND` vs `ND vs Aab+`).
-- `per_bin_donor_pairwise()` has no coverage rule beyond n ≥ 2 per pair, so the heatmap can show a pairwise star in a bin whose ANOVA/Kendall cells are blank — contradicting the "same rule for the heatmap and the trend plot" claim in the methods text.
-- An over-restrictive filter returns `NULL`, and every card reverts to the pre-run placeholder — indistinguishable from "you haven't clicked Run".
-- The covariate card prints "does NOT survive adjustment for age and sex" even when donor status was never significant (Capillary: 0.348 → 0.387).
-- Raw column encodings leak into the UI as the feature name (`prop_Beta cell`, `peri_prop_CD8a_Tcell`, `Capillary|islet_core`).
-- `outlier_summary` is measured before the min-cells / diameter filters, so "N islets excluded last Run" is counted against a superset of what was tested.
+
+**All seven items below were CLOSED on 2026-08-14** — kept here with their resolutions
+because each records a defect class worth recognising again.
+
+- ~~`eta_sq` for the Kruskal-Wallis branch is **epsilon-squared** (`H/(n−1)`), exported under the name `eta_sq`.~~ → **Fixed.** The value still lives in `eta_sq` (so nothing reading the result list positionally breaks), but `eta_sq_label` now records which statistic it is (`eta_sq` for ANOVA, `epsilon_sq` for KW) and every display/export site uses it. The same CSV line was also still emitting `formatC(format="e")` for its p-value — the defect-2 rule — and now uses `format_p_value()`.
+- ~~Sex-stratified tests use pooled-SD `pairwise.t.test` while Section 2 uses Welch `t.test` (Males ND-vs-T1D: 0.104 vs 0.088); contrast labels are also reversed (`Aab+ vs ND` vs `ND vs Aab+`).~~ → **Fixed.** Both the parametric and non-parametric branches now iterate the same `pairs` list Section 2 uses, running Welch `t.test` / `wilcox.test` per contrast. This fixes the statistic *and* the labels together: `pairwise.t.test`/`pairwise.wilcox.test` return a `[later, earlier]` matrix, so unpacking it with `as.table()` yielded reversed contrast names (verified empirically). Pooling was the wrong assumption here anyway — donor-level SDs differ by up to 50:1.
+- ~~`per_bin_donor_pairwise()` has no coverage rule beyond n ≥ 2 per pair…~~ → **This bullet was already stale when written**: resolved by the "per-bin coverage rules unified" section below (`bin_coverage_ok()`). Removed as an open item.
+- ~~An over-restrictive filter returns `NULL`, and every card reverts to the pre-run placeholder — indistinguishable from "you haven't clicked Run".~~ → **Fixed.** A `stats_empty_reason` `reactiveVal` records *which* filter emptied the frame; `overview_banner` renders it as a red "Statistics ran, but produced no result" box, and a `showNotification` fires. The three early-return branches now name the zero-value filter, the Advanced filters (quoting the active min-cells / diameter values), and the outlier threshold respectively.
+- ~~The covariate card prints "does NOT survive adjustment for age and sex" even when donor status was never significant (Capillary: 0.348 → 0.387).~~ → **Fixed.** Three-way branch on the *unadjusted* donor-level p: when it was already null the card says "No effect to adjust away … neither supports nor refutes", rather than implying adjustment destroyed something real.
+- ~~Raw column encodings leak into the UI as the feature name (`prop_Beta cell`, `peri_prop_CD8a_Tcell`, `Capillary|islet_core`).~~ → **Fixed.** New `feature_display_label()` (`00_globals.R`) resolves both encodings — prefix form and `class|region` form — to e.g. `Beta cell (core, % of cells)` and `Capillary (islet core)`, passing anything unrecognised through unchanged. The raw column is retained as `feature_col` and both are written to the CSV header.
+- ~~`outlier_summary` is measured before the min-cells / diameter filters, so "N islets excluded last Run" is counted against a superset of what was tested.~~ → **Fixed by deferring the drop, not the flagging.** `flag_outliers()` still runs on the pre-filter population so the per-group median/MAD — and therefore *which* rows are flagged — are unchanged; only the summary and the row removal moved after the min-cells/diameter filters. The reported count now describes the analysed set.
 
 ## Jul 2026 — group-comparability pass (islet number & size distribution)
 
@@ -237,8 +241,8 @@ That note exposed a real inconsistency: `per_bin_donor_anova()` required ≥2 gr
 
 ### Still open
 
-- The donor-level estimand is still undeclared: unweighted donor means give p = 0.00374, precision-weighting by islet count gives p = 0.00855. Both defensible ("average donor" vs "average islet").
-- Everything in the previous section's "Known, still open" list.
+- The donor-level estimand is still undeclared: unweighted donor means give p = 0.00374, precision-weighting by islet count gives p = 0.00855. Both defensible ("average donor" vs "average islet"). **This is the one genuinely open item** — it is a choice to be made and stated, not a bug to fix.
+- ~~Everything in the previous section's "Known, still open" list.~~ — that list was closed 2026-08-14; see the resolutions inline above.
 
 ### Gotcha for future edits
 

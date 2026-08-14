@@ -14,12 +14,23 @@ test_that("cohens_d returns d with ci_lo/ci_hi and guards small samples", {
   x <- c(1, 2, 3, 4, 5)
   y <- c(2, 3, 4, 5, 6)
   res <- cohens_d(x, y)
-  # contract: names are d / ci_lo / ci_hi (NOT ci_lower / ci_upper)
-  expect_named(res, c("d", "ci_lo", "ci_hi"))
+  # Contract: names are d / ci_lo / ci_hi (NOT ci_lower / ci_upper).
+  # The Jul 2026 group-comparability pass WIDENED this return value with the
+  # unstandardised difference + Welch CI, per-group means/SDs, both Glass's
+  # deltas and the variance ratio -- but did not update this test, so the suite
+  # went red at that commit and stayed red. Assert the required fields are
+  # present rather than pinning the exact set, so adding a field is not a
+  # breaking change while a RENAME still fails loudly.
+  expect_true(all(c("d", "ci_lo", "ci_hi") %in% names(res)))
+  expect_true(all(c("raw_diff", "raw_ci_lo", "raw_ci_hi", "mean1", "mean2",
+                    "sd1", "sd2", "glass1", "glass2", "var_ratio",
+                    "var_ratio_warn") %in% names(res)))
   # pooled SD = sqrt(2.5); mean diff = -1  =>  d = -1 / sqrt(2.5)
   expect_equal(res$d, -1 / sqrt(2.5), tolerance = 1e-6)
   expect_lt(res$ci_lo, res$d)
   expect_gt(res$ci_hi, res$d)
+  # the unstandardised difference is the plain mean difference
+  expect_equal(res$raw_diff, -1, tolerance = 1e-6)
   # fewer than 2 obs per group -> all NA
   na_res <- cohens_d(c(1), c(2, 3))
   expect_true(is.na(na_res$d))
