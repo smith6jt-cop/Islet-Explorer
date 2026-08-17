@@ -31,7 +31,8 @@ get_available_donors <- function() {
 #' @param extra Optional character vector of phenotypes observed in the data.
 #' @return Canonical names first (PHENOTYPE_COLORS order), then any extras.
 canonical_phenotype_order <- function(extra = character(0)) {
-  canon <- names(PHENOTYPE_COLORS)
+  # Retired phenotypes never enter a legend, an axis or a selector.
+  canon <- phenotype_keep(names(PHENOTYPE_COLORS))
   extra <- unique(as.character(extra[!is.na(extra) & nzchar(extra)]))
   c(canon, sort(setdiff(extra, canon)))
 }
@@ -52,7 +53,9 @@ load_donor_tissue <- function(imageid) {
   df <- tryCatch({
     d <- read.csv(fpath, stringsAsFactors = FALSE)
     if (nrow(d) == 0) return(NULL)
-    d
+    # Retired phenotypes dropped at the LOADER. Background ("tissue")
+    # cells keep their own cell_region and are unaffected.
+    phenotype_filter_rows(d)
   }, error = function(e) {
     message("[SPATIAL] Error loading donor tissue for ", imageid, ": ", e$message)
     NULL
@@ -116,6 +119,9 @@ load_cell_distance <- function() {
   })
   if (!is.null(df)) {
     df <- df[is.finite(df$signed_dist), , drop = FALSE]
+    # Retired phenotypes dropped at the LOADER, so every downstream
+    # unique(df$phenotype) inherits it rather than each site re-filtering.
+    df <- phenotype_filter_rows(df)
     .cell_distance_cache$data <- df
     message("[SPATIAL] Cached cell_distance (", nrow(df), " cells)")
   }

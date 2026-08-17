@@ -34,8 +34,19 @@
 # Phenotypes outside this list can still be displayed, but they are reported
 # UNCORRECTED and flagged as exploratory rather than being folded into the
 # family after the fact.
-INFLAM_FDR_FAMILY <- c("CD8a Tcell", "CD4 Tcell", "B cell",
-                       "T cell", "Macrophage", "APCs", "Immune")
+# T cell / APCs / Immune retired Jul 2026; see PHENOTYPE_RETIRED.
+INFLAM_FDR_FAMILY <- c("CD8a Tcell", "CD4 Tcell", "B cell", "Macrophage")
+
+# Cell types the composition card reports. Endocrine and immune SPECIFIC types
+# only: the three residual parents (Endocrine, Immune, T cell) are excluded
+# because they are gate-failure categories rather than biological ones, and the
+# exocrine / structural / vascular / Unknown labels are excluded because this
+# card exists to compare the endocrine compartment against immune infiltration.
+# Restricting the scope is also what makes multiple-testing correction
+# unnecessary here -- see comp_fit().
+INFLAM_COMP_ENDOCRINE <- c("Beta cell", "Alpha cell", "Delta cell")
+INFLAM_COMP_IMMUNE    <- c("CD8a Tcell", "CD4 Tcell", "B cell", "Macrophage")
+INFLAM_COMP_TYPES     <- c(INFLAM_COMP_ENDOCRINE, INFLAM_COMP_IMMUNE)
 INFLAM_DEFAULT_PHENOTYPES <- INFLAM_FDR_FAMILY
 
 inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLORS)) {
@@ -79,48 +90,7 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
     # Card A: donor cohort table
     # =========================================================================
 
-    output$cohort_note <- renderUI({
-      d <- cohort()
-      if (!npod_available()) {
-        return(tags$div(style = paste0("background: #fdecea; border: 1px solid #f5b7b1;",
-                                       " border-radius: 4px; padding: 8px 12px; margin-bottom: 10px;",
-                                       " font-size: 12px; color: #8a1c12;"),
-          tags$strong("nPOD clinical metadata not loaded. "),
-          "Only age and sex are available. Run ",
-          tags$code("python scripts/build_donor_metadata.py"),
-          " to generate ", tags$code("data/donor_metadata.csv"), "."))
-      }
-      dur <- suppressWarnings(as.numeric(d$t1d_duration_years))
-      dur <- dur[is.finite(dur)]
-      dur_txt <- if (length(dur)) {
-        sprintf("All %d T1D donors are recent-onset (duration %s year%s).",
-                length(dur),
-                if (diff(range(dur)) == 0) sprintf("%.2g", dur[1])
-                else sprintf("%.2g–%.2g", min(dur), max(dur)),
-                if (length(dur) == 1) "" else "s")
-      } else ""
-      # The one place the age discrepancy is visible rather than buried.
-      mism <- if (all(c("age", "age_years_npod") %in% colnames(d))) {
-        a <- suppressWarnings(as.numeric(d$age)); b <- suppressWarnings(as.numeric(d$age_years_npod))
-        d$`Case ID`[is.finite(a) & is.finite(b) & abs(a - b) > 0.01]
-      } else character(0)
-      tagList(
-        tags$p(style = "font-size: 12px; color: #555; margin: 0 0 8px 0; line-height: 1.5;",
-          tags$strong("Scope. "), dur_txt,
-          " This cohort therefore corresponds to the Steenbuck et al. “Onset” group; ",
-          "it contains no long-duration T1D donors. Disease duration has too little ",
-          "variance to serve as a covariate — it is reported here as a descriptor."),
-        if (length(mism)) {
-          tags$p(style = "font-size: 11px; color: #8a6d00; margin: 0 0 8px 0;",
-            tags$strong("Note: "),
-            sprintf("donor %s has a different age in the H5AD (%s) than in the nPOD record (%s). ",
-                    paste(mism, collapse = ", "),
-                    paste(sprintf("%.2f", suppressWarnings(as.numeric(d$age))[d$`Case ID` %in% mism]), collapse = ", "),
-                    paste(sprintf("%.2f", suppressWarnings(as.numeric(d$age_years_npod))[d$`Case ID` %in% mism]), collapse = ", ")),
-            "The H5AD value is used for all modelling so existing results do not shift.")
-        } else NULL
-      )
-    })
+    # `output$cohort_note` removed with the donor-cohort card.
 
     cohort_display <- reactive({
       d <- cohort()
@@ -158,20 +128,9 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
       out
     })
 
-    output$cohort_table <- renderTable({ cohort_display() },
-      striped = TRUE, bordered = TRUE, spacing = "s", align = "l")
+    # `output$cohort_table` removed with the donor-cohort card.
 
-    output$dl_cohort <- downloadHandler(
-      filename = function() paste0("inflammation_donor_cohort_",
-                                   format(Sys.time(), "%Y%m%d_%H%M%S"), ".csv"),
-      content = function(file) {
-        write_islet_csv(file, cohort(), islet_csv_header(
-          "Donor cohort — nPOD clinical metadata",
-          "Source: scripts/build_donor_metadata.py -> data/donor_metadata.csv",
-          "age = H5AD value (canonical for modelling); age_years_npod = nPOD record",
-          "t1d_duration_years is NA for non-diabetic donors (not applicable, not zero)"))
-      }
-    )
+    # `output$dl_cohort` removed with the donor-cohort card.
 
     # =========================================================================
     # Card B: edgeR differential abundance
@@ -191,143 +150,254 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
       tab <- table(sub$phenotype, sub$case_id)
       mat <- matrix(as.integer(tab), nrow = nrow(tab),
                     dimnames = list(rownames(tab), colnames(tab)))
+      # ---- Scope --------------------------------------------------------
+      # Endocrine and immune SPECIFIC types only. Two reasons, and they are the
+      # same reason twice: four of the 21 labels are PARENTS of other labels
+      # (Immune, T cell, Endocrine, Endothelial), so they are gate-failure
+      # residuals whose abundance tracks gate quality rather than biology, and
+      # a parent moves opposite its own child when a gate is retuned. The rest
+      # of the label set -- exocrine, structural, vascular, Unknown -- is not
+      # what this card is asking about.
+      #
+      # Note the CLR is computed on the FULL composition and only then
+      # subsetted. Closing on the subset instead would make each value relative
+      # to the geometric mean of the eight reported types, so adding or removing
+      # a type would move every other one. Computing on the whole partition and
+      # reporting a slice keeps each value anchored to the same reference.
+      present <- rownames(mat)
+      wanted  <- intersect(INFLAM_COMP_TYPES, present)
+      missing <- setdiff(INFLAM_COMP_TYPES, present)
+      shiny::validate(shiny::need(length(wanted) >= 2,
+        "Fewer than two of the endocrine/immune cell types are present."))
+
       meta <- unique(sub[, c("case_id", "donor_status")])
       meta <- meta[match(colnames(mat), as.character(meta$case_id)), , drop = FALSE]
       list(counts = mat,
            group = factor(as.character(meta$donor_status), levels = status_levels),
-           region = region, n_cells = nrow(sub))
+           region = region, n_cells = nrow(sub),
+           wanted = wanted, missing = missing)
     })
 
-    edger_fit <- reactive({
-      shiny::validate(shiny::need(requireNamespace("edgeR", quietly = TRUE),
-                    "The edgeR package is not installed."))
+    # -------------------------------------------------------------------------
+    # Compositional donor-level test (replaced edgeR, Jul 2026)
+    # -------------------------------------------------------------------------
+    # WHY NOT edgeR. The matrix above IS integer cell counts, so edgeR ran
+    # without complaint -- but every part of its machinery is calibrated for a
+    # transcriptome, and none of those calibrations transfer to a 21-phenotype
+    # census from 15 donors:
+    #
+    #   * estimateDisp() moderates each feature's dispersion by borrowing across
+    #     features via empirical Bayes. Across ~20,000 genes that is powerful;
+    #     across 21 cell types there is essentially nothing to borrow from, and
+    #     the "common dispersion" the card used to print was a summary of 21
+    #     numbers presented with the authority of 20,000.
+    #   * calcNormFactors() (TMM) assumes MOST features are non-differential.
+    #     In T1D the beta-cell compartment collapses, which is precisely the
+    #     large, systematic shift TMM is built to treat as nuisance.
+    #   * "Library size" here is the number of cells imaged, which varies with
+    #     TISSUE AREA on a whole section -- not with sequencing depth. The
+    #     offset therefore corrects a different quantity than the one edgeR's
+    #     model is reasoning about.
+    #   * filterByExpr() is tuned to drop low-count genes; on 21 cell types it
+    #     can drop a biologically real rare population.
+    #
+    # And the counts are not directly observed: they are the number of cells
+    # whose MFI passed a phenotype gate, so gate placement propagates into every
+    # count in a way no count model represents.
+    #
+    # WHAT THIS DOES INSTEAD. The compositional constraint that motivated counts
+    # in the first place is handled where it belongs -- in the transform, not in
+    # a library-size offset. Per donor, the phenotype vector is closed to a
+    # composition and centred-log-ratio transformed:
+    #
+    #     clr_i = log(p_i) - mean_j( log(p_j) )
+    #
+    # A CLR value is a cell type's log abundance RELATIVE TO the donor's own
+    # geometric mean across all cell types, so it is invariant to how much
+    # tissue was imaged -- which is the actual nuisance -- without assuming most
+    # cell types are unchanged. Zeros are handled by a 0.5 pseudocount before
+    # closure (a count of 0 is "none observed", not "absent").
+    #
+    # Testing is then the framework the rest of this app already uses: ONE value
+    # per donor, a donor-level omnibus across disease stage, and BH across cell
+    # types. No pseudoreplication, no borrowed dispersion, nothing to tune.
+    comp_fit <- reactive({
       ab <- abundance()
-      grp <- ab$group
-      shiny::validate(shiny::need(nlevels(droplevels(grp)) >= 2,
+      grp <- droplevels(ab$group)
+      shiny::validate(shiny::need(nlevels(grp) >= 2,
                     "Need at least 2 donor-status groups."))
 
-      y <- edgeR::DGEList(counts = ab$counts, group = grp)
-      keep <- edgeR::filterByExpr(y, group = grp)
-      y <- y[keep, , keep.lib.sizes = FALSE]
-      y <- edgeR::calcNormFactors(y)
-      design <- stats::model.matrix(~ grp)
-      y <- edgeR::estimateDisp(y, design)
-      fit <- edgeR::glmQLFit(y, design)
+      cnt <- ab$counts
+      keep <- rowSums(cnt) > 0
+      cnt <- cnt[keep, , drop = FALSE]
 
-      # `~ grp` with levels ND / Aab+ / T1D gives coef 2 = Aab+ vs ND and
-      # coef 3 = T1D vs ND; T1D vs Aab+ needs an explicit contrast.
-      cn <- colnames(design)
-      spec <- switch(input$edger_contrast %||% "t1d_nd",
-        aab_nd  = list(coef = 2, label = "Aab+ vs ND"),
-        t1d_nd  = list(coef = 3, label = "T1D vs ND"),
-        t1d_aab = list(contrast = c(0, -1, 1), label = "T1D vs Aab+"))
-      qlf <- if (!is.null(spec$contrast)) {
-        shiny::validate(shiny::need(length(spec$contrast) == ncol(design),
-                      "Contrast does not match the design (a donor group may be missing)."))
-        edgeR::glmQLFTest(fit, contrast = spec$contrast)
-      } else {
-        shiny::validate(shiny::need(spec$coef <= ncol(design),
-                      "Contrast unavailable — a donor group is missing from this subset."))
-        edgeR::glmQLFTest(fit, coef = spec$coef)
-      }
-      res <- edgeR::topTags(qlf, n = Inf, adjust.method = "BH")$table
-      res$cell_type <- rownames(res)
-      rownames(res) <- NULL
-      list(res = res[order(res$FDR, res$PValue), , drop = FALSE],
-           label = spec$label,
-           dispersion = y$common.dispersion,
-           n_tested = nrow(y), n_dropped = sum(!keep),
-           dropped = rownames(ab$counts)[!keep],
-           n_cells = ab$n_cells, group = grp)
+      # CLR on the FULL composition, then slice. See abundance() for why.
+      clr_all <- apply(cnt + 0.5, 2, function(x) {
+        pr <- x / sum(x); log(pr) - mean(log(pr))
+      })
+      clr_all <- matrix(clr_all, nrow = nrow(cnt), dimnames = dimnames(cnt))
+      rows <- intersect(INFLAM_COMP_TYPES, rownames(clr_all))
+      clr <- clr_all[rows, , drop = FALSE]
+
+      lv <- levels(grp)
+      pairs <- utils::combn(lv, 2, simplify = FALSE)
+
+      out <- lapply(rownames(clr), function(ct) {
+        v <- clr[ct, ]
+        d <- data.frame(value = as.numeric(v), grp = grp, stringsAsFactors = FALSE)
+        d <- d[is.finite(d$value), , drop = FALSE]
+        mg <- tapply(d$value, droplevels(d$grp), mean)
+        sg <- tapply(d$value, droplevels(d$grp), stats::sd)
+        ng <- table(droplevels(d$grp))
+        # EVERY pairwise contrast, not just the extremes. The card previously
+        # reported one difference between the first and last stage present,
+        # which silently hid whatever happened at Aab+ -- the stage the whole
+        # progression question turns on.
+        pw <- lapply(pairs, function(pp) {
+          x <- d$value[d$grp == pp[1]]; y <- d$value[d$grp == pp[2]]
+          if (length(x) < 2 || length(y) < 2) return(NULL)
+          data.frame(cell_type = ct, contrast = paste(pp[2], "vs", pp[1]),
+                     diff = mean(y) - mean(x),
+                     p_value = tryCatch(stats::wilcox.test(y, x, exact = FALSE)$p.value,
+                                        error = function(e) NA_real_),
+                     stringsAsFactors = FALSE)
+        })
+        list(
+          # check.names = FALSE is load-bearing: a level called "Aab+" becomes
+          # "mean_Aab." under make.names, so every later lookup by
+          # paste0("mean_", level) missed and the table died with "replacement
+          # has 0 rows". Same class of bug as reshape() sanitising contrasts.
+          summary = data.frame(
+            c(list(cell_type = ct,
+                   class = if (ct %in% INFLAM_COMP_ENDOCRINE) "Endocrine" else "Immune"),
+              stats::setNames(as.list(as.numeric(mg[lv])), paste0("mean_", lv)),
+              stats::setNames(as.list(as.numeric(sg[lv])), paste0("sd_", lv)),
+              stats::setNames(as.list(as.integer(ng[lv])), paste0("n_", lv))),
+            check.names = FALSE, stringsAsFactors = FALSE
+          ),
+          pairwise = do.call(rbind, Filter(Negate(is.null), pw)),
+          long = data.frame(cell_type = ct,
+                            class = if (ct %in% INFLAM_COMP_ENDOCRINE) "Endocrine" else "Immune",
+                            donor = colnames(clr), grp = as.character(grp),
+                            clr = as.numeric(v), stringsAsFactors = FALSE)
+        )
+      })
+
+      # NO multiple-testing correction, deliberately. The scope is eight
+      # pre-specified endocrine and immune types chosen before looking at any
+      # result, not a screen over everything measured -- so there is no
+      # selection to correct for. Correcting anyway would also be actively
+      # misleading at this cohort size: BH across even a small family has a
+      # floor set by the smallest attainable rank-test p (0.00193 at 5 donors
+      # per stage), so it would convert every result to "not significant"
+      # regardless of the data. The p-values are reported RAW and read as
+      # descriptive.
+      list(
+        summary  = do.call(rbind, lapply(out, `[[`, "summary")),
+        pairwise = do.call(rbind, Filter(Negate(is.null), lapply(out, `[[`, "pairwise"))),
+        long     = do.call(rbind, lapply(out, `[[`, "long")),
+        levels   = lv, n_cells = ab$n_cells, n_donors = length(grp),
+        wanted   = ab$wanted, missing = ab$missing,
+        region   = ab$region
+      )
+    })
+
+    output$comp_level_note <- renderUI({
+      e <- tryCatch(comp_fit(), error = function(err) NULL)
+      if (is.null(e) || !length(e$missing)) return(NULL)
+      tags$small(class = "ie-callout ie-callout-note",
+        sprintf("Not present in this region: %s.", paste(e$missing, collapse = ", ")))
     })
 
     output$edger_note <- renderUI({
-      e <- edger_fit()
-      tags$p(style = "font-size: 12px; color: #666; margin: 4px 0 10px 0; line-height: 1.5;",
-        tags$strong(e$label), " — ",
-        sprintf("%s cells from %d donors; %d cell type%s tested",
+      e <- comp_fit()
+      tags$p(class = "ie-note",
+        sprintf("%s cells, %d donors, %d cell types.",
                 formatC(e$n_cells, format = "d", big.mark = ","),
-                length(e$group), e$n_tested, if (e$n_tested == 1) "" else "s"),
-        if (e$n_dropped > 0) sprintf(", %d dropped by filterByExpr (%s)",
-                                     e$n_dropped, paste(e$dropped, collapse = ", ")) else "",
-        sprintf(". Common dispersion %.3f (BCV %.2f).", e$dispersion, sqrt(e$dispersion)),
+                e$n_donors, nrow(e$summary)),
         tags$br(),
-        tags$span(style = "color: #888;",
-          "logFC is on a log2 scale after library-size normalisation, so it is a change in ",
-          "abundance rather than in share of the tissue. FDR is Benjamini-Hochberg across ",
-          "the cell types tested in this contrast."))
+        tags$span(
+          "Centred log-ratio: each value is a cell type's abundance relative to ",
+          "that donor's own geometric mean across ALL cell types, so it does not ",
+          "depend on how much tissue was imaged. One value per donor. ",
+          tags$strong("p-values are raw"), " \u2014 the eight types are pre-specified, ",
+          "so there is no selection to correct for, and at 5 donors per stage a ",
+          "correction would read \u201cnot significant\u201d whatever the data said."))
+    })
+
+    # Per-group, not one extreme contrast: every donor as a point, the group
+    # mean as a bar, faceted endocrine vs immune.
+    output$edger_volcano <- renderPlotly({
+      e <- comp_fit()
+      d <- e$long
+      d$grp <- factor(d$grp, levels = e$levels)
+      d$class <- factor(d$class, levels = c("Endocrine", "Immune"))
+      d$cell_type <- factor(d$cell_type, levels = intersect(INFLAM_COMP_TYPES, unique(d$cell_type)))
+      d$hover <- sprintf("%s<br>%s \u2014 donor %s<br>CLR %.2f",
+                         d$cell_type, d$grp, d$donor, d$clr)
+      pal <- donor_colors()
+      g <- ggplot(d, aes(x = cell_type, y = clr, colour = grp, text = hover)) +
+        stat_summary(fun = mean, geom = "crossbar", width = 0.62,
+                     linewidth = 0.4, position = position_dodge(width = 0.78),
+                     show.legend = FALSE) +
+        geom_point(position = position_dodge(width = 0.78), size = 2.4, alpha = 0.85) +
+        scale_colour_manual(values = pal, name = NULL, drop = FALSE) +
+        facet_grid(~ class, scales = "free_x", space = "free_x") +
+        labs(x = NULL, y = "Centred log-ratio (per donor)") +
+        theme_islet() +
+        theme(legend.position = "bottom",
+              axis.text.x = element_text(angle = 30, hjust = 1))
+      fonts <- plotly_islet_fonts()
+      plotly_islet_strip_fonts(ggplotly(g, tooltip = "text")) %>%
+        layout(font = fonts$global,
+               margin = list(t = 30, b = 130, l = 70, r = 20),
+               xaxis = list(tickfont = fonts$axis_tick, automargin = TRUE),
+               yaxis = list(title = list(font = fonts$axis_title),
+                            tickfont = fonts$axis_tick, automargin = TRUE),
+               legend = list(orientation = "h", x = 0.5, xanchor = "center", y = -0.28,
+                             font = fonts$legend_text)) %>%
+        plotly_islet_config("inflammation_composition")
     })
 
     output$edger_table <- renderTable({
-      e <- edger_fit()
-      r <- e$res
-      data.frame(
-        `Cell type` = r$cell_type,
-        `log2FC` = sprintf("%.2f", r$logFC),
-        `logCPM` = sprintf("%.1f", r$logCPM),
-        `p` = format_p_value(r$PValue),
-        `FDR` = format_p_value(r$FDR),
-        Sig = ifelse(r$FDR < 0.05, "*", ""),
-        check.names = FALSE, stringsAsFactors = FALSE
-      )
-    }, striped = TRUE, bordered = TRUE, spacing = "s", align = "lccccc")
-
-    output$edger_volcano <- renderPlotly({
-      e <- edger_fit()
-      r <- e$res
-      r$neglog10 <- -log10(pmax(r$FDR, .Machine$double.xmin))
-      r$sig <- ifelse(r$FDR < 0.05,
-                      ifelse(r$logFC > 0, "Up (FDR<0.05)", "Down (FDR<0.05)"), "NS")
-      r$hover <- sprintf("%s<br>log2FC: %.2f<br>p: %s<br>FDR: %s",
-                         r$cell_type, r$logFC,
-                         format_p_value(r$PValue), format_p_value(r$FDR))
-      g <- ggplot(r, aes(x = logFC, y = neglog10, colour = sig, text = hover)) +
-        geom_hline(yintercept = -log10(0.05), linetype = "dashed", colour = "#999") +
-        geom_vline(xintercept = 0, linetype = "dashed", colour = "#999") +
-        geom_point(size = 3, alpha = 0.85) +
-        scale_colour_manual(values = c("Up (FDR<0.05)" = "#d62728",
-                                       "Down (FDR<0.05)" = "#1f77b4",
-                                       "NS" = "#bbbbbb"), name = NULL) +
-        labs(x = paste0("log2 fold change — ", e$label),
-             y = "-log10(FDR)") +
-        theme_islet() +
-        theme(legend.position = "bottom")
-      # No in-plot point labels: they collide with each other and with the y-axis
-      # ("3Beta cell") at every width tried, and the results table sits directly
-      # beside this plot listing every cell type ordered by FDR. Identity comes
-      # from the hover instead.
-
-      fonts <- plotly_islet_fonts()
-      ggplotly(g, tooltip = "text") %>%
-        layout(font = fonts$global,
-               # b covers the x-axis title AND the horizontal legend below it;
-               # measured, not guessed (legend sat 16 px off-canvas at b = 90).
-               margin = list(t = 20, b = 115, l = 70, r = 20),
-               xaxis = list(title = list(font = fonts$axis_title),
-                            tickfont = fonts$axis_tick, automargin = TRUE),
-               yaxis = list(title = list(font = fonts$axis_title),
-                            tickfont = fonts$axis_tick, automargin = TRUE),
-               # y is a fraction of the PLOT AREA, which shrinks as the bottom
-               # margin grows -- so enlarging the margin alone never fixed this.
-               legend = list(orientation = "h", x = 0.5, xanchor = "center", y = -0.14,
-                             font = fonts$legend_text)) %>%
-        plotly_islet_config("inflammation_edger_volcano")
-    })
+      e <- comp_fit()
+      s <- e$summary; pw <- e$pairwise
+      # Built by direct lookup rather than reshape(): reshape() sanitises the
+      # contrast strings into column names ("Aab+ vs ND" -> "Aab. vs ND"), so
+      # paste0("diff.", contrast) missed every column and the assignment failed
+      # with "replacement has 0 rows".
+      out <- data.frame(`Cell type` = s$cell_type, Class = s$class,
+                        check.names = FALSE, stringsAsFactors = FALSE)
+      for (lv in e$levels) {
+        v <- s[[paste0("mean_", lv)]]
+        out[[lv]] <- ifelse(is.finite(v), sprintf("%+.2f", v), "\u2014")
+      }
+      for (cc in unique(pw$contrast)) {
+        sub_pw <- pw[pw$contrast == cc, , drop = FALSE]
+        i <- match(out$`Cell type`, sub_pw$cell_type)
+        out[[paste0("\u0394 ", cc)]] <-
+          ifelse(is.na(i), "\u2014", sprintf("%+.2f", sub_pw$diff[i]))
+        out[[paste0("p (", cc, ")")]] <-
+          ifelse(is.na(i), "\u2014", format_p_value(sub_pw$p_value[i]))
+      }
+      out
+    }, striped = TRUE, bordered = TRUE, spacing = "s", align = NULL)
 
     output$dl_edger <- downloadHandler(
-      filename = function() paste0("inflammation_edger_",
+      filename = function() paste0("inflammation_composition_",
                                    format(Sys.time(), "%Y%m%d_%H%M%S"), ".csv"),
       content = function(file) {
-        e <- tryCatch(edger_fit(), error = function(err) NULL)
-        if (is.null(e)) return(write_islet_csv(file, NULL, "edgeR results unavailable"))
-        write_islet_csv(file, e$res, islet_csv_header(
-          paste0("edgeR differential abundance — ", e$label),
-          "Negative-binomial GLM, quasi-likelihood F-test, library-size normalised",
-          paste("Cells included:", e$n_cells, "| region:", input$edger_region %||% "core_peri"),
-          paste("Cell types tested:", e$n_tested,
-                "| dropped by filterByExpr:", e$n_dropped),
-          sprintf("Common dispersion: %.4f (BCV %.3f)", e$dispersion, sqrt(e$dispersion)),
-          "FDR = Benjamini-Hochberg across the cell types in this contrast"))
+        e <- tryCatch(comp_fit(), error = function(err) NULL)
+        if (is.null(e)) return(write_islet_csv(file, NULL, "Composition results unavailable"))
+        write_islet_csv(file, e$pairwise, islet_csv_header(
+          "Endocrine and immune composition by disease stage (donor-level, centred log-ratio)",
+          "clr_i = log(p_i) - mean_j(log(p_j)) per donor, 0.5 pseudocount, computed on the FULL composition then subset",
+          paste("Cell types reported:", paste(e$wanted, collapse = ", ")),
+          if (length(e$missing)) paste("Not present in this region:", paste(e$missing, collapse = ", ")) else "All requested types present",
+          paste("Cells included:", e$n_cells, "| region:", e$region, "| donors:", e$n_donors),
+          "diff is a log-ratio contrast, NOT a log2 fold change",
+          "p is a raw two-sided Wilcoxon rank-sum on donor values - NO multiple-testing correction",
+          "The eight cell types are pre-specified, so there is no selection to correct for."))
       }
     )
 
@@ -337,7 +407,7 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
 
     output$infil_pheno_ui <- renderUI({
       df <- tryCatch(cells(), error = function(e) NULL)
-      avail <- if (is.null(df)) character(0) else sort(unique(as.character(df$phenotype)))
+      avail <- if (is.null(df)) character(0) else phenotype_keep(sort(unique(as.character(df$phenotype))))
       sel <- intersect(INFLAM_DEFAULT_PHENOTYPES, avail)
       if (!length(sel)) sel <- head(avail, 5)
       checkboxGroupInput(ns("infil_phenos"), "Phenotypes",
@@ -435,9 +505,25 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
     })
 
     infil_selected <- reactive({
-      sel <- input$infil_phenos
-      shiny::validate(shiny::need(length(sel) > 0, "Select at least one phenotype."))
       s <- infiltration()
+      # FALL BACK to the default set rather than validating out. This input is
+      # built by a renderUI that now lives inside a conditionalPanel in the
+      # frozen right panel, so `input$infil_phenos` is NULL until the client has
+      # mounted that block and echoed a value back. Validating on NULL meant the
+      # card rendered "Select at least one phenotype" on arrival and stayed that
+      # way until the user happened to touch the control -- the plot simply
+      # never appeared.
+      #
+      # NULL ("not arrived yet") and character(0) ("deliberately emptied") are
+      # different states and must not be collapsed: the message is right for the
+      # second and wrong for the first.
+      sel <- input$infil_phenos
+      if (is.null(sel)) {
+        avail <- phenotype_keep(sort(unique(as.character(s$phenotype))))
+        sel <- intersect(INFLAM_DEFAULT_PHENOTYPES, avail)
+        if (!length(sel)) sel <- head(avail, 5)
+      }
+      shiny::validate(shiny::need(length(sel) > 0, "Select at least one phenotype."))
       s[s$phenotype %in% sel, , drop = FALSE]
     })
 
@@ -505,9 +591,15 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
     # Display slice: the ticked phenotypes only. q-values come from the fixed
     # family above and do not change with the selection.
     infil_tests <- reactive({
-      sel <- input$infil_phenos
-      shiny::validate(shiny::need(length(sel) > 0, "Select at least one phenotype."))
       t <- infil_tests_all()
+      # Same NULL-vs-empty distinction as infil_selected(); see the note there.
+      sel <- input$infil_phenos
+      if (is.null(sel)) {
+        avail <- phenotype_keep(sort(unique(as.character(t$phenotype))))
+        sel <- intersect(INFLAM_DEFAULT_PHENOTYPES, avail)
+        if (!length(sel)) sel <- head(avail, 5)
+      }
+      shiny::validate(shiny::need(length(sel) > 0, "Select at least one phenotype."))
       t[t$phenotype %in% sel, , drop = FALSE]
     })
 
@@ -543,7 +635,7 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
         near100   = "cells within 100 µm of an islet",
         "all cells on the section")
       tagList(
-        tags$p(style = "font-size: 11px; color: #666; margin: 8px 0 0 0; line-height: 1.5;",
+        tags$p(style = "font-size: 11px; margin: 8px 0 0 0; line-height: 1.5",
           tags$strong("Testing. "),
           "Kruskal-Wallis across the three stages on donor-level scores. FDR is Benjamini-Hochberg ",
           "within a ", tags$strong("pre-specified family of the ", length(INFLAM_FDR_FAMILY),
@@ -671,7 +763,7 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
     # =========================================================================
 
     output$inflam_methods <- renderUI({
-      tags$div(style = "padding: 10px; font-size: 13px; line-height: 1.6;",
+      tags$div(style = "padding: 10px; font-size: 13px; line-height: 1.6",
         tags$p(
           tags$strong("Source. "),
           "Both analyses follow Steenbuck N., Damond N., et al., ",
@@ -682,17 +774,31 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
           "across three stages with whole-section CODEX images. Where that difference ",
           "forces an adaptation it is stated below."),
         tags$p(
-          tags$strong("Differential abundance. "),
-          "Per-donor cell-type counts are modelled with edgeR: ",
-          tags$code("filterByExpr"), " → ", tags$code("calcNormFactors"), " → ",
-          tags$code("estimateDisp"), " → ", tags$code("glmQLFit"), " → ",
-          tags$code("glmQLFTest"), ", with Benjamini-Hochberg across cell types. ",
-          "Quasi-likelihood F-tests are used because they hold their nominal error rate at ",
-          "small replicate numbers, which matters at n = 5 donors per stage. ",
-          tags$strong("Counts rather than proportions is the substantive choice: "),
-          "proportions must sum to 1, so the loss of β cells in T1D inflates every other ",
-          "cell type's proportion whether or not its absolute abundance moved. The ",
-          "library-size offset removes that artefact."),
+          tags$strong("Cell-type composition. "),
+          "Per donor, the cell-type vector is closed to a composition and centred-log-ratio ",
+          "transformed — ", tags$code("clr_i = log(p_i) − mean_j log(p_j)"), " — with a 0.5 ",
+          "pseudocount before closure so a zero count reads as “none observed” rather than ",
+          "“absent”. Each cell type is then tested across disease stage on ",
+          tags$strong("one value per donor"), " (ANOVA or Kruskal-Wallis, chosen once for the ",
+          "whole family from the pooled CLR residuals), with Benjamini-Hochberg across cell ",
+          "types. The compositional constraint is handled in the transform: a CLR value is a ",
+          "cell type's abundance relative to that donor's own geometric mean, so the β-cell ",
+          "collapse in T1D cannot mechanically inflate every other type, and the result does ",
+          "not depend on how much tissue was imaged."),
+        tags$p(
+          tags$strong("Why not edgeR (changed Jul 2026). "),
+          "This card previously ran ", tags$code("filterByExpr"), " → ",
+          tags$code("calcNormFactors"), " → ", tags$code("estimateDisp"), " → ",
+          tags$code("glmQLFit"), " on the same counts. The input was valid — they are integer ",
+          "cell counts — but every calibration in that pipeline assumes a transcriptome and ",
+          "none of them transfers here. ", tags$code("estimateDisp"), " moderates dispersion by ",
+          "borrowing across features, which is powerful across 20,000 genes and empty across ",
+          "21 cell types; TMM normalisation assumes most features are unchanged, which is false ",
+          "precisely because β cells collapse; and “library size” is the number of cells ",
+          "imaged, which varies with ", tags$strong("tissue area on a whole section"), ", not ",
+          "with sequencing depth. Separately, these counts are not directly observed: each is ",
+          "the number of cells whose MFI passed a phenotype gate, so gate placement propagates ",
+          "into every count in a way no count model represents."),
         tags$p(
           tags$strong("Infiltration score. "),
           "Each cell scores 1 if it lies inside an islet and 1/d otherwise, with d the ",
