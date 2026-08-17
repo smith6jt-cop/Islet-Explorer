@@ -381,7 +381,7 @@ ui <- fluidPage(
       tabsetPanel(id = "tabs",
         tabPanel("Plot",
           fluidRow(
-            plot_main_ui("plot", extra_panel = column(2, ai_assistant_ui("ai")))
+            plot_main_ui("plot", extra_panel = if (AI_ENABLED) column(2, ai_assistant_ui("ai")) else NULL)
           )
         ),
         tabPanel("Trajectory",
@@ -632,8 +632,9 @@ server <- function(input, output, session) {
     inflammation_server("inflam", prepared, active_donor_colors)
   }
 
-  # AI Assistant module (self-contained)
-  ai_assistant_server("ai")
+  # AI Assistant module (self-contained; gated so the card is disabled AND
+  # hidden by default -- see AI_ENABLED in 00_globals.R)
+  if (AI_ENABLED) ai_assistant_server("ai")
 
   # ---- Unified segmentation + drilldown plot (root-level, used by both Plot and Trajectory panels) ----
   islet_segmentation_view_plot <- reactive({

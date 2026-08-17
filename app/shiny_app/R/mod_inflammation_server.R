@@ -337,7 +337,7 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
 
     output$infil_pheno_ui <- renderUI({
       df <- tryCatch(cells(), error = function(e) NULL)
-      avail <- if (is.null(df)) character(0) else sort(unique(as.character(df$phenotype)))
+      avail <- if (is.null(df)) character(0) else phenotype_keep(sort(unique(as.character(df$phenotype))))
       sel <- intersect(INFLAM_DEFAULT_PHENOTYPES, avail)
       if (!length(sel)) sel <- head(avail, 5)
       checkboxGroupInput(ns("infil_phenos"), "Phenotypes",

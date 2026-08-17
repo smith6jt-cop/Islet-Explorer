@@ -190,6 +190,15 @@ VIEWER_DEBUG_ENABLED <- identical(Sys.getenv("VIEWER_DEBUG", "0"), "1")
 #   SHOW_INFLAMMATION_TAB=1 in .Renviron  ->  tab reappears
 SHOW_INFLAMMATION_TAB <- identical(Sys.getenv("SHOW_INFLAMMATION_TAB", "0"), "1")
 
+# AI chat card: OFF, so it is both disabled and hidden. Gating rather than
+# deleting keeps the module files intact and makes this a one-line env change
+# rather than a code revert, exactly as with the Inflammation tab above. With it
+# off nothing reads the UF Navigator credentials (KEY/BASE), so no key is needed
+# to run the app, and the Plot tab's Distribution card widens 4 -> 6 to fill the
+# row the chat card used to occupy.
+#   ISLET_ENABLE_AI=TRUE in .Renviron  ->  card reappears
+AI_ENABLED <- isTRUE(as.logical(Sys.getenv("ISLET_ENABLE_AI", "FALSE")))
+
 # ============================================================================
 # Plot font + theme helpers (May 2026)
 # ============================================================================
@@ -850,4 +859,41 @@ phenotype_hint_ui <- function(name, prefix = "Markers:",
     shiny::tags$span(rule_html),
     link
   )
+}
+
+# ============================================================================
+# Retired phenotypes (Jul 2026)
+# ============================================================================
+# Nine labels are excluded from the app everywhere a phenotype is listed,
+# coloured, selected or tested. Two reasons, and they are the same reason twice:
+#
+#   Endocrine, Immune, T cell, Endothelial   parents of other labels in the set,
+#                                            so they are gate-failure residuals
+#                                            ("immune, not resolvable further")
+#                                            whose abundance tracks gate quality
+#   Structural, Unknown                      `-rest` catch-alls, the same thing
+#                                            without children to give them away
+#   Acinar, ECAD+, APCs                      retired with them
+#
+# Excluded rather than deleted from PHENOTYPE_COLORS: the DATA still carries
+# these labels, and every lookup in this app is by exact name, so a palette
+# without them would return NA and silently grey out real cells. Keeping the
+# colours and filtering at the point of USE means a stray row is dropped, not
+# mis-drawn.
+#
+# `phenotype_keep()` is the single gate. Anything enumerating phenotypes for a
+# selector, a legend, a family or a test goes through it.
+PHENOTYPE_RETIRED <- c("Endocrine", "Acinar", "Endothelial", "T cell",
+                       "Immune", "Unknown", "ECAD+", "Structural", "APCs")
+
+#' Drop retired phenotypes from a character vector of labels.
+phenotype_keep <- function(x) setdiff(x, PHENOTYPE_RETIRED)
+
+#' TRUE for rows whose phenotype is still in use. NA-safe.
+phenotype_is_kept <- function(x) !(as.character(x) %in% PHENOTYPE_RETIRED)
+
+#' Drop retired phenotypes from a data frame with a phenotype column.
+phenotype_filter_rows <- function(df, col = "phenotype") {
+  if (is.null(df) || !is.data.frame(df) || !(col %in% names(df))) return(df)
+  df[phenotype_is_kept(df[[col]]), , drop = FALSE]
 }

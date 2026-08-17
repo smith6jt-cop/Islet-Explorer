@@ -113,6 +113,8 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         if (length(prop_cols) > 0 || length(peri_prop_cols) > 0) {
           choices <- list("Core — Hormone Positivity (QuPath threshold)" = base_choices)
           if (length(prop_cols) > 0) {
+            # Retired phenotypes never reach the selector.
+            prop_cols   <- prop_cols[phenotype_is_kept(gsub("^prop_", "", prop_cols))]
             prop_labels <- gsub("^prop_", "", prop_cols)
             choices[["Core — Phenotype Proportions (scVI)"]] <- setNames(prop_cols, prop_labels)
           }
