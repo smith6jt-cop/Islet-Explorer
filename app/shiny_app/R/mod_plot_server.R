@@ -11,17 +11,12 @@
 #   id              -- module namespace id
 #   prepared        -- reactive returning list(targets_all, markers_all, comp)
 #   selected_islet  -- reactiveVal for cross-module click-to-segmentation
-#   active_tab      -- reactive returning the current nav key (e.g. "plot")
+#   active_tab      -- reactive returning current tab name (e.g. "Plot")
 
-plot_server <- function(id, prepared, selected_islet, active_tab = reactive("plot"),
+plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plot"),
                         donor_colors_reactive = reactive(DONOR_COLORS_BRIGHT),
                         remove_outliers = reactive(FALSE),
-                        outlier_threshold = reactive(3.0),
-                        # The shared cohort filter. Default keeps headless
-                        # testServer runs working without mounting the module.
-                        cohort = list(apply = function(df, ...) df,
-                                      spec = function() cohort_spec_default(),
-                                      provenance = function(...) character(0))) {
+                        outlier_threshold = reactive(3.0)) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
@@ -118,8 +113,6 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("plo
         if (length(prop_cols) > 0 || length(peri_prop_cols) > 0) {
           choices <- list("Core — Hormone Positivity (QuPath threshold)" = base_choices)
           if (length(prop_cols) > 0) {
-            # Retired phenotypes never reach the selector.
-            prop_cols   <- prop_cols[phenotype_is_kept(gsub("^prop_", "", prop_cols))]
             prop_labels <- gsub("^prop_", "", prop_cols)
             choices[["Core — Phenotype Proportions (scVI)"]] <- setNames(prop_cols, prop_labels)
           }
@@ -177,7 +170,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("plo
                                      "Cells per islet (core+peri)"     = "Counts",
                                      "Cells per mm² of core+peri area" = "Density"),
                          selected = "Percentage", inline = TRUE),
-            helpText(style = "font-size: 12px; margin-top: -4px",
+            helpText(style = "font-size: 12px; color: #555; margin-top: -4px;",
                      "Per islet = phenotype cells in core + 20 µm peri-islet zone. ",
                      "Per mm² of core+peri area = phenotype cells ÷ (core_region_um2 + peri_region_um2), ",
                      "using QuPath-measured annotation areas.")
@@ -189,7 +182,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("plo
                                      "Cells per islet (peri)"   = "Counts",
                                      "Cells per mm² of peri area" = "Density"),
                          selected = "Percentage", inline = TRUE),
-            helpText(style = "font-size: 12px; margin-top: -4px",
+            helpText(style = "font-size: 12px; color: #555; margin-top: -4px;",
                      "Per islet = phenotype cells tallied in the 20 µm peri-islet zone. ",
                      "Per mm² of peri area = peri cells ÷ peri_region_um2 (QuPath-measured ",
                      "`_exp20um` annotation area).")
@@ -201,7 +194,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("plo
                                      "Cells per islet (core)"     = "Counts",
                                      "Cells per mm² of core area" = "Density"),
                          selected = "Percentage", inline = TRUE),
-            helpText(style = "font-size: 12px; margin-top: -4px",
+            helpText(style = "font-size: 12px; color: #555; margin-top: -4px;",
                      "Per islet = phenotype cells tallied in the islet core. ",
                      "Per mm² of core area = core cells ÷ core_region_um2 ",
                      "(QuPath-measured islet annotation area).")
@@ -214,8 +207,8 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("plo
       df <- raw_df_base()
       if (!is.null(df) && nrow(df) > 0) {
         aabp_donors <- df %>% dplyr::filter(donor_status == "Aab+")
-        if (nrow(aabp_donors) == 0 && "Aab+" %in% cohort$spec()$groups) {
-          div(style = "font-weight: bold; margin-bottom: 10px",
+        if (nrow(aabp_donors) == 0 && "Aab+" %in% input$groups) {
+          div(style = "color: #d9534f; font-weight: bold; margin-bottom: 10px;",
               "\u26a0 No matching donors.")
         } else {
           NULL
@@ -227,9 +220,33 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("plo
 
     # ---- Age & Sex filter UIs (visible only when demographics available) ----
     # (data column is `gender`; user-facing label is "Sex")
-    # `output$age_filter_ui` removed: age/sex moved to the shared cohort filter.
+    output$age_filter_ui <- renderUI({
+      pd <- prepared()
+      if (is.null(pd$comp) || !("age" %in% colnames(pd$comp))) return(NULL)
+      age_vals <- as.numeric(pd$comp$age)
+      age_vals <- age_vals[is.finite(age_vals)]
+      if (length(age_vals) == 0) return(NULL)
+      sliderInput(ns("age_range"), "Donor Age (years)",
+                  min = floor(min(age_vals)), max = ceiling(max(age_vals)),
+                  value = c(floor(min(age_vals)), ceiling(max(age_vals))), step = 1)
+    })
 
-    # `output$gender_filter_ui` removed: age/sex moved to the shared cohort filter.
+    output$gender_filter_ui <- renderUI({
+      pd <- prepared()
+      if (is.null(pd$comp) || !("gender" %in% colnames(pd$comp))) return(NULL)
+      genders <- sort(unique(na.omit(as.character(pd$comp$gender))))
+      if (length(genders) == 0) return(NULL)
+      # User-facing label is "Sex" (project convention); the underlying data
+      # column stays `gender` for backwards compatibility. This sidebar is shared
+      # by the Plot AND Statistics tabs, so it was the one place in the live UI
+      # still showing the word "Gender". Values stay M/F — only the labels change.
+      sex_labels <- c(F = "Female", M = "Male")
+      checkboxGroupInput(ns("gender_filter"), "Sex",
+                         choiceNames  = unname(ifelse(genders %in% names(sex_labels),
+                                                      sex_labels[genders], genders)),
+                         choiceValues = as.list(genders),
+                         selected = genders, inline = TRUE)
+    })
 
     # ===========================================================================
     # Reactive data chain:  raw_df_base -> raw_df -> plot_df -> summary_df
@@ -239,9 +256,10 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("plo
     raw_df_base <- reactive({
       pd <- prepared()
       mode <- input$mode %||% "Cell Populations"
-      # Donor status is the cohort filter's now, not this module's.
-      groups <- cohort$spec()$groups
-      if (is.null(groups) || !length(groups)) groups <- GROUP_LEVELS
+      groups <- input$groups
+      if (is.null(groups) || !length(groups)) {
+        groups <- c("ND", "Aab+", "T1D")
+      }
       w <- input$which
       if (is.null(w) || length(w) == 0) w <- NA_character_
 
@@ -399,17 +417,64 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("plo
         dplyr::mutate(donor_status = `Donor Status`) %>%
         dplyr::filter(!is.na(value))
 
-      # ONE filter, shared by every tab. This block used to inline six separate
-      # filters -- min-cells, diameter, age, sex, AAb, and donor status upstream
-      # -- each of which was re-implemented slightly differently on the other
-      # tabs. The ordering (groups -> age -> sex -> AAb -> min-cells -> diameter)
-      # and the skip audit now live in R/cohort_filter.R, so a filter that
-      # cannot bind to a column reports itself instead of silently doing
-      # nothing. That failure mode is not hypothetical: min-cells held Capillary
-      # at 5,380 islets and p = 0.3476 from min-cells 1 through 200 while the
-      # CSV header still reported the value the user had set.
-      out <- cohort$apply(out)
+      # Apply min cells/islet filter
+      min_cells <- input$min_cells %||% 1
+      if (min_cells > 1 &&
+          "total_cells_core" %in% colnames(out) &&
+          "total_cells_peri" %in% colnames(out)) {
+        tc_core <- suppressWarnings(as.numeric(out$total_cells_core))
+        tc_peri <- suppressWarnings(as.numeric(out$total_cells_peri))
+        tc_core <- ifelse(is.finite(tc_core), tc_core, 0)
+        tc_peri <- ifelse(is.finite(tc_peri), tc_peri, 0)
+        out <- out[is.finite(tc_core + tc_peri) & (tc_core + tc_peri) >= min_cells, , drop = FALSE]
+      }
 
+      # Apply diameter range filter
+      if (!is.null(input$diam_range) && length(input$diam_range) == 2) {
+        diam_min <- as.numeric(input$diam_range[1])
+        diam_max <- as.numeric(input$diam_range[2])
+        if (is.finite(diam_min) && is.finite(diam_max)) {
+          out <- out %>%
+            dplyr::filter(is.finite(islet_diam_um) &
+                          islet_diam_um >= diam_min &
+                          islet_diam_um <= diam_max)
+        }
+      }
+
+      # Age filter
+      if (!is.null(input$age_range) && length(input$age_range) == 2 && "age" %in% colnames(out)) {
+        out <- out[is.finite(as.numeric(out$age)) &
+                   as.numeric(out$age) >= input$age_range[1] &
+                   as.numeric(out$age) <= input$age_range[2], , drop = FALSE]
+      }
+      # Sex filter (data column is `gender`)
+      if (!is.null(input$gender_filter) && "gender" %in% colnames(out)) {
+        out <- out[as.character(out$gender) %in% input$gender_filter, , drop = FALSE]
+      }
+
+      # Apply AAb filters (only within Aab+ donor group)
+      flags <- input$aab_flags
+      all_aab_cols <- c("AAb_GADA", "AAb_IA2A", "AAb_ZnT8A", "AAb_IAA", "AAb_mIAA")
+
+      others <- out %>% dplyr::filter(donor_status != "Aab+")
+      aabp   <- out %>% dplyr::filter(donor_status == "Aab+")
+
+      if (nrow(aabp) > 0) {
+        if (is.null(flags) || length(flags) == 0) {
+          aabp <- aabp[0, , drop = FALSE]
+        } else {
+          unchecked <- setdiff(all_aab_cols, flags)
+          unchecked_avail <- intersect(unchecked, colnames(aabp))
+          if (length(unchecked_avail) > 0) {
+            exclude_mat <- as.data.frame(aabp[, unchecked_avail, drop = FALSE])
+            for (cc in colnames(exclude_mat)) exclude_mat[[cc]] <- as.logical(exclude_mat[[cc]])
+            has_unchecked <- rowSums(exclude_mat, na.rm = TRUE) > 0
+            aabp <- aabp[!has_unchecked, , drop = FALSE]
+          }
+        }
+      }
+
+      out <- dplyr::bind_rows(others, aabp)
       attr(out, "selection_used") <- w
       attr(out, "mode_used") <- mode
       out
@@ -1038,7 +1103,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("plo
       if (!show_table) return(NULL)
       if (is.null(outlier_data) || nrow(outlier_data) == 0) {
         return(tags$div(
-          style = "margin-top: 12px; padding: 8px 10px; font-size: 12px",
+          style = "margin-top: 12px; padding: 8px 10px; background-color: #e8f4fd; border: 1px solid #b8daff; border-radius: 5px; color: #004085; font-size: 12px;",
           "No outliers detected for the current selection."
         ))
       }
@@ -1056,9 +1121,9 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("plo
       }
 
       tags$div(
-        style = "margin-top: 15px; padding: 10px",
-        tags$h6(style = "margin-top: 0", header),
-        tags$div(style = "max-height: 200px; overflow-y: auto",
+        style = "margin-top: 15px; padding: 10px; background-color: #fff3cd; border: 1px solid #ffc107; border-radius: 5px; color: #000000;",
+        tags$h6(style = "margin-top: 0; color: #000000;", header),
+        tags$div(style = "max-height: 200px; overflow-y: auto;",
           renderTable(outlier_data))
       )
     })
@@ -1107,10 +1172,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("plo
     # ---- Embedded segmentation viewer panel (below Distribution card) ----
     output$segmentation_viewer_panel <- renderUI({
       # Only render when Plot tab is active to avoid duplicate non-namespaced output IDs
-      # !identical() rather than != : NULL != "plot" is logical(0), which
-      # throws in `if`. Safe today only because input$panels is populated
-      # before selected_islet() can fire -- do not rely on that twice.
-      if (!identical(active_tab(), "plot")) return(NULL)
+      if (active_tab() != "Plot") return(NULL)
       info <- selected_islet()
       if (is.null(info)) return(NULL)
 
@@ -1136,21 +1198,21 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("plo
       if (!is.null(info$donor_age) && !is.na(info$donor_age)) title_detail <- paste0(title_detail, ", age ", round(info$donor_age))
       if (!is.null(info$donor_gender) && !is.na(info$donor_gender) && nzchar(info$donor_gender)) title_detail <- paste0(title_detail, ", ", info$donor_gender)
 
-      div(class = "card", style = "padding: 20px; margin-bottom: 20px",
+      div(class = "card", style = "padding: 20px; margin-bottom: 20px; border: 2px solid #0066CC;",
         # Header: title + close button
-        div(style = "display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px",
+        div(style = "display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;",
           h3(paste0(info$islet_key, " (", title_detail, ")"),
-             style = "margin: 0; font-size: 22px"),
+             style = "margin: 0; color: #0066CC; font-size: 22px;"),
           actionButton(ns("clear_segmentation"), "Close", class = "btn btn-sm btn-outline-secondary")
         ),
         # Main content: controls sidebar (left) + plot (center) + composition (right)
         fluidRow(
           # Left sidebar: all controls
           column(2,
-            div(style = "padding: 10px",
+            div(style = "padding: 10px; background-color: #f8f9fa; border-radius: 5px;",
               if (has_cells) {
                 tagList(
-                  h5("Layers", style = "margin-top: 0; font-size: 15px"),
+                  h5("Layers", style = "margin-top: 0; font-size: 15px;"),
                   checkboxInput("drilldown_show_cells", "Single Cells", value = TRUE),
                   checkboxInput("drilldown_show_peri_boundary", "Peri Boundary", value = TRUE),
                   checkboxInput("drilldown_show_structures", "Structures", value = TRUE),
@@ -1167,38 +1229,38 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("plo
                 )
               } else {
                 tagList(
-                  h5("Legend", style = "margin-top: 0; margin-bottom: 10px; font-size: 15px"),
-                  div(style = "display: flex; align-items: center; margin-bottom: 8px",
+                  h5("Legend", style = "margin-top: 0; margin-bottom: 10px; font-size: 15px;"),
+                  div(style = "display: flex; align-items: center; margin-bottom: 8px;",
                     div(style = "width: 24px; height: 3px; background-color: #0066CC; margin-right: 8px;"),
-                    span("Islet", style = "font-size: 14px")
+                    span("Islet", style = "font-size: 14px;")
                   ),
-                  div(style = "display: flex; align-items: center; margin-bottom: 8px",
+                  div(style = "display: flex; align-items: center; margin-bottom: 8px;",
                     div(style = "width: 24px; height: 3px; background-color: #00CCCC; margin-right: 8px;"),
-                    span("+20\u00b5m", style = "font-size: 14px")
+                    span("+20\u00b5m", style = "font-size: 14px;")
                   ),
-                  div(style = "display: flex; align-items: center; margin-bottom: 8px",
+                  div(style = "display: flex; align-items: center; margin-bottom: 8px;",
                     div(style = "width: 24px; height: 3px; background-color: #CC00CC; margin-right: 8px;"),
-                    span("Nerve", style = "font-size: 14px")
+                    span("Nerve", style = "font-size: 14px;")
                   ),
-                  div(style = "display: flex; align-items: center; margin-bottom: 8px",
+                  div(style = "display: flex; align-items: center; margin-bottom: 8px;",
                     div(style = "width: 24px; height: 3px; background-color: #CC0000; margin-right: 8px;"),
-                    span("Capillary", style = "font-size: 14px")
+                    span("Capillary", style = "font-size: 14px;")
                   ),
-                  div(style = "display: flex; align-items: center; margin-bottom: 8px",
+                  div(style = "display: flex; align-items: center; margin-bottom: 8px;",
                     div(style = "width: 24px; height: 3px; background-color: #00AA00; margin-right: 8px;"),
-                    span("Lymphatic", style = "font-size: 14px")
+                    span("Lymphatic", style = "font-size: 14px;")
                   )
                 )
               },
               hr(style = "margin: 8px 0;"),
               span(paste("Centroid:", round(info$centroid_x, 0), "/", round(info$centroid_y, 0), "\u00b5m"),
-                   style = "font-size: 13px")
+                   style = "color: #666; font-size: 13px;")
             )
           ),
           # Center: plot
           column(6,
             plotOutput("islet_segmentation_view", height = "650px"),
-            div(style = "text-align: right; margin-top: 6px",
+            div(style = "text-align: right; margin-top: 6px;",
               downloadButton("dl_islet_segmentation_view", "Download PNG",
                              class = "btn-sm btn-outline-primary"))
           ),
@@ -1207,10 +1269,10 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("plo
             if (has_cells) {
               conditionalPanel(
                 condition = "input.drilldown_show_cells",
-                div(style = "padding: 15px",
-                  h5("Cell Composition", style = "margin-top: 0; font-size: 17px"),
+                div(style = "padding: 15px; background-color: #f8f9fa; border-radius: 5px;",
+                  h5("Cell Composition", style = "margin-top: 0; font-size: 17px;"),
                   plotOutput("islet_drilldown_summary", height = "400px"),
-                  div(style = "text-align: right; margin-top: 6px",
+                  div(style = "text-align: right; margin-top: 6px;",
                     downloadButton("dl_islet_drilldown_summary", "Download PNG",
                                    class = "btn-sm btn-outline-primary")),
                   hr(),
@@ -1296,17 +1358,40 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("plo
       desc <- c(desc, paste("Selection:", input$which %||% "Unknown"))
       desc <- c(desc, paste("Metric:", input$metric %||% "Unknown"))
 
-      # Cohort scope comes from ONE generator, built from the shared filter's
-      # spec plus its audit -- so an export cannot omit a filter the panel owns,
-      # and cannot report one that was silently skipped. Hand-writing these
-      # lines is what let min_cells, age and sex go missing from the header
-      # while genuinely changing which rows were in the file.
-      desc <- c(desc, "", cohort$provenance(attr(raw_df_base(), "cohort_audit")), "")
-      desc <- c(desc, "[PLOT TAB] Controls owned by this panel:")
+      desc <- c(desc, paste("Donor Groups:", paste(input$groups %||% c(), collapse = ", ")))
+
+      if (length(input$aab_flags) > 0) {
+        all_aab <- c("AAb_GADA", "AAb_IA2A", "AAb_ZnT8A", "AAb_IAA", "AAb_mIAA")
+        excluded <- setdiff(all_aab, input$aab_flags)
+        if (length(excluded) > 0) {
+          aab_desc <- paste("AAb Filter: Excluding donors with", paste(excluded, collapse = ", "))
+          desc <- c(desc, aab_desc)
+        } else {
+          desc <- c(desc, "AAb Filter: All Aab+ donors included")
+        }
+      }
+
+      # Demographic + size filters. These CHANGE WHICH ISLETS ARE IN THE FILE,
+      # so omitting them made two CSVs with different row sets look identical in
+      # provenance. `min_cells`, age, and sex were all silently absent.
+      desc <- c(desc, paste("Min cells per islet (core+peri):", input$min_cells %||% 1))
+      if (!is.null(input$age_range) && length(input$age_range) == 2) {
+        desc <- c(desc, paste("Donor Age Range:",
+                              input$age_range[1], "-", input$age_range[2], "years"))
+      }
+      if (!is.null(input$gender_filter)) {
+        sex_labels <- c(F = "Female", M = "Male")
+        sel <- input$gender_filter
+        desc <- c(desc, paste("Sex:", paste(ifelse(sel %in% names(sex_labels),
+                                                   sex_labels[sel], sel), collapse = ", ")))
+      }
+
       desc <- c(desc, paste("Statistic:", input$stat %||% "mean_se"))
       desc <- c(desc, paste("Bin Width:", input$binwidth %||% "50", "\u00b5m"))
-      # Diameter range now appears in the cohort block above -- it is a shared
-      # filter, so it is generated rather than hand-written here.
+      if (!is.null(input$diam_range) && length(input$diam_range) == 2) {
+        desc <- c(desc, paste("Diameter Range:",
+                              input$diam_range[1], "-", input$diam_range[2], "\u00b5m"))
+      }
 
       # Analysis-rule state. Without these a file with 17 outliers removed is
       # indistinguishable from one with none.

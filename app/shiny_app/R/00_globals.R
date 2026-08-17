@@ -191,121 +191,11 @@ VIEWER_DEBUG_ENABLED <- identical(Sys.getenv("VIEWER_DEBUG", "0"), "1")
 SHOW_INFLAMMATION_TAB <- identical(Sys.getenv("SHOW_INFLAMMATION_TAB", "0"), "1")
 
 # ============================================================================
-# Tab identity (Jul 2026 shell port)
-# ============================================================================
-# `navset_hidden(id = "panels")` reports the nav_panel_hidden VALUE -- the
-# lowercase key below -- NOT the display label. Under the old
-# `tabsetPanel(id = "tabs")` the panels were declared with titles only, so
-# `input$tabs` returned "Plot" / "Trajectory" / ...; everything keyed on tab
-# identity had to move together when that changed.
-#
-# The keys are load-bearing in three places that fail SILENTLY if they drift:
-#   * the drill-down duplicate-output guards in mod_plot_server.R and
-#     mod_trajectory_server.R. navset_hidden mounts ALL panels simultaneously
-#     (measured -- same .tab-pane structure as tabsetPanel, CSS visibility
-#     only), so both modules emit the same six non-namespaced drilldown inputs
-#     and the same plotOutput("islet_segmentation_view"). Only the active-tab
-#     check keeps one of them out of the DOM. A drifted key does not error --
-#     it greys a panel out.
-#   * mod_viewer_server.R, which skips work when the Viewer is not showing.
-#   * the conditionalPanel expressions that gate the Plot sidebar.
-#
-# app.R asserts this list against its nav_panel_hidden() calls at startup, so a
-# rename fails loudly instead of quietly.
-IE_PIPELINE <- list(
-  # Order is the ORDER OF WORK, not the order these tabs were built in: start
-  # from the tissue, narrow to the neighbourhood, then to composition, then to
-  # the per-islet trajectory and distributions, and only then to the tests.
-  # The FIRST entry is what opens, and it is also what navset_hidden selects by
-  # default -- app.R's nav_panel_hidden order is kept in step so the two agree
-  # rather than one silently correcting the other on the first rail click.
-  list(key = "spatial",      num = "01", label = "Spatial",
-       sub = "Tissue map · Leiden"),
-  list(key = "neighborhood", num = "02", label = "Neighborhoods",
-       sub = "Enrichment · proximity"),
-  list(key = "inflammation", num = "03", label = "Composition & Infiltration",
-       sub = "Cell types · immune localisation"),
-  list(key = "trajectory",   num = "04", label = "Trajectory",
-       sub = "Pseudotime · UMAP"),
-  list(key = "plot",         num = "05", label = "Plot",
-       sub = "Islet size · composition"),
-  list(key = "statistics",   num = "06", label = "Statistics",
-       sub = "Mixed-effects tests")
-)
-IE_REFERENCE <- list(
-  list(key = "viewer", label = "Viewer",
-       sub = "31 channels at full resolution")
-)
-IE_TAB_KEYS <- c(vapply(IE_PIPELINE,  `[[`, "", "key"),
-                 vapply(IE_REFERENCE, `[[`, "", "key"))
-
-# ============================================================================
 # Plot font + theme helpers (May 2026)
 # ============================================================================
 # Centralised font sizing so every plot in the app reads clearly on screen and
 # downloads as a presentation/publication-ready PNG. "Presentation-first"
 # baseline: base 16pt, 18pt titles, 14pt legends, 12pt minimum for dense rows.
-
-# ---- Plot font -------------------------------------------------------------
-# Archivo is vendored under www/fonts/ for the browser (see www/fonts/archivo.css).
-# ggplot needs the same face registered with systemfonts so ragg can rasterise
-# it. Both plot paths on this machine already go through ragg -- shiny:::startPNG
-# selects ragg::agg_png, and ggplot2:::validate_device does too -- so ONE
-# registration covers the screen and the 300-dpi download handlers alike, with
-# no device change anywhere.
-#
-# NOT showtext/sysfonts, which is what the delivered redesign used. Neither is
-# installed here; font_add_google() needs network access the server may not
-# have; and showtext_opts(dpi = 96) would silently fight
-# ggsave(dpi = ISLET_PNG_DIMS$dpi = 300, bg = "transparent") in every downloadHandler, shipping
-# publication PNGs with text at roughly a third scale.
-#
-# NOT the .woff2 either: that file is a VARIABLE font (Google serves Archivo's
-# 400/600/800 as one byte-identical file) and FreeType's WOFF2 support depends
-# on a brotli-enabled build. The three static TTFs sidestep both questions.
-#
-# Returns the family name, or NULL when the TTFs are missing. Callers pass the
-# result straight to `base_family`, where NULL means "device default" -- so a
-# missing font degrades to today's appearance with no warning and no error,
-# which is the right failure mode for a production app. Verified: an
-# unresolvable family produces no warning from ragg.
-ie_register_plot_font <- function(family = "Archivo") {
-  if (!requireNamespace("systemfonts", quietly = TRUE)) return(NULL)
-  # CWD is the app dir under shiny-server and under runApp("."), but not when a
-  # script is sourced from the repo root -- probe both.
-  dirs <- c(file.path("www", "fonts"), file.path("app", "shiny_app", "www", "fonts"))
-  dir <- Find(function(d) file.exists(file.path(d, "Archivo-Regular.ttf")), dirs)
-  if (is.null(dir)) {
-    message("[FONT] Archivo TTFs not found - plots use the device default face")
-    return(NULL)
-  }
-  p <- function(f) file.path(dir, f)
-  ok <- try(systemfonts::register_font(
-    name       = family,
-    plain      = p("Archivo-Regular.ttf"),
-    bold       = p("Archivo-ExtraBold.ttf"),   # Modernist headings are weight 800
-    italic     = p("Archivo-Regular.ttf"),     # Archivo ships no italic here
-    bolditalic = p("Archivo-ExtraBold.ttf")
-  ), silent = TRUE)
-  if (inherits(ok, "try-error")) {
-    message("[FONT] register_font failed: ", conditionMessage(attr(ok, "condition")))
-    return(NULL)
-  }
-  message("[FONT] Registered plot family '", family, "' from ", dir)
-  family
-}
-
-ISLET_PLOT_FAMILY <- ie_register_plot_font()
-
-# Plotly resolves fonts in the BROWSER, so it needs a CSS stack rather than an R
-# family name; the browser matches it against the @font-face in
-# www/fonts/archivo.css. `system-ui` is deliberately NOT first -- on Ubuntu it
-# resolves to Ubuntu/Cantarell, a humanist face that reads noticeably softer
-# than Archivo.
-IE_PLOTLY_FAMILY <- paste0(
-  if (is.null(ISLET_PLOT_FAMILY)) "" else paste0("'", ISLET_PLOT_FAMILY, "', "),
-  "'Liberation Sans', 'Helvetica Neue', Helvetica, Arial, system-ui, sans-serif"
-)
 
 ISLET_FONT_SIZES <- list(
   base         = 18,
@@ -329,11 +219,8 @@ ISLET_ANNOTATE_SIZE <- ISLET_FONT_SIZES$base / ggplot2::.pt
 
 # Standard ggplot theme. Use directly: `theme_islet()` or extend with
 # additional `theme(...)` calls for plot-specific overrides.
-theme_islet <- function(base_size = ISLET_FONT_SIZES$base,
-                        family    = ISLET_PLOT_FAMILY) {
-  # `family = NULL` -> "" -> the device default, so an unregistered Archivo is
-  # a no-op rather than a per-plot warning.
-  ggplot2::theme_minimal(base_size = base_size, base_family = family %||% "") +
+theme_islet <- function(base_size = ISLET_FONT_SIZES$base) {
+  ggplot2::theme_minimal(base_size = base_size) +
     ggplot2::theme(
       plot.title    = ggplot2::element_text(size = ISLET_FONT_SIZES$title, face = "bold"),
       plot.subtitle = ggplot2::element_text(size = ISLET_FONT_SIZES$subtitle, color = "#555"),
@@ -341,41 +228,24 @@ theme_islet <- function(base_size = ISLET_FONT_SIZES$base,
       axis.text     = ggplot2::element_text(size = ISLET_FONT_SIZES$axis_text),
       legend.title  = ggplot2::element_text(size = ISLET_FONT_SIZES$legend_title, face = "bold"),
       legend.text   = ggplot2::element_text(size = ISLET_FONT_SIZES$legend_text),
-      strip.text    = ggplot2::element_text(size = ISLET_FONT_SIZES$strip, face = "bold"),
-      # TRANSPARENT, not white. theme_minimal() sets plot.background to an
-      # opaque white rect, so every figure painted its own white rectangle no
-      # matter what the device or the CSS said -- which is exactly what made the
-      # "transparent plots" change look like it had not applied. panel.background
-      # is already element_blank() from theme_minimal; this is the outer one.
-      # Screen ground comes from the card; downloads come out transparent, which
-      # is what a figure dropped into a manuscript or a slide wants.
-      plot.background  = ggplot2::element_rect(fill = NA, colour = NA),
-      panel.background = ggplot2::element_rect(fill = NA, colour = NA),
-      legend.background = ggplot2::element_rect(fill = NA, colour = NA),
-      legend.key        = ggplot2::element_rect(fill = NA, colour = NA)
+      strip.text    = ggplot2::element_text(size = ISLET_FONT_SIZES$strip, face = "bold")
     )
 }
 
 # Named list of plotly `list(size = N)` font specs ready to splice into
 # layout() calls. Keys: global, title, axis_title, axis_tick, legend_title,
 # legend_text, colorbar_title.
-# `family` was previously unset on every key, so all ~21 plotly outputs rendered
-# in plotly's own default face regardless of what theme_islet() did on the
-# ggplot side -- a mismatch that predates the redesign. Passing NULL restores
-# that behaviour if the webfont is ever removed.
-plotly_islet_fonts <- function(family = IE_PLOTLY_FAMILY) {
-  f <- function(size) if (is.null(family)) list(size = size)
-                      else list(size = size, family = family)
+plotly_islet_fonts <- function() {
   list(
-    global         = f(ISLET_FONT_SIZES$base),
-    title          = f(ISLET_FONT_SIZES$title),
-    axis_title     = f(ISLET_FONT_SIZES$axis_title),
-    axis_tick      = f(ISLET_FONT_SIZES$axis_text),
-    legend_title   = f(ISLET_FONT_SIZES$legend_title),
-    legend_text    = f(ISLET_FONT_SIZES$legend_text),
-    colorbar_title = f(ISLET_FONT_SIZES$legend_title),
-    hover          = f(ISLET_FONT_SIZES$hover),
-    annotation     = f(ISLET_FONT_SIZES$annotation)
+    global         = list(size = ISLET_FONT_SIZES$base),
+    title          = list(size = ISLET_FONT_SIZES$title),
+    axis_title     = list(size = ISLET_FONT_SIZES$axis_title),
+    axis_tick      = list(size = ISLET_FONT_SIZES$axis_text),
+    legend_title   = list(size = ISLET_FONT_SIZES$legend_title),
+    legend_text    = list(size = ISLET_FONT_SIZES$legend_text),
+    colorbar_title = list(size = ISLET_FONT_SIZES$legend_title),
+    hover          = list(size = ISLET_FONT_SIZES$hover),
+    annotation     = list(size = ISLET_FONT_SIZES$annotation)
   )
 }
 
@@ -401,19 +271,9 @@ plotly_islet_config <- function(p, filename_root = "islet_explorer_plot",
                                 width = 1400, height = 900, scale = 2,
                                 uniform_text_mode = "hide") {
   p <- plotly::layout(p,
-    # Carries the family too, not just the size: several plots (Leiden UMAP,
-    # tissue scatter, Card A bars) are read primarily via hover.
-    hoverlabel  = list(font = plotly_islet_fonts()$hover),
+    hoverlabel  = list(font = list(size = ISLET_FONT_SIZES$hover)),
     uniformtext = list(minsize = ISLET_FONT_SIZES$dense_min,
-                       mode    = uniform_text_mode),
-    # TRANSPARENT, not white. plotly paints an opaque white paper and plot area
-    # by default, so every figure sat as a white rectangle on the card ground
-    # rather than in it. `rgba(0,0,0,0)` lets the card show through on screen --
-    # and because the modebar PNG export re-renders from the same layout, the
-    # downloaded image is transparent too, which is what a figure dropped into a
-    # manuscript or a slide wants.
-    paper_bgcolor = "rgba(0,0,0,0)",
-    plot_bgcolor  = "rgba(0,0,0,0)"
+                       mode    = uniform_text_mode)
   )
   plotly::config(p,
     toImageButtonOptions = list(
@@ -833,19 +693,19 @@ phenotype_rules_table_df <- function() {
 phenotype_rules_modal_ui <- function() {
   df <- phenotype_rules_table_df()
   header_row <- shiny::tags$tr(
-    shiny::tags$th("Phenotype",          style = "text-align:left; padding:6px 10px"),
-    shiny::tags$th("Category",           style = "text-align:left; padding:6px 10px"),
-    shiny::tags$th("Positive markers",   style = "text-align:left; padding:6px 10px"),
-    shiny::tags$th("Negative markers",   style = "text-align:left; padding:6px 10px"),
-    shiny::tags$th("Notes",              style = "text-align:left; padding:6px 10px")
+    shiny::tags$th("Phenotype",          style = "text-align:left; padding:6px 10px;"),
+    shiny::tags$th("Category",           style = "text-align:left; padding:6px 10px;"),
+    shiny::tags$th("Positive markers",   style = "text-align:left; padding:6px 10px;"),
+    shiny::tags$th("Negative markers",   style = "text-align:left; padding:6px 10px;"),
+    shiny::tags$th("Notes",              style = "text-align:left; padding:6px 10px;")
   )
   body_rows <- lapply(seq_len(nrow(df)), function(i) {
     shiny::tags$tr(
-      shiny::tags$td(shiny::tags$strong(df$Phenotype[i]), style = "padding:6px 10px"),
-      shiny::tags$td(df$Category[i],                       style = "padding:6px 10px"),
-      shiny::tags$td(df$Positive[i],                       style = "padding:6px 10px"),
-      shiny::tags$td(df$Negative[i],                       style = "padding:6px 10px"),
-      shiny::tags$td(df$Notes[i],                          style = "padding:6px 10px; font-size: 13px")
+      shiny::tags$td(shiny::tags$strong(df$Phenotype[i]), style = "padding:6px 10px;"),
+      shiny::tags$td(df$Category[i],                       style = "padding:6px 10px; color:#555;"),
+      shiny::tags$td(df$Positive[i],                       style = "padding:6px 10px;"),
+      shiny::tags$td(df$Negative[i],                       style = "padding:6px 10px; color:#666;"),
+      shiny::tags$td(df$Notes[i],                          style = "padding:6px 10px; color:#444; font-size: 13px;")
     )
   })
   shiny::modalDialog(
@@ -860,20 +720,20 @@ phenotype_rules_modal_ui <- function() {
       shiny::tags$code("−"),
       " means it must be negative. “any of X+ / Y+” means at least one of the listed markers must be positive."
     ),
-    shiny::tags$div(style = "max-height: 60vh; overflow-y: auto",
+    shiny::tags$div(style = "max-height: 60vh; overflow-y: auto; border-top: 1px solid #ddd;",
       shiny::tags$table(
         class = "table table-striped",
-        style = "width: 100%; font-size: 14px; margin: 0",
+        style = "width: 100%; font-size: 14px; margin: 0;",
         shiny::tags$thead(header_row),
         shiny::tags$tbody(body_rows)
       )
     ),
-    shiny::tags$p(style = "margin-top: 10px; font-size: 12px",
+    shiny::tags$p(style = "margin-top: 10px; font-size: 12px; color: #777;",
       "Rule source: ",
       shiny::tags$code("data/phenotype_rules.csv"),
       " (15 markers: INS, GCG, SST, SMA, CD20, CD3e, CD68, CD163, CD8a, CD4, HLADR, PDPN, CD34, CD31, B3TUBB)."
     ),
-    shiny::tags$p(style = "margin-top: 6px; font-size: 12px",
+    shiny::tags$p(style = "margin-top: 6px; font-size: 12px; color: #777;",
       shiny::tags$strong("Data vs. rules: "),
       "this table is the gating spec. A few rule phenotypes have no cells in the ",
       "shipped dataset because the upstream scVI labeling merged or renamed them ",
@@ -883,7 +743,7 @@ phenotype_rules_modal_ui <- function() {
       " is an HLADR+ myeloid aggregate created upstream, not itself a ",
       shiny::tags$code("phenotype_rules.csv"), " row."
     ),
-    shiny::tags$p(style = "margin-top: 6px; font-size: 12px",
+    shiny::tags$p(style = "margin-top: 6px; font-size: 12px; color: #777;",
       shiny::tags$strong("Panel note: "),
       "the original Rules1 template also listed ", shiny::tags$code("CD99"),
       " (Endocrine) and ", shiny::tags$code("CD56"),
@@ -960,12 +820,12 @@ feature_display_label <- function(col) {
 phenotype_rules_button <- function(input_id,
                                    label = "Phenotype rules — marker definitions") {
   shiny::tags$div(
-    style = "margin-bottom: 12px; padding: 8px 14px; display: inline-block",
+    style = "margin-bottom: 12px; padding: 8px 14px; background-color: #eef4fb; border: 1px solid #c8d8e9; border-radius: 6px; display: inline-block;",
     shiny::actionLink(input_id,
-      shiny::tagList(shiny::icon("dna"),
-                     shiny::tags$span(style = "margin-left:6px; font-weight:600",
+      shiny::tagList(shiny::icon("dna", style = "color:#4477AA;"),
+                     shiny::tags$span(style = "margin-left:6px; color:#2a4d75; font-weight:600;",
                                       label)),
-      style = "text-decoration: none")
+      style = "text-decoration: none;")
   )
 }
 
@@ -979,115 +839,15 @@ phenotype_hint_ui <- function(name, prefix = "Markers:",
   rule_html <- format_phenotype_rule(name, "html")
   link <- if (!is.null(show_modal_link)) {
     shiny::tagList(
-      shiny::tags$span(" · "),
+      shiny::tags$span(style = "color:#888;", " · "),
       shiny::actionLink(show_modal_link, "see all rules →",
-                        style = "font-size: 12px")
+                        style = "font-size: 12px; color: #4477AA;")
     )
   }
   shiny::tags$div(
-    style = "margin-top: -6px; margin-bottom: 8px; padding: 6px 10px; font-size: 13px; line-height: 1.4",
-    shiny::tags$strong(paste0(prefix, " ")),
+    style = "margin-top: -6px; margin-bottom: 8px; padding: 6px 10px; background-color: #f7f9fc; border-left: 3px solid #4477AA; border-radius: 3px; font-size: 13px; color: #333; line-height: 1.4;",
+    shiny::tags$strong(style = "color:#4477AA;", paste0(prefix, " ")),
     shiny::tags$span(rule_html),
     link
   )
-}
-
-# ============================================================================
-# Phenotype hierarchy (Jul 2026)
-# ============================================================================
-# The 21 labels in the data span three levels of a hierarchy, and four of them
-# are PARENTS of other labels in the same set:
-#
-#   Immune      -> Macrophage, APCs, B cell, T cell
-#   T cell      -> CD8a Tcell, CD4 Tcell
-#   Endocrine   -> Beta cell, Alpha cell, Delta cell
-#   Endothelial -> Blood Vessel, Lymphatic
-#
-# scimap assigns exactly ONE label per cell, so the set is still a valid
-# partition and a compositional transform over it is mathematically sound. But
-# those four labels are not biological categories: they are RESIDUALS -- "immune
-# but not resolvable to macrophage / APC / T / B", "T cell but not CD4 or CD8".
-# Their abundance measures gate failure, not biology. Two consequences for any
-# test run over the whole set:
-#
-#   * A parent and its child are mechanically ANTI-CORRELATED. Tighten the CD8a
-#     gate and cells move out of `CD8a Tcell` into `T cell`; both move, in
-#     opposite directions, for a purely technical reason.
-#   * The multiple-testing family is inflated by categories that carry no
-#     independent biological claim, which lowers the attainable q for the
-#     categories that do.
-#
-# These helpers let an analysis choose its level rather than silently assuming
-# the label set is flat. They read the same parent chain the rules modal uses,
-# so they stay correct when the gates are revised.
-
-#' Immediate parent of a phenotype, in the DATA's label vocabulary, or NA.
-phenotype_parent <- function(name) {
-  r <- tryCatch(get_phenotype_rule(name), error = function(e) NULL)
-  p <- if (is.null(r)) NULL else r$parent
-  if (is.null(p) || !nzchar(p) || identical(p, "all")) return(NA_character_)
-  phenotype_display_label(p)
-}
-
-#' Which of `present` are parents of something else in `present`?
-#' These are the residual categories.
-phenotype_residual_parents <- function(present) {
-  parents <- vapply(present, phenotype_parent, character(1), USE.NAMES = TRUE)
-  intersect(present, unique(stats::na.omit(unname(parents))))
-}
-
-#' Map each phenotype to the top of its chain WITHIN `present`.
-#'
-#' Walks the parent chain and stops at the highest ancestor that is itself a
-#' label in the data, so `CD8a Tcell` -> `Immune` when Immune is present, and
-#' stays `CD8a Tcell` when it is not. Cycle-guarded.
-phenotype_lineage <- function(present) {
-  out <- stats::setNames(present, present)
-  for (p in present) {
-    cur <- p; seen <- p
-    repeat {
-      par <- phenotype_parent(cur)
-      if (is.na(par) || !(par %in% present) || par %in% seen) break
-      cur <- par; seen <- c(seen, par)
-    }
-    out[[p]] <- cur
-  }
-  out
-}
-
-# ============================================================================
-# Retired phenotypes (Jul 2026)
-# ============================================================================
-# Nine labels are excluded from the app everywhere a phenotype is listed,
-# coloured, selected or tested. Two reasons, and they are the same reason twice:
-#
-#   Endocrine, Immune, T cell, Endothelial   parents of other labels in the set,
-#                                            so they are gate-failure residuals
-#                                            ("immune, not resolvable further")
-#                                            whose abundance tracks gate quality
-#   Structural, Unknown                      `-rest` catch-alls, the same thing
-#                                            without children to give them away
-#   Acinar, ECAD+, APCs                      retired with them
-#
-# Excluded rather than deleted from PHENOTYPE_COLORS: the DATA still carries
-# these labels, and every lookup in this app is by exact name, so a palette
-# without them would return NA and silently grey out real cells. Keeping the
-# colours and filtering at the point of USE means a stray row is dropped, not
-# mis-drawn.
-#
-# `phenotype_keep()` is the single gate. Anything enumerating phenotypes for a
-# selector, a legend, a family or a test goes through it.
-PHENOTYPE_RETIRED <- c("Endocrine", "Acinar", "Endothelial", "T cell",
-                       "Immune", "Unknown", "ECAD+", "Structural", "APCs")
-
-#' Drop retired phenotypes from a character vector of labels.
-phenotype_keep <- function(x) setdiff(x, PHENOTYPE_RETIRED)
-
-#' TRUE for rows whose phenotype is still in use. NA-safe.
-phenotype_is_kept <- function(x) !(as.character(x) %in% PHENOTYPE_RETIRED)
-
-#' Drop retired phenotypes from a data frame with a phenotype column.
-phenotype_filter_rows <- function(df, col = "phenotype") {
-  if (is.null(df) || !is.data.frame(df) || !(col %in% names(df))) return(df)
-  df[phenotype_is_kept(df[[col]]), , drop = FALSE]
 }

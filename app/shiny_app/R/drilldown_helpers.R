@@ -189,7 +189,7 @@ render_islet_drilldown_plot <- function(info, cells, color_by = "phenotype", sho
 
   if (color_by == "phenotype" && "phenotype" %in% colnames(cells)) {
     # Categorical coloring by phenotype (using fill to avoid colour conflict with structures)
-    pheno_present <- phenotype_keep(sort(unique(cells$phenotype)))
+    pheno_present <- sort(unique(cells$phenotype))
     pal <- palette[pheno_present]
     # Fill missing phenotypes with gray
     pal[is.na(pal)] <- "#CCCCCC"

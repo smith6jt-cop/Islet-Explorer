@@ -57,14 +57,7 @@ apply_pt_scale <- function(df, pt_scale) {
   df
 }
 
-# NOTE: `forced_image` used to sit between `selected_islet` and `active_tab`
-# here. It was never read anywhere in this file -- it entered at the Feb 2026
-# modularisation (230af4d) and `git log -p -S forced_image` on this file shows
-# exactly one hit ever: the signature line. It was speculative wiring for a
-# Trajectory -> Viewer hand-off that was never built. Removed rather than kept,
-# because a parameter that is passed and ignored reads as a live dependency.
-# The reactiveVal itself stays in app.R and the Viewer still reads it.
-trajectory_server <- function(id, prepared, selected_islet, active_tab = reactive("trajectory"),
+trajectory_server <- function(id, prepared, selected_islet, forced_image, active_tab = reactive("Trajectory"),
                               donor_colors_reactive = reactive(DONOR_COLORS_BRIGHT),
                               remove_outliers = reactive(FALSE),
                               outlier_threshold = reactive(3.0)) {
@@ -497,22 +490,22 @@ trajectory_server <- function(id, prepared, selected_islet, active_tab = reactiv
       cur <- traj_path
       if (is.null(cur) || !file.exists(cur)) cur <- resolve_traj_path()
       if (is.null(cur) || !file.exists(cur)) {
-        return(tags$div(
+        return(tags$div(style = "color:#b00;",
           "AnnData not found. Place 'adata_ins_root.h5ad' under data/ or scripts/, or set ADATA_PATH."))
       }
       if (!requireNamespace("anndata", quietly = TRUE)) {
-        return(tags$div(
+        return(tags$div(style = "color:#b00;",
           "R package 'anndata' not installed. Install with BiocManager::install('anndata')."))
       }
       tr <- traj_with_pseudotime()
       if (is.null(tr)) {
-        return(tags$div(
+        return(tags$div(style = "color:#b00;",
           "AnnData object not available or H5AD failed to load."))
       }
       if (!is.null(tr$error)) {
         det <- if (!is.null(tr$error_detail) && nzchar(tr$error_detail)) paste0(" Details: ", tr$error_detail) else ""
         install_hint <- if (grepl("anndata", tr$error, ignore.case = TRUE)) " Install with: BiocManager::install('anndata')" else ""
-        return(tags$div(
+        return(tags$div(style = "color:#b00;",
           sprintf("Trajectory load error: %s%s%s", tr$error, det, install_hint)))
       }
       ms <- traj_validate()
@@ -522,7 +515,7 @@ trajectory_server <- function(id, prepared, selected_islet, active_tab = reactiv
       ndist <- if (is.null(jn)) 0 else nrow(dplyr::distinct(jn, case_id, islet_key))
       src <- if (!is.null(traj_path) && file.exists(traj_path)) traj_path else cur
 
-      tags$div(
+      tags$div(style = "color:#555;",
         sprintf("Loaded AnnData (%d obs). Joined %d rows (%d unique islets) of %d islet metrics. Source: %s",
                 nrow(tr$obs), nj, ndist, nm, basename(src))
       )
@@ -923,7 +916,7 @@ trajectory_server <- function(id, prepared, selected_islet, active_tab = reactiv
     # ---------- Segmentation viewer panel ----------
     output$segmentation_viewer_panel <- renderUI({
       # Only render when Trajectory tab is active to avoid duplicate non-namespaced output IDs
-      if (!identical(active_tab(), "trajectory")) return(NULL)
+      if (active_tab() != "Trajectory") return(NULL)
       info <- selected_islet()
       if (is.null(info)) return(NULL)
 
@@ -949,21 +942,21 @@ trajectory_server <- function(id, prepared, selected_islet, active_tab = reactiv
       if (!is.null(info$donor_age) && !is.na(info$donor_age)) title_detail <- paste0(title_detail, ", age ", round(info$donor_age))
       if (!is.null(info$donor_gender) && !is.na(info$donor_gender) && nzchar(info$donor_gender)) title_detail <- paste0(title_detail, ", ", info$donor_gender)
 
-      div(class = "card", style = "padding: 20px; margin-bottom: 20px",
+      div(class = "card", style = "padding: 20px; margin-bottom: 20px; border: 2px solid #0066CC;",
         # Header: title + close button
-        div(style = "display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px",
+        div(style = "display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;",
           h4(paste0(info$islet_key, " (", title_detail, ")"),
-             style = "margin: 0; font-size: 20px"),
+             style = "margin: 0; color: #0066CC; font-size: 20px;"),
           actionButton(ns("clear_segmentation"), "Close", class = "btn btn-sm btn-outline-secondary")
         ),
         # Main content: controls sidebar (left) + plot (right)
         fluidRow(
           # Left sidebar: all controls
           column(2,
-            div(style = "padding: 10px",
+            div(style = "padding: 10px; background-color: #f8f9fa; border-radius: 5px;",
               if (has_cells) {
                 tagList(
-                  h5("Layers", style = "margin-top: 0; font-size: 15px"),
+                  h5("Layers", style = "margin-top: 0; font-size: 15px;"),
                   checkboxInput("drilldown_show_cells", "Single Cells", value = TRUE),
                   checkboxInput("drilldown_show_peri_boundary", "Peri Boundary", value = TRUE),
                   checkboxInput("drilldown_show_structures", "Structures", value = TRUE),
@@ -980,38 +973,38 @@ trajectory_server <- function(id, prepared, selected_islet, active_tab = reactiv
                 )
               } else {
                 tagList(
-                  h5("Legend", style = "margin-top: 0; margin-bottom: 10px; font-size: 15px"),
-                  div(style = "display: flex; align-items: center; margin-bottom: 8px",
+                  h5("Legend", style = "margin-top: 0; margin-bottom: 10px; font-size: 15px;"),
+                  div(style = "display: flex; align-items: center; margin-bottom: 8px;",
                     div(style = "width: 24px; height: 3px; background-color: #0066CC; margin-right: 8px;"),
-                    span("Islet", style = "font-size: 14px")
+                    span("Islet", style = "font-size: 14px;")
                   ),
-                  div(style = "display: flex; align-items: center; margin-bottom: 8px",
+                  div(style = "display: flex; align-items: center; margin-bottom: 8px;",
                     div(style = "width: 24px; height: 3px; background-color: #00CCCC; margin-right: 8px;"),
-                    span("+20\u00b5m", style = "font-size: 14px")
+                    span("+20\u00b5m", style = "font-size: 14px;")
                   ),
-                  div(style = "display: flex; align-items: center; margin-bottom: 8px",
+                  div(style = "display: flex; align-items: center; margin-bottom: 8px;",
                     div(style = "width: 24px; height: 3px; background-color: #CC00CC; margin-right: 8px;"),
-                    span("Nerve", style = "font-size: 14px")
+                    span("Nerve", style = "font-size: 14px;")
                   ),
-                  div(style = "display: flex; align-items: center; margin-bottom: 8px",
+                  div(style = "display: flex; align-items: center; margin-bottom: 8px;",
                     div(style = "width: 24px; height: 3px; background-color: #CC0000; margin-right: 8px;"),
-                    span("Capillary", style = "font-size: 14px")
+                    span("Capillary", style = "font-size: 14px;")
                   ),
-                  div(style = "display: flex; align-items: center; margin-bottom: 8px",
+                  div(style = "display: flex; align-items: center; margin-bottom: 8px;",
                     div(style = "width: 24px; height: 3px; background-color: #00AA00; margin-right: 8px;"),
-                    span("Lymphatic", style = "font-size: 14px")
+                    span("Lymphatic", style = "font-size: 14px;")
                   )
                 )
               },
               hr(style = "margin: 8px 0;"),
               span(paste("Centroid:", round(info$centroid_x, 0), "/", round(info$centroid_y, 0), "\u00b5m"),
-                   style = "font-size: 13px")
+                   style = "color: #666; font-size: 13px;")
             )
           ),
           # Center: plot
           column(6,
             plotOutput("islet_segmentation_view", height = "550px"),
-            div(style = "text-align: right; margin-top: 6px",
+            div(style = "text-align: right; margin-top: 6px;",
               downloadButton("dl_islet_segmentation_view", "Download PNG",
                              class = "btn-sm btn-outline-primary"))
           ),
@@ -1020,10 +1013,10 @@ trajectory_server <- function(id, prepared, selected_islet, active_tab = reactiv
             if (has_cells) {
               conditionalPanel(
                 condition = "input.drilldown_show_cells",
-                div(style = "padding: 12px",
-                  h5("Cell Composition", style = "margin-top: 0; font-size: 16px"),
+                div(style = "padding: 12px; background-color: #f8f9fa; border-radius: 5px;",
+                  h5("Cell Composition", style = "margin-top: 0; font-size: 16px;"),
                   plotOutput("islet_drilldown_summary", height = "300px"),
-                  div(style = "text-align: right; margin-top: 6px",
+                  div(style = "text-align: right; margin-top: 6px;",
                     downloadButton("dl_islet_drilldown_summary", "Download PNG",
                                    class = "btn-sm btn-outline-primary")),
                   tableOutput("islet_drilldown_table"),
@@ -1052,7 +1045,7 @@ trajectory_server <- function(id, prepared, selected_islet, active_tab = reactiv
       if (!nzchar(suffix)) {
         if (!isTRUE(summary$enabled)) {
           return(tags$div(
-            style = "padding: 4px 10px; margin-bottom: 6px; font-size: 12px",
+            style = "background: #fdfbe7; border: 1px solid #f0d97a; border-radius: 4px; padding: 4px 10px; margin-bottom: 6px; font-size: 12px; color: #6e6300;",
             tags$span(title = GLOBAL_OUTLIER_TOOLTIP,
               "\u24d8 Outlier filter OFF \u2014 all points contribute to trend lines.")
           ))
@@ -1060,7 +1053,7 @@ trajectory_server <- function(id, prepared, selected_islet, active_tab = reactiv
         return(NULL)
       }
       tags$div(
-        style = "padding: 4px 10px; margin-bottom: 6px; font-size: 12px",
+        style = "background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; padding: 4px 10px; margin-bottom: 6px; font-size: 12px; color: #5a4400;",
         tags$span(title = GLOBAL_OUTLIER_TOOLTIP,
           sprintf("\u26a0 %d outlier%s excluded from trend lines (%s) \u2014 drawn as grey \u00d7 markers.",
                   summary$n_excluded,
@@ -1079,7 +1072,7 @@ trajectory_server <- function(id, prepared, selected_islet, active_tab = reactiv
 
       if (is.null(outlier_data) || nrow(outlier_data) == 0) {
         return(tagList(
-          div(style = "padding: 8px 12px; margin-top: 10px; font-size: 12px",
+          div(style = "background-color: #e8f4fd; border: 1px solid #b8daff; border-radius: 5px; padding: 8px 12px; margin-top: 10px; color: #004085; font-size: 12px;",
             "No outliers detected for the current selection.")
         ))
       }
@@ -1100,10 +1093,10 @@ trajectory_server <- function(id, prepared, selected_islet, active_tab = reactiv
       }
 
       tagList(
-        div(style = "padding: 10px; margin-top: 10px",
-          h5(style = "margin-top: 0", header),
-          p(style = "font-size: 12px; margin-bottom: 10px", body_text),
-          div(style = "max-height: 200px; overflow-y: auto",
+        div(style = "background-color: #fff3cd; border: 1px solid #ffc107; border-radius: 5px; padding: 10px; margin-top: 10px; color: #000000;",
+          h5(style = "color: #000000; margin-top: 0;", header),
+          p(style = "color: #000000; font-size: 12px; margin-bottom: 10px;", body_text),
+          div(style = "max-height: 200px; overflow-y: auto;",
             renderTable({
               outlier_data
             }, striped = TRUE, hover = TRUE, bordered = TRUE, spacing = "xs", width = "100%")
@@ -1119,17 +1112,17 @@ trajectory_server <- function(id, prepared, selected_islet, active_tab = reactiv
       if (color_by == "donor_status") {
         dc <- donor_colors_reactive()
         tagList(
-          div(style = "display: flex; align-items: center; margin-bottom: 8px",
+          div(style = "display: flex; align-items: center; margin-bottom: 8px;",
             div(style = sprintf("width: 20px; height: 20px; background-color: %s; border-radius: 3px; margin-right: 8px;", dc[["ND"]])),
-            span("ND", style = "font-size: 15px")
+            span("ND", style = "font-size: 15px;")
           ),
-          div(style = "display: flex; align-items: center; margin-bottom: 8px",
+          div(style = "display: flex; align-items: center; margin-bottom: 8px;",
             div(style = sprintf("width: 20px; height: 20px; background-color: %s; border-radius: 3px; margin-right: 8px;", dc[["Aab+"]])),
-            span("Aab+", style = "font-size: 15px")
+            span("Aab+", style = "font-size: 15px;")
           ),
-          div(style = "display: flex; align-items: center",
+          div(style = "display: flex; align-items: center;",
             div(style = sprintf("width: 20px; height: 20px; background-color: %s; border-radius: 3px; margin-right: 8px;", dc[["T1D"]])),
-            span("T1D", style = "font-size: 15px")
+            span("T1D", style = "font-size: 15px;")
           )
         )
       } else if (color_by == "donor_id") {
@@ -1151,18 +1144,18 @@ trajectory_server <- function(id, prepared, selected_islet, active_tab = reactiv
           col2_ids <- if (n_donors > mid_point) donor_ids[(mid_point + 1):n_donors] else NULL
 
           col1_items <- lapply(seq_along(col1_ids), function(i) {
-            div(style = "display: flex; align-items: center; margin-bottom: 6px",
+            div(style = "display: flex; align-items: center; margin-bottom: 6px;",
               div(style = sprintf("width: 18px; height: 18px; background-color: %s; border-radius: 3px; margin-right: 6px;", colors[i])),
-              span(col1_ids[i], style = "font-size: 14px")
+              span(col1_ids[i], style = "font-size: 14px;")
             )
           })
 
           col2_items <- if (!is.null(col2_ids)) {
             lapply(seq_along(col2_ids), function(i) {
               idx <- mid_point + i
-              div(style = "display: flex; align-items: center; margin-bottom: 6px",
+              div(style = "display: flex; align-items: center; margin-bottom: 6px;",
                 div(style = sprintf("width: 18px; height: 18px; background-color: %s; border-radius: 3px; margin-right: 6px;", colors[idx])),
-                span(col2_ids[i], style = "font-size: 14px")
+                span(col2_ids[i], style = "font-size: 14px;")
               )
             })
           } else {
@@ -1170,19 +1163,19 @@ trajectory_server <- function(id, prepared, selected_islet, active_tab = reactiv
           }
 
           tagList(
-            div(style = "display: flex; gap: 10px",
-              div(style = "flex: 1", col1_items),
-              if (!is.null(col2_items)) div(style = "flex: 1", col2_items)
+            div(style = "display: flex; gap: 10px;",
+              div(style = "flex: 1;", col1_items),
+              if (!is.null(col2_items)) div(style = "flex: 1;", col2_items)
             )
           )
         } else {
-          p("No data available", style = "font-size: 12px")
+          p("No data available", style = "font-size: 12px; color: #999;")
         }
       } else if (startsWith(color_by, "leiden_")) {
         df <- traj_data_clean()
         if (is.null(df) || !(color_by %in% colnames(df))) {
           return(p("Leiden clusters unavailable (rebuild islet_explorer.h5ad).",
-                   style = "font-size: 12px"))
+                   style = "font-size: 12px; color: #999;"))
         }
         lvl_vals <- unique(stats::na.omit(df[[color_by]]))
         num_vals <- suppressWarnings(as.numeric(lvl_vals))
@@ -1197,17 +1190,17 @@ trajectory_server <- function(id, prepared, selected_islet, active_tab = reactiv
         col1_idx <- seq_len(mid_point)
         col2_idx <- if (n_clust > mid_point) (mid_point + 1):n_clust else integer(0)
         make_row <- function(i) {
-          div(style = "display: flex; align-items: center; margin-bottom: 6px",
+          div(style = "display: flex; align-items: center; margin-bottom: 6px;",
             div(style = sprintf(
               "width: 18px; height: 18px; background-color: %s; border-radius: 3px; margin-right: 6px;",
               clust_colors[i])),
-            span(paste("Cluster", clust_levels[i]), style = "font-size: 14px")
+            span(paste("Cluster", clust_levels[i]), style = "font-size: 14px;")
           )
         }
         tagList(
-          div(style = "display: flex; gap: 10px",
-            div(style = "flex: 1", lapply(col1_idx, make_row)),
-            if (length(col2_idx) > 0) div(style = "flex: 1", lapply(col2_idx, make_row))
+          div(style = "display: flex; gap: 10px;",
+            div(style = "flex: 1;", lapply(col1_idx, make_row)),
+            if (length(col2_idx) > 0) div(style = "flex: 1;", lapply(col2_idx, make_row))
           )
         )
       }
@@ -1238,7 +1231,7 @@ trajectory_server <- function(id, prepared, selected_islet, active_tab = reactiv
         theme(axis.text = element_blank(), axis.ticks = element_blank(),
               panel.grid = element_blank(), axis.line = element_blank())
     })
-    output$traj_umap_donor <- renderPlot({ traj_umap_donor_plot() }, bg = "transparent")
+    output$traj_umap_donor <- renderPlot({ traj_umap_donor_plot() })
     output$dl_umap_donor <- downloadHandler(
       filename = function() islet_png_filename("trajectory_umap_donor"),
       content = function(file) {
@@ -1281,7 +1274,7 @@ trajectory_server <- function(id, prepared, selected_islet, active_tab = reactiv
 
       g
     })
-    output$traj_umap_feature <- renderPlot({ traj_umap_feature_plot() }, bg = "transparent")
+    output$traj_umap_feature <- renderPlot({ traj_umap_feature_plot() })
     output$dl_umap_feature <- downloadHandler(
       filename = function() islet_png_filename("trajectory_umap_feature"),
       content = function(file) {
@@ -1545,7 +1538,7 @@ trajectory_server <- function(id, prepared, selected_islet, active_tab = reactiv
           axis.text.y = element_text(size = ISLET_FONT_SIZES$dense_min)
         )
     })
-    output$traj_multi_heatmap <- renderPlot({ traj_multi_heatmap_plot() }, bg = "transparent",
+    output$traj_multi_heatmap <- renderPlot({ traj_multi_heatmap_plot() },
       height = function() {
         n <- length(input$multi_heatmap_markers %||% character(0))
         # 44 px/row (was 36) so the dense-floor row labels have vertical room.
@@ -1587,10 +1580,6 @@ trajectory_server <- function(id, prepared, selected_islet, active_tab = reactiv
           paste("Pseudotime mode:", input$pt_mode %||% "dpt_pseudotime"),
           paste("Markers:", paste(input$multi_heatmap_markers %||% "(none)", collapse = ", ")),
           paste("Pseudotime bins:", if (is.null(mm)) NA else mm$n_bins),
-          # traj_multi_heatmap_data() filters on this at line 1422; the header
-          # omitted it entirely, so two exports with different row sets looked
-          # identical in provenance.
-          paste("Min cells per islet:", input$min_cells %||% 1),
           "z_clamped = (bin_mean - mean of that marker's bin means) / sd, clamped to [-2.5, 2.5]. Z-scoring is ACROSS BINS within a marker, not across islets."
         ))
       }
