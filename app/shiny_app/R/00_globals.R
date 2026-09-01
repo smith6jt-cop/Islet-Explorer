@@ -113,13 +113,36 @@ try({
   message("[APP LOAD] Version=", APP_VERSION, " time=", Sys.time())
   message("[APP LOAD] getwd=", tryCatch(getwd(), error = function(e) NA))
   message("[APP LOAD] list.files(.) contains app.R? ", any(grepl('^app.R$', list.files('.'))))
-  flag_path <- file.path(dirname(sys.frame(1)$ofile %||% 'app.R'), 'APP_LOADED_FLAG')
-  writeLines(paste0('loaded ', Sys.time(), ' version=', APP_VERSION), flag_path)
+  # Publication containers keep the application and release mounts read-only.
+  # Write a load flag only when an operator explicitly requests one, and only
+  # below the process temporary directory (never below the source tree).
+  flag_path <- Sys.getenv("ISLET_APP_LOAD_FLAG", unset = "")
+  if (nzchar(flag_path)) {
+    temp_root <- normalizePath(tempdir(), mustWork = TRUE)
+    flag_path <- normalizePath(flag_path, mustWork = FALSE)
+    is_below_temp <- identical(flag_path, temp_root) ||
+      startsWith(flag_path, paste0(temp_root, .Platform$file.sep))
+    if (!is_below_temp) {
+      warning("ISLET_APP_LOAD_FLAG must resolve below tempdir(); flag not written.")
+    } else {
+      if (!dir.exists(dirname(flag_path))) {
+        dir.create(dirname(flag_path), recursive = TRUE, showWarnings = FALSE)
+      }
+      writeLines(paste0('loaded ', Sys.time(), ' version=', APP_VERSION), flag_path)
+    }
+  }
 }, silent = TRUE)
 
-# Path constants
-master_path <- file.path("..", "..", "data", "master_results.xlsx")
-h5ad_path   <- file.path("..", "..", "data", "islet_explorer.h5ad")
+# Runtime paths. Production sets ISLET_DATA_ROOT to the mounted, versioned data
+# release; a repository checkout keeps the historical ../../data default.
+.repo_data_root <- file.path("..", "..", "data")
+data_root <- Sys.getenv("ISLET_DATA_ROOT", unset = .repo_data_root)
+data_root <- tryCatch(normalizePath(data_root, mustWork = FALSE),
+                      error = function(e) data_root)
+data_path <- function(...) file.path(data_root, ...)
+
+master_path <- data_path("master_results.xlsx")
+h5ad_path   <- data_path("islet_explorer.h5ad")
 project_root <- tryCatch(normalizePath(file.path("..", ".."), mustWork = FALSE), error = function(e) NULL)
 
 # Ensure reticulate/anndata can discover a Python binary when RETICULATE_PYTHON
@@ -189,6 +212,75 @@ VIEWER_DEBUG_ENABLED <- identical(Sys.getenv("VIEWER_DEBUG", "0"), "1")
 # are lazy) but would still be dead wiring, so both are gated together.
 #   SHOW_INFLAMMATION_TAB=1 in .Renviron  ->  tab reappears
 SHOW_INFLAMMATION_TAB <- identical(Sys.getenv("SHOW_INFLAMMATION_TAB", "0"), "1")
+
+# Statistics tab: HIDDEN by default (Aug 2026, at the user's request). Same
+# pattern as the Inflammation tab above — the module, its docs and its tests are
+# untouched, so re-enabling is a one-line env change rather than a code revert.
+# Both the tabPanel and the statistics_server() call in app.R are gated on it.
+# The Plot sidebar's visibility condition still names 'Statistics' in both the
+# layout JS and the conditionalPanel: with the tab absent `input.tabs` can never
+# equal 'Statistics', so those branches are inert, and leaving them means
+# flipping this flag back on needs no second edit.
+#   SHOW_STATISTICS_TAB=1 in .Renviron  ->  tab reappears
+SHOW_STATISTICS_TAB <- identical(Sys.getenv("SHOW_STATISTICS_TAB", "0"), "1")
+
+# ---------------------------------------------------------------------------
+# Trajectory: the single pseudotime definition, and the islet cell-count range.
+# ---------------------------------------------------------------------------
+#
+# There is deliberately ONE pseudotime. The tab previously offered five
+# selectable "modes" (core / core+peri scVI, two cell-count strata, and a
+# composition one); every additional mode was another axis whose numbers were
+# not comparable with the others', which is a garden-of-forking-paths surface
+# rather than a feature. The one that survived is the islet-composition
+# diffusion map -- it gave the strongest beta-cell correlation measured
+# (rho -0.70 to -0.73 above 25 cells/islet, against -0.57 for the scVI variants)
+# and the least compressed axis. See app/shiny_app/docs/trajectory.md.
+#
+# The pseudotime is computed on the CURRENT cell-count range, not on a fixed
+# islet set: the range is part of the definition, so moving it refits the
+# diffusion map rather than filtering a frozen axis.
+
+# Largest islet in the cohort, used as the upper bound of the range slider.
+# Read from the composition features so it tracks the data; the literal is a
+# fallback for when that file is absent.
+TRAJ_MAX_ISLET_CELLS_FALLBACK <- 1902L
+
+traj_max_islet_cells <- function() {
+  f <- data_path("barlow_islet_features.csv")
+  if (!file.exists(f) || !requireNamespace("data.table", quietly = TRUE)) {
+    return(TRAJ_MAX_ISLET_CELLS_FALLBACK)
+  }
+  v <- tryCatch({
+    d <- data.table::fread(f, select = "total_cells_core")
+    as.integer(max(suppressWarnings(as.numeric(d$total_cells_core)), na.rm = TRUE))
+  }, error = function(e) NA_integer_)
+  if (is.finite(v) && v > 1) v else TRAJ_MAX_ISLET_CELLS_FALLBACK
+}
+
+# Default lower bound. Barlow et al. exclude islets with fewer than ten cells
+# before computing their embedding; below that an islet's composition vector is
+# mostly sampling noise (60.8% of our islets are <= 10 cells).
+TRAJ_DEFAULT_MIN_CELLS <- 10L
+
+#' Normalise the cell-range slider to c(lo, hi). Guards the same NA hole the old
+#' numericInput had: a cleared input sends NA, and `if (NA > 1)` aborts the whole
+#' reactive with "missing value where TRUE/FALSE needed".
+traj_cell_range <- function(x, max_default = NULL) {
+  hi_default <- suppressWarnings(as.numeric(max_default %||% TRAJ_MAX_ISLET_CELLS_FALLBACK))[1]
+  if (!is.finite(hi_default) || hi_default < 1) {
+    hi_default <- TRAJ_MAX_ISLET_CELLS_FALLBACK
+  }
+  hi_default <- floor(hi_default)
+  default_lo <- min(TRAJ_DEFAULT_MIN_CELLS, hi_default)
+  v <- suppressWarnings(as.numeric(x))
+  v <- v[is.finite(v)]
+  if (length(v) < 2) return(c(default_lo, hi_default))
+  lo <- min(max(1, floor(min(v[1:2]))), hi_default)
+  hi <- min(max(lo, ceiling(max(v[1:2]))), hi_default)
+  c(lo, hi)
+}
+
 
 # AI chat card: OFF, so it is both disabled and hidden. Gating rather than
 # deleting keeps the module files intact and makes this a one-line env change
@@ -332,7 +424,9 @@ islet_csv_header <- function(title, ...) {
 # own renders its title at plotly's default size, so the nine "No data" messages
 # across the app read noticeably smaller than everything around them.
 plotly_islet_empty <- function(msg) {
-  plotly::layout(plotly::plotly_empty(),
+  # Supplying an explicit trace type/mode keeps plotly_build() from guessing
+  # (and warning) every time an empty-state widget is rendered.
+  plotly::layout(plotly::plotly_empty(type = "scatter", mode = "markers"),
                  title = list(text = msg,
                               font = list(size = ISLET_FONT_SIZES$title)))
 }
@@ -447,7 +541,7 @@ islet_png_filename <- function(stem) {
 # hand-written descriptions in PHENOTYPE_RESIDUALS below. The alias map
 # normalises PHENOTYPE_COLORS keys -> CSV keys for the four known mismatches.
 
-PHENOTYPE_RULES_PATH <- file.path("..", "..", "data", "phenotype_rules.csv")
+PHENOTYPE_RULES_PATH <- data_path("phenotype_rules.csv")
 
 # PHENOTYPE_COLORS-form -> CSV-form (and back via reverse lookup). Used to
 # resolve a UI label to its rule row.

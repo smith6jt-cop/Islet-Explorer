@@ -2,16 +2,40 @@
 # Extracted from app.R -- GeoJSON loading, spatial queries, and segmentation data helpers.
 # References PIXEL_SIZE_UM and SF_AVAILABLE from global.R.
 
-# Cache for loaded GeoJSON data (persists across sessions for performance)
-geojson_cache <- new.env()
+# Bounded process-wide cache. Publication GeoPackages are queried by bounding
+# box, so each entry is a cropped region rather than an entire donor file.
+geojson_cache <- new.env(parent = emptyenv())
+.geojson_cache_order <- character(0)
+.cache_segmentation_region <- function(key, value, max_entries = 64L) {
+  assign(key, value, envir = geojson_cache)
+  .geojson_cache_order <<- c(setdiff(.geojson_cache_order, key), key)
+  while (length(.geojson_cache_order) > max_entries) {
+    evict <- .geojson_cache_order[[1]]
+    .geojson_cache_order <<- .geojson_cache_order[-1]
+    if (exists(evict, envir = geojson_cache, inherits = FALSE)) {
+      rm(list = evict, envir = geojson_cache)
+    }
+  }
+  value
+}
 
 # islet_spatial_lookup is loaded at bottom of file via load_islet_spatial_lookup()
 
-# Load GeoJSON for a specific case_id with caching
-load_case_geojson <- function(case_id) {
+# Load segmentation geometry for a case. A release GeoPackage is queried with
+# GDAL's spatial filter (backed by its R-tree); repository development falls
+# back to the original GeoJSON files.
+load_case_geojson <- function(case_id, centroid_x_um = NULL,
+                              centroid_y_um = NULL, buffer_um = NULL) {
   if (!SF_AVAILABLE) return(NULL)
 
-  cache_key <- as.character(case_id)
+  has_bbox <- all(vapply(list(centroid_x_um, centroid_y_um, buffer_um),
+                         function(x) length(x) == 1L && is.finite(as.numeric(x)),
+                         logical(1)))
+  cache_key <- if (has_bbox) {
+    paste(as.character(case_id), signif(as.numeric(centroid_x_um), 10),
+          signif(as.numeric(centroid_y_um), 10), signif(as.numeric(buffer_um), 10),
+          sep = "::")
+  } else as.character(case_id)
   if (exists(cache_key, envir = geojson_cache)) {
     return(get(cache_key, envir = geojson_cache))
   }
@@ -24,12 +48,50 @@ load_case_geojson <- function(case_id) {
     if (padded != case_id) candidate_ids <- c(candidate_ids, padded)
   }
 
-  # Try each candidate: uncompressed first, then compressed
+  # Publication artifact: one spatially indexed GeoPackage per donor.
+  gpkg_path <- NULL
+  for (cid in candidate_ids) {
+    p <- data_path("geometry", paste0(cid, ".gpkg"))
+    if (file.exists(p)) { gpkg_path <- p; break }
+  }
+
+  if (!is.null(gpkg_path)) {
+    message("[SEGMENTATION] Querying GeoPackage for case ", case_id,
+            if (has_bbox) " with spatial index" else "")
+    geometry <- tryCatch({
+      args <- list(dsn = gpkg_path, layer = "segmentation", quiet = TRUE)
+      if (has_bbox) {
+        x <- as.numeric(centroid_x_um) / PIXEL_SIZE_UM
+        y <- as.numeric(centroid_y_um) / PIXEL_SIZE_UM
+        b <- as.numeric(buffer_um) / PIXEL_SIZE_UM
+        args$wkt_filter <- sprintf(
+          "POLYGON ((%.17g %.17g, %.17g %.17g, %.17g %.17g, %.17g %.17g, %.17g %.17g))",
+          x - b, y - b, x + b, y - b, x + b, y + b,
+          x - b, y + b, x - b, y - b
+        )
+      }
+      gj <- do.call(sf::st_read, args)
+      sf::st_crs(gj) <- NA
+      gj
+    }, error = function(e) {
+      message("[SEGMENTATION] GeoPackage query failed: ", conditionMessage(e))
+      NULL
+    })
+    if (!is.null(geometry)) {
+      return(.cache_segmentation_region(cache_key, geometry))
+    }
+    if (islet_is_production()) return(NULL)
+  } else if (islet_is_production()) {
+    message("[SEGMENTATION] GeoPackage not found for production case ", case_id)
+    return(NULL)
+  }
+
+  # Development fallback: uncompressed then compressed GeoJSON.
   json_path <- NULL
   for (cid in candidate_ids) {
-    p <- file.path("..", "..", "data", "json", paste0(cid, ".geojson"))
+    p <- data_path("json", paste0(cid, ".geojson"))
     if (file.exists(p)) { json_path <- p; break }
-    p <- file.path("..", "..", "data", "gson", paste0(cid, ".geojson.gz"))
+    p <- data_path("gson", paste0(cid, ".geojson.gz"))
     if (file.exists(p)) { json_path <- p; break }
   }
 
@@ -53,7 +115,7 @@ load_case_geojson <- function(case_id) {
   })
 
   if (!is.null(geojson)) {
-    assign(cache_key, geojson, envir = geojson_cache)
+    .cache_segmentation_region(cache_key, geojson)
     message("[SEGMENTATION] Cached GeoJSON for case ", case_id, " (", nrow(geojson), " features)")
   }
 
@@ -172,7 +234,7 @@ get_islet_region_polygons <- function(geojson, centroid_x_um, centroid_y_um, buf
 
 # Load segmentation annotations from data directory
 load_segmentation_data <- function() {
-  seg_path <- file.path("..", "..", "data", "annotations.tsv")
+  seg_path <- data_path("annotations.tsv")
   if (!file.exists(seg_path)) {
     cat("[SEGMENTATION] Annotations file not found at", seg_path, "\n")
     return(NULL)
@@ -204,7 +266,7 @@ load_segmentation_data <- function() {
 
 # Load spatial lookup for trajectory zoom-to-islet
 load_islet_spatial_lookup <- function() {
-  lookup_path <- file.path("..", "..", "data", "islet_spatial_lookup.csv")
+  lookup_path <- data_path("islet_spatial_lookup.csv")
   if (!file.exists(lookup_path)) {
     cat("[SPATIAL] islet_spatial_lookup.csv not found at", lookup_path, "\n")
     return(NULL)
@@ -518,7 +580,8 @@ build_segmentation_base_plot <- function(info, buffer_um = 150,
                                          show_structures = TRUE) {
   if (is.null(info)) return(NULL)
 
-  geojson <- load_case_geojson(info$case_id)
+  geojson <- load_case_geojson(info$case_id, info$centroid_x,
+                               info$centroid_y, buffer_um)
   if (is.null(geojson)) return(NULL)
 
   polygons <- get_islet_region_polygons(geojson, info$centroid_x, info$centroid_y, buffer_um)

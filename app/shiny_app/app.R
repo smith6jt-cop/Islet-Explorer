@@ -371,6 +371,9 @@ ui <- fluidPage(
   fluidRow(class = "equal-height-row",
     # Left Sidebar Panel (Plot controls, hidden on other tabs via JS)
     column(width = 1.4, class = "equal-height-panel",
+      # 'Statistics' stays in this condition while that tab is hidden: with no
+      # such tab mounted `input.tabs` can never take that value, so the branch is
+      # inert, and keeping it means SHOW_STATISTICS_TAB=1 needs no second edit.
       conditionalPanel(
         condition = "input.tabs == 'Plot' || input.tabs == 'Statistics'",
         plot_sidebar_ui("plot")
@@ -390,9 +393,13 @@ ui <- fluidPage(
         tabPanel("Viewer",
           viewer_ui("viewer")
         ),
-        tabPanel("Statistics",
-          statistics_ui("stats")
-        ),
+        # Hidden unless SHOW_STATISTICS_TAB=1 (see 00_globals.R).
+        # tabsetPanel drops NULL entries, so this mounts nothing when off.
+        if (SHOW_STATISTICS_TAB) {
+          tabPanel("Statistics",
+            statistics_ui("stats")
+          )
+        },
         tabPanel("Spatial",
           spatial_ui("spatial")
         ),
@@ -410,36 +417,19 @@ ui <- fluidPage(
 
 # ---------- Server ----------
 
+# Load and prepare the immutable summaries once per R worker, not once per
+# browser session. In production this call also enforces the release manifest.
+.shared_prepared_data <- load_shared_prepared_data()
+
 server <- function(input, output, session) {
 
   # ---- Shared reactive state ----
   forced_image   <- reactiveVal(NULL)
   selected_islet <- reactiveVal(NULL)
 
-  # ---- Data loading chain ----
-  # Priority: H5AD (islet_explorer.h5ad) > Excel (master_results.xlsx)
-  validate_file <- reactive({
-    has_h5ad <- !is.null(h5ad_path) && file.exists(h5ad_path)
-    has_excel <- file.exists(master_path)
-    shiny::validate(shiny::need(has_h5ad || has_excel,
-                                paste("No data found. Checked:", h5ad_path, "and", master_path)))
-    TRUE
-  })
-
-  master <- reactive({
-    req(validate_file())
-    load_master_auto(h5ad_path = h5ad_path, excel_path = master_path)
-  })
-
-  prepared <- reactive({
-    pd <- prep_data(master())
-    try({
-      audit_na(pd$targets_all, "targets_all")
-      audit_na(pd$markers_all, "markers_all")
-      audit_na(pd$comp, "comp")
-    }, silent = TRUE)
-    pd
-  })
+  # Immutable process-wide object; reactive() preserves the existing module
+  # interface without repeating I/O or prep_data() for each reviewer.
+  prepared <- reactive(.shared_prepared_data)
 
   # ---- Theme CSS (light/dark toggle, if theme_bg input exists) ----
   output$theme_css <- renderUI({
@@ -515,7 +505,8 @@ server <- function(input, output, session) {
   # Defaults to FALSE so the raw distribution renders out of the box; users
   # opt in via the checkbox when they want to exclude tails from trends and
   # tests. The three non-namespaced inputs `sidebar_remove_outliers`,
-  # `traj_remove_outliers`, `spatial_remove_outliers` mirror this reactive;
+  # `spatial_remove_outliers` mirrors this reactive (the Trajectory tab no longer
+  # exposes an outlier control, so it is not in the sync set);
   # observers keep them in sync. Modules read `remove_outliers_global()` and
   # the threshold reactive `outlier_z_global()` directly.
   remove_outliers_rv <- reactiveVal(FALSE)
@@ -523,24 +514,15 @@ server <- function(input, output, session) {
   observeEvent(input$sidebar_remove_outliers, {
     if (!identical(input$sidebar_remove_outliers, remove_outliers_rv())) {
       remove_outliers_rv(isTRUE(input$sidebar_remove_outliers))
-      updateCheckboxInput(session, "traj_remove_outliers", value = isTRUE(input$sidebar_remove_outliers))
       updateCheckboxInput(session, "spatial_remove_outliers", value = isTRUE(input$sidebar_remove_outliers))
     }
   }, ignoreInit = TRUE)
 
-  observeEvent(input$traj_remove_outliers, {
-    if (!identical(input$traj_remove_outliers, remove_outliers_rv())) {
-      remove_outliers_rv(isTRUE(input$traj_remove_outliers))
-      updateCheckboxInput(session, "sidebar_remove_outliers", value = isTRUE(input$traj_remove_outliers))
-      updateCheckboxInput(session, "spatial_remove_outliers", value = isTRUE(input$traj_remove_outliers))
-    }
-  }, ignoreInit = TRUE)
 
   observeEvent(input$spatial_remove_outliers, {
     if (!identical(input$spatial_remove_outliers, remove_outliers_rv())) {
       remove_outliers_rv(isTRUE(input$spatial_remove_outliers))
       updateCheckboxInput(session, "sidebar_remove_outliers", value = isTRUE(input$spatial_remove_outliers))
-      updateCheckboxInput(session, "traj_remove_outliers", value = isTRUE(input$spatial_remove_outliers))
     }
   }, ignoreInit = TRUE)
 
@@ -560,26 +542,16 @@ server <- function(input, output, session) {
     val <- suppressWarnings(as.numeric(input$sidebar_outlier_z))
     if (is.finite(val) && !isTRUE(all.equal(val, outlier_z_rv()))) {
       outlier_z_rv(val)
-      updateSliderInput(session, "traj_outlier_z", value = val)
       updateSliderInput(session, "spatial_outlier_z", value = val)
     }
   }, ignoreInit = TRUE)
 
-  observeEvent(input$traj_outlier_z, {
-    val <- suppressWarnings(as.numeric(input$traj_outlier_z))
-    if (is.finite(val) && !isTRUE(all.equal(val, outlier_z_rv()))) {
-      outlier_z_rv(val)
-      updateSliderInput(session, "sidebar_outlier_z", value = val)
-      updateSliderInput(session, "spatial_outlier_z", value = val)
-    }
-  }, ignoreInit = TRUE)
 
   observeEvent(input$spatial_outlier_z, {
     val <- suppressWarnings(as.numeric(input$spatial_outlier_z))
     if (is.finite(val) && !isTRUE(all.equal(val, outlier_z_rv()))) {
       outlier_z_rv(val)
       updateSliderInput(session, "sidebar_outlier_z", value = val)
-      updateSliderInput(session, "traj_outlier_z", value = val)
     }
   }, ignoreInit = TRUE)
 
@@ -610,11 +582,15 @@ server <- function(input, output, session) {
   # it, which tied that card to the Plot sidebar's bin-width and Mean/Median
   # controls (hidden while this tab is open) and made it ignore the Statistics
   # tab's own filters. AUC now derives from `raw_df_prezero` inside the module.
-  statistics_server("stats",
-                    raw_df                  = plot_returns$raw_df_prezero,
-                    get_selection_description = plot_returns$get_selection_description,
-                    donor_colors             = active_donor_colors,
-                    remove_outliers          = remove_outliers_global)
+  # Gated on the same flag as its tabPanel (see 00_globals.R) so the module is
+  # not wired up when the tab is hidden.
+  if (SHOW_STATISTICS_TAB) {
+    statistics_server("stats",
+                      raw_df                  = plot_returns$raw_df_prezero,
+                      get_selection_description = plot_returns$get_selection_description,
+                      donor_colors             = active_donor_colors,
+                      remove_outliers          = remove_outliers_global)
+  }
 
   # Spatial Neighborhood module
   spatial_server("spatial", prepared, active_palette, active_donor_colors,
@@ -622,9 +598,9 @@ server <- function(input, output, session) {
                  outlier_threshold = outlier_z_global)
 
   # Inflammation module — cohort-level edgeR abundance + infiltration score.
-  # Reads data/cell_distance.csv directly (via the cached load_cell_distance()
-  # in spatial_helpers.R), not the Plot module's islet frame, so no sidebar
-  # filters apply. The tab is intentionally absent from the sidebar-visibility
+  # Reads the cell-distance artifact through spatial_helpers.R (Parquet/DuckDB
+  # in production; CSV only in development), not the Plot module's islet frame,
+  # so no sidebar filters apply. The tab is intentionally absent from the sidebar-visibility
   # condition in the layout JS above, so the sidebar stays hidden here.
   # Gated on the same flag as its tabPanel (see 00_globals.R) so the module is
   # not wired up when the tab is hidden.

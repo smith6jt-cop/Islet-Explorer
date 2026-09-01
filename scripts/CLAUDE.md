@@ -140,3 +140,35 @@ python scripts/extract_per_donor_tissue.py
 # Build enriched H5AD (merges trajectory + groovy + neighborhood + Leiden)
 python scripts/build_h5ad_for_app.py
 ```
+
+## compute_split_pseudotime.py (Aug 2026)
+
+Recomputes DPT **within** each cell-count stratum (`total_cells <= 10` / `> 10`) and writes
+`dpt_pseudotime_small` / `dpt_pseudotime_large` / `cell_count_stratum` back into
+`data/adata_ins_root.h5ad`. Repeats `reaggregate_islets.py` Step 5 exactly, including re-deriving
+the root inside each stratum. Leaves the shipped `dpt_pseudotime` bit-identical.
+
+```bash
+conda activate scvi-env
+python scripts/compute_split_pseudotime.py            # --split 10 by default
+```
+
+**The two strata are independent diffusion maps and are NOT on a common scale.** See
+`app/shiny_app/docs/trajectory.md` §10 for the measured results and the reasoning — read that
+before quoting either column.
+
+## build_barlow_features.py (Aug 2026)
+
+Builds `data/barlow_islet_features.csv` — the islet composition matrix for the **single reviewer
+trajectory** adapted from Barlow et al. (eLife 2024;13:RP100535): per-islet cell-type counts for core and
+the 20 µm peri band, divided by the islet's endocrine-cell count, log1p-transformed.
+
+```bash
+conda activate scvi-env
+python scripts/build_barlow_features.py
+```
+
+Reads `islet_analysis/islets_core_fixed.h5ad` + `islets_peri_fixed.h5ad` (joined on `islet_id` —
+they are **not** in the same row order). The cell-count range is deliberately NOT baked in: the app
+recomputes the diffusion map for the current lower and upper bounds. Barlow et al.'s >=10-cell
+criterion motivates the default lower bound. See `app/shiny_app/docs/trajectory.md` §11.

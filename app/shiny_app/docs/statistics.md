@@ -47,7 +47,7 @@ The app has 5,214 islets from only **15 donors** (5 per group). Islets within a 
 
 1. **Donor-level aggregation**: All tests use `aggregate_to_donor()` to compute per-donor means (N=15), not islet-level (N=5,214). Produces realistic p-values (0.01-0.05 range, not 1e-50).
 2. **Mixed-effects sensitivity**: `lmer_test_donor()` runs `lmerTest::lmer(value ~ donor_status + (1 | case_id))` on islet-level data with donor as random intercept. ICC quantifies donor-level clustering.
-3. **Min-cells filter**: Available on all 4 analysis tabs — Plot, Trajectory, Statistics, Spatial. All use `total_cells_core + total_cells_peri >= threshold` (Trajectory uses `total_cells` directly). Defaults to 1.
+3. **Cell-count controls**: Plot, Statistics, and Spatial use a minimum-cell filter that defaults to 1. Trajectory instead uses a two-ended range (default lower bound 10) that defines and refits its composition-derived axis.
 4. **Normality testing**: Shapiro-Wilk on donor-level means per group, with auto-suggestion for test type.
 5. **Exploratory display toggle** (superseded Jul 2026): the former `stats_no_binning` checkbox is replaced by a client-side `stats_show_exploratory` toggle that hides/shows the Section 3 exploratory views. Per-bin analysis is now always computed.
 6. **Fixed bin width** (Jul 2026): the per-bin width is fixed at 50 µm (`STATS_BIN_WIDTH_UM`); the former `bin_width` slider was removed (a tunable width is a multiple-comparison p-hacking surface). Heatmap x-axis labels angled (-45°).
@@ -70,16 +70,16 @@ The app has 5,214 islets from only **15 donors** (5 per group). Islets within a 
 - `strip_plotly_color_leak(gg)` -- Scrubs each trace's `text`/`hovertemplate`/`hovertext` to remove `colour:\s*black` (and `color:\s*black`) lines, plus collapses adjacent duplicate `donor_status:\s*<value>` lines. Apply after every `ggplotly()` call where any geom uses `color = "black"` as a parameter (currently: Plot scatter, Plot distribution panel, Trajectory scatter). Defensive — no-op when no leak is present.
 
 ### Unified Outlier Handling (May 2026 — Statistics decoupled May 14; defaults OFF + dynamic z May 15)
-- One non-namespaced checkbox + slider pair per tab (`sidebar_remove_outliers` + `sidebar_outlier_z`, `traj_remove_outliers` + `traj_outlier_z`, `spatial_remove_outliers` + `spatial_outlier_z`) — synced bidirectionally via six `observeEvent`s in `app.R` (three for the checkboxes, three for the sliders). Reactives `remove_outliers_global()` and `outlier_z_global()` are injected into `plot_server`, `trajectory_server`, and `spatial_server` as the `remove_outliers` and `outlier_threshold` arguments.
-- **Statistics tab is independent**: namespaced controls `stats_remove_outliers` and `stats_outlier_z` live inside the Section 1 *Advanced / sensitivity settings* `<details>` block (Jul 2026 redesign; formerly a top-level control row) and are read via `input$…` inside `stats_run()`. They do NOT sync with the Plot/Trajectory/Spatial toggles. The `statistics_server()` function still accepts the `remove_outliers` argument for backward compatibility but ignores it.
-- Defaults: **OFF** for all four checkboxes (raw distribution renders out of the box; users opt in to outlier exclusion). z-threshold slider default 3.0, range 0.5–10, step 0.5, on every tab. Toggling the Plot sidebar propagates to Trajectory and Spatial but leaves Statistics alone (and vice versa); same for the slider.
-- Plot, Trajectory, Statistics, Spatial Card C: `flag_outliers(method = "zscore", threshold = outlier_threshold())` per donor status — threshold pulled from the live slider. Card C transforms via `log1p` to handle the long-tailed distance distribution.
+- Plot and Spatial own the two non-namespaced checkbox/slider pairs. Two observers per setting in `app.R` keep them synchronized. The Trajectory server still accepts the injected reactives for interface compatibility but deliberately ignores them: its selected cell-count cohort already defines and refits the axis.
+- **Statistics tab is independent**: namespaced controls `stats_remove_outliers` and `stats_outlier_z` live inside the Section 1 *Advanced / sensitivity settings* block and are read inside `stats_run()`. They do not sync with Plot/Spatial. The `statistics_server()` function still accepts the injected argument for backward compatibility but ignores it.
+- Defaults are **OFF**; the z-threshold defaults to 3.0 (range 0.5–10, step 0.5).
+- Plot, Statistics, and Spatial Card C use `flag_outliers(method = "zscore", ...)` per donor status. Card C transforms via `log1p` for its long-tailed distance distribution.
 - **Robust two-sided z (May 15)**: the `method = "zscore"` branch uses the Iglewicz–Hoaglin modified z-score, `0.6745·(x − median)/MAD`, instead of the classical mean/SD z. Because every metric in this app is non-negative and right-skewed, mean/SD pushed the achievable lower z toward 0 and the rule only flagged the upper tail in practice. Median/MAD is symmetric and genuinely two-sided. Fallback: when `MAD = 0` (zero-inflated groups), the function reverts per-group to classical mean/SD. The threshold slider scale is unchanged; the 0.6745 rescale keeps `|z| > 3` roughly equivalent to the old classical cutoff. The active rule is exposed on `attr(df, "outlier_statistic")` (`"modified_z"`, `"classical_z"`, or `"modified_z (classical_z fallback used for some groups)"`).
 - Spatial Card A: `flag_outliers(method = "iqr", threshold = 1.5)` per donor status. Uses the Tukey fence rather than the modified z because enrichment z is already a standardised, roughly symmetric quantity; intentionally NOT routed through the slider (different scale). It previously passed `exclude_zeros = TRUE` on the belief that enrichment is zero-inflated — it isn't. `enrich_z` is a Poisson z, `(observed − expected)/sqrt(expected)`, so an absent phenotype yields `−sqrt(expected)`, never exactly 0; measured across all 5,214 islets every `enrich_z_*` column has zero exact zeros, making the flag a no-op. The real zero-inflation is in `peri_prop_*`, which this card does not plot.
-- Visual surfacing: every affected plot shows a **count badge** in its title or subtitle and renders excluded points as **shape=4 grey × ghost markers** (Plot, Trajectory, Spatial Card C). Stats forest plot title shows the badge; the Statistics outlier checkbox carries a small caption beneath it reporting `N excluded last Run` (or a yellow "Filter OFF" notice). Statistics Methods Reference paragraph names the local rule and cites the exact `n_excluded` for the current Run. Download CSV header records `Outlier rule: …` and the count.
+- Visual surfacing: affected reviewer plots show a count badge and render excluded points as **shape=4 grey × ghost markers** (Plot and Spatial Card C). The dormant Statistics forest plot and methods text report its independent rule and count. Download headers record the rule and count.
 - Spatial Card B's "Clip z > 5" checkbox is a **display saturation only** (caps the colour scale) — left alone, NOT an outlier control. Documented as such in `docs/user_guide.md`.
-- Trajectory bug fix: previously discarded outliers silently before plotting and logged only to console; now drawn as ghosts and counted in a badge above the scatter.
-- **Spatial per-card outlier tables** (May 13 follow-up): Cards A and C now expose `infiltration_show_outlier_table` and `distance_show_outlier_table` checkboxes that surface the list of excluded islets in a yellow warning panel below each plot. Reactive state lives in module-scope `infiltration_outliers` / `distance_outliers` `reactiveVal`s, populated inside each renderPlotly after the `flag_outliers()` call. Renders three states: table, "no outliers detected" blue note, or filter-OFF amber label. Matches the Plot/Trajectory `show_outlier_table` UX exactly.
+- **Trajectory removal (Aug 2026)**: the earlier ghost/table implementation was removed with the old selectable pseudotime modes. A second row-dropping rule would interact invisibly with the cohort used to refit the axis.
+- **Spatial per-card outlier tables**: Cards A and C expose `infiltration_show_outlier_table` and `distance_show_outlier_table`, backed by module-scope reactive values. The three states match the Plot table UX: rows, no-outliers note, or filter-off note.
 - **Plot distribution panel independence** (May 13 follow-up): `output$dist` now reads `raw_df_base()` (not `raw_df()`) and applies its own `exclude_zero_dist` filter, so left and right panels' "Exclude zero values" controls no longer cascade. The dist panel also re-runs `flag_outliers()` on its own subset and renders ghost × markers + a title-suffix badge, fixing the gap where outliers only appeared on the left panel. Both panels' `position_jitter()` calls now use explicit `seed = 17` (normal points) / `seed = 31` (ghost ×) so visuals stay stable across reactive re-renders.
 - **`strip_plotly_color_leak` post-process** (May 13 follow-up): added because hard-coded `color = "black"` parameters on `geom_point(shape=21, …, color="black")` (Plot summary points) and `geom_smooth(…, color="black")` (Trajectory overall trend) were surfacing as a literal `colour: black` line in plotly hover tooltips, alongside a duplicate `donor_status` entry from ggplotly emitting both `fill` and inherited `colour` aesthetics. Applied at `mod_plot_server.R:684`, `mod_plot_server.R:891`, and `mod_trajectory_server.R:662`.
 
@@ -119,7 +119,9 @@ A "About this tab" banner above Section 1 describes the tab's purpose, primary t
 5. **Methods Reference** -- "Design safeguards against p-hacking" summary, pseudoreplication, donor-level aggregation, ICC, mixed-effects, normality-driven auto test selection, fixed α / bin width, zero-value exclusion state, and honest correction scope.
 
 ### Multiple Testing Correction
-- Per-bin ANOVA, Kendall τ, and pairwise tests are BH-corrected across bins via `p.adjust(method = "BH")`. Heatmap shows `-log10(q)` (corrected) with star annotations using corrected values. All three reach the CSV (see below) — the pairwise family previously did not, so 3 of the heatmap's 5 rows could not be reproduced from the export.
+- Per-bin ANOVA and Kendall τ are BH-corrected **across bins** via `p.adjust(method = "BH")` — one family each, since the bin scan is the multiplicity those rows pay for.
+- Per-bin **pairwise** rows are **protected post-hocs** (Aug 2026): shown only for bins whose ANOVA cleared that correction, then BH-corrected *within* each bin across its 3 contrasts. See "Aug 2026 — per-bin pairwise was structurally unable to reject" below for why the old single family of 15 was wrong.
+- Heatmap shows `-log10(q)` (corrected) with star annotations using corrected values. All three reach the CSV (see below) — the pairwise family previously did not, so 3 of the heatmap's 5 rows could not be reproduced from the export.
 
 ### Download CSV contents (Jul 2026)
 
@@ -133,7 +135,7 @@ The export is a stacked multi-section CSV: a `#` provenance/methodology header, 
 | `# Post-hoc: Pairwise Comparisons (donor-level, BH across 3)` | `pairwise_df` | yes |
 | `# Covariate-Adjusted Model` | `age_model_p` from `lm(value ~ donor_status + age + sex)` | **NO** |
 | `# Per-Bin ANOVA` / `# Per-Bin Kendall` | `bin_anova` / `bin_kendall` | yes |
-| `# Post-hoc: Per-Bin Pairwise (BH across bins)` | `bin_pairwise` — rows 2-4 of `bin_heatmap` | **NO** |
+| `# Post-hoc: Per-Bin Pairwise (protected post-hoc, BH within bin)` | `bin_pairwise` — rows 2-4 of `bin_heatmap` | **NO** |
 | `# AUC by Donor Group`, `# Demographics Summary`, `# Age-Feature Correlation`, `# Post-hoc: Sex-Stratified Pairwise`, `# Autoantibody Profile` | — | yes |
 
 Header notes:
@@ -369,3 +371,148 @@ adjustment. It lives in the Inflammation tab's donor table.
 **Disease duration** is likewise descriptor-only: all five T1D donors are recent-onset (0, 0, 0,
 0.58, 0 years) and non-diabetic donors have no value, so there is no variance to model. It
 establishes cohort scope — we have no long-duration donors — and nothing more.
+
+## Aug 2026 — per-bin pairwise was structurally unable to reject
+
+Reported symptom: on `Ins_any`, the interaction `donor_status × diameter` was "highly significant"
+while the stratified pairwise row of the Section 3 heatmap showed nothing. Investigated on the
+shipped H5AD (5,373 islets, 15 donors, 5/5/5). The substance was never in conflict — the omnibus
+rows *were* significant (ANOVA q = 0.046 / 0.0052 / 0.0099 / 0.022 / 0.056; Kendall τ = −0.53 to
+−0.73 across all five bins), and the donor-level bin means show the interaction plainly:
+
+```
+bin      ND     Aab+    T1D    ND−T1D
+25 µm   11.8    7.9     2.8      9.0
+75 µm   41.8   23.6     1.9     39.9
+125 µm  42.8   31.0     4.0     38.8
+175 µm  51.5   31.4    12.7     38.7
+225 µm  49.6   28.5    14.4     35.2
+```
+
+Only the **pairwise** row was empty, and for two compounding reasons. Both are fixed.
+
+### 1. `exact = FALSE` was forced on a 5-vs-5 rank test
+
+`per_bin_donor_pairwise()` called `wilcox.test(g1, g2, exact = FALSE)`. These are **donor** means,
+so a contrast is 5 vs 5 and the exact null distribution is both available and correct. Forcing the
+normal approximation (with R's default continuity correction) inflates the smallest attainable p by
+54%, precisely at the floor where every perfectly-separated contrast lands:
+
+```
+min attainable p, 5 v 5, no ties
+  exact = FALSE, correct = TRUE   0.01219   <- was used
+  exact = FALSE, correct = FALSE  0.00902
+  exact = TRUE                    0.00794
+```
+
+Three `ND vs T1D` contrasts (bins 25/75/125) sat exactly on that floor. At 0.01219 they needed
+`0.01219 × 15/3 = 0.061` and missed; at 0.00794 they get `0.0397` and clear. **That single argument
+was the whole difference between 0 and 3 significant contrasts, with the family untouched.**
+
+The fix is to drop the argument and let `wilcox.test` decide. It is self-correcting, not a
+relaxation: when the donor means contain ties (common for zero-floored features — 6 of 15 contrasts
+for `prop_Beta cell`) R falls back to the approximation on its own and warns; `suppressWarnings()`
+silences only that expected notice. Verified: `Ins_any` has zero ties, and the tied `prop_Beta cell`
+contrasts return identical values before and after.
+
+### 2. One BH family of 15 corrected the bin scan twice
+
+The 3 contrasts × 5 bins were a single BH family. That is wrong on two counts:
+
+- **Double-charging the bin scan.** The ANOVA row already pays BH across bins. Conditioning the
+  post-hocs on that protection and then re-correcting across bins bills the same multiplicity twice.
+- **Positive dependence.** The 15 tests are the same 15 donors re-partitioned. BH stays valid under
+  positive dependence but goes conservative — the effective number of independent tests is nearer 3
+  than 15.
+
+Combined with the discreteness floor, a family of 15 requires `p ≤ 0.05 × 1/15 = 0.0033` at rank 1,
+which is **below the smallest p the test can ever produce** (0.0079). A test that cannot reject
+under any data configuration is not a test. Within a bin the threshold is `0.05 × 1/3 = 0.0167`,
+which the floor clears.
+
+Correction was **not** dropped. With exactly 3 groups Fisher's protected LSD would control FWER in
+the strong sense with no correction at all — but that is a theorem for the parametric case, and this
+branch may be running rank tests, where it is only an analogy. Within-bin BH costs one contrast
+relative to uncorrected on `Ins_any` (5 vs 6) and keeps the guarantee real rather than borrowed.
+
+Both the family and the protection gate are fixed **in source**, exactly like `INFLAM_FDR_FAMILY` —
+neither is reachable from the UI, so no user action can resize the family or lift the gate to
+manufacture a star.
+
+### Measured effect
+
+Significant contrasts out of 15, `Ins_any` (left) and `prop_Beta cell` (right):
+
+```
+                     approx  exact  t-test        approx  exact  t-test
+  uncorrected           6      6       6             9      9       9
+  BH across 15          0      3       4             5      6       8
+  BH within bin (3)     4      5       4             5      6       8
+```
+
+Shipped scheme (exact + within-bin BH + omnibus protection): **`Ins_any` 0 → 5**, `prop_Beta cell`
+5 → 6. Bin 225 is now dropped entirely for `Ins_any` (ANOVA q = 0.056, unprotected) rather than
+showing three blank cells. The surviving pattern is coherent and matches the Kendall trend:
+ND vs T1D in the 25/75/125 µm bins, Aab+ vs T1D in 75/125, **ND vs Aab+ never** — consistent with
+the cohort-wide result that ND and Aab+ do not separate.
+
+### Fixed: the interaction p was inflated by the wrong error term
+
+`size_companion_models()` fitted both companions with `(1 | .cf)` — a random **intercept**. That
+absorbs each donor's baseline but leaves nothing for donor-to-donor variation in the diameter
+*slope*, so the diameter and status × diameter terms were tested against islet-level residual:
+
+| model | interaction F | DenDF | p |
+|---|---|---|---|
+| was, `(1 \| donor)` | 188.96 | **5358.2** | < 2e-16 |
+| now, `(1 + diam \| donor)` | 23.55 | **12.05** | 6.87e-05 |
+
+15 donors carry ~12 d.f., not 5,358. The effect was always real — one OLS slope per donor, tested
+across status independently of any mixed model, gives ANOVA p = 6.5e-05 / Kruskal-Wallis p = 0.0031
+(ND +0.25 to +0.54 %/µm, Aab+ +0.10 to +0.23, T1D −0.006 to +0.12). Only the magnitude of "< 2e-16"
+was wrong.
+
+**Each term is now tested against the error term for its own unit of replication** — split-plot
+logic, which is why the three p-values deliberately come from more than one fit:
+
+| term | unit | error term | Ins_any p (was → now) |
+|---|---|---|---|
+| `donor_status` | between-donor (whole plot) | random intercept | 0.0099 → **0.0099** (unchanged) |
+| `diameter` | within-donor (sub plot) | random slope | < 2.2e-16 → **0.00047** |
+| `status × diameter` | whole × sub | random slope | < 2e-16 → **6.87e-05** |
+
+**Do not collapse these into one fit.** Putting a random slope in the *additive* model moves
+`p_status_adj` from 0.0099 to **0.61** on `Ins_any`: with no interaction term present, the
+correlated random slope absorbs the status-driven slope differences as donor noise. The additive
+companion asks "is the group difference still there at a common islet size?" — a contrast of
+intercepts, which is between-donor, and for which a random intercept was always correct. That is
+also why the primary `value ~ donor_status + (1|donor)` needed no change (DenDF 11.96): only these
+size terms are within-donor.
+
+Supporting changes:
+
+- **`SIZE_COMPANION_DIAM_SCALE = 100`** — diameter is modelled in units of 100 µm. Linear rescaling
+  cannot move an F-test or a p-value; it only keeps the random-slope fits conditioned. On raw
+  micrometres both fits emitted "nearly unidentifiable: very large eigenvalue" and `prop_Beta cell`
+  additionally hit a gradient warning at the convergence tolerance. On the 100 µm scale all fits are
+  warning-free. `mean_diam` stays in micrometres — it is a reported centring point, not a
+  coefficient.
+- **Donor-coverage gate** — reuses the shared `bin_coverage_ok()` (≥ 2 status groups, each with ≥ 2
+  donors). Without it a 3-donor subset still "fit": the interaction returned p = 1.000 on **0**
+  denominator d.f. and was reported as a clean random-slope result.
+- **Identifiability check** — a fit landing on < 1 denominator d.f. is refused (`p_interaction` set
+  to `NA` with a reason) rather than printed.
+- **Flagged fallback** — if the per-donor slope is singular or non-convergent, the models fall back
+  to a random intercept and say so. `slope_model` and `denom_df_interaction` are new return fields,
+  surfaced beside the interaction p in the UI, in the hypothesis table, and in the CSV header, so a
+  regression to islet-level d.f. is visible rather than invisible — the same discipline as
+  `lmer_pairwise_df_method`. Verified by forcing a zero-slope-variance synthetic: it reports
+  `random intercept (fallback)`, DenDF 5355, and an anticonservative-p warning banner.
+
+### Also noted, not changed: the auto non-parametric switch
+
+Test type is auto-selected from Shapiro-Wilk on donor means. For `Ins_any` it goes non-parametric on
+T1D alone (W = 0.750, p = 0.0297, n = 5). Shapiro at n = 5 has almost no power; when it *does*
+reject, it is typically extreme skew — here a floor effect, since T1D insulin is near zero. The
+t-test column outperforms Wilcoxon at every bin. This is a separate decision from the correction and
+was deliberately left alone.

@@ -30,7 +30,7 @@ Cell centroids (`X_centroid`, `Y_centroid`) are in micrometers. GeoJSON polygons
 
 ### drilldown_helpers.R
 
-- `PHENOTYPE_COLORS` -- 21 phenotypes with distinctive hex palette (endocrine=warm, immune=cool, structural=neutral)
+- `PHENOTYPE_COLORS` -- palette coverage for all 21 source labels; reviewer selectors pass through `phenotype_keep()` and expose 12
 - `drilldown_available()` -- checks if `data/cells/` exists with CSVs
 - `load_islet_cells(imageid, islet_key)` -- CSV loader with `new.env()` caching
 - `render_islet_drilldown_plot(info, cells, color_by, show_peri)` -- cells over `build_segmentation_base_plot()`. Uses `fill` aesthetic (shape 21) for phenotype/marker coloring, `alpha` for core/peri (0.9/0.4). `colour` aesthetic reserved for structure boundaries.
@@ -56,7 +56,17 @@ Cell centroids (`X_centroid`, `Y_centroid`) are in micrometers. GeoJSON polygons
 
 **Shared resolver** — `select_islet_from_key(case_id, islet_key, prepared, selected_islet)` in `segmentation_helpers.R`: the common tail of both drill-down paths (SF/lookup guards, centroid lookup with zero-padded case-id fallback, donor-metadata join, `selected_islet(list(...))`). Called by both the legacy plotly_click observers and the new native-click observers in Plot + Trajectory.
 
-## Statistics Tab
+## Statistics Tab — **currently hidden**
+
+> **Hidden in the live app since Aug 2026**, at the user's request. Gated on `SHOW_STATISTICS_TAB`
+> (`00_globals.R`), default `0`; both the `tabPanel` and the `statistics_server()` call in `app.R`
+> check it, so nothing is wired up while it is off. The module, its data and this documentation are
+> unchanged. To bring it back, set `SHOW_STATISTICS_TAB=1` in `app/shiny_app/.Renviron` and
+> `touch restart.txt` — no code edit. The Plot sidebar's visibility condition still names
+> `'Statistics'` in both the layout JS and the `conditionalPanel`: with no such tab mounted
+> `input.tabs` can never take that value, so those branches are inert and re-enabling needs no
+> second edit. (`show_phenotype_rules_stats` is likewise left registered — an `observeEvent` on an
+> input that never exists never fires.) Same pattern as the Inflammation tab.
 
 See [`docs/statistics.md`](docs/statistics.md) for full details — the Jul 2026 streamlined redesign (fixed α, auto-selected test type, fixed 50 µm bins, Advanced/sensitivity + Sensitivity-check collapsibles, single primary result, consolidated exploratory section), pseudoreplication fix (Phase 16), `utils_stats.R` reference, unified outlier handling, zero-value exclusion, sex-stratified BH correction, 5-section narrative layout, multiple-testing correction.
 
@@ -85,9 +95,16 @@ See [`docs/statistics.md`](docs/statistics.md) for full details — the Jul 2026
 - All three trend line variants weighted: overall, by-donor (donor_id coloring), by-donor (donor_status coloring)
 - **Critical**: Raw `total_cells` as LOESS weight causes wild curves — a 1,902-cell islet dominates the fit. Always use `log1p()`.
 
-### Pseudotime Mode Selector (Phase 17, Apr 2026)
+### Reviewer Trajectory (Aug 2026)
 
-`mod_trajectory_ui.R` has a "Pseudotime mode" dropdown with two options: "Core only" (default, `dpt_pseudotime`) and "Core + Peri" (`dpt_pseudotime_combined`). `mod_trajectory_server.R::traj_with_pseudotime()` switches `obs$pseudotime` based on `input$pt_mode`. The selector controls X-axis (pseudotime) only — Y-axis features remain the 31-marker panel. See `scripts/CLAUDE.md` for the upstream pipeline that produces these two pseudotimes.
+There is one trajectory, recomputed on the cohort selected by the two-ended
+`cell_range` slider. `traj_pseudotime_column()` uses scanpy DPT when available and
+falls back explicitly to destiny; `traj_with_pseudotime()` carries the actual engine
+and fitted-islet count into the UI and CSV provenance. PAGA/ForceAtlas2 is the separate
+two-dimensional graph card, not the name of the one-dimensional axis. The Y axis switches
+between the 31 marker means and retained cell-type/endocrine-cell ratios. The legacy
+`dpt_pseudotime*` H5AD columns remain audit artifacts and are not selectable in the
+reviewer UI. See `docs/trajectory.md` §11.
 
 ### Pseudotime Heatmap: Dominant Status × Feature Intensity (May 2026)
 
@@ -120,7 +137,7 @@ Sidebar radio labels and axis titles are unit-explicit — never use the bare wo
 - **Cell Populations Density** → selector `"Cells per mm² of core area"` / `"… peri area"` / `"… core+peri area"`; y-axis `"Cells per mm² (core area)"` / `"(peri area)"` / `"(core+peri area)"`. Denominator is the QuPath-measured annotation area (`core_region_um2`, `peri_region_um2`, or their sum), joined into `comp` by `prep_data()` from `targets_all` rows. Peri-islet area comes from the `_exp20um` annotation in `annotations.tsv`.
 - **Microenvironment** → metric radio hidden (only one option). Y-axis names both the class and the region: `"Nerve area (% of core area)"` / `"Capillary area (% of peri-islet area)"` / `"Lymphatic area (% of core+peri area)"`. **Value computed from `100 * area_um2 / region_um2`** (% of the selected region's QuPath annotation area occupied by the structure). Counts are not exposed — these targets (Nerve / Capillary / Lymphatic) are area-valued (a single nerve may segment into several pieces), so object counts depend on segmentation morphology, not biology.
 - **Core+Peri combined proportions** → computed on the fly: `value = (prop_X · total_cells_core + peri_prop_X · total_cells_peri)` divided by either `(total_cells_core + total_cells_peri)` (Percentage) or `(core_region_um2 + peri_region_um2)` (Density). NA totals/areas are treated as 0 so islets with only one zone still contribute.
-- **Spatial Card C distance KDE** is **donor-aware** — it averages per-donor signed-distance densities with equal donor weight (a `shape`/`abundance` radio toggle), reading `data/signed_distance_kde.csv`. Y-axis is `"Per-donor mean density (area = 1)"` (shape, default) or `"Median cells per µm per donor"` (abundance), never a per-area density. This replaced the earlier pooled `density × N`, which pseudoreplicated large donors (ND 6356 = 71% of ND's APC cells). The `shape`/`abundance` split matches the `enrich_summary()` donor-aggregation philosophy (`mod_spatial_server.R`). Card C-right also has a `dist_view` toggle exposing a second, Senior-ported **"Per-cell distance"** view over the tissue-wide `data/cell_distance.csv` (all ~2.65M cells): a **symlog**-axis density (`cd_symlog` in `spatial_helpers.R`; cells per real µm; pooled per cell; by phenotype or all) or a **composition** (stacked bars faceted by status, zero-anchored at the islet border). Two shared toggles: **`dist_mode`** (Phenotype vs **Marker+** — per-cell `{marker}_pos` = scimap-rescaled X>0.5, CODEX's equivalent of Senior's RESTORE `_pos`; ~16 lineage markers via `cell_distance_markers()` + `CELL_DIST_MARKER_COLORS`) and **`dist_norm`** (**Proportion of class** default — normalizes by each disease group's total cell count so groups compare fairly despite different totals — vs Raw count). Marker mode overlaps (a cell may be + for several markers). Binning helpers `query_cell_distance_hist` / `query_cell_distance_composition` (`spatial_helpers.R`), pickers repopulated via `observeEvent(input$dist_mode)`. CSV + the scimap gate, no DuckDB (unlike Islet-Explorer-Senior, ported from).
+- **Spatial Card C distance KDE** is **donor-aware** — it averages per-donor signed-distance densities with equal donor weight (a `shape`/`abundance` radio toggle), reading the signed-distance release artifact (Parquet in production, CSV in development). Y-axis is `"Per-donor mean density (area = 1)"` (shape, default) or `"Median cells per µm per donor"` (abundance), never a per-area density. This replaced the earlier pooled `density × N`, which pseudoreplicated large donors (ND 6356 = 71% of ND's APC cells). Card C-right also has a `dist_view` toggle exposing a Senior-ported **"Per-cell distance"** view over ~2.65M tissue-wide cells: a symlog-axis density or a zero-anchored composition view. `dist_mode` switches Phenotype vs Marker+ and `dist_norm` switches class proportion vs raw count. Production queries immutable Parquet through embedded DuckDB; CSV is development-only. The picker observer depends on both `dist_view` and `dist_mode`, preventing stale choices when users switch views.
 
 A `helpText` block under the Plot metric selector restates the active mode's denominator. Keep this phrasing if you add new metrics. The y-axis class name is parsed from `input$which` (encoded as `className|region`).
 
@@ -153,8 +170,9 @@ Carries two cohort-level analyses adapted from Steenbuck et al. 2025 (Bodenmille
   the pairwise columns all had to be reworked for whole-slide data.
 
 The tab is deliberately **absent** from the sidebar-visibility condition in `app.R`'s layout JS,
-so the Plot sidebar stays hidden — these analyses read `data/cell_distance.csv` through the cached
-`load_cell_distance()` in `spatial_helpers.R`, not the Plot module's islet frame, so sidebar
+so the Plot sidebar stays hidden — these analyses read the cell-distance backend (Parquet/DuckDB
+in production, cached CSV in development) through `load_cell_distance()` in
+`spatial_helpers.R`, not the Plot module's islet frame, so sidebar
 filters genuinely do not apply.
 
 ### Whole-slide false negatives in the infiltration score (Jul 2026)
@@ -357,6 +375,10 @@ constraints, then strips redundant `anypos` groups that are supersets of a
 stricter constraint downstream. Four residual phenotypes (`ECAD+`, `APCs`,
 `Structural`, `Unknown`) have no CSV row — they live in `PHENOTYPE_RESIDUALS`
 with hand-written descriptions.
+
+Nine source labels are retired through `PHENOTYPE_RETIRED`; reviewer selectors,
+legends, and tests route through `phenotype_keep()`/`phenotype_filter_rows()`, leaving
+12 active labels. The 23-row modal intentionally remains broader as an audit reference.
 
 Naming aliases: PHENOTYPE_COLORS (drilldown_helpers.R) uses
 `CD8a Tcell` / `CD4 Tcell` / `Blood Vessel` / `SMA+`; the CSV uses

@@ -1,5 +1,9 @@
 # Handoff — Statistics correctness, nPOD metadata, Inflammation tab (2026-07-27/28)
 
+> **Historical development record.** Analysis-audit findings remain useful, but the
+> mutable nginx/Shiny deployment notes and live-tab descriptions are superseded by
+> `deploy/README.md`, `PUBAPPS_UFRC_HANDOFF.md`, and `docs/reviewer_guide.md`.
+
 Scope: `app/shiny_app/` plus one decision on the CODEX Phenocycler workstream. Seven commits on
 `claude/spatial-cardc-per-cell-distance`, `5106c55..63f07a8`, 17 files, +3,454/−162. **All deployed**
 (`touch app/shiny_app/restart.txt`; both `:3838` and the `:8080` nginx proxy verified 200).

@@ -2,7 +2,16 @@
 
 Interactive web application for exploring pancreatic islet CODEX multiplexed imaging data from nPOD donors. Tracks insulin loss, immune infiltration, and cellular microenvironment changes across the ND → Aab+ → T1D disease progression.
 
-**Production URL**: `http://<server-ip>:8080/islet-explorer/`
+**Requested reviewer URL (use only after UFRC confirms provisioning)**:
+`https://islet-explorer.rc.ufl.edu/islet-explorer/`
+
+> **Publication profile (August 2026):** Reviewers see Plot, Trajectory, Viewer,
+> and Spatial only. AI, Statistics, and Inflammation are disabled. The concise,
+> release-current instructions are in [reviewer_guide.md](reviewer_guide.md). This longer
+> guide retains descriptions of dormant development modules for maintainers; those
+> sections are not claims about the reviewer deployment. The detailed measurements and
+> limitations behind the current composition DPT/PAGA method are recorded in
+> [the trajectory accuracy reference](../app/shiny_app/docs/trajectory.md).
 
 ---
 
@@ -27,17 +36,23 @@ Interactive web application for exploring pancreatic islet CODEX multiplexed ima
 
 ### Data Source
 
-The app loads from a single enriched H5AD file (`data/islet_explorer.h5ad`, ~70 MB) containing:
+The reviewer release validates a checksummed manifest, loads prepared islet summaries from
+read-only Parquet, queries large spatial tables through embedded DuckDB, and reads the
+trajectory H5AD and composition feature table as separate immutable artifacts. The
+underlying cohort contains:
 
 - **5,214 islets** from 15 nPOD donors (ND, Aab+, T1D)
 - **31 protein markers** (mean expression per islet)
-- **Pseudotime trajectory** (DPT with INS root, scVI-corrected)
-- **21 phenotype proportions** (from single-cell phenotyping)
+- **Trajectory source coordinates and marker values**, plus a separately released
+  phenotype-composition matrix used to refit diffusion pseudotime in the app
+- **21 upstream phenotype labels**, of which 12 are retained in reviewer-facing selectors
 - **Donor demographics** (age, sex, autoantibody status)
 - **62 neighborhood metrics** (peri-islet composition, immune infiltration, enrichment z-scores, distances)
 - **QuPath groovy data** (targets, markers, composition, LGALS3)
 
-If the H5AD is unavailable, the app falls back to `data/master_results.xlsx` with reduced functionality (no phenotype proportions, no demographics, no neighborhood metrics).
+Local development retains the legacy H5AD/Excel loader for pipeline work. Production fails
+closed if a required manifest artifact or hash is missing; it does not silently fall back
+to a different scientific dataset.
 
 ### Disease Groups
 
@@ -53,7 +68,11 @@ Colors are configurable via the **Donor Status Colors** palette selector (Paul T
 
 ## Cell Phenotypes & Marker Rules
 
-Every cell in the app is classified into one of 21 phenotypes by gating it against a set of CODEX protein markers. The full rule set lives in `data/phenotype_rules.csv` (canonical) and is the single source of truth used by the upstream phenotyping pipeline.
+The upstream data carry 21 phenotype labels. The canonical gating CSV contains 19
+hierarchical phenotype rules; four additional residual/aggregate definitions are documented
+in the app. Nine source labels are retired from reviewer-facing selectors, legends, and
+tests, leaving 12 active phenotype choices. The broader rule reference remains visible for
+provenance and interpretation of source artifacts.
 
 ### How to read a rule
 
@@ -61,17 +80,22 @@ Each phenotype is defined by which markers must be **positive** (`+`) and which 
 
 ### Where the rules appear in the app
 
-- **"Phenotype rules — marker definitions" button** at the top of every tab (Plot, Trajectory, Viewer, Spatial, Statistics) opens a single reference table listing all 21 phenotypes with their positive and negative markers. This is the canonical reference; use it whenever you need to remind yourself what a phenotype label means.
+- **"Phenotype rules — marker definitions" button** at the top of each enabled tab opens a reference table with the 19 CSV rules and 4 explicitly described residual/aggregate definitions. It is a provenance reference, so it is broader than the 12 labels offered in reviewer selectors.
 - **Inline hint under every phenotype selector** — when you change the "Population Measure" (Plot tab) or any of the Spatial Card A / Card C phenotype dropdowns, a small blue box appears underneath showing the active phenotype's rule (e.g. `CD8 T cell` → `CD3e+, CD8a+  —  SMA−, CD20−, CD68−, CD163−, CD4−, …`).
 - **Drill-down composition panel** (right rail of the islet viewer on Plot + Trajectory tabs) — under the per-islet cell count table, an expandable "Marker rules for phenotypes in this islet" section lists every phenotype actually present in the selected islet, colour-coded to match the bar chart, with its full rule.
 
-### The 18 markers used by the gating CSV
+### The 15 markers used by the gating CSV
 
-`CD99, INS, GCG, SST, SMA, CD20, CD3e, CD68, CD163, CD8a, CD4, HLADR, PDPN, CD34, CD31, B3TUBB, CD56`. The H5AD/scVI panel contains 31 markers; the additional ones (e.g. `CD45`, `ColIV`, `B-catenin`, hormone subunits) are available for visualisation on the Trajectory tab but are not part of the phenotype gating rules.
+`INS, GCG, SST, SMA, CD20, CD3e, CD68, CD163, CD8a, CD4, HLADR, PDPN, CD34, CD31, B3TUBB`.
+The H5AD/scVI panel contains 31 markers; additional markers are available for
+visualisation but are not part of the gating CSV. An upstream template once listed
+`CD99` and `CD56`, but neither exists in this 31-plex panel, so those phantom columns
+were removed from the app's canonical rule file.
 
 ### Residual categories
 
-A few phenotype labels you will see in plots are not formally gated by the CSV:
+Four source-artifact definitions are not formally gated by the CSV. They remain in the
+reference modal for provenance but are retired from reviewer-facing selectors:
 
 - **ECAD+** — epithelial cells (E-cadherin+); residual ductal/exocrine bucket from the upstream single-cell pipeline.
 - **APCs** — antigen-presenting cells aggregate (HLADR+ myeloid lineage). Used by neighborhood metrics.
@@ -84,33 +108,36 @@ These are described as such inside the in-app modal so users know when a label i
 
 ## Outlier Handling
 
-The app applies a single, consistent outlier rule across every tab so that scatter plots, trend lines, donor-level means, and statistical tests all agree about which points are "extreme."
+Outlier controls apply to Plot and Spatial. The reviewer Trajectory deliberately has no
+outlier exclusion: its cell-count cohort defines and refits the axis, so a second hidden
+row-dropping rule would make the trajectory definition ambiguous. The dormant Statistics
+module has its own independent sensitivity control when maintainers enable it.
 
 ### The Rule
 
-**For each donor status (ND, Aab+, T1D), an islet is flagged as an outlier when its robust |z| — the Iglewicz–Hoaglin modified z-score, `0.6745·(value − median)/MAD` — exceeds the value chosen on the per-tab "Outlier z-threshold" slider (default 3, range 0.5–10, step 0.5).** Median and MAD (Median Absolute Deviation) are used instead of mean and SD so the rule is robust to right-skew and detects extremes on **both** the high and the low side of the distribution. When MAD = 0 (zero-inflated groups), the rule falls back to classical mean/SD per group. Computing the threshold per-status (rather than across all islets) prevents the Aab+ and T1D heterogeneity from being mistaken for one giant ND tail. The slider is synced across Plot, Trajectory, and Spatial; Statistics has its own independent slider. Two cards use variants on the same idea:
+**For each donor status (ND, Aab+, T1D), Plot and Spatial Card C flag an islet when its robust |z| — the Iglewicz–Hoaglin modified z-score, `0.6745·(value − median)/MAD` — exceeds the shared slider value (default 3, range 0.5–10, step 0.5).** Median and MAD make the rule robust to right skew and two-sided. When MAD = 0, the calculation falls back to classical mean/SD within that group. Spatial Card C applies it to `log(1 + distance)`.
 
 - **Spatial Card A (Peri-Islet Phenotype Enrichment)**: uses **Tukey 1.5×IQR** per donor status, computed on non-zero values only. Many phenotypes are absent from most islets, so a z-score rule would over-flag the zero mode; the IQR variant tolerates that.
-- **Spatial Card C (Phenotype Proximity to Islet)**: applies the |z| > slider rule to `log(1 + distance)` rather than raw distance, because distance distributions have a long right tail.
+- **Dormant Statistics module**: uses its own checkbox and threshold; it never synchronizes with the reviewer-visible Plot/Spatial control.
 
 ### The Control
 
-A checkbox **"Exclude outliers"** plus an **"Outlier z-threshold"** slider lives on the Plot sidebar and is mirrored above the Trajectory scatter and inside the Spatial Neighborhood Analysis bar. Toggling the checkbox or moving the slider on any one of them updates the other two, so the Plot, Trajectory, and Spatial tabs always reflect the same setting. **Default: checkbox OFF, slider 3.0.** Hover the label for the full tooltip.
+A checkbox **"Exclude outliers"** plus an **"Outlier z-threshold"** slider lives on the Plot sidebar and is mirrored in the Spatial toolbar. The two views stay synchronized. **Default: checkbox OFF, slider 3.0.** Trajectory has no corresponding control.
 
-The **Statistics tab has its own dedicated outlier checkbox + slider** (Section 1: Configure Analysis). It uses the same z-score rule but operates independently of the Plot / Trajectory / Spatial synced controls — you can analyse Statistics with outliers excluded at a stricter threshold while keeping the Plot scatter at default, or vice versa. A small caption beneath the Statistics checkbox reports how many islets the most recent Run excluded.
+If maintainers enable **Statistics**, its dedicated checkbox and slider operate independently
+of Plot/Spatial. A caption reports how many rows the most recent run excluded.
 
 ### What you see when the filter is ON
 
-- Excluded points still render on the Plot left scatter, the Plot right distribution panel, the Trajectory scatter, and the Spatial Card C box plot as **faint grey × markers** ("ghost points") so you can see *where* in the distribution the exclusions are landing.
-- Plot, Trajectory, Spatial Card A, and Spatial Card C show a **count badge** in or beneath the title: e.g. `"… — 4 outliers excluded (|z| > 3 per donor status)"`. The badge always reflects the live slider value, and the count includes outliers on both ends of the distribution.
-- Statistics tab's Methods Reference section names the rule and reports the exact count for the current Run.
-- **All four analysis tabs** have an optional **"Show excluded-outlier table"** checkbox: Plot (in the sidebar), Trajectory (above the scatter), Spatial Card A (Peri-Islet Enrichment) and Spatial Card C (Phenotype Proximity) — each next to its own phenotype/metric selector. Each table lists the flagged islets (Case ID, donor status, value, z-score or fence distance) and is shown directly below the corresponding plot.
-- Plot points and trajectory ghost-marker positions are stably jittered with a fixed seed, so toggling controls doesn't shuffle the cloud.
+- Excluded points still render on the Plot panels and Spatial Card C as **faint grey × markers** ("ghost points") so their locations remain auditable.
+- Plot, Spatial Card A, and Spatial Card C show an exclusion count using the rule that applies to that view.
+- Plot and Spatial Cards A/C provide optional excluded-outlier tables with case, group, value, and score/fence information.
+- Plot ghost-marker positions are stably jittered, so toggling the control does not shuffle the cloud.
 
 ### What changes when the filter is OFF
 
 - No points are flagged or hidden; ghost markers disappear; counts go to zero.
-- A small banner appears above the Trajectory scatter noting that the Plot/Trajectory/Spatial filter is off; the Statistics tab shows its own yellow "Filter OFF" caption beneath its dedicated checkbox.
+- The dormant Statistics module, when enabled, shows its own independent "Filter OFF" caption.
 - Trend lines, donor-level means, and all statistical tests run on the full data including extreme values.
 
 ### Why this matters
@@ -166,8 +193,8 @@ The Plot tab is the primary exploration interface. It has a **sidebar** (left) a
   - *Scatter mode*: Select from markers (31 proteins) or targets (hormone intensities)
   - *Composition mode*: Three option groups (the previous "Immune Metrics" group of 5 hand-curated ratios was removed in Apr 2026 — use the Spatial tab's per-phenotype enrichment / proportion / distance views instead):
     - **Hormone Positivity (QuPath threshold)** — Ins_any, Glu_any, Stt_any
-    - **Phenotype Proportions (scVI)** — 21 phenotype proportions from single-cell data
-    - **Peri-Islet Proportions** — Proportions of each phenotype in the 20 μm expansion zone around the islet
+    - **Phenotype Proportions (scVI)** — the 12 retained reviewer-facing phenotypes from the 21-label source artifact
+    - **Peri-Islet Proportions** — proportions of those retained phenotypes in the 20 μm expansion zone around the islet
 - **Metric** (Composition / Microenvironment): Picks the y-axis unit. Labels spell out the denominator explicitly so "density" is never ambiguous — see [Density terminology](#density-terminology) below.
 - **Region**: Filter by tissue region (core only, peri-islet, or all)
 - **Donor Status**: Select disease groups to include (ND, Aab+, T1D)
@@ -189,7 +216,7 @@ The Plot tab is the primary exploration interface. It has a **sidebar** (left) a
 - The two "Exclude zero values" checkboxes (one per panel) are independent — set them differently when you want the violin/box to include zeros but the binned scatter to exclude them, or vice-versa.
 - Point positions on both panels use seeded jitter, so the cloud doesn't shuffle when you toggle other controls.
 - Use Cell Populations mode with "Peri-Islet Proportions" to visualize the cellular microenvironment around each islet. Use "Core+Peri — Phenotype Proportions" to pool both zones into a single per-islet value (cells from core + peri divided by the matching pooled cell count or pooled annotation area).
-- The "Immune Metrics" group provides pre-computed ratios that highlight immune infiltration differences between disease stages.
+- Use Spatial for per-phenotype enrichment, proportion, proximity, and distance views; the retired Plot "Immune Metrics" shortcut group is not part of the reviewer UI.
 
 ### Density terminology
 
@@ -205,7 +232,11 @@ The word *density* is reused in several places with different denominators. Each
 
 ## Trajectory Tab
 
-Visualizes the disease progression trajectory computed via diffusion pseudotime (DPT) with INS as the root anchor.
+Visualizes one composition-derived diffusion-pseudotime ordering. For each selected
+cell-count cohort, the app uses log-normalized core plus 20 µm peri-islet cell-type
+composition, a cosine 15-nearest-neighbor graph, and the ND islet nearest the ND centroid
+as the root. Production uses scanpy DPT; destiny is the explicit axis fallback when
+scanpy is unavailable. PAGA/ForceAtlas2 supplies the separate two-dimensional graph card.
 
 ### Layout
 
@@ -213,10 +244,9 @@ The Trajectory tab uses a full-width layout (no sidebar). All controls are inlin
 
 ### Components
 
-1. **UMAP Scatter** — Interactive Plotly UMAP colored by:
-   - Donor status (default)
-   - Selected feature (viridis inferno colormap, scaled to data min/max)
-   - Pseudotime (DPT)
+1. **Pseudotime Scatter** — The selected marker mean or cell-type/endocrine-cell ratio
+   against raw or rank-normalized diffusion pseudotime. Points can be colored by donor
+   status, donor, or a retained H5AD Leiden assignment.
 
 2. **Pseudotime Strip (Dominant Status × Feature Intensity)** — A single horizontal strip below the UMAP scatter, divided into 25 pseudotime bins. Each bin encodes two variables at once:
    - **Hue** = the *dominant* donor status in that bin, computed from per-status normalized density (count-in-bin divided by total islets for that status). Normalization corrects for cohort imbalance so dominance reflects enrichment relative to each status's pool, not raw count.
@@ -227,24 +257,36 @@ The Trajectory tab uses a full-width layout (no sidebar). All controls are inlin
 
 **Y-axis scale on the scatter** — Marker values are **scVI-normalized expression** (bounded roughly `0–1`), aggregated as the **mean across the cells in each islet**. They are *not* raw fluorescence intensity and *not* z-scores. Values almost never reach zero because (1) the scVI output for an individual cell rarely sits at exactly 0, and (2) averaging the cells in an islet smooths out any remaining zeros. The **multi-feature heatmap** below the scatter, by contrast, IS z-scored per marker across pseudotime bins (intentional — it standardizes markers for cross-marker comparison).
 
-4. **Click Interaction** — Click any UMAP point to:
+4. **UMAP Cards** — The audited H5AD UMAP is shown once by donor status and once by the
+   selected Y measure. These coordinates provide a fixed reference and are not the PAGA
+   layout.
+
+5. **PAGA Force-Directed Layout** — A separately computed two-dimensional graph initialized
+   from PAGA and drawn with ForceAtlas2. Coordinates are unitless; interpret relative
+   neighborhood structure, not axis magnitude.
+
+6. **Click Interaction** — Click a pseudotime point to:
    - Highlight the selected islet
    - Open the segmentation viewer panel
    - Jump to the OME-TIFF Viewer tab for that donor
 
 ### Controls
 
-- **Feature selector**: Choose which protein marker to display on the y-axis (drawn from the 31-marker panel only — no aggregate/derived metrics)
+- **Y axis**: Switch between a protein marker mean (31-marker panel) and
+  `log1p(cells of the selected type / endocrine cells in the islet core)`; ratio counts
+  can use core, peri, or core + peri cells.
 - **Trend lines**: None, Overall (single LOESS), or By Donor Status (ND/Aab+/T1D separate LOESS curves)
 - **Color points by**: Donor Status (default), Donor ID, or Leiden cluster at any of 4 resolutions (0.3 / 0.5 / 0.8 / 1.0)
-- **Pseudotime mode** (Apr 2026): Toggle between two pseudotime axes:
-  - *Core only* (default) — DPT computed from raw scVI core means. Strongest INS signal (r ≈ −0.69).
-  - *Core + Peri* — DPT computed from a 36-d input combining core scVI (10) + peri scVI (10) + 16 structural cell densities (Neural, Blood Vessel, Endothelial, Lymphatic in core and peri, weighted at α=0.15), with light Harmony (θ=0.1) on imageid. Strengthens immune/vascular marker correlations (CD3e, CD8a, CD31, CD34, PDPN) at a small cost to INS-driven span.
+- **Pseudotime scale**: Rank-normalized (default) spreads the fitted cohort uniformly;
+  Raw DPT preserves its original spacing. Rank transformation can change apparent curve
+  shape, so use raw DPT when density along the manifold matters.
 - **Point size by**: Cell Count (default), Islet Diameter, or Uniform
   - *Cell Count* sizes points by `sqrt(total_cells)` — small islets (3-10 cells) appear as tiny dots, large islets (100+ cells) as large dots. This honestly represents measurement quality.
 - **Point transparency**: 0 (fully opaque) to 0.95 (highly transparent). Default 0.4. Moving the slider right increases transparency.
 - **Point size**: Base point size slider (0.5-5.0)
-- **Min cells/islet**: Filter out islets with fewer than N total cells. Default: 1 (no filter). Increase to focus on well-measured islets.
+- **Cells per islet range**: Two-ended range with a default lower bound of 10 and a
+  data-derived upper bound. This is not a display-only filter: changing either bound
+  refits pseudotime and the PAGA layout on that cohort.
 
 ### Cell-Count-Weighted Trends
 
@@ -252,12 +294,14 @@ Trend lines are weighted by `log1p(cell count)` so that well-measured islets (ma
 
 Hover over any point to see its cell count in the tooltip (e.g., "Cells: 3"). Small islets at unexpected positions (e.g., ND islets at high pseudotime) typically have very few cells.
 
-### Key Biological Insights
+### Interpretation Limits
 
-- **INS vs pseudotime**: Strong negative correlation (r = −0.694 in Core mode, −0.51 in Core+Peri mode) — insulin decreases along the trajectory
-- **Disease ordering**: ND (early) → Aab+ (middle) → T1D (late) along pseudotime
-- **GCG increase**: Glucagon expression increases as insulin decreases, reflecting alpha cell persistence
-- **Aab+ heterogeneity**: Aab+ donors genuinely span a heterogeneous range of islet types (not all T1D-like); their pseudotime IQR is wider than ND or T1D — this is biology, not noise.
+Pseudotime is an ordering of compositional similarity, not elapsed time or proof of a
+causal ND → Aab+ → T1D transition. Donor identity is a major source of variation in this
+15-donor cohort. The audit found no donor-level separation of ND and Aab+ on the legacy
+axes, so avoid presenting a clean, evenly spaced three-stage progression. Treat marker
+trends as exploratory and preserve the displayed cell range, engine, scale, and donor
+context in any exported interpretation.
 
 ---
 
@@ -295,7 +339,7 @@ The tab uses a **5-section narrative layout** that walks you through a logical a
 - Test type selector with inline explanations:
   - **Parametric** (ANOVA / t-test): assumes roughly normal data within groups
   - **Non-parametric** (Kruskal-Wallis / Wilcoxon): no normality assumption; based on ranks
-- Additional controls: significance level (α), min cells/islet, bin width, diameter range. **Outlier removal** is controlled by a dedicated "Exclude outliers" checkbox + "Outlier z-threshold" slider local to the Statistics tab (z above the slider value per donor status, **off by default**, slider default 3.0). The controls are independent of the Plot / Trajectory / Spatial synced toggle, so you can analyse Statistics with outliers excluded while keeping them visible elsewhere. A small caption under the checkbox reports the most recent exclusion count (or a yellow "Filter OFF" notice). See [Outlier Handling](#outlier-handling) for the full rule.
+- Additional controls: significance level (α), min cells/islet, bin width, diameter range. **Outlier removal** is controlled by a dedicated "Exclude outliers" checkbox + "Outlier z-threshold" slider local to the Statistics tab (off by default, slider default 3.0). It is independent of the Plot/Spatial control. A caption reports the most recent exclusion count (or a "Filter OFF" notice). See [Outlier Handling](#outlier-handling).
 - **Exclude zero-valued islets** (checkbox, default OFF): filters `value == 0` rows before every Statistics-tab test (mixed-effects, donor-level ANOVA / Kruskal, pairwise Cohen's d, per-bin tests, demographics regressions, covariate-adjusted model). Useful for zero-inflated features — rare phenotype proportions, peri-islet enrichment z-scores, or any metric where many islets register exactly 0. The overview banner shows an orange "Zero-valued excluded (N dropped)" badge when active; the forest-plot title and the Methods Reference paragraph cite the same count. **AUC is read from the Plot tab's binned summary and is not affected by this filter** — toggling re-runs the hypothesis-testing pipeline but leaves the AUC card untouched.
 
 ### Section 2: Primary Results
@@ -377,7 +421,7 @@ Tissue-wide spatial visualization and peri-islet microenvironment analysis. Comb
 
 ### Neighborhood Analysis Cards
 
-Below the tissue scatter and Leiden panel, three interactive analysis sections visualize the per-phenotype peri-islet neighborhood metrics. **Apr 2026 update:** all three cards now expose every phenotype uniformly — previous hand-curated 7-immune-type lists replaced with dynamic dropdowns populated from the data. Cards only appear when neighborhood data is available in the H5AD (not in Excel fallback mode).
+Below the tissue scatter and Leiden panel, three interactive analysis sections visualize per-phenotype peri-islet neighborhood metrics. The cards expose the 12 retained reviewer-facing phenotypes through dynamic choices rather than the previous hand-curated immune-only lists. Cards only appear when neighborhood data is available in the H5AD (not in Excel fallback mode).
 
 **Global Controls** (toolbar above the cards):
 - **Min cells/islet**: Filter out small islets with few cells (default: 1, i.e., no filter). Higher values (e.g., 50) reduce noise from poorly-measured islets and decrease NA rates in distance metrics.
@@ -390,7 +434,7 @@ Below the tissue scatter and Leiden panel, three interactive analysis sections v
 - *Interpretation*: Pick any phenotype (Macrophage, CD8a Tcell, Beta cell, Endothelial, etc.) to see its peri-zone enrichment trajectory across ND→Aab+→T1D.
 
 **Card B: Phenotype Composition & Enrichment**
-- **Left**: Grouped bar chart spanning ALL 20 phenotypes (drops "Unknown") × 3 disease stages. Toggle median/mean summary; `Clip extreme z > 5` is a **display saturation** that caps the visible axis so the chart isn't dominated by a few hugely enriched phenotypes — it is NOT outlier exclusion (see [Outlier Handling](#outlier-handling) for the actual rule). Error bars show IQR (median) or SEM (mean).
+- **Left**: Grouped bar chart spanning the 12 retained reviewer-facing phenotypes × 3 disease stages. Toggle median/mean summary; `Clip extreme z > 5` is a **display saturation** that caps the visible axis so the chart isn't dominated by a few hugely enriched phenotypes — it is NOT outlier exclusion (see [Outlier Handling](#outlier-handling) for the actual rule). Error bars show IQR (median) or SEM (mean).
 - **Right**: Heatmap — phenotypes (columns) × disease stages (rows). Numeric values annotated on each cell.
 - **Region toggle**: Switch between:
   - *Peri-islet (enrichment z)*: Poisson z-scores comparing peri-islet vs tissue-wide. Diverging colorscale (blue = depleted, red = enriched). Default.

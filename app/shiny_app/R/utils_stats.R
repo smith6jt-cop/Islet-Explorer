@@ -436,6 +436,12 @@ lmer_test_donor <- function(rdf) {
   list(p_value = p_val, icc = icc, fit = fit, error_msg = error_msg)
 }
 
+# Diameter is modelled in units of 100 um rather than raw micrometres. Linear
+# rescaling cannot change an F-test or a p-value; it only keeps the random-slope
+# fits in size_companion_models() numerically well conditioned. See the comment
+# at the `.diam_c` assignment there.
+SIZE_COMPANION_DIAM_SCALE <- 100
+
 #' Islet-size companion models to the primary mixed-effects test.
 #'
 #' The primary model is `value ~ donor_status + (1|donor)` — it conditions on
@@ -457,11 +463,22 @@ lmer_test_donor <- function(rdf) {
 #' `donor_status` term in the additive model is the group difference at the mean
 #' islet diameter rather than at the unobservable diameter of zero.
 #'
-#' Returns list(p_status_adj, p_diam, p_interaction, mean_diam, error_msg) with
-#' NA fields on failure — never NULL, so callers can render unconditionally.
+#' Returns list(p_status_adj, p_diam, p_interaction, mean_diam,
+#' denom_df_interaction, slope_model, error_msg) with NA fields on failure —
+#' never NULL, so callers can render unconditionally.
+#'
+#' Each fixed effect is tested against the error term for ITS OWN unit of
+#' replication (split-plot logic): `donor_status` is between-donor and keeps a
+#' random intercept; `diameter` and `status × diameter` are within-donor and
+#' carry a per-donor random SLOPE. See the block comment at the fits — the three
+#' p-values deliberately come from more than one fit, and collapsing them into
+#' one model changes what they mean. `denom_df_interaction` and `slope_model`
+#' report which error term the interaction actually got, so a fallback to
+#' islet-level d.f. is visible rather than invisible.
 size_companion_models <- function(rdf, diam_col = "islet_diam_um") {
   out <- list(p_status_adj = NA_real_, p_diam = NA_real_, p_interaction = NA_real_,
-              mean_diam = NA_real_, error_msg = NULL)
+              mean_diam = NA_real_, denom_df_interaction = NA_real_,
+              slope_model = NA_character_, error_msg = NULL)
   if (!requireNamespace("lmerTest", quietly = TRUE)) {
     out$error_msg <- "lmerTest not installed"; return(out)
   }
@@ -476,8 +493,27 @@ size_companion_models <- function(rdf, diam_col = "islet_diam_um") {
       !is.finite(stats::sd(d$.diam)) || stats::sd(d$.diam) == 0) {
     out$error_msg <- "insufficient data or no diameter variation"; return(out)
   }
+  # Donor coverage, on the SHARED rule (>= 2 status groups, each with >= 2
+  # donors) that already gates the per-bin tests. Without it a 3-donor subset
+  # (one per status) still "fit": the interaction came back p = 1.000 on 0
+  # denominator d.f. and was reported as a clean random-slope result. A model
+  # that cannot separate donor from status has no companion to offer.
+  donor_status_1pd <- unique(d[, c("Case ID", "donor_status")])$donor_status
+  if (!bin_coverage_ok(donor_status_1pd)) {
+    out$error_msg <- paste("too few donors per status group to fit a size companion",
+                           "(need >= 2 groups with >= 2 donors each)")
+    return(out)
+  }
   out$mean_diam <- mean(d$.diam)
-  d$.diam_c <- d$.diam - out$mean_diam
+  # Centred AND rescaled to units of 100 um (SIZE_COMPANION_DIAM_SCALE). Scaling
+  # a predictor linearly cannot move an F-test or its p-value -- this is purely
+  # numerical hygiene. Raw micrometres put the diameter variance orders of
+  # magnitude above the intercept variance, and the random-slope fits below then
+  # emit "nearly unidentifiable: very large eigenvalue" and, for prop_Beta cell,
+  # a gradient warning at the convergence tolerance. On the 100 um scale both fit
+  # clean. Only the SLOPE ESTIMATE changes units (per 100 um, not per um);
+  # `mean_diam` stays in micrometres because it is a reported centring point.
+  d$.diam_c <- (d$.diam - out$mean_diam) / SIZE_COMPANION_DIAM_SCALE
   d$.cf <- factor(d$`Case ID`)
   d$donor_status <- droplevels(factor(d$donor_status))
 
@@ -487,26 +523,88 @@ size_companion_models <- function(rdf, diam_col = "islet_diam_um") {
       if (term %in% rownames(at)) as.numeric(at[term, "Pr(>F)"]) else NA_real_
     }, error = function(e) NA_real_)
   }
-
-  fit_add <- tryCatch(
-    lmerTest::lmer(value ~ donor_status + .diam_c + (1 | .cf), data = d),
-    error = function(e) e)
-  if (inherits(fit_add, "error")) {
-    out$error_msg <- paste("size-adjusted model failed:", fit_add$message)
-  } else {
-    out$p_status_adj <- p_of(fit_add, "donor_status")
-    out$p_diam <- p_of(fit_add, ".diam_c")
+  df_of <- function(fit, term) {
+    tryCatch({
+      at <- anova(fit)
+      if (term %in% rownames(at)) as.numeric(at[term, "DenDF"]) else NA_real_
+    }, error = function(e) NA_real_)
+  }
+  ctrl <- lme4::lmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5))
+  fit_or_null <- function(form) {
+    f <- tryCatch(lmerTest::lmer(form, data = d, control = ctrl), error = function(e) NULL)
+    if (is.null(f) || lme4::isSingular(f)) NULL else f
   }
 
-  fit_int <- tryCatch(
-    lmerTest::lmer(value ~ donor_status * .diam_c + (1 | .cf), data = d),
-    error = function(e) e)
-  if (inherits(fit_int, "error")) {
-    out$error_msg <- paste(c(out$error_msg,
-                             paste("interaction model failed:", fit_int$message)),
-                           collapse = "; ")
+  # EACH TERM IS TESTED AGAINST THE ERROR TERM FOR ITS OWN UNIT OF REPLICATION.
+  # This is the split-plot logic, and it is why the three p-values below come
+  # from more than one fit rather than one convenient model:
+  #
+  #   donor_status  -- BETWEEN donors (whole-plot). A donor random INTERCEPT is
+  #                    already the correct error term; DenDF ~ 12 on 15 donors.
+  #   diameter      -- WITHIN donor (sub-plot). Needs a per-donor random SLOPE,
+  #                    otherwise it is tested against islet-level residual.
+  #   status x diam -- whole-plot x sub-plot. Tested against BETWEEN-donor slope
+  #                    variation, so it needs the random slope too.
+  #
+  # Measured on Ins_any (5,373 islets, 15 donors) -- the interaction with a
+  # random intercept alone: F = 188.96 on DenDF = 5358.2, p < 2e-16. With the
+  # random slope: F = 23.55 on DenDF = 12.05, p = 6.87e-05. 15 donors carry ~12
+  # d.f., not 5,358. The effect is real -- one OLS slope per donor, tested across
+  # status independently of any mixed model, gives ANOVA p = 6.5e-05 and
+  # Kruskal-Wallis p = 0.0031 -- so only the MAGNITUDE of "< 2e-16" was wrong.
+  #
+  # `p_status_adj` deliberately stays on the random-INTERCEPT additive fit.
+  # Adding a random slope there moves it from 0.0099 to 0.61 (Ins_any) because,
+  # with no interaction term present, the correlated random slope absorbs the
+  # status-driven slope differences as donor noise -- it answers a different
+  # question, and a worse-posed one. The additive companion asks "is the group
+  # difference still there at a common islet size?", which is a contrast of
+  # intercepts and is between-donor. Do not "simplify" these into one fit.
+  fit_add_ri <- fit_or_null(value ~ donor_status + .diam_c + (1 | .cf))
+  if (!is.null(fit_add_ri)) out$p_status_adj <- p_of(fit_add_ri, "donor_status")
+
+  fit_add_rs <- fit_or_null(value ~ donor_status + .diam_c + (1 + .diam_c | .cf))
+  if (!is.null(fit_add_rs)) {
+    out$p_diam <- p_of(fit_add_rs, ".diam_c")
+  } else if (!is.null(fit_add_ri)) {
+    # Flagged, not silent: this p is tested against islet-level residual.
+    out$p_diam <- p_of(fit_add_ri, ".diam_c")
+  }
+
+  fit_int_rs <- fit_or_null(value ~ donor_status * .diam_c + (1 + .diam_c | .cf))
+  fell_back <- FALSE
+  if (!is.null(fit_int_rs)) {
+    out$p_interaction <- p_of(fit_int_rs, "donor_status:.diam_c")
+    out$denom_df_interaction <- df_of(fit_int_rs, "donor_status:.diam_c")
   } else {
-    out$p_interaction <- p_of(fit_int, "donor_status:.diam_c")
+    fell_back <- TRUE
+    fit_int_ri <- fit_or_null(value ~ donor_status * .diam_c + (1 | .cf))
+    if (!is.null(fit_int_ri)) {
+      out$p_interaction <- p_of(fit_int_ri, "donor_status:.diam_c")
+      out$denom_df_interaction <- df_of(fit_int_ri, "donor_status:.diam_c")
+    }
+  }
+
+  # A fit that "converged" onto ~0 denominator d.f. carries no information; its
+  # p is an artefact (the 3-donor case returned exactly 1.000). Refuse it rather
+  # than print it.
+  if (!is.finite(out$denom_df_interaction) || out$denom_df_interaction < 1) {
+    out$p_interaction <- NA_real_
+    out$denom_df_interaction <- NA_real_
+    out$slope_model <- NA_character_
+    out$error_msg <- paste(c(out$error_msg,
+      "interaction not identifiable on this subset (no usable denominator d.f.)"),
+      collapse = "; ")
+    return(out)
+  }
+
+  out$slope_model <- if (fell_back) "random intercept (fallback)" else "random slope"
+  if (fell_back) {
+    out$error_msg <- paste(c(out$error_msg,
+      paste("per-donor diameter slope not estimable (singular or non-convergent);",
+            "fell back to a random intercept, so the diameter and interaction",
+            "terms are tested against islet-level residual and their p-values",
+            "are anticonservative")), collapse = "; ")
   }
   out
 }
@@ -707,7 +805,23 @@ per_bin_donor_pairwise <- function(df, bin_col, group_col, value_col,
         tt <- tryCatch(t.test(g1, g2), error = function(e) NULL)
         if (!is.null(tt)) tt$p.value else NA_real_
       } else {
-        wt <- tryCatch(wilcox.test(g1, g2, exact = FALSE), error = function(e) NULL)
+        # Let wilcox.test choose exact vs normal-approximation. `exact = FALSE`
+        # used to be forced here, and at this sample size that is the wrong
+        # test: these are DONOR means, so a contrast is 5 vs 5 and the exact
+        # null distribution is both available and correct. The forced normal
+        # approximation (with R's default continuity correction) raises the
+        # smallest attainable p from 0.0079 to 0.0122 -- a 54% inflation
+        # precisely at the floor, where every perfectly-separated contrast
+        # lands. On Ins_any that single argument was the whole reason the
+        # pairwise row of the Section 3 heatmap was empty: three ND-vs-T1D
+        # contrasts sat exactly on the floor and needed 0.0122 x 15/3 = 0.061.
+        #
+        # Dropping the argument is self-correcting, not a relaxation: when the
+        # donor means contain ties (common for zero-floored features -- 6 of 15
+        # contrasts for prop_Beta cell) wilcox.test falls back to the
+        # approximation on its own and warns. suppressWarnings() silences only
+        # that expected fallback notice.
+        wt <- tryCatch(suppressWarnings(wilcox.test(g1, g2)), error = function(e) NULL)
         if (!is.null(wt)) wt$p.value else NA_real_
       }
       tibble(bin = as.character(b), mid = bmeta$mid[i],

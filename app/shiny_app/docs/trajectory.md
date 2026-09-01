@@ -10,6 +10,10 @@ it had happened — or which of its confident-sounding predecessors had been dis
 Every number below was **measured**, not inferred. Where a claim was tested and failed, it is
 recorded as failed rather than quietly dropped, because two of them keep getting re-proposed.
 
+> **Current-release routing:** Sections 1–10 audit legacy H5AD pseudotime columns and
+> experiments; those axes are retained as provenance artifacts but are no longer selectable
+> in the reviewer UI. Section 11 is the authority for current reviewer behavior.
+
 ---
 
 ## 1. Ground truth for the shipped file
@@ -207,3 +211,248 @@ a = ad.read_h5ad('data/adata_ins_root.h5ad')
 print('PASS' if m._validate_trajectory(a, list(a.var_names).index('INS')) else 'FAIL')
 "
 ```
+
+---
+
+## 9. What features the pseudotime is actually computed on (Aug 2026)
+
+Asked often enough to belong at the top of any pseudotime discussion, and the answer is not what
+the axis labels suggest.
+
+**Pseudotime is computed on a 10-dimensional scVI latent embedding, not on the 31 markers.**
+
+```
+single cells (2.6M x 31 markers, scVI-trained with batch covariates)
+   |  mean of the 10-d scVI latent over the cells in each islet core
+   v
+obsm['X_scVI_mean']            (5,214 x 10)   <- the ONLY input to the trajectory
+   |  Harmony, batch = imageid (donor), theta = 0.1
+   v
+obsm['X_scVI_harmony_pt']      (5,214 x 10)
+   |  sc.pp.neighbors(n_neighbors = 30, metric = 'cosine')
+   |  sc.tl.diffmap(n_comps = 10)  ->  sc.tl.dpt()
+   v
+obs['dpt_pseudotime']
+```
+
+Consequences worth stating plainly:
+
+- **The 31 markers enter only through scVI.** They are not fed to the diffusion map directly and
+  they are not weighted or selected. Whatever scVI encoded is what the trajectory sees.
+- **INS is used for the ROOT, not for the axis.** The root is the medoid, in the harmonised latent,
+  of the top-50 ND islets ranked by mean INS (`K_ROOT = 50`). A single-islet `argmax(INS)` root was
+  replaced because it is brittle to staining outliers. After that, INS has no further role.
+- **The marker picked as the Y axis is display only.** It comes from `.X` (mean marker expression
+  per islet) and does not participate in the pseudotime at all. `Spearman(pt, INS) = -0.570` on the
+  shipped core column is therefore a *validation* statistic, not a definition.
+- **Cell-type proportions, morphology and structures do not enter the core pseudotime.**
+  `obsm['phenotype_proportions']`, `obsm['phenotype_counts']` and `obsm['morphology']` are carried
+  in the file but unused by Step 5. The `combined` mode is the exception: it concatenates the peri
+  scVI latent plus z-scored structural blocks scaled by `ALPHA_STRUCT = 0.15`.
+- **Each islet is a MEAN over its cells.** An islet of 3 cells and one of 1,902 cells are both a
+  single point, weighted equally in the neighbour graph. This is the origin of the noise problem
+  below.
+
+## 10. Cell-count-stratified pseudotime (Aug 2026)
+
+### Why
+
+The shipped `dpt_pseudotime` is computed over all 5,214 islets at once, and 60.8% are aggregates of
+<= 10 cells whose mean scVI latent is correspondingly noisy. Measured:
+
+```
+spearman(dpt_pseudotime, total_cells) = -0.274      smaller islets -> higher pseudotime
+islets with dpt > 0.6: median 7 cells               vs 10-11 in the bulk
+min_cells >= 25 collapses the tail: frac(dpt>0.6) 3.97% -> 0.44%, max 1.00 -> 0.76
+```
+
+Because scanpy normalises DPT by dividing by the maximum reachable distance, that tail sets the top
+of the axis for everyone: **96.0% of islets land below 0.6**, and the bulk (to p95) occupies only
+57.4% of the drawn axis.
+
+### What was done
+
+`scripts/compute_split_pseudotime.py` recomputes DPT *within* each cell-count stratum, repeating
+Step 5 exactly (Harmony theta=0.1 on `X_scVI_mean`, n_neighbors=30 cosine, diffmap n_comps=10),
+including **re-deriving the root inside each stratum** — the all-islet root is not necessarily a
+member of a stratum, and a root outside the graph makes DPT undefined.
+
+New columns in `data/adata_ins_root.h5ad` (NaN outside their stratum, which is what subsets the
+plot — the app's ordinary `is.finite()` filters do it, so the axis and the point set cannot
+disagree):
+
+| column | stratum | n |
+|---|---|---|
+| `dpt_pseudotime_small` | `total_cells <= 10` | 3,171 |
+| `dpt_pseudotime_large` | `total_cells > 10` | 2,043 |
+| `cell_count_stratum` | `'small'` / `'large'` | 5,214 |
+
+Parameters and per-stratum validation land in `uns['split_pseudotime']`. The shipped
+`dpt_pseudotime` column is left **bit-identical** (verified by md5 against a backup); only the three
+columns above are added and `obsm` is untouched.
+
+### Results
+
+```
+                    all (shipped)   small (<=10)   large (>10)
+n                        5,214          3,171          2,043
+Spearman(pt, INS)       -0.570         -0.507         -0.664
+Spearman(pt, GCG)       +0.143         +0.386         +0.169
+Spearman(pt, SST)       -0.206         -0.211         -0.188
+donor-mean ND           0.3149         0.3912         0.1654
+donor-mean Aab+         0.3668         0.4662         0.1874
+donor-mean T1D          0.3870         0.4890         0.2396
+monotone ND<Aab+<T1D      yes            yes            yes
+frac(pt > 0.6)          3.97%         17.75%          1.62%
+bulk-to-p95 axis use    57.4%          67.0%          36.1%
+```
+
+**The real gain is signal, not axis usage.** Large islets give `Spearman(pt, INS) = -0.664` against
+the all-islet -0.570 — the cleanest INS correlation this pipeline has produced, consistent with the
+small-islet aggregates having diluted it. Small islets separately show a much stronger GCG
+correlation (+0.386 vs +0.143), worth a look on its own. Both strata preserve the monotone
+ND < Aab+ < T1D donor ordering.
+
+**Splitting did NOT fix the axis compression, and for large islets it made it worse** (bulk-to-p95
+36.1% vs 57.4%). That is the honest result: the compression is a property of scanpy's divide-by-max
+normalisation, which manufactures a long right tail in *any* stratum — the small islets were not
+solely responsible. The axis-limits fix (clipping the *view* to ~p99 with `coord_cartesian()`,
+leaving the data untouched) is orthogonal and still outstanding.
+
+### >>> The strata are NOT on a common scale <<<
+
+Each is an independent diffusion map: separate Harmony fit, separate root islet, separate
+divide-by-max normalisation. `small = 0.4` and `large = 0.4` do not mean the same thing. The app
+enforces this rather than trusting the reader — `cmp_scale_warning` in `mod_trajectory_server.R`
+renders a red banner whenever the two pseudotime cards show different strata, an amber one when
+either shows a stratum, and the comparison card's CSV header carries the same warning.
+**Compare shapes and orderings within a stratum; never merge the two columns onto one axis.**
+
+## 11. The trajectory tab as it now stands (Aug 2026)
+
+Consolidates what were sections 11-14 during the Aug 2026 rework. Read this, not the git history of
+those sections.
+
+### One pseudotime, no modes
+
+The tab briefly carried five selectable pseudotime "modes" (core / core+peri scVI, two cell-count
+strata, and a composition one). That is gone. Every extra mode was another axis whose numbers were
+not comparable with the others', which is a garden-of-forking-paths surface rather than a feature,
+and it invited exactly the cross-axis comparison the warning banners existed to forbid.
+
+The one that survived is the **islet-composition diffusion map**, on measurement: rho -0.70 to -0.73
+against core beta-cell content above 25 cells/islet, versus -0.57 for the scVI variants, with the
+least compressed axis of any option tried. It is *not* named after its source paper in the UI --
+the method is described, not branded.
+
+Method (Barlow et al., eLife 2024;13:RP100535, Methods -> "PAGA analysis"), all parameters theirs:
+
+| step | value |
+|---|---|
+| features | cell-type counts, islet core + 20 µm peri, ÷ endocrine cells in the core, log1p |
+| neighbours | cosine distance, 15 nearest |
+| clustering | Leiden, resolution 1 |
+| embedding | PAGA, then `sc.tl.draw_graph(init_pos = "paga")` = ForceAtlas2 |
+| pseudotime axis | scanpy diffusion map + DPT; destiny DPT fallback when scanpy is unavailable |
+| root | ND islet nearest the ND centroid in diffusion space |
+
+`app/shiny_app/python/paga_pseudotime.py` (real scanpy) with `R/barlow_pseudotime.R` (destiny) as
+the fallback when scanpy is unreachable from reticulate. Both are diffusion pseudotime over the same
+graph on the same features.
+
+Two deliberate deviations, stated not hidden: their hand-picked "temporarily omit 25 islets in the
+middle of the map" path-isolation step is **not** ported (unauditable, and undefinable on our data),
+and the root is restricted to ND islets because the globally nearest islet to the ND centroid was
+Aab+ at several thresholds, which anchors the axis in the wrong stage.
+
+### Cells-per-islet is a RANGE, and it defines the axis
+
+The old `min_cells` numericInput is replaced by a two-ended slider, `cell_range`, defaulting to
+**10 - <largest islet>** (1,902 cells; read from the data by `traj_max_islet_cells()`, with a
+literal fallback). 10 is Barlow's own exclusion threshold, and below it an islet's composition
+vector is mostly sampling noise -- 60.8% of our islets are <= 10 cells.
+
+The upper bound matters as much as the lower: the pseudotime is **refitted on whatever islets the
+range selects**, so capping it isolates a size band instead of letting the few 1,000+ cell islets
+dominate the embedding.
+
+```
+range        n      median pseudotime
+10-1902    2,310         0.2525
+25-1902      908         0.3825
+10-200     2,181         0.2386
+```
+
+This is not the §6 axis-instability defect. That was the axis moving as a side effect of changing
+the *Y-axis feature*, which nobody asked for; it still cannot happen and is regression-tested
+(`all.equal` across a feature switch). Here the axis moves only when the islet set that defines it
+changes, and a progress bar plus a note under the selector say so.
+
+### Y axis: markers AND cell types, never one replacing the other
+
+`traj_y_mode` switches the measure; both remain available at all times.
+
+- **Marker expression** -- scVI-denoised mean from `.X`, the 31 markers. Unchanged default.
+- **Cell-type ratio** -- `log1p(cells of type T / endocrine cells in the islet core)`, with a region
+  control for core / peri / **core + peri (default)**.
+
+Only the **retained** phenotypes are offered as ratio numerators: `barlow_ratio_types()` runs the
+list through `phenotype_keep()`, so the nine retired labels (`Endocrine, Acinar, Endothelial,
+T cell, Immune, Unknown, ECAD+, Structural, APCs`) never reappear -- 12 selectable types. Note
+`Endocrine` remains the ratio **denominator**; it is retired as a plotted label, not as a
+denominator.
+
+Separate input ids per mode (`traj_feature` vs `traj_ratio_type`) so switching cannot leave a marker
+name selected against ratio data, which would silently plot nothing. `traj_validate()` branches
+before checking `var_names`, because cell-type names are deliberately not in the marker list.
+
+**A ratio does not cure the zero pile-up** -- `log1p(0) = 0`, and Barlow's own Fig 2F has the same
+problem. What reduces it is sampling more cells (hence the core+peri default and the range floor):
+
+```
+                 core, all   core+peri, all   core+peri, >=25 cells
+Macrophage         0.644         0.235              0.042
+Beta cell          0.615         0.610              0.307
+CD8a Tcell         0.956         0.864              0.718
+CD4 Tcell          0.993         0.969              0.927
+```
+
+`output$traj_y_note` prints the exact zero percentage for the current selection and colour-codes it
+(blue < 40%, amber 40-80%, red >= 80% with "the trend line over them is close to meaningless").
+
+### PAGA force-directed layout
+
+Barlow's Fig 2B/2E, and the plot that actually separates islets. A feature-vs-pseudotime scatter
+cannot be de-overplotted by any transform because the pile-up is at exact zero; a 2-D graph
+embedding spreads points by construction. Measured on the same 133x83 occupancy grid at n = 2,310:
+
+```
+                                   coverage   densest pixel   overplotted
+PAGA force-directed layout           17.1%          3            34.8%
+scatter: INS vs pseudotime           14.0%          8            55.0%
+scatter: prop_Beta cell (Plot tab)   12.4%        125            84.0%
+scatter: prop_CD8a (Plot tab)         2.8%        129            96.4%
+```
+
+Colour by Pseudotime, Selected feature, Donor status, Leiden cluster or Donor. `coord_fixed()` and
+blanked ticks: layout coordinates are unitless and isotropic, and only relative position means
+anything. Rebuilds with the cell range, cached per range.
+
+### Removed from this tab
+
+- **Outlier exclusion** (checkbox, z slider, ghost-× layer, excluded-outlier table). With the
+  pseudotime now refitted on the selected range, a second independent islet-dropping rule was a
+  hidden interaction: which islets counted as outliers changed with the range, silently changing the
+  embedding's input set. `trajectory_server()` still *accepts* `remove_outliers` /
+  `outlier_threshold` because `app.R` passes them to every analysis module, but ignores them; the
+  `traj_remove_outliers` / `traj_outlier_z` sync observers were removed from `app.R`.
+- **The UMAP show/hide toggle.** The UMAP card is back to always visible, as before.
+- **The second (comparison) pseudotime card.** Superseded by there being only one pseudotime.
+
+### scanpy runtime
+
+Production installs the exact Python environment from `deploy/requirements-python.lock` and
+selects it through `RETICULATE_PYTHON`. Local development may use another compatible environment.
+Without scanpy, the axis falls back to destiny and the PAGA card reports that it is unavailable.
+Without `fa2-modified`, scanpy can fall back to Fruchterman–Reingold; the card reports the resulting
+layout key rather than hiding the change.

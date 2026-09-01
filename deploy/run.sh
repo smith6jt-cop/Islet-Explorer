@@ -1,65 +1,95 @@
 #!/usr/bin/env bash
-# Launch the Islet Explorer container on a UF Research Computing PubApps VM.
-#
-# RC's RSE team typically wires the *persistent* service (systemd/quadlet unit) for you —
-# this script documents the exact bind mounts + secret injection that unit must perform,
-# and is directly runnable for manual testing on the VM.
-#
-# Prereqs on the VM:
-#   - deploy/islet-explorer.sif copied to /podman/$SERVICEUSER (or PODMAN alt: an image tag)
-#   - Code + data + images staged under /pubapps/$PROJECT/islet-explorer (see deploy/README.md)
-#   - A secrets env-file (chmod 600, NOT in git) holding the rotated UF Navigator key:
-#         KEY=sk-...rotated...
-#     Do NOT put KEY in the .Renviron on the shared volume; inject it here so it stays out
-#     of the world-readable /pubapps tree.
+# Manual rootless Podman smoke launcher. Production uses activate-release.sh and
+# the generated Quadlet unit; this command intentionally has no Apptainer path.
 set -euo pipefail
 
-PROJECT="${PROJECT:?set PROJECT to your /pubapps project name}"
-SERVICEUSER="${SERVICEUSER:-$USER}"
-PUBAPPS_ROOT="/pubapps/${PROJECT}/islet-explorer"
-SIF="${SIF:-/podman/${SERVICEUSER}/islet-explorer.sif}"
-SECRET_ENV_FILE="${SECRET_ENV_FILE:-/pubapps/${PROJECT}/secrets/islet.env}"
+project_root="${PROJECT_ROOT:?set PROJECT_ROOT to /pubapps/<project>/islet-explorer}"
+release="${RELEASE:?set RELEASE to a verified release identifier}"
+port="${PORT:-3838}"
+container_name="${CONTAINER_NAME:-islet-explorer-smoke}"
 
-# Persistent log directory. --writable-tmpfs makes the container filesystem ephemeral, so
-# without this bind every shiny-server worker log is discarded when the instance stops —
-# which is exactly what you need when a worker dies at startup (the classic failure here is
-# a missing R package or a bad RETICULATE_PYTHON). README verification step 6 reads these.
-LOG_DIR="${LOG_DIR:-/pubapps/${PROJECT}/logs}"
-mkdir -p "${LOG_DIR}"
+[[ "${project_root}" == /* && "${project_root}" =~ ^[A-Za-z0-9._/-]+$ ]] || {
+  echo "ERROR: PROJECT_ROOT must be an absolute path without whitespace." >&2
+  exit 64
+}
+[[ "${release}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ && "${port}" =~ ^[0-9]+$ ]] || {
+  echo "ERROR: invalid RELEASE or PORT." >&2
+  exit 64
+}
 
-# --- Apptainer (default) ----------------------------------------------------------------
-# Apptainer uses host networking, so shiny-server on :3838 is reachable on the VM directly —
-# no port publishing needed. RC's reverse proxy then targets 127.0.0.1:3838.
-#
-# `instance start` runs the image's %startscript (NOT %runscript) — see deploy/islet-explorer.def.
-apptainer instance start \
-  --bind "${PUBAPPS_ROOT}:/srv/islet-explorer" \
-  --bind "${LOG_DIR}:/var/log/shiny-server" \
-  --env-file "${SECRET_ENV_FILE}" \
-  --writable-tmpfs \
-  "${SIF}" islet-explorer
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+release_dir="${project_root}/releases/${release}"
+"${script_dir}/verify-release.sh" "${release_dir}"
 
-echo "Started Apptainer instance 'islet-explorer'."
-echo "  App:  http://127.0.0.1:3838/islet-explorer/   (RC proxy -> https://islet-explorer.rc.ufl.edu/...)"
-echo "  Stop: apptainer instance stop islet-explorer"
-echo "  Logs: tail -f ${LOG_DIR}/*.log   (bind-mounted from /var/log/shiny-server in the instance)"
-echo "  List: apptainer instance list"
+read_meta() {
+  local key="$1"
+  awk -F= -v key="${key}" '$1 == key {sub(/^[^=]*=/, ""); print; exit}' "${release_dir}/release.env"
+}
+image_ref="$(read_meta IMAGE_REF)"
+data_schema="$(read_meta DATA_SCHEMA)"
+[[ "${image_ref}" =~ ^sha256:[0-9a-f]{64}$ ||
+   "${image_ref}" =~ ^[A-Za-z0-9._:/-]+@sha256:[0-9a-f]{64}$ ]] || {
+  echo "ERROR: release image is not immutable." >&2
+  exit 65
+}
+podman image exists "${image_ref}" || {
+  echo "ERROR: image is not present locally; pull the immutable digest first: ${image_ref}" >&2
+  exit 66
+}
+if podman container exists "${container_name}"; then
+  echo "ERROR: container already exists: ${container_name}" >&2
+  exit 65
+fi
 
-# --- Podman alternative (rootless) ------------------------------------------------------
-# If RC standardizes on Podman + quadlet instead of Apptainer, the equivalent is:
-#
-#   podman run -d --name islet-explorer \
-#     --publish 127.0.0.1:3838:3838 \
-#     --volume "${PUBAPPS_ROOT}:/srv/islet-explorer:ro,z" \
-#     --volume "${LOG_DIR}:/var/log/shiny-server:z" \
-#     --env-file "${SECRET_ENV_FILE}" \
-#     --userns=keep-id \
-#
-# The app volume is :ro deliberately — the documented update flow (`git pull` + `touch
-# restart.txt`) runs on the HOST side of the bind, so read-only inside the container is
-# sufficient and keeps a public endpoint from writing to the shared volume. The log volume
-# must be read-write, hence the separate mount.
-#     localhost/islet-explorer:latest
-#
-# Note --userns=keep-id (or a --uidmap) so the container's shiny worker can read the
-# $serviceuser-owned files on /pubapps. Prefer a quadlet .container unit for auto-restart.
+container_uid="$(podman run --rm --entrypoint /usr/bin/id "${image_ref}" -u shiny)"
+container_gid="$(podman run --rm --entrypoint /usr/bin/id "${image_ref}" -g shiny)"
+log_dir="${project_root}/runtime/logs-smoke"
+tmp_dir="${project_root}/runtime/tmp-smoke"
+mkdir -p -- "${log_dir}" "${tmp_dir}"
+chmod 0750 "${log_dir}" "${tmp_dir}"
+
+container_id="$(podman run --detach --rm \
+  --name "${container_name}" \
+  --pull=never \
+  --userns="keep-id:uid=${container_uid},gid=${container_gid}" \
+  --user "${container_uid}:${container_gid}" \
+  --publish "127.0.0.1:${port}:3838" \
+  --read-only \
+  --cap-drop=ALL \
+  --security-opt=no-new-privileges \
+  --cpus=2 --memory=14g --pids-limit=2048 \
+  --volume "${release_dir}/data:/srv/islet-explorer/data:ro" \
+  --volume "${release_dir}/data/images:/srv/islet-explorer/app/shiny_app/www/local_images:ro" \
+  --volume "${log_dir}:/var/log/shiny-server:rw" \
+  --volume "${tmp_dir}:/tmp/islet-explorer:rw" \
+  --tmpfs "/run:rw,size=16m,mode=0755,uid=${container_uid},gid=${container_gid}" \
+  --tmpfs "/var/lib/shiny-server:rw,size=64m,mode=0755,uid=${container_uid},gid=${container_gid}" \
+  --env "ISLET_RELEASE=${release}" \
+  --env ISLET_RUNTIME_MODE=production \
+  --env ISLET_DATA_ROOT=/srv/islet-explorer/data \
+  --env "ISLET_DATA_SCHEMA=${data_schema}" \
+  --env LOCAL_IMAGE_ROOT=/srv/islet-explorer/app/shiny_app/www/local_images \
+  --env RETICULATE_PYTHON=/opt/islet-explorer-py/bin/python \
+  --env ISLET_ENABLE_AI=FALSE \
+  --env SHOW_STATISTICS_TAB=0 \
+  --env SHOW_INFLAMMATION_TAB=0 \
+  --env DEBUG_CREDENTIALS=0 \
+  --env VIEWER_DEBUG=0 \
+  --env TMPDIR=/tmp/islet-explorer \
+  --env OMP_NUM_THREADS=1 \
+  --env OPENBLAS_NUM_THREADS=1 \
+  --env MKL_NUM_THREADS=1 \
+  --env NUMEXPR_NUM_THREADS=1 \
+  "${image_ref}")"
+
+echo "Started ${container_name}: ${container_id}"
+if [[ "${port}" == 3838 ]]; then
+  if ! "${script_dir}/verify-deployment.sh" \
+    --url http://127.0.0.1:3838/islet-explorer/ --container "${container_name}"; then
+    podman stop "${container_name}" >/dev/null || true
+    exit 70
+  fi
+else
+  echo "Verify manually at http://127.0.0.1:${port}/islet-explorer/."
+fi
+echo "Stop with: podman stop ${container_name}"

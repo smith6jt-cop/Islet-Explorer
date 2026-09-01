@@ -152,7 +152,7 @@ inflammation_ui <- function(id) {
       "donor's total cell count. Steenbuck et al. normalise per imaging ROI — this ",
       "cohort has whole-section CODEX images rather than ROIs, so the ROI analogue \u2014 ",
       "islet + peri-islet cells \u2014 is the default denominator here. Distances come from ",
-      tags$code("data/cell_distance.csv"), " (negative = inside the islet). ",
+      tags$code("the cell-distance release artifact"), " (negative = inside the islet). ",
       tags$strong("Multiple testing is corrected within a pre-specified family of 7 immune ",
                   "phenotypes"), ", fixed in source so it cannot be resized after seeing results."),
     fluidRow(

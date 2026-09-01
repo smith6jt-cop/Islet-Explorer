@@ -4,9 +4,9 @@
 #   cd app/shiny_app && Rscript tests/run_tests.R      # from the app dir
 #   Rscript app/shiny_app/tests/run_tests.R            # from the repo root
 #
-# The suite covers R/utils_stats.R only — pure statistical helpers that need no
-# app data or Python bridge. Dependencies loaded + code sourced by
-# tests/testthat/helper-setup.R.
+# The suite covers pure statistical helpers plus data-independent runtime-
+# backend parity, manifest-integrity, and spatial-index tests. Heavy optional
+# packages are skipped when absent from a minimal CI worker.
 
 suppressPackageStartupMessages(library(testthat))
 

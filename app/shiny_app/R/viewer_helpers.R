@@ -62,9 +62,12 @@ if (nzchar(local_images_env)) {
   local_images_root <- tryCatch(normalizePath(local_images_env, mustWork = TRUE), error = function(e) NULL)
 }
 if (is.null(local_images_root)) {
-  candidate <- if (!is.null(project_root)) file.path(project_root, "local_images") else NULL
-  if (!is.null(candidate) && dir.exists(candidate)) {
-    local_images_root <- candidate
+  release_candidate <- if (exists("data_path", mode = "function")) data_path("images") else NULL
+  project_candidate <- if (!is.null(project_root)) file.path(project_root, "local_images") else NULL
+  if (!is.null(release_candidate) && dir.exists(release_candidate)) {
+    local_images_root <- release_candidate
+  } else if (!is.null(project_candidate) && dir.exists(project_candidate)) {
+    local_images_root <- project_candidate
   } else {
     local_images_root <- tryCatch(normalizePath(file.path("..", "..", "local_images"), mustWork = FALSE), error = function(e) NULL)
   }

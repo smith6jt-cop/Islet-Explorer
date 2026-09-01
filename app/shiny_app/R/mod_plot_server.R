@@ -804,11 +804,11 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       }
 
       # Minor grid
-      p <- p + theme(panel.grid.minor = element_line(size = 0.2, colour = "#eeeeee"))
+      p <- p + theme(panel.grid.minor = element_line(linewidth = 0.2, colour = "#eeeeee"))
 
       # LOESS smoothing overlay
       if (!is.null(input$add_smooth) && input$add_smooth == "LOESS") {
-        p <- p + geom_smooth(se = FALSE, method = "loess", span = 0.6, size = 0.9)
+        p <- p + geom_smooth(se = FALSE, method = "loess", span = 0.6, linewidth = 0.9)
       }
 
       # Convert to plotly with click source (namespaced for module compatibility)

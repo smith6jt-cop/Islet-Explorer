@@ -1,0 +1,64 @@
+[Unit]
+Description=Islet Explorer reviewer application (@@RELEASE@@)
+Wants=network-online.target
+After=network-online.target
+RequiresMountsFor=@@DATA_DIR@@ @@IMAGE_DIR@@ @@LOG_DIR@@ @@TMP_DIR@@
+
+[Container]
+ContainerName=islet-explorer
+Image=@@IMAGE_REF@@
+Pull=never
+
+# Rootless keep-id maps the PubApps service account to the image's existing
+# shiny UID/GID. The entrypoint verifies the mapping and directory permissions.
+UserNS=keep-id:uid=@@CONTAINER_UID@@,gid=@@CONTAINER_GID@@
+User=@@CONTAINER_UID@@:@@CONTAINER_GID@@
+
+# Shiny listens on the container interface; only loopback is published on the
+# VM. UFRC's TLS/Basic-Auth reverse proxy is the sole external entry point.
+PublishPort=127.0.0.1:3838:3838
+
+Volume=@@DATA_DIR@@:/srv/islet-explorer/data:ro
+Volume=@@IMAGE_DIR@@:/srv/islet-explorer/app/shiny_app/www/local_images:ro
+Volume=@@LOG_DIR@@:/var/log/shiny-server:rw
+Volume=@@TMP_DIR@@:/tmp/islet-explorer:rw
+Tmpfs=/run:rw,size=16m,mode=0755,uid=@@CONTAINER_UID@@,gid=@@CONTAINER_GID@@
+Tmpfs=/var/lib/shiny-server:rw,size=64m,mode=0755,uid=@@CONTAINER_UID@@,gid=@@CONTAINER_GID@@
+
+ReadOnly=true
+NoNewPrivileges=true
+DropCapability=all
+PodmanArgs=--cpus=2 --memory=14g --pids-limit=2048
+
+Environment=ISLET_RELEASE=@@RELEASE@@
+Environment=ISLET_RUNTIME_MODE=production
+Environment=ISLET_DATA_ROOT=/srv/islet-explorer/data
+Environment=ISLET_DATA_SCHEMA=@@DATA_SCHEMA@@
+Environment=LOCAL_IMAGE_ROOT=/srv/islet-explorer/app/shiny_app/www/local_images
+Environment=RETICULATE_PYTHON=/opt/islet-explorer-py/bin/python
+Environment=ISLET_ENABLE_AI=FALSE
+Environment=SHOW_STATISTICS_TAB=0
+Environment=SHOW_INFLAMMATION_TAB=0
+Environment=DEBUG_CREDENTIALS=0
+Environment=VIEWER_DEBUG=0
+Environment=TMPDIR=/tmp/islet-explorer
+Environment=OMP_NUM_THREADS=1
+Environment=OPENBLAS_NUM_THREADS=1
+Environment=MKL_NUM_THREADS=1
+Environment=NUMEXPR_NUM_THREADS=1
+
+HealthCmd=curl --fail --silent --show-error --max-time 8 http://127.0.0.1:3838/islet-explorer/
+HealthInterval=30s
+HealthOnFailure=kill
+HealthRetries=5
+HealthStartPeriod=180s
+HealthTimeout=10s
+
+[Service]
+Restart=on-failure
+RestartSec=10s
+TimeoutStartSec=240s
+TimeoutStopSec=60s
+
+[Install]
+WantedBy=default.target

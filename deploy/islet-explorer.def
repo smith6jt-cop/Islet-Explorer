@@ -1,92 +1,13 @@
-# Apptainer definition for the Islet Explorer Shiny app on UF Research Computing PubApps.
+# RETIRED — DO NOT BUILD OR DEPLOY
 #
-# Design: this image is the SLOW-CHANGING RUNTIME only (OS libs + R packages + a reticulate
-# Python venv + shiny-server). The app CODE, DATA (1.9 GB), and OME-TIFF IMAGES (109 GB) live
-# on the persistent /pubapps volume and are BIND-MOUNTED in at run time (see deploy/run.sh).
-# App updates = `git pull` on /pubapps + touch restart.txt — no image rebuild.
+# The reviewer deployment now requires rootless Podman, an immutable OCI image,
+# read-only release mounts, dependency/security evidence, and a verified Quadlet
+# activation. Those controls are implemented by:
 #
-# Build (run from the REPO ROOT so the %files paths resolve):
-#   apptainer build deploy/islet-explorer.sif deploy/islet-explorer.def
-# Then copy the .sif to /podman/$serviceuser (or wherever RC runs it) on the PubApps VM.
+#   deploy/Containerfile
+#   deploy/build-image.sh
+#   deploy/islet-explorer.container.in
+#   deploy/activate-release.sh
 #
-# This repo ships the Apptainer path only. If RC standardizes on Podman instead, the %post
-# block below translates directly to a Containerfile (RUN per step, COPY for %files, ENV for
-# %environment, CMD for %runscript); deploy/run.sh documents the equivalent `podman run`.
-
-Bootstrap: docker
-From: rocker/shiny:4.5.1
-
-%labels
-    org.opencontainers.image.title "Islet Explorer"
-    org.opencontainers.image.description "Pancreatic islet CODEX explorer (R Shiny) for UFRC PubApps"
-    maintainer "smith6jt@ufl.edu"
-
-%files
-    # Copied into the image at build time (paths are relative to the build CWD = repo root).
-    scripts/install_shiny_deps.R /opt/install_shiny_deps.R
-    deploy/shiny-server.conf     /etc/shiny-server/shiny-server.conf
-
-%post
-    set -eux
-
-    # --- System libraries -----------------------------------------------------------------
-    # sf -> GDAL/GEOS/PROJ/udunits; magick -> ImageMagick(++); xml2 -> libxml2;
-    # httr2/curl -> libcurl+openssl; ragg/text shaping -> fontconfig/harfbuzz/fribidi;
-    # reticulate anndata venv -> python3 + venv + pip.
-    # cmake + libnlopt-dev are the nloptr -> lme4/lmerTest source-build toolchain. The base
-    # image serves binaries so this is normally unused, but lme4 is required (Statistics tab
-    # HTTP 500s without it), so keep the fallback path buildable rather than silently broken.
-    export DEBIAN_FRONTEND=noninteractive
-    apt-get update
-    apt-get install -y --no-install-recommends \
-        libgdal-dev libgeos-dev libproj-dev libudunits2-dev \
-        libmagick++-dev libxml2-dev \
-        libcurl4-openssl-dev libssl-dev \
-        libfontconfig1-dev libharfbuzz-dev libfribidi-dev \
-        libpng-dev libtiff5-dev libjpeg-dev \
-        python3 python3-venv python3-pip \
-        git \
-        cmake libnlopt-dev
-    rm -rf /var/lib/apt/lists/*
-
-    # --- R packages -----------------------------------------------------------------------
-    # Single authoritative manifest (CRAN core + guarded runtime + stats). Bioconductor and
-    # Lamian are optional and best-effort inside this script (the app ships precomputed
-    # trajectory, so they are not required). Enable them only if you use those paths:
-    #   INSTALL_BIOC=1 INSTALL_VITESSCER=1 INSTALL_LAMIAN=1 Rscript /opt/install_shiny_deps.R
-    # The script now exits non-zero if any REQUIRED package fails, so a broken build fails
-    # here rather than as an HTTP 500 from the shiny-server worker at run time.
-    Rscript /opt/install_shiny_deps.R
-
-    # --- reticulate Python venv (anndata) -------------------------------------------------
-    # Fixed path baked into the image so it never depends on any user's $HOME. Must match
-    # RETICULATE_PYTHON in %environment and in the deployment .Renviron (deploy/Renviron.pubapps.example).
-    python3 -m venv /opt/islet-explorer-py
-    /opt/islet-explorer-py/bin/pip install --no-cache-dir --upgrade pip
-    /opt/islet-explorer-py/bin/pip install --no-cache-dir anndata
-    # Sanity-check the bridge dependency the whole app hinges on:
-    /opt/islet-explorer-py/bin/python -c "import anndata; print('anndata', anndata.__version__)"
-
-    # World-readable so shiny-server (whatever user it runs as) can resolve packages + venv.
-    chmod -R a+rX /opt/islet-explorer-py /usr/local/lib/R/site-library
-
-%environment
-    # reticulate picks this up first (R/00_globals.R prefers $RETICULATE_PYTHON). Belt-and-
-    # suspenders with the .Renviron on /pubapps, which also sets it.
-    export RETICULATE_PYTHON=/opt/islet-explorer-py/bin/python
-
-%runscript
-    # shiny-server reads /etc/shiny-server/shiny-server.conf (baked in above) and serves the
-    # app at /islet-explorer/ on :3838. Chosen over `R -e shiny::runApp` specifically because
-    # shiny-server's static file server honors HTTP Range — required for streaming the 109 GB
-    # OME-TIFFs to the Avivator Viewer.
-    #
-    # %runscript is what `apptainer run` executes. deploy/run.sh instead uses
-    # `apptainer instance start`, which runs %startscript below — BOTH must exist or the
-    # persistent service comes up serving nothing.
-    exec /usr/bin/shiny-server
-
-%startscript
-    # Executed by `apptainer instance start` (see deploy/run.sh) — the path RC's persistent
-    # service unit uses. Must stay in sync with %runscript above.
-    exec /usr/bin/shiny-server
+# This filename remains only so old bookmarks and notes fail closed with a clear
+# migration message. It intentionally contains no Apptainer build definition.

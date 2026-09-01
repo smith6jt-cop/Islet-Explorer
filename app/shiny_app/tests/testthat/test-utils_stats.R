@@ -240,6 +240,49 @@ test_that("per_bin_donor_pairwise emits the three named contrasts", {
   expect_setequal(unique(bp$pair), c("ND vs Aab+", "ND vs T1D", "Aab+ vs T1D"))
 })
 
+test_that("non-parametric donor pairwise tests retain the exact 5-v-5 floor", {
+  df <- data.frame(
+    `Case ID` = paste0("D", seq_len(15)),
+    donor_status = rep(c("ND", "Aab+", "T1D"), each = 5),
+    diam_bin = "b25",
+    diam_mid = 25,
+    value = c(1:5, 6:10, 11:15),
+    check.names = FALSE
+  )
+  bp <- per_bin_donor_pairwise(df, "diam_bin", "donor_status", "value",
+                               parametric = FALSE)
+  p <- bp$p_value[bp$pair == "ND vs T1D"]
+  expect_length(p, 1)
+  expect_equal(p, 2 / choose(10, 5), tolerance = 1e-12)
+})
+
+test_that("size companion interaction uses donor-level random-slope degrees of freedom", {
+  skip_if_not_installed("lmerTest")
+  skip_if_not_installed("lme4")
+  set.seed(20260831)
+  statuses <- rep(c("ND", "Aab+", "T1D"), each = 5)
+  rdf <- do.call(rbind, lapply(seq_along(statuses), function(i) {
+    diameter <- seq(55, 335, length.out = 36) + stats::rnorm(36, sd = 4)
+    status_slope <- c(ND = -0.004, `Aab+` = 0.002, T1D = 0.009)[statuses[i]]
+    donor_slope <- stats::rnorm(1, sd = 0.003)
+    donor_intercept <- stats::rnorm(1, sd = 0.35)
+    data.frame(
+      `Case ID` = paste0("D", i),
+      donor_status = statuses[i],
+      islet_diam_um = diameter,
+      value = 3 + donor_intercept +
+        (0.006 + status_slope + donor_slope) * (diameter - 195) +
+        stats::rnorm(36, sd = 0.18),
+      check.names = FALSE
+    )
+  }))
+  res <- size_companion_models(rdf)
+  expect_equal(res$slope_model, "random slope")
+  expect_true(is.finite(res$p_interaction))
+  expect_true(is.finite(res$denom_df_interaction))
+  expect_lt(res$denom_df_interaction, 100)
+})
+
 test_that("lmer_test_donor returns the expected result structure", {
   skip_if_not_installed("lmerTest")
   skip_if_not_installed("lme4")

@@ -480,15 +480,58 @@ statistics_server <- function(id, raw_df, get_selection_description,
           }
         }, error = function(e) NULL)
 
-        # BH correction across bins to control false discovery rate
+        # ---- BH correction ----
+        #
+        # The two OMNIBUS rows are one family each, across bins: the bin scan is
+        # the multiplicity being paid for, and each row asks one question per bin.
         if (!is.null(bin_anova) && nrow(bin_anova) > 0) {
           bin_anova$p_adj <- p.adjust(bin_anova$p_anova, method = "BH")
         }
         if (!is.null(bin_kendall) && nrow(bin_kendall) > 0) {
           bin_kendall$p_adj <- p.adjust(bin_kendall$p_kendall, method = "BH")
         }
+
+        # The PAIRWISE rows are protected post-hocs, corrected WITHIN each bin
+        # (3 contrasts), and only in bins whose ANOVA survived its own BH above.
+        #
+        # They used to be one BH family of 15 (3 contrasts x 5 bins), which made
+        # the row structurally incapable of rejecting. Two things were wrong:
+        #
+        #   1. It corrected the bin dimension TWICE. The ANOVA row already pays
+        #      for the bin scan; conditioning the post-hocs on that protection
+        #      and then re-correcting across bins double-charges the same scan.
+        #   2. The 15 tests are the same 15 donors re-partitioned, so they are
+        #      heavily positively dependent. BH stays valid under positive
+        #      dependence but goes conservative -- the effective number of
+        #      independent tests is nearer 3 than 15.
+        #
+        # Combined with the discreteness floor of a 5-vs-5 rank test, a family of
+        # 15 needs p <= 0.05 x 1/15 = 0.0033 at rank 1, which is below the
+        # smallest p the test can ever produce (0.0079 exact). A test that cannot
+        # reject under ANY data configuration is not a test. Within a bin the
+        # threshold is 0.05 x 1/3 = 0.0167, which the floor clears.
+        #
+        # Correction is NOT dropped entirely. With exactly 3 groups, Fisher's
+        # protected LSD would control FWER in the strong sense with no correction
+        # at all -- but that is a theorem for the parametric case, and this branch
+        # may be running rank tests, where it is only an analogy. Within-bin BH
+        # costs one contrast relative to uncorrected on Ins_any (5 vs 6) and keeps
+        # the guarantee real rather than borrowed.
+        #
+        # Both the family and the protection are fixed HERE, in source, exactly
+        # like INFLAM_FDR_FAMILY: neither is reachable from the UI, so no user
+        # action can resize the family or lift the gate to manufacture a star.
         if (!is.null(bin_pairwise) && nrow(bin_pairwise) > 0) {
-          bin_pairwise$p_adj <- p.adjust(bin_pairwise$p_value, method = "BH")
+          protected_mids <- if (!is.null(bin_anova) && nrow(bin_anova) > 0) {
+            bin_anova$mid[is.finite(bin_anova$p_adj) & bin_anova$p_adj < alpha_num]
+          } else numeric(0)
+          bin_pairwise <- bin_pairwise[bin_pairwise$mid %in% protected_mids, , drop = FALSE]
+          if (nrow(bin_pairwise) > 0) {
+            bin_pairwise$p_adj <- stats::ave(bin_pairwise$p_value, bin_pairwise$mid,
+                                             FUN = function(p) p.adjust(p, method = "BH"))
+          } else {
+            bin_pairwise$p_adj <- numeric(0)
+          }
         }
       }
 
@@ -938,8 +981,28 @@ statistics_server <- function(id, raw_df, get_selection_description,
                       sprintf(" (vs %s unadjusted)", format_p_value(primary_p))), tags$br(),
             tags$span(style = "color: #888;", "status × diameter interaction: "),
             tags$strong(style = if (interaction_hit) "color: #d9534f;" else "",
-                        format_p_value(sm$p_interaction))),
-          warn)
+                        format_p_value(sm$p_interaction)),
+            # The error term the size terms actually got. A random intercept
+            # alone tests them against ISLET-level residual (DenDF in the
+            # thousands) for a contrast that only 15 donors inform, so surfacing
+            # the denominator d.f. makes a regression to that state visible.
+            if (is.finite(sm$denom_df_interaction)) {
+              tags$span(style = "color: #888;",
+                        sprintf(" (%s, denominator d.f. = %.1f)",
+                                sm$slope_model %||% "random slope",
+                                sm$denom_df_interaction))
+            }),
+          warn,
+          if (identical(sm$slope_model, "random intercept (fallback)")) {
+            tags$div(style = paste0("margin-top: 6px; padding: 6px 8px; background: #fff8e1;",
+                                    " border-left: 3px solid #f0ad4e; border-radius: 3px;",
+                                    " font-size: 11px; color: #6a5200; line-height: 1.4;"),
+              tags$strong("Size terms are anticonservative here. "),
+              "A per-donor diameter slope was not estimable on this subset, so these two ",
+              "models fell back to a donor random intercept and the diameter terms are ",
+              "tested against islet-level residual rather than the 15 donors. Treat the ",
+              "diameter and interaction p-values as upper bounds on the evidence.")
+          } else NULL)
       } else if (!is.null(sm) && !is.null(sm$error_msg)) {
         tags$div(style = "margin-top: 10px; font-size: 11px; color: #999;",
                  "Islet-size companion models unavailable: ", sm$error_msg)
@@ -1166,7 +1229,9 @@ statistics_server <- function(id, raw_df, get_selection_description,
           fmt_p(sm$p_status_adj), "-",
           if (is.finite(sm$p_status_adj) && sm$p_status_adj < st$alpha) "*" else ""))
         rows <- rbind(rows, blank_row(
-          "  \u21b3 donor status \u00d7 islet diameter (is the effect size-dependent?)",
+          paste0("  ↳ donor status × islet diameter (is the effect size-dependent?)",
+                 if (identical(sm$slope_model, "random intercept (fallback)"))
+                   "  [random-intercept fallback — anticonservative]" else ""),
           fmt_p(sm$p_interaction), "-",
           if (is.finite(sm$p_interaction) && sm$p_interaction < st$alpha) "*" else ""))
       }
@@ -2061,11 +2126,22 @@ statistics_server <- function(id, raw_df, get_selection_description,
           "slope, but both matter: diameter is a strong predictor of most features, and the ",
           "diameter distribution itself differs between donor groups. Two companions are ",
           "therefore fitted on the same data and reported next to the primary p \u2014 ",
-          tags$code("value ~ donor_status + diameter + (1|donor)"), " (is the group difference ",
+          tags$code("value ~ donor_status + diameter + (1 + diameter|donor)"), " (is the group difference ",
           "still there at a common islet size?) and ",
-          tags$code("value ~ donor_status \u00d7 diameter + (1|donor)"),
+          tags$code("value ~ donor_status × diameter + (1 + diameter|donor)"),
           " (does the group difference depend on size?). Diameter is mean-centred, so the ",
-          "adjusted donor-status term is the difference at the mean islet diameter. ",
+          "adjusted donor-status term is the difference at the mean islet diameter, and is ",
+          "modelled in units of 100 µm purely so the fits stay well conditioned (linear ",
+          "rescaling cannot move a p-value). ",
+          tags$strong("Both companions carry a per-donor random diameter slope, not just a random intercept. "),
+          "A random intercept absorbs each donor's baseline but leaves nothing for donor-to-donor ",
+          "variation in the size slope, so the diameter and interaction terms would be tested ",
+          "against islet-level residual — thousands of denominator d.f. for a contrast that only ",
+          "15 donors inform. On Ins_any that inflated the interaction from p = 6.9e-05 (12.1 d.f.) ",
+          "to p < 2e-16 (5,358 d.f.). The denominator d.f. actually used is printed beside the ",
+          "interaction p, and a fallback to a random intercept is flagged rather than silent. ",
+          "The primary test needed no such change: a random intercept is the correct error term ",
+          "for a between-donor factor, and only these size terms are within-donor. ",
           tags$strong("When the interaction is significant, the single omnibus p is a marginal ",
           "average over a size distribution that differs between groups"),
           " \u2014 the size-stratified analysis in Section 3 is then part of the primary reading, ",
@@ -2095,7 +2171,14 @@ statistics_server <- function(id, raw_df, get_selection_description,
           tags$strong("Stratified analysis (exploratory): "), "ANOVA, pairwise tests, and Kendall \u03c4 on donor-level means within each fixed 50 \u00b5m diameter bin. ",
           "Kendall \u03c4 correlates disease stage (ND=0, Aab+=1, T1D=2) with the feature value: ",
           "\u03c4 > 0 means the feature increases with disease progression, \u03c4 < 0 means it decreases. ",
-          "P-values are BH-corrected across bins. A bin is tested only if at least 2 donor-status groups ",
+          "The two omnibus rows (ANOVA, Kendall \u03c4) are BH-corrected across bins. The pairwise rows are ",
+          tags$strong("protected post-hocs"), ": they are shown only for bins whose ANOVA survived that ",
+          "correction, and are BH-corrected ", tags$em("within"), " each bin (3 contrasts) rather than across ",
+          "all bins at once. Correcting the bin scan twice \u2014 once on the omnibus, again on the post-hocs \u2014 ",
+          "combined with the discreteness floor of a 5-vs-5 rank test (smallest attainable p = 0.0079) left the ",
+          "pairwise row unable to reject under any data configuration, since a family of 15 requires ",
+          "p \u2264 0.0033 at rank 1. Within a bin the threshold is 0.0167, which the floor clears. ",
+          "A bin is tested only if at least 2 donor-status groups ",
           "each have \u2265 2 donors with finite values (same rule for the heatmap and the trend plot). ",
           "The same rule gates the per-bin ANOVA, Kendall \u03c4 AND the pairwise contrasts: a pairwise ",
           "post-hoc is never reported for a bin that has no omnibus test behind it. ",
@@ -2107,8 +2190,9 @@ statistics_server <- function(id, raw_df, get_selection_description,
           tags$br(),
           tags$strong("Multiple comparisons: "),
           "Benjamini-Hochberg (FDR) correction is applied ", tags$em("within"),
-          " each test family — donor-level pairwise contrasts (3 pairs), per-bin ANOVA / Kendall / ",
-          "pairwise (across bins), and sex-stratified pairwise (6 contrasts). It is ",
+          " each test family — donor-level pairwise contrasts (3 pairs), per-bin ANOVA and Kendall ",
+          "(across bins), per-bin pairwise (3 contrasts within each protected bin), and sex-stratified ",
+          "pairwise (6 contrasts). It is ",
           tags$strong("not"), " applied across families, nor across the many features you might test. ",
           "The Section 3–4 exploratory views are therefore hypothesis-generating, not confirmatory; ",
           "confirm any finding with the Section 2 primary test on a single, pre-specified feature.",
@@ -2226,7 +2310,21 @@ statistics_server <- function(id, raw_df, get_selection_description,
                                        "  *** effect is size-dependent; the omnibus p is a marginal average ***"
                                      else ""))
             lines <- c(lines, paste0("# Size companion - diameter mean-centred at: ",
-                                     if (is.finite(sm$mean_diam)) sprintf("%.2f um", sm$mean_diam) else "N/A"))
+                                     if (is.finite(sm$mean_diam)) sprintf("%.2f um", sm$mean_diam) else "N/A",
+                                     sprintf(" (modelled in units of %g um)", SIZE_COMPANION_DIAM_SCALE)))
+            # Which error term the size terms got. Both companions carry a
+            # per-donor random diameter slope; a fallback to a random intercept
+            # tests them against islet-level residual instead of the 15 donors
+            # and is anticonservative, so it must be recoverable from the export.
+            lines <- c(lines, paste0("# Size companion - donor error term: ",
+                                     sm$slope_model %||% "N/A",
+                                     if (is.finite(sm$denom_df_interaction))
+                                       sprintf("; interaction denominator d.f. = %.1f",
+                                               sm$denom_df_interaction)
+                                     else "",
+                                     if (identical(sm$slope_model, "random intercept (fallback)"))
+                                       "  *** per-donor slope not estimable; size-term p-values are anticonservative ***"
+                                     else ""))
           }
           am <- st$age_models
           if (!is.null(am)) {
@@ -2366,7 +2464,9 @@ statistics_server <- function(id, raw_df, get_selection_description,
           # previously absent from the export — so three fifths of that figure
           # could not be reproduced from the CSV.
           if (!is.null(st$bin_pairwise) && nrow(st$bin_pairwise) > 0) {
-            cat("\n# Post-hoc: Per-Bin Pairwise (donor-level, BH-corrected across bins)\n",
+            cat(paste0("\n# Post-hoc: Per-Bin Pairwise (donor-level, protected post-hoc:\n",
+                       "#   shown only for bins whose ANOVA cleared BH across bins, then\n",
+                       "#   BH-corrected within each bin across its 3 contrasts)\n"),
                 file = file, append = TRUE)
             write.table(st$bin_pairwise, file, append = TRUE, sep = ",",
                         row.names = FALSE, quote = TRUE)

@@ -2,7 +2,13 @@
 
 Developer- and maintainer-facing reference for rebuilding the app data, deploying the Shiny app, and troubleshooting. End-user feature documentation lives in [user_guide.md](user_guide.md).
 
-**Production URL**: `http://<server-ip>:8080/islet-explorer/`
+**Requested reviewer URL (pending UFRC provisioning confirmation)**:
+`https://islet-explorer.rc.ufl.edu/islet-explorer/`
+
+> **Deployment authority:** [deploy/README.md](../deploy/README.md) and
+> [PUBAPPS_UFRC_HANDOFF.md](../PUBAPPS_UFRC_HANDOFF.md) define the August 2026 reviewer
+> deployment. Any older mutable-code, direct-nginx, Apptainer, or AI-key instruction in
+> historical notes is not a production procedure.
 
 ---
 
@@ -59,7 +65,7 @@ Branch pipelines:
 
 | Source | Location | Description |
 |--------|----------|-------------|
-| Single-cell H5AD | `single_cell_analysis/CODEX_scvi_BioCov_phenotyped_newDuctal.h5ad` | 2.6M cells, scVI-embedded (note: scVI training was not batch_key-aware; downstream Harmony in reaggregate_islets.py corrects donor variance for clustering and combined-mode pseudotime), phenotyped |
+| Single-cell H5AD | `single_cell_analysis/CODEX_scvi_BioCov_phenotyped_newDuctal.h5ad` | 2.6M cells, scVI-embedded and phenotyped; downstream pipeline artifacts retain audited legacy Harmony/DPT experiments |
 | Groovy TSV exports | `panc_CODEX/results/groovy_exports/` | QuPath islet measurements (15 donors × 4 types) |
 | GeoJSON boundaries | `data/json/*.geojson` | Islet segmentation polygons |
 | Spatial lookup | `data/islet_spatial_lookup.csv` | Islet centroid coordinates |
@@ -73,25 +79,22 @@ See `data/DATA_PROVENANCE.md` for the complete lineage documentation including v
 ### Architecture
 
 ```
-nginx (port 8080)
-  ↓ reverse-proxy /islet-explorer/
-shiny-server (port 3838)
-  ↓ symlink /srv/shiny-server/islet-explorer → app/shiny_app/
-Shiny app (R worker process)
+reviewer HTTPS + Basic Auth
+  ↓ UFRC high-availability reverse proxy
+PubApps VM 127.0.0.1:3838
+  ↓ rootless Podman forwarding
+immutable Shiny container 0.0.0.0:3838
+  ├── manifest-backed data + images (read-only)
+  └── bounded temporary files + operational logs (read/write)
 ```
 
 ### Updating the App
 
-Code changes take effect when shiny-server spawns a new R worker. No restart is needed for code-only changes.
-
-If a stale R worker persists with old code:
-```bash
-# Find and kill stale Shiny R workers
-ps aux | grep R | grep shiny
-kill <PID>
-```
-
-Note: `sudo systemctl restart shiny-server` is not available — use the worker kill approach above.
+Never edit or `git pull` into an active reviewer release. Build and scan a clean,
+digest-pinned OCI image; build and fully checksum-verify a new data release; then use
+`deploy/activate-release.sh`. It health-checks the new Quadlet service and restores the
+prior unit on failure. Use `deploy/rollback-release.sh` for an explicit rollback. See the
+deployment runbook for complete commands and required evidence.
 
 ### Local Development
 
@@ -110,23 +113,37 @@ shiny, shinyjs, plotly, ggplot2, dplyr, tidyr, readxl, sf, jsonlite,
 RColorBrewer, scales, anndata, reticulate, lmerTest, lme4, emmeans
 ```
 
-### Python Dependencies (pipeline only)
+### Python Dependencies
 
 ```bash
 conda activate scvi-env
 # scanpy, anndata, scvi-tools, sklearn, scib-metrics, scipy, pandas, numpy
 ```
 
+The production app environment is independently pinned by
+`deploy/requirements-python.lock`; do not substitute the mutable pipeline environment in
+the reviewer image.
+
 ---
 
 ## Troubleshooting
 
-### App fails to load
+### Production app fails to load
+
+1. Run `deploy/verify-deployment.sh` with the active release root and expected image
+   reference.
+2. Inspect the sanitized service journal and Shiny log; do not print environment values or
+   reviewer request URLs containing query strings.
+3. Verify the active data manifest in full mode. Production must fail closed on a missing
+   artifact or hash mismatch; do not enable the development fallback.
+
+### Local development app fails to load
 
 1. Check that `data/islet_explorer.h5ad` exists and is ~70 MB
 2. Check that R packages are installed: `library(anndata); library(reticulate)`
 3. Check that Python is accessible via reticulate: `reticulate::py_available()`
-4. Fall back to Excel: ensure `data/master_results.xlsx` exists (reduced functionality)
+4. For development only, the Excel fallback requires `data/master_results.xlsx` and has
+   reduced functionality.
 
 ### No phenotype or demographic filters
 
@@ -165,21 +182,19 @@ The Statistics tab uses data from the Plot sidebar. Ensure:
 2. If missing, regenerate: `python scripts/extract_per_donor_tissue.py`
 3. If Leiden panel says "not available", rebuild the H5AD with Leiden data: `python scripts/build_h5ad_for_app.py` (requires `islet_analysis/islets_core_clustered.h5ad`)
 
-### AI assistant shows error or no response
+### AI assistant shows error or no response (development only)
 
-1. **"LLM key not found"**: Set `KEY=your-api-key` and `BASE=https://api.ai.it.ufl.edu` in `~/.Renviron` or `app/shiny_app/.Renviron`
-2. **"key not allowed to access model"**: The selected model isn't available. Verify available models with `GET /v1/models`. Current models: `gpt-oss-20b` and `gpt-oss-120b`.
-3. **Authentication error (401)**: Confirm the API key is valid and has no extra whitespace
-4. **Timeout or empty response**: The Large model (120b) needs time for reasoning. Try the Fast model (20b) for quicker responses, or increase the timeout.
-5. **"httr2 package required"**: Install with `install.packages('httr2')` and restart the app
-6. **Debug mode**: Set `DEBUG_CREDENTIALS=1` in `.Renviron` and check the R console output for credential loading details
+The reviewer release intentionally has no AI panel or key; this is expected. Do not add a
+Navigator/OpenAI credential to production. Development AI configuration is outside the
+approved reviewer data flow and requires a separate local secret plus appropriate review.
 
 ### Leiden UMAP shows a blob
 
 The Leiden UMAP visualization uses raw marker PCA coordinates (same as the Trajectory tab). If it shows a blob, the clustered H5AD may have outdated scVI-based UMAP coordinates. Fix:
 1. Copy visualization UMAP from `data/adata_ins_root.h5ad` into `islet_analysis/islets_core_clustered.h5ad`
 2. Rebuild: `python scripts/build_h5ad_for_app.py`
-3. Kill stale R workers and refresh
+3. Restart the local development app. For production, build and activate a new immutable
+   release through `deploy/README.md`; do not replace code inside the running container.
 
 ### Drill-down does nothing or Viewer flickers on macOS (fixed Jun 2026)
 
@@ -188,4 +203,9 @@ Earlier builds had two macOS-only problems: clicking a plot point did nothing (m
 - **Drill-down** uses a native-click bridge (`islet_click_bridge()` in `app/shiny_app/R/00_globals.R`) that fires on a native mouse click even when `plotly_click` is suppressed; both the Plot and Trajectory scatters route through the shared `select_islet_from_key()` resolver.
 - **Viewer** mounts the iframe once and updates its `src` in place via `session$sendCustomMessage`, so the WebGL canvas is never recreated.
 
-If these symptoms reappear on macOS, confirm the deployment is running the latest `app/shiny_app/R/` code (kill stale R workers, hard-refresh the browser). On the Plot tab, enable **Show individual points** so there are per-islet points to click. If the Viewer still flickers specifically on a Retina display, the residual cause is deck.gl's device-pixel backing buffer — rebuild Avivator (`www/avivator`) with `useDevicePixels: false` (the bundle only reads `image_url` + `channel_config` query params, so it cannot be toggled at runtime).
+If these symptoms reappear on macOS, confirm the active release manifest points to the
+expected image digest and hard-refresh the browser. Do not kill individual production R
+workers or modify container code in place; activate a rebuilt release through the runbook.
+On the Plot tab, enable **Show individual points** so there are per-islet points to click.
+If Viewer flicker remains specific to a Retina display, investigate Avivator's
+device-pixel backing-buffer behavior in a separate tested image build.

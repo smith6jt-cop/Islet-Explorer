@@ -294,7 +294,7 @@ prep_data <- function(master) {
   #
   # Absent file is a normal state (Excel fallback path, fresh checkout before the
   # script is run) — skip quietly, every consumer already guards on the columns.
-  donor_meta_path <- file.path("..", "..", "data", "donor_metadata.csv")
+  donor_meta_path <- data_path("donor_metadata.csv")
   if (file.exists(donor_meta_path)) {
     donor_meta <- tryCatch({
       dm <- utils::read.csv(donor_meta_path, stringsAsFactors = FALSE,
@@ -392,7 +392,7 @@ audit_na <- function(df, label) {
   if (is.null(df) || !nrow(df)) return(invisible(NULL))
   na_cnt <- vapply(df, function(x) sum(is.na(x)), integer(1))
   total <- nrow(df)
-  pct <- ifelse(total > 0, round(100 * na_cnt / total, 2), 0)
+  pct <- if (total > 0) round(100 * na_cnt / total, 2) else rep(0, length(na_cnt))
   msg <- paste0("[NA audit] ", label, ": ", paste(names(na_cnt), paste0(na_cnt, " (", pct, "%)"), sep = "=", collapse = "; "))
   message(msg)
 }
@@ -428,7 +428,7 @@ load_master_h5ad <- function(path) {
 
   tryCatch({
     message("[H5AD] Loading enriched H5AD: ", path)
-    ad <- anndata::read_h5ad(path)
+    ad <- islet_read_h5ad_shared(path)
 
     # Cache ad$uns as R list once (0.2s) instead of per-key bridge crossings (~14s for 62 keys)
     uns <- ad$uns
@@ -564,4 +564,54 @@ load_master_auto <- function(h5ad_path = NULL, excel_path = master_path) {
   }
 
   stop("No data source found. Checked:\n  H5AD: ", h5ad_path, "\n  Excel: ", excel_path)
+}
+
+#' Load the precomputed, immutable publication summaries.
+#'
+#' These files contain the output of prep_data(), so no H5AD bridge or joins run
+#' per reviewer session. The manifest is validated before any table is exposed.
+load_prepared_release <- function(root = data_root) {
+  manifest <- islet_validate_release(root)
+  out <- lapply(ISLET_SUMMARY_ARTIFACTS, function(rel) {
+    islet_read_parquet(file.path(root, rel))
+  })
+
+  artifacts <- manifest$artifacts %||% list()
+  for (name in names(out)) {
+    expected <- artifacts[[name]]$row_count %||% NULL
+    if (!is.null(expected) && !identical(as.numeric(nrow(out[[name]])), as.numeric(expected))) {
+      stop("Release row-count mismatch for ", name, ": expected ", expected,
+           ", read ", nrow(out[[name]]), call. = FALSE)
+    }
+  }
+  message("[DATA] Loaded immutable release summaries from ", root)
+  out
+}
+
+#' Process-wide prepared data object.
+#'
+#' Production is fail-closed: it must have a complete manifest-backed release.
+#' A repository checkout without a manifest retains the H5AD/Excel development
+#' fallback, but the resulting prepared object is still shared by all sessions.
+load_shared_prepared_data <- function(root = data_root) {
+  cache_key <- paste0("prepared::", normalizePath(root, mustWork = FALSE))
+  if (!is.null(.islet_backend[[cache_key]])) return(.islet_backend[[cache_key]])
+
+  manifest_exists <- file.exists(islet_manifest_path(root))
+  prepared <- if (manifest_exists) {
+    load_prepared_release(root)
+  } else {
+    if (islet_is_production()) {
+      stop("Production requires a manifest-backed data release under ISLET_DATA_ROOT: ",
+           root, call. = FALSE)
+    }
+    message("[DATA] No release manifest; using development H5AD/Excel source")
+    prep_data(load_master_auto(h5ad_path = h5ad_path, excel_path = master_path))
+  }
+
+  for (name in intersect(c("targets_all", "markers_all", "comp"), names(prepared))) {
+    try(audit_na(prepared[[name]], name), silent = TRUE)
+  }
+  .islet_backend[[cache_key]] <- prepared
+  prepared
 }

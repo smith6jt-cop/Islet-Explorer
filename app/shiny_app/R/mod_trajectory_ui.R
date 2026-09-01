@@ -5,20 +5,6 @@ trajectory_ui <- function(id) {
     div(style = "background-color: #e8f4fd; border: 1px solid #b8daff; border-radius: 5px; padding: 10px 15px; margin-bottom: 15px; color: #004085; font-size: 13px;",
       "Click any point on the pseudotime scatter plot to view the segmentation map for that islet."
     ),
-    div(style = "display: flex; gap: 20px; align-items: center; margin-bottom: 8px; flex-wrap: wrap;",
-      tags$div(
-        title = GLOBAL_OUTLIER_TOOLTIP,
-        checkboxInput("traj_remove_outliers",
-                      "Exclude outliers",
-                      value = FALSE,
-                      width = "200px")
-      ),
-      tags$div(style = "min-width: 240px;",
-        sliderInput("traj_outlier_z", "Outlier z-threshold",
-                    min = 0.5, max = 10, value = 3, step = 0.5, width = "230px")
-      ),
-      checkboxInput(ns("show_outlier_table"), "Show excluded-outlier table", value = FALSE)
-    ),
     uiOutput(ns("traj_status")),
     fluidRow(
       # Left card: Scatterplot and heatmaps (narrowed from col-8)
@@ -26,16 +12,26 @@ trajectory_ui <- function(id) {
         div(class = "card", style = "padding: 15px; margin-bottom: 20px;",
           fluidRow(
             column(3,
+              # Y-axis measure. Marker expression is a scVI-denoised mean from
+              # .X; the cell-type ratio is Barlow et al.'s Fig 2F y-axis,
+              # log(# cells / # endocrine cells), which removes the islet-size
+              # confound that a raw count or proportion carries.
+              selectInput(ns("traj_y_mode"), "Y axis:",
+                          choices = c("Marker expression" = "marker",
+                                      "Cell-type ratio (log cells / endocrine cell)" = "ratio"),
+                          selected = "marker"),
+              conditionalPanel(
+                condition = "input.traj_y_mode == 'ratio'", ns = ns,
+                selectInput(ns("traj_ratio_region"), "Count cells in:",
+                            choices = BARLOW_RATIO_REGIONS, selected = "both")
+              ),
               uiOutput(ns("traj_feature_selector")),
+              uiOutput(ns("traj_y_note")),
               selectInput(ns("traj_show_trend"), "Trend lines:",
                          choices = c("None" = "none",
                                      "Overall" = "overall",
                                      "By Donor Status" = "by_donor"),
                          selected = "by_donor"),
-              selectInput(ns("pt_mode"), "Pseudotime mode:",
-                         choices = c("Core only" = "core",
-                                     "Core + Peri" = "combined"),
-                         selected = "core"),
               selectInput(ns("pt_scale"), "Pseudotime scale:",
                          choices = c("Rank-normalized" = "rank",
                                      "Raw DPT" = "raw"),
@@ -45,7 +41,8 @@ trajectory_ui <- function(id) {
                 "Rank spreads islets evenly; raw shows true DPT spacing, so ",
                 "where islets actually concentrate is visible. Trend curvature ",
                 "on the rank axis is partly an artifact of the transform."
-              )
+              ),
+              uiOutput(ns("pseudotime_note"))
             ),
             column(3,
               selectInput(ns("traj_color_by"), "Color points by:",
@@ -67,8 +64,14 @@ trajectory_ui <- function(id) {
                          min = 0, max = 0.95, value = 0.4, step = 0.05),
               sliderInput(ns("traj_point_size_slider"), "Point size:",
                          min = 0.5, max = 5.0, value = 3.0, step = 0.1),
-              numericInput(ns("min_cells"), "Min cells/islet",
-                           value = 1, min = 1, max = 200, step = 1),
+              # Range, not a floor. The upper bound matters as much as the
+              # lower one here: the pseudotime is refitted on whatever islets
+              # the range selects, so capping it isolates a size band instead of
+              # letting the few 1,000+ cell islets dominate the embedding.
+              sliderInput(ns("cell_range"), "Cells per islet:",
+                          min = 1, max = traj_max_islet_cells(),
+                          value = c(TRAJ_DEFAULT_MIN_CELLS, traj_max_islet_cells()),
+                          step = 1),
               checkboxInput(ns("traj_trend_ci"), "95% CI band on trends",
                            value = TRUE)
             ),
@@ -82,7 +85,6 @@ trajectory_ui <- function(id) {
                           selected = "Bright")
             )
           ),
-          uiOutput(ns("traj_outlier_badge")),
           plotlyOutput(ns("traj_scatter"), height = 650),
           br(),
           plotlyOutput(ns("traj_heatmap"), height = 100),
@@ -100,7 +102,7 @@ trajectory_ui <- function(id) {
                            class = "btn-sm btn-outline-primary"))
         )
       ),
-      # Right column: UMAPs stacked + segmentation viewer below
+      # Right column: UMAP card + segmentation viewer below it.
       column(5,
         div(class = "card", style = "padding: 15px; margin-bottom: 20px;",
           fluidRow(
@@ -125,6 +127,38 @@ trajectory_ui <- function(id) {
         uiOutput(ns("segmentation_viewer_panel"))
       )
     ),
-    fluidRow(column(12, uiOutput(ns("traj_outlier_info"))))
+    # ---- PAGA force-directed layout (Barlow et al. Fig 2B/2E) ----------
+    # The feature-vs-pseudotime scatter above cannot be de-overplotted by any
+    # axis transform: the pile-up is at EXACT zero (95.6% of islets have no CD8a
+    # T cell, 98.2% no B cell) and log(0) is still 0. This 2-D graph embedding
+    # is the plot that actually separates islets -- 8.1% overplotted vs 84-96%.
+    fluidRow(
+      column(12,
+        div(class = "card", style = "padding: 15px; margin-bottom: 20px;",
+          h5("PAGA force-directed layout (Barlow et al. 2024)",
+             style = "color: #2c5aa0; margin-top: 0;"),
+          fluidRow(
+            column(3,
+              selectInput(ns("paga_color_by"), "Color islets by:",
+                          choices = c("Pseudotime" = "pseudotime",
+                                      "Donor status" = "donor_status",
+                                      "Leiden cluster" = "leiden",
+                                      "Donor" = "case_id",
+                                      "Selected feature" = "feature"),
+                          selected = "pseudotime")
+            ),
+            column(3,
+              sliderInput(ns("paga_point_size"), "Point size:",
+                          min = 0.3, max = 4.0, value = 1.6, step = 0.1)
+            ),
+            column(6, uiOutput(ns("paga_note")))
+          ),
+          plotlyOutput(ns("paga_layout"), height = 620),
+          div(style = "text-align: right; margin-top: 8px;",
+            downloadButton(ns("dl_paga_csv"), "Download CSV",
+                           class = "btn-sm btn-outline-secondary"))
+        )
+      )
+    ),
   )
 }

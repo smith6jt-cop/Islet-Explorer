@@ -52,7 +52,7 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
     cells <- reactive({
       df <- load_cell_distance()
       shiny::validate(shiny::need(!is.null(df) && nrow(df) > 0,
-                    "data/cell_distance.csv not found — run scripts/compute_neighborhood_metrics.py"))
+                    "Cell-distance release artifact not found — rebuild the release data."))
       df$donor_status <- factor(as.character(df$donor_status), levels = status_levels)
       df[!is.na(df$donor_status), , drop = FALSE]
     })
@@ -640,7 +640,7 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
                 isletperi = "islet + peri-islet cells (ROI analogue, default)",
                 near100   = "cells within 100 um of an islet",
                 "all cells on the section")),
-          "source: data/cell_distance.csv",
+          "source: cell-distance release artifact (Parquet in production; CSV in development)",
           paste("FDR family (pre-specified, fixed in source):",
                 paste(INFLAM_FDR_FAMILY, collapse = "; ")),
           "in_family = FALSE rows are reported UNCORRECTED (q_kw is NA) and are exploratory",

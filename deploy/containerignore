@@ -1,0 +1,35 @@
+**
+
+!app/
+!app/shiny_app/
+!app/shiny_app/**
+!app/docs/
+!app/docs/logo.png
+!scripts/
+!scripts/install_shiny_deps.R
+!scripts/verify_release_data.R
+!deploy/
+!deploy/Containerfile
+!deploy/install-production-r-deps.R
+!deploy/requirements-python.lock
+!deploy/shiny-server.conf
+!deploy/container-entrypoint.sh
+
+# Local credentials, mutable diagnostics, and scientific assets must never enter
+# the image or build context.
+**/.Renviron
+**/.Rhistory
+**/.env
+**/.env.*
+**/*.key
+**/*.pem
+app/shiny_app/APP_LOADED_FLAG
+app/shiny_app/R/APP_LOADED_FLAG
+app/shiny_app/restart.txt
+app/shiny_app/www/logo.png
+app/shiny_app/www/local_images
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.bak
+**/*~

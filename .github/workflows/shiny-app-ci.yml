@@ -5,38 +5,156 @@ on:
     branches: [main]
     paths:
       - 'app/shiny_app/**'
+      - 'scripts/**'
+      - 'deploy/**'
+      - '.gitignore'
       - '.github/workflows/shiny-app-ci.yml'
   pull_request:
     branches: [main]
     paths:
       - 'app/shiny_app/**'
+      - 'scripts/**'
+      - 'deploy/**'
+      - '.gitignore'
       - '.github/workflows/shiny-app-ci.yml'
+
+permissions:
+  contents: read
 
 jobs:
   parse-and-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      R_LIBS_USER: ${{ runner.temp }}/islet-r-library
     steps:
       - uses: actions/checkout@v4
 
       # Ubuntu's precompiled r-cran-* debs bundle their system dependencies
-      # (BLAS/LAPACK, gfortran runtime, etc.), so no compilation and no P3M binary
-      # lookup — deterministic on ubuntu-latest. Only the deps needed to source
-      # R/utils_stats.R and run the tests are installed; the full app also needs
-      # sf / reticulate / anndata / shiny + the gitignored data/ artifacts, which
-      # is why CI parse-checks (rather than sources) the app files.
+      # (including GDAL/GEOS for sf). DuckDB is not packaged by Ubuntu, so it is
+      # installed into an isolated runner library in the next step.
       - name: Install R and test packages
+        run: |
+          set -euo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          mkdir -p "${R_LIBS_USER}"
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            build-essential r-base-core r-base-dev \
+            r-cran-testthat r-cran-dplyr r-cran-tidyr \
+            r-cran-tibble r-cran-lme4 r-cran-lmertest \
+            r-cran-dbi r-cran-digest r-cran-jsonlite r-cran-sf
+
+      - name: Install embedded DuckDB test dependency
+        env:
+          MAKEFLAGS: -j2
+        run: |
+          Rscript -e 'if (!requireNamespace("duckdb", quietly = TRUE)) install.packages("duckdb", repos = "https://cloud.r-project.org", Ncpus = 2L)'
+
+      # The backend tests contain defensive skip_if_not_installed() guards for
+      # developer laptops. CI turns those dependencies into hard requirements so
+      # Parquet parity, SHA-256 validation, and GeoPackage indexing cannot skip.
+      - name: Verify non-optional test capabilities
+        run: |
+          Rscript -e 'required <- c("testthat", "dplyr", "tidyr", "tibble", "lme4", "lmerTest", "DBI", "duckdb", "digest", "jsonlite", "sf"); missing <- required[!vapply(required, requireNamespace, logical(1), quietly = TRUE)]; if (length(missing)) stop("Missing required CI packages: ", paste(missing, collapse = ", ")); if (!("GPKG" %in% sf::st_drivers()$name)) stop("sf/GDAL lacks the GPKG driver required by backend tests"); message("Backend test capabilities verified: ", paste(required, collapse = ", "))'
+
+      - name: Parse-check application and release R sources
+        run: |
+          Rscript app/shiny_app/tests/parse_check.R
+          Rscript -e 'files <- c(list.files("scripts", pattern = "[.]R$", recursive = TRUE, full.names = TRUE), list.files("deploy", pattern = "[.]R$", recursive = TRUE, full.names = TRUE)); if (!length(files)) stop("No scripts/deploy R files found"); for (file in files) tryCatch(parse(file = file), error = function(e) stop(file, ": ", conditionMessage(e))); message("Parsed ", length(files), " scripts/deploy R files")'
+
+      - name: Parse-check Python sources
+        run: |
+          python3 - <<'PY'
+          import ast
+          from pathlib import Path
+
+          files = sorted(Path("app/shiny_app/python").rglob("*.py"))
+          files += sorted(Path("scripts").rglob("*.py"))
+          if not files:
+              raise SystemExit("No application/script Python files found")
+          for path in files:
+              ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+          print(f"Parsed {len(files)} application/script Python files")
+          PY
+
+      - name: Run unit tests
+        working-directory: app/shiny_app
+        run: Rscript tests/run_tests.R
+
+  deployment-quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ShellCheck
         run: |
           export DEBIAN_FRONTEND=noninteractive
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends \
-            r-base-core \
-            r-cran-testthat r-cran-dplyr r-cran-tidyr \
-            r-cran-tibble r-cran-lme4 r-cran-lmertest
+          sudo apt-get install -y --no-install-recommends shellcheck
 
-      - name: Parse-check all R source files
-        run: Rscript app/shiny_app/tests/parse_check.R
-
-      - name: Run unit tests
+      - name: Check deployment shell syntax
+        shell: bash
         run: |
-          cd app/shiny_app
-          Rscript tests/run_tests.R
+          set -euo pipefail
+          mapfile -d '' scripts < <(find deploy -maxdepth 1 -type f -name '*.sh' -print0)
+          if (( ${#scripts[@]} == 0 )); then
+            echo 'No deployment shell scripts found.' >&2
+            exit 1
+          fi
+          for script in "${scripts[@]}"; do
+            bash -n "${script}"
+          done
+
+      - name: Run ShellCheck on deployment scripts
+        run: shellcheck --severity=warning deploy/*.sh
+
+      # This is a deterministic tracked-file gate, not a replacement for GitHub
+      # secret scanning. It reports filenames only so a detected value is never
+      # copied into CI output. Minified vendored Avivator bundles are excluded
+      # from the heuristic content regex; filenames remain covered.
+      - name: Reject tracked credentials and likely secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          forbidden=()
+          while IFS= read -r -d '' path; do
+            base="${path##*/}"
+            case "${base}" in
+              .Renviron|.env|.env.*|id_rsa|id_ed25519|credentials.json|secrets.json|*.pem|*.key|*.p12|*.pfx)
+                case "${base}" in
+                  *.example|*.sample|*.template) ;;
+                  *) forbidden+=("${path}") ;;
+                esac
+                ;;
+            esac
+          done < <(git ls-files -z)
+
+          if (( ${#forbidden[@]} > 0 )); then
+            echo 'Tracked credential-like filenames are forbidden:' >&2
+            printf '  %s\n' "${forbidden[@]}" >&2
+            exit 1
+          fi
+
+          secret_pattern='-----BEGIN [A-Z ]*PRIVATE KEY-----|'
+          secret_pattern+='A''KIA[0-9A-Z]{16}|A''SIA[0-9A-Z]{16}|'
+          secret_pattern+='s''k-(proj-)?[A-Za-z0-9_-]{20,}|'
+          secret_pattern+='g''h[pousr]_[A-Za-z0-9]{30,}|'
+          secret_pattern+='x''ox[baprs]-[A-Za-z0-9-]{20,}|'
+          secret_pattern+='A''Iza[0-9A-Za-z_-]{35}|'
+          secret_pattern+='(OPENAI_API_KEY|API_KEY|PASSWORD|TOKEN|SECRET)[[:space:]]*=[[:space:]]*[A-Za-z0-9_+./=-]{20,}'
+
+          if secret_files="$(git grep -IlE -e "${secret_pattern}" -- . \
+              ':(exclude)app/shiny_app/www/avivator/assets/**')"; then
+            echo 'Likely secret material found in tracked files (contents suppressed):' >&2
+            printf '  %s\n' "${secret_files}" >&2
+            exit 1
+          else
+            grep_status=$?
+            if (( grep_status != 1 )); then
+              echo "Tracked-secret scan failed with git grep status ${grep_status}." >&2
+              exit "${grep_status}"
+            fi
+          fi

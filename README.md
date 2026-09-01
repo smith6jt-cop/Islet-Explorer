@@ -11,18 +11,29 @@ Interactive R Shiny application for exploring pancreatic islet CODEX multiplexed
 
 ## Overview
 
-Islet Explorer is a modular R Shiny application for analyzing **5,214 islets** from **15 nPOD donors** across three disease stages. The app loads from a single enriched H5AD file (`data/islet_explorer.h5ad`) containing 31 protein markers, pseudotime trajectory, 21 phenotype proportions, donor demographics, 62 neighborhood metrics, and Leiden clustering — with Excel fallback for reduced-feature operation.
+Islet Explorer is a non-mutating R Shiny research application for exploring an
+analytical cohort of **5,214 islets** from **15 nPOD donors** across three disease
+stages. It combines marker and cell-population plots, composition-based trajectory
+analysis, spatial analysis, single-cell segmentation drill-down, and browser-streamed
+OME-TIFF imagery. Reviewers can download generated CSV and PNG files, but cannot upload
+data or alter the versioned scientific release.
+
+The publication-review configuration is intentionally narrower than the development
+tree: it exposes Plot, Trajectory, Viewer, and Spatial; AI, Statistics, and Inflammation
+are disabled. Production loads a manifest-validated release, keeps small summaries in
+process-wide memory, queries immutable Parquet with embedded DuckDB, and retains images
+and direct-lookup drill-down files in file formats suited to their access patterns.
 
 ### Key Capabilities
 
-- **6 interactive tabs**: Plot, Trajectory, Viewer, Statistics, Spatial, AI Assistant
+- **4 reviewer-facing tabs**: Plot, Trajectory, Viewer, and Spatial
 - **Single-cell drill-down**: Click any islet to view segmentation boundaries and cell composition
-- **Pseudotime trajectory**: Diffusion pseudotime (DPT) with INS root, cell-count-weighted visualization
+- **Composition trajectory**: Barlow-style PAGA/ForceAtlas2 and diffusion pseudotime, refit for the selected islet cell-count range
 - **Spatial neighborhood analysis**: Immune infiltration, enrichment z-scores, distance metrics
 - **Leiden clustering**: 4 resolution levels with UMAP visualization
-- **AI-powered analysis**: Chat assistant via UF Navigator API
 - **Configurable palettes**: Paul Tol (default), Bright, Okabe-Ito, Diverging — synced across all tabs
-- **Demographic filters**: Age, gender, autoantibody status
+- **Demographic filters**: Age, sex, autoantibody status
+- **Frozen reviewer release**: Immutable OCI image plus checksummed scientific and image manifests
 
 ### Disease Groups
 
@@ -35,14 +46,17 @@ Islet Explorer is a modular R Shiny application for analyzing **5,214 islets** f
 ## Quick Start
 
 ```bash
-# Install R dependencies
-Rscript scripts/install_shiny_deps.R
+# Install R dependencies, including the local diffusion-pseudotime fallback
+INSTALL_BIOC=1 Rscript scripts/install_shiny_deps.R
 
 # Run the application
 R -q -e "shiny::runApp('app/shiny_app', launch.browser=TRUE)"
 ```
 
-**Production URL**: `http://<server-ip>:8080/islet-explorer/`
+For local development, the legacy H5AD/Excel loader remains available. Publication
+deployment is documented in [the UFRC handoff](PUBAPPS_UFRC_HANDOFF.md) and
+[the deployment runbook](deploy/README.md); do not treat the development fallback as a
+production release.
 
 ## Installation
 
@@ -56,23 +70,31 @@ R -q -e "shiny::runApp('app/shiny_app', launch.browser=TRUE)"
 | `readxl` | Excel fallback data loading |
 | `dplyr`, `tidyr`, `stringr` | Data wrangling |
 | `ggplot2`, `plotly` | Visualization |
-| `broom`, `jsonlite` | Stats and JSON |
+| `broom`, `jsonlite`, `digest` | Stats, JSON, and release-integrity hashes |
 | `scales` | Axis formatting |
-| `sf` | GeoJSON segmentation viewer (optional) |
-| `anndata`, `reticulate` | H5AD loading, trajectory (optional) |
-| `httr2` | AI assistant API calls (optional) |
+| `sf` | GeoJSON/GeoPackage segmentation access |
+| `DBI`, `duckdb` | Embedded read-only Parquet queries and release loading |
+| `anndata`, `reticulate` | H5AD loading and Python trajectory bridge |
+| `destiny` | Composition diffusion pseudotime |
+| `httr2` | Dormant AI module only; not used in reviewer production |
 | `vitessceR` | Embedded OME-TIFF viewer (optional) |
 
-**Python Pipeline (conda `scvi-env`):**
-- `scanpy`, `anndata`, `scvi-tools`, `sklearn`, `scib-metrics`, `scipy`
+**Production Python runtime:**
+- `anndata`, `scanpy`, `igraph`, `leidenalg`, `fa2-modified`, and their pinned dependencies
+
+The broader offline analysis pipeline also uses `scvi-tools`, scikit-learn,
+`scib-metrics`, and SciPy.
 
 ### Install
 
 ```bash
-# R dependencies (automated)
+# Base R dependencies for a minimal/non-trajectory developer setup
 Rscript scripts/install_shiny_deps.R
 
-# Optional: Install Bioconductor packages for trajectory + viewer
+# Complete local app environment, including the destiny trajectory fallback
+INSTALL_BIOC=1 Rscript scripts/install_shiny_deps.R
+
+# Optional vitessceR package; the bundled Avivator viewer does not require it
 INSTALL_VITESSCER=1 Rscript scripts/install_shiny_deps.R
 
 # Optional: Avivator image viewer static bundle
@@ -88,24 +110,28 @@ Primary exploration interface with sidebar controls shared with Statistics.
 - **Scatter mode**: Feature expression vs islet diameter (31 markers, targets)
 - **Composition mode**: Cell type proportions with 4 option groups:
   - Hormone Fractions (INS, GCG, SST)
-  - Cell Type Proportions (21 phenotypes)
+  - Cell Type Proportions (12 reviewer-facing phenotypes; 21 labels remain in source data)
   - Peri-Islet Proportions (20 μm expansion zone)
   - Immune Metrics (infiltration ratios, density)
-- **Filters**: Donor status, autoantibody (GADA, IA2A, ZnT8A, IAA, mIAA), age range, gender, diameter range
+- **Filters**: Donor status, autoantibody (GADA, IA2A, ZnT8A, IAA, mIAA), age range, sex, diameter range
 - **Normalization**: None, global z-score, robust per-donor (median/MAD×1.4826)
 - **Click interaction**: Click any point to open islet segmentation + single-cell drill-down
 
 ### Trajectory Tab
 
-Pseudotime analysis computed via diffusion pseudotime (DPT) with INS as root anchor.
+The reviewer view uses one composition-derived trajectory rather than a menu of
+non-comparable pseudotimes. It follows the Barlow-style workflow: phenotype-composition
+features, scanpy diffusion pseudotime, and a PAGA-initialized ForceAtlas2 graph;
+`destiny` supplies the explicit local fallback for the pseudotime axis when scanpy is
+unavailable. Changing the cell-count range refits the trajectory on that selected cohort.
 
-- **UMAP scatter**: Color by donor status, selected feature (viridis inferno), or pseudotime
-- **Cell-count weighting**: Point size by `sqrt(total_cells)` — honestly represents measurement quality
-- **Weighted LOESS trends**: `log1p(total_cells)` weights prevent noisy small islets from distorting fits
-- **Multi-feature heatmap**: Z-scored expression along pseudotime, clamped [-2.5, 2.5]
-- **Click to drill-down**: Opens segmentation viewer and can jump to OME-TIFF Viewer tab
+- **Pseudotime scatter**: Marker expression or cell-type/endocrine-cell ratio against rank-normalized or raw DPT
+- **PAGA layout**: Interactive force-directed embedding colored by status, donor, cluster, or feature
+- **Cell-count-aware display**: Point size can reflect islet cell count or diameter
+- **Trend and heatmap views**: Overall/by-status trends and binned multi-feature heatmap
+- **Click to drill-down**: Opens the selected islet's segmentation and cell view
 
-### Statistics Tab
+### Statistics Tab (disabled in reviewer production)
 
 Five-section narrative layout with shared sidebar from Plot tab:
 
@@ -130,9 +156,16 @@ Three-panel layout with neighborhood analysis cards:
 
 Embedded OME-TIFF viewer using Avivator/Viv for multiplex image visualization with configurable channel mappings.
 
-### AI Assistant
+### AI Assistant (disabled in reviewer production)
 
-Chat interface powered by UF Navigator API (`gpt-oss-20b` / `gpt-oss-120b` reasoning model). Supports streaming responses with token budget tracking.
+The source tree retains a UF Navigator chat module for development, but the reviewer
+container neither mounts an API key nor initializes the module. Enabling it would change
+the approved data-flow and requires a new security/privacy review.
+
+### Inflammation Tab (disabled in reviewer production)
+
+The source tree also retains the cohort-level inflammation module. It is not mounted in
+the reviewer UI or server wiring.
 
 ### Single-Cell Drill-Down
 
@@ -141,24 +174,40 @@ Available from both Plot and Trajectory tabs when clicking an islet:
 - **Segmentation view**: GeoJSON boundary polygons from QuPath
 - **Single-cell overlay**: 5,214 per-islet CSV files with 37 columns (coordinates, phenotype, 31 markers)
 - **Composition summary**: Horizontal bar chart + cell count table (core/peri breakdown)
-- **Color by**: Phenotype (21 categories) or any protein marker
+- **Color by**: Reviewer-facing phenotype or any available protein marker
 
 ## Data
 
-### Primary Data File
+### Development sources
 
-`data/islet_explorer.h5ad` (~70 MB) — single enriched file containing all app data:
+`data/islet_explorer.h5ad` is the enriched analytical source used to construct the
+reviewer summaries. It contains the 5,214-islet analytical cohort, 31 protein-marker
+features, donor metadata, phenotype proportions, neighborhood metrics, UMAP coordinates,
+Leiden clusters, and QuPath-derived measurements. `data/master_results.xlsx` remains a
+reduced-feature **development fallback only**.
 
-- 5,214 islets from 15 nPOD donors
-- 31 protein markers (mean expression per islet)
-- Pseudotime trajectory (DPT with INS root, scVI-corrected)
-- 21 phenotype proportions (from single-cell phenotyping)
-- Donor demographics (age, gender, autoantibody status)
-- 62 neighborhood metrics (peri-islet composition, immune infiltration, enrichment z-scores, distances)
-- Leiden clustering at 4 resolutions + UMAP coordinates
-- QuPath groovy data (targets, markers, composition, LGALS3)
+The composition trajectory uses `data/barlow_islet_features.csv` plus the prepared app
+tables. `data/adata_ins_root.h5ad` is retained as a versioned scientific/provenance
+artifact and for legacy validation; it is not a network database.
 
-**Fallback**: `data/master_results.xlsx` (4 sheets: Islet_Markers, Islet_Targets, Islet_Composition, LGALS3) — no phenotype proportions, demographics, or neighborhood metrics.
+### Publication runtime release
+
+`scripts/build_release_data.R` creates a new, immutable release directory and never
+overwrites an existing one. It contains:
+
+- `manifest.json`: schema, Git state, sizes, row counts, and SHA-256 checksums.
+- `summary/*.parquet`: prepared Plot/Trajectory summaries loaded once per R worker.
+- `spatial/cell_distance.parquet`, `spatial/signed_distance_kde.parquet`, and partitioned
+  donor-tissue Parquet queried by embedded DuckDB.
+- `geometry/*.gpkg`: indexed per-donor segmentation geometry for bounded reads.
+- `cells/`: direct-lookup per-islet CSVs, retained because point lookup is faster than
+  consolidating this workload into DuckDB.
+- `images/`: native OME-TIFFs and sidecars for HTTP byte-range delivery.
+- Required H5AD, phenotype, metadata, and lookup artifacts.
+
+Production is fail-closed: `ISLET_RUNTIME_MODE=production` requires a complete release
+whose schema and checksums validate. There is no H5AD/Excel or CSV fallback in reviewer
+production.
 
 ### Supporting Data Files
 
@@ -166,12 +215,12 @@ Available from both Plot and Trajectory tabs when clicking an islet:
 |------|-------------|
 | `data/adata_ins_root.h5ad` | Trajectory source (5,214 islets, pseudotime, UMAP) |
 | `data/cells/*.csv` | Per-islet single-cell CSVs (5,214 files, ~203 MB) |
-| `data/donors/*.csv` | Per-donor tissue CSVs for Spatial tab (15 files, ~78 MB) |
+| `data/donors/*.csv` | Development sources for per-donor tissue Parquet |
 | `data/neighborhood_metrics.csv` | Per-islet peri-islet metrics (5,214 rows, 62 columns) |
 | `data/islet_spatial_lookup.csv` | Islet centroid coordinates |
-| `data/json/*.geojson` | QuPath segmentation boundaries |
-| `data/gson/*.geojson.gz` | Compressed segmentation boundaries |
-| `data/phenotype_rules.csv` | Rules1 phenotyping (19 phenotypes, 18 markers) |
+| `data/json/*.geojson` | Development source for per-donor GeoPackages |
+| `data/gson/*.geojson.gz` | Compressed segmentation source fallback |
+| `data/phenotype_rules.csv` | Phenotype gating rules; 12 labels are surfaced in the reviewer UI |
 
 ### Data Conventions
 
@@ -226,6 +275,23 @@ python scripts/build_h5ad_for_app.py
 python scripts/build_master_excel.py
 ```
 
+After the scientific sources are frozen and validated, build the reviewer runtime as a
+new directory. Use `copy` when the destination itself will be the authoritative frozen
+release; `hardlink` is suitable only for a disposable local validation build or when the
+source tree is independently immutable and the final transfer creates new files.
+
+```bash
+Rscript scripts/build_release_data.R \
+  --source-root data \
+  --image-root app/shiny_app/www/local_images \
+  --output /path/to/islet-data-pubapps-2026-01 \
+  --materialize copy
+
+Rscript scripts/verify_release_data.R \
+  --root /path/to/islet-data-pubapps-2026-01 \
+  --mode full
+```
+
 ## Project Structure
 
 ```
@@ -234,6 +300,7 @@ Islet-Explorer/
 │   ├── app.R                      # Entrypoint: UI layout, CSS, server wiring
 │   ├── R/
 │   │   ├── 00_globals.R           # Package loads, constants, palettes, paths
+│   │   ├── 01_runtime_data_backend.R # Manifest validation + embedded DuckDB
 │   │   ├── data_loading.R         # load_master_auto(), prep_data(), H5AD loading
 │   │   ├── utils_stats.R          # summary_stats(), cohens_d(), pairwise_wilcox()
 │   │   ├── utils_safe_join.R      # safe_left_join(), add_islet_key()
@@ -251,6 +318,9 @@ Islet-Explorer/
 │   └── www/                       # Static assets (logo, avivator/)
 ├── data/                          # Data files (see Data section)
 ├── scripts/                       # Pipeline and utility scripts
+│   ├── build_release_data.R        # Build a new immutable runtime-data root
+│   └── verify_release_data.R       # Full/core release integrity verifier
+├── deploy/                        # Container, Quadlet, release and rollback tooling
 ├── islet_analysis/                # Python analysis notebooks and modules
 ├── notebooks/                     # Validation notebooks (scVI QC, trajectory)
 ├── docs/
@@ -272,9 +342,18 @@ R -q -e "shiny::runApp('app/shiny_app', launch.browser=FALSE)"
 
 ### Deployment
 
-- **nginx** (port 8080) reverse-proxies `/islet-explorer/` → **shiny-server** (port 3838)
-- Symlink: `/srv/shiny-server/islet-explorer` → `app/shiny_app/`
-- Code changes take effect when shiny-server spawns a fresh R worker (no restart needed)
+The reviewer deployment is an immutable, rootless Podman service managed by a
+user-mode Quadlet unit. Shiny listens on container port 3838; Podman publishes it
+only to the PubApps VM loopback address `127.0.0.1:3838`, and UFRC supplies TLS,
+whole-site Basic Auth, and the public reverse proxy. Code is baked into the OCI
+image. The manifest-backed data root and its `images/` subtree are mounted read-only;
+only bounded temp and log directories are writable.
+
+Do not deploy by running `git pull` in an active release. Build and scan a clean tagged
+image, build and fully verify a new data release, activate its immutable image/data pair,
+and retain the previous pair for rollback. The exact commands and external UFRC steps are
+in [deploy/README.md](deploy/README.md) and
+[PUBAPPS_UFRC_HANDOFF.md](PUBAPPS_UFRC_HANDOFF.md).
 
 ### Testing & Diagnostics
 
@@ -283,6 +362,8 @@ Rscript scripts/test_shiny_prep.R            # Test data loading
 Rscript scripts/diagnose_islets.R            # Islet data quality
 Rscript scripts/diagnose_marker_regions.R    # Marker region checks
 Rscript scripts/na_audit.R                   # Missing value audit
+Rscript app/shiny_app/tests/parse_check.R     # Parse every application R file
+Rscript scripts/verify_release_data.R --root /path/to/release --mode full
 ./scripts/clear_shiny_cache.sh               # Clear Shiny cache
 ```
 
@@ -290,12 +371,23 @@ Rscript scripts/na_audit.R                   # Missing value audit
 
 | Variable | Purpose |
 |----------|---------|
-| `LOCAL_IMAGE_ROOT` | Directory containing OME-TIFF files for Viewer tab |
-| `KEY` | UF Navigator API key (for AI assistant) |
-| `BASE` | API base URL (defaults to `https://api.openai.com/v1`) |
+| `ISLET_RUNTIME_MODE` | `development` or fail-closed `production` |
+| `ISLET_DATA_ROOT` | Manifest-backed release root; production default mount is `/srv/islet-explorer/data` |
+| `ISLET_DATA_SCHEMA` | Expected release schema version (currently `1`) |
+| `ISLET_VERIFY_RELEASE_HASHES` | `none`, `core`, or `full`; production defaults to `core` at startup |
+| `ISLET_DUCKDB_THREADS` | Embedded DuckDB threads (production default `2`) |
+| `ISLET_DUCKDB_MEMORY_LIMIT` | DuckDB memory cap (production default `1GB`) |
+| `ISLET_DUCKDB_TEMP_DIR` | Writable bounded DuckDB spill directory |
+| `LOCAL_IMAGE_ROOT` | OME-TIFF directory; production points to the release's `images/` subtree |
 | `RETICULATE_PYTHON` | Python binary for reticulate/anndata |
+| `ISLET_ENABLE_AI` | Dormant AI module; must be `FALSE` in reviewer production |
+| `SHOW_STATISTICS_TAB` | Dormant Statistics tab; must be `0` in reviewer production |
+| `SHOW_INFLAMMATION_TAB` | Dormant Inflammation tab; must be `0` in reviewer production |
 | `DEBUG_CREDENTIALS` | Set to `1` for verbose credential loading |
 | `VIEWER_DEBUG` | Set to `1` for Viewer tab debug output |
+
+`KEY`, `OPENAI_API_KEY`, and external AI endpoint variables are forbidden in the
+reviewer container. Its entrypoint fails if an AI credential is supplied.
 
 ### Working with Images
 
@@ -333,13 +425,18 @@ See [CLAUDE.md](CLAUDE.md) for full architectural documentation.
 Rscript scripts/install_shiny_deps.R
 ```
 
-**"Cannot find islet_explorer.h5ad" / "Cannot find master_results.xlsx":**
+**Development: "Cannot find islet_explorer.h5ad" / "Cannot find master_results.xlsx":**
 - Run the data pipeline scripts (see [Data Pipeline](#data-pipeline))
 - Or ensure files exist at `data/islet_explorer.h5ad` and `data/master_results.xlsx`
 
-**Trajectory/demographics not available:**
-- Install `anndata`: `BiocManager::install('anndata')`
-- Ensure `data/islet_explorer.h5ad` exists (Excel fallback lacks these features)
+**Production: "release manifest is missing/incomplete" or checksum mismatch:**
+- Do not enable the development fallback.
+- Rebuild with `scripts/build_release_data.R`, run the full verifier, and activate the
+  resulting versioned directory. A checksum mismatch means that release must not be used.
+
+**Trajectory/PAGA unavailable:**
+- Install `destiny` and use the pinned Python environment documented under `deploy/`.
+- Ensure `barlow_islet_features.csv` and the required manifest artifacts are present.
 
 **Image viewer not loading:**
 ```bash
@@ -371,10 +468,11 @@ https://github.com/smith6jt-cop/Islet-Explorer
 - Developed for analysis of human pancreatic islet CODEX multiplexed imaging data from nPOD donors
 - Built with R Shiny, ggplot2, plotly, and sf
 - Avivator/Viv viewer for OME-TIFF visualization
-- AI assistant powered by UF Navigator API
+- The dormant AI module supports UF Navigator in development; reviewer production makes no AI/API call
 - Statistical analysis with R stats and broom
 
 ---
 
-**Version**: 2.0 (modular architecture)
-**Last Updated**: March 2026
+**Version**: 3.0 (publication-review deployment architecture)
+
+**Last Updated**: August 2026

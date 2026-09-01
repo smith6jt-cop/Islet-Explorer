@@ -609,7 +609,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                        tickfont = fonts$axis_tick),
           yaxis = list(title = list(text = "Mean Proportion", font = fonts$axis_title),
                        tickfont = fonts$axis_tick, range = c(0, 1)),
-          # Up to 21 phenotype entries — use the dense floor directly rather than
+          # Up to 12 reviewer-facing phenotype entries — use the dense floor directly rather than
           # a max() formula that already evaluates to it.
           legend = list(font = list(size = ISLET_FONT_SIZES$dense_min),
                         title = list(text = "", font = fonts$legend_title))
@@ -1273,7 +1273,8 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
 
     # Card C-Right "cellwise": repopulate the phenotype/marker pickers when the
     # group-by mode flips. Depends on input$dist_mode so it fires post-mount.
-    observeEvent(input$dist_mode, {
+    observeEvent(list(input$dist_view, input$dist_mode), {
+      if (!identical(input$dist_view %||% "kde", "cellwise")) return()
       mode <- input$dist_mode %||% "phenotype"
       items <- if (identical(mode, "marker")) cell_distance_markers() else cell_distance_phenotypes()
       ch <- c("All cells" = "__all__", stats::setNames(items, items))
@@ -2005,16 +2006,11 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
 
     # ==== Card C-Right: two views selected by input$dist_view ====
     #  "kde"      = donor-averaged signed-distance KDE over islet-associated
-    #               cells (data/signed_distance_kde.csv) — the DEFAULT.
+    #               cells (release Parquet; development CSV) — the DEFAULT.
     #  "cellwise" = per-cell tissue-wide distance density + phenotype composition
-    #               (data/cell_distance.csv, symlog axis) — ported from Senior.
-    .kde_data_env <- new.env(parent = emptyenv())
+    #               (release Parquet/DuckDB; development CSV, symlog axis) — ported from Senior.
     load_immune_kde_data <- function() {
-      if (!is.null(.kde_data_env$data)) return(.kde_data_env$data)
-      kde_path <- file.path("..", "..", "data", "signed_distance_kde.csv")
-      if (!file.exists(kde_path)) return(NULL)
-      .kde_data_env$data <- read.csv(kde_path, stringsAsFactors = FALSE)
-      .kde_data_env$data
+      load_signed_distance_kde()
     }
 
     output$immune_distance_kde <- renderPlotly({

@@ -1,6 +1,6 @@
 # testthat helper — sourced automatically by test_dir() before any test-*.R file.
-# Loads the minimal dependencies and the code under test (utils_stats.R only:
-# pure statistical helpers that need no app data, no sf / reticulate / anndata).
+# Loads the common minimal dependencies and statistical helpers. Backend tests
+# source their isolated runtime environments themselves and need no app data.
 
 suppressPackageStartupMessages({
   library(dplyr)
@@ -29,3 +29,4 @@ if (!exists("%||%", mode = "function")) {
 }
 
 source(.find_source("R/utils_stats.R"))
+source(.find_source("R/mod_trajectory_server.R"))

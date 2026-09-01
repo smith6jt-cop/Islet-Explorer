@@ -24,6 +24,8 @@ pkgs <- c(
   "shiny","shinyjs","readxl","dplyr","stringr","tidyr","ggplot2","plotly","broom","jsonlite",
   # Runtime-critical, but requireNamespace()-guarded in the app
   "sf","anndata","reticulate","data.table","magick","xml2","base64enc","httr2","curl",
+  # Embedded read-only analytics + release-integrity verification
+  "DBI","duckdb","digest",
   # Rendering / helpers
   "RColorBrewer","scales","htmltools","htmlwidgets","cluster",
   # Phase 16 statistics: mixed-effects model + post-hoc contrasts. Required by
@@ -44,18 +46,16 @@ if (length(missing)) {
   stop("Required packages failed to install: ", paste(missing, collapse = ", "))
 }
 
-# --- OPTIONAL: Bioconductor + Lamian trajectory stack --------------------------
-# NONE of slingshot/SingleCellExperiment/DelayedMatrixStats/destiny/tradeSeq/Lamian
-# are referenced by app/shiny_app/R/*.R — the app reads a PRECOMPUTED trajectory
-# (dpt_pseudotime, UMAP) from the H5AD, so it runs fine without these. They only
-# support the offline scripts/ pipeline. (The dormant on-the-fly Lamian recompute path in
-# data_loading.R was deleted 2026-07-22 — it had zero call sites.) All installs below are best-effort (try(); the script
-# still succeeds if they fail), so a container build won't break on a Bioconductor
-# compile error. Safe to skip entirely for a minimal app image.
+# --- Development Bioconductor trajectory stack --------------------------------
+# destiny is an active application dependency: the Trajectory tab uses it for the
+# in-process diffusion-pseudotime fallback. The production image installs and pins
+# destiny through deploy/install-production-r-deps.R and treats it as mandatory.
 #
-# GATED behind INSTALL_BIOC=1 so the block matches the contract deploy/islet-explorer.def
-# already states ("Bioconductor and Lamian are optional"). Previously it ran unconditionally
-# and dominated container build time compiling a stack the app never loads.
+# This general-purpose developer installer gates Bioconductor behind INSTALL_BIOC=1
+# to avoid an unexpected long compile during a minimal/non-trajectory setup. Enable
+# it for a complete local app environment. slingshot, SingleCellExperiment,
+# DelayedMatrixStats, and tradeSeq support the broader development/offline trajectory
+# workflow; Lamian is installed separately by its own analysis workflow.
 #   INSTALL_BIOC=1 Rscript scripts/install_shiny_deps.R
 if (identical(tolower(Sys.getenv("INSTALL_BIOC", "0")), "1")) {
   if (!requireNamespace("BiocManager", quietly = TRUE)) {
@@ -78,7 +78,7 @@ if (identical(tolower(Sys.getenv("INSTALL_BIOC", "0")), "1")) {
     message("Installed/verified: lmtest")
   }
 } else {
-  message("Skipping Bioconductor stack (set INSTALL_BIOC=1 to install slingshot/destiny/tradeSeq/lmtest)")
+  message("Skipping development Bioconductor trajectory stack; set INSTALL_BIOC=1 for a complete local app environment. Production uses deploy/install-production-r-deps.R.")
 }
 
 # Install vitessceR (from CRAN if available; fallback to GitHub)

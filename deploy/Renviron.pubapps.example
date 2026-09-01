@@ -1,26 +1,17 @@
-# TEMPLATE — copy to  /pubapps/$PROJECT/islet-explorer/app/shiny_app/.Renviron  on the VM.
-# This file lives on the world-readable /pubapps volume, so it MUST NOT contain any secret.
-#
-# Differences from the on-prem lab .Renviron:
-#   - NO R_LIBS_USER   : packages live in the container image's site-library, not a personal lib.
-#   - NO on-prem IP    : the public host + SSL come from RC's reverse proxy.
-#   - NO KEY line here : the UF Navigator API key is injected at container runtime via the
-#                        --env-file in deploy/run.sh. Leaving KEY out of this file is REQUIRED —
-#                        readRenviron() would otherwise overwrite the injected value with a blank.
-#                        (ai_helpers.R reads Sys.getenv("KEY"), which the injected env satisfies.)
-
-# UF Navigator AI Assistant endpoint (OpenAI-compatible). Reachable from the UF network.
-BASE=https://api.ai.it.ufl.edu
-
-# Per-session cap on AI Assistant token spend (mod_ai_assistant_server.R blocks requests once
-# the budget is exhausted). MUST be set on a Public Open, no-login endpoint: the default is
-# unlimited, and the budget resets per session, so an anonymous visitor could otherwise spend
-# the UF-issued key without bound. Anyone can open as many sessions as they like — treat this
-# as a per-session brake, not a total. If that is not acceptable, disable the AI Assistant tab.
-OPENAI_TOKEN_BUDGET=100000
-
-# reticulate: the anndata venv baked into the container image (deploy/islet-explorer.def).
-# Must match the venv path in the image and %environment. If this is wrong, read_h5ad()
-# fails and the app SILENTLY falls back to master_results.xlsx (Plot cell-type selector
-# goes empty) — so verify it after deploy (smoke test #2 in deploy/README.md).
+# Non-secret production environment contract. The Quadlet unit sets these
+# values directly, so a .Renviron file is normally unnecessary. This example is
+# useful for an RC-managed equivalent unit. Never add KEY, OPENAI_API_KEY, BASE,
+# or any other credential/AI endpoint to the reviewer deployment.
+ISLET_RUNTIME_MODE=production
+ISLET_ENABLE_AI=FALSE
+SHOW_STATISTICS_TAB=0
+SHOW_INFLAMMATION_TAB=0
+DEBUG_CREDENTIALS=0
+VIEWER_DEBUG=0
+ISLET_DATA_ROOT=/srv/islet-explorer/data
+LOCAL_IMAGE_ROOT=/srv/islet-explorer/app/shiny_app/www/local_images
 RETICULATE_PYTHON=/opt/islet-explorer-py/bin/python
+OMP_NUM_THREADS=1
+OPENBLAS_NUM_THREADS=1
+MKL_NUM_THREADS=1
+NUMEXPR_NUM_THREADS=1

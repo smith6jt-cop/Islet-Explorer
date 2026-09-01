@@ -10,7 +10,7 @@ Interactive Shiny app for exploring pancreatic islet CODEX multiplexed imaging d
 
 - `app/shiny_app/CLAUDE.md` — per-tab feature details (Drill-Down, Trajectory, Plot, AI Assistant) + conventions including the May 2026 font-standardisation system
   - `app/shiny_app/docs/spatial.md` — Spatial Neighborhood Analysis deep reference (split out May 2026)
-  - `app/shiny_app/docs/statistics.md` — Statistics Tab deep reference (split out May 2026; Jul 2026 correctness pass at the end: min-cells no-op, p-value notation, emmeans d.f. fallback, AAb pseudoreplication, AUC decoupling)
+  - `app/shiny_app/docs/statistics.md` — Statistics Tab deep reference (split out May 2026; Jul 2026 correctness pass: min-cells no-op, p-value notation, emmeans d.f. fallback, AAb pseudoreplication, AUC decoupling; **Aug 2026 at the end: why the per-bin pairwise row could never reject — forced `exact=FALSE` on a 5-v-5 rank test plus a BH family of 15 — and the `status × diameter` interaction p, which was inflated ~11 orders of magnitude by a random-intercept-only error term — each companion term is now tested against its own unit of replication (split-plot)**). The tab itself is hidden as of Aug 2026 (`SHOW_STATISTICS_TAB`).
   - `app/shiny_app/docs/trajectory.md` — **Trajectory/pseudotime accuracy reference** (Aug 2026). Ground-truth measurements of the shipped H5AD, what the audit confirmed (donor η² = 2.05× status; ND vs Aab+ never separable), three refuted claims and two non-viable directions that keep being re-proposed, and the axis/CSV/H5AD-integrity defects that were fixed. **Read before quoting any trajectory parameter — `scripts/CLAUDE.md` was stale until Aug 2026.**
 - `scripts/CLAUDE.md` — pipeline scripts, batch correction, pseudotime modes
 - `islet_analysis/CLAUDE.md` — Python analysis pipeline (phenotyping, aggregation, trajectory). Tracked via a `!` exception; the rest of `islet_analysis/` is ignored.
@@ -21,7 +21,7 @@ The Shiny app lives in `app/shiny_app/` and uses a modular architecture:
 
 ```
 app/shiny_app/
-  app.R                        # Entrypoint (~510 lines): UI layout, CSS, server wiring, root-level outputs
+  app.R                        # Entrypoint: UI layout, CSS, server wiring, root-level outputs
   R/
     00_globals.R               # Package loads, constants, feature flags, paths (h5ad_path, master_path)
     data_loading.R             # load_master_auto(), prep_data(), bin_islet_sizes(), H5AD loading
@@ -33,15 +33,21 @@ app/shiny_app/
     ai_helpers.R               # OpenAI credential loading, call_openai_chat()
     mod_plot_ui.R / mod_plot_server.R           # Plot tab (scatter, distribution, outliers, segmentation+drilldown panel)
     mod_trajectory_ui.R / mod_trajectory_server.R  # Trajectory tab (UMAP, heatmap, pseudotime, segmentation+drilldown panel)
+    barlow_pseudotime.R        # destiny fallback for the Barlow composition pseudotime
+    paga_layout.R              # reticulate bridge to python/paga_pseudotime.py (scanpy PAGA)
     mod_viewer_ui.R / mod_viewer_server.R       # Viewer tab (OME-TIFF, Avivator iframe)
     mod_statistics_ui.R / mod_statistics_server.R  # Statistics tab (5-section narrative)
-    spatial_helpers.R           # Per-donor tissue CSV loader with new.env() caching
+                                #   HIDDEN since Aug 2026 — gated on SHOW_STATISTICS_TAB
+                                #   (00_globals.R, default 0). Set =1 in .Renviron to restore.
+    spatial_helpers.R           # Spatial loaders; Parquet/DuckDB production backend + development CSV cache
     mod_spatial_ui.R / mod_spatial_server.R     # Spatial tab (3-panel: sidebar controls, tissue scatter, Leiden panel)
     mod_inflammation_ui.R / mod_inflammation_server.R  # Inflammation tab (edgeR abundance,
                                 #   Bodenmiller infiltration score, nPOD donor cohort table)
                                 #   HIDDEN since Aug 2026 — gated on SHOW_INFLAMMATION_TAB
                                 #   (00_globals.R, default 0). Set =1 in .Renviron to restore.
     mod_ai_assistant_ui.R / mod_ai_assistant_server.R  # AI chat panel
+  python/
+    paga_pseudotime.py         # scanpy DPT + PAGA/ForceAtlas2 layout (Barlow et al. 2024)
   www/                         # Static assets (images, logos)
 ```
 
@@ -52,9 +58,12 @@ them, but they sat in the deployed directory where 5,400 lines of dead code read
 **`www/logo.png` is a symlink to `app/docs/logo.png`** — that file is a live asset, not a
 stray doc.
 
-### Data Loading (H5AD with Excel Fallback)
+### Data Loading
 
-The app uses `load_master_auto()` which tries H5AD first, falls back to Excel:
+Production validates the release manifest and loads prepared summary Parquet through
+`01_runtime_data_backend.R`; large spatial tables are queried read-only with embedded
+DuckDB. It fails closed and never substitutes a development dataset. Local development
+uses `load_master_auto()`, which tries H5AD first and falls back to Excel:
 - `h5ad_path` -> `data/islet_explorer.h5ad` (built by `scripts/build_h5ad_for_app.py`)
 - `master_path` -> `data/master_results.xlsx` (built by `scripts/build_master_excel.py`)
 
@@ -106,8 +115,16 @@ These are read by the root-level `renderPlot` outputs in `app.R`.
 
 - `data/islet_explorer.h5ad` - **Primary app data** (~70 MB, 5,214 islets, groovy + trajectory + donor + neighborhood + Leiden)
 - `data/master_results.xlsx` - Aggregated islet-level data (composition, markers, targets) -- Excel fallback
-- `data/adata_ins_root.h5ad` - Trajectory h5ad (5,214 islets, 31 vars, DPT pseudotime, UMAP)
+- `data/adata_ins_root.h5ad` - Trajectory source (5,214 islets, 31 vars, UMAP, and legacy audited DPT columns)
+  Also carries `dpt_pseudotime_small` / `dpt_pseudotime_large` (Aug 2026): DPT recomputed
+  **within** each cell-count stratum (<=10 / >10 cells) by `scripts/compute_split_pseudotime.py`.
+  Independent diffusion maps — **not on a common scale with each other or with the all-islet
+  column**. See `app/shiny_app/docs/trajectory.md` §9-10, which also documents that pseudotime
+  is computed on the 10-d scVI latent, NOT on the 31 markers.
 - `data/neighborhood_metrics.csv` - Per-islet peri-islet metrics (5,214 rows, 62 columns)
+- `data/barlow_islet_features.csv` - Islet composition matrix (5,214 x 42 log-normalised
+  core+peri cell-type counts) for the reviewer trajectory; built by
+  `scripts/build_barlow_features.py`, consumed live by `app/shiny_app/R/barlow_pseudotime.R`
 - `data/cells/*.csv` - Per-islet single-cell CSVs for drill-down (~5,214 files, ~203 MB total)
 - `data/donors/*.csv` - Per-donor tissue-wide cell CSVs for Spatial tab scatter (15 files, ~78 MB total)
 - `data/islet_spatial_lookup.csv` - Centroid coordinates for segmentation viewer
@@ -155,7 +172,8 @@ assays, so keeping the existing column loses nothing.
 
 `scripts/reaggregate_islets.py` replaces the manual notebook workflow (aggregation + trajectory + Leiden in one script). `islet_analysis/islets_core_clustered.h5ad` provides Leiden clustering (4 resolutions) + UMAP coords, merged by `build_h5ad_for_app.py` step 4.7.
 
-See `scripts/CLAUDE.md` for per-script details, batch correction (Phase 17), and the two-pseudotime architecture (`dpt_pseudotime` core-only vs `dpt_pseudotime_combined` core+peri+structures).
+See `scripts/CLAUDE.md` for per-script details, batch correction history, the audited legacy
+H5AD pseudotimes, and the current composition-derived reviewer trajectory.
 
 ## Spatial / Statistics / Trajectory / AI tabs
 
@@ -175,7 +193,7 @@ Per-tab implementation details — Spatial Neighborhood Analysis (Phase 7), Sing
 - **Log-scale with zeros**: Use `scales::pseudo_log_trans(base=10)` instead of `scale_y_log10()` -- zeros map to 0 (visible) instead of -Infinity (dropped)
 - **Plot defaults**: Point size = 3.0, transparency = 0.6
 - **Plot fonts & downloads**: Every plot uses `theme_islet()` (ggplot) and `plotly_islet_fonts()` + `plotly_islet_config()` (plotly) — single source of truth in `app/shiny_app/R/00_globals.R`. Base 16pt / titles 18pt / axes 14-16pt / legends 14-16pt / heatmap rows 12pt min. Plotly modebar PNG downloads ship 2800 × 1800 px (scale=2). ggplot `renderPlot` outputs that should be downloadable are refactored into a `reactive()` consumed by both `renderPlot` and a `downloadHandler` using `ggsave(..., width=10, height=7, dpi=300)` (heatmaps 12 × 8). See `app/shiny_app/CLAUDE.md` § "Plot Fonts & Publication-Quality Downloads".
-- **Phenotype marker rules in UI**: `data/phenotype_rules.csv` is parsed once at startup into `PHENOTYPE_RULES_CSV` in `00_globals.R`, with hierarchical composition (sub-phenotypes inherit parent constraints) and an alias map for the four PHENOTYPE_COLORS-vs-CSV naming mismatches (`CD8a Tcell` ↔ `CD8 T cell`, etc.). Surfaced via (1) inline blue hint under every phenotype `selectInput` showing the active rule, (2) global "Phenotype rules — marker definitions" button at the top of every tab opening a reference modal listing all 21 phenotypes + markers, (3) expandable rules list in the drill-down composition panel naming each phenotype present in the clicked islet. See `app/shiny_app/CLAUDE.md` § "Phenotype Rules — Marker Definitions in the UI".
+- **Phenotype marker rules in UI**: `data/phenotype_rules.csv` is parsed once at startup into `PHENOTYPE_RULES_CSV` in `00_globals.R`, with hierarchical composition (sub-phenotypes inherit parent constraints) and an alias map for the four PHENOTYPE_COLORS-vs-CSV naming mismatches (`CD8a Tcell` ↔ `CD8 T cell`, etc.). Surfaced via (1) inline blue hints under phenotype selectors, (2) a global reference modal containing 19 CSV rules plus 4 explicitly described residual definitions, and (3) an expandable rules list in drill-down. Nine source labels are retired from reviewer selectors, leaving 12 active phenotype labels; the broader modal is an audit reference, not the active-choice list. See `app/shiny_app/CLAUDE.md` § "Phenotype Rules — Marker Definitions in the UI".
 - **`targets_all` carries per-islet cell counts** (Jul 2026): `prep_data()` joins `total_cells_core` / `total_cells_peri` from `comp` onto `targets_all`. Without them the "Min cells/islet" filter — guarded on those column names in both `mod_plot_server.R::raw_df_base()` and `mod_statistics_server.R::stats_run()` — *silently did nothing* in Microenvironment mode instead of erroring, while the exported CSV still reported the value the user set. Any new filter guarded on a column's presence must surface the skip (see `min_cells_applied`), never swallow it.
 - **Peri-islet data guard**: Always check `total_cells_peri > 0` before using peri metrics
 - **Column name sanitization**: Phenotype names use `_` for spaces, `plus` for `+` in peri-islet columns
@@ -186,18 +204,21 @@ App-specific UI conventions (CSS overflow, font minimums, large-scatter renderin
 
 ## Deployment Architecture
 
-- **Production URL**: `http://<server-ip>:8080/islet-explorer/`
-- nginx (port 8080) reverse-proxies `/islet-explorer/` -> shiny-server (port 3838)
-- shiny-server serves from symlink: `/srv/shiny-server/islet-explorer` -> `app/shiny_app/`
-- Changes take effect when shiny-server spawns a fresh R worker (no restart needed; kill stale workers if needed)
+- **Requested reviewer URL (pending UFRC confirmation)**: `https://islet-explorer.rc.ufl.edu/islet-explorer/`
+- The UFRC high-availability proxy terminates HTTPS and Basic Auth, then proxies to VM loopback `127.0.0.1:3838`.
+- Rootless Podman/Quadlet runs one immutable, digest-pinned image; code, scientific data, and images are read-only.
+- Releases are checksummed and atomically activated. Never update a live review round from a mutable branch or symlink.
 - Dev server (`Rscript -e 'shiny::runApp(".", port=7777)'`) is for local testing only
 
 ## Running the App
 
-Production (always use this):
+Reviewer service, once UFRC provisions the requested URL:
 ```
-http://<server-ip>:8080/islet-explorer/
+https://islet-explorer.rc.ufl.edu/islet-explorer/
 ```
+
+The authoritative production procedure is `deploy/README.md`; provisioning inputs and
+unresolved institutional gates are in `PUBAPPS_UFRC_HANDOFF.md`.
 
 Development only:
 ```bash
@@ -224,9 +245,9 @@ See `docs/user_guide.md` for end-user documentation.
 
 ## Handoffs & Archive
 
-- `docs/HANDOFF.md` — **current** handoff (Jul 2026): Statistics-tab correctness audit, group-comparability
-  companions, nPOD donor metadata, the new Inflammation tab, and the whole-slide infiltration-score fixes.
-  Includes the deployment procedure and what is still open.
+- `docs/HANDOFF.md` — historical Jul/Aug 2026 development handoff. Its analysis-audit record remains useful,
+  but its mutable nginx deployment notes are superseded by `deploy/README.md` and
+  `PUBAPPS_UFRC_HANDOFF.md`.
 - `archive/docs/HANDOFF_2026-07-25_shiny-correctness-pass.md` — superseded predecessor; retains the plotly
   in-plot text findings and the chromote selectize gotcha.
 - `scripts/codex_phenocycler/docs/HANDOFF.md` — **active** handoff for the in-flight CODEX Phenocycler port. Read it before touching that workstream's gates, floors, or pairs.
@@ -238,4 +259,13 @@ Cross-session development knowledge for this project lives in Claude's auto-memo
 
 ## R Dependencies
 
-shiny, shinyjs, plotly, ggplot2, dplyr, tidyr, readxl, sf, jsonlite, RColorBrewer, scales, anndata, reticulate, httr2, stringr, lmerTest, lme4, emmeans
+shiny, shinyjs, plotly, ggplot2, dplyr, tidyr, readxl, sf, jsonlite, RColorBrewer, scales, anndata, reticulate, httr2, stringr, lmerTest, lme4, emmeans, destiny, data.table
+
+## Python Dependencies (app venv)
+
+The app's reticulate interpreter (`RETICULATE_PYTHON`, default
+`~/.local/share/islet-explorer-py`) needs `anndata` for data loading and, since Aug 2026,
+`scanpy igraph leidenalg fa2-modified` for the Trajectory tab's PAGA force-directed layout.
+Without scanpy the PAGA card degrades to an explicit "unavailable" message and the composition
+pseudotime axis falls back to the destiny implementation in `R/barlow_pseudotime.R`.
+Without `fa2-modified`, scanpy silently uses Fruchterman-Reingold instead of ForceAtlas2.

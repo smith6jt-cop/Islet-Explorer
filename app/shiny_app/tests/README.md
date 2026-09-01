@@ -1,18 +1,22 @@
 # Shiny App Tests & CI
 
 Automated checks for the R Shiny app (`app/shiny_app/`). Run in CI by
-`.github/workflows/shiny-app-ci.yml` on every push/PR that touches
-`app/shiny_app/**`.
+`.github/workflows/shiny-app-ci.yml` on pushes/PRs that touch the app, release
+scripts, deployment assets, or the workflow itself.
 
 ## What runs
 
 1. **Parse check** — `tests/parse_check.R` syntax-parses every `R/*.R` file plus
    `app.R`. Catches syntax errors without loading any package or data.
 2. **Unit tests** — `tests/run_tests.R` runs the `testthat` suite in
-   `tests/testthat/`. Currently covers `R/utils_stats.R` — the pure statistical
+   `tests/testthat/`. It covers `R/utils_stats.R` — the pure statistical
    helpers behind the Statistics tab (donor-level aggregation, mixed-effects test,
    per-bin ANOVA / Kendall τ / pairwise, Cohen's d, η², normality, outlier
-   flagging). These need no app data and no Python bridge.
+   flagging) — plus synthetic-data parity checks for the DuckDB/Parquet backend,
+   manifest/path tamper detection, indexed GeoPackage bounding-box reads, and pure
+   trajectory-axis helpers. These
+   need no scientific data and no Python bridge; backend checks skip if their
+   optional R packages are unavailable.
 
 3. **Statistics audit harness** — `tests/manual/stats_audit.R`. **Manual/local only**
    (not in CI): it drives the *real* `plot_server` → `statistics_server` chain
@@ -53,11 +57,12 @@ audit's own numbers — min-cells sweeping 5382 → 4246 → 689 islets, pairwis
   frame; stage 2 passes it in as a constant reactive. `stats_run()` is an
   `eventReactive(ignoreInit = TRUE)` — fire it with `setInputs(run_tests = 1)`.
 
-Dependencies for the tests: `testthat`, `dplyr`, `tidyr`, `tibble`, `lme4`,
-`lmerTest`. Install with:
+Dependencies for all tests: `testthat`, `dplyr`, `tidyr`, `tibble`, `lme4`,
+`lmerTest`, `DBI`, `duckdb`, `digest`, `jsonlite`, and `sf`. Install with:
 
 ```r
-install.packages(c("testthat", "dplyr", "tidyr", "tibble", "lme4", "lmerTest"))
+install.packages(c("testthat", "dplyr", "tidyr", "tibble", "lme4", "lmerTest",
+                   "DBI", "duckdb", "digest", "jsonlite", "sf"))
 ```
 
 ## Why CI does not launch the full app
@@ -98,11 +103,9 @@ test packages automatically at the start of every web session:
 The hook runs **synchronously**, so the session waits until R is ready (no race
 where the agent runs tests before the packages exist). The `r-cran-*` debs install
 fast on Ubuntu and bundle their own system dependencies (BLAS/LAPACK, gfortran
-runtime) — no compilation. Verified by running the full suite (73 assertions pass as of
-2026-08-14; the count drifts as tests are added — re-run rather than trusting this number,
-and note the suite was red from `d403563` to `2026-08-14` because that commit widened
-`cohens_d()`'s return value without updating its test) after
-a clean install.
+runtime) — no compilation. The assertion count changes as coverage grows; use the
+testthat summary from the current checkout rather than a recorded count. The suite was
+verified after a clean install when this release candidate was prepared.
 
 The hook only enables the automated **checks**. The **full app** still cannot be
 launched in a web session — it needs the gitignored `data/` artifacts (see above).

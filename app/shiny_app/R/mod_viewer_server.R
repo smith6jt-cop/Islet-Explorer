@@ -15,8 +15,8 @@ viewer_server <- function(id, forced_image, current_tab) {
       if (dir.exists(images_dir)) {
         imgs <- c(imgs, list.files(images_dir, pattern = "\\.ome\\.tiff?$", ignore.case = TRUE))
       }
-      local_root <- Sys.getenv("LOCAL_IMAGE_ROOT", unset = "")
-      if (nzchar(local_root) && dir.exists(local_root)) {
+      local_root <- local_images_root
+      if (!is.null(local_root) && nzchar(local_root) && dir.exists(local_root)) {
         imgs <- unique(c(imgs, list.files(local_root, pattern = "\\.ome\\.tiff?$", ignore.case = TRUE)))
       }
       imgs
