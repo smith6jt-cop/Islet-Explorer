@@ -13,20 +13,28 @@ non-mutating: scientific inputs are read-only, browser CSV downloads are built
 in session-scoped temporary storage, and only temporary files and operational
 logs are writable.
 
+This runbook defines the project's chosen production implementation and release
+controls. A requirement here may be a project release invariant rather than a
+separate UFRC approval gate. External ownership, provisioning, and approval are
+tracked in [`PUBAPPS_UFRC_HANDOFF.md`](../PUBAPPS_UFRC_HANDOFF.md); proportional
+logging requirements and additional hardening guidance are in
+[`docs/pubapps_log_inventory.md`](../docs/pubapps_log_inventory.md).
+
 ## Fixed production contract
 
 - Rootless Podman and a user Quadlet service; Apptainer is not a supported
   production path.
 - Code and dependencies baked into one immutable OCI image.
-- A clean Git commit, immutable image digest, and checksummed data/image release
+- A clean Git commit, immutable image reference, and checksummed data/image release
   are required before the service can start.
 - `data/` is mounted read-only at `/srv/islet-explorer/data`.
 - OME-TIFFs are mounted read-only directly at
   `/srv/islet-explorer/app/shiny_app/www/local_images`. This is deliberate:
   Shiny Server's static handler must see them beneath `www/` to preserve HTTP
   Range delivery through the UFRC proxy.
-- Shiny listens on the container interface at 3838; Podman publishes only
-  `127.0.0.1:3838` on the VM.
+- Shiny listens on the container interface at 3838. The project requests Podman
+  publication on VM loopback at `127.0.0.1:3838`, pending UFRC confirmation that
+  the proxy can reach that target.
 - The container and Shiny workers use the same `shiny` UID/GID. Rootless
   `keep-id` maps the UFRC service account to that identity.
 - AI, Statistics, and Inflammation are off. Production rejects a supplied
@@ -61,15 +69,17 @@ must not be used for reviewer hosting.
 Core R packages are resolved by `scripts/install_shiny_deps.R` against the
 base-image repository configuration. The image build records every resolved R
 package and version at `/opt/islet-explorer-build/R-packages.tsv`; the required
-release scan exports that file alongside the committed Python lock, CycloneDX
-SBOM, Grype report, and hashes. The OCI digest binds that resolved environment.
-Changing the base digest or any R dependency requires a new image and scientific
-parity run.
+release scan writes ID-derived CycloneDX, Grype, R-package, Python-package, and
+`.scan.txt` evidence plus `published-image.txt`. The scan attestation hashes the
+four required per-image artifacts, and `published-image.txt` binds the local image
+ID or registry digest to the source commit and base image. Changing the base digest
+or any R dependency requires a new image and scientific parity run.
 
-## 1. Build, test, scan, and export the OCI image
+## 1. Project build, test, scan, and OCI export
 
-Start from a clean, committed release tag. In particular, the PAGA R/Python
-files must be tracked; the build script refuses dirty or untracked source.
+Start from a clean, committed release revision; tag it if the project's release
+practice calls for a tag. In particular, the PAGA R/Python files must be tracked;
+the build script refuses dirty or untracked source.
 
 Resolve the chosen `rocker/shiny:4.5.1` base to a registry digest and then run,
 from the repository root:
@@ -87,15 +97,24 @@ deploy/build-image.sh \
   --tag "${IMAGE_TAG}" \
   --scan-dir "${EVIDENCE_DIR}"
 
-deploy/export-image.sh "${IMAGE_TAG}" "${OCI_ARCHIVE}"
+# Copy the immutable ID printed by build-image.sh; do not export by tag.
+IMAGE_ID='sha256:<image-id-printed-by-build-image>'
+deploy/export-image.sh "${IMAGE_ID}" "${OCI_ARCHIVE}"
 ```
 
 Release builds require `podman`, `syft`, and `grype`. The build performs Python
 imports, verifies exact `destiny`/`duckdb` versions, parses all application R
 files, creates the SBOM and resolved dependency manifests, and fails on a High
 or Critical vulnerability. `export-image.sh` creates an OCI archive, metadata,
-and a SHA-256 file covering both. Record the immutable local `sha256:...` image
-ID; the mutable build tag is never placed in release metadata.
+and a SHA-256 file covering both from the resolved immutable image ID. The
+mutable build tag is never placed in release metadata.
+
+UFIT standards require a maintained SBOM, lint/static-analysis evidence, and
+pre-deployment code/package/container vulnerability testing, with remaining CVEs
+documented. This project's image policy is stricter: Grype `--fail-on high` must
+report no High or Critical image finding. Supply the exact-candidate evidence to
+UFRC for review; UFRC's production review and ongoing network scans are a separate
+requirement and do not replace this project gate.
 
 Do not put scientific data, `.Renviron`, credentials, or the 109 GiB image tree
 in the OCI archive. Inspect the external evidence directory and retain it with
@@ -172,9 +191,11 @@ rsync -a /staging/islet-explorer-"${RELEASE}".oci.tar{,.metadata,.sha256} \
 ```
 
 Copy this `deploy/` tooling directory to the VM separately. On the VM, generate
-the release metadata with the exact image digest and source commit, then perform
-the full hash pass. Hashing the TIFF store is intentionally slow and happens
-once before activation, not at every restart.
+the release metadata with the exact immutable image reference and source commit, then
+perform the initial full verification. Hashing the TIFF store is intentionally slow:
+manifest generation hashes it once, this explicit verification rehashes it and writes
+the stamp, and activation rehashes it immediately before service replacement. Ordinary
+service restarts do not repeat the hash pass.
 
 ```bash
 deploy/load-image.sh \
@@ -196,10 +217,12 @@ the manifest hash. If the bundle changes, regenerate and fully verify it.
 
 ## 3. Activate the Quadlet service
 
-UFRC must first confirm that its Podman version accepts
+On the provisioned host, first verify that the available Podman version accepts
 `keep-id:uid=<shiny_uid>,gid=<shiny_gid>` and that login linger is enabled for
-the service account. Activation itself performs a bind-mount/writeability probe
-with the resolved image UID before replacing the service.
+the service account. Quadlet/user-systemd is the implementation selected by this
+project, not a separate UFRC approval gate. Activation performs a
+bind-mount/writeability probe with the resolved image UID before replacing the
+service.
 
 ```bash
 loginctl show-user "${USER}" -p Linger
@@ -232,11 +255,16 @@ image/data pairs until the new release has survived a VM reboot test.
 
 ## 4. UFRC reverse-proxy and Basic-Auth acceptance
 
-Give UFRC backend `127.0.0.1:3838` and public path `/islet-explorer/`. Ask it to
-preserve WebSocket upgrades, forwarded host/protocol, long Shiny connections,
-and unbuffered HTTP byte ranges for multi-gigabyte TIFFs. Basic Auth must cover
-the page, WebSocket endpoint, downloads, TIFFs, XML, JSON, and any Parquet,
-GeoPackage, or H5AD paths.
+Request public path `/islet-explorer/` and backend `127.0.0.1:3838`. UFRC must
+confirm that its proxy can reach VM loopback or return the required private backend
+address and agreed port. The current Quadlet, activation, and verification tooling
+assumes `127.0.0.1:3838`; if UFRC assigns a different target, do not activate until the
+project updates and re-reviews that configuration and tooling and repeats its tests.
+Ask UFRC to preserve WebSocket upgrades,
+forwarded host/protocol, long Shiny connections, and unbuffered HTTP byte ranges for
+multi-gigabyte TIFFs. Basic Auth must cover the page, WebSocket endpoint, downloads,
+TIFFs, XML, JSON, and other served static assets. Parquet, GeoPackage, H5AD, and
+other release-data paths must not be directly web-accessible.
 
 Run locally on the VM, substituting one TIFF relative path:
 
@@ -252,16 +280,22 @@ images are writable, if feature flags or credentials violate the reviewer
 profile, if dependencies are absent, or if the byte request is not exactly a
 `206 Content-Range` response.
 
-From a clean non-UF browser/network, additionally verify:
+Before reviewer credentials are released, use a clean non-UF browser/network to
+verify the required route behavior:
 
 1. An unauthenticated request to the site and to a TIFF returns `401`.
 2. The neutral reviewer credential unlocks all four tabs and their CSV exports.
 3. Plot, Trajectory/PAGA, Viewer, and Spatial match the frozen manuscript data.
 4. The Viewer streams rather than downloads a complete TIFF and the Shiny
    WebSocket stays connected through long interactions.
-5. Directory listing and direct access outside the application path are denied.
-6. Five simultaneous reviewer sessions meet the documented latency/memory gate.
-7. `systemctl --user` brings the same digest back after a controlled VM reboot.
+5. Directory listing, direct release-data access, and access outside the application
+   path are denied.
+
+As project operational checks, exercise a representative five-session smoke at the
+declared peak and confirm that `systemctl --user` brings the same immutable image
+reference back after a controlled VM reboot. These checks inform capacity and
+recovery; they are not additional UFRC policy gates and have no invented latency
+threshold.
 
 Send the shared reviewer credential only through the journal's confidential
 field, rotate it after each review round, and never store it in this repository,
@@ -269,21 +303,38 @@ the image, release data, shell history, or publicly visible ticket comments.
 
 ## 5. Release evidence and operations
 
-Retain, per reviewer release:
+Retain the following standards and approval evidence per reviewer release:
 
-- Signed Git tag and 40-character source commit.
+- Lint/static-analysis results, documented input validation, a maintained SBOM,
+  and project code/package/container vulnerability results. The project image gate
+  has no High or Critical findings; any other remaining CVE is documented.
+- Appropriate industry-standard one-event-per-line application logs sent to a
+  UFIT-monitored location.
+- Accessibility/UF-branding review or remediation record.
+- UFRC security/availability approval and PI/data-owner attestation.
+
+Also retain the project's reproducibility and recovery record:
+
+- The 40-character source commit and release tag if one was created.
 - Immutable local image ID (or UFRC-approved registry digest), plus the OCI
   archive, transfer metadata, and SHA-256 sidecar.
 - Base-image digest.
 - `release.env`, `MANIFEST.sha256`, and verification record.
-- CycloneDX SBOM, Grype JSON/attestation, resolved R package TSV, and resolved
-  Python package list.
-- Application/unit/scientific-parity, accessibility, concurrency, Range,
-  restart, and rollback test results.
-- UFRC security approval and PI/data-owner attestation.
+- The ID-derived CycloneDX SBOM, Grype JSON report, resolved R package TSV,
+  resolved Python package list, `.scan.txt` attestation, and
+  `published-image.txt`; retain the optional Grype database-status JSON when
+  generated.
+- Application/unit/scientific-parity and Range results, plus representative
+  concurrency, restart, and rollback notes.
+- Project log-minimization checks and the recorded UFRC answers about log access and
+  retention.
 
-Monitor HTTPS health, disconnects, CPU/memory, disk usage, and log rotation.
-Logs must not contain exported scientific rows, passwords, or other sensitive
-content. Review Basic Auth and SSH access quarterly while peer review remains
-active. Renew the PubApps allocation before expiration. Remove Basic Auth only
-after written PI/data-owner/nPOD approval of the exact public-release bundle.
+Monitor HTTPS health, disconnects, CPU/memory, disk usage, and log growth. Logs
+must use an appropriate one-event-per-line format and must not contain exported
+scientific rows, credentials, or unnecessary Sensitive content. Follow the
+UFRC-provided collection, access, and retention rules; the detailed inventory adds
+project recommendations for redaction, rotation, and leakage checks. If UFRC confirms
+that project-plan item 6 applies to this Sensitive deployment, review Basic Auth and
+SSH access quarterly while peer review remains active. Renew the PubApps allocation
+before expiration. Remove Basic Auth only after written PI/data-owner/nPOD and UFRC
+approval of the exact public-release bundle.

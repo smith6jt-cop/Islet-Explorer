@@ -344,7 +344,8 @@ R -q -e "shiny::runApp('app/shiny_app', launch.browser=FALSE)"
 
 The reviewer deployment is an immutable, rootless Podman service managed by a
 user-mode Quadlet unit. Shiny listens on container port 3838; Podman publishes it
-only to the PubApps VM loopback address `127.0.0.1:3838`, and UFRC supplies TLS,
+to the requested PubApps VM loopback address `127.0.0.1:3838`, subject to UFRC
+confirming the final reachable backend address and port. UFRC supplies TLS,
 whole-site Basic Auth, and the public reverse proxy. Code is baked into the OCI
 image. The manifest-backed data root and its `images/` subtree are mounted read-only;
 only bounded temp and log directories are writable.
@@ -383,8 +384,8 @@ Rscript scripts/verify_release_data.R --root /path/to/release --mode full
 | `ISLET_ENABLE_AI` | Dormant AI module; must be `FALSE` in reviewer production |
 | `SHOW_STATISTICS_TAB` | Dormant Statistics tab; must be `0` in reviewer production |
 | `SHOW_INFLAMMATION_TAB` | Dormant Inflammation tab; must be `0` in reviewer production |
-| `DEBUG_CREDENTIALS` | Set to `1` for verbose credential loading |
-| `VIEWER_DEBUG` | Set to `1` for Viewer tab debug output |
+| `DEBUG_CREDENTIALS` | Development only: set to `1` for fixed-code credential setup diagnostics |
+| `VIEWER_DEBUG` | Development only: set to `1` for Viewer diagnostics; production rejects it |
 
 `KEY`, `OPENAI_API_KEY`, and external AI endpoint variables are forbidden in the
 reviewer container. Its entrypoint fails if an AI credential is supplied.

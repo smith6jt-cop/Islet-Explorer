@@ -25,10 +25,16 @@ jobs:
   parse-and-test:
     runs-on: ubuntu-latest
     timeout-minutes: 35
-    env:
-      R_LIBS_USER: ${{ runner.temp }}/islet-r-library
     steps:
       - uses: actions/checkout@v4
+
+      - name: Configure isolated R library
+        shell: bash
+        run: |
+          set -euo pipefail
+          r_library="${RUNNER_TEMP}/islet-r-library"
+          mkdir -p "${r_library}"
+          printf 'R_LIBS_USER=%s\n' "${r_library}" >> "${GITHUB_ENV}"
 
       # Ubuntu's precompiled r-cran-* debs bundle their system dependencies
       # (including GDAL/GEOS for sf). DuckDB is not packaged by Ubuntu, so it is
@@ -43,7 +49,8 @@ jobs:
             build-essential r-base-core r-base-dev \
             r-cran-testthat r-cran-dplyr r-cran-tidyr \
             r-cran-tibble r-cran-lme4 r-cran-lmertest \
-            r-cran-dbi r-cran-digest r-cran-jsonlite r-cran-sf
+            r-cran-dbi r-cran-digest r-cran-jsonlite r-cran-sf \
+            r-cran-lintr bandit
 
       - name: Install embedded DuckDB test dependency
         env:
@@ -56,12 +63,15 @@ jobs:
       # Parquet parity, SHA-256 validation, and GeoPackage indexing cannot skip.
       - name: Verify non-optional test capabilities
         run: |
-          Rscript -e 'required <- c("testthat", "dplyr", "tidyr", "tibble", "lme4", "lmerTest", "DBI", "duckdb", "digest", "jsonlite", "sf"); missing <- required[!vapply(required, requireNamespace, logical(1), quietly = TRUE)]; if (length(missing)) stop("Missing required CI packages: ", paste(missing, collapse = ", ")); if (!("GPKG" %in% sf::st_drivers()$name)) stop("sf/GDAL lacks the GPKG driver required by backend tests"); message("Backend test capabilities verified: ", paste(required, collapse = ", "))'
+          Rscript -e 'required <- c("testthat", "dplyr", "tidyr", "tibble", "lme4", "lmerTest", "DBI", "duckdb", "digest", "jsonlite", "sf", "lintr"); missing <- required[!vapply(required, requireNamespace, logical(1), quietly = TRUE)]; if (length(missing)) stop("Missing required CI packages: ", paste(missing, collapse = ", ")); if (!("GPKG" %in% sf::st_drivers()$name)) stop("sf/GDAL lacks the GPKG driver required by backend tests"); message("Backend test capabilities verified: ", paste(required, collapse = ", "))'
 
       - name: Parse-check application and release R sources
         run: |
           Rscript app/shiny_app/tests/parse_check.R
           Rscript -e 'files <- c(list.files("scripts", pattern = "[.]R$", recursive = TRUE, full.names = TRUE), list.files("deploy", pattern = "[.]R$", recursive = TRUE, full.names = TRUE)); if (!length(files)) stop("No scripts/deploy R files found"); for (file in files) tryCatch(parse(file = file), error = function(e) stop(file, ": ", conditionMessage(e))); message("Parsed ", length(files), " scripts/deploy R files")'
+
+      - name: Lint deployed R runtime for correctness and unsafe calls
+        run: Rscript deploy/lint-runtime-r.R
 
       - name: Parse-check Python sources
         run: |
@@ -77,6 +87,9 @@ jobs:
               ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
           print(f"Parsed {len(files)} application/script Python files")
           PY
+
+      - name: Run Bandit on deployed Python runtime
+        run: bandit --quiet --recursive app/shiny_app/python
 
       - name: Run unit tests
         working-directory: app/shiny_app
@@ -98,7 +111,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mapfile -d '' scripts < <(find deploy -maxdepth 1 -type f -name '*.sh' -print0)
+          mapfile -d '' scripts < <(find deploy -type f -name '*.sh' -print0)
           if (( ${#scripts[@]} == 0 )); then
             echo 'No deployment shell scripts found.' >&2
             exit 1
@@ -108,7 +121,14 @@ jobs:
           done
 
       - name: Run ShellCheck on deployment scripts
-        run: shellcheck --severity=warning deploy/*.sh
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -d '' scripts < <(find deploy -type f -name '*.sh' -print0)
+          shellcheck --severity=warning "${scripts[@]}"
+
+      - name: Test image scan and release-evidence contracts
+        run: bash deploy/tests/test-image-evidence.sh
 
       # This is a deterministic tracked-file gate, not a replacement for GitHub
       # secret scanning. It reports filenames only so a detected value is never

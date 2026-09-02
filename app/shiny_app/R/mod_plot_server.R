@@ -20,6 +20,139 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
+    # Build each selector vocabulary once from server-owned data, then use the
+    # same values for both UI construction and browser-input validation. This
+    # prevents a forged value from selecting a hidden data column or reaching a
+    # label/export path after the data reactive has already fallen back.
+    microenvironment_selection_choices <- function(pd) {
+      classes <- pd$targets_all %>%
+        dplyr::pull(class) %>% unique() %>% na.omit() %>% sort()
+      list(
+        "Core" = setNames(paste0(classes, "|islet_core"), classes),
+        "Peri-Islet" = setNames(paste0(classes, "|islet_band"), classes),
+        "Core + Peri" = setNames(paste0(classes, "|islet_union"), classes)
+      )
+    }
+
+    composition_selection_choices <- function(pd) {
+      base_choices <- c(
+        "Ins_frac" = "Ins_any",
+        "Glu_frac" = "Glu_any",
+        "Stt_frac" = "Stt_any"
+      )
+      comp_cols <- colnames(pd$comp)
+      prop_cols <- grep("^prop_", comp_cols, value = TRUE)
+      peri_prop_cols <- grep("^peri_prop_", comp_cols, value = TRUE)
+      combined_pairs <- pd$combined_pairs
+      combined_vals <- if (!is.null(combined_pairs) && nrow(combined_pairs) > 0) {
+        setNames(paste0("combined_prop_", combined_pairs$stem), combined_pairs$label)
+      } else {
+        character(0)
+      }
+
+      if (!length(prop_cols) && !length(peri_prop_cols)) return(base_choices)
+
+      choices <- list("Core — Hormone Positivity (QuPath threshold)" = base_choices)
+      if (length(prop_cols) > 0) {
+        prop_cols <- prop_cols[phenotype_is_kept(gsub("^prop_", "", prop_cols))]
+        choices[["Core — Phenotype Proportions (scVI)"]] <-
+          setNames(prop_cols, gsub("^prop_", "", prop_cols))
+      }
+      if (length(peri_prop_cols) > 0) {
+        peri_labels <- vapply(
+          peri_prop_cols,
+          function(cl) extract_phenotype_from_column(cl) %||% cl,
+          character(1), USE.NAMES = FALSE
+        )
+        choices[["Peri-Islet — Phenotype Proportions (scVI)"]] <-
+          setNames(peri_prop_cols, peri_labels)
+      }
+      if (length(combined_vals) > 0) {
+        choices[["Core+Peri — Phenotype Proportions (scVI)"]] <- combined_vals
+      }
+      choices
+    }
+
+    selection_values <- function(choices) {
+      unname(unlist(choices, use.names = FALSE))
+    }
+
+    selection_vocabularies <- reactive({
+      pd <- prepared()
+      list(
+        composition = composition_selection_choices(pd),
+        microenvironment = microenvironment_selection_choices(pd)
+      )
+    })
+
+    validated_mode <- reactive({
+      value <- input$mode %||% "Cell Populations"
+      if (!islet_valid_scalar_choice(
+        value, c("Cell Populations", "Microenvironment"), "plot_mode_invalid"
+      )) return("Cell Populations")
+      value
+    })
+
+    validated_selection <- reactive({
+      vocabularies <- selection_vocabularies()
+      composition_values <- selection_values(vocabularies$composition)
+      microenvironment_values <- selection_values(vocabularies$microenvironment)
+      mode <- validated_mode()
+      value <- input$which
+      allowed <- if (identical(mode, "Microenvironment")) {
+        microenvironment_values
+      } else {
+        composition_values
+      }
+      stale_allowed <- if (identical(mode, "Microenvironment")) {
+        composition_values
+      } else {
+        microenvironment_values
+      }
+
+      valid <- is.character(value) && length(value) == 1L && !is.na(value) &&
+        nzchar(value) && value %in% allowed
+      if (valid) return(value)
+
+      # Dynamic selectInput replacement briefly leaves the preceding mode's
+      # valid value in input$which. Fall back without treating that normal UI
+      # transition as a validation failure.
+      stale <- is.character(value) && length(value) == 1L && !is.na(value) &&
+        value %in% stale_allowed
+      if (!is.null(value) && !stale) {
+        islet_log_validation_failure("plot_selection_invalid")
+      }
+
+      if (length(allowed)) allowed[[1]] else NULL
+    })
+
+    validated_metric <- reactive({
+      # Microenvironment has a single implicit area-percentage metric; a stale
+      # Composition radio value is irrelevant while that mode is active.
+      if (identical(validated_mode(), "Microenvironment")) return("Percentage")
+      value <- input$metric %||% "Percentage"
+      if (!islet_valid_scalar_choice(
+        value, c("Percentage", "Counts", "Density"), "plot_metric_invalid"
+      )) return("Percentage")
+      value
+    })
+
+    validated_groups <- reactive({
+      value <- input$groups
+      if (is.null(value) || !length(value)) return(c("ND", "Aab+", "T1D"))
+      if (!islet_valid_choice_vector(
+        value, c("ND", "Aab+", "T1D"), "plot_groups_invalid"
+      )) return(c("ND", "Aab+", "T1D"))
+      value
+    })
+
+    validated_min_cells <- reactive({
+      value <- input$min_cells %||% 1
+      if (!islet_valid_bounded_number(value, 1, 200,
+                                      "plot_min_cells_invalid")) return(1)
+      as.numeric(value)
+    })
+
     # ---- Donor palette helper (consistent colors across scatter & distribution) ----
     get_donor_palette <- function(ids) {
       if (is.null(ids)) return(character(0))
@@ -75,75 +208,21 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
     # ===========================================================================
 
     output$dynamic_selector <- renderUI({
-      if (identical(input$mode, "Microenvironment")) {
-        classes <- prepared()$targets_all %>%
-          dplyr::pull(class) %>% unique() %>% na.omit() %>% sort()
-        if (length(classes) == 0) classes <- character(0)
-        choices <- list(
-          "Core" = setNames(paste0(classes, "|islet_core"), classes),
-          "Peri-Islet" = setNames(paste0(classes, "|islet_band"), classes),
-          "Core + Peri" = setNames(paste0(classes, "|islet_union"), classes)
-        )
-        all_vals <- unlist(choices, use.names = FALSE)
-        sel <- if (!is.null(input$which) && input$which %in% all_vals) {
-          input$which
-        } else if (length(all_vals) > 0) {
-          all_vals[1]
-        } else {
-          NULL
-        }
-        selectInput(ns("which"), "Structure & Region", choices = choices, selected = sel)
+      vocabularies <- selection_vocabularies()
+      selected <- validated_selection()
+      if (identical(validated_mode(), "Microenvironment")) {
+        choices <- vocabularies$microenvironment
+        selectInput(ns("which"), "Structure & Region", choices = choices,
+                    selected = selected)
       } else {
-        base_choices <- c("Ins_frac" = "Ins_any", "Glu_frac" = "Glu_any", "Stt_frac" = "Stt_any")
-        comp_cols <- colnames(prepared()$comp)
-        prop_cols <- grep("^prop_", comp_cols, value = TRUE)
-        peri_prop_cols <- grep("^peri_prop_", comp_cols, value = TRUE)
-        # Combined (core+peri) is computed on the fly. prep_data() builds a
-        # safe-name -> (core_col, peri_col) lookup that handles the divergent
-        # column naming (prop_* keeps spaces/+, peri_prop_* sanitizes them).
-        combined_pairs <- prepared()$combined_pairs
-        combined_vals <- if (!is.null(combined_pairs) && nrow(combined_pairs) > 0) {
-          setNames(paste0("combined_prop_", combined_pairs$stem), combined_pairs$label)
-        } else character(0)
-        # Note: aggregate immune ratio metrics (immune_frac_*, immune_ratio,
-        # cd8_to_macro_ratio, tcell_density_peri) are intentionally NOT
-        # surfaced here. The Spatial tab now exposes phenotype-level peri
-        # proportions and enrichment uniformly across all phenotypes; the
-        # ad-hoc curated ratios were removed in favour of that systematic UI.
-        if (length(prop_cols) > 0 || length(peri_prop_cols) > 0) {
-          choices <- list("Core — Hormone Positivity (QuPath threshold)" = base_choices)
-          if (length(prop_cols) > 0) {
-            # Retired phenotypes never reach the selector.
-            prop_cols   <- prop_cols[phenotype_is_kept(gsub("^prop_", "", prop_cols))]
-            prop_labels <- gsub("^prop_", "", prop_cols)
-            choices[["Core — Phenotype Proportions (scVI)"]] <- setNames(prop_cols, prop_labels)
-          }
-          if (length(peri_prop_cols) > 0) {
-            # `peri_prop_*` columns are sanitised (space -> _, + -> plus), so a
-            # bare gsub of the prefix displayed "CD4_Tcell" / "ECADplus" /
-            # "SMAplus" in the very same dropdown where the Core and Core+Peri
-            # groups displayed "CD4 Tcell" / "ECAD+" / "SMA+". Route the labels
-            # through the shared un-sanitiser so all three groups agree; the
-            # VALUES stay the raw column names, so nothing downstream changes.
-            peri_labels <- vapply(peri_prop_cols,
-                                  function(cl) extract_phenotype_from_column(cl) %||% cl,
-                                  character(1), USE.NAMES = FALSE)
-            choices[["Peri-Islet — Phenotype Proportions (scVI)"]] <- setNames(peri_prop_cols, peri_labels)
-          }
-          if (length(combined_vals) > 0) {
-            choices[["Core+Peri — Phenotype Proportions (scVI)"]] <- combined_vals
-          }
-        } else {
-          choices <- base_choices
-        }
-        cur_w <- if (!is.null(input$which) && input$which %in% unlist(choices)) input$which else "Ins_any"
-        pheno_label <- extract_phenotype_from_column(cur_w)
+        choices <- vocabularies$composition
+        pheno_label <- extract_phenotype_from_column(selected)
         hint <- if (!is.null(pheno_label) && !is.null(get_phenotype_rule(pheno_label))) {
           phenotype_hint_ui(pheno_label, show_modal_link = ns("show_phenotype_rules_inline"))
         }
         tagList(
           selectInput(ns("which"), "Population Measure", choices = choices,
-                      selected = cur_w),
+                      selected = selected),
           hint,
           helpText(
             "Core = cells within the islet boundary. Peri-Islet = cells within a 20 µm zone around the islet. ",
@@ -154,7 +233,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
     })
 
     output$metric_selector <- renderUI({
-      if (identical(input$mode, "Microenvironment")) {
+      if (identical(validated_mode(), "Microenvironment")) {
         # Microenvironment exposes a single metric (% of region area
         # occupied by the structure). No radio shown — Nerve / Capillary /
         # Lymphatic are area-valued, so the area fraction is the only
@@ -164,7 +243,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         # Composition — Density uses QuPath-measured region areas (core_region_um2,
         # peri_region_um2) for all three region variants. Peri-islet area is the
         # QuPath `_exp20um` annotation area, merged in via prep_data().
-        w <- input$which %||% ""
+        w <- validated_selection() %||% ""
         if (startsWith(w, "combined_prop_")) {
           tagList(
             radioButtons(ns("metric"), "Metric",
@@ -209,7 +288,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       df <- raw_df_base()
       if (!is.null(df) && nrow(df) > 0) {
         aabp_donors <- df %>% dplyr::filter(donor_status == "Aab+")
-        if (nrow(aabp_donors) == 0 && "Aab+" %in% input$groups) {
+        if (nrow(aabp_donors) == 0 && "Aab+" %in% validated_groups()) {
           div(style = "color: #d9534f; font-weight: bold; margin-bottom: 10px;",
               "\u26a0 No matching donors.")
         } else {
@@ -257,40 +336,12 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
     # ---- raw_df_base: per-islet dataset aligned with current selections ----
     raw_df_base <- reactive({
       pd <- prepared()
-      mode <- input$mode %||% "Cell Populations"
-      groups <- input$groups
-      if (is.null(groups) || !length(groups)) {
-        groups <- c("ND", "Aab+", "T1D")
-      }
-      w <- input$which
-      if (is.null(w) || length(w) == 0) w <- NA_character_
-
-      # Resolve defaults before branching so initial renders don't error
-      if (identical(mode, "Cell Populations")) {
-        cc <- colnames(pd$comp)
-        prop_in_comp <- grep("^prop_", cc, value = TRUE)
-        peri_prop_in_comp <- grep("^peri_prop_", cc, value = TRUE)
-        combined_vals <- if (!is.null(pd$combined_pairs) && nrow(pd$combined_pairs) > 0) {
-          paste0("combined_prop_", pd$combined_pairs$stem)
-        } else character(0)
-        valid_comp <- c("Ins_any", "Glu_any", "Stt_any",
-                         prop_in_comp, peri_prop_in_comp, combined_vals,
-                         intersect(c("immune_frac_peri", "immune_frac_core", "immune_ratio",
-                                     "cd8_to_macro_ratio", "tcell_density_peri"), cc))
-        if (!is.character(w) || length(w) != 1 || !nzchar(w) ||
-            !(w %in% valid_comp)) {
-          w <- "Ins_any"
-        }
-      } else if (identical(mode, "Microenvironment")) {
-        if (!is.character(w) || length(w) != 1 || !nzchar(w)) {
-          candidate_classes <- pd$targets_all %>%
-            dplyr::pull(class) %>% unique() %>% na.omit() %>% sort()
-          if (length(candidate_classes) > 0) w <- paste0(candidate_classes[1], "|islet_core")
-        }
-      }
+      mode <- validated_mode()
+      groups <- validated_groups()
+      w <- validated_selection()
 
       if (identical(mode, "Microenvironment")) {
-        req(!is.null(w) && nzchar(w))
+        req(!is.null(w), nzchar(w))
         # Parse "className|islet_region" encoding
         parts <- strsplit(w, "\\|")[[1]]
         target_class <- parts[1]
@@ -314,7 +365,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
           })
       } else {
         # Composition
-        metric <- input$metric %||% "Percentage"
+        metric <- validated_metric()
         df <- pd$comp %>%
           dplyr::filter(`Donor Status` %in% groups) %>%
           dplyr::filter(is.finite(islet_diam_um))
@@ -420,7 +471,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         dplyr::filter(!is.na(value))
 
       # Apply min cells/islet filter
-      min_cells <- input$min_cells %||% 1
+      min_cells <- validated_min_cells()
       if (min_cells > 1 &&
           "total_cells_core" %in% colnames(out) &&
           "total_cells_peri" %in% colnames(out)) {
@@ -501,8 +552,8 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       if (is.null(df) || !nrow(df)) {
         return(df %||% data.frame())
       }
-      mode <- attr(df, "mode_used") %||% (input$mode %||% "Cell Populations")
-      selection_label <- attr(df, "selection_used") %||% input$which
+      mode <- attr(df, "mode_used") %||% validated_mode()
+      selection_label <- attr(df, "selection_used") %||% validated_selection()
       if (is.null(selection_label) || length(selection_label) == 0 ||
           is.na(selection_label[1]) || !nzchar(selection_label[1])) {
         selection_label <- if (identical(mode, "Cell Populations")) "Ins_any" else ""
@@ -542,9 +593,6 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       )
 
       attr(df, "outlier_summary") <- summary
-      cat(sprintf("[PLOT] %d outliers flagged (%s)%s\n",
-                  summary$n_excluded, summary$label,
-                  if (summary$enabled) " — excluded from summary lines, drawn as ghost ×" else " — exclusion OFF"))
 
       # Attach diameter bins
       df <- bin_islet_sizes(df, "islet_diam_um", bw)
@@ -580,6 +628,9 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       if (is.null(sm) || !nrow(sm)) {
         return(plotly_islet_empty("Loading data..."))
       }
+      mode <- validated_mode()
+      selection <- validated_selection() %||% ""
+      metric <- validated_metric()
 
       grp_levels <- c("ND", "Aab+", "T1D")
       sm$donor_status <- factor(sm$donor_status, levels = grp_levels)
@@ -590,8 +641,8 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       color_map <- donor_colors_reactive()
 
       # Y-axis label
-      ylab <- if (identical(input$mode, "Microenvironment")) {
-        wsel <- input$which %||% ""
+      ylab <- if (identical(mode, "Microenvironment")) {
+        wsel <- selection
         parts <- strsplit(wsel, "\\|")[[1]]
         class_name <- if (length(parts) >= 1 && nzchar(parts[1])) parts[1] else "Structure"
         region_tag <- if (length(parts) >= 2) parts[2] else "islet_core"
@@ -602,8 +653,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
                              "region")
         paste0(class_name, " area (% of ", region_lbl, " area)")
       } else {
-        metric <- input$metric %||% "Percentage"
-        wsel <- input$which %||% ""
+        wsel <- selection
         region_tag <- if (startsWith(wsel, "combined_prop_")) "core+peri"
                        else if (startsWith(wsel, "peri_prop_")) "peri"
                        else "core"
@@ -617,14 +667,13 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       }
 
       # Title (with outlier badge appended)
-      base_title <- if (identical(input$mode, "Microenvironment")) {
+      base_title <- if (identical(mode, "Microenvironment")) {
         # Extract class name from encoded "className|region" value
-        wsel <- input$which %||% ""
+        wsel <- selection
         class_name <- strsplit(wsel, "\\|")[[1]][1]
         paste0(class_name, " vs Islet Size")
       } else {
-        wsel <- input$which
-        if (is.null(wsel) || length(wsel) != 1 || !nzchar(wsel)) wsel <- "Ins_any"
+        wsel <- selection
         if (startsWith(wsel, "combined_prop_")) {
           nm <- paste0(gsub("^combined_prop_", "", wsel), " core+peri proportion")
         } else if (startsWith(wsel, "peri_prop_")) {
@@ -693,7 +742,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         # Vertical jitter
         yr <- suppressWarnings(range(raw$value, na.rm = TRUE))
         ydiff <- if (all(is.finite(yr))) diff(yr) else 0
-        is_counts <- !is.null(input$metric) && input$metric == "Counts"
+        is_counts <- identical(metric, "Counts")
         jh <- if (is_counts) {
           mx <- max(0.02 * ydiff, 0.5)
           if (!is.finite(mx) || mx <= 0) 0.5 else mx
@@ -895,7 +944,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
     dist_data <- reactive({
       rdf <- raw_df_base()
       if (is.null(rdf) || nrow(rdf) == 0) return(NULL)
-      req(input$mode, input$which)
+      req(validated_mode(), validated_selection())
 
       # Independent zero-exclusion for the Distribution panel.
       if (isTRUE(input$exclude_zero_dist)) {
@@ -922,6 +971,9 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
     output$dist <- renderPlotly({
       dd <- dist_data()
       if (is.null(dd)) return(NULL)
+      mode <- validated_mode()
+      selection <- validated_selection() %||% ""
+      metric <- validated_metric()
 
       # Force reactivity on distribution-specific controls
       dist_color_by_val <- input$dist_color_by
@@ -938,8 +990,8 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       }
 
       # Y-axis label
-      ylab <- if (identical(input$mode, "Microenvironment")) {
-        wsel <- input$which %||% ""
+      ylab <- if (identical(mode, "Microenvironment")) {
+        wsel <- selection
         parts <- strsplit(wsel, "\\|")[[1]]
         class_name <- if (length(parts) >= 1 && nzchar(parts[1])) parts[1] else "Structure"
         region_tag <- if (length(parts) >= 2) parts[2] else "islet_core"
@@ -950,8 +1002,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
                              "region")
         paste0(class_name, " area (% of ", region_lbl, " area)")
       } else {
-        metric <- input$metric %||% "Percentage"
-        wsel <- input$which %||% ""
+        wsel <- selection
         region_tag <- if (startsWith(wsel, "combined_prop_")) "core+peri"
                        else if (startsWith(wsel, "peri_prop_")) "peri"
                        else "core"
@@ -991,7 +1042,6 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       if (isTRUE(input$dist_show_points)) {
         if (color_by == "donor_id" && "donor_id" %in% colnames(rdf)) {
           donor_colors <- get_donor_palette(levels(rdf$donor_id))
-          cat(sprintf("[DIST] Applying donor_id colors for %d donors\n", length(donor_colors)))
           g <- g +
             geom_jitter(aes(x = donor_status, y = value, color = donor_id),
                         position = position_jitter(width = 0.18, seed = 17),
@@ -1144,7 +1194,10 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         return(invisible(FALSE))
       }
       key_parts <- strsplit(as.character(click_key[1]), "\\|")[[1]]
-      if (length(key_parts) < 2) {
+      if (length(key_parts) != 2L ||
+          !islet_safe_path_segment(key_parts[1]) ||
+          !islet_safe_path_segment(key_parts[2])) {
+        islet_log_validation_failure("islet_key_invalid")
         showNotification("Could not parse islet identifier", type = "warning", duration = 3)
         return(invisible(FALSE))
       }
@@ -1155,8 +1208,6 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
     observeEvent(event_data("plotly_click", source = ns("plot_scatter")), {
       click_data <- event_data("plotly_click", source = ns("plot_scatter"))
       if (is.null(click_data)) return()
-      cat("[PLOT CLICK] plotly_click received; key:",
-          if (is.null(click_data$key)) "NULL" else as.character(click_data$key)[1], "\n")
       open_islet_from_key(click_data$key,
                           key_null_msg = "Click on individual points to view segmentation (enable 'Show individual points')")
     })
@@ -1167,7 +1218,6 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
     observeEvent(input$plot_native_click, {
       nc <- input$plot_native_click
       if (is.null(nc) || is.null(nc$key)) return()
-      cat("[PLOT CLICK] native bridge; key:", as.character(nc$key)[1], "\n")
       open_islet_from_key(nc$key)
     })
 
@@ -1356,11 +1406,11 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
     get_selection_description <- function() {
       desc <- c()
       desc <- c(desc, paste("Generated:", Sys.time()))
-      desc <- c(desc, paste("Data Layer:", input$mode %||% "Unknown"))
-      desc <- c(desc, paste("Selection:", input$which %||% "Unknown"))
-      desc <- c(desc, paste("Metric:", input$metric %||% "Unknown"))
+      desc <- c(desc, paste("Data Layer:", validated_mode()))
+      desc <- c(desc, paste("Selection:", validated_selection() %||% "Unknown"))
+      desc <- c(desc, paste("Metric:", validated_metric()))
 
-      desc <- c(desc, paste("Donor Groups:", paste(input$groups %||% c(), collapse = ", ")))
+      desc <- c(desc, paste("Donor Groups:", paste(validated_groups(), collapse = ", ")))
 
       if (length(input$aab_flags) > 0) {
         all_aab <- c("AAb_GADA", "AAb_IA2A", "AAb_ZnT8A", "AAb_IAA", "AAb_mIAA")
@@ -1376,7 +1426,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       # Demographic + size filters. These CHANGE WHICH ISLETS ARE IN THE FILE,
       # so omitting them made two CSVs with different row sets look identical in
       # provenance. `min_cells`, age, and sex were all silently absent.
-      desc <- c(desc, paste("Min cells per islet (core+peri):", input$min_cells %||% 1))
+      desc <- c(desc, paste("Min cells per islet (core+peri):", validated_min_cells()))
       if (!is.null(input$age_range) && length(input$age_range) == 2) {
         desc <- c(desc, paste("Donor Age Range:",
                               input$age_range[1], "-", input$age_range[2], "years"))

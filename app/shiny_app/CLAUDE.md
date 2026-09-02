@@ -325,7 +325,7 @@ Required env vars: `KEY` (API key), `BASE` (API base URL, optional).
 - **UF Navigator uses `/chat/completions` only**: The code detects `api.ai.it.ufl.edu` in the base URL and skips the `/responses` endpoint.
 - **Streaming parser must handle `reasoning_content`**: For reasoning models, `delta.reasoning_content` chunks arrive first — use a "Thinking..." indicator.
 - **Token budget**: Controlled by `OPENAI_TOKEN_BUDGET` env var. Chat panel shows cumulative usage and blocks requests when budget exhausted.
-- **Debug mode**: Set `DEBUG_CREDENTIALS=1` env var for verbose credential loading logs.
+- **Debug mode**: In development only, set `DEBUG_CREDENTIALS=1` for fixed-code credential setup diagnostics. Production rejects this flag.
 - **Plain-text display**: `strip_markdown()` in `mod_ai_assistant_server.R` removes markdown formatting from AI responses before display.
 
 ## Viewer Tab (Avivator) — iframe Persistence (Jun 2026)

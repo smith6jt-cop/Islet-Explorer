@@ -1,3 +1,14 @@
+# Debug modes are a deployment error in production. Keep this check before
+# package loading and other startup work so a misconfigured worker fails closed
+# without entering either diagnostic path.
+DEBUG_CREDS <- islet_flag_enabled(Sys.getenv("DEBUG_CREDENTIALS", "0"))
+VIEWER_DEBUG_ENABLED <- islet_flag_enabled(Sys.getenv("VIEWER_DEBUG", "0"))
+if (identical(tolower(trimws(Sys.getenv("ISLET_RUNTIME_MODE", "development"))),
+              "production") &&
+    (DEBUG_CREDS || VIEWER_DEBUG_ENABLED)) {
+  stop("Production does not permit credential or viewer debug modes.", call. = FALSE)
+}
+
 library(shiny)
 library(shinyjs)
 library(readxl)
@@ -76,7 +87,7 @@ suppressPackageStartupMessages({
       message("[VITESSCE] Package verified working (version ", pkg_version, ")")
       VITESSCE_AVAILABLE <<- TRUE
     }, error = function(e) {
-      warning("[VITESSCE] Package installed but failed basic test: ", conditionMessage(e))
+      warning("[VITESSCE] Package installed but failed its capability check")
     })
 
     # CRITICAL FIX: Ensure all child routes from MultiImageWrapper are registered
@@ -94,7 +105,7 @@ suppressPackageStartupMessages({
         }, overwrite = TRUE)
         message("[VITESSCE] Applied MultiImageWrapper get_routes fix for segmentation layer routing")
       }, error = function(e) {
-        warning("[VITESSCE] Failed to apply get_routes fix: ", conditionMessage(e))
+        warning("[VITESSCE] Failed to apply the segmentation routing fix")
       })
     }
   }
@@ -111,8 +122,6 @@ suppressPackageStartupMessages({
 APP_VERSION <- "modular-v1"
 try({
   message("[APP LOAD] Version=", APP_VERSION, " time=", Sys.time())
-  message("[APP LOAD] getwd=", tryCatch(getwd(), error = function(e) NA))
-  message("[APP LOAD] list.files(.) contains app.R? ", any(grepl('^app.R$', list.files('.'))))
   # Publication containers keep the application and release mounts read-only.
   # Write a load flag only when an operator explicitly requests one, and only
   # below the process temporary directory (never below the source tree).
@@ -192,15 +201,11 @@ if (!nzchar(Sys.getenv("RETICULATE_PYTHON", ""))) {
 
   if (nzchar(candidate_python)) {
     Sys.setenv(RETICULATE_PYTHON = candidate_python)
-    message("[PYTHON] RETICULATE_PYTHON=", candidate_python)
+    message("[PYTHON] Compatible interpreter configured")
   } else {
     message("[PYTHON] No python executable found. Set RETICULATE_PYTHON to a valid interpreter.")
   }
 }
-
-# Debug flags
-DEBUG_CREDS <- isTRUE(as.logical(Sys.getenv("DEBUG_CREDENTIALS", "0")))
-VIEWER_DEBUG_ENABLED <- identical(Sys.getenv("VIEWER_DEBUG", "0"), "1")
 
 # Feature flags
 #
@@ -502,14 +507,12 @@ function(el, x){
       if (d && d.points && d.points.length){ var k = keyOf(d.points[0]); if (k != null) lastKey = k; }
     });
     gd.on('plotly_unhover', function(){ lastKey = null; });
-    gd.on('plotly_click', function(){ console.log('[ISLET] plotly_click fired'); });
   }
   (gd || el).addEventListener('mousedown', function(e){ downX = e.clientX; downY = e.clientY; downKey = lastKey || hoverKey(); }, true);
   (gd || el).addEventListener('mouseup', function(e){
     if (Math.abs(e.clientX - downX) > 5 || Math.abs(e.clientY - downY) > 5) return;
     var k = downKey || lastKey || hoverKey();
     if (k == null) return;
-    console.log('[ISLET] native click -> ' + k);
     Shiny.setInputValue('%s', {key: k, nonce: (Date.now() + Math.random())}, {priority: 'event'});
   }, true);
 }", input_id)
@@ -597,7 +600,7 @@ PHENOTYPE_RESIDUALS <- list(
 # Returns NULL if the file is missing — callers should guard.
 .parse_phenotype_rules_csv <- function(path) {
   if (!file.exists(path)) {
-    message("[PHENOTYPE] Rules CSV not found at ", path, " — modal/hints disabled")
+    message("[PHENOTYPE] Rules unavailable; modal and hints disabled")
     return(NULL)
   }
   raw <- utils::read.csv(path, header = FALSE, stringsAsFactors = FALSE,

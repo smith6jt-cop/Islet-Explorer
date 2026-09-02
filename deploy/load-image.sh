@@ -28,9 +28,11 @@ read_meta() {
 format="$(read_meta FORMAT)"
 expected_id="$(read_meta IMAGE_ID)"
 expected_commit="$(read_meta GIT_COMMIT)"
+expected_base="$(read_meta BASE_IMAGE)"
 [[ "${format}" == islet-explorer-oci-transfer-v1 &&
    "${expected_id}" =~ ^sha256:[0-9a-f]{64}$ &&
-   "${expected_commit}" =~ ^[0-9a-f]{40}$ ]] || {
+   "${expected_commit}" =~ ^[0-9a-f]{40}$ &&
+   "${expected_base}" =~ ^[A-Za-z0-9._:/-]+@sha256:[0-9a-f]{64}$ ]] || {
   echo "ERROR: transfer metadata is malformed." >&2
   exit 65
 }
@@ -42,8 +44,10 @@ podman image exists "${expected_id}" || {
 }
 actual_id="$(podman image inspect --format '{{.Id}}' "${expected_id}")"
 actual_commit="$(podman image inspect --format '{{ index .Labels "org.opencontainers.image.revision" }}' "${expected_id}")"
-[[ "${actual_id}" == "${expected_id}" && "${actual_commit}" == "${expected_commit}" ]] || {
-  echo "ERROR: loaded image identity/revision does not match transfer metadata." >&2
+actual_base="$(podman image inspect --format '{{ index .Labels "org.opencontainers.image.base.name" }}' "${expected_id}")"
+[[ "${actual_id}" == "${expected_id}" && "${actual_commit}" == "${expected_commit}" &&
+   "${actual_base}" == "${expected_base}" ]] || {
+  echo "ERROR: loaded image identity or provenance does not match transfer metadata." >&2
   exit 65
 }
 

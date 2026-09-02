@@ -10,6 +10,8 @@ DONORS_DIR <- data_path("donors")
 DONOR_TISSUE_PARQUET_DIR <- data_path("spatial", "tissue")
 
 .donor_tissue_parquet <- function(imageid) {
+  imageid <- as.character(imageid)
+  if (!islet_safe_path_segment(imageid)) return(NULL)
   id_num <- suppressWarnings(as.integer(imageid))
   ids <- unique(c(as.character(imageid), if (is.finite(id_num)) sprintf("%04d", id_num)))
   ids <- ids[!is.na(ids) & nzchar(ids)]
@@ -63,7 +65,12 @@ canonical_phenotype_order <- function(extra = character(0)) {
 #' @param imageid Donor image ID (e.g., "6505")
 #' @return data.frame with X_centroid, Y_centroid, phenotype, cell_region, islet_name
 load_donor_tissue <- function(imageid) {
-  cache_key <- as.character(imageid)
+  imageid <- as.character(imageid)
+  if (!islet_safe_path_segment(imageid)) {
+    islet_log_validation_failure("spatial_donor_invalid")
+    return(NULL)
+  }
+  cache_key <- imageid
 
   if (exists(cache_key, envir = .donor_tissue_cache)) {
     return(get(cache_key, envir = .donor_tissue_cache))
@@ -84,13 +91,12 @@ load_donor_tissue <- function(imageid) {
     # cells keep their own cell_region and are unaffected.
     phenotype_filter_rows(d)
   }, error = function(e) {
-    message("[SPATIAL] Error loading donor tissue for ", imageid, ": ", e$message)
+    message("event=spatial_tissue_load_failed")
     NULL
   })
 
   if (!is.null(df)) {
     assign(cache_key, df, envir = .donor_tissue_cache)
-    message("[SPATIAL] Cached donor tissue for ", imageid, " (", nrow(df), " cells)")
   }
 
   df
@@ -145,9 +151,8 @@ cell_distance_available <- function() {
 }
 
 .cd_backend_failure <- function(context, error) {
-  msg <- paste0("[SPATIAL] ", context, " failed: ", conditionMessage(error))
-  if (islet_is_production()) stop(msg, call. = FALSE)
-  message(msg)
+  message("event=spatial_backend_failed")
+  if (islet_is_production()) stop("Spatial data operation failed.", call. = FALSE)
   NULL
 }
 
@@ -171,7 +176,7 @@ load_cell_distance <- function() {
                               signed_dist = "numeric"))
     }
   }, error = function(e) {
-    message("[SPATIAL] cell_distance load failed: ", e$message); NULL
+    message("event=spatial_cell_distance_load_failed"); NULL
   })
   if (!is.null(df)) {
     df <- df[is.finite(df$signed_dist), , drop = FALSE]
@@ -179,7 +184,6 @@ load_cell_distance <- function() {
     # unique(df$phenotype) inherits it rather than each site re-filtering.
     df <- phenotype_filter_rows(df)
     .cell_distance_cache$data <- df
-    message("[SPATIAL] Cached cell_distance (", nrow(df), " cells)")
   }
   df
 }

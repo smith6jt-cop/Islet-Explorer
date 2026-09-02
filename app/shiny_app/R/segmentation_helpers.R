@@ -27,6 +27,11 @@ geojson_cache <- new.env(parent = emptyenv())
 load_case_geojson <- function(case_id, centroid_x_um = NULL,
                               centroid_y_um = NULL, buffer_um = NULL) {
   if (!SF_AVAILABLE) return(NULL)
+  case_id <- as.character(case_id)
+  if (!islet_safe_path_segment(case_id)) {
+    islet_log_validation_failure("islet_key_invalid")
+    return(NULL)
+  }
 
   has_bbox <- all(vapply(list(centroid_x_um, centroid_y_um, buffer_um),
                          function(x) length(x) == 1L && is.finite(as.numeric(x)),
@@ -56,8 +61,6 @@ load_case_geojson <- function(case_id, centroid_x_um = NULL,
   }
 
   if (!is.null(gpkg_path)) {
-    message("[SEGMENTATION] Querying GeoPackage for case ", case_id,
-            if (has_bbox) " with spatial index" else "")
     geometry <- tryCatch({
       args <- list(dsn = gpkg_path, layer = "segmentation", quiet = TRUE)
       if (has_bbox) {
@@ -74,7 +77,7 @@ load_case_geojson <- function(case_id, centroid_x_um = NULL,
       sf::st_crs(gj) <- NA
       gj
     }, error = function(e) {
-      message("[SEGMENTATION] GeoPackage query failed: ", conditionMessage(e))
+      message("event=segmentation_query_failed")
       NULL
     })
     if (!is.null(geometry)) {
@@ -82,7 +85,7 @@ load_case_geojson <- function(case_id, centroid_x_um = NULL,
     }
     if (islet_is_production()) return(NULL)
   } else if (islet_is_production()) {
-    message("[SEGMENTATION] GeoPackage not found for production case ", case_id)
+    message("event=segmentation_asset_missing")
     return(NULL)
   }
 
@@ -96,12 +99,9 @@ load_case_geojson <- function(case_id, centroid_x_um = NULL,
   }
 
   if (is.null(json_path)) {
-    message("[SEGMENTATION] GeoJSON not found for case ", case_id,
-            " (tried: ", paste(candidate_ids, collapse = ", "), ")")
+    message("event=segmentation_asset_missing")
     return(NULL)
   }
-
-  message("[SEGMENTATION] Loading GeoJSON for case ", case_id, " from ", json_path)
 
   geojson <- tryCatch({
     gj <- sf::st_read(json_path, quiet = TRUE)
@@ -110,13 +110,12 @@ load_case_geojson <- function(case_id, centroid_x_um = NULL,
     sf::st_crs(gj) <- NA
     gj
   }, error = function(e) {
-    message("[SEGMENTATION] Error reading GeoJSON: ", conditionMessage(e))
+    message("event=segmentation_asset_read_failed")
     NULL
   })
 
   if (!is.null(geojson)) {
     .cache_segmentation_region(cache_key, geojson)
-    message("[SEGMENTATION] Cached GeoJSON for case ", case_id, " (", nrow(geojson), " features)")
   }
 
   return(geojson)
@@ -193,7 +192,7 @@ get_islet_region_polygons <- function(geojson, centroid_x_um, centroid_y_um, buf
     }
     bbox_sf
   }, error = function(e) {
-    message("[SEGMENTATION] Bbox creation error: ", conditionMessage(e))
+    message("event=segmentation_bbox_failed")
     NULL
   })
 
@@ -205,7 +204,7 @@ get_islet_region_polygons <- function(geojson, centroid_x_um, centroid_y_um, buf
   intersects <- tryCatch({
     suppressWarnings(sf::st_intersects(geojson, bbox_polygon, sparse = FALSE)[, 1])
   }, error = function(e) {
-    message("[SEGMENTATION] Intersection error: ", conditionMessage(e))
+    message("event=segmentation_intersection_failed")
     rep(FALSE, nrow(geojson))
   })
 
@@ -236,30 +235,26 @@ get_islet_region_polygons <- function(geojson, centroid_x_um, centroid_y_um, buf
 load_segmentation_data <- function() {
   seg_path <- data_path("annotations.tsv")
   if (!file.exists(seg_path)) {
-    cat("[SEGMENTATION] Annotations file not found at", seg_path, "\n")
+    message("event=segmentation_annotations_missing")
     return(NULL)
   }
 
   tryCatch({
     df <- read.delim(seg_path, stringsAsFactors = FALSE)
-    cat("[SEGMENTATION] Loaded", nrow(df), "segmentation records\n")
 
     # Validate required columns
     required_cols <- c("Image", "Name", "Class", "Centroid X µm", "Centroid Y µm")
     if (!all(required_cols %in% colnames(df))) {
-      warning("[SEGMENTATION] Missing required columns: ",
-              paste(setdiff(required_cols, colnames(df)), collapse = ", "))
+      warning("Segmentation annotations failed schema validation")
       return(NULL)
     }
 
     # Filter for islet-related classes
     df <- df[df$Class %in% c("Islet", "ExpandedIslet", "Nerve", "Lymphatic", "Capillary"), ]
-    cat("[SEGMENTATION] Found", nrow(df), "annotations across classes:",
-        paste(unique(df$Class), collapse = ", "), "\n")
 
     df
   }, error = function(e) {
-    cat("[SEGMENTATION] Error loading annotations:", e$message, "\n")
+    message("event=segmentation_annotations_load_failed")
     NULL
   })
 }
@@ -268,25 +263,23 @@ load_segmentation_data <- function() {
 load_islet_spatial_lookup <- function() {
   lookup_path <- data_path("islet_spatial_lookup.csv")
   if (!file.exists(lookup_path)) {
-    cat("[SPATIAL] islet_spatial_lookup.csv not found at", lookup_path, "\n")
+    message("event=islet_spatial_lookup_missing")
     return(NULL)
   }
 
   tryCatch({
     df <- read.csv(lookup_path, stringsAsFactors = FALSE)
-    cat("[SPATIAL] Loaded", nrow(df), "islet spatial records\n")
 
     # Validate required columns
     required_cols <- c("case_id", "islet_key", "centroid_x_um", "centroid_y_um")
     if (!all(required_cols %in% colnames(df))) {
-      warning("[SPATIAL] Missing required columns: ",
-              paste(setdiff(required_cols, colnames(df)), collapse = ", "))
+      warning("Islet spatial lookup failed schema validation")
       return(NULL)
     }
 
     df
   }, error = function(e) {
-    cat("[SPATIAL] Error loading spatial lookup:", e$message, "\n")
+    message("event=islet_spatial_lookup_load_failed")
     NULL
   })
 }
@@ -511,19 +504,25 @@ select_islet_from_key <- function(case_id, islet_key, prepared, selected_islet, 
   note <- function(msg, type = "warning", duration = 3) {
     if (notify) showNotification(msg, type = type, duration = duration)
   }
+  if (is.null(case_id) || is.null(islet_key) ||
+      length(case_id) != 1L || length(islet_key) != 1L ||
+      is.na(case_id) || is.na(islet_key) ||
+      !nzchar(as.character(case_id)) || !nzchar(as.character(islet_key))) {
+    islet_log_validation_failure("islet_key_invalid")
+    note("Could not identify clicked islet"); return(FALSE)
+  }
+  case_id <- as.character(case_id)
+  islet_key <- as.character(islet_key)
+  if (!islet_safe_path_segment(case_id) || !islet_safe_path_segment(islet_key)) {
+    islet_log_validation_failure("islet_key_invalid")
+    note("Could not identify clicked islet"); return(FALSE)
+  }
   if (!SF_AVAILABLE) {
     note("Segmentation requires the 'sf' package", "warning", 5); return(FALSE)
   }
   if (is.null(islet_spatial_lookup)) {
     note("Islet spatial lookup data not available", "warning", 5); return(FALSE)
   }
-  if (is.null(case_id) || is.null(islet_key) ||
-      is.na(case_id) || is.na(islet_key) ||
-      !nzchar(as.character(case_id)) || !nzchar(as.character(islet_key))) {
-    note("Could not identify clicked islet"); return(FALSE)
-  }
-  case_id <- as.character(case_id)
-  islet_key <- as.character(islet_key)
 
   spatial_match <- islet_spatial_lookup[
     islet_spatial_lookup$case_id == case_id &
@@ -542,6 +541,7 @@ select_islet_from_key <- function(case_id, islet_key, prepared, selected_islet, 
   }
 
   if (nrow(spatial_match) == 0) {
+    islet_log_validation_failure("islet_key_invalid")
     note(paste("Spatial data not found for", islet_key, "in case", case_id)); return(FALSE)
   }
 
@@ -685,7 +685,6 @@ build_segmentation_base_plot <- function(info, buffer_um = 150,
 # Called by both Trajectory and Plot modules for their respective segmentation outputs
 render_islet_segmentation_plot <- function(info, show_peri_boundary = TRUE, show_structures = TRUE) {
   if (is.null(info)) return(NULL)
-  cat("[SEGMENTATION RENDER] Rendering for case=", info$case_id, ", islet=", info$islet_key, "\n")
 
   p <- build_segmentation_base_plot(info, show_peri_boundary = show_peri_boundary,
                                      show_structures = show_structures)

@@ -133,8 +133,7 @@ compute_barlow_pseudotime <- function(min_cells = 1, max_cells = NA) {
       stringsAsFactors = FALSE
     )
   }, error = function(e) {
-    message("[BARLOW] pseudotime failed for cell range [", mc, ", ",
-            if (is.finite(xc)) xc else "inf", "]: ", conditionMessage(e))
+    message("event=barlow_pseudotime_failed")
     NULL
   })
 

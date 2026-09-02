@@ -159,6 +159,6 @@ trajectory_ui <- function(id) {
                            class = "btn-sm btn-outline-secondary"))
         )
       )
-    ),
+    )
   )
 }

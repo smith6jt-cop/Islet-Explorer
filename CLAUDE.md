@@ -205,7 +205,7 @@ App-specific UI conventions (CSS overflow, font minimums, large-scatter renderin
 ## Deployment Architecture
 
 - **Requested reviewer URL (pending UFRC confirmation)**: `https://islet-explorer.rc.ufl.edu/islet-explorer/`
-- The UFRC high-availability proxy terminates HTTPS and Basic Auth, then proxies to VM loopback `127.0.0.1:3838`.
+- The project requests that the UFRC high-availability proxy terminate HTTPS and Basic Auth and proxy to VM loopback `127.0.0.1:3838`; the final reachable backend address and port must be agreed in the UFRC ticket before deployment.
 - Rootless Podman/Quadlet runs one immutable, digest-pinned image; code, scientific data, and images are read-only.
 - Releases are checksummed and atomically activated. Never update a live review round from a mutable branch or symlink.
 - Dev server (`Rscript -e 'shiny::runApp(".", port=7777)'`) is for local testing only

@@ -81,7 +81,8 @@ See `data/DATA_PROVENANCE.md` for the complete lineage documentation including v
 ```
 reviewer HTTPS + Basic Auth
   ↓ UFRC high-availability reverse proxy
-PubApps VM 127.0.0.1:3838
+Requested PubApps backend 127.0.0.1:3838
+  (final address and port pending UFRC confirmation)
   ↓ rootless Podman forwarding
 immutable Shiny container 0.0.0.0:3838
   ├── manifest-backed data + images (read-only)

@@ -46,6 +46,32 @@ ui <- fluidPage(
       overflow-x: auto;
     }
 
+    .skip-link {
+      position: absolute;
+      left: 12px;
+      top: -80px;
+      z-index: 10000;
+      padding: 10px 14px;
+      background: #ffffff;
+      color: #1e3a72;
+      border: 3px solid #1e3a72;
+      border-radius: 4px;
+      font-weight: 700;
+    }
+
+    .skip-link:focus {
+      top: 12px;
+    }
+
+    a:focus-visible,
+    button:focus-visible,
+    input:focus-visible,
+    select:focus-visible,
+    [tabindex]:focus-visible {
+      outline: 3px solid #ffbf47 !important;
+      outline-offset: 2px !important;
+    }
+
     .container-fluid {
       background-color: #ffffff;
       border-radius: 12px;
@@ -128,7 +154,7 @@ ui <- fluidPage(
     }
 
     .sidebar .btn {
-      background: linear-gradient(145deg, #66b3ff 0%, #4da6ff 100%);
+      background: linear-gradient(145deg, #1d70b8 0%, #1261a0 100%);
       border: none;
       border-radius: 6px;
       color: white;
@@ -136,7 +162,7 @@ ui <- fluidPage(
     }
 
     .sidebar .btn:hover {
-      background: linear-gradient(145deg, #4da6ff 0%, #3399ff 100%);
+      background: linear-gradient(145deg, #1261a0 0%, #0b4778 100%);
       transform: translateY(-1px);
     }
 
@@ -368,9 +394,11 @@ ui <- fluidPage(
       });
     });
   ")),
+  tags$a(class = "skip-link", href = "#main-content", "Skip to main content"),
   fluidRow(class = "equal-height-row",
     # Left Sidebar Panel (Plot controls, hidden on other tabs via JS)
     column(width = 1.4, class = "equal-height-panel",
+      role = "complementary", `aria-label` = "Plot controls",
       # 'Statistics' stays in this condition while that tab is hidden: with no
       # such tab mounted `input.tabs` can never take that value, so the branch is
       # inert, and keeping it means SHOW_STATISTICS_TAB=1 needs no second edit.
@@ -381,6 +409,7 @@ ui <- fluidPage(
     ),
     # Main Panel
     column(width = 10.6, class = "equal-height-panel main-content-panel",
+      id = "main-content", role = "main", tabindex = "-1",
       tabsetPanel(id = "tabs",
         tabPanel("Plot",
           fluidRow(
@@ -419,7 +448,13 @@ ui <- fluidPage(
 
 # Load and prepare the immutable summaries once per R worker, not once per
 # browser session. In production this call also enforces the release manifest.
-.shared_prepared_data <- load_shared_prepared_data()
+.shared_prepared_data <- tryCatch(
+  load_shared_prepared_data(),
+  error = function(e) {
+    message("event=release_data_validation_failed")
+    stop("Application data validation failed.", call. = FALSE)
+  }
+)
 
 server <- function(input, output, session) {
 
@@ -624,16 +659,20 @@ server <- function(input, output, session) {
       cells <- load_islet_cells(info$case_id, info$islet_key)
       if (!is.null(cells)) {
         color_by <- input$drilldown_color_by %||% "phenotype"
+        if (!islet_valid_scalar_choice(color_by, colnames(cells),
+                                       "drilldown_color_invalid")) {
+          color_by <- "phenotype"
+        }
         show_peri_cells <- if (!is.null(input$drilldown_show_peri)) input$drilldown_show_peri else TRUE
         return(tryCatch(
           render_islet_drilldown_plot(info, cells, color_by = color_by, show_peri = show_peri_cells,
                                       show_peri_boundary = show_peri_bd, show_structures = show_structs,
                                       palette = active_palette()),
           error = function(e) {
-            cat("[DRILLDOWN ERROR]", conditionMessage(e), "\n")
+            message("event=drilldown_render_failed")
             ggplot2::ggplot() +
               ggplot2::annotate("text", x = 0.5, y = 0.5,
-                                label = paste("Render error:", conditionMessage(e)),
+                                label = "Unable to render this view.",
                                 size = ISLET_ANNOTATE_SIZE, color = "red") +
               ggplot2::theme_void() + ggplot2::xlim(0, 1) + ggplot2::ylim(0, 1)
           }
@@ -645,10 +684,10 @@ server <- function(input, output, session) {
       render_islet_segmentation_plot(info, show_peri_boundary = show_peri_bd,
                                       show_structures = show_structs),
       error = function(e) {
-        cat("[SEGMENTATION ERROR]", conditionMessage(e), "\n")
+        message("event=segmentation_render_failed")
         ggplot2::ggplot() +
           ggplot2::annotate("text", x = 0.5, y = 0.5,
-                            label = paste("Render error:", conditionMessage(e)),
+                            label = "Unable to render this view.",
                             size = ISLET_ANNOTATE_SIZE, color = "red") +
           ggplot2::theme_void() + ggplot2::xlim(0, 1) + ggplot2::ylim(0, 1)
       }

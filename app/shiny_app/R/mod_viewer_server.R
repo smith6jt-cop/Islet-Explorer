@@ -25,11 +25,11 @@ viewer_server <- function(id, forced_image, current_tab) {
     # The basename currently being viewed (forced image wins, then the user's
     # dropdown choice, then the first available image).
     selected_basename_r <- reactive({
-      fi <- forced_image()
-      if (!is.null(fi) && nzchar(fi)) return(fi)
-      si <- input$selected_image
-      if (!is.null(si) && nzchar(si)) return(si)
       ai <- available_images_r()
+      fi <- forced_image()
+      if (!is.null(fi) && islet_valid_asset_basename(fi, ai)) return(fi)
+      si <- input$selected_image
+      if (!is.null(si) && islet_valid_asset_basename(si, ai)) return(si)
       if (length(ai) > 0) return(ai[[1]])
       NULL
     })
@@ -122,9 +122,6 @@ viewer_server <- function(id, forced_image, current_tab) {
       if (VIEWER_DEBUG_ENABLED) {
         info$env <- isolate(detect_environment(session))
         info$asset_diag <- isolate(probe_viewer_asset(session, rel_url))
-        cat("[VIEWER] sel:", sel_basename %||% "NULL",
-            "rel:", rel_url %||% "NULL",
-            "src:", info$iframe_src %||% "NULL", "\n")
       }
       info
     })
@@ -218,6 +215,7 @@ viewer_server <- function(id, forced_image, current_tab) {
         ),
         tags$iframe(
           id = iframe_id, src = src0, `data-relsrc` = src0,
+          title = "Interactive pancreatic tissue image viewer",
           width = "100%", frameBorder = 0, allowfullscreen = NA,
           tabindex = "0", allow = "fullscreen",
           style = "width:100%; height:calc(100vh - 180px); border:0;"

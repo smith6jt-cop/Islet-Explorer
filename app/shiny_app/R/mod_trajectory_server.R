@@ -131,19 +131,18 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       }
 
       ad <- NULL
-      load_err <- NULL
       norm_path <- tryCatch(normalizePath(cur, mustWork = TRUE), error = function(e) cur)
 
       ad <- tryCatch(
         islet_read_h5ad_shared(norm_path),
         error = function(e) {
-          load_err <<- conditionMessage(e)
+          message("event=trajectory_data_load_failed")
           NULL
         }
       )
 
       if (is.null(ad)) {
-        traj(list(error = sprintf("Failed to read H5AD: %s", norm_path), error_detail = load_err))
+        traj(list(error = "Trajectory data could not be loaded.", error_detail = NULL))
         return()
       }
 
@@ -427,15 +426,24 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
 
     # ---------- Validate selected feature ----------
     traj_validate <- reactive({
+      y_mode <- input$traj_y_mode %||% "marker"
+      if (!islet_valid_scalar_choice(y_mode, c("marker", "ratio"),
+                                     "trajectory_mode_invalid")) return(NULL)
       # Ratio mode selects a cell type, which is deliberately NOT in var_names --
       # validating it against the marker list would reject every valid choice.
-      if (identical(input$traj_y_mode %||% "marker", "ratio")) {
+      if (identical(y_mode, "ratio")) {
         ct <- input$traj_ratio_type
-        if (is.null(ct) || !nzchar(ct) || !(ct %in% barlow_ratio_types())) return(NULL)
-        return(list(feature = ct, status = "ready", y_mode = "ratio"))
+        if (is.null(ct)) return(NULL)
+        if (!islet_valid_scalar_choice(ct, barlow_ratio_types(),
+                                       "trajectory_ratio_invalid")) return(NULL)
+        region <- input$traj_ratio_region %||% "both"
+        if (!islet_valid_scalar_choice(region, c("both", "core", "peri"),
+                                       "trajectory_region_invalid")) return(NULL)
+        return(list(feature = ct, status = "ready", y_mode = "ratio",
+                    ratio_region = region))
       }
       selected_feature <- input$traj_feature
-      if (is.null(selected_feature) || !nzchar(selected_feature)) return(NULL)
+      if (is.null(selected_feature)) return(NULL)
 
       adata_path <- resolve_traj_path()
       if (is.null(adata_path) || !file.exists(adata_path)) return(NULL)
@@ -444,7 +452,8 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       if (is.null(adata)) return(NULL)
 
       var_names <- rownames(adata$var)
-      if (!selected_feature %in% var_names) return(NULL)
+      if (!islet_valid_scalar_choice(selected_feature, var_names,
+                                     "trajectory_feature_invalid")) return(NULL)
 
       list(feature = selected_feature, status = "ready")
     })
@@ -480,7 +489,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       expression_vals <- if (identical(y_mode, "ratio")) {
         # Barlow Fig 2F: log(# cells / # endocrine cells). Joined by islet_id,
         # which is the same key as `combined_islet_id` here.
-        rv <- barlow_ratio_values(selected_feature, input$traj_ratio_region %||% "both")
+        rv <- barlow_ratio_values(selected_feature, ms$ratio_region)
         if (is.null(rv)) rep(NA_real_, nrow(obs_df))
         else rv$value[match(as.character(obs_df$combined_islet_id), rv$islet_id)]
       } else {
@@ -489,7 +498,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
           idx <- which(var_names == selected_feature)
           as.numeric(adata$X[, idx])
         }, error = function(e) {
-          message("[traj_data_clean] Error extracting feature: ", e$message)
+          message("event=trajectory_feature_extract_failed")
           rep(NA_real_, nrow(obs_df))
         })
       }
@@ -590,8 +599,6 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
           }
         }
 
-        cat("[traj_data_clean] Added spatial coordinates for",
-            sum(result_df$has_spatial), "islets\n")
       }
 
       # Filter valid rows
@@ -603,7 +610,6 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       )
 
       if (length(valid_idx) == 0) {
-        message("[traj_data_clean] No valid rows after filtering")
         return(NULL)
       }
 
@@ -633,8 +639,6 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       # feature. Do not re-rank here.
       result_df <- apply_pt_scale(result_df, input$pt_scale %||% "rank")
 
-      message("[traj_data_clean] Successfully processed ", nrow(result_df),
-              " observations for ", selected_feature)
       return(result_df)
     })
 
@@ -656,10 +660,9 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
           "AnnData object not available or H5AD failed to load."))
       }
       if (!is.null(tr$error)) {
-        det <- if (!is.null(tr$error_detail) && nzchar(tr$error_detail)) paste0(" Details: ", tr$error_detail) else ""
         install_hint <- if (grepl("anndata", tr$error, ignore.case = TRUE)) " Install with: BiocManager::install('anndata')" else ""
         return(tags$div(style = "color:#b00;",
-          sprintf("Trajectory load error: %s%s%s", tr$error, det, install_hint)))
+          sprintf("Trajectory load error: %s%s", tr$error, install_hint)))
       }
       jn <- traj_data_clean()
       nj <- if (is.null(jn)) 0 else nrow(jn)
@@ -953,30 +956,19 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       click_data <- traj_click_event()
       if (is.null(click_data)) return()
 
-      # Check if segmentation viewer is available
-      if (!SF_AVAILABLE) {
-        showNotification("Segmentation viewer requires the 'sf' package. Install with: install.packages('sf')",
-                         type = "warning", duration = 5)
-        return()
-      }
-
-      if (is.null(islet_spatial_lookup)) {
-        showNotification("Islet spatial lookup data not available", type = "warning", duration = 5)
-        return()
-      }
-
-      cat("[TRAJ CLICK] Received click event\n")
-
       # --- Priority 1: Parse key (format "case_id|islet_key") ---
       case_id   <- NULL
       islet_key <- NULL
       click_key <- click_data$key
       if (!is.null(click_key) && length(click_key) > 0 && !is.na(click_key[1]) && nzchar(click_key[1])) {
         key_parts <- strsplit(as.character(click_key[1]), "\\|")[[1]]
-        if (length(key_parts) >= 2) {
+        if (length(key_parts) == 2L &&
+            islet_safe_path_segment(key_parts[1]) &&
+            islet_safe_path_segment(key_parts[2])) {
           case_id   <- key_parts[1]
           islet_key <- key_parts[2]
-          cat("[TRAJ CLICK] From key:", case_id, islet_key, "\n")
+        } else {
+          islet_log_validation_failure("islet_key_invalid")
         }
       }
 
@@ -986,7 +978,6 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         if (!is.null(custom) && length(custom) >= 2) {
           case_id   <- custom[[1]]
           islet_key <- custom[[2]]
-          cat("[TRAJ CLICK] From customdata:", case_id, islet_key, "\n")
         }
       }
 
@@ -1010,12 +1001,10 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
             idx <- matches[1]
             case_id   <- lookup$case_id[idx]
             islet_key <- lookup$islet_key[idx]
-            cat("[TRAJ CLICK] From coord lookup:", case_id, islet_key, "\n")
           }
         }
       }
 
-      cat("[TRAJ CLICK] resolved key:", paste(case_id, islet_key, sep = "|"), "\n")
       # Centroid lookup + zero-pad fallback + donor join + selected_islet() —
       # shared with the Plot handler and the native-click bridge.
       select_islet_from_key(case_id, islet_key, prepared, selected_islet)
@@ -1027,9 +1016,13 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
     observeEvent(input$traj_native_click, {
       nc <- input$traj_native_click
       if (is.null(nc) || is.null(nc$key) || !nzchar(as.character(nc$key)[1])) return()
-      cat("[TRAJ CLICK] native bridge; key:", as.character(nc$key)[1], "\n")
       parts <- strsplit(as.character(nc$key)[1], "\\|")[[1]]
-      if (length(parts) < 2) return()
+      if (length(parts) != 2L ||
+          !islet_safe_path_segment(parts[1]) ||
+          !islet_safe_path_segment(parts[2])) {
+        islet_log_validation_failure("islet_key_invalid")
+        return()
+      }
       select_islet_from_key(parts[1], parts[2], prepared, selected_islet)
     })
 
