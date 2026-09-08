@@ -112,6 +112,16 @@ parity_runtime <- function(repo, root) {
 
 parity_hash <- function(path) digest::digest(file = path, algo = "sha256", serialize = FALSE)
 
+parity_read_stored_parquet <- function(env, path) {
+  # Compare stored CSV-derived columns, excluding case_id synthesized by
+  # DuckDB from the Hive-style directory name. Runtime queries are tested
+  # separately through the unchanged application readers.
+  con <- env$islet_duckdb_connection()
+  DBI::dbGetQuery(con, paste0("SELECT * FROM read_parquet(",
+    env$islet_sql_string(normalizePath(path, mustWork = TRUE), con),
+    ", hive_partitioning=false)"))
+}
+
 parity_tree <- function(root, env) env$.islet_sha256_tree(normalizePath(root, mustWork = TRUE))
 
 parity_query_result <- function(expected, actual, kind) {
@@ -243,7 +253,7 @@ parity_run <- function(options, repo) {
     for (file in files) {
       donor <- sub("[.]csv$", "", basename(file))
       expected <- data.table::fread(file, data.table = FALSE)
-      actual <- release_env$islet_read_parquet(file.path(release_root, "spatial", "tissue",
+      actual <- parity_read_stored_parquet(release_env, file.path(release_root, "spatial", "tissue",
         paste0("case_id=", donor), paste0(donor, ".parquet")))
       parity_compare_frames(expected, actual, c("phenotype", "cell_region", "islet_name"))
       rows <- rows + nrow(expected)

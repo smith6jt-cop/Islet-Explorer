@@ -24,7 +24,7 @@ permissions:
 
 jobs:
   parse-and-test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
@@ -61,21 +61,18 @@ jobs:
             build-essential r-base-core r-base-dev \
             r-cran-testthat r-cran-shiny r-cran-dplyr r-cran-tidyr \
             r-cran-tibble r-cran-lme4 r-cran-lmertest \
-            r-cran-dbi r-cran-digest r-cran-jsonlite r-cran-sf \
+            r-cran-dbi r-cran-digest r-cran-jsonlite r-cran-sf r-cran-data.table \
             r-cran-lintr bandit
 
-      - name: Install embedded DuckDB test dependency
-        env:
-          MAKEFLAGS: -j2
-        run: |
-          Rscript -e 'if (!requireNamespace("duckdb", quietly = TRUE)) install.packages("duckdb", repos = "https://cloud.r-project.org", Ncpus = 2L)'
+      - name: Install verified DuckDB 1.5.2 test binary
+        run: Rscript deploy/install-ci-duckdb.R
 
       # The backend tests contain defensive skip_if_not_installed() guards for
       # developer laptops. CI turns those dependencies into hard requirements so
       # Parquet parity, SHA-256 validation, and GeoPackage indexing cannot skip.
       - name: Verify non-optional test capabilities
         run: |
-          Rscript -e 'required <- c("testthat", "shiny", "dplyr", "tidyr", "tibble", "lme4", "lmerTest", "DBI", "duckdb", "digest", "jsonlite", "sf", "lintr"); missing <- required[!vapply(required, requireNamespace, logical(1), quietly = TRUE)]; if (length(missing)) stop("Missing required CI packages: ", paste(missing, collapse = ", ")); if (!("GPKG" %in% sf::st_drivers()$name)) stop("sf/GDAL lacks the GPKG driver required by backend tests"); message("Backend test capabilities verified: ", paste(required, collapse = ", "))'
+          Rscript -e 'required <- c("testthat", "shiny", "dplyr", "tidyr", "tibble", "lme4", "lmerTest", "DBI", "duckdb", "digest", "jsonlite", "sf", "lintr", "data.table"); missing <- required[!vapply(required, requireNamespace, logical(1), quietly = TRUE)]; if (length(missing)) stop("Missing required CI packages: ", paste(missing, collapse = ", ")); if (!("GPKG" %in% sf::st_drivers()$name)) stop("sf/GDAL lacks the GPKG driver required by backend tests"); message("Backend test capabilities verified: ", paste(required, collapse = ", "))'
 
       - name: Parse-check application and release R sources
         run: |

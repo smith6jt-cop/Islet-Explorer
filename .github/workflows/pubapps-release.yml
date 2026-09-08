@@ -9,7 +9,9 @@ on:
       - 'app/docs/logo.png'
       - 'deploy/**'
       - 'scripts/install_shiny_deps.R'
+      - 'scripts/build_release_data.R'
       - 'scripts/verify_release_data.R'
+      - 'scripts/verify_release_parity.R'
       - '.github/workflows/pubapps-release.yml'
 
 permissions:

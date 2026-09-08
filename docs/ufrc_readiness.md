@@ -68,8 +68,9 @@ working tree; they do not identify an approved immutable release image.
 | Authored-browser SAST | Semgrep 1.176.1: 68 rules, 6 of 6 extracted/authored targets checked, zero findings/errors/skipped rules | Working-tree result; rerun after final browser edits. Vendored dependencies have a separate coverage record |
 | Browser accessibility and behavior | 34 of 34 checks passed, including four tabs, keyboard navigation, four CSV downloads, actual tissue canvas, 16-byte HTTP 206, and blocked missing/external image URLs; zero axe violations across five scopes | Local development-data run, Chrome 152.0.7977.82, axe 4.13.0. Manual-review items retained; no exact-image or external proxy acceptance claimed |
 | External HTTPS verifier | 10 synthetic tests passed without skips, including whole-site BasicAuth, bounded Range/body verification, sidecar MIME, WebSocket handshake and redirect/credential boundaries | [Acceptance procedure](../deploy/EXTERNAL_ACCEPTANCE.md) requires the assigned endpoint and real protected credential file |
+| Hosted CI | Both `parse-and-test` and `deployment-quality` jobs passed in [run 34278896933](https://github.com/smith6jt-cop/Islet-Explorer/actions/runs/34278896933) for PR #11 at `537c0e3` | This baseline subsequently failed the separate real-data parity diagnostic; the corrected revision requires CI and release acceptance again |
 | Supported Shiny Server runtime | Checksum-locked official source build and Node 24.20.0; 315 upstream and 8 real-R tests passed without skips; stripped-runtime app/static-route smoke passed; installed-package Syft/Grype scan reports zero matches | The original base-only scan found 33 High and 3 Critical entries. The rebuilt exact application image still must pass the image security gate. See [base remediation](../deploy/BASE_HARDENING.md) |
-| Data verification tooling | 14 parity assertions, 14 browser extraction assertions, and 4 inventory tests passed without skips | Synthetic contract tests supplement the required real source-to-release comparison |
+| Data verification tooling | 22 parity assertions, 14 browser extraction assertions, and 4 inventory tests passed without skips | Synthetic contract tests supplement the required real source-to-release comparison |
 | Canonical source preparation | Five prepared tables measured; see counts below | Source-only check; generated-release parity pending |
 | Immutable image, SBOM/scan, release data manifest and parity | Pending exact-candidate results | A working-tree check or scanner installation is not release evidence |
 | Production proxy and operational acceptance | Pending UFRC configuration and deployed checks | VM provisioning alone does not establish reviewer readiness |
@@ -81,6 +82,22 @@ approved durable operating record with the final release artifacts.
 Keep raw logs, contact/key details, credentials, donor inventories, agreement
 approvals, and assessment exports in the restricted operating record. Store
 sanitized evidence references here, not sensitive evidence contents.
+
+### Rejected candidate and conversion correction
+
+Candidate `537c0e3` is not acceptable for release parity. The real donor-table
+probe found that CSV conversion changed 2,295,503 blank `islet_name` strings to
+missing values across the 15 donor tables. Canonical files were not changed.
+The builder now preserves blanks in that character field while retaining numeric
+missingness. A read-only probe of all 15 corrected tables matches exactly; the
+regression fixture covers blank strings, literal `NA`, numeric missingness and
+partition columns. The corrected immutable release still requires its own full
+hash and parity checks before acceptance.
+
+The raw-table comparator also now disables DuckDB's inferred Hive partition
+column; separate runtime-query comparisons continue to exercise the application's
+normal reader. This prevents an extra inferred `case_id` from masking the actual
+stored-table comparison.
 
 ### Scientific counts and parity scope
 
