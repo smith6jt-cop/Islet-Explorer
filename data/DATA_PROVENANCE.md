@@ -2,6 +2,14 @@
 
 This document describes the canonical data lineage for the Islet Explorer app.
 
+Current source-preparation note (2026-09-08): the 5,214 H5AD observation count
+below is distinct from the embedded QuPath/prepared-table universe. Canonical
+preparation currently returns `core_area` 5,382 rows, `comp` 5,382 rows,
+`targets_all` 48,438 rows, `markers_all` 64,584 rows, and `combined_pairs` 21
+definitions. Historical pipeline/check counts below describe their named
+artifacts. They do not establish parity for a new reviewer release; see
+[the current evidence index](../docs/ufrc_readiness.md).
+
 ## Canonical H5AD Lineage
 
 ```
@@ -37,7 +45,7 @@ data/adata_ins_root.h5ad  (5,214 islets + pseudotime + UMAP)
   ↓ scripts/build_h5ad_for_app.py  (executed 2026-02-23)
   │   (+ groovy TSV data + donor metadata + neighborhood + Leiden)
   │
-data/islet_explorer.h5ad  (5,214 islets, all app data, ~70 MB)
+data/islet_explorer.h5ad  (5,214 observation rows plus larger embedded QuPath tables, ~70 MB)
   Location: data/
   Contents: Complete app data — trajectory + groovy + donor + neighborhood + Leiden clustering
   Groovy data stored in .uns as column arrays (groovy_targets_*, groovy_markers_*, etc.)

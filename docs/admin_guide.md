@@ -2,7 +2,7 @@
 
 Developer- and maintainer-facing reference for rebuilding the app data, deploying the Shiny app, and troubleshooting. End-user feature documentation lives in [user_guide.md](user_guide.md).
 
-**Requested reviewer URL (pending UFRC provisioning confirmation)**:
+**Requested reviewer URL (pending UFRC production-access confirmation)**:
 `https://islet-explorer.rc.ufl.edu/islet-explorer/`
 
 > **Deployment authority:** [deploy/README.md](../deploy/README.md) and
@@ -13,6 +13,13 @@ Developer- and maintainer-facing reference for rebuilding the app data, deployin
 ---
 
 ## Data Pipeline
+
+The 2026-09-08 source preparation distinguishes the 5,214-observation trajectory
+H5AD from prepared app tables: `core_area` and `comp` each have 5,382 rows,
+`targets_all` has 48,438, `markers_all` has 64,584, and `combined_pairs` has 21.
+The counts in the historical pipeline below refer to their named artifacts,
+not to every runtime summary. Use [the evidence index](ufrc_readiness.md) and
+the generated release manifest for current release validation.
 
 ### Rebuilding the App Data
 

@@ -155,7 +155,7 @@ load_islet_cells <- function(imageid, islet_key) {
     if (nrow(df) == 0) return(NULL)
     df
   }, error = function(e) {
-    message("event=drilldown_cells_load_failed")
+    islet_log_event("drilldown_cells_load_failed")
     NULL
   })
 

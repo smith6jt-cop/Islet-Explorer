@@ -133,7 +133,7 @@ compute_barlow_pseudotime <- function(min_cells = 1, max_cells = NA) {
       stringsAsFactors = FALSE
     )
   }, error = function(e) {
-    message("event=barlow_pseudotime_failed")
+    islet_log_event("barlow_pseudotime_failed")
     NULL
   })
 

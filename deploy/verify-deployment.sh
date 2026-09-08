@@ -4,7 +4,7 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage: deploy/verify-deployment.sh --url URL [--container NAME]
-       [--range-path RELATIVE_OME_TIFF_PATH]
+       [--range-path RELATIVE_OME_TIFF_PATH] [--expected-image IMMUTABLE_REF]
 
 Checks container health, loopback-only publication, application HTTP response,
 production flags, dependency availability, read-only scientific mounts, and an
@@ -16,19 +16,31 @@ EOF
 url=""
 container_name="islet-explorer"
 range_path=""
+expected_image=""
 while (($#)); do
   case "$1" in
     --url) url="${2:?missing value for --url}"; shift 2 ;;
     --container) container_name="${2:?missing value for --container}"; shift 2 ;;
     --range-path) range_path="${2:?missing value for --range-path}"; shift 2 ;;
+    --expected-image) expected_image="${2:?missing value for --expected-image}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "ERROR: unknown argument: $1" >&2; usage >&2; exit 64 ;;
   esac
 done
-[[ "${url}" == http://127.0.0.1:*/* || "${url}" == http://localhost:*/* ]] || {
-  echo "ERROR: this verifier expects the local loopback backend URL." >&2
+[[ "${url}" =~ ^http://(127\.0\.0\.1|localhost):([0-9]{1,5})/islet-explorer/?$ ]] || {
+  echo "ERROR: expected http://127.0.0.1:PORT/islet-explorer/ (or localhost)." >&2
   exit 64
 }
+backend_port="$((10#${BASH_REMATCH[2]}))"
+((backend_port >= 1 && backend_port <= 65535)) || {
+  echo "ERROR: backend port must be between 1 and 65535." >&2
+  exit 64
+}
+if [[ -n "${expected_image}" && ! "${expected_image}" =~ ^sha256:[0-9a-f]{64}$ &&
+      ! "${expected_image}" =~ ^[A-Za-z0-9._:/-]+@sha256:[0-9a-f]{64}$ ]]; then
+  echo "ERROR: --expected-image must be an immutable image ID or registry digest." >&2
+  exit 64
+fi
 
 for command_name in podman curl ss; do
   command -v "${command_name}" >/dev/null || {
@@ -63,13 +75,25 @@ running="$(podman inspect --format '{{.State.Running}}' "${container_name}")"
   echo "ERROR: container state running=${running}, health=${health}." >&2
   exit 70
 }
-
-if ss -ltnH | awk '$4 ~ /(^|\])0\.0\.0\.0:3838$|^\*:3838$|^\[::\]:3838$|^:::3838$/ {found=1} END {exit !found}'; then
-  echo "ERROR: backend port 3838 is exposed on a non-loopback host address." >&2
-  exit 77
+if [[ -n "${expected_image}" ]]; then
+  expected_id="$(podman image inspect --format '{{.Id}}' "${expected_image}")"
+  actual_id="$(podman inspect --format '{{.Image}}' "${container_name}")"
+  [[ "${expected_id}" =~ ^sha256:[0-9a-f]{64}$ && "${actual_id}" == "${expected_id}" ]] || {
+    echo "ERROR: running container does not use the expected immutable image." >&2
+    exit 70
+  }
 fi
-ss -ltnH | awk '$4 ~ /127\.0\.0\.1:3838$/ {found=1} END {exit !found}' || {
-  echo "ERROR: expected 127.0.0.1:3838 listener was not found." >&2
+
+# Reject every other binding on this port, including a specific non-loopback IP
+# alongside the expected listener. Checking only wildcard addresses misses that.
+ss -ltnH | awk -v port="${backend_port}" '
+  $4 ~ (":" port "$") {
+    if ($4 == "127.0.0.1:" port) found = 1
+    else unexpected = 1
+  }
+  END { exit (!found || unexpected) }
+' || {
+  echo "ERROR: backend port ${backend_port} must listen exclusively on 127.0.0.1." >&2
   exit 77
 }
 
@@ -80,6 +104,8 @@ podman exec "${container_name}" /bin/sh -ceu '
   test "${ISLET_ENABLE_AI}" = FALSE
   test "${SHOW_STATISTICS_TAB}" = 0
   test "${SHOW_INFLAMMATION_TAB}" = 0
+  test "${DEBUG_CREDENTIALS}" = 0
+  test "${VIEWER_DEBUG}" = 0
   test -z "${KEY:-}"
   test -z "${OPENAI_API_KEY:-}"
   test -r /srv/islet-explorer/data
@@ -91,7 +117,7 @@ podman exec "${container_name}" /bin/sh -ceu '
 '
 podman exec "${container_name}" /opt/islet-explorer-py/bin/python -c \
   'import anndata, scanpy, igraph, leidenalg, fa2_modified'
-podman exec "${container_name}" /usr/bin/Rscript -e \
+podman exec "${container_name}" Rscript -e \
   'stopifnot(packageVersion("destiny")=="3.22.0", packageVersion("duckdb")=="1.5.2")'
 
 if [[ -n "${range_path}" ]]; then

@@ -1,8 +1,15 @@
 # Islet Explorer PubApps Log Inventory and Project Handling Guidance
 
 Status: **application hardening recorded; exact-release and UFRC confirmations remain open**
-Repository snapshot reviewed: **2026-09-02**
+Repository snapshot reviewed: **2026-09-08**
 Production profile: **journal-review deployment, Public Restricted access, Sensitive collection**
+
+UFRC support ticket #83810 (SYSCONFIG-8173) exists, and the individual Risk
+Assessment IRM-456246-Panc Floyd was submitted on 2026-09-01. VM provisioning is
+owner-reported; the 2026-09-08 UFRC response says setup normally follows completed
+assessments and checklists. Reconcile the assigned host and provisioning status with
+UFRC. Collector/retention settings and production acceptance remain unconfirmed.
+See [`ufrc_readiness.md`](ufrc_readiness.md) for the evidence index.
 
 ## Purpose and scope
 
@@ -37,8 +44,16 @@ Plot, Trajectory, viewer, drilldown, spatial, segmentation, and root-render erro
 messages and has replaced their failure paths with fixed event codes. Production now
 fails closed if credential or viewer debugging is enabled.
 
-The remaining application output is primarily one-line capability and data-preparation
-text plus native R/package output. Credential and AI failures now use fixed event codes,
+The reviewed startup, capability, release-loading, PAGA, Barlow, segmentation,
+drilldown, and spatial paths now call the centralized `islet_log_event()` emitter.
+It produces UTC timestamped JSON records with allowlisted event, level, component,
+result, and optional validation error code; it accepts no raw exception or selected
+scientific value. The focused tests in
+`app/shiny_app/tests/testthat/test-application-logging.R` cover record shape and
+hostile inputs; 180 checks passed locally on 2026-09-08 before the final release
+commit. That result is not an exact-release runtime capture.
+Native R/package output and other framework messages still require review.
+Credential and AI failures use fixed event codes,
 provider details are not logged or shown, and production rejects the AI path before any
 request; the production fail-closed controls must remain in place. The exact release
 output still needs a source/runtime review for line discipline and minimization. Two
@@ -53,10 +68,9 @@ Existing controls that reduce risk are:
   `preserve_logs false` avoids indefinitely preserving per-worker files and
   `log_file_mode 0640` restricts any created Shiny log (`deploy/shiny-server.conf`).
 - Shiny worker logs are directed to `/var/log/shiny-server`, which is a dedicated
-  read-write host mount (`deploy/shiny-server.conf:24` and
-  `deploy/islet-explorer.container.in:23`).
+  read-write host mount (`deploy/shiny-server.conf` and `deploy/islet-explorer.container.in`).
 - The activation script creates the runtime log directory with mode `0750`
-  (`deploy/activate-release.sh:88-89`). Actual file modes and ACLs still require a
+  (`deploy/activate-release.sh`). Actual file modes and ACLs still require a
   deployment-time check.
 - Production sets `DEBUG_CREDENTIALS=0` and `VIEWER_DEBUG=0`, disables AI, and rejects
   either debug mode or `KEY`/`OPENAI_API_KEY` if supplied
@@ -69,8 +83,8 @@ Existing controls that reduce risk are:
 
 | Stream | Current producer and transport | Current or expected destination | Security disposition |
 |---|---|---|---|
-| Shiny worker output | R `message()`, `cat()`, `warning()`, uncaught `stop()`, package output | Container `/var/log/shiny-server`; host `runtime/logs` mount | Potentially Sensitive operational record. Reviewed identifier-bearing emissions were removed; validate the exact release. Shiny does not preserve completed worker logs, and any separately retained host copy follows the applicable UFRC or project limits. |
-| Shiny Server supervisor output | Shiny Server lifecycle, worker start/stop, configuration and fatal errors | Container stdout/stderr and/or Shiny Server's native log destination; exact base-image behavior must be verified | Internal operational record. Do not assume it shares the worker-log mount. Confirm with `podman logs` and the user journal. |
+| Shiny worker output | Central application JSON emitter, remaining R/framework messages, uncaught conditions, package output | Container `/var/log/shiny-server`; host `runtime/logs` mount | Potentially Sensitive operational record. Reviewed application events use fixed fields; validate native output in the exact release. Shiny does not preserve completed worker logs, and any separately retained host copy follows the applicable UFRC or project limits. |
+| Shiny Server supervisor output | Shiny Server lifecycle, worker start/stop, configuration and fatal errors | Container stdout/stderr and/or Shiny Server's native log destination; exact rebuilt-candidate behavior must be verified | Internal operational record. Do not assume it shares the worker-log mount. Confirm with `podman logs` and the user journal. |
 | Container and unit output | Entrypoint checks, health failures, Podman runtime, systemd restart events | User journal for `islet-explorer.service`; visible through `journalctl --user` and `podman logs` | Internal operational/security record. Current messages do not print secret values, but can reveal UID/GID and paths. Record the effective UFRC host limits and retention. |
 | Reverse-proxy access | HTTPS, WebSocket upgrade, downloads, and TIFF Range requests | UFRC-managed proxy/access log and any central UFRC collector | Sensitive access metadata. Log a normalized route, never a query string, credential, cookie, or full TIFF/case filename. |
 | Basic-Auth events | Successful and failed authentication at the UFRC proxy | UFRC-managed authentication/security log | Sensitive security record. Never log the `Authorization` header or password. A shared username is not individual attribution. |
@@ -78,7 +92,7 @@ Existing controls that reduce risk are:
 | Deployment commands | `build-image.sh`, `scan-image.sh`, release verification, activation, rollback, and deployment verification | Operator terminal unless deliberately captured; some state is written under release evidence/deployments | Internal release record, not an application log. It may contain image digests, Git commits, hostnames, UIDs, absolute paths, and registry names. Never capture shell history containing credentials. |
 | Host administrative access | SSH, login, service-account and privilege events | UFRC host/security logs | UFRC-owned security record. Restrict to named maintainers and UFRC administrators; confirm review and retention. |
 
-The Quadlet does not select a Podman log driver. On the provisioned host, record the
+The Quadlet does not select a Podman log driver. On the confirmed deployment host, record the
 effective driver, whether `podman logs` and the user journal contain the same records,
 and which store is authoritative.
 
@@ -90,8 +104,8 @@ can add output.
 
 | Category | Reviewed disposition | Remaining release check |
 |---|---|---|
-| Startup and capability | Working-directory, interpreter-path, viewer resource-path, image-filename, and setup-count diagnostics were removed. Some non-identifying package/version and capability messages remain. | Confirm remaining native and application records stay on one physical line and disclose no unnecessary environment detail. |
-| Release and data loading | Production failure paths use fixed event codes; data-preparation code retains free-form aggregate/status messages and development fallbacks. | Exercise production startup with the immutable manifest and inspect failures without copying raw data or paths into tickets. |
+| Startup and capability | Reviewed capability/setup emissions now use the centralized timestamped JSON emitter; identifier/path diagnostics remain removed. | Confirm native package and remaining framework records stay on one physical line and disclose no unnecessary environment detail. |
+| Release and data loading | Reviewed production release-loading and data-preparation events use the central emitter; development fallbacks are not evidence of production behavior. | Exercise production startup with the immutable manifest and inspect failures without copying raw data or paths into tickets. |
 | Plot, Trajectory, PAGA, and Barlow | Reviewed click keys, selected features/ranges, case/islet values, and raw compute exceptions were removed from operational output. Fixed failure codes and validation events remain. | Confirm UI values cannot enter log fields and validation JSON remains one line. |
 | Drilldown, spatial, and segmentation | Reviewed combined IDs, image IDs, paths, geometry details, and raw render/read exceptions were replaced with fixed event codes. | Confirm expected errors expose no case, islet, filename, path, coordinate, or raw exception. |
 | Viewer | Reviewed filename/path lookup and iframe-source output was removed. `VIEWER_DEBUG` now fails closed in both the entrypoint and R production startup. | Keep debug disabled and verify UFRC proxy logs do not retain `image_url`, `channel_config`, or the full query string. |
@@ -113,19 +127,25 @@ can add output.
   are release evidence. Protect them as internal records, but do not mix them with
   rotating runtime logs.
 
-## Recommended structured application format
+## Implemented format and recommended extensions
 
 ### One event per line
 
 UFIT requires an appropriate industry-standard one-event-per-line format. UTF-8 JSON
-Lines is the project's preferred structured format for application-owned events: each
+Lines is implemented for the reviewed application-owned events: each
 physical line is one complete JSON object and one event. Values must be JSON-escaped;
 embedded CR/LF, tabs, control characters, and terminal escape sequences must never
 create another log line. The exact UFIT outcome does not require every native framework
 or capability message to adopt this project schema; those records should still remain
 one event per physical line and in a separately identified stream.
 
-Recommended application fields:
+The current emitter implements `ts`, `level`, `event`, `component`, `result`, and
+allowlisted validation `error_code`. `release`, metrics, and correlation fields
+below are optional design guidance and are not claimed as implemented output.
+The example event names illustrate the recommended extended schema; the current
+event allowlist is defined in `app/shiny_app/R/00_audit.R`.
+
+Application fields and optional extensions:
 
 | Field | Rule |
 |---|---|
@@ -142,7 +162,7 @@ Recommended application fields:
 Example acceptable application event:
 
 ```json
-{"ts":"2026-08-31T14:05:16Z","level":"INFO","event":"data.release.loaded","component":"shiny","release":"pubapps-2026-01","result":"ok","rows":5214}
+{"ts":"2026-09-08T19:01:08Z","level":"INFO","event":"release_data_loaded","component":"shiny","result":"ok"}
 ```
 
 Example acceptable proxy event after field minimization:

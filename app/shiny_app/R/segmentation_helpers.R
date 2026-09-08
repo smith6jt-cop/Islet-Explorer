@@ -77,7 +77,7 @@ load_case_geojson <- function(case_id, centroid_x_um = NULL,
       sf::st_crs(gj) <- NA
       gj
     }, error = function(e) {
-      message("event=segmentation_query_failed")
+      islet_log_event("segmentation_query_failed")
       NULL
     })
     if (!is.null(geometry)) {
@@ -85,7 +85,7 @@ load_case_geojson <- function(case_id, centroid_x_um = NULL,
     }
     if (islet_is_production()) return(NULL)
   } else if (islet_is_production()) {
-    message("event=segmentation_asset_missing")
+    islet_log_event("segmentation_asset_missing")
     return(NULL)
   }
 
@@ -99,7 +99,7 @@ load_case_geojson <- function(case_id, centroid_x_um = NULL,
   }
 
   if (is.null(json_path)) {
-    message("event=segmentation_asset_missing")
+    islet_log_event("segmentation_asset_missing")
     return(NULL)
   }
 
@@ -110,7 +110,7 @@ load_case_geojson <- function(case_id, centroid_x_um = NULL,
     sf::st_crs(gj) <- NA
     gj
   }, error = function(e) {
-    message("event=segmentation_asset_read_failed")
+    islet_log_event("segmentation_asset_read_failed")
     NULL
   })
 
@@ -192,7 +192,7 @@ get_islet_region_polygons <- function(geojson, centroid_x_um, centroid_y_um, buf
     }
     bbox_sf
   }, error = function(e) {
-    message("event=segmentation_bbox_failed")
+    islet_log_event("segmentation_bbox_failed")
     NULL
   })
 
@@ -204,7 +204,7 @@ get_islet_region_polygons <- function(geojson, centroid_x_um, centroid_y_um, buf
   intersects <- tryCatch({
     suppressWarnings(sf::st_intersects(geojson, bbox_polygon, sparse = FALSE)[, 1])
   }, error = function(e) {
-    message("event=segmentation_intersection_failed")
+    islet_log_event("segmentation_intersection_failed")
     rep(FALSE, nrow(geojson))
   })
 
@@ -235,7 +235,7 @@ get_islet_region_polygons <- function(geojson, centroid_x_um, centroid_y_um, buf
 load_segmentation_data <- function() {
   seg_path <- data_path("annotations.tsv")
   if (!file.exists(seg_path)) {
-    message("event=segmentation_annotations_missing")
+    islet_log_event("segmentation_annotations_missing")
     return(NULL)
   }
 
@@ -245,7 +245,7 @@ load_segmentation_data <- function() {
     # Validate required columns
     required_cols <- c("Image", "Name", "Class", "Centroid X µm", "Centroid Y µm")
     if (!all(required_cols %in% colnames(df))) {
-      warning("Segmentation annotations failed schema validation")
+      islet_log_event("segmentation_annotations_schema_invalid")
       return(NULL)
     }
 
@@ -254,7 +254,7 @@ load_segmentation_data <- function() {
 
     df
   }, error = function(e) {
-    message("event=segmentation_annotations_load_failed")
+    islet_log_event("segmentation_annotations_load_failed")
     NULL
   })
 }
@@ -263,7 +263,7 @@ load_segmentation_data <- function() {
 load_islet_spatial_lookup <- function() {
   lookup_path <- data_path("islet_spatial_lookup.csv")
   if (!file.exists(lookup_path)) {
-    message("event=islet_spatial_lookup_missing")
+    islet_log_event("islet_spatial_lookup_missing")
     return(NULL)
   }
 
@@ -273,13 +273,13 @@ load_islet_spatial_lookup <- function() {
     # Validate required columns
     required_cols <- c("case_id", "islet_key", "centroid_x_um", "centroid_y_um")
     if (!all(required_cols %in% colnames(df))) {
-      warning("Islet spatial lookup failed schema validation")
+      islet_log_event("islet_spatial_lookup_schema_invalid")
       return(NULL)
     }
 
     df
   }, error = function(e) {
-    message("event=islet_spatial_lookup_load_failed")
+    islet_log_event("islet_spatial_lookup_load_failed")
     NULL
   })
 }

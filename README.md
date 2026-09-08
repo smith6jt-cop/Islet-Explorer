@@ -11,9 +11,10 @@ Interactive R Shiny application for exploring pancreatic islet CODEX multiplexed
 
 ## Overview
 
-Islet Explorer is a non-mutating R Shiny research application for exploring an
-analytical cohort of **5,214 islets** from **15 nPOD donors** across three disease
-stages. It combines marker and cell-population plots, composition-based trajectory
+Islet Explorer is a non-mutating R Shiny research application for exploring
+pancreatic-islet measurements from **15 nPOD donors** across three disease
+stages. The trajectory H5AD contains **5,214 observations**; prepared core-area
+and composition tables each contain **5,382 rows**. It combines marker and cell-population plots, composition-based trajectory
 analysis, spatial analysis, single-cell segmentation drill-down, and browser-streamed
 OME-TIFF imagery. Reviewers can download generated CSV and PNG files, but cannot upload
 data or alter the versioned scientific release.
@@ -181,10 +182,16 @@ Available from both Plot and Trajectory tabs when clicking an islet:
 ### Development sources
 
 `data/islet_explorer.h5ad` is the enriched analytical source used to construct the
-reviewer summaries. It contains the 5,214-islet analytical cohort, 31 protein-marker
+reviewer summaries. It contains a 5,214-observation H5AD axis, 31 protein-marker
 features, donor metadata, phenotype proportions, neighborhood metrics, UMAP coordinates,
 Leiden clusters, and QuPath-derived measurements. `data/master_results.xlsx` remains a
 reduced-feature **development fallback only**.
+
+H5AD observation counts do not describe all embedded QuPath measurements. The
+2026-09-08 source preparation produces `core_area` and `comp` with 5,382 rows
+each, `targets_all` with 48,438 rows, `markers_all` with 64,584 rows, and
+21 `combined_pairs` definitions. See [the readiness evidence index](docs/ufrc_readiness.md)
+for these source measurements and the pending source-to-release parity check.
 
 The composition trajectory uses `data/barlow_islet_features.csv` plus the prepared app
 tables. `data/adata_ins_root.h5ad` is retained as a versioned scientific/provenance

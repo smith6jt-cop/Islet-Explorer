@@ -65,7 +65,7 @@ load_user_env_credentials <- function() {
 
 # Publication mode never searches local credential files, even if this helper
 # is sourced accidentally while the AI feature remains disabled.
-if (!islet_is_production()) load_user_env_credentials()
+if (!islet_is_production() && isTRUE(AI_ENABLED)) load_user_env_credentials()
 
 # Simplified credential getters
 get_llm_api_key <- function() {

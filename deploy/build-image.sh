@@ -76,6 +76,16 @@ cleanup_temp_files() {
 }
 trap cleanup_temp_files EXIT
 
+# Check the digest-selected base before installing the full scientific stack.
+# Rocker builds R under /usr/local; resolve it through the image's PATH.
+podman run --rm --pull=missing --entrypoint /bin/sh "${base_image}" -ceu '
+  test "$(uname -m)" = x86_64
+  command -v Rscript
+  command -v shiny-server
+  id shiny
+  Rscript -e '\''stopifnot(getRversion() == "4.5.1"); cat("Base R repository: ", getOption("repos"), "\n")'\''
+'
+
 podman build \
   --pull=missing \
   --iidfile "${iid_file}" \
@@ -96,9 +106,9 @@ image_id="$(tr -d '[:space:]' < "${iid_file}")"
 
 podman run --rm --entrypoint /opt/islet-explorer-py/bin/python "${image_id}" -c \
   'import anndata, scanpy, igraph, leidenalg, fa2_modified; print("python dependency probe: ok")'
-podman run --rm --entrypoint /usr/bin/Rscript "${image_id}" -e \
+podman run --rm --entrypoint Rscript "${image_id}" -e \
   'stopifnot(packageVersion("destiny")=="3.22.0", packageVersion("duckdb")=="1.5.2"); cat("R dependency probe: ok\n")'
-podman run --rm --entrypoint /usr/bin/Rscript \
+podman run --rm --entrypoint Rscript \
   --workdir /srv/islet-explorer/app/shiny_app "${image_id}" tests/parse_check.R
 
 "${script_dir}/scan-image.sh" "${image_id}" "${scan_dir}"

@@ -12,8 +12,13 @@ container_name="${CONTAINER_NAME:-islet-explorer-smoke}"
   echo "ERROR: PROJECT_ROOT must be an absolute path without whitespace." >&2
   exit 64
 }
-[[ "${release}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ && "${port}" =~ ^[0-9]+$ ]] || {
+[[ "${release}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ && "${port}" =~ ^[0-9]{1,5}$ ]] || {
   echo "ERROR: invalid RELEASE or PORT." >&2
+  exit 64
+}
+port="$((10#${port}))"
+((port >= 1 && port <= 65535)) || {
+  echo "ERROR: PORT must be between 1 and 65535." >&2
   exit 64
 }
 
@@ -83,13 +88,10 @@ container_id="$(podman run --detach --rm \
   "${image_ref}")"
 
 echo "Started ${container_name}: ${container_id}"
-if [[ "${port}" == 3838 ]]; then
-  if ! "${script_dir}/verify-deployment.sh" \
-    --url http://127.0.0.1:3838/islet-explorer/ --container "${container_name}"; then
-    podman stop "${container_name}" >/dev/null || true
-    exit 70
-  fi
-else
-  echo "Verify manually at http://127.0.0.1:${port}/islet-explorer/."
+if ! "${script_dir}/verify-deployment.sh" \
+  --url "http://127.0.0.1:${port}/islet-explorer/" --container "${container_name}" \
+  --expected-image "${image_ref}"; then
+  podman stop "${container_name}" >/dev/null || true
+  exit 70
 fi
 echo "Stop with: podman stop ${container_name}"

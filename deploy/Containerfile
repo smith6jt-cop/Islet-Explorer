@@ -1,4 +1,20 @@
 ARG BASE_IMAGE
+FROM ${BASE_IMAGE} AS shiny_server_build
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      build-essential ca-certificates curl git python3 xz-utils \
+    && rm -rf /var/lib/apt/lists/*
+COPY deploy/harden-base.sh /opt/islet-server-build/harden-base.sh
+COPY deploy/tests/smoke-shiny-server.py /opt/islet-server-build/smoke-shiny-server.py
+COPY deploy/shiny-server.conf /opt/islet-server-build/shiny-server.conf
+# The upstream permission-denial tests and real-R tests must run without root.
+USER shiny
+RUN bash /opt/islet-server-build/harden-base.sh \
+      /tmp/islet-shiny-server /tmp/islet-shiny-server-evidence \
+    && python3 /opt/islet-server-build/smoke-shiny-server.py \
+      /tmp/islet-shiny-server /tmp/islet-shiny-server-evidence/staged-smoke.json \
+      /opt/islet-server-build/shiny-server.conf
+
 FROM ${BASE_IMAGE}
 
 ARG BASE_IMAGE
@@ -40,14 +56,24 @@ COPY deploy/requirements-python.lock /opt/islet-explorer-build/requirements-pyth
 
 RUN set -eux; \
     apt-get update; \
+    apt-get upgrade -y --no-install-recommends; \
     apt-get install -y --no-install-recommends \
       build-essential cmake curl gfortran git pkg-config \
-      python3 python3-dev python3-pip python3-venv \
+      python3 python3-dev python3-pip python3-venv xz-utils \
       libcurl4-openssl-dev libfontconfig1-dev libfribidi-dev \
       libgdal-dev libgeos-dev libhdf5-dev libharfbuzz-dev \
       libjpeg-dev libmagick++-dev libnlopt-dev libpng-dev \
       libproj-dev libssl-dev libtiff-dev libudunits2-dev libxml2-dev; \
-    rm -rf /var/lib/apt/lists/*
+    apt-get remove -y shiny-server; \
+    rm -rf /opt/shiny-server /var/lib/apt/lists/*
+
+COPY --from=shiny_server_build --chown=root:root /tmp/islet-shiny-server /opt/shiny-server
+COPY --from=shiny_server_build --chown=root:root /tmp/islet-shiny-server-evidence /opt/islet-explorer-build/shiny-server
+RUN set -eux; \
+    ln -sf /opt/shiny-server/bin/shiny-server /usr/bin/shiny-server; \
+    test -x /usr/bin/pandoc; \
+    /usr/bin/shiny-server --version; \
+    Rscript -e 'stopifnot(as.character(getRversion()) == "4.5.1")'
 
 # The existing application manifest supplies the core R stack. The production
 # installer additionally makes destiny and DuckDB mandatory and verifies their
@@ -59,6 +85,7 @@ RUN set -eux; \
     /opt/islet-explorer-py/bin/python -m pip install --no-cache-dir 'pip==25.3'; \
     /opt/islet-explorer-py/bin/python -m pip install --no-cache-dir \
       --requirement /opt/islet-explorer-build/requirements-python.lock; \
+    /opt/islet-explorer-py/bin/python -m pip check; \
     /opt/islet-explorer-py/bin/python -c \
       'import anndata, scanpy, igraph, leidenalg, fa2_modified; print("python trajectory dependencies: ok")'
 

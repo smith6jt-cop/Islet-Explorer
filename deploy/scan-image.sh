@@ -55,7 +55,12 @@ readonly r_packages="${output_dir}/${safe_name}.R-packages.tsv"
 readonly python_packages="${output_dir}/${safe_name}.python-packages.txt"
 readonly attestation="${output_dir}/${safe_name}.scan.txt"
 
-syft "podman:${image_id}" -o "cyclonedx-json=${sbom}"
+syft_status=0
+syft "podman:${image_id}" -o "cyclonedx-json=${sbom}" || syft_status=$?
+if ((syft_status)); then
+  echo "ERROR: SBOM generation failed. For a Podman connection error, start the private API socket and set CONTAINER_HOST as documented in deploy/README.md." >&2
+  exit "${syft_status}"
+fi
 # --fail-on high rejects both High and Critical findings.
 grype "sbom:${sbom}" --fail-on high -o json > "${report}"
 if ! grype db status -o json > "${grype_db_status}" 2>/dev/null; then

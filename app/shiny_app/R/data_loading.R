@@ -584,7 +584,7 @@ load_prepared_release <- function(root = data_root) {
            ", read ", nrow(out[[name]]), call. = FALSE)
     }
   }
-  message("[DATA] Loaded immutable release summaries")
+  islet_log_event("release_data_loaded")
   out
 }
 

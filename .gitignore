@@ -61,6 +61,7 @@ tmp/
 venv*/
 __pycache__/
 *.pyc
+node_modules/
 
 # Excel and other large source data
 *.xlsx

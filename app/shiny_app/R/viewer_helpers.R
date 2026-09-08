@@ -45,7 +45,7 @@ load_channel_names <- function() {
     return(labels)
   }
 
-  message("[CHANNELS] Channel names not found. Embed names with: tiffcomment -set \"ChannelNames=<comma-separated>\" <file.ome.tif>")
+  islet_log_event("viewer_channels_unavailable")
   NULL
 }
 

@@ -8,6 +8,16 @@ procedure is in [`deploy/README.md`](deploy/README.md), and the detailed project
 inventory is in [`docs/pubapps_log_inventory.md`](docs/pubapps_log_inventory.md).
 Do not submit the request with bracketed placeholders left unresolved.
 
+Status updated 2026-09-08: the existing records are UFRC request `83810`,
+configuration reference `SYSCONFIG-8173`, and individual assessment `IRM-456246`
+(submission confirmed 2026-09-01). These references were recovered through
+read-only UF Outlook search. The owner reports a provisioned VM, while UFRC
+comment 4 on 2026-09-08 says operations normally waits for completed assessments
+before VM setup. Reconcile that status and obtain the assigned host configuration.
+Continue the existing records; do not open duplicate requests. Neither allocation
+nor an open assessment establishes production approval. The current requirement-to-evidence index is
+[`docs/ufrc_readiness.md`](docs/ufrc_readiness.md).
+
 The checklists below distinguish UFRC/policy requirements from conditional and
 recurring owner actions and from project recommendations. Project hardening in the
 deployment runbook remains part of this application's release process, but each such
@@ -17,9 +27,9 @@ control is not a separate UFRC approval gate.
 
 | Item | Decision |
 |---|---|
-| Service | Trial `PA-INSTANCE` allocation recorded for `maigan`, reference `RC83797`; the PubApps instance/VM is not provisioned until UFRC confirms setup |
+| Service | VM provisioning reported by the owner; UFRC status and assigned host details require reconciliation. Trial `PA-INSTANCE` allocation for `maigan`, reference `RC83797` |
 | Current allocation term | 2026-08-31 through 2026-11-30; renew or purchase before reviewer access extends beyond that date |
-| Initial resources | 2 vCPU, 16 GiB RAM, 1 TiB `/pubapps`, standard local container storage |
+| Initial resources | Requested base: 2 vCPU, 16 GiB RAM, 1 TiB `/pubapps`, standard local container storage; verify assigned resources |
 | Add-ons | None initially; observe representative use at the expected five-session peak before requesting more capacity |
 | Access during peer review | **Public Restricted**, with whole-site shared Basic Auth |
 | UF data classification during peer review | **Sensitive** |
@@ -44,7 +54,9 @@ confirmed in the purchase form.
 
 ## Information the project owner must supply
 
-Complete this table before filling the DOCX or opening the provisioning ticket.
+Complete this table in the existing restricted ticket and operating record before
+finalizing the DOCX and production review. Details have been requested from the
+project owner; unknown values below are not new work requests.
 
 | Required information | Value |
 |---|---|
@@ -64,9 +76,9 @@ Complete this table before filling the DOCX or opening the provisioning ticket.
 | Journal and manuscript identifier | `[JOURNAL / MANUSCRIPT ID WHEN AVAILABLE]` |
 | Data owner | `[NAME / ROLE]` |
 | Applicable IRB, DUA, or MTA identifiers | `[IDENTIFIERS OR NOT APPLICABLE]` |
-| UFRC support ticket | `[TICKET NUMBER WHEN ISSUED]` |
-| Main PubApps risk-assessment reference | `[UFRC-PROVIDED MAIN ASSESSMENT/TICKET; SEPARATE INDIVIDUAL NUMBER ONLY IF DIRECTED]` |
-| Provisioned VM, service account, and SSH route | `[UFRC-CONFIRMED VALUES]` |
+| UFRC support ticket | `83810`, configuration reference `SYSCONFIG-8173` |
+| Individual Risk Assessment | `IRM-456246`; submission confirmed 2026-09-01; disposition pending |
+| Provisioned VM, service account, and SSH route | Owner reports provisioning; reconcile UFRC status; `[ASSIGNED HOST / ACCOUNT / SSH ROUTE]` pending |
 | Production URL, proxy target, and backend port | `[UFRC-CONFIRMED VALUES]` |
 | `/pubapps` and local container paths/quotas | `[UFRC-CONFIRMED VALUES]` |
 | Confirmed reviewer/concurrency estimate | 1–8 total / up to 5 concurrent |
@@ -80,11 +92,13 @@ Public Restricted deployment. A checked item should point to dated evidence in t
 restricted support ticket or release record; do not put personal contact information,
 SSH keys, credentials, or sensitive approvals in this repository.
 
-### Before submitting the provisioning request
+### Complete the existing request and assessment
 
 - [x] Trial `PA-INSTANCE` allocation recorded for HPG group `maigan`, reference
-  `RC83797`, active 2026-08-31 through 2026-11-30. This allocation permits the setup
-  request; it does not prove that UFRC has created the instance or VM.
+  `RC83797`, active 2026-08-31 through 2026-11-30.
+- [x] Existing UFRC request `83810`, configuration reference `SYSCONFIG-8173`,
+  and assessment `IRM-456246` identified in UF Outlook. Assessment disposition
+  and the owner-reported provisioning status remain to be confirmed with UFRC.
 - [ ] Give the PI/data owner, applicable IRB/privacy contact, and nPOD or other agreement
   owner an exact inventory of the proposed reviewer files and fields. Obtain written
   confirmation that the release contains no PHI or other Restricted data and that its
@@ -96,17 +110,16 @@ SSH keys, credentials, or sensitive approvals in this repository.
 - [ ] Confirm that the PI and two named maintainers have active HiPerGator accounts.
   Supply their HPG usernames and public SSH keys through the restricted ticket; never
   send a private key or commit a public key to this repository.
-- [ ] Open a UFRC support ticket at <https://support.rc.ufl.edu/> with the completed form
-  and `RC83797`, using the copy-ready text below.
-- [ ] Start an individual risk assessment only if UFRC directs the project to do so;
-  return its number in the setup ticket. Otherwise record UFRC's confirmation that the
-  form will be attached to the main PubApps assessment.
+- [ ] Attach the reviewed form, allocation evidence, and requested technical
+  evidence to existing request `83810` and assessment `IRM-456246` through the
+  authorized owner. Resolve assessment follow-up items and
+  retain its disposition; opening an assessment is not its acceptance.
 
-### After UFRC provisions the instance
+### Confirm the provisioned instance configuration
 
-- [ ] Record the provisioned VM/service account, storage and container paths/quotas,
-  SSH route, and proxy/backend assignment returned by UFRC. Allocation reference
-  `RC83797` alone cannot close this item.
+- [ ] Reconcile the owner-reported provisioning status with UFRC comment 4 of
+  2026-09-08, then record the assigned VM/service account, storage/container
+  paths/quotas, SSH route, and proxy/backend assignment.
 - [ ] Have both named maintainers independently confirm that they can reach the service
   account by SSH from their own HPG accounts; retain the dated acceptance in the
   restricted ticket.
@@ -119,7 +132,7 @@ An open-source software license does not grant redistribution rights to the unde
 research material.
 
 If an agreement owner determines that any included asset is Restricted or cannot be
-shown to reviewers, stop the PubApps request. Remove the asset or ask UFRC whether the
+shown to reviewers, keep reviewer access closed. Remove the asset or ask UFRC whether the
 application must move to PrivApps.
 
 ### Before reviewer access
@@ -161,7 +174,7 @@ the UF hostname, or case identifiers conflict with double-blind review; exercise
 representative five-session smoke test before requesting additional resources; and
 obtain a current UFRC quote before adding capacity.
 
-The trial allocation is sufficient to request and validate the instance now. Do not rely
+The trial allocation supports instance validation once setup is confirmed. Do not rely
 on its current expiration for journal review: arrange continuation before 2026-11-30 and
 retain service through editorial review, publication, and the agreed post-publication
 period.
@@ -281,20 +294,23 @@ Example Open elements:
 
 Faculty PI/HPG Group Sponsor Name: Maigan Brusko, PhD
 
-Date: 2026-08-31
+Date: `[ACTUAL PI ATTESTATION DATE]` — this draft was updated 2026-09-08 and does
+not record a completed attestation.
 
-## Copy-ready UFRC support ticket
+## Copy-ready follow-up for the existing UFRC ticket
 
-**Subject:** `Initial PubApps instance and application setup — Islet Explorer — maigan — RC83797`
+**Subject:** `Request 83810: Islet Explorer production review — IRM-456246`
 
 **Body:**
 
-> Please create the initial PubApps instance/VM and review a new Public Restricted
-> application for the Panc Floyd project, deployed as Islet Explorer under HPG group
-> `maigan`. `RC83797` records one trial `PA-INSTANCE` allocation active 2026-08-31
-> through 2026-11-30; it is allocation evidence, not confirmation that the instance or
-> VM has already been provisioned. The completed UFIT-RC Web Hosting Instance Request is
-> attached. Desired reviewer production date: `[DATE]`.
+> Please continue the production review for the Panc Floyd project, deployed as
+> Islet Explorer under HPG group `maigan`, in existing ticket `83810`, configuration
+> reference `SYSCONFIG-8173`, and individual Risk Assessment `IRM-456246`.
+> Please reconcile the owner-reported VM provisioning with comment 4's assessment
+> prerequisite and return the current setup status. `RC83797` records one trial `PA-INSTANCE` allocation
+> active 2026-08-31 through 2026-11-30. The reviewed UFIT-RC Web Hosting Instance
+> Request and current technical evidence are attached. Desired reviewer production
+> date: `[DATE]`.
 >
 > The requested starting allocation is the standard PubApps base: 2 vCPU, 16 GiB RAM,
 > 1 TiB `/pubapps`, and standard local container storage. The curated deployment is
@@ -351,16 +367,18 @@ Date: 2026-08-31
 > security/availability review, and identify the ongoing UFIT network-scan and approval
 > process.
 >
-> Please advise whether a separate individual risk assessment is required, identify the
+> Please confirm the remaining items and disposition of the existing individual
+> Risk Assessment, identify the
 > UFRC-monitored application/proxy log destinations and retention requirements, and
 > provide the procedure for creating, changing, and revoking the shared Basic Auth
 > credential. Please return the production-approval reference and support escalation
 > route when setup and review are complete.
 
-Attach the completed, named-and-dated `UFIT_PubApps_Instance_Request.docx` and the
-`RC83797` allocation confirmation. The form already contains the architecture/data-flow
-map. Provide a separate risk-assessment number or additional owner/legal evidence only
-if UFRC requests it; keep the authoritative approvals in the restricted project record.
+Attach the completed, genuinely attested `UFIT_PubApps_Instance_Request.docx` and
+the `RC83797` allocation confirmation to the existing ticket. The form contains
+the architecture/data-flow map. Cross-reference the existing individual assessment
+and provide additional requested owner/legal evidence through the restricted
+project record. Do not send this template with unresolved placeholders.
 
 ## Database and storage position
 
@@ -389,7 +407,15 @@ The production release uses a hybrid, embedded layout:
   query only the selected islet's bounding box. Do not use SQLite as the primary
   analytical store.
 
-Provisioning and purchasing may proceed while the release is being built, but the
+The 2026-09-08 canonical source preparation produced 5,382 `core_area` rows,
+5,382 `comp` rows, 48,438 `targets_all` rows, 64,584 `markers_all` rows, and
+21 `combined_pairs` definitions. The separate trajectory H5AD has 5,214
+observations; the drill-down file count and trajectory count must not be used as
+the count of all prepared runtime summaries. The donor image cohort remains 15.
+See [`docs/ufrc_readiness.md`](docs/ufrc_readiness.md) for the source evidence and
+the remaining release-parity check.
+
+Configuration and service continuation may proceed while the release is being built, but the
 manifest-backed runtime is a production prerequisite. Before promotion it must reproduce
 every legacy downloadable table and plotted statistic, including row counts and identifiers,
 with exact categorical values and documented numeric tolerance. If parity is not complete,
@@ -407,8 +433,8 @@ Record these answers in the ticket or release record:
 - WebSocket and TIFF HTTP Range proxy behavior.
 - Basic Auth ownership and credential creation/change/revocation procedure.
 - UFRC-monitored log destination and retention/access requirements.
-- Required risk-assessment number or confirmation that the form is attached to UFRC's
-  main PubApps assessment.
+- Existing individual Risk Assessment number, remaining requests, and final
+  disposition; any relationship UFRC records to its main PubApps assessment.
 - Security-evidence submission, UFRC scan/review, and production-approval process.
 - Support escalation contact and expected response route during journal review.
 

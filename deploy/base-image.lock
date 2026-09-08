@@ -1,0 +1,4 @@
+# rocker/shiny:4.5.1 linux/amd64, resolved from the official registry 2026-09-08.
+# Base-only scan has High/Critical findings; the hardened candidate must pass
+# the existing image scan gate before export or deployment.
+docker.io/rocker/shiny@sha256:dd10b638e2e7e6b73cfbfef2bbed51d5a97b624f8122e9379f1c3395bf660ef8

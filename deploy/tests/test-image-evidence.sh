@@ -57,7 +57,10 @@ if [[ "${1:-}" == build ]]; then
   exit 64
 fi
 if [[ "${1:-}" == run ]]; then
+  printf '%s\n' "$*" >> "${MOCK_LOG_DIR:?}/podman-run.log"
   case " $* " in
+    *" --entrypoint /usr/bin/Rscript "*) echo 'Rscript must resolve through PATH' >&2; exit 70 ;;
+    *" --pull=missing "*) if [[ "${MOCK_BASE_FAIL:-0}" == 1 ]]; then exit 65; fi ;;
     *" /bin/cat "*) printf 'Package\tVersion\nshiny\t1.0\n' ;;
     *" pip freeze --all "*) printf 'scanpy==1.0\n' ;;
     *) : ;;
@@ -183,6 +186,16 @@ expect_status 64 "${repo_root}/deploy/build-image.sh" \
   --tag local/test:release --version release \
   --base-image "${base_image}"
 
+# A wrong or unusable base must fail before the expensive build and before any
+# successful image evidence can be emitted.
+expect_status 65 env PATH="${mock_bin}:${PATH}" MOCK_LOG_DIR="${mock_log}" \
+  MOCK_IMAGE_ID="${image_id}" MOCK_GIT_COMMIT="${commit}" MOCK_BASE_FAIL=1 \
+  "${repo_root}/deploy/build-image.sh" \
+  --tag local/test:release --version release --base-image "${base_image}" \
+  --scan-dir "${work_dir}/bad-base-scan"
+[[ ! -e "${mock_log}/podman-build.log" && ! -e "${work_dir}/bad-base-scan" ]] || \
+  fail 'failed base probe reached the build or emitted scan evidence'
+
 build_scan_dir="${work_dir}/build-scan"
 : > "${mock_log}/syft.log"
 env PATH="${mock_bin}:${PATH}" MOCK_LOG_DIR="${mock_log}" \
@@ -194,6 +207,8 @@ grep -Fq "podman:${image_id}" "${mock_log}/syft.log" || \
   fail "build wrapper did not scan the immutable image ID"
 grep -Fq -- "--iidfile" "${mock_log}/podman-build.log" || \
   fail "build wrapper did not capture Podman's direct build image ID"
+grep -Fq -- "--entrypoint Rscript" "${mock_log}/podman-run.log" || \
+  fail "build wrapper did not resolve Rscript through the image PATH"
 grep -Fqx "LOCAL_IMAGE_ID=${image_id}" "${build_scan_dir}/published-image.txt" || \
   fail "build wrapper did not publish immutable local-image evidence"
 

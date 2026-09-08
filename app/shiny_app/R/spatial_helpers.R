@@ -91,7 +91,7 @@ load_donor_tissue <- function(imageid) {
     # cells keep their own cell_region and are unaffected.
     phenotype_filter_rows(d)
   }, error = function(e) {
-    message("event=spatial_tissue_load_failed")
+    islet_log_event("spatial_tissue_load_failed")
     NULL
   })
 
@@ -151,7 +151,7 @@ cell_distance_available <- function() {
 }
 
 .cd_backend_failure <- function(context, error) {
-  message("event=spatial_backend_failed")
+  islet_log_event("spatial_backend_failed")
   if (islet_is_production()) stop("Spatial data operation failed.", call. = FALSE)
   NULL
 }
@@ -176,7 +176,7 @@ load_cell_distance <- function() {
                               signed_dist = "numeric"))
     }
   }, error = function(e) {
-    message("event=spatial_cell_distance_load_failed"); NULL
+    islet_log_event("spatial_cell_distance_load_failed"); NULL
   })
   if (!is.null(df)) {
     df <- df[is.finite(df$signed_dist), , drop = FALSE]

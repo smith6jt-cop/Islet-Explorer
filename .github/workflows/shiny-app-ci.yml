@@ -1,6 +1,7 @@
 name: Shiny App CI
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
@@ -28,6 +29,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Initialize evidence directory
+        run: mkdir -p "${RUNNER_TEMP}/islet-ci-r"
+
       - name: Configure isolated R library
         shell: bash
         run: |
@@ -47,7 +59,7 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
             build-essential r-base-core r-base-dev \
-            r-cran-testthat r-cran-dplyr r-cran-tidyr \
+            r-cran-testthat r-cran-shiny r-cran-dplyr r-cran-tidyr \
             r-cran-tibble r-cran-lme4 r-cran-lmertest \
             r-cran-dbi r-cran-digest r-cran-jsonlite r-cran-sf \
             r-cran-lintr bandit
@@ -63,7 +75,7 @@ jobs:
       # Parquet parity, SHA-256 validation, and GeoPackage indexing cannot skip.
       - name: Verify non-optional test capabilities
         run: |
-          Rscript -e 'required <- c("testthat", "dplyr", "tidyr", "tibble", "lme4", "lmerTest", "DBI", "duckdb", "digest", "jsonlite", "sf", "lintr"); missing <- required[!vapply(required, requireNamespace, logical(1), quietly = TRUE)]; if (length(missing)) stop("Missing required CI packages: ", paste(missing, collapse = ", ")); if (!("GPKG" %in% sf::st_drivers()$name)) stop("sf/GDAL lacks the GPKG driver required by backend tests"); message("Backend test capabilities verified: ", paste(required, collapse = ", "))'
+          Rscript -e 'required <- c("testthat", "shiny", "dplyr", "tidyr", "tibble", "lme4", "lmerTest", "DBI", "duckdb", "digest", "jsonlite", "sf", "lintr"); missing <- required[!vapply(required, requireNamespace, logical(1), quietly = TRUE)]; if (length(missing)) stop("Missing required CI packages: ", paste(missing, collapse = ", ")); if (!("GPKG" %in% sf::st_drivers()$name)) stop("sf/GDAL lacks the GPKG driver required by backend tests"); message("Backend test capabilities verified: ", paste(required, collapse = ", "))'
 
       - name: Parse-check application and release R sources
         run: |
@@ -81,6 +93,7 @@ jobs:
 
           files = sorted(Path("app/shiny_app/python").rglob("*.py"))
           files += sorted(Path("scripts").rglob("*.py"))
+          files += sorted(Path("deploy").rglob("*.py"))
           if not files:
               raise SystemExit("No application/script Python files found")
           for path in files:
@@ -91,15 +104,79 @@ jobs:
       - name: Run Bandit on deployed Python runtime
         run: bandit --quiet --recursive app/shiny_app/python
 
-      - name: Run unit tests
-        working-directory: app/shiny_app
-        run: Rscript tests/run_tests.R
+      - name: Run R suites with zero skipped tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          for suite in app parity extraction; do
+            Rscript scripts/run_ci_r_tests.R "$suite" "${RUNNER_TEMP}/islet-ci-r" 2>&1 | tee "${RUNNER_TEMP}/islet-ci-r/${suite}-tests.log"
+          done
+
+      - name: Install inventory test and pinned browser SAST tools
+        run: |
+          python3 -m pip install numpy==2.2.6 h5py==3.15.1 tifffile==2025.10.16 semgrep==1.176.1
+          python3 -m pip freeze --all > "${RUNNER_TEMP}/islet-ci-r/python-tools.txt"
+          Rscript -e 'p <- as.data.frame(installed.packages()[, c("Package", "Version"), drop=FALSE]); write.table(p[order(p$Package), ], file.path(Sys.getenv("RUNNER_TEMP"), "islet-ci-r", "R-test-packages.tsv"), sep="\t", row.names=FALSE, quote=FALSE)'
+          node --version > "${RUNNER_TEMP}/islet-ci-r/node-version.txt"
+
+      - name: Verify browser harness dependencies and syntax
+        working-directory: deploy/browser
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Browser execution stays with the real-data acceptance harness.
+          # CI verifies this exact lockfile without downloading a browser.
+          npm ci --ignore-scripts --no-audit --no-fund 2>&1 | tee "${RUNNER_TEMP}/islet-ci-r/browser-npm-ci.log"
+          npm --version > "${RUNNER_TEMP}/islet-ci-r/npm-version.txt"
+          npm ls --all --json > "${RUNNER_TEMP}/islet-ci-r/browser-dependencies.json"
+          cp package.json package-lock.json "${RUNNER_TEMP}/islet-ci-r/"
+          node --check check-app.mjs
+          npm audit --audit-level=high --json > "${RUNNER_TEMP}/islet-ci-r/browser-npm-audit.json"
+
+      - name: Test sanitized data inventory with zero skips
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' 2>&1 | tee "${RUNNER_TEMP}/islet-ci-r/inventory-tests.log"
+          import importlib.util
+          import json
+          import os
+          from pathlib import Path
+          import unittest
+          spec = importlib.util.spec_from_file_location("inventory_tests", "scripts/tests/test_inventory_release_data.py")
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          result = unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromModule(module))
+          summary = {"tests": result.testsRun, "failed": len(result.failures), "errors": len(result.errors), "skipped": len(result.skipped)}
+          path = Path(os.environ["RUNNER_TEMP"]) / "islet-ci-r/inventory-tests.json"
+          path.write_text(json.dumps(summary, indent=2) + "\n")
+          raise SystemExit(0 if result.wasSuccessful() and result.testsRun and not result.skipped else 1)
+          PY
+
+      - name: Scan authored and R-embedded browser code
+        run: bash deploy/scan-browser-code.sh --output "${RUNNER_TEMP}/islet-ci-r/browser-sast"
+
+      - name: Retain test and browser SAST evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r-python-browser-sast-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/islet-ci-r/
+          retention-days: 90
+          if-no-files-found: error
 
   deployment-quality:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Initialize evidence directory
+        run: mkdir -p "${RUNNER_TEMP}/islet-ci-deploy"
 
       - name: Install ShellCheck
         run: |
@@ -128,7 +205,39 @@ jobs:
           shellcheck --severity=warning "${scripts[@]}"
 
       - name: Test image scan and release-evidence contracts
-        run: bash deploy/tests/test-image-evidence.sh
+        shell: bash
+        run: |
+          set -euo pipefail
+          for suite in image-evidence deployment-verifier deployment-recovery; do
+            bash "deploy/tests/test-${suite}.sh" 2>&1 | tee "${RUNNER_TEMP}/islet-ci-deploy/${suite}.log"
+          done
+
+      - name: Test viewer URL boundary with zero skips
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test-reporter=tap deploy/tests/test-viewer-boundary.mjs 2>&1 | tee "${RUNNER_TEMP}/islet-ci-deploy/viewer-tests.tap"
+          grep -Fx '# skipped 0' "${RUNNER_TEMP}/islet-ci-deploy/viewer-tests.tap"
+          grep -Fx '# cancelled 0' "${RUNNER_TEMP}/islet-ci-deploy/viewer-tests.tap"
+          grep -Fx '# todo 0' "${RUNNER_TEMP}/islet-ci-deploy/viewer-tests.tap"
+          test "$(awk '/^# tests / {print $3}' "${RUNNER_TEMP}/islet-ci-deploy/viewer-tests.tap")" -ge 31
+
+      - name: Test external authentication verifier with synthetic requests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' 2>&1 | tee "${RUNNER_TEMP}/islet-ci-deploy/reviewer-access-tests.log"
+          import json
+          import os
+          from pathlib import Path
+          import unittest
+          suite = unittest.defaultTestLoader.discover("deploy/tests", pattern="test_reviewer_access.py")
+          result = unittest.TextTestRunner(verbosity=2).run(suite)
+          summary = {"tests": result.testsRun, "failed": len(result.failures), "errors": len(result.errors), "skipped": len(result.skipped)}
+          path = Path(os.environ["RUNNER_TEMP"]) / "islet-ci-deploy/reviewer-access-tests.json"
+          path.write_text(json.dumps(summary, indent=2) + "\n")
+          raise SystemExit(0 if result.wasSuccessful() and result.testsRun and not result.skipped else 1)
+          PY
 
       # This is a deterministic tracked-file gate, not a replacement for GitHub
       # secret scanning. It reports filenames only so a detected value is never
@@ -178,3 +287,12 @@ jobs:
               exit "${grep_status}"
             fi
           fi
+
+      - name: Retain deployment and viewer test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-viewer-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/islet-ci-deploy/
+          retention-days: 90
+          if-no-files-found: error

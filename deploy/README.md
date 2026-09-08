@@ -30,8 +30,12 @@ logging requirements and additional hardening guidance are in
 - `data/` is mounted read-only at `/srv/islet-explorer/data`.
 - OME-TIFFs are mounted read-only directly at
   `/srv/islet-explorer/app/shiny_app/www/local_images`. This is deliberate:
-  Shiny Server's static handler must see them beneath `www/` to preserve HTTP
-  Range delivery through the UFRC proxy.
+  The explicit `site_dir` routes in `shiny-server.conf` serve `local_images/`,
+  `images/`, and the legacy `img_data/` alias from that same mount with directory
+  listings disabled. They are required for HTTP Range delivery: the general
+  `app_dir` route forwards requests to R/httpuv and returned full-file HTTP 200
+  responses in the local browser test. All three image routes remain covered
+  by the UFRC proxy's application-wide authentication.
 - Shiny listens on the container interface at 3838. The project requests Podman
   publication on VM loopback at `127.0.0.1:3838`, pending UFRC confirmation that
   the proxy can reach that target.
@@ -67,7 +71,11 @@ must not be used for reviewer hosting.
 | `run.sh` | Manual Podman smoke launcher; not the persistent production service |
 
 Core R packages are resolved by `scripts/install_shiny_deps.R` against the
-base-image repository configuration. The image build records every resolved R
+base-image repository configuration. That inherited snapshot predates the tested
+DuckDB 1.5.2 release, so the production installer obtains that exact CRAN source
+archive and checks its pinned SHA-256 before installation. It bounds DuckDB
+compilation to two jobs; `destiny` remains pinned to 3.22.0 through Bioconductor
+3.21. The image build records every resolved R
 package and version at `/opt/islet-explorer-build/R-packages.tsv`; the required
 release scan writes ID-derived CycloneDX, Grype, R-package, Python-package, and
 `.scan.txt` evidence plus `published-image.txt`. The scan attestation hashes the
@@ -80,6 +88,42 @@ or any R dependency requires a new image and scientific parity run.
 Start from a clean, committed release revision; tag it if the project's release
 practice calls for a tag. In particular, the PAGA R/Python files must be tracked;
 the build script refuses dirty or untracked source.
+
+Syft's `podman:` source reads images through the Podman API. In a dedicated build
+shell, start a private Unix socket for the same local rootless image store before
+running the build/scan commands. This does not open a TCP listener:
+
+```bash
+islet_socket_dir="$(mktemp -d "${XDG_RUNTIME_DIR:-/tmp}/islet-scan.XXXXXX")"
+env -u CONTAINER_HOST podman system service --time=0 \
+  "unix://${islet_socket_dir}/podman.sock" > "${islet_socket_dir}/service.log" 2>&1 &
+islet_socket_pid=$!
+cleanup_islet_scan_socket() {
+  kill "${islet_socket_pid}" 2>/dev/null || true
+  wait "${islet_socket_pid}" 2>/dev/null || true
+  unset CONTAINER_HOST
+  rm -f -- "${islet_socket_dir}/podman.sock" "${islet_socket_dir}/service.log"
+  rmdir -- "${islet_socket_dir}"
+}
+trap cleanup_islet_scan_socket EXIT
+for _ in {1..50}; do
+  [[ -S "${islet_socket_dir}/podman.sock" ]] && break
+  sleep 0.2
+done
+test -S "${islet_socket_dir}/podman.sock"
+chmod 0600 "${islet_socket_dir}/podman.sock"
+export CONTAINER_HOST="unix://${islet_socket_dir}/podman.sock"
+curl --fail --silent --show-error --unix-socket "${islet_socket_dir}/podman.sock" \
+  http://localhost/_ping
+```
+
+The temporary directory is private to the build user. Keep this shell open through
+scan and export, then exit it to stop the API and remove the socket. If the ping
+fails, inspect `service.log` before retrying; a working Podman CLI alone does not
+establish scanner connectivity. The separate `PubApps Image Build and Security
+Gate` GitHub workflow supplies its own isolated socket and retains build/security
+evidence on failures. It exports an OCI artifact only after the security gate
+passes and does not deploy or push an image.
 
 Resolve the chosen `rocker/shiny:4.5.1` base to a registry digest and then run,
 from the repository root:
@@ -103,11 +147,20 @@ deploy/export-image.sh "${IMAGE_ID}" "${OCI_ARCHIVE}"
 ```
 
 Release builds require `podman`, `syft`, and `grype`. The build performs Python
-imports, verifies exact `destiny`/`duckdb` versions, parses all application R
-files, creates the SBOM and resolved dependency manifests, and fails on a High
+dependency consistency checks and imports, verifies exact `destiny`/`duckdb`
+versions, parses all application R files, creates the SBOM and resolved dependency
+manifests, and fails on a High
 or Critical vulnerability. `export-image.sh` creates an OCI archive, metadata,
 and a SHA-256 file covering both from the resolved immutable image ID. The
 mutable build tag is never placed in release metadata.
+
+Use the project workstation as the build host when its rootless `podman info`
+check succeeds. Install Podman and its rootless UID/network helpers plus Syft and
+Grype there before building, and retain the tool versions with the evidence.
+The wrapper first probes the digest-selected base for x86_64, R 4.5.1, the `shiny`
+account, and Shiny Server before the long dependency installation. Rscript is
+resolved through the image's PATH because Rocker's R is installed under
+`/usr/local`. The image is built locally; the PubApps VM receives its OCI archive.
 
 UFIT standards require a maintained SBOM, lint/static-analysis evidence, and
 pre-deployment code/package/container vulnerability testing, with remaining CVEs
@@ -138,7 +191,7 @@ Rscript scripts/build_release_data.R \
   --source-root data \
   --image-root app/shiny_app/www/local_images \
   --output /staging/islet-explorer-data-pubapps-2026-01 \
-  --materialize hardlink \
+  --materialize copy \
   --schema 1
 
 Rscript scripts/verify_release_data.R \
@@ -146,7 +199,9 @@ Rscript scripts/verify_release_data.R \
   --mode full
 ```
 
-Use `--materialize copy` if the staging destination is on another filesystem.
+Use `--materialize copy` for the reviewer bundle so subsequent edits to canonical
+inputs cannot change the release through shared inodes. Hardlinks are only a
+space-saving option for disposable local tests.
 The builder and image must come from the same clean Git commit; activation
 compares the OCI revision label, generated data manifest, and release metadata
 and refuses a mismatch.
@@ -236,7 +291,10 @@ renders `~/.config/containers/systemd/islet-explorer.container`, reloads user
 systemd, starts `islet-explorer.service`, and runs local verification. If the
 new service fails to start or become healthy, it restores the prior unit
 automatically. It records active/previous state only after a successful health
-check.
+check. Recovery checks the restored service's health and immutable image identity.
+If service replacement fails, exit 70 reports completed recovery and exit 71
+reports that recovery could not be verified and requires operator attention.
+Preflight failures can also use exit 70 before any service is replaced.
 
 Useful operations:
 
@@ -275,10 +333,13 @@ deploy/verify-deployment.sh \
   --range-path 'local_images/<image>.ome.tiff'
 ```
 
-The verifier fails if host port 3838 is bound to `0.0.0.0`/IPv6-any, if data or
+The verifier fails if the backend port has any listener outside its expected
+`127.0.0.1` binding, including a specific non-loopback host IP, if data or
 images are writable, if feature flags or credentials violate the reviewer
 profile, if dependencies are absent, or if the byte request is not exactly a
-`206 Content-Range` response.
+`206 Content-Range` response. Activation also checks that the running container
+uses the requested immutable image. The manual `run.sh` launcher applies the
+same verification when an alternate loopback `PORT` is selected for a smoke test.
 
 Before reviewer credentials are released, use a clean non-UF browser/network to
 verify the required route behavior:

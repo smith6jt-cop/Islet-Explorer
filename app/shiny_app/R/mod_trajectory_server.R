@@ -136,7 +136,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       ad <- tryCatch(
         islet_read_h5ad_shared(norm_path),
         error = function(e) {
-          message("event=trajectory_data_load_failed")
+          islet_log_event("trajectory_data_load_failed")
           NULL
         }
       )
@@ -498,7 +498,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
           idx <- which(var_names == selected_feature)
           as.numeric(adata$X[, idx])
         }, error = function(e) {
-          message("event=trajectory_feature_extract_failed")
+          islet_log_event("trajectory_feature_extract_failed")
           rep(NA_real_, nrow(obs_df))
         })
       }
