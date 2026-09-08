@@ -28,6 +28,13 @@ rows, CSV bodies, image filenames, screenshots, console messages, or credentials
 The Range check cancels a non-206 response before reading its body. CSVs are
 checked in memory and discarded. Output is written with mode 0600.
 
+The workstation review identified a browser-generated `/favicon.ico` request
+returning 404 as the sole console error. The report counts that missing default
+icon separately from application HTTP errors; application errors still fail.
+The review also found absent vendor tab-button IDs and an absent iframe
+landmark. The wrapper now connects both panels to their real tab buttons and
+provides a named main landmark; the harness checks those relationships.
+
 For a workstation test, run a separate unprivileged Shiny Server with a copy of
 `deploy/shiny-server.conf`: substitute the current user, an unused loopback
 port, the local application/image paths, and temporary log, `socket_dir`, and

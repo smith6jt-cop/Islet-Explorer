@@ -7,6 +7,13 @@ function showUnavailable() {
 }
 
 function restrictUrlForm() {
+  // The vendor panels reference these IDs, but its tab buttons omit them.
+  for (const [index, tab] of [...document.querySelectorAll('[role="tablist"] [role="tab"]')].entries()) {
+    const panel = document.getElementById(`simple-tabpanel-${index}`);
+    if (!panel) continue;
+    tab.id = panel.getAttribute('aria-labelledby');
+    tab.setAttribute('aria-controls', panel.id);
+  }
   // These hidden native inputs are activated by the vendor's visible picker
   // buttons. Remove them from the accessibility tree so they do not create
   // unnamed controls nested inside another interactive element.

@@ -34,6 +34,7 @@ const report = {
   checks: [],
   accessibility: [],
   browserErrors: { page: 0, console: 0 },
+  httpErrors: { missingDefaultFavicon: 0, application: 0 },
   externalRequestsBlocked: 0,
   limitations: [
     'Automated checks are a subset of accessibility review; visualizations and assistive-technology use still require manual review.',
@@ -77,6 +78,15 @@ async function instrument(page) {
   });
   page.on('pageerror', () => { report.browserErrors.page += 1; });
   page.on('console', message => { if (message.type() === 'error') report.browserErrors.console += 1; });
+  page.on('response', response => {
+    if (response.status() < 400) return;
+    const url = new URL(response.url());
+    if (response.status() === 404 && url.origin === appUrl.origin && url.pathname === '/favicon.ico') {
+      report.httpErrors.missingDefaultFavicon += 1;
+    } else {
+      report.httpErrors.application += 1;
+    }
+  });
 }
 
 async function accessibility(context, scope) {
@@ -207,6 +217,16 @@ try {
           return frame.evaluate(() => [...document.querySelectorAll('canvas')]
             .some(canvas => canvas.width > 0 && canvas.height > 0));
         });
+        await check('viewer_control_semantics', async () => frame.evaluate(() => {
+          const panels = [...document.querySelectorAll('[role="tabpanel"]')];
+          const channels = [...document.querySelectorAll('[role="combobox"]')];
+          return Boolean(document.querySelector('#root[role="main"]')) && panels.length > 0 &&
+            panels.every(panel => {
+              const tab = document.getElementById(panel.getAttribute('aria-labelledby'));
+              return tab?.getAttribute('role') === 'tab' && tab.getAttribute('aria-controls') === panel.id;
+            }) && channels.some(channel => channel.getBoundingClientRect().width > 0 &&
+              channel.getAttribute('aria-label'));
+        }));
         await check('accessibility_viewer_canvas', () => accessibility(frame, 'Viewer frame'));
       }
     }
@@ -232,6 +252,8 @@ try {
     attempts: report.externalRequestsBlocked });
   report.checks.push({ name: 'no_uncaught_browser_errors', passed: report.browserErrors.page === 0,
     count: report.browserErrors.page });
+  report.checks.push({ name: 'application_http_responses', passed: report.httpErrors.application === 0,
+    failures: report.httpErrors.application });
 } catch (error) {
   report.checks.push({ name: 'browser_run_completed', passed: false,
     error: error.name === 'TimeoutError' ? 'timeout' : 'browser_run_failed' });
