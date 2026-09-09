@@ -36,7 +36,7 @@ case "${1:-} ${2:-}" in
   "image exists") exit 0 ;;
   "image inspect")
     case "${4:-}" in
-      "{{.Id}}") printf '%s\n' "${MOCK_IMAGE_ID:?}" ;;
+      "{{.Id}}") printf '%s\n' "${MOCK_INSPECT_IMAGE_ID-${MOCK_IMAGE_ID:?}}" ;;
       *org.opencontainers.image.revision*) printf '%s\n' "${MOCK_GIT_COMMIT:?}" ;;
       *org.opencontainers.image.base.name*) printf '%s\n' "${MOCK_BASE_IMAGE:?}" ;;
       *) echo "unexpected mock inspect format: ${4:-}" >&2; exit 70 ;;
@@ -243,6 +243,49 @@ env PATH="${mock_bin}:${PATH}" MOCK_LOG_DIR="${mock_log}" \
   "${repo_root}/deploy/load-image.sh" "${archive}"
 [[ -s "${mock_log}/podman-load.log" ]] || \
   fail "load wrapper did not import the verified OCI archive"
+
+# Hosted Podman returns a prefixed build iidfile but bare inspect IDs. Scan,
+# export, and import must retain the same canonical identity in that case.
+bare_scan_dir="${work_dir}/bare-build-scan"
+bare_archive="${export_dir}/bare-inspect.oci.tar"
+env PATH="${mock_bin}:${PATH}" MOCK_LOG_DIR="${mock_log}" \
+  MOCK_IMAGE_ID="${image_id}" MOCK_INSPECT_IMAGE_ID="${image_hex}" \
+  MOCK_GIT_COMMIT="${commit}" \
+  "${repo_root}/deploy/build-image.sh" \
+  --tag local/test:bare --version release --base-image "${base_image}" \
+  --scan-dir "${bare_scan_dir}"
+grep -Fqx "IMAGE_ID=${image_id}" "${bare_scan_dir}/${safe_name}.scan.txt" || \
+  fail "bare inspect ID was not canonicalized in scan evidence"
+grep -Fqx "LOCAL_IMAGE_ID=${image_id}" "${bare_scan_dir}/published-image.txt" || \
+  fail "bare inspect ID changed the immutable build identity"
+env PATH="${mock_bin}:${PATH}" MOCK_LOG_DIR="${mock_log}" \
+  MOCK_IMAGE_ID="${image_id}" MOCK_INSPECT_IMAGE_ID="${image_hex}" \
+  MOCK_GIT_COMMIT="${commit}" MOCK_BASE_IMAGE="${base_image}" \
+  "${repo_root}/deploy/export-image.sh" local/test:bare "${bare_archive}"
+grep -Fqx "IMAGE_ID=${image_id}" "${bare_archive}.metadata" || \
+  fail "bare inspect ID was not canonicalized in export metadata"
+env PATH="${mock_bin}:${PATH}" MOCK_LOG_DIR="${mock_log}" \
+  MOCK_IMAGE_ID="${image_id}" MOCK_INSPECT_IMAGE_ID="${image_hex}" \
+  MOCK_GIT_COMMIT="${commit}" MOCK_BASE_IMAGE="${base_image}" \
+  "${repo_root}/deploy/load-image.sh" "${bare_archive}"
+
+# Normalization must not accept truncated IDs, other algorithms, whitespace,
+# repeated prefixes, or arbitrary strings from a failed inspect operation.
+invalid_index=0
+for invalid_id in '' latest "${image_hex:1}" "sha512:${image_hex}" \
+  "sha256:${image_id}" " ${image_hex}" "${image_hex}"$'\n'garbage; do
+  invalid_index=$((invalid_index + 1))
+  expect_status 65 env PATH="${mock_bin}:${PATH}" MOCK_LOG_DIR="${mock_log}" \
+    MOCK_IMAGE_ID="${image_id}" MOCK_INSPECT_IMAGE_ID="${invalid_id}" \
+    "${repo_root}/deploy/scan-image.sh" "${image_id}" "${work_dir}/invalid-scan-${invalid_index}"
+  expect_status 65 env PATH="${mock_bin}:${PATH}" MOCK_LOG_DIR="${mock_log}" \
+    MOCK_IMAGE_ID="${image_id}" MOCK_INSPECT_IMAGE_ID="${invalid_id}" \
+    "${repo_root}/deploy/export-image.sh" "${image_id}" "${export_dir}/invalid-${invalid_index}.oci.tar"
+  expect_status 65 env PATH="${mock_bin}:${PATH}" MOCK_LOG_DIR="${mock_log}" \
+    MOCK_IMAGE_ID="${image_id}" MOCK_INSPECT_IMAGE_ID="${invalid_id}" \
+    MOCK_GIT_COMMIT="${commit}" MOCK_BASE_IMAGE="${base_image}" \
+    "${repo_root}/deploy/load-image.sh" "${archive}"
+done
 
 make_release() {
   local destination="$1"

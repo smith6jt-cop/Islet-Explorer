@@ -78,6 +78,8 @@ running="$(podman inspect --format '{{.State.Running}}' "${container_name}")"
 if [[ -n "${expected_image}" ]]; then
   expected_id="$(podman image inspect --format '{{.Id}}' "${expected_image}")"
   actual_id="$(podman inspect --format '{{.Image}}' "${container_name}")"
+  expected_id="sha256:${expected_id#sha256:}"
+  actual_id="sha256:${actual_id#sha256:}"
   [[ "${expected_id}" =~ ^sha256:[0-9a-f]{64}$ && "${actual_id}" == "${expected_id}" ]] || {
     echo "ERROR: running container does not use the expected immutable image." >&2
     exit 70

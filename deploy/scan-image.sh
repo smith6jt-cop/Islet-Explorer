@@ -28,6 +28,8 @@ mkdir -p -- "${output_dir}"
 umask 022
 
 image_id="$(podman image inspect --format '{{.Id}}' "${image_ref}")"
+# Podman versions report inspect IDs with or without the sha256 prefix.
+image_id="sha256:${image_id#sha256:}"
 [[ "${image_id}" =~ ^sha256:[0-9a-f]{64}$ ]] || {
   echo "ERROR: image does not have a valid immutable image ID." >&2
   exit 65

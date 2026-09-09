@@ -20,6 +20,8 @@ done
 podman image exists "${image_ref}" || { echo "ERROR: image not found: ${image_ref}" >&2; exit 66; }
 
 image_id="$(podman image inspect --format '{{.Id}}' "${image_ref}")"
+# Keep archive metadata canonical across Podman's inspect output formats.
+image_id="sha256:${image_id#sha256:}"
 [[ "${image_id}" =~ ^sha256:[0-9a-f]{64}$ ]] || {
   echo "ERROR: image lacks a valid immutable ID." >&2
   exit 65

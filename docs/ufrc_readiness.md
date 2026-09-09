@@ -51,8 +51,8 @@ individual assessment is the record to continue. [UFRC assessment guidance](http
 
 The implementation is retained in draft [PR #11](https://github.com/smith6jt-cop/Islet-Explorer/pull/11).
 It includes application logging, viewer containment, pinned dependencies, and
-deployment verification/recovery. Source CI passed at `606fb53`; its real data
-release also passed full verification and all 22 scientific parity checks.
+deployment verification/recovery. Source CI passed at `cc1c1bc`; the corrected
+`606fb53` data release passed full verification and all 22 scientific parity checks.
 Image acceptance and production startup validation are tracked separately in
 the restricted release record. Neither source tests nor data parity establish
 UFRC production approval.
@@ -67,14 +67,14 @@ UFRC production approval.
 | DOCX integrity | All 18 archive parts retained; 129 paragraphs and XML element/attribute topology preserved; supplied policy/project-plan/standards content unchanged | Draft fields updated; no PI attestation inferred |
 | Architecture rendering | PNG regenerated from editable SVG and visually checked | Requested topology; UFRC target/collector confirmation pending |
 | Authored-browser SAST | Semgrep 1.176.1: 68 rules, 6 of 6 extracted/authored targets checked, zero findings/errors/skipped rules | Working-tree result; rerun after final browser edits. Vendored dependencies have a separate coverage record |
-| Browser accessibility and behavior | 34 of 34 checks passed, including four tabs, keyboard navigation, four CSV downloads, actual tissue canvas, 16-byte HTTP 206, and blocked missing/external image URLs; zero axe violations across five scopes | Local development-data run, Chrome 152.0.7977.82, axe 4.13.0. Manual-review items retained; no exact-image or external proxy acceptance claimed |
+| Browser accessibility and behavior | 34 of 34 checks passed, including four tabs, keyboard navigation, four CSV downloads, actual tissue canvas, 16-byte HTTP 206, and blocked missing/external image URLs; zero axe violations across five scopes | Native production-profile rerun passed on 2026-09-09 with the verified `606fb53` data and corrected R worker launcher; Chrome 152.0.7977.82, axe 4.13.0. Manual-review items retained; no final-image or external proxy acceptance claimed |
 | External HTTPS verifier | 10 synthetic tests passed without skips, including whole-site BasicAuth, bounded Range/body verification, sidecar MIME, WebSocket handshake and redirect/credential boundaries | [Acceptance procedure](../deploy/EXTERNAL_ACCEPTANCE.md) requires the assigned endpoint and real protected credential file |
-| Hosted CI | Both `parse-and-test` and `deployment-quality` passed in [run 34282663946](https://github.com/smith6jt-cop/Islet-Explorer/actions/runs/34282663946) at `606fb53`, including all 22 parity test assertions | Later runtime changes require their own CI and image acceptance |
+| Hosted CI | Both `parse-and-test` and `deployment-quality` passed in [run 34355263510](https://github.com/smith6jt-cop/Islet-Explorer/actions/runs/34355263510) at `cc1c1bc`, including all 22 parity test assertions | Later runtime changes require their own CI and image acceptance |
 | Supported Shiny Server runtime | Checksum-locked official source build and Node 24.20.0; 315 upstream and 8 real-R tests passed without skips; stripped-runtime app/static-route smoke passed; installed-package Syft/Grype scan reports zero matches | The original base-only scan found 33 High and 3 Critical entries. The rebuilt exact application image still must pass the image security gate. See [base remediation](../deploy/BASE_HARDENING.md) |
 | Data verification tooling | 22 parity assertions, 14 browser extraction assertions, and 4 inventory tests passed without skips | Synthetic contract tests supplement the required real source-to-release comparison |
 | Canonical source preparation | Five prepared tables measured; see counts below | All five match the corrected `606fb53` release; counts describe different scientific tables |
 | Release data | `606fb53`: independent full checksum verification and all 22 real-data parity checks passed; all five summary tables had zero numeric difference; all 15 donor tables matched | Retained manifest and reports identify this data candidate; final image/runtime acceptance remains separate |
-| Immutable image and SBOM/scan | Build and required security gate pending | Earlier builds passed server/R/Python checks but failed the package-inventory step; that reporting bug is corrected |
+| Immutable image and SBOM/scan | Build and required security gate pending | Application images built successfully; scanning was blocked by an unprefixed Podman image ID. Strict ID normalization is corrected; the scan must complete before acceptance |
 | Production proxy and operational acceptance | Pending UFRC configuration and deployed checks | VM provisioning alone does not establish reviewer readiness |
 
 Local evidence is retained under the restricted, Git-ignored
@@ -94,7 +94,7 @@ The builder now preserves blanks in that character field while retaining numeric
 missingness. A read-only probe of all 15 corrected tables matches exactly; the
 regression fixture covers blank strings, literal `NA`, numeric missingness and
 partition columns. The corrected `606fb53` release passed independent full checksum verification
-and all 22 real-data parity checks on 2026-09-09. Its manifest SHA-256 is
+and all 22 real-data parity checks on 2026-09-08. Its manifest SHA-256 is
 `32badc77220273f39815690dcddacfaf857c8237aae2cf483d21ec5428b1a80c`.
 
 The raw-table comparator also now disables DuckDB's inferred Hive partition

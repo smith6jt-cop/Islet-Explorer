@@ -43,6 +43,7 @@ podman image exists "${expected_id}" || {
   exit 65
 }
 actual_id="$(podman image inspect --format '{{.Id}}' "${expected_id}")"
+actual_id="sha256:${actual_id#sha256:}"
 actual_commit="$(podman image inspect --format '{{ index .Labels "org.opencontainers.image.revision" }}' "${expected_id}")"
 actual_base="$(podman image inspect --format '{{ index .Labels "org.opencontainers.image.base.name" }}' "${expected_id}")"
 [[ "${actual_id}" == "${expected_id}" && "${actual_commit}" == "${expected_commit}" &&

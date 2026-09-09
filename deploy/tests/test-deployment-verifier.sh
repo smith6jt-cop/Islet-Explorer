@@ -68,6 +68,18 @@ verifier=(bash "${repo_root}/deploy/verify-deployment.sh")
 url='http://127.0.0.1:3838/islet-explorer/'
 printf 'LISTEN 0 128 127.0.0.1:3838 0.0.0.0:*\n' > "${work_dir}/listeners"
 check 0 "${verifier[@]}" --url "${url}" --expected-image "${image_id}" --range-path local_images/test.ome.tiff
+check 0 env MOCK_IMAGE_ID="${image_id#sha256:}" MOCK_ACTUAL_IMAGE="${image_id}" \
+  "${verifier[@]}" --url "${url}" --expected-image "${image_id}"
+check 0 env MOCK_IMAGE_ID="${image_id}" MOCK_ACTUAL_IMAGE="${image_id#sha256:}" \
+  "${verifier[@]}" --url "${url}" --expected-image "${image_id}"
+check 0 env MOCK_IMAGE_ID="${image_id#sha256:}" MOCK_ACTUAL_IMAGE="${image_id#sha256:}" \
+  "${verifier[@]}" --url "${url}" --expected-image "${image_id}"
+for invalid_id in latest "${image_id:1}" "sha256:${image_id}" " ${image_id}"; do
+  check 70 env MOCK_IMAGE_ID="${invalid_id}" MOCK_ACTUAL_IMAGE="${invalid_id}" \
+    "${verifier[@]}" --url "${url}" --expected-image "${image_id}"
+  check 70 env MOCK_ACTUAL_IMAGE="${invalid_id}" \
+    "${verifier[@]}" --url "${url}" --expected-image "${image_id}"
+done
 check 70 env MOCK_ACTUAL_IMAGE="${other_image}" "${verifier[@]}" --url "${url}" --expected-image "${image_id}"
 check 70 env MOCK_RANGE_STATUS=200 "${verifier[@]}" --url "${url}" --range-path local_images/test.ome.tiff
 
