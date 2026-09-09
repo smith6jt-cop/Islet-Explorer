@@ -109,7 +109,7 @@ RUN set -eux; \
     ln -s ../../docs/logo.png /srv/islet-explorer/app/shiny_app/www/logo.png; \
     chmod 0755 /usr/local/bin/islet-container-entrypoint; \
     chown -R shiny:shiny /srv/islet-explorer /var/log/shiny-server /opt/islet-explorer-py; \
-    Rscript -e 'stopifnot(requireNamespace("shiny", quietly=TRUE), requireNamespace("destiny", quietly=TRUE), requireNamespace("duckdb", quietly=TRUE)); p <- as.data.frame(installed.packages()[, c("Package", "Version", "LibPath", "Repository"), drop=FALSE]); p <- p[order(p$Package), ]; write.table(p, "/opt/islet-explorer-build/R-packages.tsv", sep="\t", row.names=FALSE, quote=FALSE, na="")'; \
+    Rscript -e 'stopifnot(requireNamespace("shiny", quietly=TRUE), requireNamespace("destiny", quietly=TRUE), requireNamespace("duckdb", quietly=TRUE)); p <- as.data.frame(installed.packages(fields="Repository")[, c("Package", "Version", "LibPath", "Repository"), drop=FALSE]); p <- p[order(p$Package), ]; write.table(p, "/opt/islet-explorer-build/R-packages.tsv", sep="\t", row.names=FALSE, quote=FALSE, na="")'; \
     chmod 0444 /opt/islet-explorer-build/R-packages.tsv
 
 WORKDIR /srv/islet-explorer/app/shiny_app
