@@ -6,6 +6,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 COPY deploy/harden-base.sh /opt/islet-server-build/harden-base.sh
 COPY deploy/tests/smoke-shiny-server.py /opt/islet-server-build/smoke-shiny-server.py
+COPY deploy/r-worker.py /opt/islet-server-build/r-worker.py
 COPY deploy/shiny-server.conf /opt/islet-server-build/shiny-server.conf
 # The upstream permission-denial tests and real-R tests must run without root.
 USER shiny
@@ -13,7 +14,7 @@ RUN bash /opt/islet-server-build/harden-base.sh \
       /tmp/islet-shiny-server /tmp/islet-shiny-server-evidence \
     && python3 /opt/islet-server-build/smoke-shiny-server.py \
       /tmp/islet-shiny-server /tmp/islet-shiny-server-evidence/staged-smoke.json \
-      /opt/islet-server-build/shiny-server.conf
+      /opt/islet-server-build/shiny-server.conf /opt/islet-server-build/r-worker.py
 
 FROM ${BASE_IMAGE}
 
@@ -93,6 +94,7 @@ COPY --chown=shiny:shiny app/shiny_app /srv/islet-explorer/app/shiny_app
 COPY --chown=shiny:shiny app/docs/logo.png /srv/islet-explorer/app/docs/logo.png
 COPY deploy/shiny-server.conf /etc/shiny-server/shiny-server.conf
 COPY deploy/container-entrypoint.sh /usr/local/bin/islet-container-entrypoint
+COPY deploy/r-worker.py /usr/local/bin/islet-r-worker
 
 RUN set -eux; \
     rm -f \
@@ -108,6 +110,7 @@ RUN set -eux; \
     rm -f /srv/islet-explorer/app/shiny_app/www/logo.png; \
     ln -s ../../docs/logo.png /srv/islet-explorer/app/shiny_app/www/logo.png; \
     chmod 0755 /usr/local/bin/islet-container-entrypoint; \
+    chmod 0555 /usr/local/bin/islet-r-worker; \
     chown -R shiny:shiny /srv/islet-explorer /var/log/shiny-server /opt/islet-explorer-py; \
     Rscript -e 'stopifnot(requireNamespace("shiny", quietly=TRUE), requireNamespace("destiny", quietly=TRUE), requireNamespace("duckdb", quietly=TRUE)); p <- as.data.frame(installed.packages(fields="Repository")[, c("Package", "Version", "LibPath", "Repository"), drop=FALSE]); p <- p[order(p$Package), ]; write.table(p, "/opt/islet-explorer-build/R-packages.tsv", sep="\t", row.names=FALSE, quote=FALSE, na="")'; \
     chmod 0444 /opt/islet-explorer-build/R-packages.tsv

@@ -17,6 +17,7 @@
 !deploy/requirements-python.lock
 !deploy/shiny-server.conf
 !deploy/container-entrypoint.sh
+!deploy/r-worker.py
 
 # Local credentials, mutable diagnostics, and scientific assets must never enter
 # the image or build context.

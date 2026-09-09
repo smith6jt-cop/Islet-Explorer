@@ -56,5 +56,14 @@ export R_USER="${runtime_r_user}"
 export XDG_CACHE_HOME="${runtime_cache}"
 export MPLCONFIGDIR="${runtime_matplotlib}"
 export NUMBA_CACHE_DIR="${runtime_numba}"
+export ISLET_RUNTIME_MODE="${runtime_mode}"
+export ISLET_DATA_ROOT="${data_root}"
+export LOCAL_IMAGE_ROOT="${image_root}"
+export TMPDIR="${runtime_tmp}"
+
+# Shiny Server starts R with only HOME/LANG/PATH. The immutable wrapper restores
+# this allowlisted profile before R can read user startup files.
+/usr/local/bin/islet-r-worker --write-profile
+export R=/usr/local/bin/islet-r-worker
 
 exec "$@"

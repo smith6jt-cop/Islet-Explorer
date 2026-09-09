@@ -1,6 +1,6 @@
 # Islet Explorer UFRC readiness and evidence index
 
-Updated 2026-09-08. This is the review index for the supplied
+Updated 2026-09-09. This is the review index for the supplied
 [`UFIT_PubApps_Instance_Request.docx`](../UFIT_PubApps_Instance_Request.docx),
 including its hosting policy, project plan, and development standards. It records
 implementation separately from acceptance. It is not a signed attestation or
@@ -34,7 +34,7 @@ UFRC approval gates.
 | Supplied requirement | Current implementation or document | Evidence still needed to close it |
 |---|---|---|
 | Project plan 1: purpose, audience, complete data-flow map, data categories | Populated DOCX; [handoff](../PUBAPPS_UFRC_HANDOFF.md); [SVG](pubapps_architecture.svg)/[PNG](pubapps_architecture.png) describe the planned profile and reported provisioning status | Assigned configuration and reconciled provisioning status; final reviewed form with genuine dated PI acknowledgment |
-| Project plan 3–4: controls appropriate to the data and lawful data handling | Sensitive profile; whole-site proxy authentication request; read-only releases; production rejects AI credentials/debugging | Exact asset/field inventory, authorized data-owner classification and disclosure approval, applicable IRB/DUA/MTA disposition; no Restricted asset may enter the reviewer release |
+| Project plan 3–4: controls appropriate to the data and lawful data handling | Sensitive profile; whole-site proxy authentication request; read-only releases; production rejects AI credentials/debugging | Owner review of the retained asset/field inventory, authorized classification and disclosure approval, applicable IRB/DUA/MTA disposition; no Restricted asset may enter the reviewer release |
 | Project plan 2: UF branding and accessibility | App skip link/landmarks and UF accessibility footer; the browser viewer URL input is disabled | Record automated and manual checks across all four tabs, keyboard/focus, labels, contrast/zoom, plots and viewer alternatives; fix defects before claiming conformance |
 | Development standards: input validation and minimal, appropriate output | Allowlisted browser inputs and asset basenames; centralized fixed-field JSON events; viewer bootstrap rejects external/missing/traversal URLs before vendor import | Retained lint/security test results for the chosen revision; exact-runtime negative-input and log review |
 | Development standards: lint, secure coding and static analysis | R runtime lint gate; security-boundary tests; focused deployment and viewer tests | Dated lint/SAST results with zero lint errors and documented residual warnings/findings, bound to the release revision |
@@ -49,12 +49,13 @@ individual assessment is the record to continue. [UFRC assessment guidance](http
 
 ## Implementation and validation record
 
-The working tree contains the centralized application logger and tests; viewer
-URL/CSP containment with preserved vendor bytes; build preflight and pinned
-DuckDB source installation; and deployment verification/recovery fixes. These
-changes require one final reviewed revision before the release build is frozen.
-The results below are local, pre-final-commit evidence from the implementation
-working tree; they do not identify an approved immutable release image.
+The implementation is retained in draft [PR #11](https://github.com/smith6jt-cop/Islet-Explorer/pull/11).
+It includes application logging, viewer containment, pinned dependencies, and
+deployment verification/recovery. Source CI passed at `606fb53`; its real data
+release also passed full verification and all 22 scientific parity checks.
+Image acceptance and production startup validation are tracked separately in
+the restricted release record. Neither source tests nor data parity establish
+UFRC production approval.
 
 | Check | Recorded result on 2026-09-08 | Limit |
 |---|---|---|
@@ -68,11 +69,12 @@ working tree; they do not identify an approved immutable release image.
 | Authored-browser SAST | Semgrep 1.176.1: 68 rules, 6 of 6 extracted/authored targets checked, zero findings/errors/skipped rules | Working-tree result; rerun after final browser edits. Vendored dependencies have a separate coverage record |
 | Browser accessibility and behavior | 34 of 34 checks passed, including four tabs, keyboard navigation, four CSV downloads, actual tissue canvas, 16-byte HTTP 206, and blocked missing/external image URLs; zero axe violations across five scopes | Local development-data run, Chrome 152.0.7977.82, axe 4.13.0. Manual-review items retained; no exact-image or external proxy acceptance claimed |
 | External HTTPS verifier | 10 synthetic tests passed without skips, including whole-site BasicAuth, bounded Range/body verification, sidecar MIME, WebSocket handshake and redirect/credential boundaries | [Acceptance procedure](../deploy/EXTERNAL_ACCEPTANCE.md) requires the assigned endpoint and real protected credential file |
-| Hosted CI | Both `parse-and-test` and `deployment-quality` jobs passed in [run 34278896933](https://github.com/smith6jt-cop/Islet-Explorer/actions/runs/34278896933) for PR #11 at `537c0e3` | This baseline subsequently failed the separate real-data parity diagnostic; the corrected revision requires CI and release acceptance again |
+| Hosted CI | Both `parse-and-test` and `deployment-quality` passed in [run 34282663946](https://github.com/smith6jt-cop/Islet-Explorer/actions/runs/34282663946) at `606fb53`, including all 22 parity test assertions | Later runtime changes require their own CI and image acceptance |
 | Supported Shiny Server runtime | Checksum-locked official source build and Node 24.20.0; 315 upstream and 8 real-R tests passed without skips; stripped-runtime app/static-route smoke passed; installed-package Syft/Grype scan reports zero matches | The original base-only scan found 33 High and 3 Critical entries. The rebuilt exact application image still must pass the image security gate. See [base remediation](../deploy/BASE_HARDENING.md) |
 | Data verification tooling | 22 parity assertions, 14 browser extraction assertions, and 4 inventory tests passed without skips | Synthetic contract tests supplement the required real source-to-release comparison |
-| Canonical source preparation | Five prepared tables measured; see counts below | Source-only check; generated-release parity pending |
-| Immutable image, SBOM/scan, release data manifest and parity | Pending exact-candidate results | A working-tree check or scanner installation is not release evidence |
+| Canonical source preparation | Five prepared tables measured; see counts below | All five match the corrected `606fb53` release; counts describe different scientific tables |
+| Release data | `606fb53`: independent full checksum verification and all 22 real-data parity checks passed; all five summary tables had zero numeric difference; all 15 donor tables matched | Retained manifest and reports identify this data candidate; final image/runtime acceptance remains separate |
+| Immutable image and SBOM/scan | Build and required security gate pending | Earlier builds passed server/R/Python checks but failed the package-inventory step; that reporting bug is corrected |
 | Production proxy and operational acceptance | Pending UFRC configuration and deployed checks | VM provisioning alone does not establish reviewer readiness |
 
 Local evidence is retained under the restricted, Git-ignored
@@ -91,8 +93,9 @@ missing values across the 15 donor tables. Canonical files were not changed.
 The builder now preserves blanks in that character field while retaining numeric
 missingness. A read-only probe of all 15 corrected tables matches exactly; the
 regression fixture covers blank strings, literal `NA`, numeric missingness and
-partition columns. The corrected immutable release still requires its own full
-hash and parity checks before acceptance.
+partition columns. The corrected `606fb53` release passed independent full checksum verification
+and all 22 real-data parity checks on 2026-09-09. Its manifest SHA-256 is
+`32badc77220273f39815690dcddacfaf857c8237aae2cf483d21ec5428b1a80c`.
 
 The raw-table comparator also now disables DuckDB's inferred Hive partition
 column; separate runtime-query comparisons continue to exercise the application's
@@ -120,8 +123,8 @@ Local source evidence: `/tmp/islet-parity-source-check.json` and
 base commit `e58996168198187840636901acdaad723317fdb5` with `git_dirty=true`
 and status `source_prepared_release_pending`; copy it to the restricted durable
 release record. Comparison settings are absolute numeric tolerance `1e-12` with
-exact categories, counts, missingness, and infinities. A built release manifest
-and source-to-release comparisons are still required before claiming parity.
+exact categories, counts, missingness, and infinities. The later `606fb53` release manifest, full-verification report, and successful
+source-to-release comparisons are retained in the restricted release record.
 
 ## Remaining release sequence
 

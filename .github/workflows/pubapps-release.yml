@@ -59,7 +59,7 @@ jobs:
           } > "${build_root}/evidence/source-identity.txt"
           sha256sum deploy/Containerfile deploy/containerignore deploy/base-image.lock \
             deploy/harden-base.sh deploy/tests/smoke-shiny-server.py \
-            deploy/shiny-server.conf deploy/container-entrypoint.sh \
+            deploy/shiny-server.conf deploy/container-entrypoint.sh deploy/r-worker.py \
             scripts/install_shiny_deps.R deploy/install-production-r-deps.R \
             deploy/requirements-python.lock > "${build_root}/evidence/build-inputs.sha256"
 

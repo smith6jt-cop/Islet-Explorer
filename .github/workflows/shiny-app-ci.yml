@@ -99,7 +99,7 @@ jobs:
           PY
 
       - name: Run Bandit on deployed Python runtime
-        run: bandit --quiet --recursive app/shiny_app/python
+        run: bandit --quiet --recursive app/shiny_app/python deploy/r-worker.py
 
       - name: Run R suites with zero skipped tests
         shell: bash
