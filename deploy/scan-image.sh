@@ -9,7 +9,7 @@ fi
 readonly image_ref="$1"
 readonly output_dir="$2"
 
-for command_name in podman syft grype; do
+for command_name in podman syft grype python3; do
   command -v "${command_name}" >/dev/null || {
     echo "ERROR: required scan command not found: ${command_name}" >&2
     exit 69
@@ -50,7 +50,11 @@ grype_version="$(grype --version 2>/dev/null)" || {
   exit 69
 }
 readonly syft_version grype_version
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+readonly script_dir
 readonly sbom="${output_dir}/${safe_name}.cyclonedx.json"
+readonly raw_sbom="${output_dir}/${safe_name}.syft.cyclonedx.json"
+readonly sbom_corrections="${output_dir}/${safe_name}.sbom-corrections.json"
 readonly report="${output_dir}/${safe_name}.grype.json"
 readonly grype_db_status="${output_dir}/${safe_name}.grype-db.json"
 readonly r_packages="${output_dir}/${safe_name}.R-packages.tsv"
@@ -58,13 +62,14 @@ readonly python_packages="${output_dir}/${safe_name}.python-packages.txt"
 readonly attestation="${output_dir}/${safe_name}.scan.txt"
 
 syft_status=0
-syft "podman:${image_id}" -o "cyclonedx-json=${sbom}" || syft_status=$?
+syft "podman:${image_id}" -o "cyclonedx-json=${raw_sbom}" || syft_status=$?
 if ((syft_status)); then
   echo "ERROR: SBOM generation failed. For a Podman connection error, start the private API socket and set CONTAINER_HOST as documented in deploy/README.md." >&2
   exit "${syft_status}"
 fi
+python3 "${script_dir}/correct-syft-vim-cpe.py" "${raw_sbom}" "${sbom}" "${sbom_corrections}"
 # --fail-on high rejects both High and Critical findings.
-grype "sbom:${sbom}" --fail-on high -o json > "${report}"
+grype "sbom:${sbom}" --add-cpes-if-none=false --fail-on high -o json > "${report}"
 if ! grype db status -o json > "${grype_db_status}" 2>/dev/null; then
   rm -f -- "${grype_db_status}"
 fi
@@ -81,6 +86,8 @@ podman run --rm --entrypoint /opt/islet-explorer-py/bin/python "${image_id}" \
   printf 'GRYPE_VERSION=%s\n' "${grype_version}"
   printf 'RESULT=pass-no-high-or-critical\n'
   printf 'SBOM_SHA256=%s\n' "$(sha256sum "${sbom}" | awk '{print $1}')"
+  printf 'RAW_SBOM_SHA256=%s\n' "$(sha256sum "${raw_sbom}" | awk '{print $1}')"
+  printf 'SBOM_CORRECTIONS_SHA256=%s\n' "$(sha256sum "${sbom_corrections}" | awk '{print $1}')"
   printf 'REPORT_SHA256=%s\n' "$(sha256sum "${report}" | awk '{print $1}')"
   printf 'R_PACKAGES_SHA256=%s\n' "$(sha256sum "${r_packages}" | awk '{print $1}')"
   printf 'PYTHON_PACKAGES_SHA256=%s\n' "$(sha256sum "${python_packages}" | awk '{print $1}')"

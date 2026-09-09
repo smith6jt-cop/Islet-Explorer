@@ -126,10 +126,12 @@ expected_scan_attestation="${attestations_dir}/${safe_name}.scan.txt"
 }
 
 sbom="${attestations_dir}/${safe_name}.cyclonedx.json"
+raw_sbom="${attestations_dir}/${safe_name}.syft.cyclonedx.json"
+sbom_corrections="${attestations_dir}/${safe_name}.sbom-corrections.json"
 report="${attestations_dir}/${safe_name}.grype.json"
 r_packages="${attestations_dir}/${safe_name}.R-packages.tsv"
 python_packages="${attestations_dir}/${safe_name}.python-packages.txt"
-for evidence_file in "${sbom}" "${report}" "${r_packages}" "${python_packages}"; do
+for evidence_file in "${sbom}" "${raw_sbom}" "${sbom_corrections}" "${report}" "${r_packages}" "${python_packages}"; do
   [[ -f "${evidence_file}" && ! -L "${evidence_file}" ]] || {
     echo "ERROR: required image evidence is missing or is a symlink: ${evidence_file}" >&2
     exit 66
@@ -153,6 +155,8 @@ verify_evidence_hash() {
 }
 
 verify_evidence_hash SBOM_SHA256 "${sbom}" || exit $?
+verify_evidence_hash RAW_SBOM_SHA256 "${raw_sbom}" || exit $?
+verify_evidence_hash SBOM_CORRECTIONS_SHA256 "${sbom_corrections}" || exit $?
 verify_evidence_hash REPORT_SHA256 "${report}" || exit $?
 verify_evidence_hash R_PACKAGES_SHA256 "${r_packages}" || exit $?
 verify_evidence_hash PYTHON_PACKAGES_SHA256 "${python_packages}" || exit $?

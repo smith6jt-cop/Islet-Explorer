@@ -174,6 +174,11 @@ grep -Fqx "SYFT_VERSION=syft 1.42.3" "${attestation}" || fail "Syft version was 
 grep -Fqx "GRYPE_VERSION=grype 0.110.0" "${attestation}" || fail "Grype version was not recorded"
 grep -Fq "podman:${image_id}" "${mock_log}/syft.log" || fail "Syft did not scan the immutable ID"
 grep -Fq "sbom:${sbom}" "${mock_log}/grype.log" || fail "Grype did not scan the generated SBOM"
+grep -Fq -- '--add-cpes-if-none=false' "${mock_log}/grype.log" || fail "Grype CPE regeneration was not disabled"
+[[ -f "${scan_dir}/${safe_name}.syft.cyclonedx.json" && -f "${scan_dir}/${safe_name}.sbom-corrections.json" ]] || \
+  fail "scan did not retain its original SBOM and correction record"
+grep -Eq '^RAW_SBOM_SHA256=[0-9a-f]{64}$' "${attestation}" || fail "raw SBOM hash was not recorded"
+grep -Eq '^SBOM_CORRECTIONS_SHA256=[0-9a-f]{64}$' "${attestation}" || fail "correction record hash was not recorded"
 
 scan_fail_dir="${work_dir}/scan-fail"
 expect_status 2 env PATH="${mock_bin}:${PATH}" MOCK_LOG_DIR="${mock_log}" \
@@ -181,6 +186,8 @@ expect_status 2 env PATH="${mock_bin}:${PATH}" MOCK_LOG_DIR="${mock_log}" \
   "${repo_root}/deploy/scan-image.sh" "${image_id}" "${scan_fail_dir}"
 [[ ! -e "${scan_fail_dir}/${safe_name}.scan.txt" ]] || \
   fail "failed Grype gate produced a passing attestation"
+[[ -f "${scan_fail_dir}/${safe_name}.syft.cyclonedx.json" && -f "${scan_fail_dir}/${safe_name}.sbom-corrections.json" ]] || \
+  fail "failed Grype gate lost its original SBOM or correction record"
 
 expect_status 64 "${repo_root}/deploy/build-image.sh" \
   --tag local/test:release --version release \

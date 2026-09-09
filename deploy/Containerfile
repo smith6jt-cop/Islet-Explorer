@@ -81,11 +81,20 @@ RUN set -eux; \
 # release versions instead of allowing a best-effort install.
 RUN Rscript /opt/islet-explorer-build/install-production-r-deps.R
 
+# Remove unused system Python packaging tools only after all installs. Avoid
+# autoremove so scientific shared libraries remain; bound dependent removals to
+# the reviewed build tools and verify the isolated runtime after cleanup.
 RUN set -eux; \
     python3 -m venv /opt/islet-explorer-py; \
     /opt/islet-explorer-py/bin/python -m pip install --no-cache-dir 'pip==25.3'; \
     /opt/islet-explorer-py/bin/python -m pip install --no-cache-dir \
       --requirement /opt/islet-explorer-build/requirements-python.lock; \
+    apt-get -s remove python3-pip python3-setuptools python3-mako python3-wheel \
+      > /opt/islet-explorer-build/system-build-tools-removal.txt; \
+    awk '$1 == "Remv" { sub(/:.*/, "", $2); if ($2 !~ /^(python3-pip|python3-setuptools|python3-mako|python3-wheel|gobject-introspection|gobject-introspection-bin|libgirepository-1[.]0-dev|libgirepository1[.]0-dev|librsvg2-dev|libmagick\+\+-dev|libmagick\+\+-6[.]q16-dev|libmagickcore-6[.]q16-dev|libmagickwand-6[.]q16-dev)$/) { print "Unexpected removal: " $2; exit 1 } }' \
+      /opt/islet-explorer-build/system-build-tools-removal.txt; \
+    apt-get remove -y python3-pip python3-setuptools python3-mako python3-wheel; \
+    python3 -c 'import importlib.util; assert all(importlib.util.find_spec(p) is None for p in ("pip", "setuptools", "mako", "wheel"))'; \
     /opt/islet-explorer-py/bin/python -m pip check; \
     /opt/islet-explorer-py/bin/python -c \
       'import anndata, scanpy, igraph, leidenalg, fa2_modified; print("python trajectory dependencies: ok")'
@@ -112,7 +121,7 @@ RUN set -eux; \
     chmod 0755 /usr/local/bin/islet-container-entrypoint; \
     chmod 0555 /usr/local/bin/islet-r-worker; \
     chown -R shiny:shiny /srv/islet-explorer /var/log/shiny-server /opt/islet-explorer-py; \
-    Rscript -e 'stopifnot(requireNamespace("shiny", quietly=TRUE), requireNamespace("destiny", quietly=TRUE), requireNamespace("duckdb", quietly=TRUE)); p <- as.data.frame(installed.packages(fields="Repository")[, c("Package", "Version", "LibPath", "Repository"), drop=FALSE]); p <- p[order(p$Package), ]; write.table(p, "/opt/islet-explorer-build/R-packages.tsv", sep="\t", row.names=FALSE, quote=FALSE, na="")'; \
+    Rscript -e 'stopifnot(all(vapply(c("shiny", "destiny", "duckdb", "sf", "magick", "reticulate"), requireNamespace, logical(1), quietly=TRUE))); p <- as.data.frame(installed.packages(fields="Repository")[, c("Package", "Version", "LibPath", "Repository"), drop=FALSE]); p <- p[order(p$Package), ]; write.table(p, "/opt/islet-explorer-build/R-packages.tsv", sep="\t", row.names=FALSE, quote=FALSE, na="")'; \
     chmod 0444 /opt/islet-explorer-build/R-packages.tsv
 
 WORKDIR /srv/islet-explorer/app/shiny_app

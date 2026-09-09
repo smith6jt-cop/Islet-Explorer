@@ -219,7 +219,7 @@ jobs:
           grep -Fx '# todo 0' "${RUNNER_TEMP}/islet-ci-deploy/viewer-tests.tap"
           test "$(awk '/^# tests / {print $3}' "${RUNNER_TEMP}/islet-ci-deploy/viewer-tests.tap")" -ge 31
 
-      - name: Test external authentication verifier with synthetic requests
+      - name: Test SBOM identity correction and external authentication verifier
         shell: bash
         run: |
           set -euo pipefail
@@ -228,7 +228,7 @@ jobs:
           import os
           from pathlib import Path
           import unittest
-          suite = unittest.defaultTestLoader.discover("deploy/tests", pattern="test_reviewer_access.py")
+          suite = unittest.TestSuite(unittest.defaultTestLoader.discover("deploy/tests", pattern=pattern) for pattern in ("test_reviewer_access.py", "test_sbom_correction.py"))
           result = unittest.TextTestRunner(verbosity=2).run(suite)
           summary = {"tests": result.testsRun, "failed": len(result.failures), "errors": len(result.errors), "skipped": len(result.skipped)}
           path = Path(os.environ["RUNNER_TEMP"]) / "islet-ci-deploy/reviewer-access-tests.json"

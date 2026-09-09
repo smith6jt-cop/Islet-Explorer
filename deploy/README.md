@@ -146,7 +146,7 @@ IMAGE_ID='sha256:<image-id-printed-by-build-image>'
 deploy/export-image.sh "${IMAGE_ID}" "${OCI_ARCHIVE}"
 ```
 
-Release builds require `podman`, `syft`, and `grype`. The build performs Python
+Release builds require `podman`, `syft`, `grype`, and `python3`. The build performs Python
 dependency consistency checks and imports, verifies exact `destiny`/`duckdb`
 versions, parses all application R files, creates the SBOM and resolved dependency
 manifests, and fails on a High
@@ -168,6 +168,15 @@ documented. This project's image policy is stricter: Grype `--fail-on high` must
 report no High or Critical image finding. Supply the exact-candidate evidence to
 UFRC for review; UFRC's production review and ongoing network scans are a separate
 requirement and do not replace this project gate.
+
+The scan retains the original Syft SBOM, its scan copy, and a hash-bound correction
+record. `correct-syft-vim-cpe.py` removes only Syft 1.51.1's exact editor CPE on
+`pkg:cran/VIM@6.2.6` when the R cataloger, metadata, and DESCRIPTION location all
+match. [CRAN](https://cran.r-project.org/package=VIM) and the
+[package source](https://github.com/statistikat/VIM) identify this as the R
+missing-value package. Every component and other field remains; Grype runs with
+`--add-cpes-if-none=false` and the unchanged High/Critical gate. Genuine editor
+components and other versions receive no correction.
 
 Do not put scientific data, `.Renviron`, credentials, or the 109 GiB image tree
 in the OCI archive. Inspect the external evidence directory and retain it with
