@@ -36,9 +36,9 @@ UFRC approval gates.
 | Project plan 1: purpose, audience, complete data-flow map, data categories | Populated DOCX; [handoff](../PUBAPPS_UFRC_HANDOFF.md); [SVG](pubapps_architecture.svg)/[PNG](pubapps_architecture.png) describe the planned profile and reported provisioning status | Assigned configuration and reconciled provisioning status; final reviewed form with genuine dated PI acknowledgment |
 | Project plan 3–4: controls appropriate to the data and lawful data handling | Sensitive profile; whole-site proxy authentication request; read-only releases; production rejects AI credentials/debugging | Owner review of the retained asset/field inventory, authorized classification and disclosure approval, applicable IRB/DUA/MTA disposition; no Restricted asset may enter the reviewer release |
 | Project plan 2: UF branding and accessibility | App skip link/landmarks and UF accessibility footer; the browser viewer URL input is disabled | Record automated and manual checks across all four tabs, keyboard/focus, labels, contrast/zoom, plots and viewer alternatives; fix defects before claiming conformance |
-| Development standards: input validation and minimal, appropriate output | Allowlisted browser inputs and asset basenames; centralized fixed-field JSON events; viewer bootstrap rejects external/missing/traversal URLs before vendor import | Retained lint/security test results for the chosen revision; exact-runtime negative-input and log review |
-| Development standards: lint, secure coding and static analysis | R runtime lint gate; security-boundary tests; focused deployment and viewer tests | Dated lint/SAST results with zero lint errors and documented residual warnings/findings, bound to the release revision |
-| Development standards: maintained SBOM and code/package/container vulnerability review | Build/scan tooling records image identity, resolved R/Python manifests, CycloneDX and Grype results; DuckDB source/version and Rocker interpreter handling corrected | A successful exact-candidate build and scan, current scanner/database identity, remaining-CVE disposition, and browser-vendor coverage record. The project's image gate permits no High/Critical findings |
+| Development standards: input validation and minimal, appropriate output | Allowlisted browser inputs and asset basenames; centralized fixed-field JSON events; viewer bootstrap rejects external/missing/traversal URLs before vendor import | Source CI and native production-profile negative-input/log evidence retained; final deployed runtime and UFRC log-collection checks remain |
+| Development standards: lint, secure coding and static analysis | R runtime lint gate; security-boundary tests; focused deployment and viewer tests | Dated CI/lint/SAST results retained for `5809be4`; browser-vendor coverage limitations remain explicit |
+| Development standards: maintained SBOM and code/package/container vulnerability review | Build/scan tooling records image identity, resolved R/Python manifests, CycloneDX and Grype results; DuckDB source/version and Rocker interpreter handling corrected | Exact-candidate SBOM/scan and scanner/database identity retained; the no High/Critical gate passed. UFRC pre-production review remains; lower-severity findings and incomplete browser-vendor coverage are recorded |
 | Development standards: one event per line and UFIT-monitored logging | Central timestamped JSON emitter in `00_audit.R`; [log inventory](pubapps_log_inventory.md); dedicated worker log mount | Candidate runtime capture, native/framework output review, effective permissions, and UFRC collector destination. Record applicable access/retention rules |
 | UFRC team: pre-production vulnerability/availability review and owner attestation; continuing UFIT network scans | Deployment verification and rollback tooling; review request text | UFRC production acceptance and network-scan process; exact HTTPS/auth/WebSocket/download/TIFF Range tests; genuine PI/data-owner go-live attestation |
 | Conditional project-plan obligations and the existing individual assessment | Individual Risk Assessment already open; Sensitive access-review applicability awaiting UFRC | Assessment follow-up responses and disposition; quarterly access reviews if UFRC applies item 6; any additional controls explicitly assigned by the assessment |
@@ -51,13 +51,13 @@ individual assessment is the record to continue. [UFRC assessment guidance](http
 
 The implementation is retained in draft [PR #11](https://github.com/smith6jt-cop/Islet-Explorer/pull/11).
 It includes application logging, viewer containment, pinned dependencies, and
-deployment verification/recovery. Source CI passed at `cc1c1bc`; the corrected
-`606fb53` data release passed full verification and all 22 scientific parity checks.
-Image acceptance and production startup validation are tracked separately in
-the restricted release record. Neither source tests nor data parity establish
+deployment verification/recovery. The frozen release revision is `5809be4`: source CI, the immutable container
+High/Critical gate, OCI transfer checksums, full data hashes, all 22 scientific
+parity checks, and the assembled release checksums passed. The matching container,
+data bundle, inventory, and evidence are retained in the restricted release record. Neither source tests nor data parity establish
 UFRC production approval.
 
-| Check | Recorded result on 2026-09-08 | Limit |
+| Check | Recorded result | Limit |
 |---|---|---|
 | `node deploy/tests/test-viewer-boundary.mjs` | 31 checks passed: accepted local prefixes, malicious/missing/duplicate URLs, XML compatibility, CSP placement, and vendor hashes | Pure Node/static checks; does not prove real TIFF rendering or proxy behavior |
 | Application and logging tests | 192 assertions passed across the app suite with zero skips, including 26 logging and 12 viewer-readiness assertions | Local source tests; native worker output and UFRC collection still require exact-runtime validation |
@@ -66,15 +66,15 @@ UFRC production approval.
 | Avivator dependency signature scan | Retire.js 5.7.0 standard/deep scans exited 0 with no reported vulnerabilities in detected signatures; JSON and recognized-component CycloneDX retained | Recognized React DOM/react-is only; incomplete transitive coverage and no exact image claim |
 | DOCX integrity | All 18 archive parts retained; 129 paragraphs and XML element/attribute topology preserved; supplied policy/project-plan/standards content unchanged | Draft fields updated; no PI attestation inferred |
 | Architecture rendering | PNG regenerated from editable SVG and visually checked | Requested topology; UFRC target/collector confirmation pending |
-| Authored-browser SAST | Semgrep 1.176.1: 68 rules, 6 of 6 extracted/authored targets checked, zero findings/errors/skipped rules | Working-tree result; rerun after final browser edits. Vendored dependencies have a separate coverage record |
+| Authored-browser SAST | Semgrep 1.176.1: 68 rules, 6 of 6 extracted/authored targets checked, zero findings/errors/skipped rules | Retained hosted CI result at `5809be4`; vendored dependencies have a separate coverage record |
 | Browser accessibility and behavior | 34 of 34 checks passed, including four tabs, keyboard navigation, four CSV downloads, actual tissue canvas, 16-byte HTTP 206, and blocked missing/external image URLs; zero axe violations across five scopes | Native production-profile rerun passed on 2026-09-09 with the verified `606fb53` data and corrected R worker launcher; Chrome 152.0.7977.82, axe 4.13.0. Manual-review items retained; no final-image or external proxy acceptance claimed |
 | External HTTPS verifier | 10 synthetic tests passed without skips, including whole-site BasicAuth, bounded Range/body verification, sidecar MIME, WebSocket handshake and redirect/credential boundaries | [Acceptance procedure](../deploy/EXTERNAL_ACCEPTANCE.md) requires the assigned endpoint and real protected credential file |
-| Hosted CI | Both `parse-and-test` and `deployment-quality` passed in [run 34355263510](https://github.com/smith6jt-cop/Islet-Explorer/actions/runs/34355263510) at `cc1c1bc`, including all 22 parity test assertions | Later runtime changes require their own CI and image acceptance |
-| Supported Shiny Server runtime | Checksum-locked official source build and Node 24.20.0; 315 upstream and 8 real-R tests passed without skips; stripped-runtime app/static-route smoke passed; installed-package Syft/Grype scan reports zero matches | The original base-only scan found 33 High and 3 Critical entries. The rebuilt exact application image still must pass the image security gate. See [base remediation](../deploy/BASE_HARDENING.md) |
+| Hosted CI | Both `parse-and-test` and `deployment-quality` passed in [run 34375550621](https://github.com/smith6jt-cop/Islet-Explorer/actions/runs/34375550621) at `5809be4`, including all 22 parity assertions and 19 authentication/SBOM tests | Later runtime changes require their own CI and image acceptance |
+| Supported Shiny Server runtime | Checksum-locked official source build and Node 24.20.0; 315 upstream and 8 real-R tests passed without skips; stripped-runtime app/static-route smoke passed; installed-package Syft/Grype scan reports zero matches | The original base-only scan found 33 High and 3 Critical entries. The complete `5809be4` application image subsequently passed the High/Critical gate. See [base remediation](../deploy/BASE_HARDENING.md) |
 | Data verification tooling | 22 parity assertions, 14 browser extraction assertions, and 4 inventory tests passed without skips | Synthetic contract tests supplement the required real source-to-release comparison |
-| Canonical source preparation | Five prepared tables measured; see counts below | All five match the corrected `606fb53` release; counts describe different scientific tables |
-| Release data | `606fb53`: independent full checksum verification and all 22 real-data parity checks passed; all five summary tables had zero numeric difference; all 15 donor tables matched | Retained manifest and reports identify this data candidate; final image/runtime acceptance remains separate |
-| Immutable image and SBOM/scan | Build and required security gate pending | Application images built successfully; scanning was blocked by an unprefixed Podman image ID. Strict ID normalization is corrected; the scan must complete before acceptance |
+| Canonical source preparation | Five prepared tables measured; see counts below | All five match the final `5809be4` release; counts describe different scientific tables |
+| Release data | `5809be4`: full data hashes and all 22 real-data parity checks passed; all five summary tables had zero numeric difference and all 15 donor tables matched. Inventory: 5,317 files, 117,092,780,533 bytes. Assembled release checksums also passed | The data and container identify the same clean source revision. These checks do not establish deployed UFRC acceptance |
+| Immutable image and SBOM/scan | `5809be4`: build, High/Critical gate, OCI export and checksums passed in [run 34375550622](https://github.com/smith6jt-cop/Islet-Explorer/actions/runs/34375550622) on 2026-09-09 | Unused system build tools were removed; one exact R VIM/editor CPE correction is recorded alongside the original SBOM. Lower-severity findings and browser-vendor coverage limits remain in the evidence. UFRC deployment acceptance is separate |
 | Production proxy and operational acceptance | Pending UFRC configuration and deployed checks | VM provisioning alone does not establish reviewer readiness |
 
 Local evidence is retained under the restricted, Git-ignored
@@ -123,24 +123,19 @@ Local source evidence: `/tmp/islet-parity-source-check.json` and
 base commit `e58996168198187840636901acdaad723317fdb5` with `git_dirty=true`
 and status `source_prepared_release_pending`; copy it to the restricted durable
 release record. Comparison settings are absolute numeric tolerance `1e-12` with
-exact categories, counts, missingness, and infinities. The later `606fb53` release manifest, full-verification report, and successful
-source-to-release comparisons are retained in the restricted release record.
+exact categories, counts, missingness, and infinities. The final `5809be4` manifest, full-hash/parity report, inventory, and release
+verification record are retained in the restricted release record; earlier
+`606fb53` evidence remains historical.
 
 ## Remaining release sequence
 
 1. Reconcile provisioning and record the remaining owner/UFRC details in request
    `83810` and assessment `IRM-456246`;
    complete classification/disclosure review and genuine PI acknowledgment.
-2. Finish and retain local tests, accessibility checks, and security review; freeze
-   one clean revision. Build its immutable image, manifests, SBOM, and scan reports;
-   document browser-vendor coverage limitations and disposition.
-3. Build the versioned data/image release, verify complete checksums and scientific
-   parity, and retain counts and resource results. The chosen image and data must
-   reference the same source revision.
-4. Apply only the UFRC-confirmed backend/proxy configuration, transfer and activate
+2. Apply the UFRC-confirmed backend/proxy configuration, transfer and activate
    the exact artifacts, then verify authentication, WebSocket, downloads, small
    TIFF ranges, logs, health/restart/rollback, and representative five-session use.
-5. Retain UFRC acceptance and owner go-live approval before delivering reviewer
+3. Retain UFRC acceptance and owner go-live approval before delivering reviewer
    credentials. Assign both maintainers, incident/rotation responsibilities, and
    continuation before the trial expires on 2026-11-30.
 
