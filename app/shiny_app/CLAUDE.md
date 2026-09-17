@@ -2,6 +2,20 @@
 
 Deep details for the modular Shiny app under `app/shiny_app/`. The top-level `CLAUDE.md` covers the entrypoint architecture, root-level outputs, shared reactive state, and data loading. This file documents per-tab features and conventions.
 
+## Current schema-3 candidate — 2026-09-17
+
+The 21-donor candidate uses immutable offline diffusion coordinates and
+ratio-only trajectory y values. See [docs/trajectory.md](docs/trajectory.md)
+and [the delivery record](../../docs/all_donor_delivery.md). Donor filtering
+must apply to points, curves, graph highlights, heatmaps and downloads without
+retraining or reranking. Unvalidated subtype denominators remain unavailable;
+raw marker heatmaps and cell downloads remain available for all donors.
+All 31 markers are selected by default. Research reports are outside the app;
+do not restore the tab or static report route. The current fit needs islet
+identity review, visible through `trajectory/quality_review.json`. Legacy
+Spatial analysis is unavailable in this candidate. The old cohort counts and
+trajectory/PAGA methods below describe the frozen original, not current defaults.
+
 ## Spatial Neighborhood Analysis
 
 See [`docs/spatial.md`](docs/spatial.md) for full details — peri-islet metrics, tab layout (Phase 9+13+15), neighborhood-card server architecture, KDE selector race fix, tissue scatter design.

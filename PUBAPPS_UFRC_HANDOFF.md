@@ -1,5 +1,16 @@
 # Panc Floyd / Islet Explorer UFRC PubApps Request and Reviewer-Hosting Handoff
 
+Local revision update, 2026-09-17: the app on 3839 now uses
+`data/development/all-donor-20260917/`, schema 3, all 31 heatmap markers and
+offline research reports. The owner's QuPath review identified suspect islet
+candidates; scientific acceptance remains false and actual subtype ratios
+remain unavailable. Runtime size is 164,147,382,976 bytes (152.874 GiB), or
+414.799 GiB including the frozen original and one candidate staging copy.
+Fresh implementation, review evidence and local restart instructions are in
+[the revision record](docs/trajectory_revision_20260917.md). Institutional
+status below remains as last verified on 2026-09-16; local checks do not
+establish a new UFRC acceptance.
+
 This document is the actionable companion to
 `UFIT_PubApps_Instance_Request.docx`. It provides copy-ready form and support-ticket
 text, identifies information that the project owner must supply, and records the
@@ -8,12 +19,16 @@ procedure is in [`deploy/README.md`](deploy/README.md), and the detailed project
 inventory is in [`docs/pubapps_log_inventory.md`](docs/pubapps_log_inventory.md).
 Do not submit the request with bracketed placeholders left unresolved.
 
-Status updated 2026-09-08: the existing records are UFRC request `83810`,
+Status updated 2026-09-16: the existing records are UFRC request `83810`,
 configuration reference `SYSCONFIG-8173`, and individual assessment `IRM-456246`
 (submission confirmed 2026-09-01). These references were recovered through
-read-only UF Outlook search. The owner reports a provisioned VM, while UFRC
-comment 4 on 2026-09-08 says operations normally waits for completed assessments
-before VM setup. Reconcile that status and obtain the assigned host configuration.
+read-only UF Outlook search. On 2026-09-16 an assigned ISM requested a brief
+Microsoft Teams meeting for the risk review; scheduling and completion are not
+established. UFRC comment 8, received 2026-09-11, had reported its ISO waiting
+for that local review. Comment 7 requested that the UFRC-designated technical
+contact be added to the assessment; completion is not established. The owner
+previously reported a provisioned VM, but assigned host/account/SSH/proxy details
+remain unconfirmed.
 Continue the existing records; do not open duplicate requests. Neither allocation
 nor an open assessment establishes production approval. The current requirement-to-evidence index is
 [`docs/ufrc_readiness.md`](docs/ufrc_readiness.md).
@@ -23,18 +38,59 @@ recurring owner actions and from project recommendations. Project hardening in t
 deployment runbook remains part of this application's release process, but each such
 control is not a separate UFRC approval gate.
 
+Expansion update (2026-09-16): the owner authorized a separate candidate targeting
+21 donor images: the original 15 nPOD donors plus 6090, 6232, 6539, the
+`PAN-6558-AAb_test35_35p-LED.tif` acquisition, 6520-01A, and HPAP-078. The alternate
+`CX_PAN-6558` image and 6520-01B are excluded. HPAP-078 retains its HPAP provenance;
+do not describe the expanded collection as 21 nPOD donors. InstanSeg 0.1.1 image
+preparation and joint cohort refitting are offline development steps, not new
+services on the PubApps VM. Preserve the frozen `5809be4` release and its dated
+15-image evidence. **The 6090/6539 source mix-up is resolved:** 6090 matches all
+36 original raw channel planes; the distinct 6539 stack was reconstructed from
+its own raw acquisition and checked pixel-for-pixel. The corrected six viewer
+TIFFs total 46,877,746,573 bytes. Preserve the rejected duplicate and its old
+annotation separately; use the corrected inventory when staging images.
+All six additions completed offline segmentation, export, raw import and QC
+preparation: 943,068 cell objects, including 942,867 fully measured objects and
+201 flagged unmeasured objects. Independent spatial checks reproduce all 2,989
+islet-core counts; biological review and final retained counts remain pending.
+Corrected local paths, preparation counts, validation and remaining scientific
+work are in [the expansion status record](docs/cohort_expansion_status.md).
+The separate 21-donor local candidate is now built at
+`data/development/all-donor-20260916/` and served at
+`http://127.0.0.1:3839/islet-explorer/`. It contains 3,592,722 raw objects,
+8,371 islets and a fixed outcome-blind trajectory for 3,499 eligible islets.
+Six primary hypotheses have provisional estimates; four explicitly await
+validated inputs. It uses runtime schema 2 and a complete hash manifest.
+The measured runtime is 164,130,834,281 bytes (152.859 GiB). Scientific
+acceptance, a matching immutable image/scan, and UFRC acceptance remain pending.
+See [the local delivery and evidence record](docs/all_donor_delivery.md). Update
+the existing request and assessment with the reviewed cohort
+inventory and applicable HPAP disclosure/usage terms through the authorized owner;
+this document does not infer an institutional policy or assessment disposition.
+
+The current phenotype-retirement policy supersedes the earlier requirement to
+recover all 21 historical labels. Retained assignments and their full upstream
+gate chains are audited. Unvalidated gates still prevent certification of the
+alpha/beta/delta union denominator and several immune/ductal endpoints; those
+outputs remain unavailable. Historical transfer benchmarks and raw labels are
+preserved, with no replacement labels inferred from failed transfer models.
+The new axis uses raw compartment marker summaries and fixed diffusion
+ordering; the earlier proposed disease-oriented scVI/Harmony trajectory is
+not the candidate's method.
+
 ## Deployment decisions
 
 | Item | Decision |
 |---|---|
-| Service | VM provisioning reported by the owner; UFRC status and assigned host details require reconciliation. Trial `PA-INSTANCE` allocation for `maigan`, reference `RC83797` |
+| Service | Assigned ISM requested a risk-review Teams meeting on 2026-09-16; assigned host details unconfirmed. Trial `PA-INSTANCE` allocation for `maigan`, reference `RC83797` |
 | Current allocation term | 2026-08-31 through 2026-11-30; renew or purchase before reviewer access extends beyond that date |
 | Initial resources | Requested base: 2 vCPU, 16 GiB RAM, 1 TiB `/pubapps`, standard local container storage; verify assigned resources |
 | Add-ons | None initially; observe representative use at the expected five-session peak before requesting more capacity |
 | Access during peer review | **Public Restricted**, with whole-site shared Basic Auth |
 | UF data classification during peer review | **Sensitive** |
 | Expected audience | 1–8 editors/reviewers total, up to 5 concurrent sessions, plus 2 named UF maintainers |
-| Reviewer-visible features | Plot, Trajectory, Viewer, and Spatial |
+| Reviewer-visible features | Plot, Trajectory, Viewer, Spatial. Current schema-3 candidate keeps research reports outside the app; legacy Spatial analyses are explicitly unavailable |
 | Disabled features | AI, Statistics, and Inflammation |
 | Production URL request | `https://islet-explorer.rc.ufl.edu/islet-explorer/` |
 | Production backend request | Shiny listens on container `0.0.0.0:3838`; the project requests rootless Podman publication on VM `127.0.0.1:3838`, subject to UFRC confirming the reachable proxy target |
@@ -42,15 +98,22 @@ control is not a separate UFRC approval gate.
 | Runtime writes | Temporary files and operational logs only; scientific data are immutable and read-only |
 | External AI/API traffic | None |
 
-The base allocation is the right starting size: the current TIFF collection is
-approximately 109 GiB and the broader `data/` directory is approximately 1.9 GiB.
-The requested 1 TiB persistent allocation provides ample room for a curated release,
-one rollback release, logs, and temporary transfer files. The active data and
-image payload is approximately 111 GiB; retaining a separate full previous release uses
-approximately 222 GiB before logs and temporary transfer files and still fits the base
-allocation. UFRC's price page listed the
+The frozen release inventory measures 117,092,780,533 bytes (109.05 GiB),
+including 116,225,236,881 bytes of images and sidecars. Adding the corrected six
+TIFFs gives approximately 151.90 GiB of candidate images before the expanded
+derived tables. Those images plus the retained frozen runtime bundle require
+at least 260.95 GiB, before candidate tables, logs, transfer staging, spill space
+and container storage. These are measured inputs and a lower bound, not a final
+expanded-release capacity acceptance. UFRC's price page listed the
 one-year base at $300 when this handoff was prepared, but price and availability must be
 confirmed in the purchase form.
+The completed candidate's declared runtime plus the frozen original requires
+261.910 GiB; including one complete candidate staging copy requires 414.769 GiB
+before OCI storage, logs and temporary/spill space. The local candidate uses
+hardlinks for unchanged source material; deployment copies require full bytes.
+One preview R worker used approximately 1 GiB RSS. Five-session memory/latency
+and assigned-host measurements remain pending; local availability does not
+establish capacity or deployment acceptance.
 
 ## Information the project owner must supply
 
@@ -77,8 +140,8 @@ project owner; unknown values below are not new work requests.
 | Data owner | `[NAME / ROLE]` |
 | Applicable IRB, DUA, or MTA identifiers | `[IDENTIFIERS OR NOT APPLICABLE]` |
 | UFRC support ticket | `83810`, configuration reference `SYSCONFIG-8173` |
-| Individual Risk Assessment | `IRM-456246`; submission confirmed 2026-09-01; disposition pending |
-| Provisioned VM, service account, and SSH route | Owner reports provisioning; reconcile UFRC status; `[ASSIGNED HOST / ACCOUNT / SSH ROUTE]` pending |
+| Individual Risk Assessment | `IRM-456246`; assigned ISM requested a Teams meeting on 2026-09-16; review and requested assessment contact still unconfirmed |
+| Provisioned VM, service account, and SSH route | Owner previously reported provisioning; `[ASSIGNED HOST / ACCOUNT / SSH ROUTE]` pending |
 | Production URL, proxy target, and backend port | `[UFRC-CONFIRMED VALUES]` |
 | `/pubapps` and local container paths/quotas | `[UFRC-CONFIRMED VALUES]` |
 | Confirmed reviewer/concurrency estimate | 1–8 total / up to 5 concurrent |
@@ -97,8 +160,12 @@ SSH keys, credentials, or sensitive approvals in this repository.
 - [x] Trial `PA-INSTANCE` allocation recorded for HPG group `maigan`, reference
   `RC83797`, active 2026-08-31 through 2026-11-30.
 - [x] Existing UFRC request `83810`, configuration reference `SYSCONFIG-8173`,
-  and assessment `IRM-456246` identified in UF Outlook. Assessment disposition
-  and the owner-reported provisioning status remain to be confirmed with UFRC.
+  and assessment `IRM-456246` identified in UF Outlook. Comment 8 of 2026-09-11
+  reports local ISM review pending; this is not an approval record.
+- [ ] Arrange the brief Teams meeting requested by the assigned ISM on 2026-09-16,
+  complete the local risk-assessment review identified in comment 8, and
+  confirm the UFRC-designated assessment technical contact requested in comment 7.
+  Keep personal contact details in the restricted assessment/ticket.
 - [ ] Give the PI/data owner, applicable IRB/privacy contact, and nPOD or other agreement
   owner an exact inventory of the proposed reviewer files and fields. Obtain written
   confirmation that the release contains no PHI or other Restricted data and that its
@@ -117,14 +184,15 @@ SSH keys, credentials, or sensitive approvals in this repository.
 
 ### Confirm the provisioned instance configuration
 
-- [ ] Reconcile the owner-reported provisioning status with UFRC comment 4 of
-  2026-09-08, then record the assigned VM/service account, storage/container
+- [ ] Reconcile the owner-reported provisioning status with the current assessment
+  status in UFRC comment 8 of 2026-09-11, then record the assigned VM/service account, storage/container
   paths/quotas, SSH route, and proxy/backend assignment.
 - [ ] Have both named maintainers independently confirm that they can reach the service
   account by SSH from their own HPG accounts; retain the dated acceptance in the
   restricted ticket.
 
-The authorization inventory must cover the 15 donor OME-TIFF images and sidecars,
+The authorization inventory must cover every donor OME-TIFF image and sidecar
+(15 in the frozen release; 21 targeted in the expanded candidate),
 case identifiers, age/sex and clinical attributes used by the app, cell- and islet-level
 derived measurements, spatial boundaries, downloadable data, proxy authentication logs,
 and application logs that can contain case/islet selections or error details.
@@ -203,7 +271,9 @@ Maigan Brusko, PhD — `[GATORLINK, EMAIL, DEPARTMENT]`
 
 > Islet Explorer is an R Shiny research application through which confidential journal
 > editors and reviewers explore de-identified and derived pancreatic-islet data and
-> browser-streamed OME-TIFF multiplexed images from 15 nPOD donors. It provides marker
+> browser-streamed OME-TIFF multiplexed images. The frozen reference release contains
+> 15 nPOD donors; the expanded candidate targets 21 donor images, including HPAP-078
+> with separate HPAP provenance and applicable usage terms. It provides marker
 > and cell-population plots, composition-based trajectory/PAGA analysis, spatial
 > analysis, and image/segmentation drill-down. The application is non-mutating: it
 > accepts no user uploads and cannot alter its canonical scientific data. Reviewers may
@@ -294,7 +364,7 @@ Example Open elements:
 
 Faculty PI/HPG Group Sponsor Name: Maigan Brusko, PhD
 
-Date: `[ACTUAL PI ATTESTATION DATE]` — this draft was updated 2026-09-08 and does
+Date: `[ACTUAL PI ATTESTATION DATE]` — this draft was updated 2026-09-16 and does
 not record a completed attestation.
 
 ## Copy-ready follow-up for the existing UFRC ticket
@@ -306,18 +376,23 @@ not record a completed attestation.
 > Please continue the production review for the Panc Floyd project, deployed as
 > Islet Explorer under HPG group `maigan`, in existing ticket `83810`, configuration
 > reference `SYSCONFIG-8173`, and individual Risk Assessment `IRM-456246`.
-> Please reconcile the owner-reported VM provisioning with comment 4's assessment
-> prerequisite and return the current setup status. `RC83797` records one trial `PA-INSTANCE` allocation
+> The assigned ISM requested a brief risk-review meeting on 2026-09-16, following
+> comment 8's report that the ISO was waiting for local review. Please confirm
+> that review's status and whether the assessment technical contact requested in
+> comment 7 has been added, then return the current instance setup status.
+> `RC83797` records one trial `PA-INSTANCE` allocation
 > active 2026-08-31 through 2026-11-30. The reviewed UFIT-RC Web Hosting Instance
 > Request and current technical evidence are attached. Desired reviewer production
 > date: `[DATE]`.
 >
 > The requested starting allocation is the standard PubApps base: 2 vCPU, 16 GiB RAM,
-> 1 TiB `/pubapps`, and standard local container storage. The curated deployment is
-> expected to use approximately 111 GiB for its active image/data payload. The 1 TiB
-> allocation also provides headroom for rollback, logs, and transfer files; retaining
-> separate active and previous data/image releases uses approximately 222 GiB before
-> logs and temporary transfer files. No GPU,
+> 1 TiB `/pubapps`, and standard local container storage. The frozen 15-image
+> runtime bundle measures 109.05 GiB. A separate 21-image candidate adds five nPOD
+> acquisitions and HPAP-078; its corrected image collection alone is approximately
+> 151.90 GiB. Candidate images plus the retained frozen bundle require at least
+> 260.95 GiB before new derived tables, transfer staging, logs and container storage.
+> Expanded scientific analysis and final runtime measurements remain pending.
+> Segmentation and model fitting are offline; no GPU,
 > additional storage, Slurm access, database service, or HPG filesystem mount is
 > requested.
 >
@@ -389,7 +464,7 @@ obligations without providing a needed multi-writer capability.
 
 The production release uses a hybrid, embedded layout:
 
-- Keep OME-TIFF images as files; storing approximately 109 GiB of imagery as database
+- Keep OME-TIFF images as files; storing the original approximately 109 GiB of imagery as database
   BLOBs would break efficient HTTP Range delivery and complicate recovery.
 - Keep H5AD as the canonical scientific/provenance artifact. Flatten only the fields the
   app needs into versioned runtime tables after output-parity tests.
@@ -400,7 +475,7 @@ The production release uses a hybrid, embedded layout:
   plus an allowlist for selectable marker columns.
 - Keep small prepared islet summaries in process-global memory rather than rewriting all
   Plot/Trajectory logic as SQL.
-- Keep the 5,214 per-islet drill-down CSVs as direct-lookup files. Measured point lookup
+- Keep per-islet drill-down CSVs as direct-lookup files (5,214 in the original release). Measured point lookup
   was faster than consolidating them into DuckDB; package them as one archive for release
   transfer, then extract them into the immutable versioned data directory.
 - Package each donor's segmentation boundaries as an indexed, read-only GeoPackage and
@@ -411,14 +486,18 @@ The 2026-09-08 canonical source preparation produced 5,382 `core_area` rows,
 5,382 `comp` rows, 48,438 `targets_all` rows, 64,584 `markers_all` rows, and
 21 `combined_pairs` definitions. The separate trajectory H5AD has 5,214
 observations; the drill-down file count and trajectory count must not be used as
-the count of all prepared runtime summaries. The donor image cohort remains 15.
+the count of all prepared runtime summaries. These measurements describe the
+original 15-image cohort; expanded-candidate counts must be regenerated and recorded.
 See [`docs/ufrc_readiness.md`](docs/ufrc_readiness.md) for the source evidence and
 the remaining release-parity check.
 
 Configuration and service continuation may proceed while the release is being built, but the
 manifest-backed runtime is a production prerequisite. Before promotion it must reproduce
-every legacy downloadable table and plotted statistic, including row counts and identifiers,
-with exact categorical values and documented numeric tolerance. If parity is not complete,
+the candidate's canonical prepared tables and plotted statistics, including row counts
+and identifiers, with exact categorical values and documented numeric tolerance.
+The expanded cohort is jointly refit, so its trajectories and clustering may differ
+from the original release; retain and report those scientific differences separately
+from source-to-release conversion parity. If parity is not complete,
 do not promote that release; keep the reviewer site closed until a validated release exists.
 
 ## Information UFRC must return or confirm

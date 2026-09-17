@@ -1,6 +1,14 @@
 #!/usr/bin/env python3
 """
-Derive per-donor clinical metadata for the 15 CODEX donors from an nPOD export.
+Derive donor metadata from an explicit cohort/key or the original nPOD cohort.
+
+With --cohort, read case_id and donor_source (nPOD or HPAP) from a CSV and
+demographics from --donor-key. Optional --source adds nPOD clinical fields only
+to nPOD donors; unavailable clinical values remain null. Keep the candidate
+output separate from the original CSV. inclusion_status is retained, not used
+to silently remove identity-held donors or certify scientific inclusion.
+
+Without --cohort, the original command, cohort, and output schema are retained.
 
 The nPOD "All-Download" spreadsheet carries ~741 donors and 47 columns, including
 free-text admission courses, clinical histories, medication lists and HLA types.
@@ -34,11 +42,16 @@ Outputs:
 Usage:
     python scripts/build_donor_metadata.py
     python scripts/build_donor_metadata.py --source path/to/All-Download_*.xlsx
+    python scripts/build_donor_metadata.py --cohort cohort.csv \
+        --donor-key CODEX_Pancreas_Donors.xlsx --output candidate/donor_metadata.csv
 """
 
 import argparse
 import glob
+import hashlib
+import math
 import os
+import re
 import sys
 
 import pandas as pd
@@ -114,12 +127,190 @@ def parse_c_peptide(value):
         return (float("nan"), False)
 
 
+def normalize_case_id(value):
+    """Normalize spreadsheet integers and HPAP labels without truncating fractions."""
+    if value is None or isinstance(value, bool) or pd.isna(value):
+        raise ValueError("missing or invalid donor case ID")
+    match = re.fullmatch(r"(?:HPAP-|HDL)?([0-9]+)(?:\.0+)?", str(value).strip(), re.I)
+    if not match:
+        raise ValueError(f"invalid donor case ID: {value!r}")
+    return str(int(match.group(1)))
+
+
+def read_table(path, sheet_name=0):
+    if str(path).lower().endswith(".csv"):
+        return pd.read_csv(path, dtype=str)
+    return pd.read_excel(path, sheet_name=sheet_name)
+
+
+def file_sha256(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def optional_number(value, label):
+    if value is None or pd.isna(value) or str(value).strip() == "":
+        return float("nan")
+    try:
+        number = float(value)
+    except (ValueError, TypeError) as exc:
+        raise ValueError(f"invalid numeric {label}: {value!r}") from exc
+    if not math.isfinite(number):
+        raise ValueError(f"nonfinite {label}")
+    return number
+
+
+def read_cohort(path):
+    cohort = pd.read_csv(path, dtype=str)
+    required = {"case_id", "donor_source"}
+    if not required.issubset(cohort.columns) or cohort.empty:
+        raise ValueError("cohort must contain rows with case_id and donor_source")
+    original_ids = cohort["case_id"].copy()
+    cohort["case_id"] = cohort["case_id"].map(normalize_case_id)
+    cohort["donor_source"] = cohort["donor_source"].str.strip().str.upper()
+    if not cohort["donor_source"].isin(["NPOD", "HPAP"]).all():
+        raise ValueError("donor_source must be explicitly nPOD or HPAP")
+    for raw_id, source in zip(original_ids, cohort["donor_source"]):
+        if str(raw_id).strip().upper().startswith("HPAP-") and source != "HPAP":
+            raise ValueError("an HPAP case ID cannot be assigned to nPOD")
+        if str(raw_id).strip().upper().startswith("HDL") and source != "NPOD":
+            raise ValueError("an nPOD HDL case ID cannot be assigned to HPAP")
+    if cohort["case_id"].duplicated().any():
+        raise ValueError("duplicate normalized case_id in cohort")
+    if "inclusion_status" not in cohort:
+        cohort["inclusion_status"] = "selected"
+    if not cohort["inclusion_status"].isin(["selected", "identity_hold"]).all():
+        raise ValueError("inclusion_status must be selected or identity_hold; no rows are silently filtered")
+    return cohort
+
+
+def build_cohort_metadata(cohort_path, donor_key_path, npod_source=None):
+    """Build only the explicitly supplied cohort, keeping source identity distinct."""
+    cohort = read_cohort(cohort_path)
+    key = read_table(donor_key_path)
+    required = {"Case ID", "Donor Status", "Age", "Gender"}
+    if not required.issubset(key.columns):
+        raise ValueError(f"donor key is missing columns: {sorted(required - set(key.columns))}")
+    key = key.loc[key["Case ID"].notna()].copy()
+    key["case_id"] = key["Case ID"].map(normalize_case_id)
+    key = key.loc[key["case_id"].isin(cohort["case_id"])].copy()
+    if key["case_id"].duplicated().any():
+        raise ValueError("duplicate normalized case_id in donor key")
+    missing = set(cohort["case_id"]) - set(key["case_id"])
+    if missing:
+        raise ValueError(f"cohort donors missing from donor key: {sorted(missing)}")
+    key = key.set_index("case_id")
+
+    npod = None
+    if npod_source:
+        npod = read_table(npod_source, sheet_name="data")
+        if "case_id" not in npod:
+            raise ValueError("nPOD export is missing case_id")
+        # Preserve nPOD's HDL namespace. Numeric spreadsheet values normalize
+        # without allowing HPAP-078 to become a lookup of nPOD donor 78.
+        npod["case_id"] = npod["case_id"].map(
+            lambda value: re.sub(r"\.0+$", "", str(value).strip()).upper()
+        )
+
+    rows = []
+    key_hash = file_sha256(donor_key_path)
+    source_hash = file_sha256(npod_source) if npod_source else None
+    for _, selected in cohort.iterrows():
+        app_id = selected["case_id"]
+        source = "nPOD" if selected["donor_source"] == "NPOD" else "HPAP"
+        demographics = key.loc[app_id]
+        if str(demographics["Case ID"]).strip().upper().startswith("HPAP-") and source != "HPAP":
+            raise ValueError("an HPAP donor-key row cannot supply nPOD demographics")
+        if str(demographics["Case ID"]).strip().upper().startswith("HDL") and source != "nPOD":
+            raise ValueError("an nPOD HDL donor-key row cannot supply HPAP demographics")
+        age = optional_number(demographics["Age"], f"donor {app_id} Age")
+        if pd.isna(age) or age < 0:
+            raise ValueError(f"donor {app_id} requires a nonnegative Age")
+        for field in ["Gender", "Donor Status"]:
+            if pd.isna(demographics[field]) or not str(demographics[field]).strip():
+                raise ValueError(f"donor {app_id} is missing {field}")
+        source_id = CODEX_DONORS.get(app_id, app_id) if source == "nPOD" else f"HPAP-{int(app_id):03d}"
+        row = {
+            "case_id": app_id,
+            "npod_case_id": source_id if source == "nPOD" else None,
+            "donor_type": str(demographics["Donor Status"]).strip(),
+            "age_years_npod": float("nan"),
+            "age_group": "<13" if age < AGE_GROUP_CUT else ">=13",
+            "t1d_duration_years": float("nan"),
+            "sex": str(demographics["Gender"]).strip(),
+            "BMI": float("nan"),
+            "HbA1c_percent": float("nan"),
+            "C_peptide_ng_mL": float("nan"),
+            "C_peptide_censored": None,
+            **{field: None for field in AAB_COLS.values()},
+            "n_aab": None,
+            "donor_source": source,
+            "source_donor_id": source_id,
+            "inclusion_status": selected["inclusion_status"],
+            "age_years_key": age,
+            "metadata_source": "donor_key_only",
+            "donor_key_sha256": key_hash,
+            "npod_source_sha256": None,
+        }
+        if source == "nPOD" and npod is not None:
+            matches = npod.loc[npod["case_id"] == source_id]
+            if len(matches) != 1:
+                raise ValueError(f"expected exactly one nPOD row for {source_id}, found {len(matches)}")
+            clinical = matches.iloc[0]
+            for output, column in {
+                "age_years_npod": "age_years", "t1d_duration_years": "diabetes_hx_years",
+                "BMI": "BMI", "HbA1c_percent": "HbA1c_percent",
+            }.items():
+                row[output] = optional_number(clinical.get(column), f"donor {app_id} {column}")
+            c_peptide = clinical.get("C_peptide_ng_mL")
+            if c_peptide is not None and pd.notna(c_peptide):
+                row["C_peptide_ng_mL"], row["C_peptide_censored"] = parse_c_peptide(c_peptide)
+                if not math.isfinite(row["C_peptide_ng_mL"]):
+                    raise ValueError(f"invalid C_peptide_ng_mL for donor {app_id}")
+            for column, output in AAB_COLS.items():
+                value = clinical.get(column)
+                if value is not None and pd.notna(value):
+                    row[output] = parse_aab(value, app_id, column)
+            known = [row[field] for field in AAB_COLS.values()]
+            row["n_aab"] = sum(known) if all(value is not None for value in known) else None
+            row["metadata_source"] = "donor_key+npod_export"
+            row["npod_source_sha256"] = source_hash
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--source", default=None,
-                    help="nPOD All-Download xlsx (default: newest in repo root)")
+                    help="nPOD All-Download XLSX (original default: newest in repo root; with --cohort: optional, CSV also accepted)")
     ap.add_argument("--output", default=DEFAULT_OUT)
+    ap.add_argument("--cohort", help="CSV with case_id, donor_source, and optional inclusion_status")
+    ap.add_argument("--donor-key", help="CSV/XLSX with Case ID, Donor Status, Age, and Gender")
     args = ap.parse_args()
+
+    if args.cohort:
+        if not args.donor_key:
+            ap.error("--cohort requires --donor-key")
+        protected = [DEFAULT_OUT, args.cohort, args.donor_key]
+        if args.source:
+            protected.append(args.source)
+        if os.path.realpath(args.output) in {os.path.realpath(path) for path in protected}:
+            ap.error("--cohort requires a separate --output; preserve inputs and the original donor_metadata.csv")
+        try:
+            out = build_cohort_metadata(args.cohort, args.donor_key, args.source)
+        except (ValueError, OSError) as exc:
+            ap.error(str(exc))
+        os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
+        out.to_csv(args.output, index=False)
+        held = int((out["inclusion_status"] == "identity_hold").sum())
+        print(f"[donor-meta] wrote {len(out)} explicit cohort rows; {held} remain on identity hold")
+        print("[donor-meta] metadata does not establish image attribution or scientific inclusion")
+        return
+    if args.donor_key:
+        ap.error("--donor-key requires --cohort")
 
     src = find_source(args.source)
     print(f"[donor-meta] source: {src}")

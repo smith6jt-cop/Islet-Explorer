@@ -74,6 +74,10 @@ if (is.null(local_images_root)) {
 
 www_local_images_dir <- file.path("www", "local_images")
 has_www_local_images <- dir.exists(www_local_images_dir)
+if (file.exists(data_path("candidate.json")) &&
+    (!has_www_local_images || !identical(normalizePath(www_local_images_dir), normalizePath(data_path("images"))))) {
+  stop("Candidate image route must resolve to its explicit image root; mixed-cohort fallback is forbidden.")
+}
 
 # Register /images resource path for backup access (avoid conflict with www/local_images)
 # This provides redundancy even if www/local_images exists

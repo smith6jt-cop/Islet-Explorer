@@ -71,8 +71,12 @@ jobs:
           # These SDKs belong to this disposable hosted runner. None is used by
           # the scientific image build; removing them leaves room for OCI export.
           sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends podman curl ca-certificates xz-utils
+          # Use Ubuntu's package indexes; unrelated hosted-runner repositories
+          # must not prevent installation of these Ubuntu packages.
+          test -s /etc/apt/sources.list.d/ubuntu.sources
+          apt_sources=(-o Dir::Etc::sourcelist=/etc/apt/sources.list.d/ubuntu.sources -o Dir::Etc::sourceparts=-)
+          sudo apt-get "${apt_sources[@]}" update -qq
+          sudo apt-get "${apt_sources[@]}" install -y --no-install-recommends podman curl ca-certificates xz-utils
           free_kib="$(df -Pk "${RUNNER_TEMP}" | awk 'NR == 2 {print $4}')"
           [[ "${free_kib}" =~ ^[0-9]+$ ]] && (( free_kib >= 16 * 1024 * 1024 ))
           df -h "${RUNNER_TEMP}" > "${RUNNER_TEMP}/pubapps-release/evidence/disk-before-build.txt"

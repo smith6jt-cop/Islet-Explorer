@@ -1,6 +1,7 @@
 # Islet Explorer UFRC readiness and evidence index
 
-Updated 2026-09-09. This is the review index for the supplied
+Updated 2026-09-17 for the local candidate; institutional status remains as
+last verified on 2026-09-16. This is the review index for the supplied
 [`UFIT_PubApps_Instance_Request.docx`](../UFIT_PubApps_Instance_Request.docx),
 including its hosting policy, project plan, and development standards. It records
 implementation separately from acceptance. It is not a signed attestation or
@@ -10,11 +11,12 @@ production approval.
 
 The existing records are UFRC support request `83810`, configuration reference
 `SYSCONFIG-8173`, and individual assessment `IRM-456246` (submission confirmed
-2026-09-01). Read-only UF Outlook search results supplied these references on
-2026-09-08. The owner reports that the VM is provisioned; however, UFRC comment 4
-on 2026-09-08 says its operations team normally waits for assessment completion
-before VM setup. Reconcile that status with the assigned host details before
-deployment. Hostname, service-account, SSH, and proxy details remain unknown.
+2026-09-01). Read-only UF Outlook search on 2026-09-16 found an assigned ISM's
+request that day for a brief Teams meeting for the risk review. Scheduling and
+completion are unconfirmed. Comment 8, received 2026-09-11, had reported the ISO
+waiting for local ISM review. Comment 7 requested an assessment technical contact;
+completion is not established. The owner previously reported a provisioned VM,
+but hostname, service-account, SSH and proxy details remain unconfirmed.
 Continue the existing requests. Trial allocation
 `RC83797` for group `maigan` is recorded for 2026-08-31 through 2026-11-30.
 
@@ -24,6 +26,64 @@ disabled; immutable local scientific files; no managed database, upload endpoint
 or production external API. The proposed URL is
 `https://islet-explorer.rc.ufl.edu/islet-explorer/`. The backend address and port
 must come from UFRC; `127.0.0.1:3838` is a request, not an established proxy route.
+
+### Expanded cohort candidate
+
+The owner authorized six additions on 2026-09-11, targeting 21 donor images:
+6090, 6232, 6539, `PAN-6558-AAb_test35_35p-LED.tif`, 6520-01A, and HPAP-078.
+Exclude the alternate `CX_PAN-6558` acquisition and 6520-01B. Preserve HPAP-078's
+HPAP provenance and separately review its applicable disclosure/usage terms;
+the expanded cohort must not be described as 21 nPOD donors. Continue request
+`83810` and assessment `IRM-456246` with the updated inventory through the owner.
+No new UFRC acceptance or classification disposition has been established here.
+
+InstanSeg 0.1.1 image preparation, fixed diffusion ordering and hypothesis
+fitting are offline work. They do not add model training, GPU requirements, uploads, or
+external API traffic to the PubApps runtime. Keep the frozen original `5809be4`
+release and its source/evidence intact. Record shifts in original-donor
+trajectories or clustering as scientific changes; source-to-release parity for
+the expanded candidate compares against its own verified canonical preparation.
+
+| Expanded-candidate item | Status |
+|---|---|
+| Input selection and cohort size | Source mix-up resolved: 6090 matches all 36 raw channel planes; 6539 reconstructed and pixel-checked against its distinct raw acquisition. The candidate targets 20 nPOD images plus one HPAP image |
+| Viewer image conversion | Corrected six TIFFs total 46,877,746,573 bytes. Use `reports/image_conversion/reconciled_inventory.json`; the original duplicate 6539 TIFF is excluded |
+| Image preparation and scientific integration | Candidate retains 3,592,722 raw objects, including 201 wholly unmeasured objects; 8,371 islets and 31 raw markers are available. Six primary estimates and four unavailable tests are recorded. See [local delivery](all_donor_delivery.md) |
+| Cell-phenotyping provenance | Retirement policy supersedes reconstruction of all 21 labels. Retained assignments and complete parent chains are audited; unvalidated upstream gates leave subtype ratios and several endpoints unavailable |
+| Fixed trajectory | Previous fit: 3,499 islets, 100% primary support, median LODO absolute Spearman 0.9143. Islet-identity review now required: 508 previously eligible candidates have no cells above exported hormone thresholds, including 143 in HPAP-078. Numerical stability does not validate biological identity |
+| Release count contract | Version-2 `release.env` declares `EXPECTED_IMAGES`; generation checks the staged count. Verification/activation/rollback use the declaration; legacy version-1 releases remain fixed at 15 |
+| Count and recovery tests | Local synthetic image-evidence and recovery suites pass, including 21-image activation, 15-image legacy rollback, missing/duplicate/conflicting count failures, and checksum failures; these do not validate real expanded data |
+| Scientific counts and capacity | Revised runtime 164,147,382,976 bytes (152.874 GiB); frozen original plus candidate plus staging copy 414.799 GiB before review reports/OCI/logs/spill. New worker observed at about 0.70 GiB RSS; peak/concurrency and assigned-host tests pending |
+| Local candidate evidence | Schema 3 at http://127.0.0.1:3839/islet-explorer/; all 31 heatmap markers, four app tabs and offline research reports. Fresh tests and hashes in the [2026-09-17 revision record](trajectory_revision_20260917.md). Ratios still lack certified gates; islet identity warning visible |
+| Exact production release evidence | Pending clean source revision, matching immutable image/data identity, production source parity, SBOM/scan and assigned-runtime browser checks. Production loading rejects scientific_acceptance=false |
+| Institutional and deployed acceptance | Pending updated owner-reviewed inventory/disclosure terms, UFRC assessment follow-up, assigned-host/proxy checks, and production acceptance |
+
+The validation tables below describe the original release and their stated dates.
+Their passing results are not expanded-candidate evidence.
+
+Conversion and preparation evidence is retained under the restricted, Git-ignored
+`data/development/expanded-20260911/` directory. The initial duplicate audit and
+mislabeled image remain as rejected evidence. The reconciled inventory selects
+the correct source paths, records distinct source/pixel signatures and verifies
+current TIFF/sidecar hashes against completed pixel-validation reports. The
+recovered 6539 source hash is
+`1866d5e8856dc096c1829e04b3622bc796cd9b81be4225bff12b864d4df1c69e`.
+Its old exclusion annotation was drawn on duplicated 6090 pixels and was preserved
+separately. Corrected source paths and the raw acquisition evidence are documented
+in [the expansion status](cohort_expansion_status.md).
+
+A second scientific blocker is recorded in the historical
+`7571b6d:scripts/phenotype_evaluator.py` note: the original rules that produced
+the shipped ECAD-positive/Structural labels were unavailable; v2 rules were a
+reconstruction requiring biological review. The current `data/phenotype_rules.csv`
+cannot produce all 21 shipped labels. The revised scope requires validation of
+retained labels and their upstream gates rather than recovery of retired labels.
+Completing segmentation does not establish equivalent retained assignments.
+Raw-marker and mask analyses proceed with explicit limitations; certified
+new-cell phenotypes still require reviewed gate evidence.
+The tested transfer models did not meet their predeclared accuracy/F1/recall
+screen; their design and per-class results are retained. This is a scientific
+provenance issue, not a newly inferred UFRC rule.
 
 ## Requirements mapped to evidence
 
@@ -70,6 +130,7 @@ UFRC production approval.
 | Browser accessibility and behavior | 34 of 34 checks passed, including four tabs, keyboard navigation, four CSV downloads, actual tissue canvas, 16-byte HTTP 206, and blocked missing/external image URLs; zero axe violations across five scopes | Native production-profile rerun passed on 2026-09-09 with the verified `606fb53` data and corrected R worker launcher; Chrome 152.0.7977.82, axe 4.13.0. Manual-review items retained; no final-image or external proxy acceptance claimed |
 | External HTTPS verifier | 10 synthetic tests passed without skips, including whole-site BasicAuth, bounded Range/body verification, sidecar MIME, WebSocket handshake and redirect/credential boundaries | [Acceptance procedure](../deploy/EXTERNAL_ACCEPTANCE.md) requires the assigned endpoint and real protected credential file |
 | Hosted CI | Both `parse-and-test` and `deployment-quality` passed in [run 34375550621](https://github.com/smith6jt-cop/Islet-Explorer/actions/runs/34375550621) at `5809be4`, including all 22 parity assertions and 19 authentication/SBOM tests | Later runtime changes require their own CI and image acceptance |
+| Later hosted CI at `000e970` | [Source run 34385986809](https://github.com/smith6jt-cop/Islet-Explorer/actions/runs/34385986809) and [image run 34385986858](https://github.com/smith6jt-cop/Islet-Explorer/actions/runs/34385986858) failed before application checks because the runner's Chrome package index had a hash mismatch | Local workflows now use Ubuntu 24.04 repositories for their Ubuntu packages. YAML/shell parsing and offline APT repository isolation pass; hosted rerun pending |
 | Supported Shiny Server runtime | Checksum-locked official source build and Node 24.20.0; 315 upstream and 8 real-R tests passed without skips; stripped-runtime app/static-route smoke passed; installed-package Syft/Grype scan reports zero matches | The original base-only scan found 33 High and 3 Critical entries. The complete `5809be4` application image subsequently passed the High/Critical gate. See [base remediation](../deploy/BASE_HARDENING.md) |
 | Data verification tooling | 22 parity assertions, 14 browser extraction assertions, and 4 inventory tests passed without skips | Synthetic contract tests supplement the required real source-to-release comparison |
 | Canonical source preparation | Five prepared tables measured; see counts below | All five match the final `5809be4` release; counts describe different scientific tables |
@@ -128,6 +189,15 @@ verification record are retained in the restricted release record; earlier
 `606fb53` evidence remains historical.
 
 ## Remaining release sequence
+
+For the expanded candidate, use the reconciled six-source inventory, recover or
+review the cell-phenotyping method, and finish biological review and the joint
+scientific analysis. Record the final retained cohort/row counts and storage
+requirements, then produce a
+matching clean-revision image and copied immutable data bundle. Generate the
+manifest with the explicitly reviewed final count (21 remains the target) and retain new full checksum,
+source-to-release parity, SBOM/scan, browser, and capacity evidence. Do not replace
+the preserved original release or reuse its passing results as candidate results.
 
 1. Reconcile provisioning and record the remaining owner/UFRC details in request
    `83810` and assessment `IRM-456246`;

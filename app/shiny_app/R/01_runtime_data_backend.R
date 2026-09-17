@@ -16,6 +16,8 @@ islet_release_schema <- function() {
   Sys.getenv("ISLET_DATA_SCHEMA", unset = "1")
 }
 
+islet_is_expanded_schema <- function(schema = islet_release_schema()) as.character(schema) %in% c("2", "3")
+
 islet_duckdb_connection <- function() {
   if (!requireNamespace("DBI", quietly = TRUE) ||
       !requireNamespace("duckdb", quietly = TRUE)) {
@@ -114,6 +116,18 @@ ISLET_REQUIRED_RELEASE_ARTIFACTS <- c(
   "islet_spatial_lookup", "phenotype_rules", "donor_metadata", "cells", "images"
 )
 
+islet_required_artifacts <- function(schema = islet_release_schema()) {
+  if (identical(as.character(schema), "3")) return(c(
+    names(ISLET_SUMMARY_ARTIFACTS), "geometry", "islet_spatial_lookup",
+    "phenotype_rules", "donor_metadata", "images", "cells", "cohort", "trajectory"
+  ))
+  if (identical(as.character(schema), "2")) return(c(
+    names(ISLET_SUMMARY_ARTIFACTS), "geometry", "islet_spatial_lookup",
+    "phenotype_rules", "donor_metadata", "images", "cells", "cohort", "trajectory", "research"
+  ))
+  ISLET_REQUIRED_RELEASE_ARTIFACTS
+}
+
 .islet_tree_files <- function(root) {
   files <- list.files(root, recursive = TRUE, full.names = TRUE,
                       all.files = TRUE, no.. = TRUE)
@@ -131,7 +145,9 @@ ISLET_REQUIRED_RELEASE_ARTIFACTS <- c(
   files <- .islet_tree_files(root)
   norm_root <- normalizePath(root, mustWork = TRUE)
   rel <- substring(files, nchar(norm_root) + 2L)
-  ord <- order(rel)
+  # Expanded schemas are built by Python: use portable byte ordering.
+  # Preserve schema 1's historical tree digest contract for frozen releases.
+  ord <- if (islet_is_expanded_schema()) order(rel, method = "radix") else order(rel)
   records <- vapply(ord, function(i) {
     paste(rel[[i]], .islet_sha256_file(files[[i]]), sep = "  ")
   }, character(1))
@@ -151,7 +167,7 @@ islet_verify_release_hashes <- function(manifest, root = data_root, mode = NULL)
   if (is.null(mode)) {
     mode <- tolower(Sys.getenv(
       "ISLET_VERIFY_RELEASE_HASHES",
-      unset = if (islet_is_production()) "core" else "none"
+      unset = if (islet_is_production() || islet_is_expanded_schema()) "core" else "none"
     ))
   }
   if (identical(mode, "none")) return(invisible(TRUE))
@@ -198,19 +214,29 @@ islet_validate_release <- function(root = data_root) {
   }
 
   artifacts <- manifest$artifacts %||% list()
-  missing_entries <- setdiff(ISLET_REQUIRED_RELEASE_ARTIFACTS, names(artifacts))
+  required <- islet_required_artifacts(actual_schema)
+  if (islet_is_expanded_schema(actual_schema) && islet_is_production() && !isTRUE(manifest$scientific_acceptance)) {
+    stop("Expanded candidate has not passed scientific deployment acceptance.", call. = FALSE)
+  }
+  missing_entries <- setdiff(required, names(artifacts))
   if (length(missing_entries)) {
     stop("Release manifest lacks required artifacts: ",
          paste(missing_entries, collapse = ", "), call. = FALSE)
   }
-  missing_paths <- vapply(ISLET_REQUIRED_RELEASE_ARTIFACTS, function(name) {
+  missing_paths <- vapply(required, function(name) {
     path <- .islet_artifact_path(root, artifacts[[name]]$relative_path)
     !file.exists(path) && !dir.exists(path)
   }, logical(1))
   if (any(missing_paths)) {
     stop("Release is incomplete; missing: ",
-         paste(ISLET_REQUIRED_RELEASE_ARTIFACTS[missing_paths], collapse = ", "),
+         paste(required[missing_paths], collapse = ", "),
          call. = FALSE)
+  }
+  if (identical(actual_schema, "3")) {
+    files <- c("counts.csv", "endocrine_counts.csv", "phenotype_availability.csv", "marker_panel.json", "count_manifest.json")
+    if (!all(file.exists(file.path(root, "trajectory", files))))
+      stop("Schema 3 requires trajectory count, availability and marker-panel artifacts.", call. = FALSE)
+    if ("research" %in% names(artifacts)) stop("Schema 3 research reports must be outside the app runtime.", call. = FALSE)
   }
   islet_verify_release_hashes(manifest, root)
   manifest

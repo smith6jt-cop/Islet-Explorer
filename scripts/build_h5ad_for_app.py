@@ -229,6 +229,11 @@ def build_enriched_h5ad(trajectory_path, groovy_dir, donor_key_path, output_path
 
     comp_df = load_groovy_composition(groovy_dir, donor_key_df)
     print(f"   Composition: {len(comp_df)} rows")
+    expected_donors = set(donor_key_df['Case ID'].astype(str).str.lstrip('0'))
+    for name, table in [('targets', targets_df), ('markers', markers_df), ('composition', comp_df)]:
+        actual_donors = set(table['Case ID'].astype(str).str.lstrip('0'))
+        if actual_donors != expected_donors:
+            raise ValueError(f'Mixed or incomplete cohort in {name}; explicit matching inputs are required')
 
     # Build mapping from h5ad islet_id to groovy data
     # h5ad islet_id format: "imageid_Islet_N" (e.g., "6479_Islet_156")
@@ -429,6 +434,10 @@ if __name__ == '__main__':
     parser.add_argument('--output', default=DEFAULT_OUTPUT,
                         help='Output path for enriched h5ad')
     args = parser.parse_args()
+    supplied = {x.split('=')[0] for x in sys.argv[1:] if x.startswith('--')}
+    explicit = {'--trajectory', '--groovy-dir', '--donor-key', '--output'}
+    if supplied & explicit and not explicit <= supplied:
+        parser.error('An explicit build requires --trajectory, --groovy-dir, --donor-key and --output together; original-cohort fallback is forbidden')
 
     # Resolve paths relative to script location
     script_dir = os.path.dirname(os.path.abspath(__file__))

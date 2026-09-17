@@ -1233,12 +1233,14 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         !is.null(load_islet_cells(info$case_id, info$islet_key))
 
       # Marker choices for color-by dropdown
-      marker_choices <- c("phenotype" = "phenotype")
+      candidate <- islet_is_expanded_schema()
+      marker_choices <- if (candidate) character() else c("phenotype" = "phenotype")
       if (has_cells) {
         cells <- load_islet_cells(info$case_id, info$islet_key)
         marker_cols <- setdiff(colnames(cells),
                                c("X_centroid", "Y_centroid", "phenotype", "cell_region",
-                                 "Cell.Area", "Cell Area", "Nucleus.Area", "Nucleus Area"))
+                                 "Cell.Area", "Cell Area", "Nucleus.Area", "Nucleus Area",
+                                 "object_id", "marker_measurements_complete"))
         if (length(marker_cols) > 0) {
           marker_choices <- c(marker_choices, setNames(marker_cols, marker_cols))
         }
@@ -1272,7 +1274,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
                   conditionalPanel(
                     condition = "input.drilldown_show_cells",
                     selectInput("drilldown_color_by", "Color by",
-                                choices = marker_choices, selected = "phenotype"),
+                                choices = marker_choices, selected = if (candidate) "INS" else "phenotype"),
                     selectInput("drilldown_palette", "Phenotype Palette",
                                 choices = c("Original", "High Contrast", "Colorblind Safe", "Maximum Distinction"),
                                 selected = "High Contrast"),
@@ -1318,7 +1320,9 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
           ),
           # Right: composition sidebar
           column(4,
-            if (has_cells) {
+            if (candidate) {
+              p("Subtype composition is unavailable pending retained-phenotype gate validation. Raw marker measurements are available in the cell view.")
+            } else if (has_cells) {
               conditionalPanel(
                 condition = "input.drilldown_show_cells",
                 div(style = "padding: 15px; background-color: #f8f9fa; border-radius: 5px;",
@@ -1337,6 +1341,8 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         )
       )
     })
+
+    outputOptions(output, "segmentation_viewer_panel", suspendWhenHidden = FALSE)
 
     # ---- Clear segmentation viewer ----
     observeEvent(input$clear_segmentation, {

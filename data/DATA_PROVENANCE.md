@@ -2,6 +2,163 @@
 
 This document describes the canonical data lineage for the Islet Explorer app.
 
+## Revised local candidate — 2026-09-17
+
+`data/development/all-donor-20260917/` is a separate schema-3 revision of the
+candidate below. Raw inputs/images are immutable hardlinks; derived files are
+independent copies. Nine fitted trajectory artifacts remain byte-identical.
+New count/evidence artifacts use all-donor parent-gate auditing independently
+of archival labels. Unreviewed gates remain unvalidated and ratios unavailable.
+The owner's QuPath review also identified suspect islet candidates: 348 HPAP
+regions have no cells above exported hormone thresholds, including 143 in the
+previous fit. The fit is now explicitly provisional pending identity review.
+No review-project objects were modified. Exact analysis-region overlays and
+raw-channel contact sheets are stored separately under `data/reviews/`.
+
+Research results are copied without refitting into
+`data/reports/all-donor-research/20260917/`, outside the runtime. The revised
+manifest declares 13 artifacts and 164,147,382,976 runtime bytes; scientific
+and UFRC acceptance remain false. See the
+[revision and hash record](../docs/trajectory_revision_20260917.md).
+The dated build history below is preserved for provenance.
+
+## All-donor candidate — completed local build 2026-09-16
+
+The separate `data/development/all-donor-20260916/` candidate uses
+[`scripts/research/cohort-v1.csv`](../scripts/research/cohort-v1.csv) as its sole
+21-donor input selection: seven ND, seven Aab-positive and seven T1D, including
+HPAP-078 with HPAP provenance. It combines original raw H5AD marker means,
+six corrected additions, geometry, structural masks, regional exports and
+clinical metadata. The frozen `5809be4` release remains unchanged.
+
+All 3,592,722 raw objects are retained; 201 wholly unmeasured objects remain
+NaN and are explicitly excluded from marker-dependent analyses. New compartment
+summaries cover 8,371 islets; 3,499 satisfy the fixed trajectory eligibility
+criteria. The retired phenotype policy replaces the earlier goal of rebuilding
+all 21 historical labels. Retained assignments require complete upstream-gate
+validation; unresolved assignments and ratio denominators remain unavailable.
+
+The new trajectory is fit offline from core/peri median `log1p` raw intensities,
+excluding INS/GCG/SST/CHGA, clinical outcomes, phenotype features and old
+embeddings. Disease labels and endocrine ratios cannot select or orient its
+root. Its transformations, landmarks, root, graph, coordinates and validation
+are saved under `trajectory/`. Prior disease-oriented code is archived under
+`archive/trajectory-pre-20260916/`; no new scVI/Harmony fit defines this axis.
+
+Schema-2 `manifest.json` records artifact/source SHA-256 hashes and the
+21-image contract. The app uses these candidate files without fallback to
+original-cohort artifacts. `research/` contains the registry, six provisional
+primary estimates, four explicit unavailable tests and exploratory branches.
+Raw inputs/images are locally hardlinked for space efficiency and must never
+be modified. Production copies require 164,130,834,281 bytes for the declared
+runtime. Scientific and UFRC acceptance remain false. Complete lineage,
+validation limits and local operation are in the
+[all-donor delivery record](../docs/all_donor_delivery.md).
+
+## Expanded cohort preparation history — 2026-09-16
+
+The new candidate targets the original 15 donor images plus six selected
+additions from the separate QuPath acquisition sources. The 6090/6539 source
+mix-up has been reconciled against the raw channel folders:
+
+| Addition | Inclusion rule |
+|---|---|
+| 6090 | Existing selected stack verified against all 36 original raw channel planes |
+| 6232 | Include selected new acquisition |
+| 6539 | Use the reconstructed stack from its distinct raw acquisition; preserve the old duplicate and its annotation separately |
+| 6558 | Include `PAN-6558-AAb_test35_35p-LED.tif`; exclude the alternate `CX_PAN-6558` image |
+| 6520 | Include 6520-01A; exclude 6520-01B |
+| HPAP-078 | Include and retain HPAP provenance; normalize spreadsheet identifier `78.0` explicitly to this donor |
+
+The corrected six viewer TIFFs total 46,877,746,573 bytes. All original-resolution
+pixels and all five reduced pyramid levels were validated against each selected
+source. Source and pixel signatures are distinct across the corrected inventory.
+The preparation selected 20 nPOD images plus one HPAP image; the subsequent
+local runtime is documented above. Stage images from the explicit corrected
+inventory, not from the whole development image directory.
+
+The restricted, Git-ignored candidate record at
+`data/development/expanded-20260911/reports/image_conversion/` contains
+`conversion_summary.json`, per-image reports, and the initial
+`cohort_identity_audit.json`. Those original reports preserve the rejected source
+selection. The corrected `reconciled_inventory.json` supersedes that selection
+and checks current source/TIFF/sidecar hashes. The verified 6090 source hash is
+`81b5a874aebc828b5c6c5925d79736b17497bf286e0aefcdf9cebedc9275c2f8`;
+the reconstructed 6539 source hash is
+`1866d5e8856dc096c1829e04b3622bc796cd9b81be4225bff12b864d4df1c69e`.
+The 6539 processing source is
+`data/development/expanded-20260911/recovery/sources/PAN-6539-ND test 34.tif`;
+its corrected viewer is in `recovery/images/`. Its raw planes, acquisition
+calibration, channel mapping and pixel checks are recorded in
+`recovery/source_reconstruction_6539.json`. The old exclusion annotation was
+drawn on duplicated 6090 pixels and was retained separately, not transferred
+to a different acquisition. Corrected absolute paths and current counts are in
+[the expansion status record](../docs/cohort_expansion_status.md).
+
+The `KRT8` workflow alias for 6520/HPAP-078 was checked against the existing
+classifier convention for that acquisition panel. Its evidence is in
+`reports/channel_mapping/krt8_workflow_alias_evidence.json`. Source and viewer
+TIFF channel labels remain unchanged.
+
+Use the established tissue/islet classification, boundary refinement,
+InstanSeg cell segmentation, region assignment, measurement/export, and
+pyramidal OME-TIFF/sidecar workflow. The approved InstanSeg model is **0.1.1**;
+retain that version change and full-resolution segmentation review in the
+candidate record. These are offline preparation steps and are not installed as
+PubApps runtime services.
+
+Cell-phenotyping provenance remains unresolved. The historical
+`7571b6d:scripts/phenotype_evaluator.py` note states that the original rules
+producing shipped ECAD-positive/Structural labels were unavailable and that v2
+was a reconstruction requiring biological review. The current
+`data/phenotype_rules.csv` cannot generate all 21 labels in the shipped analysis.
+This historical gap does not require reconstruction of retired labels. Audit
+retained labels and validate their upstream gates before assigning certified
+new-cell phenotypes. Existing segmentation, marker measurements, or viewer
+conversion do not demonstrate equivalent phenotype assignment. Two donor-disjoint
+transfer benchmarks failed their predeclared integration screen: 86.67% and
+87.99% accuracy. Their feature transforms, sampling, per-class results and
+limitations are retained; no new-cell phenotypes were assigned.
+
+The earlier scVI/Age/Gender/Harmony trajectory proposal is superseded by the
+fixed outcome-blind compartment-level method described above. New coordinates
+have arbitrary orientation and are not numerically comparable with the former
+INS-oriented axis. Preserve the frozen `5809be4` source, immutable release,
+original measurements and reference results independently.
+
+Preparation counts, raw measurement roundtrips, regional joins and calibration
+are recorded in the candidate audits linked from the expansion status.
+All six additions completed offline preparation: 943,068 cell objects, 942,867
+fully measured objects, 201 unmeasured objects and 2,989 islet regions.
+Measurement TSVs now retain Java double precision; the five earlier rounded
+exports/imports are archived in `precision_revision_20260916/`. The raw H5AD
+stores marker means as float32 and centroids as float64. Independent spatial
+checks use unrounded centroids and QuPath's exact polygon boundary convention,
+retaining overlapping memberships. Raw imports preserve wholly unmeasured
+objects as flagged NaN rows for review;
+the current candidate excludes them from marker analyses without dropping raw
+objects. Retained-gate validation and immutable production source-to-release
+acceptance remain pending; local hashes and capacity are recorded above.
+All counts and validation outcomes in the
+historical lineage below retain their original cohort and date; they are not
+results for the expanded candidate. Keep HPAP-specific source and applicable
+usage/disclosure terms distinct from the nPOD metadata lineage.
+
+For explicit-cohort clinical metadata, `scripts/build_donor_metadata.py` now
+accepts `--cohort scripts/cohort_expansion/cohort.csv` and `--donor-key` pointing
+to the source CSV/XLSX with `Case ID`, `Donor Status`, `Age`, and `Gender`.
+Supply a separate candidate `--output`; the original canonical CSV is protected
+from this mode. Optional `--source` supplements only rows whose `donor_source`
+is `nPOD`. HPAP-078 remains an HPAP donor with no nPOD lookup; absent extended
+clinical values and unreported autoantibody results remain null. Donor-key and
+nPOD source hashes, source cohort, normalized source identity, and
+`inclusion_status` accompany the derived rows. Identity-held rows are retained
+as held metadata in the original selection record. The separately verified
+6090/6539 project uses `scripts/cohort_expansion/cohort_recovered.csv`; original
+cohort/checkpoint fingerprints are preserved. The reconciled inventory joins
+those two recovered cases with the four original unambiguous additions.
+The original command without `--cohort` retains its 15-donor defaults and schema.
+
 Current source-preparation note (2026-09-08): the 5,214 H5AD observation count
 below is distinct from the embedded QuPath/prepared-table universe. Canonical
 preparation currently returns `core_area` 5,382 rows, `comp` 5,382 rows,

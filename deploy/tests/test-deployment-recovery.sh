@@ -14,15 +14,11 @@ mock_bin="${work_dir}/bin"
 fixture_deploy="${work_dir}/deploy"
 mkdir -p "${mock_bin}" "${fixture_deploy}"
 cp "${repo_root}/deploy/activate-release.sh" \
+  "${repo_root}/deploy/rollback-release.sh" "${repo_root}/deploy/verify-release.sh" \
   "${repo_root}/deploy/islet-explorer.container.in" "${fixture_deploy}/"
 
-# Exercise the real activation script with isolated user-systemd and image
-# boundaries. Full data hashing and live container checks have separate tests.
-cat > "${fixture_deploy}/verify-release.sh" <<'MOCK'
-#!/usr/bin/env bash
-set -euo pipefail
-test -f "$1/release.env"
-MOCK
+# Exercise real activation, release verification, and rollback with isolated
+# user-systemd and image boundaries. Live container checks have separate tests.
 cat > "${fixture_deploy}/verify-deployment.sh" <<'MOCK'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -86,6 +82,25 @@ MOCK
 chmod 0755 "${mock_bin}/systemctl" "${mock_bin}/podman" \
   "${fixture_deploy}/verify-release.sh" "${fixture_deploy}/verify-deployment.sh"
 
+make_release() {
+  local root="$1" release="$2" image="$3" count="$4" version="$5" index
+  local destination="${root}/releases/${release}"
+  mkdir -p "${destination}/data/images"
+  {
+    printf 'MANIFEST_VERSION=%s\nRELEASE=%s\nIMAGE_REF=%s\nGIT_COMMIT=%s\nDATA_SCHEMA=1\n' \
+      "${version}" "${release}" "${image}" "${commit}"
+    if [[ "${version}" == 2 ]]; then printf 'EXPECTED_IMAGES=%s\n' "${count}"; fi
+  } > "${destination}/release.env"
+  printf '{}\n' > "${destination}/data/manifest.json"
+  for ((index = 1; index <= count; index++)); do
+    printf 'image fixture %s\n' "${index}" > "${destination}/data/images/${index}.ome.tiff"
+  done
+  (
+    cd -- "${destination}"
+    find data release.env -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum > MANIFEST.sha256
+  )
+}
+
 for scenario in success reload_fail start_fail candidate_health_fail recovery_restart_fail recovery_health_fail first_health_fail; do
   case_dir="${work_dir}/${scenario}"
   project="${case_dir}/project"
@@ -93,9 +108,8 @@ for scenario in success reload_fail start_fail candidate_health_fail recovery_re
   unit="${config}/containers/systemd/islet-explorer.container"
   state="${project}/runtime/deployments"
   mkdir -p "${project}/releases/new/data/images" "$(dirname "${unit}")" "${state}"
-  printf 'RELEASE=new\nIMAGE_REF=%s\nGIT_COMMIT=%s\nDATA_SCHEMA=1\n' \
-    "${candidate_image}" "${commit}" > "${project}/releases/new/release.env"
-  printf '{}\n' > "${project}/releases/new/data/manifest.json"
+  make_release "${project}" new "${candidate_image}" 21 2
+  make_release "${project}" old "${prior_image}" 15 1
   if [[ "${scenario}" != first_health_fail ]]; then
     printf '[Container]\nImage=%s\n' "${prior_image}" > "${unit}"
     cp "${unit}" "${case_dir}/original-unit"
@@ -125,6 +139,18 @@ for scenario in success reload_fail start_fail candidate_health_fail recovery_re
       grep -qx 'RELEASE=new' "${state}/active.state" || fail 'new release was not recorded'
       cmp -s "${state}/previous.state" "${case_dir}/original-state" || fail 'previous state lost'
       grep -Fqx "${candidate_image}" "${case_dir}/health-checks" || fail 'candidate identity was not verified'
+      grep -Fq 'verified: 21 OME-TIFFs' "${case_dir}/output" || fail 'activation did not use the expanded release count'
+      env PATH="${mock_bin}:${PATH}" XDG_CONFIG_HOME="${config}" \
+        MOCK_CASE="${case_dir}" MOCK_SCENARIO=success \
+        MOCK_CANDIDATE_IMAGE="${prior_image}" MOCK_COMMIT="${commit}" \
+        bash "${fixture_deploy}/rollback-release.sh" --project-root "${project}" \
+        > "${case_dir}/rollback-output" 2>&1 || {
+          cat "${case_dir}/rollback-output" >&2
+          fail 'rollback to the legacy 15-image release failed'
+        }
+      grep -Fq 'verified: 15 OME-TIFFs' "${case_dir}/rollback-output" || fail 'rollback did not use the original release count'
+      grep -qx 'RELEASE=old' "${state}/active.state" || fail 'rollback did not restore the original release'
+      grep -qx 'RELEASE=new' "${state}/previous.state" || fail 'rollback lost the expanded release state'
       ;;
     first_health_fail)
       [[ ! -e "${unit}" && ! -e "${state}/active.state" && ! -e "${case_dir}/running-image" ]] || \

@@ -296,8 +296,12 @@ done
 
 make_release() {
   local destination="$1"
+  local count="${2:-15}" index
   mkdir -p -- "${destination}/data/images" "${destination}/attestations"
   printf '{}\n' > "${destination}/data/manifest.json"
+  for ((index = 1; index <= count; index++)); do
+    printf 'image fixture %s\n' "${index}" > "${destination}/data/images/${index}.ome.tiff"
+  done
   cp -- "${scan_dir}"/* "${destination}/attestations/"
   {
     printf 'LOCAL_IMAGE_ID=%s\n' "${image_id}"
@@ -311,6 +315,82 @@ make_release "${release_ok}"
 "${repo_root}/deploy/generate-release-manifest.sh" \
   "${release_ok}" release "${image_id}" "${commit}" 1
 [[ -f "${release_ok}/MANIFEST.sha256" ]] || fail "valid evidence did not generate a manifest"
+grep -Fqx 'MANIFEST_VERSION=2' "${release_ok}/release.env" || fail 'manifest version was not advanced'
+grep -Fqx 'EXPECTED_IMAGES=15' "${release_ok}/release.env" || fail 'original image count was not recorded'
+expect_status 0 "${repo_root}/deploy/verify-release.sh" "${release_ok}"
+expect_status 0 "${repo_root}/deploy/verify-release.sh" "${release_ok}" --quick
+
+release_expanded="${work_dir}/release-expanded"
+make_release "${release_expanded}" 21
+# A staged count must match the owner's explicit expectation, not redefine it.
+expect_status 65 "${repo_root}/deploy/generate-release-manifest.sh" \
+  "${release_expanded}" expanded "${image_id}" "${commit}" 1
+[[ ! -e "${release_expanded}/release.env" ]] || fail 'wrong count wrote release metadata'
+expect_status 0 "${repo_root}/deploy/generate-release-manifest.sh" \
+  "${release_expanded}" expanded "${image_id}" "${commit}" 1 21
+grep -Fqx 'EXPECTED_IMAGES=21' "${release_expanded}/release.env" || fail 'expanded image count was not recorded'
+expect_status 0 "${repo_root}/deploy/verify-release.sh" "${release_expanded}"
+expect_status 0 "${repo_root}/deploy/verify-release.sh" "${release_expanded}" --quick
+expect_status 0 "${repo_root}/deploy/verify-release.sh" "${release_expanded}" --expected-images 21
+expect_status 65 "${repo_root}/deploy/verify-release.sh" "${release_expanded}" --expected-images 15
+expect_status 64 "${repo_root}/deploy/verify-release.sh" "${release_expanded}" --expected-images
+expect_status 64 "${repo_root}/deploy/verify-release.sh" "${release_expanded}" --expected-images 21 --expected-images 21
+for invalid_count in '' 0 -1 021 abc; do
+  expect_status 64 "${repo_root}/deploy/generate-release-manifest.sh" \
+    "${release_expanded}" expanded "${image_id}" "${commit}" 1 "${invalid_count}"
+done
+
+# Rehash metadata mutations so structural failures are tested independently of
+# checksum failures. This helper never touches real release evidence.
+rehash_fixture() {
+  local destination="$1"
+  (
+    cd -- "${destination}"
+    find data release.env attestations -type f -print0 | \
+      LC_ALL=C sort -z | xargs -0 sha256sum > MANIFEST.sha256
+  )
+}
+for mutation in missing duplicate malformed unsupported missing_version duplicate_version; do
+  release_bad="${work_dir}/release-${mutation}-count"
+  cp -a -- "${release_expanded}" "${release_bad}"
+  case "${mutation}" in
+    missing) sed -i '/^EXPECTED_IMAGES=/d' "${release_bad}/release.env" ;;
+    duplicate) printf 'EXPECTED_IMAGES=21\n' >> "${release_bad}/release.env" ;;
+    malformed) sed -i 's/^EXPECTED_IMAGES=.*/EXPECTED_IMAGES=21oops/' "${release_bad}/release.env" ;;
+    unsupported) sed -i 's/^MANIFEST_VERSION=.*/MANIFEST_VERSION=3/' "${release_bad}/release.env" ;;
+    missing_version) sed -i '/^MANIFEST_VERSION=/d' "${release_bad}/release.env" ;;
+    duplicate_version) printf 'MANIFEST_VERSION=1\n' >> "${release_bad}/release.env" ;;
+  esac
+  rehash_fixture "${release_bad}"
+  expect_status 65 "${repo_root}/deploy/verify-release.sh" "${release_bad}"
+done
+
+release_legacy="${work_dir}/release-legacy"
+cp -a -- "${release_ok}" "${release_legacy}"
+sed -i '/^EXPECTED_IMAGES=/d; s/^MANIFEST_VERSION=.*/MANIFEST_VERSION=1/' "${release_legacy}/release.env"
+rehash_fixture "${release_legacy}"
+expect_status 0 "${repo_root}/deploy/verify-release.sh" "${release_legacy}"
+expect_status 0 "${repo_root}/deploy/verify-release.sh" "${release_legacy}" --quick
+expect_status 65 "${repo_root}/deploy/verify-release.sh" "${release_legacy}" --expected-images 21
+printf 'EXPECTED_IMAGES=21\n' >> "${release_legacy}/release.env"
+rehash_fixture "${release_legacy}"
+expect_status 65 "${repo_root}/deploy/verify-release.sh" "${release_legacy}"
+
+release_hash="${work_dir}/release-hash"
+cp -a -- "${release_expanded}" "${release_hash}"
+sed -i 's/^RELEASE=.*/RELEASE=changed/' "${release_hash}/release.env"
+expect_status 65 "${repo_root}/deploy/verify-release.sh" "${release_hash}"
+expect_status 65 "${repo_root}/deploy/verify-release.sh" "${release_hash}" --quick
+cp -- "${release_expanded}/release.env" "${release_hash}/release.env"
+sed -i '/  release.env$/d' "${release_hash}/MANIFEST.sha256"
+expect_status 65 "${repo_root}/deploy/verify-release.sh" "${release_hash}"
+cp -- "${release_expanded}/MANIFEST.sha256" "${release_hash}/MANIFEST.sha256"
+printf 'corrupted pixels\n' >> "${release_hash}/data/images/1.ome.tiff"
+expect_status 1 "${repo_root}/deploy/verify-release.sh" "${release_hash}"
+cp -- "${release_expanded}/data/images/1.ome.tiff" "${release_hash}/data/images/1.ome.tiff"
+mv -- "${release_hash}/data/images/21.ome.tiff" "${release_hash}/missing-image"
+expect_status 65 "${repo_root}/deploy/verify-release.sh" "${release_hash}"
+expect_status 65 "${repo_root}/deploy/verify-release.sh" "${release_hash}" --quick
 
 release_registry="${work_dir}/release-registry"
 make_release "${release_registry}"

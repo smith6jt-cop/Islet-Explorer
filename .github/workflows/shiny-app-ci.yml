@@ -9,6 +9,7 @@ on:
       - 'scripts/**'
       - 'deploy/**'
       - '.gitignore'
+      - 'data/phenotype_rules.csv'
       - '.github/workflows/shiny-app-ci.yml'
   pull_request:
     branches: [main]
@@ -17,6 +18,7 @@ on:
       - 'scripts/**'
       - 'deploy/**'
       - '.gitignore'
+      - 'data/phenotype_rules.csv'
       - '.github/workflows/shiny-app-ci.yml'
 
 permissions:
@@ -38,7 +40,9 @@ jobs:
           python-version: '3.12'
 
       - name: Initialize evidence directory
-        run: mkdir -p "${RUNNER_TEMP}/islet-ci-r"
+        run: |
+          mkdir -p "${RUNNER_TEMP}/islet-ci-r"
+          git rev-parse HEAD > "${RUNNER_TEMP}/islet-ci-r/source-revision.txt"
 
       - name: Configure isolated R library
         shell: bash
@@ -56,8 +60,12 @@ jobs:
           set -euo pipefail
           export DEBIAN_FRONTEND=noninteractive
           mkdir -p "${R_LIBS_USER}"
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends \
+          # All requested packages come from Ubuntu. A broken third-party
+          # Chrome index stopped all three jobs on 2026-09-09 before testing.
+          test -s /etc/apt/sources.list.d/ubuntu.sources
+          apt_sources=(-o Dir::Etc::sourcelist=/etc/apt/sources.list.d/ubuntu.sources -o Dir::Etc::sourceparts=-)
+          sudo apt-get "${apt_sources[@]}" update -qq
+          sudo apt-get "${apt_sources[@]}" install -y --no-install-recommends \
             build-essential r-base-core r-base-dev \
             r-cran-testthat r-cran-shiny r-cran-dplyr r-cran-tidyr \
             r-cran-tibble r-cran-lme4 r-cran-lmertest \
@@ -109,12 +117,54 @@ jobs:
             Rscript scripts/run_ci_r_tests.R "$suite" "${RUNNER_TEMP}/islet-ci-r" 2>&1 | tee "${RUNNER_TEMP}/islet-ci-r/${suite}-tests.log"
           done
 
-      - name: Install inventory test and pinned browser SAST tools
+      - name: Install data preparation test and pinned browser SAST tools
         run: |
-          python3 -m pip install numpy==2.2.6 h5py==3.15.1 tifffile==2025.10.16 semgrep==1.176.1
+          python3 -m pip install --report "${RUNNER_TEMP}/islet-ci-r/python-install.json" \
+            numpy==2.2.6 h5py==3.15.1 tifffile==2025.10.16 semgrep==1.176.1 \
+            pandas==2.3.3 anndata==0.12.4 scipy==1.16.3 \
+            openpyxl==3.1.5 imagecodecs==2026.6.6 shapely==2.1.2 \
+            scikit-learn==1.7.2 statsmodels==0.14.5 pyarrow==22.0.0 \
+            joblib==1.5.2 threadpoolctl==3.6.0 matplotlib==3.10.7
           python3 -m pip freeze --all > "${RUNNER_TEMP}/islet-ci-r/python-tools.txt"
           Rscript -e 'p <- as.data.frame(installed.packages()[, c("Package", "Version"), drop=FALSE]); write.table(p[order(p$Package), ], file.path(Sys.getenv("RUNNER_TEMP"), "islet-ci-r", "R-test-packages.tsv"), sep="\t", row.names=FALSE, quote=FALSE)'
           node --version > "${RUNNER_TEMP}/islet-ci-r/node-version.txt"
+
+      - name: Test cohort metadata and analysis import with zero skips
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' 2>&1 | tee "${RUNNER_TEMP}/islet-ci-r/cohort-tests.log"
+          import json
+          import os
+          from pathlib import Path
+          import unittest
+
+          summaries = {}
+          passed = True
+          for name, pattern in (
+              ("donor_metadata", "test_build_donor_metadata.py"),
+              ("cohort_analysis_import", "test_cohort_analysis_import.py"),
+              ("cohort_processing", "test_cohort_processing.py"),
+              ("research_pipeline", "test_research_pipeline.py"),
+          ):
+              suite = unittest.defaultTestLoader.discover("scripts/tests", pattern=pattern)
+              result = unittest.TextTestRunner(verbosity=2).run(suite)
+              summaries[name] = {
+                  "tests": result.testsRun, "failed": len(result.failures),
+                  "errors": len(result.errors), "skipped": len(result.skipped),
+              }
+              passed = passed and result.wasSuccessful() and result.testsRun > 0 and not result.skipped
+          path = Path(os.environ["RUNNER_TEMP"]) / "islet-ci-r/cohort-tests.json"
+          path.write_text(json.dumps(summaries, indent=2) + "\n")
+          raise SystemExit(0 if passed else 1)
+          PY
+
+      - name: Test synthetic viewer image conversion and duplicate detection
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/cohort_expansion/convert_images.py --self-test 2>&1 | \
+            tee "${RUNNER_TEMP}/islet-ci-r/image-conversion-self-test.log"
 
       - name: Verify browser harness dependencies and syntax
         working-directory: deploy/browser
@@ -128,6 +178,7 @@ jobs:
           npm ls --all --json > "${RUNNER_TEMP}/islet-ci-r/browser-dependencies.json"
           cp package.json package-lock.json "${RUNNER_TEMP}/islet-ci-r/"
           node --check check-app.mjs
+          node --check check-all-donor.mjs
           npm audit --audit-level=high --json > "${RUNNER_TEMP}/islet-ci-r/browser-npm-audit.json"
 
       - name: Test sanitized data inventory with zero skips
@@ -163,7 +214,7 @@ jobs:
           if-no-files-found: error
 
   deployment-quality:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -173,13 +224,18 @@ jobs:
           node-version: '22'
 
       - name: Initialize evidence directory
-        run: mkdir -p "${RUNNER_TEMP}/islet-ci-deploy"
+        run: |
+          mkdir -p "${RUNNER_TEMP}/islet-ci-deploy"
+          git rev-parse HEAD > "${RUNNER_TEMP}/islet-ci-deploy/source-revision.txt"
 
       - name: Install ShellCheck
         run: |
+          set -euo pipefail
           export DEBIAN_FRONTEND=noninteractive
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends shellcheck
+          test -s /etc/apt/sources.list.d/ubuntu.sources
+          apt_sources=(-o Dir::Etc::sourcelist=/etc/apt/sources.list.d/ubuntu.sources -o Dir::Etc::sourceparts=-)
+          sudo apt-get "${apt_sources[@]}" update -qq
+          sudo apt-get "${apt_sources[@]}" install -y --no-install-recommends shellcheck
 
       - name: Check deployment shell syntax
         shell: bash

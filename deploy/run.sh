@@ -53,6 +53,8 @@ tmp_dir="${project_root}/runtime/tmp-smoke"
 mkdir -p -- "${log_dir}" "${tmp_dir}"
 chmod 0750 "${log_dir}" "${tmp_dir}"
 
+# OCI images do not retain the Containerfile HEALTHCHECK. Set it here, as the
+# production Quadlet does, so verification can observe a healthy container.
 container_id="$(podman run --detach --rm \
   --name "${container_name}" \
   --pull=never \
@@ -63,6 +65,9 @@ container_id="$(podman run --detach --rm \
   --cap-drop=ALL \
   --security-opt=no-new-privileges \
   --cpus=2 --memory=14g --pids-limit=2048 \
+  --health-cmd='curl --fail --silent --show-error --max-time 8 http://127.0.0.1:3838/islet-explorer/' \
+  --health-interval=30s --health-timeout=10s \
+  --health-start-period=180s --health-retries=5 \
   --volume "${release_dir}/data:/srv/islet-explorer/data:ro" \
   --volume "${release_dir}/data/images:/srv/islet-explorer/app/shiny_app/www/local_images:ro" \
   --volume "${log_dir}:/var/log/shiny-server:rw" \

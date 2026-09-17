@@ -205,6 +205,18 @@ ui <- fluidPage(
       box-shadow: 0 0 0 0.2rem rgba(44, 90, 160, 0.15);
     }
 
+    /* Readable Selectize values during reactive control updates. */
+    .selectize-input .item,
+    .selectize-input input {
+      color: #444444;
+    }
+    .selectize-input.disabled {
+      opacity: 1;
+    }
+    .shiny-output-error-validation {
+      color: #595959;
+    }
+
     /* Button styling */
     .btn-primary {
       background: linear-gradient(145deg, #2c5aa0 0%, #1e3a72 100%);
@@ -258,9 +270,12 @@ ui <- fluidPage(
 
     /* Help text styling */
     .help-block {
-      color: #b3d9ff;
+      color: #52606d;
       font-size: 12px;
       font-style: italic;
+    }
+    .sidebar .help-block {
+      color: #b3d9ff;
     }
 
     /* Well and panel styling */
@@ -473,7 +488,10 @@ ui <- fluidPage(
           )
         },
         tabPanel("Spatial",
-          spatial_ui("spatial")
+          if (file.exists(data_path("candidate.json"))) {
+            tagList(h3("Spatial measurements"),
+              p("Tissue-clipped structural area measurements are available in Plot. Phenotype-distance and neighborhood analyses are unavailable until retained cell gates are validated for this cohort."))
+          } else spatial_ui("spatial")
         ),
         # Hidden unless SHOW_INFLAMMATION_TAB=1 (see 00_globals.R).
         # tabsetPanel drops NULL entries, so this mounts nothing when off.
@@ -676,7 +694,7 @@ server <- function(input, output, session) {
   }
 
   # Spatial Neighborhood module
-  spatial_server("spatial", prepared, active_palette, active_donor_colors,
+  if (!file.exists(data_path("candidate.json"))) spatial_server("spatial", prepared, active_palette, active_donor_colors,
                  remove_outliers = remove_outliers_global,
                  outlier_threshold = outlier_z_global)
 
@@ -706,7 +724,7 @@ server <- function(input, output, session) {
     if (show_cells) {
       cells <- load_islet_cells(info$case_id, info$islet_key)
       if (!is.null(cells)) {
-        color_by <- input$drilldown_color_by %||% "phenotype"
+        color_by <- input$drilldown_color_by %||% if (file.exists(data_path("candidate.json"))) "INS" else "phenotype"
         if (!islet_valid_scalar_choice(color_by, colnames(cells),
                                        "drilldown_color_invalid")) {
           color_by <- "phenotype"

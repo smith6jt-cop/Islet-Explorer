@@ -1,6 +1,6 @@
 # Islet Explorer
 
-Interactive R Shiny application for exploring pancreatic islet CODEX multiplexed imaging data from nPOD donors. Tracks insulin loss, immune infiltration, and cellular microenvironment changes across the ND → Aab+ → T1D disease progression.
+Interactive R Shiny application for exploring pancreatic islet CODEX multiplexed imaging data from nPOD and HPAP donors. Compares ND, autoantibody-positive and T1D donor groups using cross-sectional measurements; autoantibody positivity is not treated as a clinical disease stage.
 
 <div align="center">
 
@@ -9,7 +9,27 @@ Interactive R Shiny application for exploring pancreatic islet CODEX multiplexed
 
 </div>
 
-## Overview
+## Current all-donor local candidate
+
+The separate `data/development/all-donor-20260917/` candidate includes **21
+donors (7 ND, 7 Aab+, 7 T1D)**, corrected images, 3,592,722 raw objects and
+8,371 islets. The preview is at **http://127.0.0.1:3839/islet-explorer/**;
+`preview/service.json` records the current URL, PID, logs and restart command.
+The original service on port 3838 is preserved.
+
+Trajectory coordinates are fitted offline from outcome-blind marker features.
+Donor filters never refit or rescale them. All 31 panel markers are enabled in
+the heatmap. Research outputs are in
+`data/reports/all-donor-research/20260917/`, outside the app. The existing fit
+and estimates remain provisional: the owner's QuPath review identified suspect
+islet candidates, and subtype ratios still need validated upstream gates.
+The app displays this review status and retains corrected image access.
+
+See the [current implementation and validation record](docs/trajectory_revision_20260917.md) and
+[reproducible offline workflow](scripts/research/README.md). This is local
+delivery, not scientific or UFRC deployment acceptance.
+
+## Frozen publication-review baseline
 
 Islet Explorer is a non-mutating R Shiny research application for exploring
 pancreatic-islet measurements from **15 nPOD donors** across three disease

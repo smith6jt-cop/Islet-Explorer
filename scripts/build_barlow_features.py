@@ -18,10 +18,10 @@ Endocrine denominator
 ---------------------
 Barlow merged alpha/beta/delta into a single 'Endocrine' type for islet
 definition, and divide by "the number of endocrine cells inside the islet".
-Our phenotyping keeps Alpha/Beta/Delta separate AND carries a residual
-'Endocrine' class (any of INS/GCG/SST+ that did not resolve to a subtype), so
-the faithful denominator here is their sum. Floored at 1 so an islet with no
-resolved endocrine cell cannot produce an infinity.
+Only the union of validated Alpha/Beta/Delta assignments defines the denominator.
+The historical Endocrine residual is retired. Zero denominators remain missing.
+This compatibility builder assumes mutually exclusive assignments; candidate
+builds compute the union directly from object identifiers.
 
 What is NOT done here
 ---------------------
@@ -42,8 +42,11 @@ Output: data/barlow_islet_features.csv
 Usage:
     conda activate scvi-env
     python scripts/build_barlow_features.py
+    python scripts/build_barlow_features.py --core candidate/islets_core_fixed.h5ad \
+        --peri candidate/islets_peri_fixed.h5ad --output candidate/barlow_islet_features.csv
 """
 
+import argparse
 import os
 import numpy as np
 import pandas as pd
@@ -56,7 +59,7 @@ PERI = os.path.join(ROOT, 'islet_analysis', 'islets_peri_fixed.h5ad')
 OUT = os.path.join(ROOT, 'data', 'barlow_islet_features.csv')
 
 # Our analogue of Barlow's merged 'Endocrine' type.
-ENDOCRINE = ['Alpha cell', 'Beta cell', 'Delta cell', 'Endocrine']
+ENDOCRINE = ['Alpha cell', 'Beta cell', 'Delta cell']
 
 
 def count_frame(a, prefix):
@@ -69,12 +72,24 @@ def count_frame(a, prefix):
 
 
 def main():
-    core = ad.read_h5ad(CORE)
-    peri = ad.read_h5ad(PERI)
+    parser = argparse.ArgumentParser(description="Build core/peri Barlow composition features.")
+    parser.add_argument('--core', default=CORE, help='Core islet H5AD (default: original analysis input)')
+    parser.add_argument('--peri', default=PERI, help='Peri-islet H5AD (default: original analysis input)')
+    parser.add_argument('--output', default=OUT, help='Output CSV (set a separate path for a candidate)')
+    args = parser.parse_args()
+    if os.path.realpath(args.output) in {os.path.realpath(args.core), os.path.realpath(args.peri)}:
+        parser.error('--output must be separate from the input H5AD files')
+
+    core = ad.read_h5ad(args.core)
+    peri = ad.read_h5ad(args.peri)
     print(f"core {core.shape}  peri {peri.shape}")
 
     c = count_frame(core, '')
     p = count_frame(peri, '')
+    if set(core.obs.imageid.astype(str)) != set(peri.obs.imageid.astype(str)):
+        raise ValueError('Core/peri donor cohorts differ; silent intersection is forbidden')
+    if set(c.index) != set(p.index):
+        raise ValueError('Core/peri islet cohorts differ; silent intersection is forbidden')
 
     # Join on islet_id -- the two files are NOT in the same row order.
     common = c.index.intersection(p.index)
@@ -88,8 +103,8 @@ def main():
         print(f"  NOTE: endocrine types absent from phenotyping: {sorted(missing)}")
     n_endo = c[endo_present].sum(axis=1)
     print(f"  endocrine cells/islet: median {n_endo.median():.0f}, "
-          f"zero in {(n_endo == 0).sum()} islets (floored at 1)")
-    denom = n_endo.clip(lower=1)
+          f"zero in {(n_endo == 0).sum()} islets (unavailable)")
+    denom = n_endo.where(n_endo > 0)
 
     # Barlow: counts / endocrine cells, then log. log1p rather than log so that
     # a zero count stays 0 instead of -inf -- most cell types are absent from
@@ -115,8 +130,9 @@ def main():
     peri_n = p.add_prefix('n_peri_')
 
     out = pd.concat([meta, core_f, peri_f, core_n, peri_n], axis=1)
-    out.to_csv(OUT, index=False)
-    print(f"\nWrote {OUT}")
+    os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
+    out.to_csv(args.output, index=False)
+    print(f"\nWrote {args.output}")
     print(f"  {out.shape[0]} islets x {out.shape[1]} columns "
           f"({core_f.shape[1]} core + {peri_f.shape[1]} peri log-ratio features, "
           f"plus the same counts raw as n_core_* / n_peri_*)")

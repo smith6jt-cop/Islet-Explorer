@@ -104,7 +104,8 @@ load_case_geojson <- function(case_id, centroid_x_um = NULL,
   }
 
   geojson <- tryCatch({
-    gj <- sf::st_read(json_path, quiet = TRUE)
+    source_path <- if (grepl("[.]gz$", json_path)) paste0("/vsigzip/", normalizePath(json_path)) else json_path
+    gj <- sf::st_read(source_path, quiet = TRUE)
     # Remove geographic CRS - these are actually image pixel/micron coordinates, not geographic
     # The GeoJSON export from QuPath uses pixel coordinates but sf assigns WGS84 by default
     sf::st_crs(gj) <- NA

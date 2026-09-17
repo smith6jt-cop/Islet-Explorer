@@ -20,6 +20,37 @@ tracked in [`PUBAPPS_UFRC_HANDOFF.md`](../PUBAPPS_UFRC_HANDOFF.md); proportional
 logging requirements and additional hardening guidance are in
 [`docs/pubapps_log_inventory.md`](../docs/pubapps_log_inventory.md).
 
+The expansion, updated 2026-09-16, is a separate candidate targeting 21 donor images. The
+frozen 15-image release at `5809be4` and its evidence remain the reference release.
+The candidate adds 6090, 6232, 6539, the selected `PAN-6558` acquisition,
+6520-01A, and HPAP-078; it excludes `CX_PAN-6558` and 6520-01B. Image preparation
+with InstanSeg 0.1.1 and joint cohort model fitting run offline, outside PubApps.
+The 6090/6539 source mix-up has been resolved from raw channel acquisitions:
+6090 was verified and the distinct 6539 stack reconstructed and pixel-checked.
+The corrected six viewer TIFFs total 46,877,746,573 bytes. Stage them from
+`data/development/expanded-20260911/reports/image_conversion/reconciled_inventory.json`;
+the main development `images/` directory still retains the rejected duplicate
+6539 as historical evidence and must not be copied wholesale. Corrected paths,
+preparation counts and QC are in [the expansion status](../docs/cohort_expansion_status.md).
+The current separate schema-3 runtime is built and served locally at
+http://127.0.0.1:3839/islet-explorer/. It contains 21 donors, fixed offline
+trajectory artifacts and all 31 heatmap markers; research reports are outside
+the app. Missing gates and the newly identified islet-identity review are
+explicitly labeled. Its declared runtime measures 164,147,382,976 bytes
+(152.874 GiB); retaining the frozen original and one candidate staging copy
+requires 414.799 GiB before review reports/containers/logs/spill. Scientific acceptance,
+exact-image scans and UFRC runtime acceptance remain pending. Local operation
+and candidate-specific evidence are in [the revision record](../docs/trajectory_revision_20260917.md).
+Original-release results do not certify the candidate. See
+[the readiness record](../docs/ufrc_readiness.md).
+
+The retirement policy requires retained-label and upstream-gate validation,
+superseding the earlier requirement to recreate all 21 historical labels.
+Unvalidated subtype denominators and immune/ductal endpoints remain unavailable.
+Both deployment verification and the production R profile reject this
+schema-2/3 candidates while `scientific_acceptance` remains false. Keep the local
+development service separate from production and the frozen rollback release.
+
 ## Fixed production contract
 
 - Rootless Podman and a user Quadlet service; Apptainer is not a supported
@@ -222,7 +253,7 @@ On the PubApps VM, use the assigned project path:
   releases/
     pubapps-2026-01/
       data/                  # output of the release-data builder
-        images/              # 15 OME-TIFFs + XML/offset sidecars
+        images/              # declared OME-TIFF count + XML/offset sidecars
       attestations/          # SBOM, scan, dependency manifests
       release.env            # generated; do not hand-edit
       MANIFEST.sha256        # generated
@@ -267,17 +298,41 @@ deploy/load-image.sh \
 
 IMAGE_REF='sha256:<image-id-printed-by-load-image>'
 GIT_COMMIT='<40-character-release-commit>'
+EXPECTED_IMAGES=21 # expanded candidate; use 15 for the original cohort
+DATA_SCHEMA=2 # fixed offline trajectory contract; frozen original uses 1
 
 deploy/generate-release-manifest.sh \
-  "${RELEASE_DIR}" "${RELEASE}" "${IMAGE_REF}" "${GIT_COMMIT}" 1
+  "${RELEASE_DIR}" "${RELEASE}" "${IMAGE_REF}" "${GIT_COMMIT}" "${DATA_SCHEMA}" "${EXPECTED_IMAGES}"
 deploy/verify-release.sh "${RELEASE_DIR}"
 ```
 
+The 21-image cohort is built locally; it remains unaccepted for production.
+This example applies only after scientific review and fresh immutable-image
+evidence are complete. Do not change the acceptance field merely to bypass
+the verifier. Stage only declared runtime artifacts from the reviewed candidate;
+do not deploy its raw working directories, preview logs or rejected images.
+
 Generation hashes the builder's `data/` output once, including its `images/`
 subtree, and rejects symlinks that escape the release plus filenames associated
-with credentials or mutable backups. Verification requires exactly 15
-OME-TIFFs by default, checks every manifest hash, and writes `.verified` tied to
-the manifest hash. If the bundle changes, regenerate and fully verify it.
+with credentials or mutable backups. Supply the independently reviewed OME-TIFF
+count as the sixth argument; generation rejects a different staged count and
+writes `MANIFEST_VERSION=2` and `EXPECTED_IMAGES` into the hashed `release.env`.
+The original runtime data schema is `1`. The new offline trajectory contract
+is schema `2`, declaring cohort, trajectory, research and cell drill-down artifacts;
+it preserves schema-1 reader/verifier compatibility for the frozen release.
+Omitting the count retains the original generator default of 15, so an expanded
+bundle cannot silently redefine its expected cohort from the files present.
+
+Verification reads that declaration automatically, checks every manifest hash,
+and writes `.verified` tied to the manifest hash. Activation, the manual launcher,
+and rollback all use the same verifier; they need no image-count override.
+Legacy `MANIFEST_VERSION=1` releases without `EXPECTED_IMAGES` retain their
+15-image contract, including the frozen original release. For an optional
+operator cross-check, `--expected-images N` must agree with the release metadata;
+it cannot override it. Missing version-2 counts and duplicate, malformed, or
+conflicting metadata fail verification. Even `--quick` checks the metadata hash
+and actual image count, but does not rehash TIFF contents. If the bundle changes,
+regenerate and fully verify it.
 
 ## 3. Activate the Quadlet service
 

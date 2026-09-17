@@ -2,9 +2,26 @@
 
 This file provides guidance to Claude Code when working with this repository.
 
+## Current candidate contract — 2026-09-17
+
+Use [scripts/research/README.md](scripts/research/README.md) and
+[docs/trajectory_revision_20260917.md](docs/trajectory_revision_20260917.md) for the 21-donor candidate.
+It includes HPAP-078, retains the retirement policy, and reads fixed offline
+outcome-blind diffusion coordinates. It does not fit scVI/Harmony, use an
+INS/ND root, tune disease ordering, or interpret Aab positivity as a clinical
+stage. Trajectory y values are endocrine-normalized ratios only; unvalidated
+denominators remain unavailable. Schema 3 keeps research reports outside the
+app and selects all 31 heatmap markers. Islet identity requires review after
+suspect HPAP candidates were identified; a new fit requires recorded review
+decisions. Historical pipeline details
+below describe the frozen original and must not override this contract.
+
 ## Project Overview
 
-Interactive Shiny app for exploring pancreatic islet CODEX multiplexed imaging data from nPOD donors. Tracks insulin loss and immune infiltration across ND -> Aab+ -> T1D progression. Features islet-level aggregated views, pseudotime trajectory, spatial neighborhood analysis, and single-cell drill-down.
+Interactive Shiny app for exploring pancreatic islet CODEX multiplexed imaging
+data from nPOD and HPAP donors. Compares endocrine composition and the islet
+microenvironment across ND, autoantibody-positive and T1D donors. Section-level
+associations and arbitrary trajectory orientation do not establish progression.
 
 ## Sub-directory CLAUDE.md files
 
