@@ -211,8 +211,13 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
     })
 
     # ==== Card 2 (rdeck variant): WebGL tissue scatter for million-cell donors ====
-    output$tissue_scatter_deck <- if (requireNamespace("rdeck", quietly = TRUE)) {
-      rdeck::renderRdeck({
+    # Defined only when rdeck is installed. Shiny's defineOutput() rejects a
+    # non-function (assigning NULL raises "Unexpected NULL output"), so the
+    # slot must be left undefined rather than set to NULL. The renderUI above
+    # only emits rdeckOutput() when is_rdeck_available(), so nothing binds to
+    # this id in the default ggplot path.
+    if (requireNamespace("rdeck", quietly = TRUE)) {
+      output$tissue_scatter_deck <- rdeck::renderRdeck({
         cells <- donor_cells()
         req(cells)
 
@@ -231,8 +236,6 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         if (nrow(plot_df) == 0) return(NULL)
         render_tissue_deck(plot_df, palette = palette())
       })
-    } else {
-      NULL
     }
 
     # ==== Card 2: Tissue Scatter Plot (ggplot2, rasterized) ====

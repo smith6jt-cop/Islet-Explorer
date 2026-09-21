@@ -412,8 +412,11 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       }
     })
 
-    output$traj_scatter_deck <- if (requireNamespace("rdeck", quietly = TRUE)) {
-      rdeck::renderRdeck({
+    # Defined only when rdeck is installed — Shiny's defineOutput() rejects a
+    # non-function, so assigning NULL here would error at app start on every
+    # box without rdeck. The renderUI above falls back to plotlyOutput().
+    if (requireNamespace("rdeck", quietly = TRUE)) {
+      output$traj_scatter_deck <- rdeck::renderRdeck({
         df <- traj_data_clean()
         if (is.null(df) || nrow(df) == 0) return(NULL)
 
@@ -429,8 +432,6 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
                          color_col = "donor_status",
                          palette = donor_colors_reactive())
       })
-    } else {
-      NULL
     }
 
     # ---------- Trajectory scatter plot ----------
