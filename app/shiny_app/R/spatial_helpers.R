@@ -56,7 +56,7 @@ get_available_donors <- function() {
 #' @param extra Optional character vector of phenotypes observed in the data.
 #' @return Canonical names first (PHENOTYPE_COLORS order), then any extras.
 canonical_phenotype_order <- function(extra = character(0)) {
-  canon <- phenotype_keep(names(PHENOTYPE_COLORS))
+  canon <- if (identical(islet_release_schema(), "4")) islet_current_phenotype_names() else islet_app_phenotype_names()
   extra <- unique(as.character(extra[!is.na(extra) & nzchar(extra)]))
   c(canon, sort(setdiff(extra, canon)))
 }
@@ -87,9 +87,10 @@ load_donor_tissue <- function(imageid) {
       read.csv(csv_path, stringsAsFactors = FALSE)
     }
     if (nrow(d) == 0) return(NULL)
-    # Retired phenotypes dropped at the LOADER. Background ("tissue")
-    # cells keep their own cell_region and are unaffected.
-    phenotype_filter_rows(d)
+    # Use the most recent delivered phenotype rows as approved for display.
+    # Scientific retirement rules remain available to analyses, but must not
+    # make Spatial silently lose measured cells or create a review blocker.
+    if (identical(islet_release_schema(), "4")) d else phenotype_filter_rows(d)
   }, error = function(e) {
     islet_log_event("spatial_tissue_load_failed")
     NULL

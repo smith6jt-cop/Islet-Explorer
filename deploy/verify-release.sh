@@ -100,7 +100,7 @@ if [[ "${actual_images}" != "${expected_images}" ]]; then
   echo "ERROR: expected ${expected_images} OME-TIFF files, found ${actual_images}." >&2
   exit 65
 fi
-if [[ "${data_schema}" == 2 || "${data_schema}" == 3 ]]; then
+if [[ "${data_schema}" == 2 || "${data_schema}" == 3 || "${data_schema}" == 4 ]]; then
   python3 - "${release_dir}/data/manifest.json" "${expected_images}" "${data_schema}" <<'PY'
 import json
 import sys
@@ -120,6 +120,21 @@ if schema == "3":
     files = ["counts.csv", "endocrine_counts.csv", "phenotype_availability.csv", "marker_panel.json", "count_manifest.json"]
     if "research" in manifest["artifacts"] or not all((root/"trajectory"/f).is_file() for f in files):
         raise SystemExit("ERROR: schema-3 count artifacts are required; research reports must be outside the runtime.")
+if schema == "4":
+    root = Path(sys.argv[1]).parent
+    files = ['image_channels.json', 'typing/catalog.json', 'typing/specification.json', 'analysis/classifier_eligibility_manifest.json', 'trajectory/feature_manifest.json',
+             'trajectory/count_manifest.json', 'trajectory/marker_panel.json', 'trajectory/validation.json']
+    tables = ['composition_features', 'marker_summaries', 'counts', 'endocrine_counts', 'coordinates', 'edges', 'graph_layout']
+    if ('research' in manifest['artifacts'] or 'typing' not in manifest['artifacts']
+            or not all((root/f).is_file() for f in files)
+            or not all(any((root/'trajectory'/(name+ext)).is_file() for ext in ['.parquet','.csv']) for name in tables)):
+        raise SystemExit('ERROR: schema-4 requires typed composition, marker summaries and their provenance; research remains outside the runtime.')
+    definitions = manifest.get('measurement_definitions', {})
+    if (definitions.get('trajectory_features') != 'log1p_validated_base_type_count_per_classifier_defined_core_cell'
+            or definitions.get('islet_eligibility') != 'no_image_edge_contact_and_at_least_one_canonical_classifier_core_cell'
+            or definitions.get('endocrine_denominator') != 'all_canonical_cells_inside_endocrine_pixel_classifier_core_counted_once'
+            or not {'typing_specification', 'typing_catalog', 'trajectory_feature_manifest', 'classifier_eligibility'}.issubset(manifest.get('provenance_hashes', {}))):
+        raise SystemExit('ERROR: schema-4 measurement definition or provenance hash is missing.')
 if manifest.get("scientific_acceptance") is not True:
     raise SystemExit("ERROR: local expanded candidate has not passed scientific deployment acceptance.")
 PY

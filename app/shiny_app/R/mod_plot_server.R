@@ -35,6 +35,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
     }
 
     composition_selection_choices <- function(pd) {
+      typed_release <- identical(islet_release_schema(), "4")
       base_choices <- c(
         "Ins_frac" = "Ins_any",
         "Glu_frac" = "Glu_any",
@@ -43,6 +44,14 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       comp_cols <- colnames(pd$comp)
       prop_cols <- grep("^prop_", comp_cols, value = TRUE)
       peri_prop_cols <- grep("^peri_prop_", comp_cols, value = TRUE)
+      # Keep the delivered display vocabulary visible even when a release has
+      # no measured counts for one of its identities. The corresponding
+      # summary columns are NA in that case and the plot reports no data.
+      if (typed_release) {
+        app_labels <- islet_app_phenotype_names()
+        prop_cols <- unique(c(prop_cols, paste0("prop_", app_labels)))
+        peri_prop_cols <- unique(c(peri_prop_cols, paste0("peri_prop_", app_labels)))
+      }
       combined_pairs <- pd$combined_pairs
       combined_vals <- if (!is.null(combined_pairs) && nrow(combined_pairs) > 0) {
         setNames(paste0("combined_prop_", combined_pairs$stem), combined_pairs$label)
@@ -52,10 +61,9 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
 
       if (!length(prop_cols) && !length(peri_prop_cols)) return(base_choices)
 
-      choices <- list("Core — Hormone Positivity (QuPath threshold)" = base_choices)
+      choices <- setNames(list(base_choices), if (typed_release) "Core — reviewed hormone positivity" else "Core — Hormone Positivity (QuPath threshold)")
       if (length(prop_cols) > 0) {
-        prop_cols <- prop_cols[phenotype_is_kept(gsub("^prop_", "", prop_cols))]
-        choices[["Core — Phenotype Proportions (scVI)"]] <-
+        choices[[if (typed_release) "Core — typed identities and states" else "Core — Phenotype Proportions (scVI)"]] <-
           setNames(prop_cols, gsub("^prop_", "", prop_cols))
       }
       if (length(peri_prop_cols) > 0) {
@@ -64,11 +72,11 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
           function(cl) extract_phenotype_from_column(cl) %||% cl,
           character(1), USE.NAMES = FALSE
         )
-        choices[["Peri-Islet — Phenotype Proportions (scVI)"]] <-
+        choices[[if (typed_release) "Peri-islet — typed identities and states" else "Peri-Islet — Phenotype Proportions (scVI)"]] <-
           setNames(peri_prop_cols, peri_labels)
       }
       if (length(combined_vals) > 0) {
-        choices[["Core+Peri — Phenotype Proportions (scVI)"]] <- combined_vals
+        choices[[if (typed_release) "Core + peri — typed identities and states" else "Core+Peri — Phenotype Proportions (scVI)"]] <- combined_vals
       }
       choices
     }
@@ -397,6 +405,14 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
           peri_n <- ifelse(is.finite(peri_prop) & is.finite(peri_total), peri_prop * peri_total, 0)
           ctot <- ifelse(is.finite(core_total), core_total, 0)
           ptot <- ifelse(is.finite(peri_total), peri_total, 0)
+          if (identical(islet_release_schema(), "4")) {
+            core_n <- core_prop * core_total; peri_n <- peri_prop * peri_total
+            ctot <- core_total; ptot <- peri_total
+            # An assessed, empty compartment has a true zero count; a missing
+            # assignment or compartment cannot silently become biological zero.
+            core_n[is.finite(core_total) & core_total == 0] <- 0
+            peri_n[is.finite(peri_total) & peri_total == 0] <- 0
+          }
           combined_n <- core_n + peri_n
           combined_total <- ctot + ptot
           if (metric == "Counts") {
@@ -404,6 +420,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
           } else if (metric == "Density") {
             ca <- ifelse(is.finite(core_area_um2), core_area_um2, 0)
             pa <- ifelse(is.finite(peri_area_um2), peri_area_um2, 0)
+            if (identical(islet_release_schema(), "4")) { ca <- core_area_um2; pa <- peri_area_um2 }
             combined_area <- ca + pa
             df <- df %>% dplyr::mutate(value = ifelse(combined_area > 0,
               combined_n / combined_area * 1e6, NA_real_))
@@ -1234,6 +1251,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
 
       # Marker choices for color-by dropdown
       candidate <- islet_is_expanded_schema()
+      typed_release <- identical(islet_release_schema(), "4")
       marker_choices <- if (candidate) character() else c("phenotype" = "phenotype")
       if (has_cells) {
         cells <- load_islet_cells(info$case_id, info$islet_key)
@@ -1243,6 +1261,10 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
                                  "object_id", "marker_measurements_complete"))
         if (length(marker_cols) > 0) {
           marker_choices <- c(marker_choices, setNames(marker_cols, marker_cols))
+        }
+        if (typed_release) {
+          panel <- jsonlite::read_json(data_path("trajectory", "marker_panel.json"))
+          marker_choices <- islet_cell_color_choices(intersect(unlist(panel$markers, use.names = FALSE), names(cells)))
         }
       }
 
@@ -1274,7 +1296,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
                   conditionalPanel(
                     condition = "input.drilldown_show_cells",
                     selectInput("drilldown_color_by", "Color by",
-                                choices = marker_choices, selected = if (candidate) "INS" else "phenotype"),
+                                choices = marker_choices, selected = if (candidate && !typed_release) "INS" else "phenotype"),
                     selectInput("drilldown_palette", "Phenotype Palette",
                                 choices = c("Original", "High Contrast", "Colorblind Safe", "Maximum Distinction"),
                                 selected = "High Contrast"),

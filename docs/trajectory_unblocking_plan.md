@@ -1,25 +1,32 @@
 # Trajectory unblocking plan — 2026-09-17
 
-Status updated 2026-09-17: the complete marker panel, offline report export,
-schema-3 runtime, count-engine repair and revised local preview are implemented
-and technically verified. Actual ratios remain blocked by scientific gate
-review. The owner's QuPath review also exposed false islet candidates; islet
-identity must now be reviewed before accepting a new fit. See the
-[implementation and evidence record](trajectory_revision_20260917.md).
-A separate native QuPath review copy has been prepared for the six additions;
-see the [donor review guide](qupath_donor_review.md).
-This supersedes the earlier requirement to put Research results in the app.
-Research outputs belong in a local report folder. The trajectory heatmap must
-offer and initially display all 31 panel markers.
+**Superseding measurement/typing correction, 2026-09-19:** see
+[the reference and decision record](trajectory_typing_reference_20260919.md).
+Typing must precede the endocrine-normalized composition inputs used to fit
+trajectory, and the nine newly specified markers must contribute meaningfully
+to cell phenotypes. Instructions below to preserve median-intensity fitting
+inputs no longer define the target implementation.
 
-## What is actually blocking the trajectory
+Status updated 2026-09-22: the schema-4 runtime now uses the most recent
+approved boundaries and typed-cell outputs. Eligibility is determined only by
+no image-edge contact and at least one canonical cell inside the classifier
+core. The saved fit records 11,136 eligible islets across all 21 donors, 7,493
+feature-supported rows and 2,626 supported primary coordinates. Spatial UMAP
+and Leiden use the 7,493 feature-supported typed-composition rows. The ratio
+scatter, pseudotime strip, graph, display controls, 31-marker typed-expression
+heatmap and schema-4 islet drilldown pass browser acceptance. Marker-positive
+heatmap ratios remain separately unavailable where positivity gates are absent.
+Research outputs belong in a local report folder and are absent from the app.
 
-The saved pseudotime contains 3,499 previously eligible islets across all 21
-donors. The ratio plot lacks certified phenotype counts. In addition, 508 of
-those previously eligible islets have no cells above the exported hormone
-thresholds and need identity review (143 in HPAP-078). Numerical stability did
-not establish islet identity. Replacing the error display with an availability
-notice supplied neither certified counts nor biological region validation.
+## Resolved trajectory blockers and remaining scientific limits
+
+Earlier checkpoints contained 3,499 marker-median eligible rows, a 54-islet
+typed gate and a 1,510-islet multi-gate set. All are superseded. Current
+eligibility has only the two classifier rules above, and every donor contributes
+at least 137 eligible islets. Downstream typing can make a trajectory feature or
+coordinate unavailable but cannot remove eligibility. The saved trajectory is
+unstable by its prespecified thresholds; its root orientation, topology, donor
+association and incomplete positivity gates remain substantive limits.
 
 The table records the original causes that motivated the implementation:
 
@@ -128,8 +135,9 @@ uncertified gate must remain uncertified until the evidence supports it.
   corrections are available; changed geometry also requires new measurements.
 - Plot `log1p(numerator / core_endocrine_union_count)`. A validated zero
   numerator plots as zero when the denominator is positive. A zero denominator
-  or unavailable required count remains missing. Retain all 201 wholly
-  unmeasured objects in raw data and their exclusion reasons.
+  or unavailable required count remains missing. Retain every wholly
+  unmeasured object and its exclusion reason (201 in the earlier checkpoint;
+  248 in the final native-cell universe).
 - Make availability messages reflect the selected donor/type and actual reason.
   Export numerator, denominator, raw ratio, plotted value and availability
   reason. Preserve all retained types in the control, including immune and
@@ -201,3 +209,22 @@ verification results. Update the delivery/readiness documentation to
 distinguish working trajectory ratios, any remaining type-specific limitations,
 offline research reports and UFRC acceptance. Preserve rollback to the previous
 candidate and the frozen original release.
+## Superseded 2026-09-21 checkpoint
+
+This checkpoint predates the 2026-09-22 classifier eligibility correction
+recorded at the top of this document.
+
+The post-typing composition runner has been executed against the all-donor
+candidate. It writes typed core/peri counts, the endocrine denominator, all-31
+marker summaries, and explicit exclusion reasons. The fixed trajectory runner
+was then invoked and stopped before fitting because donors 6516, 6520, 6549,
+6550, 6558, and 6563 currently have no supported eligible compositions under
+the primary rules (at least ten measured core cells, valid geometry, no primary
+region overlap, and supported typed core/peri measurements). This is recorded in
+`trajectory_fit/validation.json` as `status: unavailable`.
+
+No zero denominator or unsupported peri-islet measurement was substituted. The
+next unblock is biological lineage review/application for the held cells and
+rebuilding composition; changing the diffusion parameters would not address the
+upstream missing typing. The fitted trajectory remains absent until every donor
+has supported eligible compositions.

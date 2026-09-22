@@ -52,15 +52,21 @@ def geometry_data(path):
     return cores,result,bad
 
 def positive_area(region, structural):
-    if structural is None or region.is_empty: return 0.
+    if structural is None: return np.nan
+    if region.is_empty: return 0.
     parts,tree=structural
     nearby=tree.query(region,predicate='intersects')
     # Union the intersected local pieces so an overlapping mask cannot inflate
     # positive area. The spatial index avoids scanning a whole-slide union.
     return shapely.union_all(shapely.intersection(parts[nearby],region)).area if len(nearby) else 0.
 
-def membership(index, geom, x, y):
+def membership(index, geom, x, y, boundary_policy='qupath_polygon'):
     if geom.is_empty: return np.array([],dtype=int)
+    if boundary_policy == 'qupath_geometry':
+        # GeometryROI.contains includes both JTS INTERIOR and BOUNDARY.
+        return np.sort(index.query(geom,predicate='covers'))
+    if boundary_policy != 'qupath_polygon':
+        raise ValueError('Unknown native ROI containment policy')
     ids=index.query(geom,predicate='contains')
     # Use the audited QuPath PolygonROI winding convention for exact ties.
     ties=index.query(geom.boundary,predicate='intersects')
@@ -71,7 +77,7 @@ def membership(index, geom, x, y):
         ids=np.r_[ids,[i for i in ties if polygon_boundary_contains(list(geom.exterior.coords),x[i],y[i])]].astype(int)
     return np.sort(ids)
 
-def process(row, out, rules, gate_table, gate_provenance):
+def process(row, out, rules, gate_table, gate_provenance, core_roi_types=None):
     cid=row.case_id; start=time.monotonic()
     source=ad.read_h5ad(row.cells,backed='r')
     try:
@@ -119,7 +125,9 @@ def process(row, out, rules, gate_table, gate_provenance):
         for band in [10,20,30]:
             peri=g.buffer(band/px).difference(union).intersection(tissue) if valid else shapely.GeometryCollection()
             for comp,region in [('core',core),('peri',peri)]:
-                members=membership(idx,region,x,y); use=members[measured[members]]
+                roi_type=core_roi_types[name] if comp=='core' and core_roi_types is not None else 'PolygonROI'
+                policy={'PolygonROI':'qupath_polygon','GeometryROI':'qupath_geometry'}[roi_type]
+                members=membership(idx,region,x,y,policy); use=members[measured[members]]
                 record={**base,'compartment':comp,'band_um':band,'valid_area_um2':region.area*area_scale,
                         'raw_cells':len(members),'measured_cells':len(use),
                         'unmeasured_cells':len(members)-len(use)}

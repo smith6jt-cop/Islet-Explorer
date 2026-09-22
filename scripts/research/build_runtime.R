@@ -10,6 +10,11 @@ Sys.setenv(ISLET_DATA_ROOT = root, ISLET_DATA_SCHEMA = schema, ISLET_RUNTIME_MOD
 setwd(file.path(repo, "app/shiny_app"))
 source("R/00_audit.R"); source("R/00_globals.R"); source("R/01_runtime_data_backend.R")
 source("R/utils_safe_join.R"); source("R/data_loading.R")
+if (identical(as.character(schema), "4")) {
+  python <- Sys.getenv("RETICULATE_PYTHON", unset = Sys.which("python3"))
+  status <- system2(python, c(shQuote(file.path(repo, "scripts/research/build_runtime_schema4.py")), "--input-root", shQuote(root)))
+  if (!identical(status, 0L)) stop("Canonical schema-4 summary materialization failed")
+} else {
 master <- load_master(file.path(root, "master_results.xlsx"))
 master <- lapply(master, function(d) {
   if (!is.null(d) && "Case ID" %in% names(d)) d$`Case ID` <- as.integer(d$`Case ID`)
@@ -29,6 +34,8 @@ for (name in names(ISLET_SUMMARY_ARTIFACTS)) {
   DBI::dbExecute(con, paste0("COPY candidate_frame TO ", DBI::dbQuoteString(con, target), " (FORMAT PARQUET, COMPRESSION ZSTD)"))
   duckdb::duckdb_unregister(con, "candidate_frame")
 }
+}
+cohort <- read.csv(file.path(root,"cohort.csv"), colClasses = "character")
 dir.create(file.path(root, "geometry"), showWarnings = FALSE)
 for (cid in cohort$case_id) {
   key <- sprintf("%04d", as.integer(cid))

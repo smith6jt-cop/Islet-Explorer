@@ -28,6 +28,8 @@ def design(d, interaction=False):
     x=pd.DataFrame({'Intercept':np.ones(len(d)),'disease':(d.donor_status=='T1D').astype(float),
                     'log_area_within':d.log_area_within,'log_area_between':d.log_area_between,
                     'age':d.age,'sex':d.sex.astype(str).str.lower().str.startswith('m').astype(float)},index=d.index)
+    if (d.donor_status=='Aab+').any():
+        x['aab_status']=(d.donor_status=='Aab+').astype(float)
     if interaction:
         x['disease:log_area_within']=x.disease*x.log_area_within
         x['disease:log_area_between']=x.disease*x.log_area_between

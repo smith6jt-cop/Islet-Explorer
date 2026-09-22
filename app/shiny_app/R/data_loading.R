@@ -616,6 +616,8 @@ load_shared_prepared_data <- function(root = data_root) {
         nrow(cohort) != 21L || anyDuplicated(cohort$case_id)) stop("Candidate cohort identity mismatch.")
     actual_images <- sort(list.files(file.path(root, "images"), pattern = "[.]ome[.]tiff$"))
     if (!identical(actual_images, sort(unlist(candidate$expected_images)))) stop("Candidate image cohort mismatch.")
+    if (identical(as.character(candidate$schema_version), "4"))
+      stop("Schema 4 must be finalized before serving; Excel fallback is prohibited.")
     master <- load_master(file.path(root, "master_results.xlsx"))
     master <- lapply(master, function(d) {
       if (!is.null(d) && "Case ID" %in% names(d)) d$`Case ID` <- as.integer(d$`Case ID`)

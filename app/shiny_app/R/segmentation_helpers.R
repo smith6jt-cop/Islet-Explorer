@@ -41,6 +41,7 @@ load_case_geojson <- function(case_id, centroid_x_um = NULL,
           signif(as.numeric(centroid_y_um), 10), signif(as.numeric(buffer_um), 10),
           sep = "::")
   } else as.character(case_id)
+  cache_key <- paste(normalizePath(data_root, mustWork = FALSE), cache_key, sep = "::")
   if (exists(cache_key, envir = geojson_cache)) {
     return(get(cache_key, envir = geojson_cache))
   }

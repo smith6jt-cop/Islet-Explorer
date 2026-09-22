@@ -20,6 +20,9 @@ test_that("schema 2 requires fixed trajectory artifacts and leaves schema 1 inta
   expect_true(all(c("cohort", "trajectory", "cells") %in% env$islet_required_artifacts("3")))
   expect_false("research" %in% env$islet_required_artifacts("3"))
   expect_true(env$islet_is_expanded_schema("3"))
+  expect_true(env$islet_is_expanded_schema("4"))
+  expect_true(all(c("typing", "trajectory", "cohort", "classifier_eligibility") %in% env$islet_required_artifacts("4")))
+  expect_false(any(c("research", "phenotype_rules") %in% env$islet_required_artifacts("4")))
 })
 
 test_that("schema 2 tree hashes use portable byte ordering", {

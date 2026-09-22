@@ -16,7 +16,7 @@ islet_release_schema <- function() {
   Sys.getenv("ISLET_DATA_SCHEMA", unset = "1")
 }
 
-islet_is_expanded_schema <- function(schema = islet_release_schema()) as.character(schema) %in% c("2", "3")
+islet_is_expanded_schema <- function(schema = islet_release_schema()) as.character(schema) %in% c("2", "3", "4")
 
 islet_duckdb_connection <- function() {
   if (!requireNamespace("DBI", quietly = TRUE) ||
@@ -117,6 +117,11 @@ ISLET_REQUIRED_RELEASE_ARTIFACTS <- c(
 )
 
 islet_required_artifacts <- function(schema = islet_release_schema()) {
+  if (identical(as.character(schema), "4")) return(c(
+    names(ISLET_SUMMARY_ARTIFACTS), "geometry", "islet_spatial_lookup",
+    "donor_metadata", "images", "image_channels", "cells", "cohort", "trajectory", "typing",
+    "islet_embedding", "islet_embedding_manifest", "classifier_eligibility"
+  ))
   if (identical(as.character(schema), "3")) return(c(
     names(ISLET_SUMMARY_ARTIFACTS), "geometry", "islet_spatial_lookup",
     "phenotype_rules", "donor_metadata", "images", "cells", "cohort", "trajectory"
@@ -237,6 +242,24 @@ islet_validate_release <- function(root = data_root) {
     if (!all(file.exists(file.path(root, "trajectory", files))))
       stop("Schema 3 requires trajectory count, availability and marker-panel artifacts.", call. = FALSE)
     if ("research" %in% names(artifacts)) stop("Schema 3 research reports must be outside the app runtime.", call. = FALSE)
+  }
+  if (identical(actual_schema, "4")) {
+    required_files <- c("typing/catalog.json", "typing/specification.json",
+      "trajectory/marker_panel.json", "trajectory/count_manifest.json",
+      "trajectory/feature_manifest.json", "trajectory/validation.json",
+      "analysis/islet_embedding_manifest.json", "analysis/classifier_eligibility_manifest.json")
+    required_tables <- c("composition_features", "marker_summaries", "counts", "endocrine_counts", "coordinates", "edges", "graph_layout")
+    present <- vapply(required_tables, function(name) any(file.exists(file.path(root, "trajectory", paste0(name, c(".parquet", ".csv"))))), logical(1))
+    if (!all(file.exists(file.path(root, required_files))) || !all(present))
+      stop("Schema 4 requires typed composition, marker summaries, endocrine counts and their provenance.", call. = FALSE)
+    provenance <- manifest$measurement_definitions
+    if (!identical(provenance$trajectory_features, "log1p_validated_base_type_count_per_classifier_defined_core_cell") ||
+        !identical(provenance$spatial_embedding_features, "same_typed_classifier_core_normalized_composition_as_primary_trajectory") ||
+        !identical(provenance$islet_eligibility, "no_image_edge_contact_and_at_least_one_canonical_classifier_core_cell") ||
+        !identical(provenance$endocrine_denominator, "all_canonical_cells_inside_endocrine_pixel_classifier_core_counted_once") ||
+        !all(c("typing_specification", "typing_catalog", "trajectory_feature_manifest", "islet_embedding_manifest", "classifier_eligibility") %in% names(manifest$provenance_hashes)))
+      stop("Schema 4 requires explicit typing, denominator and trajectory provenance.", call. = FALSE)
+    if ("research" %in% names(artifacts)) stop("Schema 4 research reports must be outside the app runtime.", call. = FALSE)
   }
   islet_verify_release_hashes(manifest, root)
   manifest

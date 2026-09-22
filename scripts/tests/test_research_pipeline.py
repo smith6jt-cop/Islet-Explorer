@@ -10,7 +10,7 @@ from trajectory import fit, project, features, landmarks, excluded_for_outcome, 
 from phenotypes import read_rules, dependencies, rule_mask, audit
 from run_hypotheses import bh_ten, beta_binomial_fit, followups
 from prediction import nested_predict
-from build_candidate import positive_area
+from build_candidate import positive_area, membership
 
 def sample(n=120):
     rng=np.random.default_rng(12);t=np.linspace(-2,2,n)
@@ -21,9 +21,9 @@ def sample(n=120):
 
 class ResearchContract(unittest.TestCase):
     def test_label_outcome_and_row_order_invariance(self):
-        d=sample();a,m=fit(d,k=10,cap=20)
+        d=sample();a,m=fit(d,k=10,cap=20,legacy_intensity=True)
         changed=d.copy();changed.donor_status='T1D';changed['ratio']=np.arange(len(d))*100
-        b,n=fit(changed.sample(frac=1,random_state=7),k=10,cap=20)
+        b,n=fit(changed.sample(frac=1,random_state=7),k=10,cap=20,legacy_intensity=True)
         np.testing.assert_allclose(a.sort_values('islet_id').pseudotime_raw,b.sort_values('islet_id').pseudotime_raw,equal_nan=True,atol=1e-10)
         self.assertEqual(m['root_id'],n['root_id'])
         self.assertTrue(all(c.split('__')[1] not in ['INS','GCG','SST','CHGA'] for c in m['columns']))
@@ -33,7 +33,7 @@ class ResearchContract(unittest.TestCase):
         self.assertEqual(d.iloc[ids].groupby('case_id').size().tolist(),[17]*4)
 
     def test_projection_alignment_and_heldout(self):
-        d=sample();train=d.loc[d.case_id!='3'];a,m=fit(train,k=10,cap=20)
+        d=sample();train=d.loc[d.case_id!='3'];a,m=fit(train,k=10,cap=20,legacy_intensity=True)
         q=d.loc[d.case_id=='3'].sample(frac=1,random_state=1);p=project(q,m)
         self.assertEqual(p.islet_id.tolist(),q.islet_id.tolist())
         self.assertTrue(p.pseudotime_raw.notna().any())
@@ -43,14 +43,14 @@ class ResearchContract(unittest.TestCase):
         d=sample(120);rng=np.random.default_rng(4)
         # Two well-separated angular clusters with more than k landmarks each.
         for j,c in enumerate(features()):d[c]=(np.where(np.arange(len(d))<60,-1,1)*(1+j/50)+rng.normal(0,.001,len(d)))
-        a,m=fit(d,k=5,cap=25)
+        a,m=fit(d,k=5,cap=25,legacy_intensity=True)
         self.assertGreater(len(set(m['landmark_components'])),1)
         self.assertTrue(a.pseudotime_raw.isna().any())
 
     def test_constant_features_dropped_and_missing_rejected(self):
         d=sample();d[features()[0]]=1
-        _,m=fit(d,k=10,cap=20);self.assertIn(features()[0],m['dropped'])
-        with self.assertRaises(ValueError):fit(d.drop(columns=features()[1]),k=10,cap=20)
+        _,m=fit(d,k=10,cap=20,legacy_intensity=True);self.assertIn(features()[0],m['dropped'])
+        with self.assertRaises(ValueError):fit(d.drop(columns=features()[1]),k=10,cap=20,legacy_intensity=True)
 
     def test_outcome_module_and_parent_chain_exclusion(self):
         rules=read_rules(Path(__file__).parents[2]/'data/phenotype_rules.csv')
@@ -184,6 +184,22 @@ class ResearchContract(unittest.TestCase):
         region=shapely.box(0,0,10,10);a=shapely.box(0,0,5,10)
         parts=np.array([a,a],dtype=object)
         self.assertEqual(positive_area(region,(parts,shapely.STRtree(parts))),50)
+
+    def test_native_polygon_edge_is_not_shifted_by_export_rounding(self):
+        import shapely
+        # Actual HPAP export failure: native float vertex lies on the cell;
+        # the JTS GeoJSON 0.01-pixel representation moves the right edge out.
+        edge=float(np.float32(7055.59))
+        x=np.array([edge,edge-.1]);y=np.array([2270.365478515625]*2)
+        points=shapely.STRtree(shapely.points(x,y))
+        exact=shapely.box(7050,2266,edge,2275)
+        rounded=shapely.box(7050,2266,7055.59,2275)
+        self.assertEqual(membership(points,exact,x,y).tolist(),[1])
+        self.assertEqual(membership(points,rounded,x,y).tolist(),[0,1])
+        # GeometryROI explicitly includes JTS boundary points, unlike this
+        # PolygonROI right-edge winding convention.
+        self.assertEqual(membership(points,exact,x,y,'qupath_geometry').tolist(),[0,1])
+        with self.assertRaises(ValueError):membership(points,exact,x,y,'unknown')
 
     def test_beta_binomial_rejects_impossible_count(self):
         with self.assertRaises(ValueError):beta_binomial_fit(np.ones((2,1)),[3,5],[2,10])

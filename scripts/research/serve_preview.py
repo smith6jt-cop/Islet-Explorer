@@ -5,9 +5,11 @@ import getpass
 import json
 import os
 from pathlib import Path
+import shlex
 import shutil
 import socket
 import subprocess
+import sys
 def write_json(path, value):
     Path(path).write_text(json.dumps(value, indent=2)+'\n')
 
@@ -43,24 +45,37 @@ def stop_recorded_preview(data_root):
 def main():
     p=argparse.ArgumentParser();p.add_argument('--data-root',required=True);p.add_argument('--app-root',required=True)
     p.add_argument('--python',required=True);p.add_argument('--restart',action='store_true')
+    p.add_argument('--port',type=int,help='Fixed loopback port for the preview; omit to choose the first free port.')
     p.add_argument('--replace-preview',type=Path,help='Replace only the recorded service for this previous candidate');a=p.parse_args()
     data=Path(a.data_root).resolve(strict=True);source=Path(a.app_root).resolve(strict=True)
     metadata=data/'manifest.json' if (data/'manifest.json').exists() else data/'candidate.json'
     schema=str(json.loads(metadata.read_text())['schema_version'])
-    if schema not in {'2','3'}:raise ValueError('Unsupported candidate runtime schema')
+    if schema not in {'2','3','4'}:raise ValueError('Unsupported candidate runtime schema')
     runtime=data/'preview';runtime.mkdir(exist_ok=True)
+    app=runtime/'app'
+    if source==app or source.is_relative_to(app):
+        raise ValueError('The app source must be outside the preview destination; copy a rollback snapshot to a separate source directory first')
     previous=runtime/'service.json'
+    previous_record={}
     if previous.exists():
-        old=json.loads(previous.read_text());procpath=Path(f'/proc/{old["pid"]}/cmdline')
+        old=json.loads(previous.read_text());previous_record=old;procpath=Path(f'/proc/{old["pid"]}/cmdline')
         if procpath.exists() and str(runtime/'shiny-server.conf').encode() in procpath.read_bytes():
             if not a.restart: raise RuntimeError('Candidate is already running; use --restart to restart only its recorded process')
             stop_recorded_preview(data)
-    app=runtime/'app'
     if app.exists(): shutil.rmtree(app)
     shutil.copytree(source,app,ignore=shutil.ignore_patterns('local_images','node_modules','.git','tests'))
     (app/'www/local_images').symlink_to(data/'images',target_is_directory=True)
-    replaced=stop_recorded_preview(a.replace_preview) if a.replace_preview else None
-    port=choose_port();log=runtime/'logs';log.mkdir(exist_ok=True)
+    replaced=(stop_recorded_preview(a.replace_preview) if a.replace_preview
+              else previous_record.get('replaced_preview'))
+    port=a.port if a.port is not None else choose_port()
+    if not (1 <= port <= 65535): raise ValueError('Port must be between 1 and 65535')
+    # Fail before replacing the service record if an explicitly requested port
+    # is occupied by an unrelated process.
+    with socket.socket() as probe:
+        probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try: probe.bind(('127.0.0.1', port))
+        except OSError as exc: raise RuntimeError(f'Fixed preview port {port} is not free') from exc
+    log=runtime/'logs';log.mkdir(exist_ok=True)
     for sub in ['sockets','bookmarks']:(runtime/sub).mkdir(exist_ok=True)
     config=f'run_as {getpass.getuser()};\npreserve_logs true;\nsanitize_errors true;\nsocket_dir {runtime}/sockets;\nbookmark_state_dir {runtime}/bookmarks;\nserver {{\n listen {port} 127.0.0.1;\n'
     for alias in ['local_images','images','img_data']:
@@ -90,11 +105,20 @@ def main():
             if proc.poll() is not None: raise RuntimeError('Preview server exited; inspect server.log')
             time.sleep(.1)
     else: raise RuntimeError('Preview did not open its loopback listener; inspect server.log')
+    restart_argv=[str(Path(sys.executable).resolve()),str(Path(__file__).resolve()),
+                  '--data-root',str(data),'--app-root',str(source),'--python',a.python,
+                  '--port',str(port),'--restart']
+    stop_argv=['kill','-TERM',str(proc.pid)]
     record=dict(url=f'http://127.0.0.1:{port}/islet-explorer/',pid=proc.pid,logs=str(log),server_log=str(runtime/'server.log'),
                 app_snapshot=str(app),data_root=str(data),schema_version=schema,ufrc_accepted=False,
                 replaced_preview=replaced,
-                restart_argv=['python3',str(Path(__file__).resolve()),'--data-root',str(data),'--app-root',str(source),'--python',a.python,'--restart'],
-                stop_argv=['kill','-TERM',str(proc.pid)])
+                fixed_port=port,restart_argv=restart_argv,stop_argv=stop_argv,
+                restart_command=shlex.join(restart_argv),stop_command=shlex.join(stop_argv))
+    # Network exposure is configured separately from this loopback service.
+    # Preserve its operator record across an app-only restart.
+    network_record=previous_record or (replaced if isinstance(replaced,dict) else {})
+    for key in ['public_url','network_proxy','network_config','network_restart_argv']:
+        if key in network_record:record[key]=network_record[key]
     write_json(runtime/'service.json',record);print(json.dumps(record,indent=2))
 
 if __name__=='__main__':main()

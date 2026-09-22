@@ -1,26 +1,47 @@
 # All-donor candidate and offline research
 
+**2026-09-22 implementation status:** trajectory follows cell typing and uses
+cell-type composition per canonical cell in the classifier-determined endocrine
+core. The nine explicitly required
+markers participate through the versioned typing requirements and refinement
+paths. See the
+[reference/decision record](../../docs/trajectory_typing_reference_20260919.md)
+and `cell_typing_requirements-v1.json`. Whole-islet marker averages are not
+trajectory or Spatial-embedding features.
+
 The authoritative input selection is `cohort-v1.csv`: 21 donors, seven ND,
 seven Aab-positive and seven T1D, including HPAP-078 (analysis ID `78`, image
 ID `0078`). Paths are resolved against an explicit repository root; external
 regional exports have explicit absolute paths. Corrected 6539 is selected from
 the recovery tree. The rejected duplicate is never selected.
 
-The current candidate is `data/development/all-donor-20260917/`; the preceding
-`all-donor-20260916` candidate and frozen original are preserved. Raw H5ADs,
+The current candidate is `data/development/all-donor-20260922-classifier-eligibility/`; the preceding
+dated candidates and frozen original are preserved. Raw H5ADs,
 geometry, regional exports and TIFFs are immutable hardlinks; revised derived
-files are independent copies. **Never edit linked inputs.** Runtime schema 3
+files are independent copies. **Never edit linked inputs.** Compatibility schema 3
 requires cohort, trajectory, counts/availability, marker panel and cell
-drill-downs. Research reports live outside the app data root. Schema 1/2 readers
+drill-downs. The current runtime is schema 4 and additionally requires typed
+cell partitions plus the fixed Spatial embedding and its manifest. Research
+reports live outside the app data root. Schema 1/2/3 readers
 remain compatible with earlier releases. See the
-[revision record](../../docs/trajectory_revision_20260917.md) for measured
+[integration record](../../docs/app_boundary_integration_20260918.md) for measured
 capacity, exact evidence and outstanding scientific decisions.
 
-Islet identity is now a required review input. HPAP-078 contains many suspect
-small candidates; the existing fit is preserved for inspection, not accepted.
-Reviewed identity corrections need a new fit; edited geometry also needs new
-measurements and dependent research analyses. Absence of threshold-positive
-hormone cells alone does not automatically establish non-islet identity.
+HPAP-078's 1,431 owner-approved corrected outlines replace the rejected set.
+The app uses the most recent approved all-donor geometry and exposes no
+identity-review blocker. Any future geometry edit still requires rebuilding
+memberships, composition, trajectory and dependent analyses. Absence of
+threshold-positive hormone cells alone does not establish non-islet identity.
+
+`integrate_reviewed_boundaries.py` stages the verified native geometry and its
+dependent measurements in a fresh explicit output root. `build_cell_lookup.py
+--case 78` respects native PolygonROI/GeometryROI containment and replaces no
+existing cell files. `index_candidate_geometry.R` writes missing indexed
+geometry only. After full hashing, `optimize_candidate_runtime.py` adds Parquet
+trajectory tables and exact single-islet outline downloads, then refreshes their
+manifest entries. `validate_candidate.py` checks their CSV parity, native cell
+universes, classifier eligibility, typed counts, embedding and trajectory
+validation. The app only reads the saved offline fit.
 
 ## Reproduction
 
@@ -101,15 +122,19 @@ candidate/report versions, never in overwritten historical outputs.
 
 ## Trajectory contract
 
-Features are compartment medians of `log1p` raw Cell mean intensities, with the
-same ordered marker panel, physical units and clipping convention for every
-donor. This harmonizes measurement definitions; it is **not** a claim that
-acquisition effects have been removed. No donor quantile alignment, clinical
-covariates, phenotype counts, hormone ratios or previous embeddings are fitted.
-Core and tissue-clipped 20-µm peri-islet features exclude INS/GCG/SST/CHGA.
-Peri-islet regions exclude neighboring cores. Invalid geometry, tissue coverage
-at or below 99%, fewer than ten measured core cells, or an empty measured
-compartment exclude an islet from fitting but retain its image and raw objects.
+Cell typing precedes trajectory aggregation. The primary features are
+`log1p(validated base-type count / classifier-core cell count)` in the core;
+separate 20-µm peri-islet counts are retained for display and sensitivity work.
+The denominator is every canonical cell centroid inside the endocrine
+pixel-classifier core, counted once. Disease status, clinical outcomes, section
+area, whole-islet marker averages and earlier pseudotime do not enter the fit.
+
+Classifier eligibility has exactly two requirements: no image-edge contact and
+at least one canonical cell in the classifier core. Downstream typing cannot
+override it. The current cohort has 11,136 eligible islets. Complete supported
+typed-composition features are available for 7,493; feature and projection
+support are reported separately from eligibility and are never relabeled as an
+eligibility gate.
 
 Landmarks have equal numbers per donor, capped at 200 and the smallest donor's
 eligible set. Stable ID hashes distribute draws across within-donor section-area
@@ -139,6 +164,12 @@ are separate sampled units; no disease-order target is used. Report all
 replicates, including failures. The specified instability thresholds are median
 LODO correlation below .8 or supported primary coverage below .8.
 
+For the 2026-09-22 candidate, all requested reconstructions completed. Median
+LODO absolute Spearman correlation is 0.131 and supported primary coverage is
+23.6% (2,626 of 11,136 eligible islets), so the ordering is recorded as
+unstable. Fourteen disconnected components are retained. Parameters were not
+changed to obtain a preferred disease ordering.
+
 Outcome-exclusion helpers expand the marker module and complete phenotype parent
 chain. **No inferential pseudotime association tests are currently published**;
 the app's curves and heatmaps are descriptive. Future tests must reconstruct
@@ -148,12 +179,11 @@ donor-aware smooth associations and use a separate multiplicity family.
 ## Phenotype and hypothesis interpretation
 
 Nine retired labels are removed from selectors and tests, while archival labels
-remain intact. `phenotypes.py` audits each retained label and its full parent
-chain. Passing a raw threshold is not independent gate validation. Current
-immune parent gates remain unvalidated, PDPN is provisional, and the supplied
-ductal rule is negative-only. Consequently no certified alpha/beta/delta union
-denominator can be furnished under that subtype policy; ratio outputs remain
-missing instead of using the retired Endocrine label or replacing zero by one.
+remain intact. The most recent typed-cell outputs are the current approved
+assignments. Unsupported phenotype numerators and marker-positive calls remain
+missing rather than becoming zeros. Their availability does not affect the
+classifier-core denominator or classifier eligibility, and the retired
+Endocrine label is never substituted.
 
 H1 uses a different, explicitly defined operational endpoint: the independently
 exported QuPath hormone-positive union (`cells_total - Triple_Neg`) and INS-any

@@ -2,15 +2,25 @@
 
 Pipeline scripts that build the data files consumed by the Shiny app.
 
-## Current offline defaults — 2026-09-17
+## Owner correction — 2026-09-19
+
+[Typing must precede endocrine-normalized trajectory features](../docs/trajectory_typing_reference_20260919.md).
+The nine explicitly required marker contributors and implementation status are
+recorded in `research/cell_typing_requirements-v1.json`. Schema 4 now runs cell
+typing before composition and fits trajectory from typed counts per canonical
+cell inside the classifier-determined endocrine core. Whole-islet marker averages are excluded from both the
+primary trajectory and Spatial embedding.
+
+## Current offline defaults — 2026-09-22
 
 The authoritative 21-donor pipeline is [research/README.md](research/README.md).
-`reaggregate_islets.py`, `compute_split_pseudotime.py` and `compute_pseudotime.R`
-now delegate to its fixed outcome-blind trajectory runner, requiring explicit
-input/output roots and `--islet-review`. Prepare compartment features with
-`research/build_candidate.py`. Research runners require `--report-root` outside
-app data. Preserve the native QuPath review project and user edits; suspect
-islet identity and missing parent-gate evidence remain scientific work.
+The schema-4 path is `research/reprocess_candidate.py` followed by correction,
+typing, composition, trajectory, `build_islet_embedding.py`, runtime
+materialization, validation and finalization. Every builder requires explicit
+input/output roots. Research runners require `--report-root` outside app data.
+The current local candidate is
+`data/development/all-donor-20260922-classifier-eligibility`; preserve the native QuPath
+project, source images, prior candidates and frozen release.
 The former ND/INS-root, disease-order validation and small/large refits are
 archived under `archive/trajectory-pre-20260916/`. Preserve those historical
 sources and frozen outputs; do not run their defaults against the new candidate.

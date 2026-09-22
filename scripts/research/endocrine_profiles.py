@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Endocrine marker profiles using the literal QuPath hormone thresholds.
+"""Marker profiles within the validated expanded endocrine cell union.
 
-This is an operational hormone-positive union, independent of the historical
-phenotype parent gates. It is not substituted for validated subtype assignments
-in the trajectory ratio denominator.
+The archived literal three-hormone threshold union remains available only with
+an explicit legacy option. Runtime v4 profiles follow completed cell typing.
 """
 import argparse
 from pathlib import Path
@@ -12,7 +11,17 @@ import pandas as pd
 from common import MARKERS, write_json, offline_report_root
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('--input-root',required=True);p.add_argument('--report-root',required=True);a=p.parse_args();root=Path(a.input_root);out=offline_report_root(root,a.report_root)
+    p=argparse.ArgumentParser();p.add_argument('--input-root',required=True);p.add_argument('--report-root',required=True);p.add_argument('--legacy-threshold-union',action='store_true');a=p.parse_args();root=Path(a.input_root);out=offline_report_root(root,a.report_root)
+    if not a.legacy_threshold_union:
+        from analysis_v2 import endocrine_profiles
+        summaries=pd.read_parquet(root/'analysis/marker_summaries.parquet')
+        profiles=endocrine_profiles(summaries)
+        profiles.to_parquet(root/'analysis/endocrine_profiles.parquet',index=False)
+        write_json(out/'endocrine_profile_specification.json',dict(version=2,
+            selection='Validated expanded endocrine union after cell typing; alpha/beta/delta/CHGA-supported hormone-unresolved',
+            summary='Mean log1p corrected intensity within typed endocrine cells; no whole-islet marker average',
+            minimum_endocrine_cells=5,markers=MARKERS,phenotype_subtype_denominator=True))
+        return
     donors=pd.read_csv(root/'donor_metadata.csv',dtype={'case_id':str});rows=[];audit=[]
     for cid in donors.case_id:
         cells=pd.read_parquet(root/'raw'/f'{cid}-cells.parquet').set_index('object_id')

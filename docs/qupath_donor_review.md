@@ -1,5 +1,30 @@
 # Review the six newly processed donors in QuPath
 
+The [18 September six-donor delivery](endocrine_boundary_rollout_20260918.md)
+contains the owner's 1,431 approved HPAP-078 boundaries with rebuilt membership
+and measurements, plus 2,030 candidates across the other five donors using the
+same fixed endocrine classifier and IO60 size-dependent rules.
+[Open the current QuPath project](../data/reviews/qupath-endocrine-rollout-20260918/project.qpproj)
+or the [offline gallery](http://127.0.0.1:3840/endocrine-rollout-20260918/).
+All 943,068 original cells are retained. Other-donor boundaries await their own
+visual review. The earlier HPAP-only project and the
+[original15 pixel refinement](endocrine_reference_refinement_20260917.md) and
+[existing-classifier comparison](endocrine_pixel_classifier_pilot_20260917.md)
+are retained as baseline evidence, along with their editable review projects.
+
+**Boundary correction in progress:** the R5 candidates linked below have a
+confirmed SAM background-overreach failure and are withdrawn as a usable
+segmentation result. The native files and any review edits remain intact. See
+the [quality status record](../data/reviews/qupath-regenerated-islets-20260917-r5/quality_status.json).
+
+**Withdrawn R5 candidate, retained as historical evidence:**
+[`qupath-regenerated-islets-20260917-r5/project.qpproj`](../data/reviews/qupath-regenerated-islets-20260917-r5/project.qpproj)
+for the 1,162 regenerated boundary candidates across these six donors. The
+[regeneration record](islet_regeneration_20260917.md) explains the colors,
+raw-channel comparisons and verification. That independent project retains all
+943,068 original cells. The earlier project described below, including any
+review edits, is preserved.
+
 The six additions have complete native QuPath object files. A separate,
 editable project is available at:
 
@@ -118,3 +143,11 @@ env JAVA_TOOL_OPTIONS='-Xmx24g -Djava.awt.headless=true' \
   --args /data/panc_CODEX/Islet-Explorer/data/reviews/qupath-six-donors-20260917 \
   scripts/cohort_expansion/verify_review_project.groovy
 ```
+# Original15 reference-trained pixel diagnostic (2026-09-17)
+
+A separate [HPAP-078 diagnostic project](../data/reviews/qupath-endocrine-pixel-diagnostic-20260917/project.qpproj)
+contains 1,056 conservative endocrine pixel candidates and all 267,993 original
+cells. It uses a new INS/GCG/SST forest trained from signal-supported reference
+regions in the original 15 donors. This is not an accepted replacement delivery;
+weak/background staining and boundary extent remain unresolved. See the
+[method, checks and plots](endocrine_reference_refinement_20260917.md).

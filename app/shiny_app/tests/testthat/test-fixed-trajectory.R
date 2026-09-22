@@ -7,7 +7,35 @@ test_that("donor filters leave fixed coordinates and percentiles intact", {
   expect_equal(one$pseudotime_percentile, .05)
   expect_equal(trajectory_filter(d, "all", c(1, Inf)), d)
 })
-test_that("ratios use unique endocrine denominator and preserve missingness", {
+
+test_that("secondary-component graph layout does not invent pseudotime", {
+  coords <- data.frame(islet_id=c("a","b"),case_id=c("1","2"),DC1=c(1,NA),DC2=c(2,NA),pseudotime_raw=c(.2,NA),pseudotime_percentile=c(.4,NA))
+  layout <- data.frame(islet_id=c("b","a"),graph_x=c(10,1),graph_y=c(12,2),layout_kind="componentwise spectral graph layout")
+  result <- trajectory_graph_coordinates(coords,layout)
+  expect_equal(result$graph_x,c(1,10))
+  expect_identical(result$pseudotime_raw,coords$pseudotime_raw)
+  expect_true(is.na(result$pseudotime_raw[2]))
+  expect_error(trajectory_graph_coordinates(coords,layout[1,,drop=FALSE]),"islet revision")
+})
+
+test_that("withdrawn coordinates use explicit fixed section-area heatmap bins", {
+  coords <- data.frame(case_id = c("78", "1"), area_um2 = c(10, 1000),
+                       pseudotime_raw = NA_real_, pseudotime_percentile = NA_real_)
+  unavailable <- list(coordinates_available = FALSE)
+  axis <- trajectory_heatmap_axis(coords, unavailable)
+  expect_identical(axis$kind, "section_area")
+  expect_identical(axis$column, "area_um2")
+  expect_equal(axis$limits, c(1, 3))
+  expect_match(axis$label, "pseudotime unavailable")
+  expect_equal(axis$transform(coords$area_um2), c(1, 3))
+  expect_identical(trajectory_heatmap_axis(coords, unavailable, "raw"), axis)
+  expect_true(all(is.na(coords$pseudotime_raw)))
+  expect_null(trajectory_heatmap_notice(data.frame(area_um2 = 10, core__INS = 1), axis$column))
+  existing <- trajectory_heatmap_axis(coords, list(status = "stable"))
+  expect_identical(existing$kind, "pseudotime")
+  expect_equal(existing$limits, c(0, 1))
+})
+test_that("ratios use the classifier-core cell denominator and preserve missingness", {
   assign("PHENOTYPE_RETIRED", c("Endocrine", "Unknown"), envir = globalenv())
   d <- data.frame(islet_id = c("1_a", "1_b", "2_c"), case_id = c("1", "1", "2"))
   counts <- data.frame(islet_id = rep(d$islet_id, 2), phenotype = "CD8a Tcell",
@@ -38,6 +66,13 @@ test_that("filters with no matching islets preserve empty ratio download columns
   restored <- trajectory_ratios(trajectory_filter(d, "1", c(10, 200)), counts, "Beta cell", "both", denom)
   expect_equal(restored$raw_ratio, 4/6)
   expect_equal(restored$pseudotime_raw, d$pseudotime_raw)
+})
+
+test_that("islet choices clear safely when donor filters yield zero rows", {
+  d <- data.frame(case_id = "78", islet_key = "AdaptiveIslet_78_00011", islet_id = "78_AdaptiveIslet_78_00011", measured_cells = 24)
+  expect_identical(unname(trajectory_islet_choices(d)), "78|AdaptiveIslet_78_00011")
+  expect_identical(trajectory_islet_choices(d[FALSE, ]), character(0))
+  expect_identical(trajectory_islet_choices(NULL), character(0))
 })
 
 test_that("expected trajectory missingness has explicit informational states", {
@@ -81,7 +116,7 @@ test_that("uncertified numeric counts never produce ratios and valid zeros do", 
   expect_true(is.na(r$plotted_value[2]))
   expect_true(is.na(r$plotted_value[3]))
   expect_match(r$availability_reason[2], "gate_pending")
-  expect_identical(r$availability_reason[3], "zero_core_endocrine_denominator")
+  expect_identical(r$availability_reason[3], "no_core_cells_in_classifier_area")
   denominator$validated[1] <- FALSE
   denominator$reason[1] <- "CD20 review missing"
   r <- trajectory_ratios(d, counts, "Beta cell", "core", denominator)

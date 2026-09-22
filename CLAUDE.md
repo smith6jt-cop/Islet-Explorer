@@ -2,19 +2,40 @@
 
 This file provides guidance to Claude Code when working with this repository.
 
-## Current candidate contract — 2026-09-17
+## Owner correction — 2026-09-19
 
-Use [scripts/research/README.md](scripts/research/README.md) and
-[docs/trajectory_revision_20260917.md](docs/trajectory_revision_20260917.md) for the 21-donor candidate.
-It includes HPAP-078, retains the retirement policy, and reads fixed offline
-outcome-blind diffusion coordinates. It does not fit scVI/Harmony, use an
-INS/ND root, tune disease ordering, or interpret Aab positivity as a clinical
-stage. Trajectory y values are endocrine-normalized ratios only; unvalidated
-denominators remain unavailable. Schema 3 keeps research reports outside the
-app and selects all 31 heatmap markers. Islet identity requires review after
-suspect HPAP candidates were identified; a new fit requires recorded review
-decisions. Historical pipeline details
-below describe the frozen original and must not override this contract.
+Read [the typing/trajectory reference record](docs/trajectory_typing_reference_20260919.md)
+before further phenotype or trajectory work. Cell typing must precede the
+endocrine-normalized composition features used to fit trajectory. CHGA, CD45,
+VIM, LGALS3, CD44, PGP9.5, GAP43, CD35 and NaKATPase must meaningfully contribute
+to cell phenotypes. This supersedes the median-intensity fitting specification
+below; conversion is pending. Reconcile prior accepted typing work rather than
+assuming the active 15-marker rules capture it. Preserve the frozen release.
+
+## Current candidate contract — 2026-09-22
+
+Use [scripts/research/README.md](scripts/research/README.md),
+[docs/reprocessing_execution_20260920.md](docs/reprocessing_execution_20260920.md)
+and [docs/all_donor_delivery.md](docs/all_donor_delivery.md) for the schema-4
+21-donor candidate. It includes HPAP-078, retains the retirement policy and
+uses the most recent approved regenerated geometry and typed-cell artifacts.
+Classifier eligibility has exactly two requirements: the endocrine
+pixel-classifier core does not contact an image edge, and at least one canonical
+cell centroid lies inside that core. The candidate contains 11,136 eligible
+islets across every donor; 7,493 have complete typed-composition features and
+2,626 have supported primary coordinates. Typing support may make a measurement
+or coordinate unavailable, but cannot revoke islet eligibility. The saved
+outcome-blind trajectory does not fit scVI/Harmony,
+use an INS/ND root, tune disease ordering, or interpret Aab positivity as a
+clinical stage.
+
+Trajectory y values are typed-cell ratios per canonical cell inside the
+classifier-determined endocrine core. A classifier core with no cells is
+ineligible; unavailable phenotype numerators remain missing. Spatial UMAP and
+Leiden read a fixed offline embedding of the 7,493 feature-supported rows. The
+31-marker heatmap is separate from the fit and defaults to typed-population
+expression. Research reports remain outside the app. Historical pipeline
+details below describe the frozen original and must not override this contract.
 
 ## Project Overview
 

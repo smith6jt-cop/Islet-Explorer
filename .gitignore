@@ -22,7 +22,8 @@ pdfs/
 gson/
 single_cell_analysis/*.h5ad
 single_cell_analysis/*.tsv
-app/shiny_app/www/local_images/
+app/shiny_app/www/local_images
+app/shiny_app/R/00_00_candidate_profile.R
 local_images/
 app/shiny_app/www/segmentation_data/
 AI_Markdown/

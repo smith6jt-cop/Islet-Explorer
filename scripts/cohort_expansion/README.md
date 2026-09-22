@@ -1,5 +1,29 @@
 # Expanded-cohort image processing
 
+**18 September delivery:** [HPAP approval and five-donor rollout](../../docs/endocrine_boundary_rollout_20260918.md)
+documents the current six-donor review project. `stage_adaptive_rollout.py` and
+`promote_reviewed_islets.groovy` bind the owner's approval to exact saved HPAP
+objects. `export_exact_reviewed_geometry.groovy` preserves native coordinate
+precision for `rebuild_reviewed_islet_regions.py`. New-donor predictions use
+`--minimum-votes 160`, followed by native tracing and the adaptive boundary
+stage. Approval of boundaries and validation of phenotype gates stay separate.
+
+**Current boundary work:** use the endocrine foreground followed by the owner's
+[IO60 size-adaptive rules](../../docs/size_adaptive_islet_boundaries_20260917.md).
+`build_size_adaptive_islets.groovy` replaces uniform boundary cleanup with
+size-dependent erosion/dilation, split handling, enclosed-hole filling and
+50 µm² fragment refinement. It consumes verified raw foreground from
+`vectorize_endocrine_pixel_regions.groovy` and writes a fresh output folder.
+New predictions must complete this stage before review import. The SAM R5
+candidate remains withdrawn after repeated HPAP-078 errors. The processing
+workflow below records the preserved historical run.
+
+The separate endocrine-seeded boundary review added after the small HPAP-078
+annotation finding is documented in
+[`docs/islet_regeneration_20260917.md`](../../docs/islet_regeneration_20260917.md).
+It preserves the processing objects described below and does not itself accept
+new islets or rebuild downstream measurements.
+
 This workflow stages the existing QuPath project without writing to its images, annotations, classifiers, or scripts. Outputs remain separate from the frozen application release.
 
 The candidate lives at `data/development/expanded-20260911/`. Its `images/` directory holds viewer TIFFs and sidecars; `qupath/` holds the staged project and scripts; `exports/CASE/` holds measurements; `analysis/raw_cells/` holds unphenotyped cell data; `metadata/`, `reports/`, and `logs/` retain identity, validation, and processing evidence. These large or restricted artifacts are Git-ignored. The processing scripts and cohort selection are versioned separately.
@@ -123,3 +147,12 @@ rule; ties and overlapping memberships are recorded explicitly. Other core
 geometry types require a reviewed predicate and are rejected by this audit.
 A report of completed offline preparation does not establish biological or
 release acceptance.
+
+The subsequent endocrine pixel refinement uses the original 15 donors' source
+annotations as weak references. See
+[the method and artifact record](../../docs/endocrine_reference_refinement_20260917.md).
+`export_endocrine_training_references.groovy` reads source objects without saving
+them. `refine_endocrine_pixel_classifier.py` prepares and harmonizes samples,
+runs donor-held-out fitting, and predicts from endocrine channels and tissue
+masks. `vectorize_endocrine_pixel_regions.groovy` traces candidate boundaries in
+native source coordinates. These steps do not promote geometry into the app.

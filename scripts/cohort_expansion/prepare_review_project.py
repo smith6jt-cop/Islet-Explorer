@@ -39,6 +39,8 @@ def main():
                         default=repo/'data/development/expanded-20260911')
     parser.add_argument('--output-root', type=Path,
                         default=repo/'data/reviews/qupath-six-donors-20260917')
+    parser.add_argument('--cases', nargs='+', choices=[row[0] for row in SELECTION],
+                        help='Copy only these completed donors; default: all six')
     args = parser.parse_args()
     source_root, output = args.source_root.resolve(), args.output_root.resolve()
     if output.exists():
@@ -48,7 +50,8 @@ def main():
     project = copy.deepcopy(json.loads((source_root/'qupath/project.qpproj').read_text()))
     project['images'] = []
     records = []
-    for case_id, suffix, entry_id in SELECTION:
+    selection = SELECTION if args.cases is None else [row for row in SELECTION if row[0] in args.cases]
+    for case_id, suffix, entry_id in selection:
         root = source_root/suffix
         source_project = root/'qupath/project.qpproj'
         document = json.loads(source_project.read_text())

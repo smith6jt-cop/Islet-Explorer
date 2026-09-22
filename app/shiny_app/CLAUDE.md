@@ -2,19 +2,39 @@
 
 Deep details for the modular Shiny app under `app/shiny_app/`. The top-level `CLAUDE.md` covers the entrypoint architecture, root-level outputs, shared reactive state, and data loading. This file documents per-tab features and conventions.
 
-## Current schema-3 candidate — 2026-09-17
+## Current schema-4 candidate — 2026-09-22
 
-The 21-donor candidate uses immutable offline diffusion coordinates and
-ratio-only trajectory y values. See [docs/trajectory.md](docs/trajectory.md)
-and [the delivery record](../../docs/all_donor_delivery.md). Donor filtering
-must apply to points, curves, graph highlights, heatmaps and downloads without
-retraining or reranking. Unvalidated subtype denominators remain unavailable;
-raw marker heatmaps and cell downloads remain available for all donors.
-All 31 markers are selected by default. Research reports are outside the app;
-do not restore the tab or static report route. The current fit needs islet
-identity review, visible through `trajectory/quality_review.json`. Legacy
-Spatial analysis is unavailable in this candidate. The old cohort counts and
-trajectory/PAGA methods below describe the frozen original, not current defaults.
+The 21-donor candidate uses the most recent approved regenerated geometry and
+typed-cell artifacts. It retains 11,944 annotations; 11,136 meet the two
+classifier eligibility rules and every donor contributes at least 137. Of
+those, 7,493 have complete typed-composition features and the saved primary
+trajectory supports 2,626 islets. Its arbitrary orientation,
+fixed reference scale and disconnected components must remain unchanged by
+donor or display filters.
+
+Trajectory y values are `log1p(selected typed-cell count / canonical cell count
+inside the classifier-determined endocrine core)`. The classifier-defined cell
+census is independent of downstream phenotype support. All 31 markers appear in the
+separate typed-population heatmap, with typed expression as the default because
+reviewed marker-positivity calls remain nullable. Research reports stay outside
+the app.
+
+Spatial UMAP and Leiden use the same typed, endocrine-normalized composition
+matrix as trajectory, not whole-islet marker averages or the legacy H5AD UMAP.
+The app reads the fixed 2,626 supported primary coordinates, exposes four
+Leiden resolutions, and builds cluster composition from exclusive base
+identities for 7,493 feature-supported islets. The other classifier-eligible
+regions stay eligible and are reported as lacking a supported representation.
+Disease is display metadata only.
+
+Schema-4 cell drilldown queries donor Parquet cells, exact 20-µm membership and
+typed identities through DuckDB. Trajectory Parquet tables are shared across
+sessions in one worker; cell drill-down uses a bounded 64-entry/64-MiB cache.
+Geometry uses indexed bounding-box queries, and outline downloads copy exact
+per-islet files. See [docs/trajectory.md](docs/trajectory.md),
+[docs/spatial.md](docs/spatial.md) and
+[the delivery record](../../docs/all_donor_delivery.md). Older cohort counts
+and H5AD methods below document the frozen compatibility path.
 
 ## Spatial Neighborhood Analysis
 

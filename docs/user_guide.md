@@ -392,6 +392,17 @@ Dynamic text (subdued grey background) describing all statistical tests, correct
 
 Tissue-wide spatial visualization and peri-islet microenvironment analysis. Combines single-cell tissue scatter plots with Leiden clustering and neighborhood enrichment metrics.
 
+For the current 21-donor schema-4 candidate, the right panel shows 7,493
+feature-supported islets from 11,136 classifier-eligible islets. UMAP and Leiden
+are saved offline from typed cell counts per canonical cell inside the
+classifier-determined endocrine core; disease status only colors the fixed
+coordinates. Eligibility requires only that the classifier core does not touch
+an image edge and contains at least one canonical cell. Downstream phenotype
+support cannot revoke eligibility. The four Leiden resolutions and cluster
+composition remain visible without refitting. References below to 15 donors,
+5,214 islets and H5AD raw-marker PCA describe the frozen original compatibility
+path.
+
 ### 3-Panel Layout
 
 1. **Controls Sidebar** (left panel)

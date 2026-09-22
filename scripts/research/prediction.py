@@ -43,17 +43,25 @@ def _bootstrap(baseline,full,y,draw):
         return balanced_accuracy_score(y[draw],z)-balanced_accuracy_score(y[draw],x)
     except ValueError:return np.nan
 
-def permutation_test(baseline,full,y,permutations=200,bootstrap=200):
+def permutation_test(baseline,full,y,permutations=200,bootstrap=200,workers=4,exact=False):
     a,_,_=nested_predict(baseline,y);b,coef,choices=nested_predict(full,y)
     ba=balanced_accuracy_score(y,a);bb=balanced_accuracy_score(y,b);delta=bb-ba
     rng=np.random.default_rng(SEED)
     from joblib import Parallel, delayed
-    null=Parallel(n_jobs=4)(delayed(_permuted)(baseline,full,rng.permutation(y)) for _ in range(permutations))
+    if exact:
+        from itertools import combinations
+        if set(np.unique(y))!={0,1}:raise ValueError('Exact permutation requires a binary disease contrast')
+        assignments=[]
+        for positive in combinations(range(len(y)),int(np.sum(y))):
+            labels=np.zeros(len(y),int);labels[list(positive)]=1;assignments.append(labels)
+    else:assignments=[rng.permutation(y) for _ in range(permutations)]
+    null=Parallel(n_jobs=workers)(delayed(_permuted)(baseline,full,labels) for labels in assignments)
     print('H10 full-procedure permutations complete',flush=True)
-    draws=Parallel(n_jobs=4)(delayed(_bootstrap)(baseline,full,y,rng.choice(len(y),len(y),replace=True)) for _ in range(bootstrap))
+    draws=Parallel(n_jobs=workers)(delayed(_bootstrap)(baseline,full,y,rng.choice(len(y),len(y),replace=True)) for _ in range(bootstrap))
     draws=np.asarray(draws);draws=draws[np.isfinite(draws)]
     ci=np.quantile(draws,[.025,.975]) if len(draws)>=.8*bootstrap else [np.nan,np.nan]
-    return dict(effect=delta,p_value=(1+sum(v>=delta-1e-12 for v in null))/(1+permutations),
+    return dict(effect=delta,p_value=sum(v>=delta-1e-12 for v in null)/len(null) if exact else (1+sum(v>=delta-1e-12 for v in null))/(1+len(null)),
+                permutation_count=len(null),permutation_exact=exact,
                 baseline_balanced_accuracy=ba,full_balanced_accuracy=bb,null=null,predictions_baseline=a,
                 predictions_full=b,coefficients=coef,regularization=choices,
                 ci_low=ci[0],ci_high=ci[1],bootstrap_success=len(draws),bootstrap_draws=draws)

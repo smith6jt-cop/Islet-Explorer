@@ -9,6 +9,16 @@ ui <- fluidPage(
   lang = "en",
   useShinyjs(),
   tags$head(
+    # A workstation may expose a direct Shiny port alongside a reverse proxy
+    # that supports TIFF byte ranges. Use its explicitly configured frontend.
+    local({
+      frontend <- as.character(getOption("islet.network.frontend_port", ""))
+      backend <- as.character(getOption("islet.network.backend_port", ""))
+      valid_port <- function(x) length(x) == 1L && grepl("^[0-9]{1,5}$", x) && as.integer(x) > 0L && as.integer(x) <= 65535L
+      if (valid_port(frontend) && valid_port(backend) && !identical(frontend, backend))
+        tags$script(HTML(sprintf("(function(){if(window.location.port===%s){var u=new URL(window.location.href);u.port=%s;window.location.replace(u.href);}})();",
+          jsonlite::toJSON(backend, auto_unbox = TRUE), jsonlite::toJSON(frontend, auto_unbox = TRUE))))
+    }),
     # Favicons for browser tab, bookmarks, and mobile pinning. Browsers pick
     # the most appropriate sized PNG based on context; the ICO is the legacy
     # default location for tools that hard-fetch /favicon.ico. Apple touch
@@ -488,10 +498,7 @@ ui <- fluidPage(
           )
         },
         tabPanel("Spatial",
-          if (file.exists(data_path("candidate.json"))) {
-            tagList(h3("Spatial measurements"),
-              p("Tissue-clipped structural area measurements are available in Plot. Phenotype-distance and neighborhood analyses are unavailable until retained cell gates are validated for this cohort."))
-          } else spatial_ui("spatial")
+          spatial_ui("spatial")
         ),
         # Hidden unless SHOW_INFLAMMATION_TAB=1 (see 00_globals.R).
         # tabsetPanel drops NULL entries, so this mounts nothing when off.
@@ -694,7 +701,7 @@ server <- function(input, output, session) {
   }
 
   # Spatial Neighborhood module
-  if (!file.exists(data_path("candidate.json"))) spatial_server("spatial", prepared, active_palette, active_donor_colors,
+  spatial_server("spatial", prepared, active_palette, active_donor_colors,
                  remove_outliers = remove_outliers_global,
                  outlier_threshold = outlier_z_global)
 

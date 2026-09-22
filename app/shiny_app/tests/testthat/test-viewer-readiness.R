@@ -11,6 +11,7 @@ test_that("viewer waits for session origin and preserves the iframe across image
   env$islet_valid_asset_basename <- function(value, choices) value %in% choices
   env$default_image_url <- NULL
   env$channel_names_vec <- character()
+  env$viewer_channel_names_for_image <- function(...) character()
   env$build_channel_config_b64 <- function(...) NULL
   env$VIEWER_DEBUG_ENABLED <- FALSE
   env$`%||%` <- function(a, b) if (is.null(a)) b else a
@@ -57,4 +58,24 @@ test_that("viewer waits for session origin and preserves the iframe across image
       expect_match(viewer_info()$iframe_src, "127.0.0.1:7778", fixed = TRUE)
       expect_identical(output$viewer_frame$html, initial_frame)
     })
+})
+
+test_that("schema 4 viewer channel orders are donor specific and cannot borrow a global panel", {
+  root <- tempfile("viewer-channel-map-");dir.create(root)
+  env <- new.env(parent = globalenv())
+  env$data_path <- function(...) file.path(root,...)
+  env$islet_release_schema <- function() "4"
+  env$channel_names_vec <- c("DAPI","legacy")
+  for (expression in parse(.find_source("R/viewer_helpers.R"))) {
+    if (is.call(expression) && identical(expression[[1]], as.name("<-")) &&
+        as.character(expression[[2]]) %in% c(".viewer_image_channels", "viewer_channel_names_for_image")) eval(expression, envir = env)
+  }
+  expect_error(env$viewer_channel_names_for_image("one.ome.tiff"), "per-image OME")
+  jsonlite::write_json(list(images = list(
+    "one.ome.tiff" = list(channel_names = c("DAPI","HLADR","PDPN")),
+    "two.ome.tiff" = list(channel_names = c("DAPI","PDPN","HLADR")))),file.path(root,"image_channels.json"),auto_unbox = TRUE)
+  expect_identical(env$viewer_channel_names_for_image("one.ome.tiff"),c("DAPI","HLADR","PDPN"))
+  expect_identical(env$viewer_channel_names_for_image("two.ome.tiff"),c("DAPI","PDPN","HLADR"))
+  expect_error(env$viewer_channel_names_for_image("absent.ome.tiff"),"Missing or duplicate")
+  expect_identical(env$viewer_channel_names_for_image("absent.ome.tiff", "3"),c("DAPI","legacy"))
 })

@@ -1,6 +1,60 @@
-# All-donor local delivery — 2026-09-16
+# All-donor local delivery
 
-**Current revision: 2026-09-17.** The preview on 3839 now uses
+## Current schema-4 candidate — 2026-09-22
+
+The shared app at `http://10.15.152.7:8080/islet-explorer/` serves
+`data/development/all-donor-20260922-classifier-eligibility/`. Nginx on port 8080 is the only
+network-facing route and proxies to the loopback service on
+`127.0.0.1:3840`. The service record contains one-line restart and stop
+commands, log paths, the exact app snapshot and the public URL.
+
+The candidate contains seven ND, seven autoantibody-positive and seven T1D
+donors, 11,944 retained islet annotations, 3,619,534 canonical raw cell
+objects and all 31 shared markers. It preserves 3,592,722 archival source
+objects. All 248 wholly unmeasured canonical objects remain present and are
+excluded from marker-dependent analyses with recorded reasons; 439 corrected
+objects are unavailable for complete-marker analyses. HPAP-078 retains HPAP
+provenance and its corrected endocrine-derived boundaries.
+
+Trajectory and Spatial eligibility is recorded per islet and has exactly two
+requirements: the endocrine pixel-classifier core does not contact an image
+edge, and at least one canonical cell centroid lies inside that classifier
+core. There are 11,136 eligible islets across all 21 donors; the smallest donor
+contributes 137. Of the 808 ineligible classifier regions, all are empty and
+none touch an image edge. Their images and raw measurements remain available.
+Downstream phenotype or typing support cannot revoke classifier eligibility.
+
+The saved trajectory is downstream of cell typing and uses core
+`log1p(validated base-type count / canonical classifier-core cell count)`
+features. The denominator counts every canonical cell centroid in the
+classifier-determined endocrine core exactly once.
+Disease labels, clinical outcomes, section area, whole-islet marker averages
+and earlier pseudotime do not enter the fit. Of 11,136 eligible islets, 7,493
+have complete typed-composition features and 2,626 receive supported primary
+coordinates on the largest component. Fourteen disconnected components remain
+explicit and are not forced onto the primary axis. The prespecified checks give
+median leave-one-donor-out absolute Spearman 0.131 and 23.6% supported primary
+coverage, with 21 donor omissions and 200 bootstrap reconstructions complete.
+The ordering is therefore **unstable**. Parameters were not changed to recover
+disease ordering; orientation remains arbitrary and is not elapsed disease time.
+
+Spatial embeds the 7,493 feature-supported eligible islets from the same typed,
+classifier-core-normalized composition matrix. It displays UMAP coordinates, Leiden
+resolutions 0.3/0.5/0.8/1.0, donor-status UMAP and cluster composition. The
+Trajectory tab displays one point for each of the 2,626 supported primary-axis
+islets, nonnegative log1p ratios, the pseudotime strip, restored display
+controls and a donor-weighted 31-marker typed-expression heatmap. Schema-4
+drilldown joins donor Parquet cells to exact 20-µm memberships and typed
+identities; browser acceptance downloaded 147 cells for a real test islet.
+
+Research results are excluded from the app runtime. Historical result tables
+from earlier geometry are not current-candidate evidence. The independent
+schema-4 validator and browser regression pass, but `scientific_acceptance`
+and UFRC deployment acceptance remain false.
+
+## Historical delivery records
+
+**Previous revision: 2026-09-17.** The earlier preview on 3839 used
 `data/development/all-donor-20260917/` and schema 3. Research results are offline,
 all 31 heatmap markers are enabled, and the newly identified islet-identity
 problem is visible in the app. Ratios still require validated parent gates.
@@ -252,3 +306,32 @@ downloads, image links and zero axe violations on the five tabs. The app
 was restarted at the same local URL. Scientific artifacts and their manifest
 were unchanged. Dated evidence and runtime source hashes are retained in
 `evidence/trajectory-fix-20260917/`; the original delivery evidence remains intact.
+## Candidate delivery record — 2026-09-22
+
+The schema-4 all-donor candidate is the only network-facing app at
+`http://10.15.152.7:8080/islet-explorer/`. Nginx proxies that URL to the
+loopback backend on `127.0.0.1:3840`; the older 3838 and 3839 services are
+stopped and disabled. The service record, logs, and nginx configuration backup
+are recorded in `data/development/all-donor-20260922-classifier-eligibility/preview/service.json`,
+`data/development/all-donor-20260922-classifier-eligibility/preview/server.log`, and
+`/etc/nginx/conf.d/islet-explorer.conf.before-single-20260921`.
+
+Restart the backend by copying this one line into a shell:
+
+```bash
+cd /data/panc_CODEX/Islet-Explorer && /home/smith6jt/miniconda3/envs/scvi-env/bin/python3.13 scripts/research/serve_preview.py --data-root data/development/all-donor-20260922-classifier-eligibility --app-root app/shiny_app --python /home/smith6jt/miniconda3/envs/scvi-env/bin/python --port 3840 --restart
+```
+
+The public URL remains unchanged after a backend restart. If nginx itself is
+restarted, reload it with `pkexec systemctl reload nginx`.
+
+The preview and public proxy respond with HTTP 200. Browser acceptance verifies
+the Spatial UMAP and Leiden views, the 31-marker heatmap, fixed donor filtering,
+ratio arithmetic, islet click-through, cell downloads and the absence of a
+Research tab. The current fixed trajectory records all 21 donors, 11,136
+classifier-eligible islets, 7,493 feature-supported rows and 2,626 supported
+primary coordinates; disconnected observations remain explicit. Research
+results remain offline and are not part of the runtime. Machine-readable browser
+evidence and its screenshot are in
+`preview/evidence/schema4-classifier-eligibility-live.{json,png}` under the
+candidate root.
