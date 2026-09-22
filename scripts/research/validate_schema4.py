@@ -49,6 +49,19 @@ def assert_parquet_csv_equal(parquet_path, csv_path):
     pd.testing.assert_frame_equal(left,right,check_dtype=False)
 
 
+def validate_reference_percentiles(coordinates, specification):
+    """Validate the version-2 fixed reference display rank."""
+    if specification.get('reference_percentile_version') != 2:
+        return
+    finite=coordinates.pseudotime_raw.notna()
+    if not coordinates.loc[~finite,'pseudotime_percentile'].isna().all():
+        raise ValueError('Unsupported coordinates received a reference percentile')
+    observed=np.sort(coordinates.loc[finite,'pseudotime_percentile'].to_numpy(float))
+    expected=(np.arange(len(observed),dtype=float)+.5)/len(observed)
+    if not len(observed) or not np.allclose(observed,expected,rtol=0,atol=1e-12):
+        raise ValueError('Reference percentiles are not fixed evenly spaced ordinal ranks')
+
+
 def validate(root, report_root=None):
     root=Path(root).resolve(strict=True)
     cohort=pd.read_csv(root/'cohort.csv',dtype={'case_id':str})
@@ -190,6 +203,8 @@ def validate(root, report_root=None):
     regions=pd.read_parquet(root/'analysis/regions.parquet')
     if set(regions.band_um)!={10,20,30}:raise ValueError('Missing spatial sensitivity bands')
     status=json.loads((root/'trajectory/validation.json').read_text())
+    specification=json.loads((root/'trajectory/specification.json').read_text())
+    validate_reference_percentiles(coordinates,specification)
     supported=flags(coordinates.supported)&coordinates.pseudotime_raw.notna()
     if not supported.any():raise ValueError('All-missing trajectory does not satisfy local delivery acceptance')
     if status.get('bootstrap_completed')!=200 or status.get('lodo_completed')!=21:raise ValueError('Incomplete trajectory validation')

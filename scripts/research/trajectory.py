@@ -145,8 +145,14 @@ def fit(frame,k=15,cap=200,seed=SEED,excluded=(),feature_columns=None,legacy_int
     model['primary_landmark_coordinates']=psi*vals
     coords['pseudotime_percentile']=np.nan
     good=np.isfinite(coords.pseudotime_raw)
-    model['reference_raw']=np.sort(coords.loc[good,'pseudotime_raw'].to_numpy())
-    coords.loc[good,'pseudotime_percentile']=reference_percentile(coords.loc[good,'pseudotime_raw'],model['reference_raw'])
+    reference_raw=coords.loc[good,'pseudotime_raw'].to_numpy(float)
+    reference_ids=coords.loc[good,'islet_id'].astype(str).to_numpy()
+    reference_rank=fixed_reference_rank(reference_raw,reference_ids)
+    model['reference_raw']=np.sort(reference_raw)
+    model['reference_ids']=reference_ids
+    model['reference_id_raw']=reference_raw
+    model['reference_id_percentile']=reference_rank
+    coords.loc[good,'pseudotime_percentile']=reference_rank
     return coords,model
 
 def reference_percentile(values,reference):
@@ -154,6 +160,39 @@ def reference_percentile(values,reference):
     ref=np.asarray(reference,float);x=np.asarray(values,float)
     if not len(ref):return np.full(x.shape,np.nan)
     return (np.searchsorted(ref,x,side='left')+np.searchsorted(ref,x,side='right'))/(2*len(ref))
+
+def fixed_reference_rank(values, identifiers):
+    """Fixed ordinal percentile with outcome-blind spreading of exact ties.
+
+    Raw pseudotime remains the primary ordering. Exact ties contain no
+    diffusion ordering information, so SHA-256 of the immutable islet ID gives
+    them a deterministic display order that cannot depend on donor status or a
+    plotted outcome. The resulting supported reference coordinates occupy the
+    evenly spaced midpoints of N bins on (0, 1).
+    """
+    x=np.asarray(values,float);ids=np.asarray(identifiers,dtype=str)
+    if x.shape!=ids.shape:raise ValueError('Reference values and identifiers must align')
+    out=np.full(x.shape,np.nan);finite=np.flatnonzero(np.isfinite(x))
+    if not len(finite):return out
+    finite_ids=ids[finite]
+    if len(set(finite_ids))!=len(finite_ids):raise ValueError('Reference identifiers must be unique')
+    order=sorted(finite,key=lambda i:(x[i],hashlib.sha256(ids[i].encode()).digest(),ids[i]))
+    out[np.asarray(order,int)]=(np.arange(len(order),dtype=float)+.5)/len(order)
+    return out
+
+def model_reference_percentile(values, identifiers, model):
+    """Project to the frozen reference, preserving exact reference ranks."""
+    x=np.asarray(values,float);ids=np.asarray(identifiers,dtype=str)
+    out=reference_percentile(x,model['reference_raw'])
+    required={'reference_ids','reference_id_raw','reference_id_percentile'}
+    if not required.issubset(model):return out
+    lookup={str(i):(float(raw),float(rank)) for i,raw,rank in zip(
+        model['reference_ids'],model['reference_id_raw'],model['reference_id_percentile'])}
+    for row,(identifier,value) in enumerate(zip(ids,x)):
+        saved=lookup.get(str(identifier))
+        if saved is not None and np.isfinite(value) and np.isclose(value,saved[0],rtol=1e-12,atol=1e-14):
+            out[row]=saved[1]
+    return out
 
 def project(frame,model):
     cols=model['columns'];out=frame[[c for c in ['islet_id','case_id','donor_status','donor_source','islet_key','area_um2','measured_cells','raw_cells','eligible','trajectory_feature_supported','exclusion_reason'] if c in frame]].reset_index(drop=True).copy()
@@ -196,7 +235,8 @@ def project(frame,model):
     if 'reference_raw' in model:
         ref=model['reference_raw'];out['pseudotime_percentile']=np.nan
         finite=out.pseudotime_raw.notna()
-        out.loc[finite,'pseudotime_percentile']=reference_percentile(out.loc[finite,'pseudotime_raw'],ref)
+        out.loc[finite,'pseudotime_percentile']=model_reference_percentile(
+            out.loc[finite,'pseudotime_raw'],out.loc[finite,'islet_id'],model)
     return out
 
 def graph_layout(frame,coordinates,model):
@@ -362,7 +402,8 @@ def main():
                 versions={p:importlib.metadata.version(p) for p in ['numpy','scipy','pandas','scikit-learn','shapely']},
                 preprocessing='post-typing log1p(validated base-type count/classifier-defined core cell count); landmark median/IQR scaling',
                 eligibility='no image-edge contact and at least one canonical cell in the endocrine pixel-classifier core; typing support cannot revoke eligibility',
-                reference_percentile='frozen empirical mid-distribution: (left insertion + right insertion)/(2*N)',
+                reference_percentile='fixed ordinal reference rank: raw pseudotime order with exact ties spread by SHA-256(islet_id); midpoint ranks (i+0.5)/N',
+                reference_percentile_version=2,
                 graph_layout='Componentwise spectral graph layout with fixed neighbor interpolation, not comparable diffusion coordinates',
                 projection_support='all k neighbors in same component; nearest distance <= 2 times local kth-neighbor radius')
     write_json(out/'specification.json',spec)

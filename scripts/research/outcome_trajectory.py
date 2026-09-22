@@ -119,19 +119,25 @@ def held_out_smooth(frame,held,response,donors,bootstrap_draw=None):
             part=train.loc[train.case_id.eq(cid)].copy();part.case_id=f'{cid}@{j}';part.islet_id=part.islet_id+f'@{j}';pieces.append(part)
         train=pd.concat(pieces,ignore_index=True) if pieces else train.iloc[:0]
     train_coordinates,model=fit(train);test_coordinates=project(test,model)
-    train=train.merge(train_coordinates[['islet_id','pseudotime_percentile']],on='islet_id',validate='one_to_one').dropna(subset=['pseudotime_percentile','response','age','sex'])
-    test=test.merge(test_coordinates[['islet_id','pseudotime_percentile']],on='islet_id',validate='one_to_one').dropna(subset=['pseudotime_percentile','response','age','sex'])
+    # Inference uses the diffusion coordinate itself.  The fixed reference rank
+    # is a display/binning coordinate and may spread exact raw ties by an
+    # identifier-only hash; that arbitrary within-tie order must never become
+    # an inferential covariate.
+    coordinate='pseudotime_raw'
+    coordinate_columns=['islet_id','pseudotime_raw','pseudotime_percentile']
+    train=train.merge(train_coordinates[coordinate_columns],on='islet_id',validate='one_to_one').dropna(subset=[coordinate,'response','age','sex'])
+    test=test.merge(test_coordinates[coordinate_columns],on='islet_id',validate='one_to_one').dropna(subset=[coordinate,'response','age','sex'])
     if len(test)<4 or train.case_id.nunique()<3:raise ValueError('Insufficient supported observations in held-out smooth association')
     base_train=clinical_design(train);base_test=clinical_design(test)
     center=base_train.mean(axis=0);scale=base_train.std(axis=0);center[scale==0]=0;scale[scale==0]=1
     base_train=(base_train-center)/scale;base_test=(base_test-center)/scale
     spline=SplineTransformer(n_knots=4,degree=3,knots='quantile',include_bias=False,extrapolation='linear')
-    smooth_train=spline.fit_transform(train[['pseudotime_percentile']]);smooth_test=spline.transform(test[['pseudotime_percentile']])
+    smooth_train=spline.fit_transform(train[[coordinate]]);smooth_test=spline.transform(test[[coordinate]])
     weight=1/train.groupby('case_id').case_id.transform('size').to_numpy();weight=np.sqrt(weight)
     def prediction(X,Z):return Z@np.linalg.lstsq(X*weight[:,None],train.response.to_numpy()*weight,rcond=None)[0]
     null=prediction(base_train,base_test);full=prediction(np.c_[base_train,smooth_train],np.c_[base_test,smooth_test])
     error_null=(test.response.to_numpy()-null)**2;error_full=(test.response.to_numpy()-full)**2
-    result=test[['islet_id','case_id','pseudotime_percentile','response']].copy()
+    result=test[['islet_id','case_id','pseudotime_raw','pseudotime_percentile','response']].copy()
     result['baseline_prediction']=null;result['smooth_prediction']=full
     return float(np.mean(error_null-error_full)),result
 

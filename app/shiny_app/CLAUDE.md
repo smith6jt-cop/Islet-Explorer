@@ -12,6 +12,12 @@ trajectory supports 2,626 islets. Its arbitrary orientation,
 fixed reference scale and disconnected components must remain unchanged by
 donor or display filters.
 
+The default reference scale uses 2,626 saved, evenly spaced midpoint ranks.
+Raw pseudotime determines rank order; SHA-256 of islet ID orders exact raw
+ties. The app must label that within-tie order as biologically arbitrary,
+retain the raw coordinate in hover/downloads, and never rerank interactively.
+Inference uses raw pseudotime rather than the tie-spread display rank.
+
 Trajectory y values are `log1p(selected typed-cell count / canonical cell count
 inside the classifier-determined endocrine core)`. The classifier-defined cell
 census is independent of downstream phenotype support. All 31 markers appear in the

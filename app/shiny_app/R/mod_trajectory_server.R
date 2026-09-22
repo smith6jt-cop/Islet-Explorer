@@ -150,6 +150,17 @@ trajectory_heatmap_notice <- function(d, xcol = "pseudotime_percentile") {
 trajectory_notice_ui <- function(notice) {
   div(class = "alert alert-info", role = "status", strong(notice$title), p(notice$message))
 }
+trajectory_axis_label <- function(scale = "rank") {
+  if (identical(scale, "raw")) "Raw pseudotime (arbitrary direction)" else
+    "Fixed reference-cohort rank (exact ties hash-spread)"
+}
+trajectory_zero_ratio_message <- function(d, xcol = "pseudotime_percentile", type = "cell type", region = "core") {
+  if (is.null(d) || !nrow(d) || !all(c(xcol, "plotted_value") %in% names(d))) return(NULL)
+  plotted <- is.finite(d[[xcol]]) & is.finite(d$plotted_value)
+  if (!any(plotted) || !all(d$plotted_value[plotted] == 0)) return(NULL)
+  sprintf("All %s plotted ratios are valid measured zeros for %s in %s. The points therefore lie on y = 0; choose another cell type or compartment to inspect variation.",
+    format(sum(plotted), big.mark = ","), type, switch(region, core = "the core", peri = "peri-islet tissue", both = "the combined core and peri-islet compartments", region))
+}
 trajectory_heatmap_axis <- function(coords, status, scale = "rank") {
   if (identical(status$coordinates_available, FALSE)) {
     limits <- traj_pt_extent(log10(coords$area_um2[is.finite(coords$area_um2) & coords$area_um2 > 0]), 0)$dom
@@ -159,7 +170,7 @@ trajectory_heatmap_axis <- function(coords, status, scale = "rank") {
   column <- if (identical(scale, "raw")) "pseudotime_raw" else "pseudotime_percentile"
   list(column = column, transform = identity,
        limits = if (identical(scale, "raw")) traj_pt_extent(coords$pseudotime_raw, 0)$dom else c(0, 1),
-       label = if (identical(scale, "raw")) "Raw pseudotime (arbitrary direction)" else "Fixed reference-cohort percentile", kind = "pseudotime")
+       label = trajectory_axis_label(scale), kind = "pseudotime")
 }
 trajectory_server <- function(id, prepared, selected_islet, forced_image, active_tab = reactive("Trajectory"),
                               donor_colors_reactive = reactive(DONOR_COLORS_BRIGHT),
@@ -262,12 +273,14 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       eligible <- if ("eligible" %in% names(d)) d$eligible %in% TRUE else rep(TRUE, nrow(d))
       primary <- is.finite(d[[xcol()]])
       ratio_available <- is.finite(d$plotted_value)
-      p(sprintf(paste0("log1p(selected cell-type count / ", if (typed_release) "canonical cell count inside the endocrine pixel-classifier core" else "core alpha–beta–delta union count", "). ",
+      summary <- sprintf(paste0("log1p(selected cell-type count / ", if (typed_release) "canonical cell count inside the endocrine pixel-classifier core" else "core alpha–beta–delta union count", "). ",
         "%d selected islets; %d plotted points (one per islet with a primary coordinate and defined ratio); ",
         "%d excluded by classifier eligibility; %d eligible islets without a supported primary coordinate; ",
         "%d primary-coordinate ratios unavailable; %d classifier cores with no cells."),
         nrow(d), sum(primary & ratio_available), sum(!eligible), sum(eligible & !primary),
-        sum(primary & !ratio_available), sum(d$denominator == 0, na.rm = TRUE)))
+        sum(primary & !ratio_available), sum(d$denominator == 0, na.rm = TRUE))
+      zero_message <- trajectory_zero_ratio_message(d, xcol(), input$traj_ratio_type %||% "Beta cell", input$traj_ratio_region %||% "core")
+      tagList(p(summary), if (!is.null(zero_message)) p(role = "status", strong(zero_message)))
     })
     output$traj_scatter_panel <- renderUI({
       if (!axis_available) return(trajectory_notice_ui(list(title = "Trajectory plot unavailable",
@@ -283,8 +296,9 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       d$pt <- d[[xcol()]]
       d <- d[is.finite(d$pt) & is.finite(d$plotted_value), , drop = FALSE]
       d$key <- paste(d$case_id, d$islet_key, sep = "|")
-      d$hover <- sprintf("%s<br>Donor: %s (%s)<br>Numerator: %g<br>Core endocrine denominator: %g<br>log1p ratio: %.4f",
-        d$islet_id, d$case_id, d$donor_status, d$numerator, d$denominator, d$plotted_value)
+      d$hover <- sprintf("%s<br>Donor: %s (%s)<br>Reference rank: %.4f<br>Raw pseudotime: %.6f<br>Numerator: %g<br>Core endocrine denominator: %g<br>log1p ratio: %.4f",
+        d$islet_id, d$case_id, d$donor_status, d$pseudotime_percentile, d$pseudotime_raw,
+        d$numerator, d$denominator, d$plotted_value)
       color <- input$traj_color_by %||% "donor_status"
       palette <- get_donor_color_palette(input$traj_donor_palette %||% "Bright")
       size_by <- input$traj_point_size %||% "uniform"
@@ -293,12 +307,12 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       if (identical(size_by, "measured_cells") && "measured_cells" %in% names(d)) d$.point_size <- scales::rescale(d$measured_cells, to = c(point_size * .55, point_size * 1.8))
       if (identical(size_by, "area_um2") && "area_um2" %in% names(d)) d$.point_size <- scales::rescale(log1p(pmax(d$area_um2, 0)), to = c(point_size * .55, point_size * 1.8))
       ymax <- max(d$plotted_value, na.rm = TRUE)
-      if (!is.finite(ymax) || ymax <= 0) ymax <- 1
+      if (!is.finite(ymax) || ymax <= 0) ymax <- .01
       g <- ggplot(d, aes(x = pt, y = plotted_value, key = key, text = hover, color = .data[[color]], size = .point_size)) +
         geom_point(alpha = input$traj_alpha %||% .6, show.legend = color != "case_id", stroke = 0) + scale_size_identity() +
         scale_y_continuous(limits = c(0, NA), expand = expansion(mult = c(0, .05))) +
         coord_cartesian(xlim = xlimits(), ylim = c(0, ymax * 1.05)) + theme_islet() +
-        labs(x = if (xcol() == "pseudotime_raw") "Raw pseudotime (arbitrary direction)" else "Fixed reference-cohort percentile", y = "log1p(cells / classifier-core cell)", color = "")
+        labs(x = trajectory_axis_label(input$pt_scale %||% "rank"), y = "log1p(cells / classifier-core cell)", color = "")
       if (identical(color, "donor_status")) g <- g + scale_color_manual(values = palette, drop = FALSE)
       if (identical(color, "case_id")) {
         ids <- sort(unique(as.character(d$case_id))); idpal <- setNames(grDevices::hcl.colors(length(ids), palette = "Dark 3"), ids)
@@ -360,7 +374,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
           (.35 + .65 * amount) * rgb[3] + (.65 - .65 * amount))
       }
       hm$fill <- mapply(function(status, amount) if (is.na(status)) "#D9D9D9" else blend(donor_palette[[status]], amount), hm$dominant, scaled)
-      hm$hover <- sprintf("Pseudotime: %.3f<br>Dominant status: %s<br>Islets: %d<br>Mean log1p ratio: %.4f",
+      hm$hover <- sprintf("Trajectory coordinate: %.3f<br>Dominant status: %s<br>Islets: %d<br>Mean log1p ratio: %.4f",
         hm$x, ifelse(is.na(hm$dominant), "none", hm$dominant), hm$n, hm$value)
       g <- ggplot(hm, aes(x, 1, fill = fill, text = hover)) +
         geom_tile(width = diff(breaks)[1], height = .9) + scale_fill_identity() +
@@ -422,7 +436,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
     heatmap_axis <- reactive(trajectory_heatmap_axis(coords, status, input$pt_scale %||% "rank"))
     output$heatmap_axis_note <- renderUI({
       if (typed_release) return(p(role = "status", paste(
-        if (identical(heatmap_axis()$kind, "section_area")) "Pseudotime is unavailable; fixed cohort-wide section-area bins are shown." else "Marker measurements use the saved ordering and fixed cohort-wide bins.",
+        if (identical(heatmap_axis()$kind, "section_area")) "Pseudotime is unavailable; fixed cohort-wide section-area bins are shown." else "Marker measurements use the saved ordering and fixed cohort-wide bins. The reference rank spreads exact raw-coordinate ties deterministically by islet ID only; order inside a tie has no biological meaning.",
         "Bins average islets within each donor, then weight donors equally. Gray cells denote unavailable measurements. Marker-positive ratios use the classifier-defined core-cell denominator; typed expression is the mean log1p intensity within the selected cell population.")))
       if (identical(heatmap_axis()$kind, "section_area")) p(role = "status",
         "Pseudotime is unavailable. This descriptive heatmap groups islets by section area using fixed cohort-wide bins. Marker values are mean islet medians of log1p core intensity; unmeasured values remain missing.")

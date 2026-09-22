@@ -3,13 +3,13 @@ trajectory_ui <- function(id) {
   tagList(
     uiOutput(ns("traj_status")),
     uiOutput(ns("boundary_review")),
-    p("Fixed islet ordering with arbitrary orientation. Pseudotime is not elapsed disease time. Display filters never refit or rescale the coordinates."),
+    p("Fixed islet ordering with arbitrary orientation. Pseudotime is not elapsed disease time. Display filters never refit or rescale the coordinates. The reference rank spaces supported islets evenly from 0 to 1; exact raw-coordinate ties are ordered by an islet-ID hash and have no biological order within the tie."),
     div(class = "card trajectory-controls-card", style = "padding: 15px; margin-bottom: 18px;",
     fluidRow(
       column(3, selectInput(ns("traj_donor"), "Donor", choices = c("All donors" = "all")),
              selectInput(ns("traj_ratio_type"), "Selected cell type", choices = islet_phenotype_choices(), selected = "Beta cell")),
       column(3, selectInput(ns("traj_ratio_region"), "Count cells in", choices = c("Core" = "core", "Core + peri-islet" = "both", "Peri-islet" = "peri"), selected = "core"),
-             selectInput(ns("pt_scale"), "Pseudotime scale", choices = c("Reference-cohort percentile" = "rank", "Raw pseudotime" = "raw"))),
+             selectInput(ns("pt_scale"), "Pseudotime scale", choices = c("Reference-cohort rank (evenly spaced)" = "rank", "Raw pseudotime" = "raw"))),
       column(3, sliderInput(ns("cell_range"), "Measured core cells (display filter)", min = 0, max = 3000, value = c(0,3000)),
              selectInput(ns("traj_show_trend"), "Descriptive trend", choices = c("Overall" = "overall", "By disease status" = "by_donor", "None" = "none"))),
       column(3, selectInput(ns("traj_color_by"), "Color points by", choices = c("Disease status" = "donor_status", "Donor" = "case_id")),

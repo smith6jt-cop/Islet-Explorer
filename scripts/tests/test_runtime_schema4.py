@@ -10,7 +10,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'research'))
 from build_runtime_schema4 import build
 from common import MARKERS
-from validate_schema4 import validate_count_arithmetic, validate_structural_areas
+from validate_schema4 import validate_count_arithmetic, validate_structural_areas, validate_reference_percentiles
 from finalize_candidate import startup_verify_artifact
 
 
@@ -112,3 +112,14 @@ def test_schema4_startup_verification_skips_large_immutable_trees():
         assert startup_verify_artifact(name, '4')
     # Other schemas retain startup checking for their ordinary trajectory tree.
     assert startup_verify_artifact('trajectory', '3')
+
+
+def test_version_two_reference_percentiles_are_even_and_missing_off_axis():
+    coordinates=pd.DataFrame({
+        'pseudotime_raw':[.4,.4,.8,np.nan],
+        'pseudotime_percentile':[1/6,3/6,5/6,np.nan],
+    })
+    validate_reference_percentiles(coordinates,{'reference_percentile_version':2})
+    coordinates.loc[1,'pseudotime_percentile']=.4
+    with pytest.raises(ValueError,match='evenly spaced'):
+        validate_reference_percentiles(coordinates,{'reference_percentile_version':2})

@@ -11,7 +11,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'research'))
 from common import MARKERS, sha256
 from composition import canonical_cells,aggregate_donor
 from materialize_classifier_eligibility import materialize
-from trajectory import fit,project,reference_percentile,graph_layout
+from trajectory import fit,project,reference_percentile,fixed_reference_rank,graph_layout
 from cell_typing import TypingConfig,fit_ensemble_member,load_model,project_clusters,consensus_assignments
 
 
@@ -189,5 +189,14 @@ class CompositionTest(unittest.TestCase):
     def test_frozen_percentiles_handle_ties(self):
         ref=np.array([0,1,1,2.]);np.testing.assert_allclose(reference_percentile(ref,ref),[.125,.5,.5,.875])
         np.testing.assert_allclose(reference_percentile([-1,3],ref),[0,1])
+
+    def test_fixed_reference_rank_evenly_spreads_ties_without_labels(self):
+        raw=np.array([1.,0.,1.,2.,1.]);ids=np.array(['c','a','b','e','d'])
+        rank=fixed_reference_rank(raw,ids)
+        np.testing.assert_allclose(np.sort(rank),(.5+np.arange(5))/5)
+        self.assertLess(rank[1],rank[0]);self.assertLess(rank[0],rank[3])
+        shuffled=np.array([4,2,0,3,1])
+        reranked=fixed_reference_rank(raw[shuffled],ids[shuffled])
+        np.testing.assert_allclose(reranked[np.argsort(shuffled)],rank)
 
 if __name__=='__main__':unittest.main()

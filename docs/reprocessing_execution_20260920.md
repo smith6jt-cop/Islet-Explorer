@@ -1,7 +1,7 @@
 # Typed-cell reprocessing and app revision
 
 Implementation started on 2026-09-20. The current local candidate is
-`data/development/all-donor-20260922-classifier-eligibility` and now supplies the shared
+`data/development/all-donor-20260922-trajectory-rank-v2` and now supplies the shared
 workstation app. This remains an execution record, not UFRC or scientific
 acceptance.
 
@@ -10,7 +10,7 @@ acceptance.
 The candidate contains seven ND, seven autoantibody-positive and seven T1D
 donors. HPAP-078 provenance remains explicit. Original inputs and the frozen
 release remain preserved. The working candidate is
-`data/development/all-donor-20260922-classifier-eligibility`; scientific reports belong in
+`data/development/all-donor-20260922-trajectory-rank-v2`; scientific reports belong in
 `data/reports/reprocessing-20260920`, outside the app runtime.
 
 1. Regenerate all 21 donors' boundaries with the frozen INS/GCG/SST pixel
@@ -181,3 +181,13 @@ completed. Fourteen graph components are retained, and non-primary components
 are not forced onto the primary pseudotime scale. The ordering is unstable by
 the prespecified checks. Spatial UMAP and Leiden use the 7,493 feature-supported
 islets. Earlier gates and fit counts are superseded by these artifacts.
+
+The 2,626 raw primary coordinates contain 731 unique values; 1,896 observations
+share the largest exact tie. The 2026-09-22 rank-v2 revision preserves those
+raw values and the fitted graph, while replacing the former tied empirical
+midrank with 2,626 fixed midpoint display ranks across 0–1. Exact ties are
+spread by SHA-256 of islet ID only. This order within a tie is descriptive and
+has no biological meaning; supporting inferential models use raw pseudotime.
+The public browser regression passed the evenly spaced rank grid, nonnegative
+ratio axis, explicit all-zero beta/core state, Spatial views, all 31 heatmap
+markers, donor filters, downloads and image click-through.

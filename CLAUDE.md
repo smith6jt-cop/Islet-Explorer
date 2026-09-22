@@ -29,6 +29,15 @@ outcome-blind trajectory does not fit scVI/Harmony,
 use an INS/ND root, tune disease ordering, or interpret Aab positivity as a
 clinical stage.
 
+The historical `pseudotime_percentile` column now stores a fixed ordinal
+display rank: raw pseudotime determines order and SHA-256 of the immutable
+islet ID spreads exact raw-coordinate ties. The 2,626 supported observations
+therefore occupy unique midpoint ranks across 0–1. This within-tie display
+order has no biological meaning and must not be used for inference;
+`pseudotime_raw` preserves all exact ties and remains the inferential
+coordinate. Shiny reads both saved coordinates and never reranks after a
+display filter.
+
 Trajectory y values are typed-cell ratios per canonical cell inside the
 classifier-determined endocrine core. A classifier core with no cells is
 ineligible; unavailable phenotype numerators remain missing. Spatial UMAP and

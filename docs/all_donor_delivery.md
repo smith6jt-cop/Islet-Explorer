@@ -3,7 +3,7 @@
 ## Current schema-4 candidate — 2026-09-22
 
 The shared app at `http://10.15.152.7:8080/islet-explorer/` serves
-`data/development/all-donor-20260922-classifier-eligibility/`. Nginx on port 8080 is the only
+`data/development/all-donor-20260922-trajectory-rank-v2/`. Nginx on port 8080 is the only
 network-facing route and proxies to the loopback service on
 `127.0.0.1:3840`. The service record contains one-line restart and stop
 commands, log paths, the exact app snapshot and the public URL.
@@ -37,6 +37,11 @@ median leave-one-donor-out absolute Spearman 0.131 and 23.6% supported primary
 coverage, with 21 donor omissions and 200 bootstrap reconstructions complete.
 The ordering is therefore **unstable**. Parameters were not changed to recover
 disease ordering; orientation remains arbitrary and is not elapsed disease time.
+The raw coordinate contains 731 unique values and a 1,896-islet exact tie. The
+default 0–1 reference rank preserves raw ordering and spreads exact ties by
+SHA-256 of islet ID, giving all 2,626 supported islets a unique fixed midpoint
+position. Order within a tie is only for display and descriptive binning;
+inferential models retain the raw tied coordinate.
 
 Spatial embeds the 7,493 feature-supported eligible islets from the same typed,
 classifier-core-normalized composition matrix. It displays UMAP coordinates, Leiden
@@ -312,14 +317,14 @@ The schema-4 all-donor candidate is the only network-facing app at
 `http://10.15.152.7:8080/islet-explorer/`. Nginx proxies that URL to the
 loopback backend on `127.0.0.1:3840`; the older 3838 and 3839 services are
 stopped and disabled. The service record, logs, and nginx configuration backup
-are recorded in `data/development/all-donor-20260922-classifier-eligibility/preview/service.json`,
-`data/development/all-donor-20260922-classifier-eligibility/preview/server.log`, and
+are recorded in `data/development/all-donor-20260922-trajectory-rank-v2/preview/service.json`,
+`data/development/all-donor-20260922-trajectory-rank-v2/preview/server.log`, and
 `/etc/nginx/conf.d/islet-explorer.conf.before-single-20260921`.
 
 Restart the backend by copying this one line into a shell:
 
 ```bash
-cd /data/panc_CODEX/Islet-Explorer && /home/smith6jt/miniconda3/envs/scvi-env/bin/python3.13 scripts/research/serve_preview.py --data-root data/development/all-donor-20260922-classifier-eligibility --app-root app/shiny_app --python /home/smith6jt/miniconda3/envs/scvi-env/bin/python --port 3840 --restart
+cd /data/panc_CODEX/Islet-Explorer && /home/smith6jt/miniconda3/envs/scvi-env/bin/python3.13 scripts/research/serve_preview.py --data-root data/development/all-donor-20260922-trajectory-rank-v2 --app-root app/shiny_app --python /home/smith6jt/miniconda3/envs/scvi-env/bin/python --port 3840 --restart
 ```
 
 The public URL remains unchanged after a backend restart. If nginx itself is
@@ -333,5 +338,4 @@ classifier-eligible islets, 7,493 feature-supported rows and 2,626 supported
 primary coordinates; disconnected observations remain explicit. Research
 results remain offline and are not part of the runtime. Machine-readable browser
 evidence and its screenshot are in
-`preview/evidence/schema4-classifier-eligibility-live.{json,png}` under the
-candidate root.
+`evidence/browser-schema4-trajectory.{json,png}` under the candidate root.

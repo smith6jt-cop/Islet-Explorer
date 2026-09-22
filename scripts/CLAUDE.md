@@ -19,8 +19,11 @@ typing, composition, trajectory, `build_islet_embedding.py`, runtime
 materialization, validation and finalization. Every builder requires explicit
 input/output roots. Research runners require `--report-root` outside app data.
 The current local candidate is
-`data/development/all-donor-20260922-classifier-eligibility`; preserve the native QuPath
+`data/development/all-donor-20260922-trajectory-rank-v2`; preserve the native QuPath
 project, source images, prior candidates and frozen release.
+The fixed 0–1 reference rank is a display/binning artifact: raw pseudotime
+orders observations, and exact ties are spread by SHA-256 of islet ID. Outcome
+trajectory inference uses `pseudotime_raw`, where the ties remain intact.
 The former ND/INS-root, disease-order validation and small/large refits are
 archived under `archive/trajectory-pre-20260916/`. Preserve those historical
 sources and frozen outputs; do not run their defaults against the new candidate.

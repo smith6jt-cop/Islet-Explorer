@@ -34,6 +34,17 @@ test_that("withdrawn coordinates use explicit fixed section-area heatmap bins", 
   existing <- trajectory_heatmap_axis(coords, list(status = "stable"))
   expect_identical(existing$kind, "pseudotime")
   expect_equal(existing$limits, c(0, 1))
+  expect_match(existing$label, "reference-cohort rank")
+})
+
+test_that("constant zero ratios are stated explicitly without inventing variation", {
+  d <- data.frame(pseudotime_percentile = c(.1, .2, NA), plotted_value = c(0, 0, 1))
+  message <- trajectory_zero_ratio_message(d, type = "Beta cell", region = "core")
+  expect_match(message, "2 plotted ratios")
+  expect_match(message, "valid measured zeros")
+  expect_match(message, "Beta cell")
+  d$plotted_value[2] <- .1
+  expect_null(trajectory_zero_ratio_message(d))
 })
 test_that("ratios use the classifier-core cell denominator and preserve missingness", {
   assign("PHENOTYPE_RETIRED", c("Endocrine", "Unknown"), envir = globalenv())

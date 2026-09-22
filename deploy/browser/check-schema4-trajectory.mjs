@@ -28,6 +28,9 @@ const embeddingManifest=synthetic?{}:JSON.parse(await fs.readFile(path.join(root
 const classifierEligible=features.filter(row=>row.eligible.toLowerCase()==='true').length;
 const embeddedIslets=Number(embeddingManifest.embedded_islets??embeddingManifest.eligible_islets??0);
 const supportedPrimary=coordinates.filter(row=>row.pseudotime_raw!=='').length;
+const savedRanks=coordinates.filter(row=>row.pseudotime_raw!=='').map(row=>Number(row.pseudotime_percentile)).sort((a,b)=>a-b);
+assert.equal(savedRanks.length,supportedPrimary);assert(savedRanks.every(Number.isFinite));
+for(let index=0;index<savedRanks.length;index++)assert(Math.abs(savedRanks[index]-(index+.5)/savedRanks.length)<1e-12,'Saved reference ranks must be the fixed evenly spaced midpoint grid');
 const displayNumber=value=>Number(value).toLocaleString('en-US');
 const browser=await puppeteer.launch({executablePath:value('--chrome')||'/usr/bin/google-chrome',headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
 const evidence={url,synthetic,checks:{},errors:[],started:new Date().toISOString()};let page;
@@ -82,12 +85,24 @@ try{
   const scatter=await page.$eval('#traj-traj_scatter',plot=>{
     const traces=(plot.data||[]).filter(trace=>String(trace.mode||'').includes('markers'));
     const y=traces.flatMap(trace=>Array.from(trace.y||[]).map(Number).filter(Number.isFinite));
-    return {points:traces.reduce((n,trace)=>n+(trace.x?.length||0),0),minimumY:Math.min(...y)};
+    const x=traces.flatMap(trace=>Array.from(trace.x||[]).map(Number).filter(Number.isFinite)).sort((a,b)=>a-b);
+    return {points:x.length,x,minimumY:Math.min(...y),maximumY:Math.max(...y),yRange:plot.layout?.yaxis?.range||[]};
   });
   if(!synthetic)assert.equal(scatter.points,supportedPrimary);else assert(scatter.points>0);
   assert(scatter.minimumY>=0);
+  assert.equal(scatter.x.length,savedRanks.length);
+  for(let index=0;index<scatter.x.length;index++)assert(Math.abs(scatter.x[index]-savedRanks[index])<1e-12,'Default scatter must use the saved fixed reference ranks');
+  if(!synthetic){
+    assert.equal(scatter.maximumY,0,'The default Beta-cell/core values in this release are measured zeros');
+    assert(Number(scatter.yRange[1])<.1,'A constant-zero response must not be stretched to a y-axis maximum of 1');
+    const ratioNote=await page.$eval('#traj-traj_y_note',el=>el.textContent||'');
+    assert(ratioNote.includes('valid measured zeros'));
+  }
   for(const id of ['#traj-traj_point_size','#traj-traj_point_size_slider','#traj-traj_alpha','#traj-traj_color_by','#traj-traj_donor_palette'])assert(await page.$(id));
   assert(await page.$('#traj-traj_strip_heatmap.js-plotly-plot'));
+  const stripText=await page.$eval('#traj-traj_strip_heatmap',plot=>(plot.data||[]).flatMap(trace=>Array.from(trace.text||[])).join(' '));
+  assert(!stripText.includes('Islets: 0'),'Evenly ranked full-cohort points must populate every strip bin');
+  evidence.checks.fixed_rank_is_evenly_spaced_and_zero_response_is_explicit=true;
   evidence.checks.dynamic_identities_states_and_all_markers=true;
   const baseline=await csv('#traj-dl_paga_csv');
   const secondary=baseline.filter(row=>row.supported.toLowerCase()==='false');

@@ -15,7 +15,7 @@ ID `0078`). Paths are resolved against an explicit repository root; external
 regional exports have explicit absolute paths. Corrected 6539 is selected from
 the recovery tree. The rejected duplicate is never selected.
 
-The current candidate is `data/development/all-donor-20260922-classifier-eligibility/`; the preceding
+The current candidate is `data/development/all-donor-20260922-trajectory-rank-v2/`; the preceding
 dated candidates and frozen original are preserved. Raw H5ADs,
 geometry, regional exports and TIFFs are immutable hardlinks; revised derived
 files are independent copies. **Never edit linked inputs.** Compatibility schema 3
@@ -42,6 +42,12 @@ trajectory tables and exact single-islet outline downloads, then refreshes their
 manifest entries. `validate_candidate.py` checks their CSV parity, native cell
 universes, classifier eligibility, typed counts, embedding and trajectory
 validation. The app only reads the saved offline fit.
+
+`revise_trajectory_reference_rank.py` creates a fresh hardlinked schema-4
+revision while replacing only the fixed display rank, its model metadata and
+provenance. It preserves the raw diffusion coordinate byte-for-value and
+requires a new output root. Run finalization and independent validation before
+serving that revision.
 
 ## Reproduction
 
