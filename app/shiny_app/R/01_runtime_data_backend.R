@@ -16,6 +16,8 @@ islet_release_schema <- function() {
   Sys.getenv("ISLET_DATA_SCHEMA", unset = "1")
 }
 
+islet_is_expanded_schema <- function(schema = islet_release_schema()) as.character(schema) %in% c("2", "3", "4")
+
 islet_duckdb_connection <- function() {
   if (!requireNamespace("DBI", quietly = TRUE) ||
       !requireNamespace("duckdb", quietly = TRUE)) {
@@ -114,6 +116,23 @@ ISLET_REQUIRED_RELEASE_ARTIFACTS <- c(
   "islet_spatial_lookup", "phenotype_rules", "donor_metadata", "cells", "images"
 )
 
+islet_required_artifacts <- function(schema = islet_release_schema()) {
+  if (identical(as.character(schema), "4")) return(c(
+    names(ISLET_SUMMARY_ARTIFACTS), "geometry", "islet_spatial_lookup",
+    "donor_metadata", "images", "image_channels", "cells", "cohort", "trajectory", "typing",
+    "islet_embedding", "islet_embedding_manifest", "classifier_eligibility"
+  ))
+  if (identical(as.character(schema), "3")) return(c(
+    names(ISLET_SUMMARY_ARTIFACTS), "geometry", "islet_spatial_lookup",
+    "phenotype_rules", "donor_metadata", "images", "cells", "cohort", "trajectory"
+  ))
+  if (identical(as.character(schema), "2")) return(c(
+    names(ISLET_SUMMARY_ARTIFACTS), "geometry", "islet_spatial_lookup",
+    "phenotype_rules", "donor_metadata", "images", "cells", "cohort", "trajectory", "research"
+  ))
+  ISLET_REQUIRED_RELEASE_ARTIFACTS
+}
+
 .islet_tree_files <- function(root) {
   files <- list.files(root, recursive = TRUE, full.names = TRUE,
                       all.files = TRUE, no.. = TRUE)
@@ -131,7 +150,9 @@ ISLET_REQUIRED_RELEASE_ARTIFACTS <- c(
   files <- .islet_tree_files(root)
   norm_root <- normalizePath(root, mustWork = TRUE)
   rel <- substring(files, nchar(norm_root) + 2L)
-  ord <- order(rel)
+  # Expanded schemas are built by Python: use portable byte ordering.
+  # Preserve schema 1's historical tree digest contract for frozen releases.
+  ord <- if (islet_is_expanded_schema()) order(rel, method = "radix") else order(rel)
   records <- vapply(ord, function(i) {
     paste(rel[[i]], .islet_sha256_file(files[[i]]), sep = "  ")
   }, character(1))
@@ -151,7 +172,7 @@ islet_verify_release_hashes <- function(manifest, root = data_root, mode = NULL)
   if (is.null(mode)) {
     mode <- tolower(Sys.getenv(
       "ISLET_VERIFY_RELEASE_HASHES",
-      unset = if (islet_is_production()) "core" else "none"
+      unset = if (islet_is_production() || islet_is_expanded_schema()) "core" else "none"
     ))
   }
   if (identical(mode, "none")) return(invisible(TRUE))
@@ -198,19 +219,47 @@ islet_validate_release <- function(root = data_root) {
   }
 
   artifacts <- manifest$artifacts %||% list()
-  missing_entries <- setdiff(ISLET_REQUIRED_RELEASE_ARTIFACTS, names(artifacts))
+  required <- islet_required_artifacts(actual_schema)
+  if (islet_is_expanded_schema(actual_schema) && islet_is_production() && !isTRUE(manifest$scientific_acceptance)) {
+    stop("Expanded candidate has not passed scientific deployment acceptance.", call. = FALSE)
+  }
+  missing_entries <- setdiff(required, names(artifacts))
   if (length(missing_entries)) {
     stop("Release manifest lacks required artifacts: ",
          paste(missing_entries, collapse = ", "), call. = FALSE)
   }
-  missing_paths <- vapply(ISLET_REQUIRED_RELEASE_ARTIFACTS, function(name) {
+  missing_paths <- vapply(required, function(name) {
     path <- .islet_artifact_path(root, artifacts[[name]]$relative_path)
     !file.exists(path) && !dir.exists(path)
   }, logical(1))
   if (any(missing_paths)) {
     stop("Release is incomplete; missing: ",
-         paste(ISLET_REQUIRED_RELEASE_ARTIFACTS[missing_paths], collapse = ", "),
+         paste(required[missing_paths], collapse = ", "),
          call. = FALSE)
+  }
+  if (identical(actual_schema, "3")) {
+    files <- c("counts.csv", "endocrine_counts.csv", "phenotype_availability.csv", "marker_panel.json", "count_manifest.json")
+    if (!all(file.exists(file.path(root, "trajectory", files))))
+      stop("Schema 3 requires trajectory count, availability and marker-panel artifacts.", call. = FALSE)
+    if ("research" %in% names(artifacts)) stop("Schema 3 research reports must be outside the app runtime.", call. = FALSE)
+  }
+  if (identical(actual_schema, "4")) {
+    required_files <- c("typing/catalog.json", "typing/specification.json",
+      "trajectory/marker_panel.json", "trajectory/count_manifest.json",
+      "trajectory/feature_manifest.json", "trajectory/validation.json",
+      "analysis/islet_embedding_manifest.json", "analysis/classifier_eligibility_manifest.json")
+    required_tables <- c("composition_features", "marker_summaries", "counts", "endocrine_counts", "coordinates", "edges", "graph_layout")
+    present <- vapply(required_tables, function(name) any(file.exists(file.path(root, "trajectory", paste0(name, c(".parquet", ".csv"))))), logical(1))
+    if (!all(file.exists(file.path(root, required_files))) || !all(present))
+      stop("Schema 4 requires typed composition, marker summaries, endocrine counts and their provenance.", call. = FALSE)
+    provenance <- manifest$measurement_definitions
+    if (!identical(provenance$trajectory_features, "log1p_validated_base_type_count_per_classifier_defined_core_cell") ||
+        !identical(provenance$spatial_embedding_features, "same_typed_classifier_core_normalized_composition_as_primary_trajectory") ||
+        !identical(provenance$islet_eligibility, "no_image_edge_contact_and_at_least_one_canonical_classifier_core_cell") ||
+        !identical(provenance$endocrine_denominator, "all_canonical_cells_inside_endocrine_pixel_classifier_core_counted_once") ||
+        !all(c("typing_specification", "typing_catalog", "trajectory_feature_manifest", "islet_embedding_manifest", "classifier_eligibility") %in% names(manifest$provenance_hashes)))
+      stop("Schema 4 requires explicit typing, denominator and trajectory provenance.", call. = FALSE)
+    if ("research" %in% names(artifacts)) stop("Schema 4 research reports must be outside the app runtime.", call. = FALSE)
   }
   islet_verify_release_hashes(manifest, root)
   manifest

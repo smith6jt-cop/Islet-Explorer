@@ -1,3 +1,15 @@
+# Debug modes are a deployment error in production. Keep this check before
+# package loading and other startup work so a misconfigured worker fails closed
+# without entering either diagnostic path.
+DEBUG_CREDS <- islet_flag_enabled(Sys.getenv("DEBUG_CREDENTIALS", "0"))
+VIEWER_DEBUG_ENABLED <- islet_flag_enabled(Sys.getenv("VIEWER_DEBUG", "0"))
+if (identical(tolower(trimws(Sys.getenv("ISLET_RUNTIME_MODE", "development"))),
+              "production") &&
+    (DEBUG_CREDS || VIEWER_DEBUG_ENABLED)) {
+  islet_log_event("runtime_profile_rejected")
+  stop("Production does not permit credential or viewer debug modes.", call. = FALSE)
+}
+
 library(shiny)
 library(shinyjs)
 library(readxl)
@@ -39,23 +51,22 @@ suppressPackageStartupMessages({
   if (requireNamespace("sf", quietly = TRUE)) {
     library(sf)
     SF_AVAILABLE <- TRUE
-    message("[SF] Package sf loaded for segmentation viewer")
+    islet_log_event("sf_ready")
   } else {
-    message("[SF] Package 'sf' not found. Islet segmentation viewer will be disabled.")
-    message("[SF] Install with: install.packages('sf')")
+    islet_log_event("sf_unavailable")
   }
 })
 
 # Check for httr2 package (required for AI assistant)
 httr2_available <- requireNamespace("httr2", quietly = TRUE)
 if (!httr2_available) {
-  message("Package 'httr2' not found. The AI assistant will be disabled until you install it (install.packages('httr2')).")
+  islet_log_event("httr2_unavailable")
 }
 
 # Load anndata package for trajectory analysis (install with BiocManager::install('anndata'))
 suppressPackageStartupMessages({
   if (!requireNamespace("anndata", quietly = TRUE)) {
-    message("Package 'anndata' not found. Install with: BiocManager::install('anndata')")
+    islet_log_event("anndata_unavailable")
   }
 })
 
@@ -63,20 +74,19 @@ suppressPackageStartupMessages({
 VITESSCE_AVAILABLE <- FALSE
 suppressPackageStartupMessages({
   if (!requireNamespace("vitessceR", quietly = TRUE)) {
-    message("Package 'vitessceR' not found. Install with: remotes::install_github('vitessce/vitessceR')")
-    message("Version required: >= 0.1.0")
+    islet_log_event("vitessce_unavailable")
   } else {
     # Verify we have the GitHub version with required features
     tryCatch({
       pkg_version <- packageVersion("vitessceR")
       if (pkg_version < "0.1.0") {
-        warning("vitessceR version ", pkg_version, " detected. Please upgrade to >= 0.1.0 from GitHub")
+        islet_log_event("vitessce_version_unsupported")
       }
       test_vc <- vitessceR::VitessceConfig$new(schema_version = "1.0.16", name = "Test")
-      message("[VITESSCE] Package verified working (version ", pkg_version, ")")
+      islet_log_event("vitessce_ready")
       VITESSCE_AVAILABLE <<- TRUE
     }, error = function(e) {
-      warning("[VITESSCE] Package installed but failed basic test: ", conditionMessage(e))
+      islet_log_event("vitessce_check_failed")
     })
 
     # CRITICAL FIX: Ensure all child routes from MultiImageWrapper are registered
@@ -92,9 +102,9 @@ suppressPackageStartupMessages({
           }
           routes
         }, overwrite = TRUE)
-        message("[VITESSCE] Applied MultiImageWrapper get_routes fix for segmentation layer routing")
+        islet_log_event("vitessce_routes_ready")
       }, error = function(e) {
-        warning("[VITESSCE] Failed to apply get_routes fix: ", conditionMessage(e))
+        islet_log_event("vitessce_routes_failed")
       })
     }
   }
@@ -110,9 +120,7 @@ suppressPackageStartupMessages({
 # ---- Runtime diagnostics ----
 APP_VERSION <- "modular-v1"
 try({
-  message("[APP LOAD] Version=", APP_VERSION, " time=", Sys.time())
-  message("[APP LOAD] getwd=", tryCatch(getwd(), error = function(e) NA))
-  message("[APP LOAD] list.files(.) contains app.R? ", any(grepl('^app.R$', list.files('.'))))
+  islet_log_event("app_loaded")
   # Publication containers keep the application and release mounts read-only.
   # Write a load flag only when an operator explicitly requests one, and only
   # below the process temporary directory (never below the source tree).
@@ -123,7 +131,7 @@ try({
     is_below_temp <- identical(flag_path, temp_root) ||
       startsWith(flag_path, paste0(temp_root, .Platform$file.sep))
     if (!is_below_temp) {
-      warning("ISLET_APP_LOAD_FLAG must resolve below tempdir(); flag not written.")
+      islet_log_event("app_load_flag_rejected")
     } else {
       if (!dir.exists(dirname(flag_path))) {
         dir.create(dirname(flag_path), recursive = TRUE, showWarnings = FALSE)
@@ -185,22 +193,16 @@ if (!nzchar(Sys.getenv("RETICULATE_PYTHON", ""))) {
   # back to the first existing candidate so behaviour is no worse than before.
   if (!nzchar(candidate_python) && length(.py_candidates)) {
     candidate_python <- .py_candidates[[1]]
-    message("[PYTHON] WARNING: no candidate interpreter could import anndata; ",
-            "H5AD loading may fail and fall back to Excel. Set RETICULATE_PYTHON ",
-            "to a python that has the anndata module.")
+    islet_log_event("python_anndata_unavailable")
   }
 
   if (nzchar(candidate_python)) {
     Sys.setenv(RETICULATE_PYTHON = candidate_python)
-    message("[PYTHON] RETICULATE_PYTHON=", candidate_python)
+    islet_log_event("python_configured")
   } else {
-    message("[PYTHON] No python executable found. Set RETICULATE_PYTHON to a valid interpreter.")
+    islet_log_event("python_unavailable")
   }
 }
-
-# Debug flags
-DEBUG_CREDS <- isTRUE(as.logical(Sys.getenv("DEBUG_CREDENTIALS", "0")))
-VIEWER_DEBUG_ENABLED <- identical(Sys.getenv("VIEWER_DEBUG", "0"), "1")
 
 # Feature flags
 #
@@ -502,14 +504,12 @@ function(el, x){
       if (d && d.points && d.points.length){ var k = keyOf(d.points[0]); if (k != null) lastKey = k; }
     });
     gd.on('plotly_unhover', function(){ lastKey = null; });
-    gd.on('plotly_click', function(){ console.log('[ISLET] plotly_click fired'); });
   }
   (gd || el).addEventListener('mousedown', function(e){ downX = e.clientX; downY = e.clientY; downKey = lastKey || hoverKey(); }, true);
   (gd || el).addEventListener('mouseup', function(e){
     if (Math.abs(e.clientX - downX) > 5 || Math.abs(e.clientY - downY) > 5) return;
     var k = downKey || lastKey || hoverKey();
     if (k == null) return;
-    console.log('[ISLET] native click -> ' + k);
     Shiny.setInputValue('%s', {key: k, nonce: (Date.now() + Math.random())}, {priority: 'event'});
   }, true);
 }", input_id)
@@ -597,7 +597,12 @@ PHENOTYPE_RESIDUALS <- list(
 # Returns NULL if the file is missing — callers should guard.
 .parse_phenotype_rules_csv <- function(path) {
   if (!file.exists(path)) {
-    message("[PHENOTYPE] Rules CSV not found at ", path, " — modal/hints disabled")
+    # Schema 4 intentionally replaces the legacy CSV with its versioned typing
+    # catalog.  Missing legacy rules are therefore expected, not a blocker.
+    candidate_path <- data_path("candidate.json")
+    schema <- tryCatch(as.character(jsonlite::read_json(candidate_path)$schema_version),
+                       error = function(e) NA_character_)
+    if (!identical(schema, "4")) islet_log_event("phenotype_rules_unavailable")
     return(NULL)
   }
   raw <- utils::read.csv(path, header = FALSE, stringsAsFactors = FALSE,
@@ -687,6 +692,18 @@ PHENOTYPE_RULES_CSV <- .compose_phenotype_rules(PHENOTYPE_RULES_CSV_RAW)
 # Returns NULL if the name has no rule and no residual entry.
 get_phenotype_rule <- function(name) {
   if (is.null(name) || is.na(name) || !nzchar(name)) return(NULL)
+  if (exists("islet_typing_catalog", mode = "function")) {
+    catalog <- islet_typing_catalog()
+    if (!is.null(catalog)) {
+      for (entry in c(catalog$base_types, catalog$states)) {
+        label <- if (is.character(entry)) entry else entry$name
+        if (identical(name, label)) return(list(description = if (is.list(entry)) entry$description %||%
+          "Joint corrected-marker profile assigned by the release's hierarchical cell-typing model." else
+          "Joint corrected-marker profile assigned by the release's hierarchical cell-typing model."))
+      }
+      return(NULL)
+    }
+  }
   # Try residuals first (small set, includes "Unknown" fallback).
   if (name %in% names(PHENOTYPE_RESIDUALS)) return(PHENOTYPE_RESIDUALS[[name]])
   # Apply alias (PHENOTYPE_COLORS -> CSV).
@@ -794,6 +811,13 @@ phenotype_rules_table_df <- function() {
 # Modal builder. Pure shiny — no DT dependency. Pass to showModal() from any tab's
 # Phenotype-Rules button handler.
 phenotype_rules_modal_ui <- function() {
+  if (exists("islet_typing_catalog", mode = "function") && !is.null(islet_typing_catalog())) {
+    choices <- islet_phenotype_choices()
+    return(shiny::modalDialog(title = "Cell identities and phenotype states", size = "l", easyClose = TRUE,
+      shiny::p("Joint marker profiles define base identities; finer states are interpreted within each lineage. Assignment support is preserved in cell downloads."),
+      lapply(names(choices), function(group) shiny::tagList(shiny::h4(group),
+        lapply(choices[[group]], function(name) shiny::p(shiny::strong(name), " — ", format_phenotype_rule(name, "plain")))))))
+  }
   df <- phenotype_rules_table_df()
   header_row <- shiny::tags$tr(
     shiny::tags$th("Phenotype",          style = "text-align:left; padding:6px 10px;"),
@@ -981,10 +1005,16 @@ PHENOTYPE_RETIRED <- c("Endocrine", "Acinar", "Endothelial", "T cell",
                        "Immune", "Unknown", "ECAD+", "Structural", "APCs")
 
 #' Drop retired phenotypes from a character vector of labels.
-phenotype_keep <- function(x) setdiff(x, PHENOTYPE_RETIRED)
+phenotype_keep <- function(x) {
+  if (exists("islet_typing_catalog", mode = "function")) {
+    catalog <- islet_typing_catalog()
+    if (!is.null(catalog)) return(intersect(x, islet_catalog_names(c(catalog$base_types, catalog$states))))
+  }
+  setdiff(x, PHENOTYPE_RETIRED)
+}
 
 #' TRUE for rows whose phenotype is still in use. NA-safe.
-phenotype_is_kept <- function(x) !(as.character(x) %in% PHENOTYPE_RETIRED)
+phenotype_is_kept <- function(x) as.character(x) %in% phenotype_keep(as.character(x))
 
 #' Drop retired phenotypes from a data frame with a phenotype column.
 phenotype_filter_rows <- function(df, col = "phenotype") {

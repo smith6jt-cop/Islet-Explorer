@@ -42,15 +42,29 @@ load_channel_names <- function() {
     labels <- labels[nzchar(labels)]
     if (!length(labels)) next
 
-    message(sprintf("[CHANNELS] Loaded %d channel names from %s", length(labels), cand))
     return(labels)
   }
 
-  message("[CHANNELS] Channel names not found. Embed names with: tiffcomment -set \"ChannelNames=<comma-separated>\" <file.ome.tif>")
+  islet_log_event("viewer_channels_unavailable")
   NULL
 }
 
 channel_names_vec <- load_channel_names()
+
+# Expanded typed releases declare each image's embedded OME channel order.
+# A global Channel_names.txt can silently swap donor-specific acquisitions.
+.viewer_image_channels <- new.env(parent = emptyenv())
+viewer_channel_names_for_image <- function(filename, schema = islet_release_schema()) {
+  if (!identical(as.character(schema), "4")) return(channel_names_vec)
+  path <- data_path("image_channels.json")
+  if (!file.exists(path)) stop("Schema 4 requires per-image OME channel provenance")
+  key <- normalizePath(path, mustWork = TRUE)
+  if (is.null(.viewer_image_channels[[key]])) .viewer_image_channels[[key]] <- jsonlite::read_json(path)
+  record <- .viewer_image_channels[[key]]$images[[filename]]
+  labels <- unlist(record$channel_names, use.names = FALSE)
+  if (!length(labels) || anyDuplicated(labels)) stop("Missing or duplicate OME channel names for selected image")
+  labels
+}
 
 # ---- Local images setup ---------------------------------------------------
 
@@ -75,13 +89,16 @@ if (is.null(local_images_root)) {
 
 www_local_images_dir <- file.path("www", "local_images")
 has_www_local_images <- dir.exists(www_local_images_dir)
+if (file.exists(data_path("candidate.json")) &&
+    (!has_www_local_images || !identical(normalizePath(www_local_images_dir), normalizePath(data_path("images"))))) {
+  stop("Candidate image route must resolve to its explicit image root; mixed-cohort fallback is forbidden.")
+}
 
 # Register /images resource path for backup access (avoid conflict with www/local_images)
 # This provides redundancy even if www/local_images exists
 if (!is.null(local_images_root) && dir.exists(local_images_root)) {
   try({
     shiny::addResourcePath("images", local_images_root)
-    cat("[SETUP] Registered resource path /images ->", local_images_root, "\n")
   }, silent = TRUE)
 }
 
@@ -91,7 +108,6 @@ if (has_www_local_images) {
     # Register local_images path for both local and remote compatibility
     # Use 'img_data' to avoid conflict warning with www/local_images subdirectory
     shiny::addResourcePath("img_data", file.path("www", "local_images"))
-    cat("[SETUP] Registered /img_data -> www/local_images\n")
   }, silent = TRUE)
 }
 
@@ -99,19 +115,7 @@ label_exports_dir <- file.path("www", "LabelExports")
 if (dir.exists(label_exports_dir)) {
   try({
     shiny::addResourcePath("label_exports", label_exports_dir)
-    cat("[SETUP] Registered /label_exports ->", label_exports_dir, "\n")
-    seg_files <- list.files(label_exports_dir, pattern = "\\.ome\\.tiff?$", ignore.case = TRUE)
-    cat("[SETUP] Found", length(seg_files), "segmentation OME-TIFF files\n")
   }, silent = TRUE)
-} else {
-  cat("[SETUP] LabelExports directory not found at", label_exports_dir, "\n")
-}
-
-# Log the setup for debugging
-cat("[SETUP] www/local_images exists:", has_www_local_images, "\n")
-if (has_www_local_images) {
-  local_files <- list.files(www_local_images_dir, pattern = "\\.(ome\\.)?tiff?$", ignore.case = TRUE)
-  cat("[SETUP] Found", length(local_files), "images in www/local_images\n")
 }
 
 # ---- Viewer helpers/defaults (Avivator) -----------------------------------
@@ -215,7 +219,6 @@ find_image_for_case <- function(case_id, www_dir, local_root) {
   if (!is.null(www_dir) && dir.exists(www_dir)) {
     matches <- list.files(www_dir, pattern = pattern, ignore.case = TRUE, full.names = TRUE)
     if (length(matches) > 0) {
-      cat("[IMAGE] Found in www:", matches[1], "\n")
       return(matches[1])
     }
   }
@@ -224,12 +227,10 @@ find_image_for_case <- function(case_id, www_dir, local_root) {
   if (!is.null(local_root) && dir.exists(local_root)) {
     matches <- list.files(local_root, pattern = pattern, ignore.case = TRUE, full.names = TRUE)
     if (length(matches) > 0) {
-      cat("[IMAGE] Found in LOCAL_IMAGE_ROOT:", matches[1], "\n")
       return(matches[1])
     }
   }
 
-  cat("[IMAGE] Not found for case:", case_id, "\n")
   return(NULL)
 }
 

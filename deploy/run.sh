@@ -12,8 +12,13 @@ container_name="${CONTAINER_NAME:-islet-explorer-smoke}"
   echo "ERROR: PROJECT_ROOT must be an absolute path without whitespace." >&2
   exit 64
 }
-[[ "${release}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ && "${port}" =~ ^[0-9]+$ ]] || {
+[[ "${release}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ && "${port}" =~ ^[0-9]{1,5}$ ]] || {
   echo "ERROR: invalid RELEASE or PORT." >&2
+  exit 64
+}
+port="$((10#${port}))"
+((port >= 1 && port <= 65535)) || {
+  echo "ERROR: PORT must be between 1 and 65535." >&2
   exit 64
 }
 
@@ -48,6 +53,8 @@ tmp_dir="${project_root}/runtime/tmp-smoke"
 mkdir -p -- "${log_dir}" "${tmp_dir}"
 chmod 0750 "${log_dir}" "${tmp_dir}"
 
+# OCI images do not retain the Containerfile HEALTHCHECK. Set it here, as the
+# production Quadlet does, so verification can observe a healthy container.
 container_id="$(podman run --detach --rm \
   --name "${container_name}" \
   --pull=never \
@@ -58,6 +65,9 @@ container_id="$(podman run --detach --rm \
   --cap-drop=ALL \
   --security-opt=no-new-privileges \
   --cpus=2 --memory=14g --pids-limit=2048 \
+  --health-cmd='curl --fail --silent --show-error --max-time 8 http://127.0.0.1:3838/islet-explorer/' \
+  --health-interval=30s --health-timeout=10s \
+  --health-start-period=180s --health-retries=5 \
   --volume "${release_dir}/data:/srv/islet-explorer/data:ro" \
   --volume "${release_dir}/data/images:/srv/islet-explorer/app/shiny_app/www/local_images:ro" \
   --volume "${log_dir}:/var/log/shiny-server:rw" \
@@ -83,13 +93,10 @@ container_id="$(podman run --detach --rm \
   "${image_ref}")"
 
 echo "Started ${container_name}: ${container_id}"
-if [[ "${port}" == 3838 ]]; then
-  if ! "${script_dir}/verify-deployment.sh" \
-    --url http://127.0.0.1:3838/islet-explorer/ --container "${container_name}"; then
-    podman stop "${container_name}" >/dev/null || true
-    exit 70
-  fi
-else
-  echo "Verify manually at http://127.0.0.1:${port}/islet-explorer/."
+if ! "${script_dir}/verify-deployment.sh" \
+  --url "http://127.0.0.1:${port}/islet-explorer/" --container "${container_name}" \
+  --expected-image "${image_ref}"; then
+  podman stop "${container_name}" >/dev/null || true
+  exit 70
 fi
 echo "Stop with: podman stop ${container_name}"

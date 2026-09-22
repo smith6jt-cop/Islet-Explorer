@@ -43,6 +43,15 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       )
     }
 
+    ordered_cluster_levels <- function(values) {
+      levels <- unique(as.character(values[!is.na(values) & nzchar(as.character(values))]))
+      numeric_levels <- suppressWarnings(as.numeric(levels))
+      if (length(levels) && all(is.finite(numeric_levels))) {
+        return(as.character(sort(unique(numeric_levels))))
+      }
+      sort(levels)
+    }
+
     has_neighborhood <- reactive({
       pd <- prepared()
       if (is.null(pd$comp)) return(FALSE)
@@ -54,7 +63,10 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       pd <- prepared()
       if (is.null(pd$comp)) return(FALSE)
       nbr <- get_nbr_columns(colnames(pd$comp))
-      length(nbr$leiden) > 0
+      if (!length(nbr$leiden) || !all(c("leiden_umap_1", "leiden_umap_2") %in% colnames(pd$comp))) return(FALSE)
+      x <- suppressWarnings(as.numeric(pd$comp$leiden_umap_1))
+      y <- suppressWarnings(as.numeric(pd$comp$leiden_umap_2))
+      any(is.finite(x) & is.finite(y))
     })
 
     has_tissue <- reactive({
@@ -84,6 +96,17 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       selectInput(ns("donor"), "Donor", choices = choices, selected = donors[1])
     })
 
+    # Browser input is accepted only when it is one of the donor partitions
+    # discovered by the server. This check happens before the value reaches a
+    # filesystem path or download filename.
+    selected_donor <- reactive({
+      donor_id <- input$donor
+      if (is.null(donor_id)) return(NULL)
+      if (!islet_valid_scalar_choice(donor_id, get_available_donors(),
+                                     "spatial_donor_invalid")) return(NULL)
+      donor_id
+    })
+
     # ---- Leiden resolution selector ----
     output$leiden_res_selector <- renderUI({
       if (!has_leiden()) return(NULL)
@@ -97,17 +120,19 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
 
     # ---- Donor cells reactive (load tissue CSV for selected donor) ----
     donor_cells <- reactive({
-      req(input$donor)
-      load_donor_tissue(input$donor)
+      donor_id <- selected_donor()
+      req(donor_id)
+      load_donor_tissue(donor_id)
     })
 
     # ---- Donor status for selected donor ----
     donor_status <- reactive({
-      req(input$donor)
+      donor_id <- selected_donor()
+      req(donor_id)
       pd <- prepared()
       if (!is.null(pd$comp) && "Donor Status" %in% colnames(pd$comp) &&
           "Case ID" %in% colnames(pd$comp)) {
-        ds <- pd$comp$`Donor Status`[pd$comp$`Case ID` == as.integer(input$donor)]
+        ds <- pd$comp$`Donor Status`[pd$comp$`Case ID` == as.integer(donor_id)]
         if (length(ds) > 0) return(ds[1])
       }
       "?"
@@ -121,7 +146,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       req(leiden_col, leiden_col %in% colnames(pd$comp))
 
       # Build islet_key -> cluster mapping for the selected donor
-      donor_id <- input$donor
+      donor_id <- selected_donor()
       req(donor_id)
 
       comp <- pd$comp
@@ -147,7 +172,14 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
     pheno_choice_info <- reactive({
       cells <- tryCatch(donor_cells(), error = function(e) NULL)
       observed <- if (is.null(cells)) character(0) else cells$phenotype
-      phenos <- canonical_phenotype_order(observed)
+      if (identical(islet_release_schema(), "4")) {
+        catalog <- islet_typing_catalog()
+        base <- islet_catalog_names(catalog$base_types)
+        observed <- unique(as.character(observed[!is.na(observed) & nzchar(observed)]))
+        phenos <- c(base, sort(setdiff(observed, base)))
+      } else {
+        phenos <- canonical_phenotype_order(observed)
+      }
       counts <- table(factor(observed, levels = phenos))
       list(phenos = phenos, counts = counts)
     })
@@ -318,7 +350,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       # Foreground layer: colored by phenotype or leiden
       if (nrow(fg) > 0) {
         if (use_leiden && "cluster" %in% colnames(fg)) {
-          cluster_levels <- sort(unique(fg$cluster[fg$cluster != "tissue"]))
+          cluster_levels <- ordered_cluster_levels(fg$cluster[fg$cluster != "tissue"])
           fg$cluster <- factor(fg$cluster, levels = c(cluster_levels, "tissue"))
           n_clusters <- length(cluster_levels)
           pal_colors <- rep_len(leiden_palette, n_clusters)
@@ -376,8 +408,10 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           ggplot2::scale_y_reverse()
       }
 
+      donor_id <- selected_donor()
+      req(donor_id)
       p + ggplot2::labs(
-          title = paste0("Donor ", input$donor, " (", ds, ")"),
+          title = paste0("Donor ", donor_id, " (", ds, ")"),
           subtitle = paste0(nrow(fg), " foreground cells | ",
                             nrow(bg), " background cells"),
           x = expression(paste("X centroid (", mu, "m)")),
@@ -392,7 +426,10 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
 
     output$tissue_scatter <- shiny::renderPlot({ spatial_tissue_scatter_plot() }, height = 800)
     output$dl_tissue_scatter <- shiny::downloadHandler(
-      filename = function() islet_png_filename(paste0("spatial_tissue_donor_", input$donor %||% "all")),
+      filename = function() {
+        donor_id <- selected_donor()
+        islet_png_filename(paste0("spatial_tissue_donor_", donor_id %||% "all"))
+      },
       content = function(file) {
         p <- spatial_tissue_scatter_plot(); if (is.null(p)) return()
         ggplot2::ggsave(file, plot = p,
@@ -401,12 +438,30 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       }
     )
 
-    # ==== Card 3: Leiden UMAP (plotly, 1015 islets) ====
+    # ==== Card 3: Leiden UMAP (feature-supported eligible islets) ====
+    output$leiden_summary <- renderUI({
+      if (!has_leiden()) return(NULL)
+      comp <- prepared()$comp
+      keep <- is.finite(suppressWarnings(as.numeric(comp$leiden_umap_1))) &
+        is.finite(suppressWarnings(as.numeric(comp$leiden_umap_2)))
+      donors <- if ("Case ID" %in% colnames(comp)) length(unique(comp$`Case ID`[keep])) else NA_integer_
+      manifest_path <- data_path("analysis", "islet_embedding_manifest.json")
+      manifest <- if (file.exists(manifest_path)) jsonlite::read_json(manifest_path) else list()
+      classifier_eligible <- suppressWarnings(as.integer(manifest$classifier_eligible_islets %||% sum(keep)))
+      tagList(
+        tags$p(sprintf("%s feature-supported islets are embedded from %s classifier-eligible islets across %s donors.",
+          format(sum(keep), big.mark = ","), format(classifier_eligible, big.mark = ","),
+          if (is.finite(donors)) donors else "the cohort"),
+          role = "status", style = "font-weight: 600; margin-bottom: 4px;"),
+        tags$p("An islet is eligible when its endocrine pixel-classifier core does not contact the image edge and contains at least one canonical core cell. Downstream phenotype support can limit an embedding coordinate, but cannot revoke eligibility.",
+          style = "color: #5f6b76; font-size: 12px; margin-bottom: 10px;")
+      )
+    })
+
     output$leiden_not_available <- renderUI({
       if (!has_leiden()) {
         return(div(style = "color: #888; font-style: italic; margin-bottom: 10px;",
-          "Leiden clustering not available in current H5AD. ",
-          "Rebuild with build_h5ad_for_app.py after running Leiden clustering."))
+          "Leiden clustering is not included in this release; the tissue map and neighborhood summaries remain available."))
       }
       NULL
     })
@@ -435,6 +490,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
 
       plot_df <- data.frame(
         umap1 = umap1, umap2 = umap2, cluster = cluster,
+        case_id = if ("Case ID" %in% colnames(plot_comp)) as.character(plot_comp$`Case ID`) else "",
         donor_status = if ("Donor Status" %in% colnames(plot_comp)) as.character(plot_comp$`Donor Status`) else "",
         islet_key = if ("islet_key" %in% colnames(plot_comp)) as.character(plot_comp$islet_key) else "",
         stringsAsFactors = FALSE
@@ -442,8 +498,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       plot_df <- plot_df[is.finite(plot_df$umap1) & is.finite(plot_df$umap2), , drop = FALSE]
       if (nrow(plot_df) == 0) return(plotly_islet_empty("No UMAP data"))
 
-      # Sort cluster levels numerically
-      cluster_levels <- sort(unique(plot_df$cluster))
+      cluster_levels <- ordered_cluster_levels(plot_df$cluster)
       plot_df$cluster <- factor(plot_df$cluster, levels = cluster_levels)
       n_clusters <- length(cluster_levels)
       pal_colors <- rep_len(leiden_palette, n_clusters)
@@ -455,6 +510,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       plot_ly(plot_df, x = ~umap1, y = ~umap2, color = ~cluster,
               colors = pal,
               text = ~paste0("Cluster: ", cluster, "<br>",
+                             "Donor: ", case_id, "<br>",
                              "Status: ", donor_status, "<br>",
                              islet_key),
               hoverinfo = "text",
@@ -543,7 +599,12 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       }
 
       # Get phenotype proportion columns (prop_*), filtered by selected phenotypes
-      prop_cols <- grep("^prop_", colnames(plot_comp), value = TRUE)
+      prop_cols <- if (identical(islet_release_schema(), "4")) {
+        catalog <- islet_typing_catalog()
+        intersect(paste0("prop_", islet_catalog_names(catalog$base_types)), colnames(plot_comp))
+      } else {
+        grep("^prop_", colnames(plot_comp), value = TRUE)
+      }
       if (length(prop_cols) == 0) {
         return(plotly_islet_empty("No phenotype proportion data"))
       }
@@ -558,7 +619,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       cluster <- as.character(plot_comp[[leiden_col]])
 
       # Compute mean phenotype proportions per cluster
-      cluster_levels <- sort(unique(cluster))
+      cluster_levels <- ordered_cluster_levels(cluster)
       mat <- matrix(NA_real_, nrow = length(prop_cols), ncol = length(cluster_levels),
                     dimnames = list(prop_cols, cluster_levels))
       for (cl in cluster_levels) {

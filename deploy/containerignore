@@ -10,10 +10,14 @@
 !scripts/verify_release_data.R
 !deploy/
 !deploy/Containerfile
+!deploy/harden-base.sh
+!deploy/tests/
+!deploy/tests/smoke-shiny-server.py
 !deploy/install-production-r-deps.R
 !deploy/requirements-python.lock
 !deploy/shiny-server.conf
 !deploy/container-entrypoint.sh
+!deploy/r-worker.py
 
 # Local credentials, mutable diagnostics, and scientific assets must never enter
 # the image or build context.

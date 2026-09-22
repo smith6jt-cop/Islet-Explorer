@@ -1,6 +1,39 @@
 # CLAUDE.md - Pipeline Scripts
 
-Pipeline scripts that build the data files consumed by the Shiny app. The top-level `CLAUDE.md` covers the high-level data lineage and run commands. This file documents the batch-correction pipeline, pseudotime modes, and per-script details.
+Pipeline scripts that build the data files consumed by the Shiny app.
+
+## Owner correction — 2026-09-19
+
+[Typing must precede endocrine-normalized trajectory features](../docs/trajectory_typing_reference_20260919.md).
+The nine explicitly required marker contributors and implementation status are
+recorded in `research/cell_typing_requirements-v1.json`. Schema 4 now runs cell
+typing before composition and fits trajectory from typed counts per canonical
+cell inside the classifier-determined endocrine core. Whole-islet marker averages are excluded from both the
+primary trajectory and Spatial embedding.
+
+## Current offline defaults — 2026-09-22
+
+The authoritative 21-donor pipeline is [research/README.md](research/README.md).
+The schema-4 path is `research/reprocess_candidate.py` followed by correction,
+typing, composition, trajectory, `build_islet_embedding.py`, runtime
+materialization, validation and finalization. Every builder requires explicit
+input/output roots. Research runners require `--report-root` outside app data.
+The current local candidate is
+`data/development/all-donor-20260922-trajectory-rank-v2`; preserve the native QuPath
+project, source images, prior candidates and frozen release.
+The fixed 0–1 reference rank is a display/binning artifact: raw pseudotime
+orders observations, and exact ties are spread by SHA-256 of islet ID. Outcome
+trajectory inference uses `pseudotime_raw`, where the ties remain intact.
+The former ND/INS-root, disease-order validation and small/large refits are
+archived under `archive/trajectory-pre-20260916/`. Preserve those historical
+sources and frozen outputs; do not run their defaults against the new candidate.
+Retained gates replace reconstruction of retired labels; unresolved outputs
+remain unavailable. See [the delivery record](../docs/all_donor_delivery.md).
+
+## Historical original-cohort methods
+
+The following descriptions and commands document the frozen original pipeline;
+their old parameters and entry-point arguments are not current defaults.
 
 ## Donor Batch Correction & Pseudotime Modes (Phase 17, Apr 2026)
 

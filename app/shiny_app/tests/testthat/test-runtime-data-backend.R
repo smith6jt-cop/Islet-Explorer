@@ -12,6 +12,33 @@ make_backend_env <- function(root) {
   env
 }
 
+test_that("schema 2 requires fixed trajectory artifacts and leaves schema 1 intact", {
+  env <- make_backend_env(tempdir())
+  expect_true(all(c("cohort", "trajectory", "research") %in% env$islet_required_artifacts("2")))
+  expect_false("adata_ins_root" %in% env$islet_required_artifacts("2"))
+  expect_equal(env$islet_required_artifacts("1"), env$ISLET_REQUIRED_RELEASE_ARTIFACTS)
+  expect_true(all(c("cohort", "trajectory", "cells") %in% env$islet_required_artifacts("3")))
+  expect_false("research" %in% env$islet_required_artifacts("3"))
+  expect_true(env$islet_is_expanded_schema("3"))
+  expect_true(env$islet_is_expanded_schema("4"))
+  expect_true(all(c("typing", "trajectory", "cohort", "classifier_eligibility") %in% env$islet_required_artifacts("4")))
+  expect_false(any(c("research", "phenotype_rules") %in% env$islet_required_artifacts("4")))
+})
+
+test_that("schema 2 tree hashes use portable byte ordering", {
+  root <- tempfile("islet-tree-"); dir.create(root)
+  writeLines("one", file.path(root, "validation.json"))
+  writeLines("two", file.path(root, "validation_replicates.csv"))
+  env <- make_backend_env(root)
+  env$islet_release_schema <- function() "2"
+  files <- c("validation.json", "validation_replicates.csv")
+  records <- vapply(files, function(x) paste(x, env$.islet_sha256_file(file.path(root, x)), sep = "  "), character(1))
+  expected <- digest::digest(paste(records, collapse = "\n"), algo = "sha256", serialize = FALSE)
+  expect_equal(env$.islet_sha256_tree(root), expected)
+  env$islet_release_schema <- function() "3"
+  expect_equal(env$.islet_sha256_tree(root), expected)
+})
+
 write_test_parquet <- function(path, frame) {
   con <- DBI::dbConnect(duckdb::duckdb(), bigint = "numeric")
   on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)

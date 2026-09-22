@@ -138,7 +138,7 @@ IFS=$'\t' read -r manifest_schema manifest_commit <<< "${manifest_identity}"
 podman run --rm \
   --userns="keep-id:uid=${container_uid},gid=${container_gid}" \
   --user "${container_uid}:${container_gid}" \
-  --entrypoint /usr/bin/Rscript \
+  --entrypoint Rscript \
   --volume "${data_dir}:/srv/islet-explorer/data:ro" \
   --env "ISLET_DATA_SCHEMA=${data_schema}" \
   "${image_ref}" /srv/islet-explorer/scripts/verify_release_data.R \
@@ -146,7 +146,7 @@ podman run --rm \
 
 escape_sed() { printf '%s' "$1" | sed 's/[&|\\]/\\&/g'; }
 rendered="$(mktemp)"
-unit_dir="${HOME}/.config/containers/systemd"
+unit_dir="${XDG_CONFIG_HOME:-${HOME}/.config}/containers/systemd"
 unit_path="${unit_dir}/islet-explorer.container"
 backup=""
 trap 'rm -f -- "${rendered}" "${backup:-}"' EXIT
@@ -171,32 +171,52 @@ fi
 install -m 0644 "${rendered}" "${unit_path}"
 
 restore_previous_unit() {
-  echo "Activation failed; restoring the prior Quadlet unit." >&2
   if [[ -n "${backup}" && -f "${backup}" ]]; then
-    install -m 0644 "${backup}" "${unit_path}"
-    systemctl --user daemon-reload || true
-    systemctl --user restart islet-explorer.service || true
+    echo "Activation failed; restoring and checking the prior Quadlet service." >&2
+    local previous_image
+    previous_image="$(awk -F= '$1 == "Image" {sub(/^[^=]*=/, ""); print; exit}' "${backup}")"
+    [[ -n "${previous_image}" ]] || return 1
+    install -m 0644 "${backup}" "${unit_path}" || return 1
+    systemctl --user daemon-reload || return 1
+    systemctl --user restart islet-explorer.service || return 1
+    "${script_dir}/verify-deployment.sh" --url \
+      "http://127.0.0.1:3838/islet-explorer/" --container islet-explorer \
+      --expected-image "${previous_image}" || return 1
+    echo "Prior release restored and verified healthy; release state is unchanged." >&2
   else
-    systemctl --user stop islet-explorer.service || true
-    rm -f -- "${unit_path}"
-    systemctl --user daemon-reload || true
+    echo "First activation failed; stopping and removing the candidate service." >&2
+    systemctl --user stop islet-explorer.service || return 1
+    rm -f -- "${unit_path}" || return 1
+    systemctl --user daemon-reload || return 1
+    if podman container exists islet-explorer; then
+      local still_running
+      still_running="$(podman inspect --format '{{.State.Running}}' islet-explorer)" || return 1
+      [[ "${still_running}" == false ]] || return 1
+    fi
+    echo "Candidate service removed; no release was activated." >&2
   fi
 }
 
-if ! systemctl --user daemon-reload; then
-  restore_previous_unit
+activation_failed() {
+  if ! restore_previous_unit; then
+    echo "ERROR: activation and recovery failed; service availability is unverified. Inspect the user service before retrying." >&2
+    exit 71
+  fi
   exit 70
+}
+
+if ! systemctl --user daemon-reload; then
+  activation_failed
 fi
 # Quadlet's [Install] section wires the generated service into default.target;
 # generated units themselves are not enabled with `systemctl enable`.
 if ! systemctl --user restart islet-explorer.service; then
-  restore_previous_unit
-  exit 70
+  activation_failed
 fi
 if ! "${script_dir}/verify-deployment.sh" --url \
-  "http://127.0.0.1:3838/islet-explorer/" --container islet-explorer; then
-  restore_previous_unit
-  exit 70
+  "http://127.0.0.1:3838/islet-explorer/" --container islet-explorer \
+  --expected-image "${image_ref}"; then
+  activation_failed
 fi
 
 if [[ -f "${state_dir}/active.state" ]]; then

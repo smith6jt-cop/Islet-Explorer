@@ -6,7 +6,7 @@ development modules.
 ## Access and data handling
 
 - Requested URL: `https://islet-explorer.rc.ufl.edu/islet-explorer/` (pending UFRC
-  provisioning confirmation; use the access link supplied by the journal).
+  production-access confirmation; use the access link supplied by the journal).
 - Username: supplied in the journal's confidential reviewer instructions.
 - Password: supplied separately through the confidential reviewer channel.
 - Supported clients: current desktop Firefox, Chrome, Edge, or Safari. The interface is

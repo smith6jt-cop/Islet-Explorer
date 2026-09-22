@@ -304,7 +304,7 @@ prep_data <- function(master) {
       # names (gender / Donor Status).
       dm[, setdiff(colnames(dm), c("case_id", "sex", "donor_type")), drop = FALSE]
     }, error = function(e) {
-      message("[prep-data] donor_metadata.csv unreadable: ", e$message); NULL
+      message("event=donor_metadata_load_failed"); NULL
     })
     if (!is.null(donor_meta) && nrow(donor_meta) > 0) {
       # Drop any column the target frame ALREADY has, keeping the existing one.
@@ -427,7 +427,7 @@ load_master_h5ad <- function(path) {
   }
 
   tryCatch({
-    message("[H5AD] Loading enriched H5AD: ", path)
+    message("[H5AD] Loading enriched data")
     ad <- islet_read_h5ad_shared(path)
 
     # Cache ad$uns as R list once (0.2s) instead of per-key bridge crossings (~14s for 62 keys)
@@ -458,7 +458,7 @@ load_master_h5ad <- function(path) {
         phen$islet_key <- gsub("^Islet_Islet_", "Islet_", as.character(phen$base_islet_id))
         phen[, c("Case ID", "islet_key", prop_cols), drop = FALSE]
       } else NULL
-    }, error = function(e) { message("[H5AD] phenotype extraction failed: ", e$message); NULL })
+    }, error = function(e) { message("event=h5ad_phenotype_extract_failed"); NULL })
 
     # Extract donor demographics (one row per donor)
     donor_demographics <- tryCatch({
@@ -472,7 +472,7 @@ load_master_h5ad <- function(path) {
         )
         demo[!duplicated(demo$`Case ID`), , drop = FALSE]
       } else NULL
-    }, error = function(e) { message("[H5AD] demographics extraction failed: ", e$message); NULL })
+    }, error = function(e) { message("event=h5ad_demographics_extract_failed"); NULL })
 
     # Extract neighborhood metrics from .obs (added by compute_neighborhood_metrics.py → build_h5ad_for_app.py)
     neighborhood_df <- tryCatch({
@@ -485,7 +485,7 @@ load_master_h5ad <- function(path) {
         nbr$islet_key <- gsub("^Islet_Islet_", "Islet_", as.character(nbr$base_islet_id))
         nbr[, c("Case ID", "islet_key", nbr_cols), drop = FALSE]
       } else NULL
-    }, error = function(e) { message("[H5AD] neighborhood extraction failed: ", e$message); NULL })
+    }, error = function(e) { message("event=h5ad_neighborhood_extract_failed"); NULL })
 
     message("[H5AD] Loaded: targets=", if (!is.null(targets)) nrow(targets) else 0,
             " markers=", if (!is.null(markers)) nrow(markers) else 0,
@@ -499,7 +499,7 @@ load_master_h5ad <- function(path) {
          phenotypes = phenotype_df, donor_demographics = donor_demographics,
          neighborhood = neighborhood_df)
   }, error = function(e) {
-    message("[H5AD] Failed to load: ", conditionMessage(e))
+    message("event=h5ad_load_failed")
     NULL
   })
 }
@@ -552,14 +552,14 @@ load_master_auto <- function(h5ad_path = NULL, excel_path = master_path) {
   if (!is.null(h5ad_path) && file.exists(h5ad_path)) {
     result <- load_master_h5ad(h5ad_path)
     if (!is.null(result)) {
-      message("[DATA] Using H5AD source: ", h5ad_path)
+      message("[DATA] Using H5AD source")
       return(result)
     }
   }
 
   # Fall back to Excel
   if (file.exists(excel_path)) {
-    message("[DATA] Using Excel source: ", excel_path)
+    message("[DATA] Using Excel source")
     return(load_master(excel_path))
   }
 
@@ -577,6 +577,16 @@ load_prepared_release <- function(root = data_root) {
   })
 
   artifacts <- manifest$artifacts %||% list()
+  if (islet_is_expanded_schema(manifest$schema_version)) {
+    cohort <- read.csv(file.path(root, "cohort.csv"), colClasses = "character")
+    for (name in names(out)) {
+      if (nrow(out[[name]]) && "Case ID" %in% names(out[[name]]) && !setequal(as.character(out[[name]]$`Case ID`), cohort$case_id)) {
+        stop("Mixed donor cohort in runtime summary: ", name)
+      }
+    }
+    coords <- read.csv(file.path(root, "trajectory", "coordinates.csv"), colClasses = c(case_id = "character"))
+    if (!setequal(coords$case_id, cohort$case_id) || anyDuplicated(coords$islet_id)) stop("Trajectory cohort does not match runtime cohort.")
+  }
   for (name in names(out)) {
     expected <- artifacts[[name]]$row_count %||% NULL
     if (!is.null(expected) && !identical(as.numeric(nrow(out[[name]])), as.numeric(expected))) {
@@ -584,7 +594,7 @@ load_prepared_release <- function(root = data_root) {
            ", read ", nrow(out[[name]]), call. = FALSE)
     }
   }
-  message("[DATA] Loaded immutable release summaries from ", root)
+  islet_log_event("release_data_loaded")
   out
 }
 
@@ -597,6 +607,29 @@ load_shared_prepared_data <- function(root = data_root) {
   cache_key <- paste0("prepared::", normalizePath(root, mustWork = FALSE))
   if (!is.null(.islet_backend[[cache_key]])) return(.islet_backend[[cache_key]])
 
+  candidate_path <- file.path(root, "candidate.json")
+  if (file.exists(candidate_path) && !file.exists(islet_manifest_path(root))) {
+    if (islet_is_production()) stop("An unfinished local candidate cannot run in production.")
+    candidate <- jsonlite::read_json(candidate_path)
+    cohort <- read.csv(file.path(root, "cohort.csv"), colClasses = "character")
+    if (!identical(.islet_sha256_file(file.path(root, "cohort.csv")), candidate$cohort_sha256) ||
+        nrow(cohort) != 21L || anyDuplicated(cohort$case_id)) stop("Candidate cohort identity mismatch.")
+    actual_images <- sort(list.files(file.path(root, "images"), pattern = "[.]ome[.]tiff$"))
+    if (!identical(actual_images, sort(unlist(candidate$expected_images)))) stop("Candidate image cohort mismatch.")
+    if (identical(as.character(candidate$schema_version), "4"))
+      stop("Schema 4 must be finalized before serving; Excel fallback is prohibited.")
+    master <- load_master(file.path(root, "master_results.xlsx"))
+    master <- lapply(master, function(d) {
+      if (!is.null(d) && "Case ID" %in% names(d)) d$`Case ID` <- as.integer(d$`Case ID`)
+      d
+    })
+    prepared <- prep_data(master)
+    for (name in c("comp", "targets_all", "markers_all")) {
+      if (!setequal(as.character(prepared[[name]]$`Case ID`), cohort$case_id)) stop("Candidate summary cohort mismatch.")
+    }
+    .islet_backend[[cache_key]] <- prepared
+    return(prepared)
+  }
   manifest_exists <- file.exists(islet_manifest_path(root))
   prepared <- if (manifest_exists) {
     load_prepared_release(root)
@@ -609,8 +642,10 @@ load_shared_prepared_data <- function(root = data_root) {
     prep_data(load_master_auto(h5ad_path = h5ad_path, excel_path = master_path))
   }
 
-  for (name in intersect(c("targets_all", "markers_all", "comp"), names(prepared))) {
-    try(audit_na(prepared[[name]], name), silent = TRUE)
+  if (!islet_is_production()) {
+    for (name in intersect(c("targets_all", "markers_all", "comp"), names(prepared))) {
+      try(audit_na(prepared[[name]], name), silent = TRUE)
+    }
   }
   .islet_backend[[cache_key]] <- prepared
   prepared

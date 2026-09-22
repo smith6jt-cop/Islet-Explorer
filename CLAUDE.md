@@ -2,9 +2,59 @@
 
 This file provides guidance to Claude Code when working with this repository.
 
+## Owner correction — 2026-09-19
+
+Read [the typing/trajectory reference record](docs/trajectory_typing_reference_20260919.md)
+before further phenotype or trajectory work. Cell typing must precede the
+endocrine-normalized composition features used to fit trajectory. CHGA, CD45,
+VIM, LGALS3, CD44, PGP9.5, GAP43, CD35 and NaKATPase must meaningfully contribute
+to cell phenotypes. This supersedes the median-intensity fitting specification
+below; conversion is pending. Reconcile prior accepted typing work rather than
+assuming the active 15-marker rules capture it. Preserve the frozen release.
+
+## Current candidate contract — 2026-09-22
+
+Use [scripts/research/README.md](scripts/research/README.md),
+[docs/reprocessing_execution_20260920.md](docs/reprocessing_execution_20260920.md)
+and [docs/all_donor_delivery.md](docs/all_donor_delivery.md) for the schema-4
+21-donor candidate. It includes HPAP-078, retains the retirement policy and
+uses the most recent approved regenerated geometry and typed-cell artifacts.
+Classifier eligibility has exactly two requirements: the endocrine
+pixel-classifier core does not contact an image edge, and at least one canonical
+cell centroid lies inside that core. The candidate contains 11,136 eligible
+islets across every donor; 7,493 have complete typed-composition features and
+7,490 have supported primary coordinates. The diffusion graph is trained on
+the 1,514 islets with valid geometry and at least ten measured core cells,
+using 20 deterministic landmarks per donor, then all feature-supported eligible
+islets are projected into the fixed representation. Typing support may make a
+measurement or coordinate unavailable, but cannot revoke islet eligibility. The saved
+outcome-blind trajectory does not fit scVI/Harmony,
+use an INS/ND root, tune disease ordering, or interpret Aab positivity as a
+clinical stage.
+
+The historical `pseudotime_percentile` column now stores a fixed ordinal
+display rank: raw pseudotime determines order and SHA-256 of the immutable
+islet ID spreads exact raw-coordinate ties. The 7,490 supported observations
+therefore occupy unique midpoint ranks across 0–1. This within-tie display
+order has no biological meaning and must not be used for inference;
+`pseudotime_raw` preserves all exact ties and remains the inferential
+coordinate. Shiny reads both saved coordinates and never reranks after a
+display filter.
+
+Trajectory y values are typed-cell ratios per canonical cell inside the
+classifier-determined endocrine core. A classifier core with no cells is
+ineligible; unavailable phenotype numerators remain missing. Spatial UMAP and
+Leiden read a fixed offline embedding of the 7,493 feature-supported rows. The
+31-marker heatmap is separate from the fit and defaults to typed-population
+expression. Research reports remain outside the app. Historical pipeline
+details below describe the frozen original and must not override this contract.
+
 ## Project Overview
 
-Interactive Shiny app for exploring pancreatic islet CODEX multiplexed imaging data from nPOD donors. Tracks insulin loss and immune infiltration across ND -> Aab+ -> T1D progression. Features islet-level aggregated views, pseudotime trajectory, spatial neighborhood analysis, and single-cell drill-down.
+Interactive Shiny app for exploring pancreatic islet CODEX multiplexed imaging
+data from nPOD and HPAP donors. Compares endocrine composition and the islet
+microenvironment across ND, autoantibody-positive and T1D donors. Section-level
+associations and arbitrary trajectory orientation do not establish progression.
 
 ## Sub-directory CLAUDE.md files
 
@@ -205,7 +255,7 @@ App-specific UI conventions (CSS overflow, font minimums, large-scatter renderin
 ## Deployment Architecture
 
 - **Requested reviewer URL (pending UFRC confirmation)**: `https://islet-explorer.rc.ufl.edu/islet-explorer/`
-- The UFRC high-availability proxy terminates HTTPS and Basic Auth, then proxies to VM loopback `127.0.0.1:3838`.
+- The project requests that the UFRC high-availability proxy terminate HTTPS and Basic Auth and proxy to VM loopback `127.0.0.1:3838`; the final reachable backend address and port must be agreed in the UFRC ticket before deployment.
 - Rootless Podman/Quadlet runs one immutable, digest-pinned image; code, scientific data, and images are read-only.
 - Releases are checksummed and atomically activated. Never update a live review round from a mutable branch or symlink.
 - Dev server (`Rscript -e 'shiny::runApp(".", port=7777)'`) is for local testing only

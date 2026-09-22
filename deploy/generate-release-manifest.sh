@@ -3,17 +3,20 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: deploy/generate-release-manifest.sh RELEASE_DIR RELEASE IMAGE_REF GIT_COMMIT [DATA_SCHEMA]
+Usage: deploy/generate-release-manifest.sh RELEASE_DIR RELEASE IMAGE_REF GIT_COMMIT [DATA_SCHEMA [EXPECTED_IMAGES]]
 
 RELEASE_DIR must contain the generated data bundle at data/, including its
-data/images/ subtree. Optional attestations/ files are also included. The
+data/images/ subtree, and the passing image evidence at attestations/. The
 command writes release.env and MANIFEST.sha256, invalidating any prior
 verification stamp. IMAGE_REF must be an immutable registry digest or local
-image ID.
+image ID and must match the published scan evidence. EXPECTED_IMAGES is the
+approved OME-TIFF count, defaults to the original cohort's 15, and must match
+the staged files. Use 21 for the expanded cohort; never infer approval from
+the number of files present.
 EOF
 }
 
-if (($# < 4 || $# > 5)); then
+if (($# < 4 || $# > 6)); then
   usage >&2
   exit 64
 fi
@@ -23,6 +26,12 @@ release="$2"
 image_ref="$3"
 git_commit="$4"
 data_schema="${5:-1}"
+expected_images="${6-15}"
+
+[[ "${expected_images}" =~ ^[1-9][0-9]*$ ]] || {
+  echo "ERROR: expected image count must be a positive integer without leading zeros." >&2
+  exit 64
+}
 
 [[ "${release}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || {
   echo "ERROR: invalid release identifier: ${release}" >&2
@@ -41,7 +50,7 @@ data_schema="${5:-1}"
   echo "ERROR: invalid data schema identifier." >&2
   exit 64
 }
-for required_dir in data data/images; do
+for required_dir in data data/images attestations; do
   [[ -d "${release_dir}/${required_dir}" && ! -L "${release_dir}/${required_dir}" ]] || {
     echo "ERROR: ${release_dir}/${required_dir} must be a real directory." >&2
     exit 66
@@ -52,12 +61,177 @@ done
   exit 66
 }
 
+read_evidence_value() {
+  local file="$1"
+  local key="$2"
+  awk -F= -v key="${key}" '
+    $1 == key { sub(/^[^=]*=/, ""); value = $0; count++ }
+    END { if (count != 1) exit 1; print value }
+  ' "${file}"
+}
+
+read_optional_evidence_value() {
+  local file="$1"
+  local key="$2"
+  awk -F= -v key="${key}" '
+    $1 == key { sub(/^[^=]*=/, ""); value = $0; count++ }
+    END { if (count > 1) exit 1; if (count == 1) print value }
+  ' "${file}"
+}
+
+required_evidence_value() {
+  local file="$1"
+  local key="$2"
+  local value
+  value="$(read_evidence_value "${file}" "${key}")" || {
+    echo "ERROR: evidence file has missing or duplicate ${key}: ${file}" >&2
+    return 65
+  }
+  [[ -n "${value}" ]] || {
+    echo "ERROR: evidence field ${key} is empty: ${file}" >&2
+    return 65
+  }
+  printf '%s' "${value}"
+}
+
+attestations_dir="${release_dir}/attestations"
+mapfile -d '' scan_attestations < <(
+  find "${attestations_dir}" -maxdepth 1 -type f -name '*.scan.txt' -print0
+)
+(( ${#scan_attestations[@]} == 1 )) || {
+  echo "ERROR: attestations must contain exactly one regular *.scan.txt file." >&2
+  exit 66
+}
+scan_attestation="${scan_attestations[0]}"
+published_image="${attestations_dir}/published-image.txt"
+[[ -f "${published_image}" && ! -L "${published_image}" ]] || {
+  echo "ERROR: attestations/published-image.txt must be a regular file." >&2
+  exit 66
+}
+
+scan_result="$(required_evidence_value "${scan_attestation}" RESULT)" || exit $?
+scan_ref="$(required_evidence_value "${scan_attestation}" IMAGE_REF)" || exit $?
+scan_image_id="$(required_evidence_value "${scan_attestation}" IMAGE_ID)" || exit $?
+syft_version="$(required_evidence_value "${scan_attestation}" SYFT_VERSION)" || exit $?
+grype_version="$(required_evidence_value "${scan_attestation}" GRYPE_VERSION)" || exit $?
+[[ "${scan_result}" == pass-no-high-or-critical ]] || {
+  echo "ERROR: image evidence does not record a passing High/Critical gate." >&2
+  exit 65
+}
+[[ "${scan_image_id}" =~ ^sha256:[0-9a-f]{64}$ && "${scan_ref}" == "${scan_image_id}" ]] || {
+  echo "ERROR: scan evidence is not bound to its immutable image ID." >&2
+  exit 65
+}
+[[ "${syft_version}" == syft\ * && "${grype_version}" == grype\ * ]] || {
+  echo "ERROR: scan evidence does not contain usable Syft/Grype versions." >&2
+  exit 65
+}
+
+safe_name="$(printf '%s' "${scan_image_id}" | tr ':/' '__')"
+expected_scan_attestation="${attestations_dir}/${safe_name}.scan.txt"
+[[ "${scan_attestation}" == "${expected_scan_attestation}" ]] || {
+  echo "ERROR: scan-attestation filename does not match its IMAGE_ID." >&2
+  exit 65
+}
+
+sbom="${attestations_dir}/${safe_name}.cyclonedx.json"
+raw_sbom="${attestations_dir}/${safe_name}.syft.cyclonedx.json"
+sbom_corrections="${attestations_dir}/${safe_name}.sbom-corrections.json"
+report="${attestations_dir}/${safe_name}.grype.json"
+r_packages="${attestations_dir}/${safe_name}.R-packages.tsv"
+python_packages="${attestations_dir}/${safe_name}.python-packages.txt"
+for evidence_file in "${sbom}" "${raw_sbom}" "${sbom_corrections}" "${report}" "${r_packages}" "${python_packages}"; do
+  [[ -f "${evidence_file}" && ! -L "${evidence_file}" ]] || {
+    echo "ERROR: required image evidence is missing or is a symlink: ${evidence_file}" >&2
+    exit 66
+  }
+done
+
+verify_evidence_hash() {
+  local key="$1"
+  local file="$2"
+  local expected actual
+  expected="$(required_evidence_value "${scan_attestation}" "${key}")" || return $?
+  [[ "${expected}" =~ ^[0-9a-f]{64}$ ]] || {
+    echo "ERROR: invalid ${key} in scan evidence." >&2
+    return 65
+  }
+  actual="$(sha256sum "${file}" | awk '{print $1}')"
+  [[ "${actual}" == "${expected}" ]] || {
+    echo "ERROR: ${key} does not match ${file}." >&2
+    return 65
+  }
+}
+
+verify_evidence_hash SBOM_SHA256 "${sbom}" || exit $?
+verify_evidence_hash RAW_SBOM_SHA256 "${raw_sbom}" || exit $?
+verify_evidence_hash SBOM_CORRECTIONS_SHA256 "${sbom_corrections}" || exit $?
+verify_evidence_hash REPORT_SHA256 "${report}" || exit $?
+verify_evidence_hash R_PACKAGES_SHA256 "${r_packages}" || exit $?
+verify_evidence_hash PYTHON_PACKAGES_SHA256 "${python_packages}" || exit $?
+
+grype_db_status="${attestations_dir}/${safe_name}.grype-db.json"
+grype_db_hash="$(read_optional_evidence_value "${scan_attestation}" GRYPE_DB_STATUS_SHA256)" || {
+  echo "ERROR: duplicate GRYPE_DB_STATUS_SHA256 in scan evidence." >&2
+  exit 65
+}
+if [[ -e "${grype_db_status}" || -n "${grype_db_hash}" ]]; then
+  [[ -f "${grype_db_status}" && ! -L "${grype_db_status}" &&
+     "${grype_db_hash}" =~ ^[0-9a-f]{64}$ ]] || {
+    echo "ERROR: Grype DB status evidence is incomplete or malformed." >&2
+    exit 65
+  }
+  [[ "$(sha256sum "${grype_db_status}" | awk '{print $1}')" == "${grype_db_hash}" ]] || {
+    echo "ERROR: GRYPE_DB_STATUS_SHA256 does not match ${grype_db_status}." >&2
+    exit 65
+  }
+fi
+
+published_local_id="$(read_optional_evidence_value "${published_image}" LOCAL_IMAGE_ID)" || {
+  echo "ERROR: duplicate LOCAL_IMAGE_ID in published-image.txt." >&2
+  exit 65
+}
+published_registry_ref="$(read_optional_evidence_value "${published_image}" REGISTRY_REF)" || {
+  echo "ERROR: duplicate REGISTRY_REF in published-image.txt." >&2
+  exit 65
+}
+published_image_id="$(read_optional_evidence_value "${published_image}" IMAGE_ID)" || {
+  echo "ERROR: duplicate IMAGE_ID in published-image.txt." >&2
+  exit 65
+}
+published_commit="$(required_evidence_value "${published_image}" GIT_COMMIT)" || exit $?
+published_base="$(required_evidence_value "${published_image}" BASE_IMAGE)" || exit $?
+
+if [[ -n "${published_local_id}" && -z "${published_registry_ref}" && -z "${published_image_id}" ]]; then
+  published_ref="${published_local_id}"
+  published_id="${published_local_id}"
+elif [[ -z "${published_local_id}" && -n "${published_registry_ref}" && -n "${published_image_id}" ]]; then
+  published_ref="${published_registry_ref}"
+  published_id="${published_image_id}"
+else
+  echo "ERROR: published-image.txt must describe exactly one local or registry image." >&2
+  exit 65
+fi
+
+[[ "${published_id}" == "${scan_image_id}" && "${published_ref}" == "${image_ref}" &&
+   "${published_commit}" == "${git_commit,,}" &&
+   "${published_base}" =~ ^[A-Za-z0-9._:/-]+@sha256:[0-9a-f]{64}$ ]] || {
+  echo "ERROR: published image, scan evidence, and release identity do not match." >&2
+  exit 65
+}
+
 unsafe="$(find "${release_dir}" -xdev \( \
   -name '.Renviron' -o -name '.Rhistory' -o -name '*.bak' -o \
   -name '*~' -o -name '*.pem' -o -name '*.key' \
 \) -print -quit)"
 if [[ -n "${unsafe}" ]]; then
   echo "ERROR: release contains a forbidden credential/backup filename: ${unsafe}" >&2
+  exit 65
+fi
+
+attestation_link="$(find "${attestations_dir}" -type l -print -quit)"
+if [[ -n "${attestation_link}" ]]; then
+  echo "ERROR: attestation evidence may not contain symlinks: ${attestation_link}" >&2
   exit 65
 fi
 
@@ -74,6 +248,12 @@ while IFS= read -r -d '' link_path; do
 done < <(find "${release_dir}/data" -type l -print0)
 
 data_files="$(find "${release_dir}/data" -path "${release_dir}/data/images" -prune -o -type f -print | wc -l)"
+actual_images="$(find "${release_dir}/data/images" -type f \
+  \( -iname '*.ome.tif' -o -iname '*.ome.tiff' \) | wc -l)"
+[[ "${actual_images}" == "${expected_images}" ]] || {
+  echo "ERROR: expected ${expected_images} OME-TIFF files, found ${actual_images}." >&2
+  exit 65
+}
 image_files="$(find "${release_dir}/data/images" -type f | wc -l)"
 data_total_bytes="$(du -sb -- "${release_dir}/data" | awk '{print $1}')"
 image_bytes="$(du -sb -- "${release_dir}/data/images" | awk '{print $1}')"
@@ -85,11 +265,12 @@ manifest_tmp="$(mktemp "${release_dir}/.MANIFEST.sha256.XXXXXX")"
 trap 'rm -f -- "${env_tmp}" "${manifest_tmp}"' EXIT
 
 {
-  printf 'MANIFEST_VERSION=1\n'
+  printf 'MANIFEST_VERSION=2\n'
   printf 'RELEASE=%s\n' "${release}"
   printf 'IMAGE_REF=%s\n' "${image_ref}"
   printf 'GIT_COMMIT=%s\n' "${git_commit,,}"
   printf 'DATA_SCHEMA=%s\n' "${data_schema}"
+  printf 'EXPECTED_IMAGES=%s\n' "${expected_images}"
   printf 'CREATED_AT=%s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
   printf 'DATA_FILES=%s\n' "${data_files}"
   printf 'DATA_BYTES=%s\n' "${data_bytes}"
@@ -98,8 +279,7 @@ trap 'rm -f -- "${env_tmp}" "${manifest_tmp}"' EXIT
 } > "${env_tmp}"
 mv -f -- "${env_tmp}" "${release_dir}/release.env"
 
-paths=(data release.env)
-[[ -d "${release_dir}/attestations" ]] && paths+=(attestations)
+paths=(data release.env attestations)
 (
   cd -- "${release_dir}"
   find "${paths[@]}" \( -type f -o -type l \) -print0 | \

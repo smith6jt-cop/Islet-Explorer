@@ -9,6 +9,8 @@ data/*
 !data/phenotype_gates_per_image.csv
 !data/phenotype_gates_provenance.csv
 !data/donor_metadata.csv
+# Versioned rule definitions are source inputs, not generated assignments.
+!data/phenotype_rules.csv
 # Referenced from CLAUDE.md as the canonical lineage doc but never actually
 # tracked -- the blanket data/ rule kept it out of every clone.
 !data/DATA_PROVENANCE.md
@@ -20,7 +22,8 @@ pdfs/
 gson/
 single_cell_analysis/*.h5ad
 single_cell_analysis/*.tsv
-app/shiny_app/www/local_images/
+app/shiny_app/www/local_images
+app/shiny_app/R/00_00_candidate_profile.R
 local_images/
 app/shiny_app/www/segmentation_data/
 AI_Markdown/
@@ -34,11 +37,45 @@ islet_analysis/*
 !islet_analysis/CLAUDE.md
 literature/*
 
+# Generated analysis/review outputs outside the standard data/ tree.
+/reports/
+*.h5ad
+*.h5
+*.hdf5
+*.parquet
+*.arrow
+*.feather
+*.npy
+*.npz
+*.zarr/
+*.tif
+*.tiff
+*.TIF
+*.TIFF
+# Native QuPath projects, object hierarchies and automatic backups.
+*.qpproj
+*.qpproj.*
+*.qpdata
+*.qpdata.*
+*.geojson
+*.geojson.gz
+*.gpkg
+*.duckdb
+*.duckdb.wal
+
 # R workspace and environment files
 .RData
 .Rhistory
 app/shiny_app/.Renviron
 .Renviron
+.Rproj.user/
+.env
+.env.*
+!.env.example
+!.env.template
+*.pem
+*.key
+*.p12
 
 # Organized script directories (duplicates for organization)
 scripts/Python/
@@ -55,12 +92,19 @@ app/shiny_app/R/APP_LOADED_FLAG
 
 # Temporary files
 tmp/
+*.log
+*.log.*
+*.pid
 
 # Virtual environments and caches
 .venv*/
 venv*/
 __pycache__/
 *.pyc
+node_modules/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
 # Excel and other large source data
 *.xlsx

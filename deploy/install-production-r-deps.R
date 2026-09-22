@@ -28,9 +28,30 @@ if (!requireNamespace("destiny", quietly = TRUE) ||
   BiocManager::install("destiny", ask = FALSE, update = FALSE)
 }
 
-if (!requireNamespace("duckdb", quietly = TRUE) ||
+if (!("duckdb" %in% rownames(utils::installed.packages())) ||
     as.character(utils::packageVersion("duckdb")) != expected[["duckdb"]]) {
-  install.packages("duckdb", repos = repos)
+  # rocker/shiny:4.5.1 retains a 2025 CRAN snapshot, before DuckDB 1.5.2.
+  # Install the reviewed CRAN source archive, checking its bytes before R can
+  # execute any package configure/install code. Never substitute current CRAN.
+  duckdb_source <- "https://cran.r-project.org/src/contrib/Archive/duckdb/duckdb_1.5.2.tar.gz"
+  duckdb_sha256 <- "55f98a336513a94354f328791c8b94521b9f2e918a57d7e9fe6c0cb6b9a38db6"
+  archive <- tempfile(pattern = "duckdb-1.5.2-", fileext = ".tar.gz")
+  tryCatch({
+    utils::download.file(duckdb_source, archive, mode = "wb", method = "libcurl")
+    actual_sha256 <- digest::digest(file = archive, algo = "sha256", serialize = FALSE)
+    if (!identical(actual_sha256, duckdb_sha256)) {
+      stop("DuckDB source SHA-256 mismatch; refusing to install.")
+    }
+    # DuckDB otherwise chooses build parallelism from host resources. Bound it
+    # for a predictable workstation/container build without changing the binary.
+    old_makeflags <- Sys.getenv("MAKEFLAGS", unset = NA_character_)
+    Sys.setenv(MAKEFLAGS = "-j2")
+    tryCatch(
+      utils::install.packages(archive, repos = NULL, type = "source"),
+      finally = if (is.na(old_makeflags)) Sys.unsetenv("MAKEFLAGS") else
+        Sys.setenv(MAKEFLAGS = old_makeflags)
+    )
+  }, finally = unlink(archive))
 }
 
 actual <- vapply(names(expected), function(pkg) {

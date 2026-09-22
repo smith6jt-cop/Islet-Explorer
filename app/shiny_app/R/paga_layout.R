@@ -31,7 +31,7 @@ paga_available <- function() {
       isTRUE(reticulate::py_module_available("scanpy"))
   }, error = function(e) FALSE)
   .paga_cache$available <- ok
-  if (!ok) message("[PAGA] scanpy not available to reticulate; PAGA layout disabled")
+  if (!ok) islet_log_event("paga_unavailable")
   ok
 }
 
@@ -39,9 +39,9 @@ paga_available <- function() {
   if (!is.null(.paga_cache$mod)) return(.paga_cache$mod)
   m <- tryCatch(reticulate::import_from_path(
          "paga_pseudotime", path = "python", convert = TRUE),
-       error = function(e) {
-         message("[PAGA] could not import module: ", conditionMessage(e)); NULL
-       })
+         error = function(e) {
+           islet_log_event("paga_module_import_failed"); NULL
+         })
   .paga_cache$mod <- m
   m
 }
@@ -61,13 +61,12 @@ compute_paga_layout <- function(min_cells = 1, max_cells = NA) {
   if (is.null(m)) return(NULL)
 
   res <- tryCatch(m$compute(mc, if (is.finite(xc)) xc else NULL), error = function(e) {
-    message("[PAGA] compute failed for cell range [", mc, ", ",
-            if (is.finite(xc)) xc else "inf", "]: ", conditionMessage(e))
+    islet_log_event("paga_compute_failed")
     NULL
   })
   if (is.null(res)) return(NULL)
   if (!is.null(res$error)) {
-    message("[PAGA] ", res$error)
+    islet_log_event("paga_compute_failed")
     # Cache the failure so a bad range does not re-run a 15 s fit on every
     # reactive invalidation. NULL would not be cached (the is.null check above).
     .paga_cache[[key]] <- NA

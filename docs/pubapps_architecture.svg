@@ -6,11 +6,11 @@
       <path d="M0,0 L0,6 L9,3 z" fill="#254b72"/>
     </marker>
     <style>
-      .title { font: 700 34px Arial, sans-serif; fill: #17324d; }
-      .subtitle { font: 18px Arial, sans-serif; fill: #42566a; }
-      .box-title { font: 700 22px Arial, sans-serif; fill: #17324d; }
-      .body { font: 17px Arial, sans-serif; fill: #263746; }
-      .small { font: 15px Arial, sans-serif; fill: #405466; }
+      .title { font-family: Arial, sans-serif; font-size: 34px; font-weight: 700; fill: #17324d; }
+      .subtitle { font-family: Arial, sans-serif; font-size: 18px; fill: #42566a; }
+      .box-title { font-family: Arial, sans-serif; font-size: 22px; font-weight: 700; fill: #17324d; }
+      .body { font-family: Arial, sans-serif; font-size: 17px; fill: #263746; }
+      .small { font-family: Arial, sans-serif; font-size: 15px; fill: #405466; }
       .boundary { fill: #f7fafc; stroke: #8097aa; stroke-width: 2; stroke-dasharray: 10 7; }
       .external { fill: #eef6ff; stroke: #3977aa; stroke-width: 2; }
       .ufrc { fill: #fff6df; stroke: #b7791f; stroke-width: 2; }
@@ -24,7 +24,7 @@
 
   <rect width="1500" height="960" fill="#ffffff"/>
   <text x="750" y="52" text-anchor="middle" class="title">Panc Floyd / Islet Explorer — UFRC PubApps Reviewer Deployment</text>
-  <text x="750" y="82" text-anchor="middle" class="subtitle">Public Restricted • Sensitive research release • no external runtime API or database service</text>
+  <text x="750" y="82" text-anchor="middle" class="subtitle">Planned reviewer configuration • Public Restricted • Sensitive collection</text>
 
   <rect x="340" y="105" width="1120" height="760" rx="20" class="boundary"/>
   <text x="365" y="140" class="box-title">UFRC-managed hosting boundary</text>
@@ -41,15 +41,15 @@
   <text x="555" y="288" text-anchor="middle" class="small">Public URL and access logging</text>
 
   <rect x="790" y="155" width="620" height="300" rx="18" class="ufrc"/>
-  <text x="1100" y="193" text-anchor="middle" class="box-title">PubApps virtual machine</text>
-  <text x="1100" y="222" text-anchor="middle" class="small">Base allocation: 2 vCPU • 16 GiB RAM • 1 TiB /pubapps</text>
+  <text x="1100" y="193" text-anchor="middle" class="box-title">PubApps VM: provisioning unverified</text>
+  <text x="1100" y="222" text-anchor="middle" class="small">Requested base: 2 vCPU • 16 GiB RAM • 1 TiB /pubapps</text>
 
   <rect x="835" y="250" width="530" height="160" rx="16" class="runtime"/>
-  <text x="1100" y="283" text-anchor="middle" class="box-title">VM loopback 127.0.0.1:3838</text>
+  <text x="1100" y="283" text-anchor="middle" class="box-title">Backend target pending UFRC confirmation</text>
   <text x="1100" y="313" text-anchor="middle" class="small">rootless Podman forwarding • user-mode Quadlet</text>
   <text x="1100" y="343" text-anchor="middle" class="body">Immutable Islet Explorer OCI image</text>
   <text x="1100" y="373" text-anchor="middle" class="small">Shiny container listens on 0.0.0.0:3838</text>
-  <text x="1100" y="397" text-anchor="middle" class="small">Optional HPG-restricted staging: VM 127.0.0.1:3839</text>
+  <text x="1100" y="397" text-anchor="middle" class="small">Requested VM publication: 127.0.0.1:3838</text>
 
   <path d="M290 220 L390 220" class="arrow"/>
   <text x="340" y="202" text-anchor="middle" class="small">HTTPS</text>
@@ -72,7 +72,7 @@
   <text x="897" y="585" text-anchor="middle" class="body">Read-only OME-TIFF files</text>
   <text x="897" y="622" text-anchor="middle" class="small">Approximately 109 GiB</text>
   <text x="897" y="650" text-anchor="middle" class="small">Mounted below Shiny www/</text>
-  <text x="897" y="678" text-anchor="middle" class="small">Browser requests only needed ranges</text>
+  <text x="897" y="678" text-anchor="middle" class="small">Explicit static routes serve byte ranges</text>
   <text x="897" y="706" text-anchor="middle" class="small">No database BLOB storage</text>
 
   <rect x="1100" y="515" width="310" height="265" rx="16" class="writable"/>
@@ -80,7 +80,7 @@
   <text x="1255" y="585" text-anchor="middle" class="body">Bounded temporary directory</text>
   <text x="1255" y="615" text-anchor="middle" class="small">Session download generation</text>
   <text x="1255" y="650" text-anchor="middle" class="body">Operational logs</text>
-  <text x="1255" y="680" text-anchor="middle" class="small">UFRC-approved path and retention</text>
+  <text x="1255" y="680" text-anchor="middle" class="small">UFRC collection and retention pending</text>
   <text x="1255" y="716" text-anchor="middle" class="small">No canonical scientific-data writes</text>
 
   <path d="M640 515 L985 410" class="arrow"/>
@@ -102,4 +102,6 @@
   <path d="M290 735 L390 700" class="dash-arrow"/>
 
   <text x="900" y="825" text-anchor="middle" class="subtitle">Production AI, user uploads, Slurm jobs, inbound database ports, and third-party runtime connections: none</text>
+  <text x="750" y="908" text-anchor="middle" class="subtitle">UFRC #83810 / SYSCONFIG-8173 • IRM-456246-Panc Floyd submitted 2026-09-01</text>
+  <text x="750" y="938" text-anchor="middle" class="small">VM provisioning is owner-reported; the 2026-09-08 UFRC reply ties setup to completed assessments/checklists. Confirm host and approvals.</text>
 </svg>

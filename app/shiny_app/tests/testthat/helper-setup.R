@@ -28,5 +28,6 @@ if (!exists("%||%", mode = "function")) {
   normalizePath(hit[1])
 }
 
+source(.find_source("R/00_audit.R"))
 source(.find_source("R/utils_stats.R"))
 source(.find_source("R/mod_trajectory_server.R"))

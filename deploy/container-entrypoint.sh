@@ -6,6 +6,7 @@ expected_gid="$(id -g shiny)"
 actual_uid="$(id -u)"
 actual_gid="$(id -g)"
 readonly expected_uid expected_gid actual_uid actual_gid
+readonly runtime_mode="${ISLET_RUNTIME_MODE:-production}"
 
 if [[ "${actual_uid}" != "${expected_uid}" || "${actual_gid}" != "${expected_gid}" ]]; then
   echo "ERROR: container must run as shiny (${expected_uid}:${expected_gid}); got ${actual_uid}:${actual_gid}." >&2
@@ -13,10 +14,11 @@ if [[ "${actual_uid}" != "${expected_uid}" || "${actual_gid}" != "${expected_gid
   exit 70
 fi
 
-if [[ "${ISLET_RUNTIME_MODE:-production}" == "production" ]]; then
+if [[ "${runtime_mode,,}" == "production" ]]; then
   if [[ "${ISLET_ENABLE_AI:-FALSE}" != "FALSE" || "${SHOW_STATISTICS_TAB:-0}" != "0" ||
-        "${SHOW_INFLAMMATION_TAB:-0}" != "0" ]]; then
-    echo "ERROR: the reviewer release must keep AI, Statistics, and Inflammation disabled." >&2
+        "${SHOW_INFLAMMATION_TAB:-0}" != "0" || "${DEBUG_CREDENTIALS:-0}" != "0" ||
+        "${VIEWER_DEBUG:-0}" != "0" ]]; then
+    echo "ERROR: the reviewer release must keep optional features and debug modes disabled." >&2
     exit 78
   fi
   if [[ -n "${KEY:-}" || -n "${OPENAI_API_KEY:-}" ]]; then
@@ -54,5 +56,14 @@ export R_USER="${runtime_r_user}"
 export XDG_CACHE_HOME="${runtime_cache}"
 export MPLCONFIGDIR="${runtime_matplotlib}"
 export NUMBA_CACHE_DIR="${runtime_numba}"
+export ISLET_RUNTIME_MODE="${runtime_mode}"
+export ISLET_DATA_ROOT="${data_root}"
+export LOCAL_IMAGE_ROOT="${image_root}"
+export TMPDIR="${runtime_tmp}"
+
+# Shiny Server starts R with only HOME/LANG/PATH. The immutable wrapper restores
+# this allowlisted profile before R can read user startup files.
+/usr/local/bin/islet-r-worker --write-profile
+export R=/usr/local/bin/islet-r-worker
 
 exec "$@"
