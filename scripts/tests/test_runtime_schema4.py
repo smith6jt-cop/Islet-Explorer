@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'research'))
 from build_runtime_schema4 import build
 from common import MARKERS
 from validate_schema4 import validate_count_arithmetic, validate_structural_areas
+from finalize_candidate import startup_verify_artifact
 
 
 def candidate(tmp_path):
@@ -100,3 +101,14 @@ def test_independent_validation_checks_union_ratios_and_missing_structural_masks
     validate_structural_areas(structure)
     structure.positive_area_um2=0.
     with pytest.raises(ValueError,match='Unavailable mask'):validate_structural_areas(structure)
+
+
+def test_schema4_startup_verification_skips_large_immutable_trees():
+    for name in ['images', 'geometry', 'cells', 'islet_boundaries',
+                 'provenance', 'typing', 'trajectory', 'spatial_tissue']:
+        assert not startup_verify_artifact(name, '4')
+    for name in ['cohort', 'comp', 'trajectory_coordinates',
+                 'trajectory_feature_manifest', 'classifier_eligibility']:
+        assert startup_verify_artifact(name, '4')
+    # Other schemas retain startup checking for their ordinary trajectory tree.
+    assert startup_verify_artifact('trajectory', '3')

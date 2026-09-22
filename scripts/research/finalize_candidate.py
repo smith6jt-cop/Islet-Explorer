@@ -24,6 +24,13 @@ def artifact(root,relative,startup=True):
     if relative.endswith('.parquet'):result['row_count']=pq.read_metadata(path).num_rows
     return result
 
+def startup_verify_artifact(name, schema):
+    """Keep startup checks bounded while retaining creation-time full hashes."""
+    large_immutable = {'images', 'geometry', 'cells', 'islet_boundaries', 'provenance'}
+    if str(schema) == '4':
+        large_immutable.update({'typing', 'trajectory', 'spatial_tissue'})
+    return name not in large_immutable
+
 def main():
     p=argparse.ArgumentParser();p.add_argument('--input-root',required=True);p.add_argument('--schema',choices=['2','3','4'],default='3');p.add_argument('--add-cell-artifact',action='store_true');a=p.parse_args();root=Path(a.input_root).resolve(strict=True)
     if a.add_cell_artifact:
@@ -100,8 +107,8 @@ def main():
         if (root/'research').exists():raise ValueError('Research reports belong outside the schema-3 runtime')
     artifacts={}
     for name,rel in mapping.items():
-        skip_startup=['images','geometry','cells','islet_boundaries']+(['typing','trajectory'] if a.schema=='4' else [])
-        print('Hashing',name,flush=True);artifacts[name]=artifact(root,rel,name not in skip_startup)
+        print('Hashing',name,flush=True)
+        artifacts[name]=artifact(root,rel,startup_verify_artifact(name,a.schema))
     sources=pd.read_csv(root/'source_manifest.csv',dtype=str)
     paths=sorted(set(sources.cells)|set(sources.geometry)|set(sources.metadata))
     evidence=[dict(path=str(p),sha256=sha256(p),bytes=Path(p).stat().st_size) for p in paths]
