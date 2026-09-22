@@ -17,6 +17,7 @@ from common import MARKERS, sha256, write_json
 
 KEY = ['case_id', 'object_id']
 ENDOCRINE_COMPONENTS = ['Alpha cell', 'Beta cell', 'Delta cell', 'Hormone-unresolved endocrine cell']
+MIN_TRAJECTORY_TRAINING_CORE_CELLS = 10
 
 
 def check_unique(frame, keys, label):
@@ -146,6 +147,19 @@ def aggregate_donor(islets,memberships,cells,base_types,state_names=(),include_m
         primary=[f'core__count__{name}' for name in base_types]
         f['eligible']=not reasons
         f['trajectory_feature_supported']=bool(f['eligible'] and np.isfinite([f[name] for name in primary]).all())
+        # Classifier eligibility answers whether this is a retained islet.  A
+        # separate, outcome-blind support flag answers whether its observed
+        # core census is large enough to train a stable composition graph.
+        # Smaller eligible islets remain in every canonical table and are
+        # projected into the graph after fitting.
+        fit_reasons=[]
+        if not f['eligible']:fit_reasons.append('classifier_ineligible')
+        if not (pd.notna(geom['geometry_valid']) and bool(geom['geometry_valid'])):fit_reasons.append('invalid_geometry')
+        if f['measured_cells']<MIN_TRAJECTORY_TRAINING_CORE_CELLS:
+            fit_reasons.append(f'fewer_than_{MIN_TRAJECTORY_TRAINING_CORE_CELLS}_measured_core_cells')
+        if not f['trajectory_feature_supported']:fit_reasons.append('typed_composition_unavailable')
+        f['trajectory_fit_supported']=not fit_reasons
+        f['trajectory_fit_exclusion_reason']=';'.join(dict.fromkeys(fit_reasons))
         f['exclusion_reason']=';'.join(dict.fromkeys(reasons));features.append(f)
     return pd.DataFrame(features),pd.DataFrame(counts),pd.DataFrame(summaries)
 
@@ -246,6 +260,13 @@ def main():
                state_features_sha256=sha256(out/'trajectory/state_composition_features.parquet') if state_columns else None,base_types=base_types,endocrine_components=ENDOCRINE_COMPONENTS,
                formula='log1p(validated base-type count / classifier-defined core cell count)',
                minimum_classifier_core_cells=1,
+               trajectory_fit_minimum_measured_core_cells=MIN_TRAJECTORY_TRAINING_CORE_CELLS,
+               trajectory_fit_support=dict(all_of=[
+                   'classifier-eligible islet',
+                   'valid classifier-core geometry',
+                   f'at least {MIN_TRAJECTORY_TRAINING_CORE_CELLS} measured cells in the classifier-defined core',
+                   'complete primary typed-composition feature vector',
+               ],role='landmark graph training only; all eligible feature-supported islets are projected after fitting'),
                eligibility=dict(all_of=[
                    'the endocrine pixel-classifier core has no image-edge contact',
                    'at least one canonical cell centroid is inside the classifier-defined core',
@@ -254,6 +275,9 @@ def main():
                   downstream_typing_can_revoke_eligibility=False),
                exclusion_counts=exclusion_counts,eligible_islets_by_donor=eligible_by_donor,
                feature_supported_islets=int((frame.eligible&frame.trajectory_feature_supported).sum()),
+               trajectory_fit_supported_islets=int(frame.trajectory_fit_supported.sum()),
+               trajectory_fit_supported_by_donor={str(case_id):int(count) for case_id,count in
+                   frame.loc[frame.trajectory_fit_supported].groupby('case_id').size().items()},
                uncertainty='Unvalidated cells remain in the classifier-core denominator, are excluded from phenotype numerators, and are reported as unresolved; typing support affects coordinates, not islet eligibility.',
                sources=sources,features_sha256=sha256(out/'trajectory/composition_features.parquet'),
                markers=MARKERS,typing_required=True,eligible_islets=int(frame.eligible.sum()),donors=sorted(frame.case_id.unique()),

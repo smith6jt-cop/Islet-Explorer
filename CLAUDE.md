@@ -23,15 +23,18 @@ Classifier eligibility has exactly two requirements: the endocrine
 pixel-classifier core does not contact an image edge, and at least one canonical
 cell centroid lies inside that core. The candidate contains 11,136 eligible
 islets across every donor; 7,493 have complete typed-composition features and
-2,626 have supported primary coordinates. Typing support may make a measurement
-or coordinate unavailable, but cannot revoke islet eligibility. The saved
+7,490 have supported primary coordinates. The diffusion graph is trained on
+the 1,514 islets with valid geometry and at least ten measured core cells,
+using 20 deterministic landmarks per donor, then all feature-supported eligible
+islets are projected into the fixed representation. Typing support may make a
+measurement or coordinate unavailable, but cannot revoke islet eligibility. The saved
 outcome-blind trajectory does not fit scVI/Harmony,
 use an INS/ND root, tune disease ordering, or interpret Aab positivity as a
 clinical stage.
 
 The historical `pseudotime_percentile` column now stores a fixed ordinal
 display rank: raw pseudotime determines order and SHA-256 of the immutable
-islet ID spreads exact raw-coordinate ties. The 2,626 supported observations
+islet ID spreads exact raw-coordinate ties. The 7,490 supported observations
 therefore occupy unique midpoint ranks across 0–1. This within-tie display
 order has no biological meaning and must not be used for inference;
 `pseudotime_raw` preserves all exact ties and remains the inferential

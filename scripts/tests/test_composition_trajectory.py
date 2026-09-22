@@ -62,6 +62,7 @@ class CompositionTest(unittest.TestCase):
         self.assertAlmostEqual(f['core__count__B cell'].iloc[0],np.log1p(5/12))
         self.assertEqual(f['peri__count__B cell'].iloc[0],0)
         self.assertTrue(f.eligible.iloc[0])
+        self.assertTrue(f.trajectory_fit_supported.iloc[0])
         self.assertEqual(set(summary.marker),set(MARKERS))
         self.assertFalse(summary.positive_available.any())
         self.assertTrue(summary.loc[summary.population.eq('Endocrine union')&summary.compartment.eq('core'),'mean_log1p'].notna().all())
@@ -82,6 +83,8 @@ class CompositionTest(unittest.TestCase):
         f,counts,s=aggregate_donor(g,m,cells,['Beta cell','Hormone-unresolved endocrine cell','B cell'])
         self.assertEqual(f.measured_cells.iloc[0],8);self.assertEqual(f.excluded_cells.iloc[0],4)
         self.assertTrue(f.eligible.iloc[0]);self.assertEqual(f.endocrine_count.iloc[0],12)
+        self.assertFalse(f.trajectory_fit_supported.iloc[0])
+        self.assertIn('fewer_than_10_measured_core_cells',f.trajectory_fit_exclusion_reason.iloc[0])
         self.assertTrue(s.query("population == 'All cells' and compartment == 'core'").n_cells.eq(8).all())
 
     def test_only_image_edge_and_empty_classifier_core_control_eligibility(self):
@@ -149,6 +152,38 @@ class CompositionTest(unittest.TestCase):
         np.testing.assert_allclose(a.pseudotime_raw,projected.pseudotime_raw,equal_nan=True)
         np.testing.assert_allclose(a.pseudotime_percentile,projected.pseudotime_percentile,equal_nan=True)
         with self.assertRaisesRegex(ValueError,'rebuilding typing'):fit(f,excluded=['INS'])
+
+    def test_graph_training_support_does_not_remove_small_eligible_islets(self):
+        rows=[]
+        # Each donor contributes a connected, adequately sampled training set.
+        # Small eligible islets form a degenerate all-unresolved group that
+        # would otherwise become the largest graph component.
+        for donor in range(4):
+            for i in range(24):
+                t=(i+donor/7)/23
+                rows.append(dict(islet_id=f'{donor}-train-{i}',case_id=str(donor),area_um2=100+i,
+                    eligible=True,geometry_valid=True,measured_cells=20,trajectory_feature_supported=True,
+                    trajectory_fit_supported=True,
+                    core__count__Alpha=np.log1p(.7*(1-t)+.02),
+                    core__count__Beta=np.log1p(.7*t+.02),
+                    core__count__Delta=np.log1p(.1+.02*np.sin(t)),
+                    core__count__Unresolved=np.log1p(.1)))
+            for i in range(30):
+                rows.append(dict(islet_id=f'{donor}-small-{i}',case_id=str(donor),area_um2=10+i,
+                    eligible=True,geometry_valid=True,measured_cells=1,trajectory_feature_supported=True,
+                    trajectory_fit_supported=False,
+                    core__count__Alpha=0.,core__count__Beta=0.,core__count__Delta=0.,
+                    core__count__Unresolved=np.log1p(1.)))
+        frame=pd.DataFrame(rows)
+        coordinates,model=fit(frame,k=10,cap=20)
+        self.assertEqual(model['training_support'],'trajectory_fit_supported')
+        self.assertEqual(model['training_islets'],96)
+        self.assertTrue(all('-train-' in name for name in model['landmark_ids']))
+        self.assertTrue(coordinates.loc[coordinates.islet_id.str.contains('-small-'),'eligible'].all())
+        fitted=coordinates.loc[coordinates.islet_id.str.contains('-train-')&coordinates.pseudotime_raw.notna()]
+        self.assertGreater(len(fitted),40)
+        self.assertTrue((frame.set_index('islet_id').loc[fitted.islet_id,'core__count__Beta']>0).all())
+        self.assertGreater(fitted.pseudotime_raw.nunique(),20)
 
     def test_omitted_training_marker_cannot_change_reconstructed_counts(self):
         import tempfile

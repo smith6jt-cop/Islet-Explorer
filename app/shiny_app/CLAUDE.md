@@ -8,11 +8,12 @@ The 21-donor candidate uses the most recent approved regenerated geometry and
 typed-cell artifacts. It retains 11,944 annotations; 11,136 meet the two
 classifier eligibility rules and every donor contributes at least 137. Of
 those, 7,493 have complete typed-composition features and the saved primary
-trajectory supports 2,626 islets. Its arbitrary orientation,
-fixed reference scale and disconnected components must remain unchanged by
-donor or display filters.
+trajectory supports 7,490 islets. The graph is trained on 1,514 valid cores
+with at least ten measured cells, then all feature-supported eligible islets
+are projected. Its arbitrary orientation and fixed reference scale must remain
+unchanged by donor or display filters.
 
-The default reference scale uses 2,626 saved, evenly spaced midpoint ranks.
+The default reference scale uses 7,490 saved, evenly spaced midpoint ranks.
 Raw pseudotime determines rank order; SHA-256 of islet ID orders exact raw
 ties. The app must label that within-tie order as biologically arbitrary,
 retain the raw coordinate in hover/downloads, and never rerank interactively.
@@ -27,7 +28,7 @@ the app.
 
 Spatial UMAP and Leiden use the same typed, endocrine-normalized composition
 matrix as trajectory, not whole-islet marker averages or the legacy H5AD UMAP.
-The app reads the fixed 2,626 supported primary coordinates, exposes four
+The app reads the fixed 7,490 supported primary coordinates, exposes four
 Leiden resolutions, and builds cluster composition from exclusive base
 identities for 7,493 feature-supported islets. The other classifier-eligible
 regions stay eligible and are reported as lacking a supported representation.

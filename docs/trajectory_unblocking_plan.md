@@ -11,8 +11,10 @@ Status updated 2026-09-22: the schema-4 runtime now uses the most recent
 approved boundaries and typed-cell outputs. Eligibility is determined only by
 no image-edge contact and at least one canonical cell inside the classifier
 core. The saved fit records 11,136 eligible islets across all 21 donors, 7,493
-feature-supported rows and 2,626 supported primary coordinates. Spatial UMAP
-and Leiden use the 7,493 feature-supported typed-composition rows. The ratio
+feature-supported rows and 7,490 supported primary coordinates. The graph is
+trained on 1,514 valid cores with at least ten measured cells and all supported
+feature rows are projected afterward. Spatial UMAP and Leiden use the 7,493
+feature-supported typed-composition rows. The ratio
 scatter, pseudotime strip, graph, display controls, 31-marker typed-expression
 heatmap and schema-4 islet drilldown pass browser acceptance. Marker-positive
 heatmap ratios remain separately unavailable where positivity gates are absent.

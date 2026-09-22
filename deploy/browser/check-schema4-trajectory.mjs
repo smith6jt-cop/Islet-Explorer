@@ -28,6 +28,8 @@ const embeddingManifest=synthetic?{}:JSON.parse(await fs.readFile(path.join(root
 const classifierEligible=features.filter(row=>row.eligible.toLowerCase()==='true').length;
 const embeddedIslets=Number(embeddingManifest.embedded_islets??embeddingManifest.eligible_islets??0);
 const supportedPrimary=coordinates.filter(row=>row.pseudotime_raw!=='').length;
+const supportedIds=new Set(coordinates.filter(row=>row.pseudotime_raw!=='').map(row=>row.islet_id));
+const defaultBetaValues=counts.filter(row=>supportedIds.has(row.islet_id)&&row.compartment==='core'&&row.phenotype==='Beta cell'&&row.plotted_value!=='').map(row=>Number(row.plotted_value));
 const savedRanks=coordinates.filter(row=>row.pseudotime_raw!=='').map(row=>Number(row.pseudotime_percentile)).sort((a,b)=>a-b);
 assert.equal(savedRanks.length,supportedPrimary);assert(savedRanks.every(Number.isFinite));
 for(let index=0;index<savedRanks.length;index++)assert(Math.abs(savedRanks[index]-(index+.5)/savedRanks.length)<1e-12,'Saved reference ranks must be the fixed evenly spaced midpoint grid');
@@ -93,16 +95,16 @@ try{
   assert.equal(scatter.x.length,savedRanks.length);
   for(let index=0;index<scatter.x.length;index++)assert(Math.abs(scatter.x[index]-savedRanks[index])<1e-12,'Default scatter must use the saved fixed reference ranks');
   if(!synthetic){
-    assert.equal(scatter.maximumY,0,'The default Beta-cell/core values in this release are measured zeros');
-    assert(Number(scatter.yRange[1])<.1,'A constant-zero response must not be stretched to a y-axis maximum of 1');
-    const ratioNote=await page.$eval('#traj-traj_y_note',el=>el.textContent||'');
-    assert(ratioNote.includes('valid measured zeros'));
+    assert(defaultBetaValues.some(value=>value>0),'Canonical supported coordinates must include beta-containing islets');
+    assert(scatter.maximumY>0,'The default Beta-cell/core view must display the nonzero canonical beta ratios');
+    assert(Math.abs(scatter.maximumY-Math.max(...defaultBetaValues))<1e-10,'Default Beta-cell/core maximum differs from the canonical count table');
+    assert(Number(scatter.yRange[1])>=scatter.maximumY,'The y-axis must include the observed nonzero beta ratios');
   }
   for(const id of ['#traj-traj_point_size','#traj-traj_point_size_slider','#traj-traj_alpha','#traj-traj_color_by','#traj-traj_donor_palette'])assert(await page.$(id));
   assert(await page.$('#traj-traj_strip_heatmap.js-plotly-plot'));
   const stripText=await page.$eval('#traj-traj_strip_heatmap',plot=>(plot.data||[]).flatMap(trace=>Array.from(trace.text||[])).join(' '));
   assert(!stripText.includes('Islets: 0'),'Evenly ranked full-cohort points must populate every strip bin');
-  evidence.checks.fixed_rank_is_evenly_spaced_and_zero_response_is_explicit=true;
+  evidence.checks.fixed_rank_is_evenly_spaced_and_beta_ratios_are_nonzero=true;
   evidence.checks.dynamic_identities_states_and_all_markers=true;
   const baseline=await csv('#traj-dl_paga_csv');
   const secondary=baseline.filter(row=>row.supported.toLowerCase()==='false');

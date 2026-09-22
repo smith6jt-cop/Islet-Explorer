@@ -177,6 +177,13 @@ def validate(root, report_root=None):
     observed_support=flags(features.eligible)&np.isfinite(features[primary_columns]).all(axis=1)
     if not np.array_equal(supported,observed_support):raise ValueError('Trajectory feature support differs from available typed composition')
     if manifest.get('feature_supported_islets')!=int(supported.sum()):raise ValueError('Feature-supported islet census differs')
+    minimum_fit_cells=manifest.get('trajectory_fit_minimum_measured_core_cells')
+    if minimum_fit_cells!=10:raise ValueError('Trajectory graph-training cell threshold differs from the fixed specification')
+    expected_fit=supported&flags(features.geometry_valid)&features.measured_cells.ge(minimum_fit_cells)
+    if 'trajectory_fit_supported' not in features or not np.array_equal(flags(features.trajectory_fit_supported),expected_fit):
+        raise ValueError('Trajectory graph-training support differs from the fixed technical rule')
+    if manifest.get('trajectory_fit_supported_islets')!=int(expected_fit.sum()):
+        raise ValueError('Trajectory graph-training support census differs')
     if manifest['features_sha256']!=sha256(root/'trajectory/composition_features.parquet'):raise ValueError('Trajectory feature provenance changed')
     embedding=pd.read_parquet(root/'analysis/islet_embedding.parquet');embedding['case_id']=embedding.case_id.astype(str)
     embedding_manifest=json.loads((root/'analysis/islet_embedding_manifest.json').read_text())
@@ -204,6 +211,8 @@ def validate(root, report_root=None):
     if set(regions.band_um)!={10,20,30}:raise ValueError('Missing spatial sensitivity bands')
     status=json.loads((root/'trajectory/validation.json').read_text())
     specification=json.loads((root/'trajectory/specification.json').read_text())
+    if specification.get('training_support')!='trajectory_fit_supported' or specification.get('training_islets')!=int(expected_fit.sum()):
+        raise ValueError('Saved trajectory was not fit on the declared graph-training support set')
     validate_reference_percentiles(coordinates,specification)
     supported=flags(coordinates.supported)&coordinates.pseudotime_raw.notna()
     if not supported.any():raise ValueError('All-missing trajectory does not satisfy local delivery acceptance')
@@ -227,7 +236,8 @@ def validate(root, report_root=None):
         if not {'object_id','base_type','phenotype_state','phenotype_states','classification_status'}.issubset(typing_columns):raise ValueError(f'{cid}: typing partition lacks drill-down identities')
     if (root/'research').exists():raise ValueError('Research reports must remain outside runtime')
     result=dict(schema_version=4,donors=21,shared_markers=31,islets=len(islets),eligible=int(features.eligible.sum()),
-                feature_supported_islets=int(flags(features.trajectory_feature_supported).sum()),embedded_islets=len(embedding),supported_islets=int(supported.sum()),
+                feature_supported_islets=int(flags(features.trajectory_feature_supported).sum()),
+                trajectory_fit_supported_islets=int(expected_fit.sum()),embedded_islets=len(embedding),supported_islets=int(supported.sum()),
                 trajectory_status=status['status'],native_cell_census=census,**totals,passed=True,scientific_acceptance=False,
                 canonical_count_reconciliation=True,research_not_in_runtime=True,validation_script_sha256=sha256(__file__))
     if report_root is not None:

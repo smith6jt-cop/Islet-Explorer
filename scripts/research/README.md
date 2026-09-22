@@ -15,7 +15,7 @@ ID `0078`). Paths are resolved against an explicit repository root; external
 regional exports have explicit absolute paths. Corrected 6539 is selected from
 the recovery tree. The rejected duplicate is never selected.
 
-The current candidate is `data/development/all-donor-20260922-trajectory-rank-v2/`; the preceding
+The current candidate is `data/development/all-donor-20260922-trajectory-fit-support-v1/`; the preceding
 dated candidates and frozen original are preserved. Raw H5ADs,
 geometry, regional exports and TIFFs are immutable hardlinks; revised derived
 files are independent copies. **Never edit linked inputs.** Compatibility schema 3
@@ -142,9 +142,13 @@ typed-composition features are available for 7,493; feature and projection
 support are reported separately from eligibility and are never relabeled as an
 eligibility gate.
 
-Landmarks have equal numbers per donor, capped at 200 and the smallest donor's
-eligible set. Stable ID hashes distribute draws across within-donor section-area
-quartiles. Robust landmark median/IQR scaling drops constant features; a
+Graph training requires valid geometry, complete typed-composition features and
+at least ten measured classifier-core cells. This technical support rule does
+not change classifier eligibility. Smaller eligible islets remain in the
+canonical tables and are Nyström-projected after fitting when their feature
+vector is available. Landmarks have equal numbers per donor, capped at 200 and
+the smallest donor's graph-training set. Stable ID hashes distribute draws
+across within-donor section-area quartiles. Robust landmark median/IQR scaling drops constant features; a
 nonconstant feature with zero IQR uses unit scale, recorded in the model.
 Cosine kNN (k=15) uses an adaptive Gaussian kernel, symmetric union edges,
 alpha=1 density normalization and ten nontrivial diffusion components. The
@@ -170,11 +174,12 @@ are separate sampled units; no disease-order target is used. Report all
 replicates, including failures. The specified instability thresholds are median
 LODO correlation below .8 or supported primary coverage below .8.
 
-For the 2026-09-22 candidate, all requested reconstructions completed. Median
-LODO absolute Spearman correlation is 0.131 and supported primary coverage is
-23.6% (2,626 of 11,136 eligible islets), so the ordering is recorded as
-unstable. Fourteen disconnected components are retained. Parameters were not
-changed to obtain a preferred disease ordering.
+For the 2026-09-22 fit-support revision, all requested reconstructions
+completed. The 1,514 graph-training islets yield one landmark component, and
+7,490 of 7,493 feature-supported islets receive a primary coordinate. Median
+LODO absolute Spearman correlation is 0.754 and total classifier-eligible
+coverage is 67.3% (7,490 of 11,136), so the ordering remains recorded as
+unstable. Parameters were not changed to obtain a preferred disease ordering.
 
 Outcome-exclusion helpers expand the marker module and complete phenotype parent
 chain. **No inferential pseudotime association tests are currently published**;

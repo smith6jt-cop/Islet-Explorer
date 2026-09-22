@@ -95,7 +95,15 @@ def fit(frame,k=15,cap=200,seed=SEED,excluded=(),feature_columns=None,legacy_int
     missing=set(cols)-set(frame)
     if missing: raise ValueError(f'Missing required trajectory features: {sorted(missing)}')
     if frame.islet_id.duplicated().any(): raise ValueError('Duplicate trajectory IDs')
-    f=frame.loc[frame.eligible & np.isfinite(frame[cols]).all(axis=1)].sort_values('islet_id').reset_index(drop=True)
+    feature_supported=frame.eligible & np.isfinite(frame[cols]).all(axis=1)
+    if 'trajectory_fit_supported' in frame:
+        declared=frame.trajectory_fit_supported.fillna(False).astype(bool)
+        if (declared & ~feature_supported).any():
+            raise ValueError('Trajectory training support includes an ineligible or feature-unsupported islet')
+        training_supported=declared
+    else:
+        training_supported=feature_supported
+    f=frame.loc[training_supported].sort_values('islet_id').reset_index(drop=True)
     if f.empty: raise ValueError('No eligible islets')
     li=landmarks(f,cap,seed); X=f[cols].to_numpy(float); L=X[li]
     center=np.median(L,axis=0); scale=np.quantile(L,.75,axis=0)-np.quantile(L,.25,axis=0)
@@ -132,7 +140,9 @@ def fit(frame,k=15,cap=200,seed=SEED,excluded=(),feature_columns=None,legacy_int
                root_metric=metric[root],normalizer=norm,k=k,graph=graph,root_id=ids[ix[root]],
                endpoint_ids=[ids[ix[j]] for j in endpoints],medoid_id=ids[ix[medoid]],
                dropped=[c for c,v in zip(cols,keep) if not v],seed=seed,cap=cap,
-               representation='legacy_intensity' if legacy_intensity else 'typed_composition')
+               representation='legacy_intensity' if legacy_intensity else 'typed_composition',
+               training_support='trajectory_fit_supported' if 'trajectory_fit_supported' in frame else 'eligible_feature_supported',
+               training_islets=len(f))
     coords=project(frame,model)
     # Nyström is defined off-sample. Preserve the exact fitted landmark rows.
     positions=coords.set_index('islet_id').index.get_indexer(ids[ix])
@@ -195,7 +205,7 @@ def model_reference_percentile(values, identifiers, model):
     return out
 
 def project(frame,model):
-    cols=model['columns'];out=frame[[c for c in ['islet_id','case_id','donor_status','donor_source','islet_key','area_um2','measured_cells','raw_cells','eligible','trajectory_feature_supported','exclusion_reason'] if c in frame]].reset_index(drop=True).copy()
+    cols=model['columns'];out=frame[[c for c in ['islet_id','case_id','donor_status','donor_source','islet_key','area_um2','measured_cells','raw_cells','eligible','trajectory_feature_supported','trajectory_fit_supported','trajectory_fit_exclusion_reason','exclusion_reason'] if c in frame]].reset_index(drop=True).copy()
     out['component']=-1;out['supported']=False;out['support_distance']=np.nan;out['pseudotime_raw']=np.nan
     for j in range(10): out[f'DC{j+1}']=np.nan
     eligible=frame.eligible.to_numpy(bool)&np.isfinite(frame[cols]).all(axis=1).to_numpy()
@@ -374,7 +384,15 @@ def main():
     feature_supported=frame.eligible & np.isfinite(frame[primary_columns]).all(axis=1)
     if 'trajectory_feature_supported' in frame and not np.array_equal(feature_supported.to_numpy(),frame.trajectory_feature_supported.fillna(False).to_numpy(bool)):
         raise ValueError('Recorded trajectory feature support differs from the primary feature matrix')
-    eligible_counts=frame.loc[feature_supported].groupby('case_id').size()
+    minimum_fit_cells=int(manifest.get('trajectory_fit_minimum_measured_core_cells',10))
+    expected_fit_support=(feature_supported & frame.geometry_valid.fillna(False).astype(bool)
+                          & frame.measured_cells.ge(minimum_fit_cells))
+    if 'trajectory_fit_supported' not in frame:
+        raise ValueError('Composition features do not record trajectory graph-training support')
+    recorded_fit_support=frame.trajectory_fit_supported.fillna(False).astype(bool)
+    if not np.array_equal(expected_fit_support.to_numpy(),recorded_fit_support.to_numpy()):
+        raise ValueError('Recorded trajectory graph-training support differs from the fixed technical rule')
+    eligible_counts=frame.loc[recorded_fit_support].groupby('case_id').size()
     # Fit the fixed specification on donors with enough eligible islets for
     # k=15 landmark neighbors. Donors without that support remain explicit
     # unsupported observations; they are never forced onto the axis.
@@ -385,8 +403,9 @@ def main():
         raise ValueError(f'Insufficient supported donors for trajectory fit: {unsupported}')
     frame=frame[frame.case_id.isin(fit_donors)].copy()
     # Eligibility comes from the classifier geometry and core-cell census.
-    # Typing support controls only whether an eligible row can be represented
-    # in this typed-composition fit; it never changes the eligible flag.
+    # The graph is trained on technically supported islets, then every eligible
+    # islet with a complete typed-composition vector is Nyström-projected into
+    # that fixed representation. The classifier eligibility flag is unchanged.
     fit_columns=list(primary_columns)
     if not feature_supported.any(): raise ValueError('No feature-supported eligible islets')
     with threadpool_limits(limits=1):coords,model=fit(frame,feature_columns=fit_columns)
@@ -400,15 +419,17 @@ def main():
                 orientation='arbitrary hash endpoint; not elapsed disease time',runner_sha256=sha256(__file__),
                 features_sha256=sha256(feature_path),feature_manifest_sha256=sha256(manifest_path),
                 versions={p:importlib.metadata.version(p) for p in ['numpy','scipy','pandas','scikit-learn','shapely']},
-                preprocessing='post-typing log1p(validated base-type count/classifier-defined core cell count); landmark median/IQR scaling',
+                preprocessing='post-typing log1p(validated base-type count/classifier-defined core cell count); train on valid cores with at least 10 measured cells; landmark median/IQR scaling; project all eligible feature-supported islets',
                 eligibility='no image-edge contact and at least one canonical cell in the endocrine pixel-classifier core; typing support cannot revoke eligibility',
+                trajectory_fit_support=f'valid geometry, complete typed composition, and at least {minimum_fit_cells} measured core cells; training only',
                 reference_percentile='fixed ordinal reference rank: raw pseudotime order with exact ties spread by SHA-256(islet_id); midpoint ranks (i+0.5)/N',
                 reference_percentile_version=2,
                 graph_layout='Componentwise spectral graph layout with fixed neighbor interpolation, not comparable diffusion coordinates',
                 projection_support='all k neighbors in same component; nearest distance <= 2 times local kth-neighbor radius')
     write_json(out/'specification.json',spec)
     pd.DataFrame({'islet_id':model['landmark_ids'],'component':model['landmark_components']}).to_csv(out/'landmarks.csv',index=False)
-    write_json(out/'validation.json',dict(status='running',bootstrap_required=200,eligible=int(frame.eligible.sum())))
+    write_json(out/'validation.json',dict(status='running',bootstrap_required=200,eligible=int(frame.eligible.sum()),
+               trajectory_fit_supported=int(recorded_fit_support.sum()),trajectory_fit_minimum_measured_core_cells=minimum_fit_cells))
     records=validate(frame,coords,args.bootstrap,feature_columns=fit_columns,workers=args.workers,checkpoint_root=out/'validation_checkpoints')
     state_path=source/'trajectory/state_composition_features.parquet'
     if manifest.get('state_sensitivity_columns'):
@@ -428,7 +449,9 @@ def main():
     groupcols=[c for c in ['case_id','donor_source','donor_status'] if c in coords]
     coords.groupby(groupcols,dropna=False).agg(islets=('islet_id','size'),supported=('pseudotime_raw','count'),median_pseudotime=('pseudotime_raw','median')).reset_index().to_csv(out/'donor_associations.csv',index=False)
     write_json(out/'validation.json',dict(status=status,median_lodo_absolute_spearman=median,supported_primary_fraction=coverage,
-               eligible=int(frame.eligible.sum()),feature_supported=int(feature_supported.sum()),supported=int(coords.pseudotime_raw.notna().sum()),
+               eligible=int(frame.eligible.sum()),feature_supported=int(feature_supported.sum()),
+               trajectory_fit_supported=int(recorded_fit_support.sum()),trajectory_fit_minimum_measured_core_cells=minimum_fit_cells,
+               supported=int(coords.pseudotime_raw.notna().sum()),
                fit_donors=sorted(fit_donors),unsupported_donors=unsupported,
                disconnected_components=int(len(np.unique(model['landmark_components']))),bootstrap_completed=successful,
                bootstrap_requested=args.bootstrap,bootstrap_failed=len(boots)-successful,lodo_completed=lodo_success,lodo_failed=len(lodo)-lodo_success,
