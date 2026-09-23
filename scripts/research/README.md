@@ -1,5 +1,30 @@
 # All-donor candidate and offline research
 
+**2026-09-23 restoration and owner correction:** `6b7884b` restores the default
+15-donor app. Exact original donor/islet/value preservation now governs any
+addition. The schema-4 workflow below is historical and untrusted pending
+revision and evaluation; its regenerated original-donor subset does not satisfy
+that requirement. Do not use the historical reproduction or service commands
+as a promotion recipe. Keep their prior artifacts intact.
+
+Run the read-only preservation gate before any optional app integration:
+
+```bash
+python scripts/research/audit_original_parity.py \
+  --baseline-root data \
+  --candidate-root data/development/all-donor-20260922-trajectory-fit-support-v1 \
+  --report-root tmp/original-parity-20260923
+```
+
+The exact default tolerance is zero. Missing original fields or artifacts,
+changed values or missingness, duplicate IDs, and replaced/added islets from
+original donors fail the gate. A failed comparison is not permission to rename
+regenerated islets or substitute raw intensities for legacy normalized values.
+`serve_preview.py` now requires `--baseline-root` and recomputes this comparison
+before creating a snapshot, changing preview files, or stopping a service.
+Passing preservation alone does not establish scientific acceptance or approve
+promotion. Existing candidate services are not changed by running this audit.
+
 **2026-09-22 implementation status:** trajectory follows cell typing and uses
 cell-type composition per canonical cell in the classifier-determined endocrine
 core. The nine explicitly required

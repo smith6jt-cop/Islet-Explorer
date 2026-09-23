@@ -1,5 +1,14 @@
 # Typed-cell reprocessing and app revision
 
+**2026-09-23 status:** the local default app has been restored at `6b7884b`.
+The owner requires exact preservation of original islet identities and values.
+The all-21 regeneration contract recorded below is therefore pending revision
+and evaluation; its results are not a compatible donor addition. The original
+15-donor subset has 8,483 regenerated IDs versus 5,214 frozen IDs, with no exact
+overlap. Candidate launch now requires the read-only original-parity gate
+documented in `scripts/research/README.md`. This correction does not redeploy
+or attest to the separately running public service.
+
 Implementation started on 2026-09-20. The current local candidate is
 `data/development/all-donor-20260922-trajectory-fit-support-v1` and now supplies the shared
 workstation app. This remains an execution record, not UFRC or scientific

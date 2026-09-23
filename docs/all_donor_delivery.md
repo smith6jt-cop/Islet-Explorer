@@ -1,5 +1,15 @@
 # All-donor local delivery
 
+## Restoration status — 2026-09-23
+
+The local default app is restored at `6b7884b`; the earlier candidate delivery
+record below is historical, not current scientific acceptance. Exact original
+donor/islet/value parity is required before optional app integration. The
+regenerated schema-4 candidate fails that requirement and needs revision and
+evaluation. Its historical restart commands now additionally require
+`--baseline-root` and a passing preservation check. No public service cutover
+or promotion was performed during the restoration.
+
 ## Current schema-4 candidate — 2026-09-22
 
 The shared app at `http://10.15.152.7:8080/islet-explorer/` serves

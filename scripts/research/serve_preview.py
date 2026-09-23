@@ -10,6 +10,20 @@ import shutil
 import socket
 import subprocess
 import sys
+from audit_original_parity import audit as audit_original_parity
+
+
+def require_original_parity(baseline_root, candidate_root):
+    """Recheck source values before creating files or stopping any service."""
+    report = audit_original_parity(baseline_root, candidate_root)
+    if not report['passed']:
+        raise ValueError(
+            'Original-donor parity failed; candidate launch is blocked. '
+            'Run audit_original_parity.py for the full read-only report. '
+            'No preview files or services have been changed.')
+    return report
+
+
 def write_json(path, value):
     Path(path).write_text(json.dumps(value, indent=2)+'\n')
 
@@ -44,6 +58,8 @@ def stop_recorded_preview(data_root):
 
 def main():
     p=argparse.ArgumentParser();p.add_argument('--data-root',required=True);p.add_argument('--app-root',required=True)
+    p.add_argument('--baseline-root',required=True,type=Path,
+                   help='Restored original data root; exact preservation is checked before launch')
     p.add_argument('--python',required=True);p.add_argument('--restart',action='store_true')
     p.add_argument('--port',type=int,help='Fixed loopback port for the preview; omit to choose the first free port.')
     p.add_argument('--replace-preview',type=Path,help='Replace only the recorded service for this previous candidate');a=p.parse_args()
@@ -51,6 +67,7 @@ def main():
     metadata=data/'manifest.json' if (data/'manifest.json').exists() else data/'candidate.json'
     schema=str(json.loads(metadata.read_text())['schema_version'])
     if schema not in {'2','3','4'}:raise ValueError('Unsupported candidate runtime schema')
+    require_original_parity(a.baseline_root, data)
     runtime=data/'preview';runtime.mkdir(exist_ok=True)
     app=runtime/'app'
     if source==app or source.is_relative_to(app):
@@ -107,6 +124,7 @@ def main():
     else: raise RuntimeError('Preview did not open its loopback listener; inspect server.log')
     restart_argv=[str(Path(sys.executable).resolve()),str(Path(__file__).resolve()),
                   '--data-root',str(data),'--app-root',str(source),'--python',a.python,
+                  '--baseline-root',str(a.baseline_root.resolve(strict=True)),
                   '--port',str(port),'--restart']
     stop_argv=['kill','-TERM',str(proc.pid)]
     record=dict(url=f'http://127.0.0.1:{port}/islet-explorer/',pid=proc.pid,logs=str(log),server_log=str(runtime/'server.log'),
