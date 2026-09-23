@@ -597,12 +597,7 @@ PHENOTYPE_RESIDUALS <- list(
 # Returns NULL if the file is missing — callers should guard.
 .parse_phenotype_rules_csv <- function(path) {
   if (!file.exists(path)) {
-    # Schema 4 intentionally replaces the legacy CSV with its versioned typing
-    # catalog.  Missing legacy rules are therefore expected, not a blocker.
-    candidate_path <- data_path("candidate.json")
-    schema <- tryCatch(as.character(jsonlite::read_json(candidate_path)$schema_version),
-                       error = function(e) NA_character_)
-    if (!identical(schema, "4")) islet_log_event("phenotype_rules_unavailable")
+    islet_log_event("phenotype_rules_unavailable")
     return(NULL)
   }
   raw <- utils::read.csv(path, header = FALSE, stringsAsFactors = FALSE,
@@ -692,18 +687,6 @@ PHENOTYPE_RULES_CSV <- .compose_phenotype_rules(PHENOTYPE_RULES_CSV_RAW)
 # Returns NULL if the name has no rule and no residual entry.
 get_phenotype_rule <- function(name) {
   if (is.null(name) || is.na(name) || !nzchar(name)) return(NULL)
-  if (exists("islet_typing_catalog", mode = "function")) {
-    catalog <- islet_typing_catalog()
-    if (!is.null(catalog)) {
-      for (entry in c(catalog$base_types, catalog$states)) {
-        label <- if (is.character(entry)) entry else entry$name
-        if (identical(name, label)) return(list(description = if (is.list(entry)) entry$description %||%
-          "Joint corrected-marker profile assigned by the release's hierarchical cell-typing model." else
-          "Joint corrected-marker profile assigned by the release's hierarchical cell-typing model."))
-      }
-      return(NULL)
-    }
-  }
   # Try residuals first (small set, includes "Unknown" fallback).
   if (name %in% names(PHENOTYPE_RESIDUALS)) return(PHENOTYPE_RESIDUALS[[name]])
   # Apply alias (PHENOTYPE_COLORS -> CSV).
@@ -811,13 +794,6 @@ phenotype_rules_table_df <- function() {
 # Modal builder. Pure shiny — no DT dependency. Pass to showModal() from any tab's
 # Phenotype-Rules button handler.
 phenotype_rules_modal_ui <- function() {
-  if (exists("islet_typing_catalog", mode = "function") && !is.null(islet_typing_catalog())) {
-    choices <- islet_phenotype_choices()
-    return(shiny::modalDialog(title = "Cell identities and phenotype states", size = "l", easyClose = TRUE,
-      shiny::p("Joint marker profiles define base identities; finer states are interpreted within each lineage. Assignment support is preserved in cell downloads."),
-      lapply(names(choices), function(group) shiny::tagList(shiny::h4(group),
-        lapply(choices[[group]], function(name) shiny::p(shiny::strong(name), " — ", format_phenotype_rule(name, "plain")))))))
-  }
   df <- phenotype_rules_table_df()
   header_row <- shiny::tags$tr(
     shiny::tags$th("Phenotype",          style = "text-align:left; padding:6px 10px;"),
@@ -1005,16 +981,10 @@ PHENOTYPE_RETIRED <- c("Endocrine", "Acinar", "Endothelial", "T cell",
                        "Immune", "Unknown", "ECAD+", "Structural", "APCs")
 
 #' Drop retired phenotypes from a character vector of labels.
-phenotype_keep <- function(x) {
-  if (exists("islet_typing_catalog", mode = "function")) {
-    catalog <- islet_typing_catalog()
-    if (!is.null(catalog)) return(intersect(x, islet_catalog_names(c(catalog$base_types, catalog$states))))
-  }
-  setdiff(x, PHENOTYPE_RETIRED)
-}
+phenotype_keep <- function(x) setdiff(x, PHENOTYPE_RETIRED)
 
 #' TRUE for rows whose phenotype is still in use. NA-safe.
-phenotype_is_kept <- function(x) as.character(x) %in% phenotype_keep(as.character(x))
+phenotype_is_kept <- function(x) !(as.character(x) %in% PHENOTYPE_RETIRED)
 
 #' Drop retired phenotypes from a data frame with a phenotype column.
 phenotype_filter_rows <- function(df, col = "phenotype") {

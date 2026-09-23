@@ -9,16 +9,6 @@ ui <- fluidPage(
   lang = "en",
   useShinyjs(),
   tags$head(
-    # A workstation may expose a direct Shiny port alongside a reverse proxy
-    # that supports TIFF byte ranges. Use its explicitly configured frontend.
-    local({
-      frontend <- as.character(getOption("islet.network.frontend_port", ""))
-      backend <- as.character(getOption("islet.network.backend_port", ""))
-      valid_port <- function(x) length(x) == 1L && grepl("^[0-9]{1,5}$", x) && as.integer(x) > 0L && as.integer(x) <= 65535L
-      if (valid_port(frontend) && valid_port(backend) && !identical(frontend, backend))
-        tags$script(HTML(sprintf("(function(){if(window.location.port===%s){var u=new URL(window.location.href);u.port=%s;window.location.replace(u.href);}})();",
-          jsonlite::toJSON(backend, auto_unbox = TRUE), jsonlite::toJSON(frontend, auto_unbox = TRUE))))
-    }),
     # Favicons for browser tab, bookmarks, and mobile pinning. Browsers pick
     # the most appropriate sized PNG based on context; the ICO is the legacy
     # default location for tools that hard-fetch /favicon.ico. Apple touch
@@ -215,18 +205,6 @@ ui <- fluidPage(
       box-shadow: 0 0 0 0.2rem rgba(44, 90, 160, 0.15);
     }
 
-    /* Readable Selectize values during reactive control updates. */
-    .selectize-input .item,
-    .selectize-input input {
-      color: #444444;
-    }
-    .selectize-input.disabled {
-      opacity: 1;
-    }
-    .shiny-output-error-validation {
-      color: #595959;
-    }
-
     /* Button styling */
     .btn-primary {
       background: linear-gradient(145deg, #2c5aa0 0%, #1e3a72 100%);
@@ -280,12 +258,9 @@ ui <- fluidPage(
 
     /* Help text styling */
     .help-block {
-      color: #52606d;
+      color: #b3d9ff;
       font-size: 12px;
       font-style: italic;
-    }
-    .sidebar .help-block {
-      color: #b3d9ff;
     }
 
     /* Well and panel styling */
@@ -731,7 +706,7 @@ server <- function(input, output, session) {
     if (show_cells) {
       cells <- load_islet_cells(info$case_id, info$islet_key)
       if (!is.null(cells)) {
-        color_by <- input$drilldown_color_by %||% if (file.exists(data_path("candidate.json"))) "INS" else "phenotype"
+        color_by <- input$drilldown_color_by %||% "phenotype"
         if (!islet_valid_scalar_choice(color_by, colnames(cells),
                                        "drilldown_color_invalid")) {
           color_by <- "phenotype"

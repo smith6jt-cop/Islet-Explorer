@@ -51,21 +51,6 @@ load_channel_names <- function() {
 
 channel_names_vec <- load_channel_names()
 
-# Expanded typed releases declare each image's embedded OME channel order.
-# A global Channel_names.txt can silently swap donor-specific acquisitions.
-.viewer_image_channels <- new.env(parent = emptyenv())
-viewer_channel_names_for_image <- function(filename, schema = islet_release_schema()) {
-  if (!identical(as.character(schema), "4")) return(channel_names_vec)
-  path <- data_path("image_channels.json")
-  if (!file.exists(path)) stop("Schema 4 requires per-image OME channel provenance")
-  key <- normalizePath(path, mustWork = TRUE)
-  if (is.null(.viewer_image_channels[[key]])) .viewer_image_channels[[key]] <- jsonlite::read_json(path)
-  record <- .viewer_image_channels[[key]]$images[[filename]]
-  labels <- unlist(record$channel_names, use.names = FALSE)
-  if (!length(labels) || anyDuplicated(labels)) stop("Missing or duplicate OME channel names for selected image")
-  labels
-}
-
 # ---- Local images setup ---------------------------------------------------
 
 # Prefer static www/local_images so shiny-server can serve large OME-TIFFs with HTTP Range support.
@@ -89,10 +74,6 @@ if (is.null(local_images_root)) {
 
 www_local_images_dir <- file.path("www", "local_images")
 has_www_local_images <- dir.exists(www_local_images_dir)
-if (file.exists(data_path("candidate.json")) &&
-    (!has_www_local_images || !identical(normalizePath(www_local_images_dir), normalizePath(data_path("images"))))) {
-  stop("Candidate image route must resolve to its explicit image root; mixed-cohort fallback is forbidden.")
-}
 
 # Register /images resource path for backup access (avoid conflict with www/local_images)
 # This provides redundancy even if www/local_images exists

@@ -13,125 +13,6 @@
 #   selected_islet  -- reactiveVal for cross-module click-to-segmentation
 #   active_tab      -- reactive returning current tab name (e.g. "Plot")
 
-# Population selectors include the full schema-owned display vocabulary, even
-# when a particular identity is unavailable in the current candidate. Order
-# measured columns first so a freshly opened Plot tab always starts with real
-# data; unavailable identities remain selectable and get an explicit empty
-# state instead of causing a missing-column error.
-plot_column_has_values <- function(df, column) {
-  if (is.null(df) || !is.data.frame(df) || !(column %in% colnames(df))) {
-    return(FALSE)
-  }
-  values <- suppressWarnings(as.numeric(df[[column]]))
-  any(is.finite(values))
-}
-
-plot_numeric_column <- function(df, column) {
-  if (is.null(df) || !is.data.frame(df) || !(column %in% colnames(df))) {
-    return(rep(NA_real_, if (is.data.frame(df)) nrow(df) else 0L))
-  }
-  suppressWarnings(as.numeric(df[[column]]))
-}
-
-plot_available_first <- function(columns, df, priority = character(0)) {
-  columns <- unique(c(intersect(priority, columns), setdiff(columns, priority)))
-  available <- vapply(columns, plot_column_has_values, logical(1), df = df)
-  c(columns[available], columns[!available])
-}
-
-plot_population_label <- function(column) {
-  for (prefix in c("combined_prop_", "peri_prop_", "prop_")) {
-    if (startsWith(column, prefix)) {
-      stem <- sub(paste0("^", prefix), "", column)
-      return(gsub("_", " ", gsub("plus", "+", stem, fixed = TRUE), fixed = TRUE))
-    }
-  }
-  column
-}
-
-plot_composition_selection_choices <- function(
-    pd,
-    typed_release = identical(islet_release_schema(), "4"),
-    app_labels = NULL) {
-  base_choices <- c(
-    "Ins_frac" = "Ins_any",
-    "Glu_frac" = "Glu_any",
-    "Stt_frac" = "Stt_any"
-  )
-  comp <- if (is.data.frame(pd$comp)) pd$comp else data.frame()
-  comp_cols <- colnames(comp)
-  prop_cols <- grep("^prop_", comp_cols, value = TRUE)
-  peri_prop_cols <- grep("^peri_prop_", comp_cols, value = TRUE)
-
-  # Keep every current identity visible for schema 4. Missing columns sort
-  # after measured columns and safely produce an informative empty plot.
-  if (typed_release) {
-    if (is.null(app_labels)) app_labels <- islet_app_phenotype_names()
-    prop_cols <- unique(c(prop_cols, paste0("prop_", app_labels)))
-    peri_prop_cols <- unique(c(peri_prop_cols, paste0("peri_prop_", app_labels)))
-    core_priority <- paste0("prop_", c("Beta cell", "Alpha cell", "Delta cell"))
-    peri_priority <- paste0("peri_prop_", c("Beta cell", "Alpha cell", "Delta cell"))
-    prop_cols <- plot_available_first(prop_cols, comp, core_priority)
-    peri_prop_cols <- plot_available_first(peri_prop_cols, comp, peri_priority)
-    # Legacy threshold counts are not part of the schema-4 typed result. Show
-    # them only if this candidate actually contains measurements.
-    base_choices <- base_choices[vapply(
-      unname(base_choices), plot_column_has_values, logical(1), df = comp
-    )]
-  }
-
-  combined_pairs <- pd$combined_pairs
-  combined_vals <- if (!is.null(combined_pairs) && nrow(combined_pairs) > 0) {
-    setNames(paste0("combined_prop_", combined_pairs$stem), combined_pairs$label)
-  } else {
-    character(0)
-  }
-
-  if (!typed_release) {
-    if (!length(prop_cols) && !length(peri_prop_cols)) return(base_choices)
-    choices <- setNames(list(base_choices), "Core — Hormone Positivity (QuPath threshold)")
-    if (length(prop_cols)) {
-      choices[["Core — Phenotype Proportions (scVI)"]] <-
-        setNames(prop_cols, gsub("^prop_", "", prop_cols))
-    }
-    if (length(peri_prop_cols)) {
-      peri_labels <- vapply(
-        peri_prop_cols,
-        plot_population_label,
-        character(1), USE.NAMES = FALSE
-      )
-      choices[["Peri-Islet — Phenotype Proportions (scVI)"]] <-
-        setNames(peri_prop_cols, peri_labels)
-    }
-    if (length(combined_vals)) {
-      choices[["Core+Peri — Phenotype Proportions (scVI)"]] <- combined_vals
-    }
-    return(choices)
-  }
-
-  choices <- list()
-  if (length(prop_cols)) {
-    choices[["Core — typed identities and states"]] <-
-      setNames(prop_cols, gsub("^prop_", "", prop_cols))
-  }
-  if (length(peri_prop_cols)) {
-    peri_labels <- vapply(
-      peri_prop_cols,
-      plot_population_label,
-      character(1), USE.NAMES = FALSE
-    )
-    choices[["Peri-islet — typed identities and states"]] <-
-      setNames(peri_prop_cols, peri_labels)
-  }
-  if (length(combined_vals)) {
-    choices[["Core + peri — typed identities and states"]] <- combined_vals
-  }
-  if (length(base_choices)) {
-    choices[["Core — reviewed hormone positivity"]] <- base_choices
-  }
-  choices
-}
-
 plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plot"),
                         donor_colors_reactive = reactive(DONOR_COLORS_BRIGHT),
                         remove_outliers = reactive(FALSE),
@@ -153,6 +34,45 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       )
     }
 
+    composition_selection_choices <- function(pd) {
+      base_choices <- c(
+        "Ins_frac" = "Ins_any",
+        "Glu_frac" = "Glu_any",
+        "Stt_frac" = "Stt_any"
+      )
+      comp_cols <- colnames(pd$comp)
+      prop_cols <- grep("^prop_", comp_cols, value = TRUE)
+      peri_prop_cols <- grep("^peri_prop_", comp_cols, value = TRUE)
+      combined_pairs <- pd$combined_pairs
+      combined_vals <- if (!is.null(combined_pairs) && nrow(combined_pairs) > 0) {
+        setNames(paste0("combined_prop_", combined_pairs$stem), combined_pairs$label)
+      } else {
+        character(0)
+      }
+
+      if (!length(prop_cols) && !length(peri_prop_cols)) return(base_choices)
+
+      choices <- list("Core — Hormone Positivity (QuPath threshold)" = base_choices)
+      if (length(prop_cols) > 0) {
+        prop_cols <- prop_cols[phenotype_is_kept(gsub("^prop_", "", prop_cols))]
+        choices[["Core — Phenotype Proportions (scVI)"]] <-
+          setNames(prop_cols, gsub("^prop_", "", prop_cols))
+      }
+      if (length(peri_prop_cols) > 0) {
+        peri_labels <- vapply(
+          peri_prop_cols,
+          function(cl) extract_phenotype_from_column(cl) %||% cl,
+          character(1), USE.NAMES = FALSE
+        )
+        choices[["Peri-Islet — Phenotype Proportions (scVI)"]] <-
+          setNames(peri_prop_cols, peri_labels)
+      }
+      if (length(combined_vals) > 0) {
+        choices[["Core+Peri — Phenotype Proportions (scVI)"]] <- combined_vals
+      }
+      choices
+    }
+
     selection_values <- function(choices) {
       unname(unlist(choices, use.names = FALSE))
     }
@@ -160,7 +80,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
     selection_vocabularies <- reactive({
       pd <- prepared()
       list(
-        composition = plot_composition_selection_choices(pd),
+        composition = composition_selection_choices(pd),
         microenvironment = microenvironment_selection_choices(pd)
       )
     })
@@ -477,14 +397,6 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
           peri_n <- ifelse(is.finite(peri_prop) & is.finite(peri_total), peri_prop * peri_total, 0)
           ctot <- ifelse(is.finite(core_total), core_total, 0)
           ptot <- ifelse(is.finite(peri_total), peri_total, 0)
-          if (identical(islet_release_schema(), "4")) {
-            core_n <- core_prop * core_total; peri_n <- peri_prop * peri_total
-            ctot <- core_total; ptot <- peri_total
-            # An assessed, empty compartment has a true zero count; a missing
-            # assignment or compartment cannot silently become biological zero.
-            core_n[is.finite(core_total) & core_total == 0] <- 0
-            peri_n[is.finite(peri_total) & peri_total == 0] <- 0
-          }
           combined_n <- core_n + peri_n
           combined_total <- ctot + ptot
           if (metric == "Counts") {
@@ -492,7 +404,6 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
           } else if (metric == "Density") {
             ca <- ifelse(is.finite(core_area_um2), core_area_um2, 0)
             pa <- ifelse(is.finite(peri_area_um2), peri_area_um2, 0)
-            if (identical(islet_release_schema(), "4")) { ca <- core_area_um2; pa <- peri_area_um2 }
             combined_area <- ca + pa
             df <- df %>% dplyr::mutate(value = ifelse(combined_area > 0,
               combined_n / combined_area * 1e6, NA_real_))
@@ -501,7 +412,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
               100.0 * combined_n / combined_total, NA_real_))
           }
         } else if (startsWith(w, "peri_prop_")) {
-          raw_val <- plot_numeric_column(df, w)
+          raw_val <- suppressWarnings(as.numeric(df[[w]]))
           # peri_prop_ are relative to peri-islet cells, use total_cells_peri
           peri_total <- if ("total_cells_peri" %in% colnames(df)) {
             suppressWarnings(as.numeric(df$total_cells_peri))
@@ -517,7 +428,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
             df <- df %>% dplyr::mutate(value = raw_val * 100.0)
           }
         } else if (startsWith(w, "prop_")) {
-          raw_val <- plot_numeric_column(df, w)
+          raw_val <- suppressWarnings(as.numeric(df[[w]]))
           core_total <- suppressWarnings(as.numeric(df$total_cells_core))
           if (metric == "Counts") {
             df <- df %>% dplyr::mutate(value = round(raw_val * core_total))
@@ -530,7 +441,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         } else if (w %in% c("immune_frac_peri", "immune_frac_core", "immune_ratio",
                              "cd8_to_macro_ratio", "tcell_density_peri")) {
           # Immune metrics — only immune_frac_peri/core are true fractions (×100 for %)
-          raw_val <- plot_numeric_column(df, w)
+          raw_val <- suppressWarnings(as.numeric(df[[w]]))
           if (w %in% c("immune_frac_peri", "immune_frac_core") && metric == "Percentage") {
             df <- df %>% dplyr::mutate(value = raw_val * 100.0)
           } else {
@@ -540,7 +451,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
           # Hormone fractions (Ins_any, Glu_any, Stt_any) — QuPath threshold counts.
           # Must use cells_total (same QuPath/groovy pipeline), NOT total_cells_core
           # (DeepCell single-cell pipeline) — mismatched denominators can yield >100%.
-          num <- plot_numeric_column(df, w)
+          num <- suppressWarnings(as.numeric(df[[w]]))
           den <- suppressWarnings(as.numeric(df$cells_total))
           if (metric == "Counts") {
             df <- df %>% dplyr::mutate(value = num)
@@ -715,9 +626,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
     output$plt <- renderPlotly({
       sm <- summary_df()
       if (is.null(sm) || !nrow(sm)) {
-        return(plotly_islet_empty(
-          "No measured islets match this population and the current filters."
-        ))
+        return(plotly_islet_empty("Loading data..."))
       }
       mode <- validated_mode()
       selection <- validated_selection() %||% ""
@@ -1324,21 +1233,14 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         !is.null(load_islet_cells(info$case_id, info$islet_key))
 
       # Marker choices for color-by dropdown
-      candidate <- islet_is_expanded_schema()
-      typed_release <- identical(islet_release_schema(), "4")
-      marker_choices <- if (candidate) character() else c("phenotype" = "phenotype")
+      marker_choices <- c("phenotype" = "phenotype")
       if (has_cells) {
         cells <- load_islet_cells(info$case_id, info$islet_key)
         marker_cols <- setdiff(colnames(cells),
                                c("X_centroid", "Y_centroid", "phenotype", "cell_region",
-                                 "Cell.Area", "Cell Area", "Nucleus.Area", "Nucleus Area",
-                                 "object_id", "marker_measurements_complete"))
+                                 "Cell.Area", "Cell Area", "Nucleus.Area", "Nucleus Area"))
         if (length(marker_cols) > 0) {
           marker_choices <- c(marker_choices, setNames(marker_cols, marker_cols))
-        }
-        if (typed_release) {
-          panel <- jsonlite::read_json(data_path("trajectory", "marker_panel.json"))
-          marker_choices <- islet_cell_color_choices(intersect(unlist(panel$markers, use.names = FALSE), names(cells)))
         }
       }
 
@@ -1370,7 +1272,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
                   conditionalPanel(
                     condition = "input.drilldown_show_cells",
                     selectInput("drilldown_color_by", "Color by",
-                                choices = marker_choices, selected = if (candidate && !typed_release) "INS" else "phenotype"),
+                                choices = marker_choices, selected = "phenotype"),
                     selectInput("drilldown_palette", "Phenotype Palette",
                                 choices = c("Original", "High Contrast", "Colorblind Safe", "Maximum Distinction"),
                                 selected = "High Contrast"),
@@ -1416,9 +1318,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
           ),
           # Right: composition sidebar
           column(4,
-            if (candidate) {
-              p("Subtype composition is unavailable pending retained-phenotype gate validation. Raw marker measurements are available in the cell view.")
-            } else if (has_cells) {
+            if (has_cells) {
               conditionalPanel(
                 condition = "input.drilldown_show_cells",
                 div(style = "padding: 15px; background-color: #f8f9fa; border-radius: 5px;",
@@ -1437,8 +1337,6 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         )
       )
     })
-
-    outputOptions(output, "segmentation_viewer_panel", suspendWhenHidden = FALSE)
 
     # ---- Clear segmentation viewer ----
     observeEvent(input$clear_segmentation, {

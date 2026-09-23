@@ -2,6 +2,17 @@
 
 This file provides guidance to Claude Code when working with this repository.
 
+## Restoration checkpoint — 2026-09-23
+
+The default app and original pipeline entry points are restored from `000e970`.
+The owner requires exact preservation of the original 15 donors and their
+islet identities and values. The schema-4 contract below describes the isolated,
+untrusted candidate, not the default app; it requires revision and evaluation
+before reuse. Do not auto-source a candidate profile or overwrite original
+data artifacts. Candidate-only app helpers/tests are quarantined under
+`archive/schema4-before-restore-20260923/`. See the appended verification record
+in `app/shiny_app/docs/trajectory.md`.
+
 ## Owner correction — 2026-09-19
 
 Read [the typing/trajectory reference record](docs/trajectory_typing_reference_20260919.md)

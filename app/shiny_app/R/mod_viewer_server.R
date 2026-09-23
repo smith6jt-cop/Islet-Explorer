@@ -47,11 +47,7 @@ viewer_server <- function(id, forced_image, current_tab) {
       if (length(ai) > 0) return(ai[[1]])
       NULL
     })
-    observeEvent(input$selected_image, {
-      selected <- input$selected_image
-      if (!is.null(forced_image()) && !identical(selected, forced_image()) &&
-          islet_valid_asset_basename(selected, available_images_r())) forced_image(NULL)
-    }, ignoreInit = TRUE)
+
     # Coarse "is there something to show" flag. Computed reactively, then
     # mirrored into a reactiveVal so it only invalidates dependents when the
     # boolean actually FLIPS. Switching between images keeps it TRUE, so
@@ -120,9 +116,7 @@ viewer_server <- function(id, forced_image, current_tab) {
       params <- list(image_url = utils::URLencode(sel_url, reserved = FALSE))
       info$image_url <- resolved_app_url %||% sel_url
 
-      # Schema 4 must never reuse a different acquisition's channel ordering.
-      channels <- viewer_channel_names_for_image(sel_basename)
-      ch_b64 <- tryCatch(build_channel_config_b64(channels), error = function(e) NULL)
+      ch_b64 <- tryCatch(build_channel_config_b64(channel_names_vec), error = function(e) NULL)
       if (!is.null(ch_b64) && nzchar(ch_b64)) {
         params[["channel_config"]] <- utils::URLencode(ch_b64, reserved = TRUE)
       }

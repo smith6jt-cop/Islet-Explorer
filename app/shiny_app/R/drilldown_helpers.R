@@ -113,77 +113,18 @@ PHENOTYPE_PALETTES <- list(
 )
 
 get_phenotype_palette <- function(name = "Original") {
-  palette <- PHENOTYPE_PALETTES[[name]] %||% PHENOTYPE_COLORS
-  if (exists("islet_catalog_palette", mode = "function")) islet_catalog_palette(palette) else palette
+  PHENOTYPE_PALETTES[[name]] %||% PHENOTYPE_COLORS
 }
 
 # ── Cell CSV cache (env-based, same pattern as geojson_cache) ──────────
 drilldown_cache <- new.env()
-.drilldown_cache_order <- character(0)
-.drilldown_cache_sizes <- numeric(0)
-.cache_islet_cells <- function(key, value, max_entries = 64L, max_bytes = 64 * 1024^2) {
-  bytes <- as.numeric(object.size(value))
-  if (bytes > max_bytes) return(value)
-  assign(key, value, envir = drilldown_cache)
-  .drilldown_cache_order <<- c(setdiff(.drilldown_cache_order, key), key)
-  .drilldown_cache_sizes[key] <<- bytes
-  while (length(.drilldown_cache_order) > max_entries || sum(.drilldown_cache_sizes) > max_bytes) {
-    evict <- .drilldown_cache_order[[1]]
-    .drilldown_cache_order <<- .drilldown_cache_order[-1]
-    .drilldown_cache_sizes <<- .drilldown_cache_sizes[names(.drilldown_cache_sizes) != evict]
-    rm(list = evict, envir = drilldown_cache)
-  }
-  value
-}
 
 # Path to per-islet cell CSVs
 CELLS_DIR <- data_path("cells")
 
-drilldown_release_schema <- function() {
-  if (exists("islet_release_schema", mode = "function", inherits = TRUE)) {
-    return(islet_release_schema())
-  }
-  as.character(Sys.getenv("ISLET_DATA_SCHEMA", unset = "legacy"))
-}
-
 #' Check if single-cell drill-down data is available
 drilldown_available <- function() {
-  if (!dir.exists(CELLS_DIR)) return(FALSE)
-  if (identical(drilldown_release_schema(), "4")) {
-    return(length(list.files(CELLS_DIR, pattern = "-cells[.]parquet$")) > 0 &&
-      file.exists(data_path("analysis", "memberships.parquet")) &&
-      dir.exists(data_path("typing", "cells")))
-  }
-  length(list.files(CELLS_DIR, pattern = "\\.csv$")) > 0
-}
-
-load_schema4_islet_cells <- function(imageid, combined_id) {
-  cell_path <- file.path(CELLS_DIR, paste0(imageid, "-cells.parquet"))
-  typing_path <- data_path("typing", "cells", paste0(imageid, ".parquet"))
-  membership_path <- data_path("analysis", "memberships.parquet")
-  if (!all(file.exists(c(cell_path, typing_path, membership_path)))) return(NULL)
-  con <- islet_duckdb_connection()
-  cell_rel <- islet_parquet_relation(cell_path, con)
-  typing_rel <- islet_parquet_relation(typing_path, con)
-  membership_rel <- islet_parquet_relation(membership_path, con)
-  donor_sql <- islet_sql_string(imageid, con)
-  islet_sql <- islet_sql_string(combined_id, con)
-  DBI::dbGetQuery(con, paste0(
-    "SELECT c.*, m.islet_id, CAST(m.compartment AS VARCHAR) AS cell_region, ",
-    "COALESCE(CAST(t.base_type AS VARCHAR), 'Unresolved') AS phenotype, ",
-    "CAST(t.base_type AS VARCHAR) AS base_type, CAST(t.lineage AS VARCHAR) AS lineage, ",
-    "CAST(t.phenotype_state AS VARCHAR) AS phenotype_state, CAST(t.phenotype_states AS VARCHAR) AS phenotype_states, ",
-    "CAST(t.classification_status AS VARCHAR) AS classification_status, t.confidence, t.projection_supported, ",
-    "t.is_endocrine, t.consensus_votes, t.state_consensus_votes, ",
-    "CAST(t.typing_model_identity AS VARCHAR) AS typing_model_identity, ",
-    "CAST(t.typing_run_identity AS VARCHAR) AS typing_run_identity ",
-    "FROM ", cell_rel, " c ",
-    "INNER JOIN ", membership_rel, " m ON c.object_id=m.object_id ",
-    "LEFT JOIN ", typing_rel, " t ON c.object_id=t.object_id ",
-    "WHERE CAST(m.case_id AS VARCHAR)=", donor_sql,
-    " AND m.islet_id=", islet_sql, " AND m.band_um=20 ",
-    "ORDER BY m.compartment, c.object_id"
-  ))
+  dir.exists(CELLS_DIR) && length(list.files(CELLS_DIR, pattern = "\\.csv$")) > 0
 }
 
 #' Load single-cell data for a specific islet
@@ -198,20 +139,10 @@ load_islet_cells <- function(imageid, islet_key) {
     return(NULL)
   }
   combined_id <- paste0(imageid, "_", islet_key)
-  cache_key <- paste(normalizePath(CELLS_DIR, mustWork = FALSE), combined_id, sep = "::")
+  cache_key <- combined_id
 
   if (exists(cache_key, envir = drilldown_cache)) {
-    .drilldown_cache_order <<- c(setdiff(.drilldown_cache_order, cache_key), cache_key)
     return(get(cache_key, envir = drilldown_cache))
-  }
-
-  if (identical(drilldown_release_schema(), "4")) {
-    cells <- tryCatch(load_schema4_islet_cells(imageid, combined_id), error = function(e) {
-      islet_log_event("drilldown_cells_load_failed")
-      NULL
-    })
-    if (!is.null(cells)) .cache_islet_cells(cache_key, cells)
-    return(cells)
   }
 
   csv_path <- file.path(CELLS_DIR, paste0(combined_id, ".csv"))
@@ -221,8 +152,7 @@ load_islet_cells <- function(imageid, islet_key) {
 
   cells <- tryCatch({
     df <- read.csv(csv_path, stringsAsFactors = FALSE)
-    if ("marker_measurements_complete" %in% names(df)) df$marker_measurements_complete <-
-      tolower(as.character(df$marker_measurements_complete)) %in% c("true", "t", "1")
+    if (nrow(df) == 0) return(NULL)
     df
   }, error = function(e) {
     islet_log_event("drilldown_cells_load_failed")
@@ -230,7 +160,7 @@ load_islet_cells <- function(imageid, islet_key) {
   })
 
   if (!is.null(cells)) {
-    .cache_islet_cells(cache_key, cells)
+    assign(cache_key, cells, envir = drilldown_cache)
   }
 
   cells
@@ -242,23 +172,10 @@ load_islet_cells <- function(imageid, islet_key) {
 #' @param color_by "phenotype" or a marker column name
 #' @param show_peri Logical; if FALSE, only show core cells
 #' @return ggplot object
-islet_state_membership <- function(cells, state_name) {
-  if ("phenotype_states" %in% names(cells)) {
-    states <- lapply(cells$phenotype_states, function(value) {
-      if (is.na(value) || !nzchar(value)) return(character())
-      tryCatch(as.character(jsonlite::fromJSON(value)), error = function(e) character())
-    })
-  } else {
-    states <- strsplit(ifelse(is.na(cells$phenotype_state), "", cells$phenotype_state), "; ", fixed = TRUE)
-  }
-  vapply(states, function(values) state_name %in% values, logical(1))
-}
 render_islet_drilldown_plot <- function(info, cells, color_by = "phenotype", show_peri = TRUE,
                                         show_peri_boundary = TRUE, show_structures = TRUE,
                                         palette = PHENOTYPE_COLORS) {
-  if (is.null(info)) return(NULL)
-  if (is.null(cells) || nrow(cells) == 0) return(render_islet_segmentation_plot(info,
-    show_peri_boundary = show_peri_boundary, show_structures = show_structures))
+  if (is.null(info) || is.null(cells) || nrow(cells) == 0) return(NULL)
 
   # Build base plot: GeoJSON boundaries (islet core always drawn)
   base_plot <- build_segmentation_base_plot(info, show_peri_boundary = show_peri_boundary,
@@ -275,21 +192,9 @@ render_islet_drilldown_plot <- function(info, cells, color_by = "phenotype", sho
   cells$x_px <- cells$X_centroid / PIXEL_SIZE_UM
   cells$y_px <- cells$Y_centroid / PIXEL_SIZE_UM
 
-  if (startsWith(color_by, "state::") && "phenotype_state" %in% colnames(cells)) {
-    state_name <- substring(color_by, 8L)
-    cells$state_present <- islet_state_membership(cells, state_name)
-    p <- base_plot + ggplot2::geom_point(data = cells,
-      ggplot2::aes(x = x_px, y = y_px, fill = state_present), shape = 21,
-      colour = "grey30", stroke = 0.3, size = 3.0, alpha = 0.9, inherit.aes = FALSE) +
-      ggplot2::scale_fill_manual(values = c("FALSE" = "#CCCCCC", "TRUE" = "#c51b7d"),
-        labels = c("FALSE" = "Not assigned", "TRUE" = "Assigned"), name = state_name) +
-      ggplot2::labs(title = paste(info$islet_key, "-", state_name))
-  } else if (color_by %in% c("phenotype", "phenotype_state") && color_by %in% colnames(cells)) {
-    if (exists("islet_catalog_palette", mode = "function")) palette <- islet_catalog_palette(palette)
-    cells$display_identity <- as.character(cells[[color_by]])
-    cells$display_identity[is.na(cells$display_identity) | !nzchar(cells$display_identity)] <- "Unresolved"
+  if (color_by == "phenotype" && "phenotype" %in% colnames(cells)) {
     # Categorical coloring by phenotype (using fill to avoid colour conflict with structures)
-    pheno_present <- sort(unique(cells$display_identity))
+    pheno_present <- phenotype_keep(sort(unique(cells$phenotype)))
     pal <- palette[pheno_present]
     # Fill missing phenotypes with gray
     pal[is.na(pal)] <- "#CCCCCC"
@@ -297,11 +202,11 @@ render_islet_drilldown_plot <- function(info, cells, color_by = "phenotype", sho
     p <- base_plot +
       ggplot2::geom_point(
         data = cells,
-        ggplot2::aes(x = x_px, y = y_px, fill = display_identity),
+        ggplot2::aes(x = x_px, y = y_px, fill = phenotype),
         shape = 21, colour = "grey30", stroke = 0.3, size = 3.0, alpha = 0.9,
         inherit.aes = FALSE
       ) +
-      ggplot2::scale_fill_manual(values = pal, name = if (identical(color_by, "phenotype_state")) "Finer phenotype state" else "Base identity") +
+      ggplot2::scale_fill_manual(values = pal, name = "Phenotype") +
       ggplot2::labs(title = paste(info$islet_key, "- Single Cells"))
   } else if (color_by %in% colnames(cells)) {
     # Continuous coloring by marker expression (using fill)
@@ -354,7 +259,6 @@ render_drilldown_summary <- function(cells, palette = PHENOTYPE_COLORS) {
   if (is.null(cells) || nrow(cells) == 0 || !"phenotype" %in% colnames(cells)) {
     return(NULL)
   }
-  if (exists("islet_catalog_palette", mode = "function")) palette <- islet_catalog_palette(palette)
 
   # Count phenotypes, split by region
   if ("cell_region" %in% colnames(cells)) {

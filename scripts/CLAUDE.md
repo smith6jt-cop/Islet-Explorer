@@ -2,6 +2,15 @@
 
 Pipeline scripts that build the data files consumed by the Shiny app.
 
+## Restoration checkpoint — 2026-09-23
+
+The original 15-donor builders and trajectory entry points have been restored
+from `000e970`. Their restored defaults are for the frozen original lineage;
+do not run them in place or apply them to candidate inputs. The research
+pipeline below remains isolated and untrusted pending revision and evaluation.
+The owner's current priority is exact original donor/islet/value preservation.
+Build into new paths and pass original-subset parity before optional app wiring.
+
 ## Owner correction — 2026-09-19
 
 [Typing must precede endocrine-normalized trajectory features](../docs/trajectory_typing_reference_20260919.md).

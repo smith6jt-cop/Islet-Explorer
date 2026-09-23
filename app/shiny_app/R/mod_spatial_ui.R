@@ -84,20 +84,19 @@ spatial_ui <- function(id) {
       column(4,
         div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible; height: 100%;",
           h5("Islet-Level UMAPs"),
-          tags$p(
-            "UMAP and Leiden use validated typed-cell counts per canonical cell inside the endocrine pixel-classifier core, matching the trajectory feature definition. Disease status is used only for display.",
-            style = "color: #5f6b76; font-size: 13px; margin-bottom: 8px;"
-          ),
-          uiOutput(ns("leiden_summary")),
           uiOutput(ns("leiden_not_available")),
-          h5("Leiden Clustering", style = "font-size: 14px; margin-top: 0;"),
-          plotlyOutput(ns("leiden_umap"), height = "430px"),
-          hr(style = "margin: 8px 0;"),
-          h5("Donor Status", style = "font-size: 14px; margin-top: 0;"),
-          plotOutput(ns("spatial_umap_donor"), height = 360),
-          div(style = "text-align: right; margin-top: 6px;",
-            downloadButton(ns("dl_spatial_umap_donor"), "Download PNG",
-                           class = "btn-sm btn-outline-primary")
+          fluidRow(
+            column(6,
+              h5("Leiden Clustering", style = "font-size: 13px; margin-top: 0;"),
+              plotlyOutput(ns("leiden_umap"), height = "400px")
+            ),
+            column(6,
+              h5("Donor Status", style = "font-size: 13px; margin-top: 0;"),
+              plotOutput(ns("spatial_umap_donor"), height = 300),
+              div(style = "text-align: right; margin-top: 6px;",
+                downloadButton(ns("dl_spatial_umap_donor"), "Download PNG",
+                               class = "btn-sm btn-outline-primary"))
+            )
           ),
           hr(style = "margin: 8px 0;"),
           h5("Cluster Composition", style = "font-size: 15px;"),

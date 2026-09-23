@@ -7,28 +7,6 @@ Detailed reference for the Spatial tab. Linked from `app/shiny_app/CLAUDE.md`.
 > UI applies the shared nine-label retirement gate and exposes 12 active phenotypes.
 > Counts below describe artifact coverage unless a UI count is stated explicitly.
 
-## Current schema-4 candidate — 2026-09-22
-
-The 21-donor runtime keeps 11,944 image annotations and supplies fixed Spatial
-coordinates for 7,493 feature-supported islets. The cohort contains 11,136
-classifier-eligible islets: a classifier core is eligible when it does not
-contact an image edge and contains at least one canonical core cell. Every
-donor contributes at least 137 eligible islets. Downstream phenotype support
-can limit an embedding coordinate, but cannot revoke eligibility.
-
-UMAP and Leiden no longer reuse the original 5,214-islet H5AD or whole-islet
-marker averages. They are fit offline from the same typed composition per
-classifier-core cell matrix used by the primary trajectory.
-The app reads `analysis/islet_embedding.parquet`, exposes resolutions
-0.3/0.5/0.8/1.0, and never reclusters during interaction. Disease status is a
-display annotation. Cluster composition uses exclusive base identities so
-overlapping states are not double-counted. The donor tissue map reads all 21
-per-donor partitions; exact cell/islet drilldown joins donor Parquet cells,
-20-µm membership and typed identities through DuckDB.
-
-The phase-specific H5AD descriptions below document the frozen original
-runtime and remain relevant only to its compatibility path.
-
 ## Spatial Neighborhood Analysis (Phase 7, Feb 2026 — extended Apr 2026)
 
 ### Peri-Islet Metrics (~100 columns, all phenotypes systematic)

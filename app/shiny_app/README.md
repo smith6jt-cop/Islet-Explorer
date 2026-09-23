@@ -1,14 +1,5 @@
 # Shiny App: Islet Area Distributions
 
-The current all-donor candidate is launched with
-[`scripts/research/serve_preview.py`](../../scripts/research/serve_preview.py),
-using an explicit candidate data root and an isolated application snapshot.
-It reads fixed offline trajectory artifacts and displays all 31 heatmap markers.
-Research reports are exported outside the app. Candidate islet identity and
-retained parent gates still require scientific review. See the
-[delivery record](../../docs/all_donor_delivery.md). The legacy instructions
-below describe the original workbook-based app.
-
 Interactive Shiny app to explore islet area distributions across donor status (ND → Aab+ → T1D) with:
 
 - Band-region Islet_Markers: % positive per islet vs. size (mean ± SE)
@@ -40,3 +31,4 @@ R -q -e 'shiny::runApp("shiny", launch.browser=TRUE)'
 - Markers use `% positive` (100 × `pos_frac`). Targets use `area_density` by class.
 - Composition uses `*_any / cells_total` for INS/GCG/SST.
 - Stats tab runs one-way ANOVA per bin across groups (ND, Aab+, T1D) and reports BH-adjusted p-values.
+

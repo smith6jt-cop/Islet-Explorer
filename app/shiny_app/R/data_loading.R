@@ -577,16 +577,6 @@ load_prepared_release <- function(root = data_root) {
   })
 
   artifacts <- manifest$artifacts %||% list()
-  if (islet_is_expanded_schema(manifest$schema_version)) {
-    cohort <- read.csv(file.path(root, "cohort.csv"), colClasses = "character")
-    for (name in names(out)) {
-      if (nrow(out[[name]]) && "Case ID" %in% names(out[[name]]) && !setequal(as.character(out[[name]]$`Case ID`), cohort$case_id)) {
-        stop("Mixed donor cohort in runtime summary: ", name)
-      }
-    }
-    coords <- read.csv(file.path(root, "trajectory", "coordinates.csv"), colClasses = c(case_id = "character"))
-    if (!setequal(coords$case_id, cohort$case_id) || anyDuplicated(coords$islet_id)) stop("Trajectory cohort does not match runtime cohort.")
-  }
   for (name in names(out)) {
     expected <- artifacts[[name]]$row_count %||% NULL
     if (!is.null(expected) && !identical(as.numeric(nrow(out[[name]])), as.numeric(expected))) {
@@ -607,29 +597,6 @@ load_shared_prepared_data <- function(root = data_root) {
   cache_key <- paste0("prepared::", normalizePath(root, mustWork = FALSE))
   if (!is.null(.islet_backend[[cache_key]])) return(.islet_backend[[cache_key]])
 
-  candidate_path <- file.path(root, "candidate.json")
-  if (file.exists(candidate_path) && !file.exists(islet_manifest_path(root))) {
-    if (islet_is_production()) stop("An unfinished local candidate cannot run in production.")
-    candidate <- jsonlite::read_json(candidate_path)
-    cohort <- read.csv(file.path(root, "cohort.csv"), colClasses = "character")
-    if (!identical(.islet_sha256_file(file.path(root, "cohort.csv")), candidate$cohort_sha256) ||
-        nrow(cohort) != 21L || anyDuplicated(cohort$case_id)) stop("Candidate cohort identity mismatch.")
-    actual_images <- sort(list.files(file.path(root, "images"), pattern = "[.]ome[.]tiff$"))
-    if (!identical(actual_images, sort(unlist(candidate$expected_images)))) stop("Candidate image cohort mismatch.")
-    if (identical(as.character(candidate$schema_version), "4"))
-      stop("Schema 4 must be finalized before serving; Excel fallback is prohibited.")
-    master <- load_master(file.path(root, "master_results.xlsx"))
-    master <- lapply(master, function(d) {
-      if (!is.null(d) && "Case ID" %in% names(d)) d$`Case ID` <- as.integer(d$`Case ID`)
-      d
-    })
-    prepared <- prep_data(master)
-    for (name in c("comp", "targets_all", "markers_all")) {
-      if (!setequal(as.character(prepared[[name]]$`Case ID`), cohort$case_id)) stop("Candidate summary cohort mismatch.")
-    }
-    .islet_backend[[cache_key]] <- prepared
-    return(prepared)
-  }
   manifest_exists <- file.exists(islet_manifest_path(root))
   prepared <- if (manifest_exists) {
     load_prepared_release(root)
