@@ -8,17 +8,20 @@ The original 15-donor builders and trajectory entry points have been restored
 from `000e970`. Their restored defaults are for the frozen original lineage;
 do not run them in place or apply them to candidate inputs. The research
 pipeline below remains isolated and untrusted pending revision and evaluation.
-The owner's current priority is exact original donor/islet/value preservation.
-Build into new paths and pass original-subset parity before optional app wiring.
+The owner requires preservation of original IDs, physical geometry,
+measurements, missingness and phenotype labels. A validated common 21-donor
+trajectory, UMAP and Leiden refit may change derived outputs. See the current
+phase-2 contract before any app integration.
 
-## Owner correction — 2026-09-19
+## Historical owner correction — 2026-09-19, revised 2026-09-29
 
 [Typing must precede endocrine-normalized trajectory features](../docs/trajectory_typing_reference_20260919.md).
-The nine explicitly required marker contributors and implementation status are
-recorded in `research/cell_typing_requirements-v1.json`. Schema 4 now runs cell
-typing before composition and fits trajectory from typed counts per canonical
-cell inside the classifier-determined endocrine core. Whole-islet marker averages are excluded from both the
-primary trajectory and Spatial embedding.
+The nine-marker enhancement recorded in
+`research/cell_typing_requirements-v1.json` is deferred for the current expansion.
+First recover and verify the exact original phenotype rules, numeric gates,
+scVI weights and preprocessing, then apply them to the six additions. Historical
+schema 4 ran cell typing before composition and fitted trajectory from typed
+counts; its outputs are not accepted for the restored app.
 
 ## Historical offline defaults — 2026-09-22 (superseded)
 
@@ -28,7 +31,7 @@ The schema-4 path is `research/reprocess_candidate.py` followed by correction,
 typing, composition, trajectory, `build_islet_embedding.py`, runtime
 materialization, validation and finalization. Every builder requires explicit
 input/output roots. Research runners require `--report-root` outside app data.
-The current local candidate is
+The historical local candidate was
 `data/development/all-donor-20260922-trajectory-rank-v2`; preserve the native QuPath
 project, source images, prior candidates and frozen release.
 The fixed 0–1 reference rank is a display/binning artifact: raw pseudotime

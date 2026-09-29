@@ -29,7 +29,7 @@ UNAVAILABLE = {
     'legacy_normalized_expression': 'Raw marker means are not legacy normalized expression',
     'scvi': 'No compatible saved scVI representation for these additions',
     'islet_composition': 'Requires validated typing and separately reviewed geometry/membership',
-    'trajectory': 'Requires validated compatible features/projection preserving original coordinates',
+    'trajectory': 'Requires comparable typed features and a validated common 21-donor refit',
 }
 
 

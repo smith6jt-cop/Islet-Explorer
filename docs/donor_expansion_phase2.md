@@ -126,7 +126,9 @@ was changed. Pre-existing untracked research files remain untouched.
 
 The integration checkpoint remains unmet: the exact original phenotype rules,
 scVI weights/preprocessing and numeric gates have not yet been recovered and
-verified for the six additions. The earlier donor-disjoint
+verified for the six additions. The searched locations and precise resume
+requirements are in [the method recovery record](original_method_recovery_20260929.md).
+The earlier donor-disjoint
 transfer screens reported raw-feature accuracy/macro-F1 0.86668/0.8380 and
 rescaled-feature accuracy/macro-F1 0.87988/0.8526 against required minima
 0.97/0.90 (plus per-label recall requirements). These are historical failure

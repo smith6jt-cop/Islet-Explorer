@@ -1,13 +1,16 @@
 # All-donor candidate and offline research
 
-**2026-09-23 restoration and owner correction:** `6b7884b` restores the default
-15-donor app. Exact original donor/islet/value preservation now governs any
-addition. The schema-4 workflow below is historical and untrusted pending
-revision and evaluation; its regenerated original-donor subset does not satisfy
+**2026-09-29 restoration and owner direction:** `6b7884b` restored the default
+15-donor app. Original IDs, geometry, measurements, missingness and phenotype
+labels must be preserved; a validated common 21-donor trajectory, UMAP and
+Leiden refit may change derived outputs. The schema-4 workflow below is
+historical and untrusted pending revision and evaluation; its regenerated
+original-donor subset does not satisfy
 that requirement. Do not use the historical reproduction or service commands
 as a promotion recipe. Keep their prior artifacts intact.
 
-Run the read-only preservation gate before any optional app integration:
+Run the read-only preservation gate before any app integration of its
+regenerated candidate:
 
 ```bash
 python scripts/research/audit_original_parity.py \

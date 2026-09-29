@@ -2,18 +2,20 @@
 
 ## Phase-2 contract — 2026-09-23
 
-The [preservation-first contract](donor_expansion_phase2.md) is authoritative.
-The six additions are staged separately; original 15-donor data are never
-regenerated. Earlier all-21 census, scientific-method and service statements
+The [current phase-2 contract](donor_expansion_phase2.md) is authoritative.
+The six additions are staged separately; original 15-donor IDs, geometry,
+measurements, missingness and phenotype labels remain fixed. A validated common
+21-donor refit may change derived trajectory, UMAP and Leiden outputs. Earlier
+all-21 census, scientific-method and service statements
 below describe historical experiments, not the current default app or an
-accepted expanded release. No optional loader or promotion is approved by raw
-staging alone.
+accepted expanded release. Raw staging alone does not make an app-ready dataset.
 
 ## Restoration status — 2026-09-23
 
 The local default app is restored at `6b7884b`; the earlier candidate delivery
 record below is historical, not current scientific acceptance. Exact original
-donor/islet/value parity is required before optional app integration. The
+source-record parity is required before app integration; a future common refit
+may change derived trajectory, UMAP and Leiden outputs. The
 regenerated schema-4 candidate fails that requirement and needs revision and
 evaluation. Its historical restart commands now additionally require
 `--baseline-root` and a passing preservation check. No public service cutover

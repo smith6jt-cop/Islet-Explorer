@@ -1,11 +1,11 @@
 # Trajectory unblocking plan — 2026-09-17
 
-**Superseding measurement/typing correction, 2026-09-19:** see
-[the reference and decision record](trajectory_typing_reference_20260919.md).
-Typing must precede the endocrine-normalized composition inputs used to fit
-trajectory, and the nine newly specified markers must contribute meaningfully
-to cell phenotypes. Instructions below to preserve median-intensity fitting
-inputs no longer define the target implementation.
+**Historical plan:** this records the September 17–22 regenerated 21-donor
+candidate. The [current phase-2 contract](donor_expansion_phase2.md) instead
+requires the exact original phenotype rules, numeric gates, scVI weights and
+preprocessing for the additions; the nine-marker enhancement proposed on
+September 19 is deferred. The candidate's fitted data and acceptance statements
+below do not describe the restored 15-donor app.
 
 Status updated 2026-09-22: the schema-4 runtime now uses the most recent
 approved boundaries and typed-cell outputs. Eligibility is determined only by
