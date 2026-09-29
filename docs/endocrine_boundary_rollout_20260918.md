@@ -8,7 +8,7 @@ The reviewed project remains unchanged.
 
 Open the independent [six-donor QuPath project](../data/reviews/qupath-endocrine-rollout-20260918/project.qpproj)
 with **File → Project → Open project**. Each image already has its objects;
-no import or segmentation rerun is needed. The [offline gallery](http://127.0.0.1:3840/endocrine-rollout-20260918/)
+no import or segmentation rerun is needed. The [offline gallery](../data/reviews/endocrine-rollout-20260918/index.html)
 provides full-field overlays, deterministic small/medium/large examples, and
 PNG/PDF plots. Research results remain outside the application.
 

@@ -1,10 +1,18 @@
 # Cell typing before trajectory: reference and decision record
 
 Recorded 2026-09-19 from the owner's corrections and direct review of the two
-supplied literature PDFs. This changes the required scientific workflow; it
-does not claim that a new cell classifier or trajectory has been implemented.
+supplied literature PDFs. It records the workflow proposed at that time; it
+does not claim that a new cell classifier or trajectory was accepted.
 
-## Owner requirements
+**September 29 scope update:** For the current six-donor expansion, the owner
+directs use of the exact original phenotype rules, numeric gates and scVI
+weights/preprocessing after those artifacts are recovered and verified. The
+nine-marker enhancement below is deferred. A validated common 21-donor
+trajectory, UMAP and Leiden refit may change derived outputs for the original
+donors while their IDs, geometry, measurements, missingness and phenotype labels
+stay fixed. See [the current phase-2 contract](donor_expansion_phase2.md).
+
+## September 19 requirements (deferred for this expansion)
 
 Cell typing must precede trajectory calculation. The primary islet trajectory
 uses cell-type abundance per core endocrine cell. Merely running the existing
@@ -73,11 +81,12 @@ remain pending on disk. Reconcile that evidence mismatch without discarding the
 recorded acceptance or claiming that the full subtype runner already exists.
 
 The prior screen excluded NaKATPase, and its handoff treated CD44/LGALS3 states
-as separate from cell typing. The owner's current requirement takes precedence:
-these markers must contribute to the resulting cell phenotypes, through
-lineage/subtype inference or explicit, lineage-conditioned state inference.
+as separate from cell typing. The September 19 enhancement proposed their
+contribution to resulting cell phenotypes, through lineage/subtype inference or
+explicit, lineage-conditioned state inference. That enhancement is deferred for
+the six additions.
 
-## Operational roles to implement and verify
+## Proposed enhancement roles, currently deferred
 
 These roles guide implementation; they are not newly validated thresholds.
 
@@ -108,7 +117,7 @@ unique validated core alpha/beta/delta and CHGA-supported hormone-unresolved
 endocrine union. Only evidence-supported assignments contribute; ambiguous
 objects remain explicit. This supersedes the earlier three-type definition.
 
-## Required downstream sequence and acceptance evidence
+## Earlier proposed downstream sequence and acceptance evidence
 
 1. Reconcile the accepted typing work with current raw measurements, marker
    names, donor/acquisition provenance and the retained-label policy. Define
@@ -134,8 +143,7 @@ assignment/state algorithm, its parameters and data provenance, and measured
 influence or ablation results. Inclusion in a manifest alone is insufficient;
 do not manufacture label changes when a marker carries little information.
 
-Implementation began on 2026-09-20 in the independent candidate
+Experimental implementation began on 2026-09-20 in the independent candidate
 `data/development/all-donor-20260920`. See
-[the execution record](reprocessing_execution_20260920.md). The served release
-will change only after the new data and runtime pass verification. The frozen
-original remains preserved.
+[the execution record](reprocessing_execution_20260920.md). That candidate is
+not the accepted expansion method; the restored 15-donor app remains the default.

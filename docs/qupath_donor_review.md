@@ -1,16 +1,20 @@
 # Review the six newly processed donors in QuPath
 
-The [18 September six-donor delivery](endocrine_boundary_rollout_20260918.md)
-contains the owner's 1,431 approved HPAP-078 boundaries with rebuilt membership
-and measurements, plus 2,030 candidates across the other five donors using the
-same fixed endocrine classifier and IO60 size-dependent rules.
-[Open the current QuPath project](../data/reviews/qupath-endocrine-rollout-20260918/project.qpproj)
-or the [offline gallery](http://127.0.0.1:3840/endocrine-rollout-20260918/).
-All 943,068 original cells are retained. Other-donor boundaries await their own
-visual review. The earlier HPAP-only project and the
+The current [six-donor QuPath project](../data/reviews/qupath-endocrine-rollout-20260918/project.qpproj)
+contains 1,431 owner-approved HPAP-078 boundaries and 2,030 cyan `Endocrine
+pixel candidate` objects across 6090, 6232, 6520, recovered 6539 and 6558.
+Open the project in QuPath 0.7, double-click each donor, inspect the candidate
+outlines against the raw INS/GCG/SST signal, and save any review edits in that
+project. The [offline gallery](../data/reviews/endocrine-rollout-20260918/index.html)
+contains whole-field and size-stratified examples. All 943,068 source cells are
+retained. The five donors still need the owner's own visual decision; the
+HPAP-078 decision does not transfer to them. The earlier HPAP-only project and the
 [original15 pixel refinement](endocrine_reference_refinement_20260917.md) and
 [existing-classifier comparison](endocrine_pixel_classifier_pilot_20260917.md)
 are retained as baseline evidence, along with their editable review projects.
+
+The sections below describe earlier September 17 review projects and are kept
+for provenance. Their counts and R5 masks are not the current five-donor review.
 
 **Boundary correction in progress:** the R5 candidates linked below have a
 confirmed SAM background-overreach failure and are withdrawn as a usable
