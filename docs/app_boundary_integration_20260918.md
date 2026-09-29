@@ -58,8 +58,8 @@ independent full hash pass; original-release passing evidence is not reused.
 
 The candidate contains `revision.json`, `runtime_optimization.json`,
 `candidate_validation.json`, `manifest.json`, `capacity.json`, and
-`trajectory/boundary_review.csv`. The fresh browser check is
-`deploy/browser/check-reviewed-islets.mjs`. Service identity, logs and exact
+`trajectory/boundary_review.csv`. The historical browser check is
+`deploy/browser/historical/check-reviewed-islets.mjs`. Service identity, logs and exact
 restart arguments are recorded in `preview/service.json`. Preserve the preceding
 `all-donor-20260917` candidate and its service record for rollback.
 

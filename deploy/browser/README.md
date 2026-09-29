@@ -1,6 +1,10 @@
 # Browser acceptance
 
-For the schema-3 all-donor local candidate, use the separate harness:
+Use `check-app.mjs` below for the restored 15-donor development app and for a
+matching selected release. Its URL can be the shared local development URL or
+an isolated loopback Shiny worker.
+
+The schema-3 all-donor check is historical. Its prior invocation was:
 
 ```bash
 node deploy/browser/check-all-donor.mjs \
@@ -9,17 +13,19 @@ node deploy/browser/check-all-donor.mjs \
   --chrome /usr/bin/google-chrome
 ```
 
-It checks all 21 donor/image choices, ratio-only trajectory controls, fixed
+It checked all 21 donor/image choices, ratio-only trajectory controls, fixed
 coordinates after donor filtering, graph/ratio/heatmap downloads, raw-cell
 drill-down and its donor scope, HPAP click-through, corrected-6539 TIFF Range,
 all 31 heatmap defaults/exports, the visible islet-review status, absence of
 research UI/downloads/routes, and axe on the four app tabs. Empty scientific results
-are expected where validated inputs are unavailable. It waits for visible
+were expected where validated inputs were unavailable. It waits for visible
 reactive updates to settle before evaluating accessibility. Failure evidence
 includes offending DOM fragments; keep reports in the restricted local evidence
-directory. The original harness below retains its frozen-release contract.
-Passing the explicit unavailable-ratio state does not establish working real
-ratio curves or accepted islet identities.
+directory. Passing the explicit unavailable-ratio state did not establish
+working real ratio curves or accepted islet identities. The withdrawn 2026-09-18
+corrected-boundary check is retained under
+[`historical/check-reviewed-islets.mjs`](historical/check-reviewed-islets.mjs).
+Neither historical harness is a gate for the restored app or phase-2 additions.
 
 Run this test against an explicitly selected, isolated or staged four-tab app.
 It exercises the Shiny session, keyboard tab navigation and skip link, Plot,

@@ -15,8 +15,9 @@ size-dependent erosion/dilation, split handling, enclosed-hole filling and
 50 µm² fragment refinement. It consumes verified raw foreground from
 `vectorize_endocrine_pixel_regions.groovy` and writes a fresh output folder.
 New predictions must complete this stage before review import. The SAM R5
-candidate remains withdrawn after repeated HPAP-078 errors. The processing
-workflow below records the preserved historical run.
+candidate remains withdrawn after repeated HPAP-078 errors; its R5-only scripts
+are kept in [the historical archive](../../archive/sam-r5-withdrawn-20260917/README.md).
+The processing workflow below records the preserved historical run.
 
 The separate endocrine-seeded boundary review added after the small HPAP-078
 annotation finding is documented in

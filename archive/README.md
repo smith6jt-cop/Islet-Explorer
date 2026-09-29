@@ -1,10 +1,21 @@
 # archive/
 
-Files kept for reference but **not part of the running system**. Nothing here is
-loaded, sourced, imported, or served. History is preserved — every file was moved
-with `git mv`, so `git log --follow archive/<path>` shows its full past.
+Files kept for reference but **not part of the running system**. The app does not
+load, source, import, or serve them. Some archived research scripts can be run
+explicitly to inspect historical evidence and may then import shared helpers
+from `scripts/`; that does not make them current processing or acceptance steps.
+Tracked moves retain their history through `git log --follow`; newly archived
+untracked work acquires history when committed.
 
-Delete anything here freely; the app does not depend on it.
+The app does not depend on these files. Preserve the historical record when a
+method or delivery document still cites it.
+
+## sam-r5-withdrawn-20260917/
+
+R5-only SAM inference, finalization, rendering, QuPath import, and mask-geometry
+test. The candidate was withdrawn after repeated HPAP-078 boundary errors. See
+[the archive note](sam-r5-withdrawn-20260917/README.md) before interpreting or
+running these scripts.
 
 ## docs/
 

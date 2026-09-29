@@ -218,9 +218,13 @@ Generated images, native objects and review artifacts remain excluded by
 
 ## Reproduction
 
-Use new output directories; the scripts reject overwriting completed donor
-artifacts or delivered native data. The analysis interpreter is the existing
-`scvi-env`; inference and mask tests use the existing `samapi` environment.
+These commands record the withdrawn R5 run; they are not a current boundary
+recipe. The R5-only scripts are retained in
+[`archive/sam-r5-withdrawn-20260917/`](../archive/sam-r5-withdrawn-20260917/README.md).
+Use new output directories if reproducing historical evidence; the scripts
+reject overwriting completed donor artifacts or delivered native data. The
+analysis interpreter is the existing `scvi-env`; inference and mask tests use
+the existing `samapi` environment.
 
 ```bash
 /home/smith6jt/miniconda3/envs/scvi-env/bin/python scripts/cohort_expansion/prepare_endocrine_candidates.py \
@@ -230,24 +234,24 @@ artifacts or delivered native data. The analysis interpreter is the existing
   --case-ids 78 6090 6232 6520 6539 6558
 
 CUBLAS_WORKSPACE_CONFIG=:4096:8 /home/smith6jt/miniconda3/envs/samapi/bin/python \
-  scripts/cohort_expansion/predict_endocrine_candidates.py \
+  archive/sam-r5-withdrawn-20260917/predict_endocrine_candidates.py \
   --root NEW_CANDIDATE_ROOT --checkpoint /home/smith6jt/.samapi/vit_b/sam_vit_b_01ec64.pth \
   --case-ids 78 6090 6232 6520 6539 6558 --prompt-mode box-only
 
-/home/smith6jt/miniconda3/envs/scvi-env/bin/python scripts/cohort_expansion/finalize_endocrine_candidates.py \
+/home/smith6jt/miniconda3/envs/scvi-env/bin/python archive/sam-r5-withdrawn-20260917/finalize_endocrine_candidates.py \
   --root NEW_CANDIDATE_ROOT --case-ids 78 6090 6232 6520 6539 6558
-/home/smith6jt/miniconda3/envs/scvi-env/bin/python scripts/cohort_expansion/render_endocrine_candidate_review.py \
+/home/smith6jt/miniconda3/envs/scvi-env/bin/python archive/sam-r5-withdrawn-20260917/render_endocrine_candidate_review.py \
   --root NEW_CANDIDATE_ROOT --case-ids 78 6090 6232 6520 6539 6558
 /home/smith6jt/miniconda3/envs/scvi-env/bin/python scripts/cohort_expansion/prepare_review_project.py \
   --output-root NEW_REVIEW_ROOT
 env JAVA_TOOL_OPTIONS='-Xmx24g -Djava.awt.headless=true' /home/smith6jt/QuPath/bin/QuPath script \
   --args /absolute/NEW_REVIEW_ROOT --args /absolute/NEW_CANDIDATE_ROOT \
-  scripts/cohort_expansion/import_endocrine_review.groovy
+  archive/sam-r5-withdrawn-20260917/import_endocrine_review.groovy
 /home/smith6jt/miniconda3/envs/scvi-env/bin/python scripts/cohort_expansion/package_endocrine_review.py \
   --candidate-root NEW_CANDIDATE_ROOT --project-root NEW_REVIEW_ROOT \
   --source-inventory data/development/expanded-20260911/reports/image_conversion/reconciled_inventory.json
 /home/smith6jt/miniconda3/envs/samapi/bin/python -m unittest discover \
-  -s scripts/tests -p test_endocrine_mask_geometry.py -v
+  -s archive/sam-r5-withdrawn-20260917 -p test_endocrine_mask_geometry.py -v
 /home/smith6jt/miniconda3/envs/scvi-env/bin/python -m unittest discover \
   -s scripts/tests -p test_endocrine_prompt_points.py -v
 ```
