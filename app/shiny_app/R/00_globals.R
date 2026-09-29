@@ -528,7 +528,8 @@ islet_png_filename <- function(stem) {
 # ============================================================================
 # Phenotype rules (May 2026) — marker -> celltype definitions surfaced in UI
 # ============================================================================
-# Source of truth: data/phenotype_rules.csv (parsed once at startup).
+# UI reference: data/phenotype_rules.csv (parsed once at startup). This is not
+# verified as the complete original method that produced all shipped labels.
 # Column-1 is the parent rule, column-2 the phenotype, columns 3+ are markers
 # with cell values:
 #   "pos"    -> required positive
@@ -812,12 +813,12 @@ phenotype_rules_modal_ui <- function() {
     )
   })
   shiny::modalDialog(
-    title = shiny::tagList(shiny::icon("dna"), "Cell Phenotype Rules — Marker Definitions"),
+    title = shiny::tagList(shiny::icon("dna"), "Cell Phenotype Rule Reference"),
     size = "l", easyClose = TRUE, fade = TRUE,
     footer = shiny::modalButton("Close"),
     shiny::tags$p(
-      "Every cell in the app is classified into one of these phenotypes by the upstream ",
-      shiny::tags$code("data/phenotype_rules.csv"), " gating rules. A ",
+      "This table describes a documented upstream Rules1 marker-gating stage. ",
+      "It does not fully reproduce the phenotype labels saved in the app data. A ",
       shiny::tags$code("+"),
       " means the marker is required to be positive; a ",
       shiny::tags$code("−"),
@@ -832,14 +833,14 @@ phenotype_rules_modal_ui <- function() {
       )
     ),
     shiny::tags$p(style = "margin-top: 10px; font-size: 12px; color: #777;",
-      "Rule source: ",
+      "Reference CSV: ",
       shiny::tags$code("data/phenotype_rules.csv"),
       " (15 markers: INS, GCG, SST, SMA, CD20, CD3e, CD68, CD163, CD8a, CD4, HLADR, PDPN, CD34, CD31, B3TUBB)."
     ),
     shiny::tags$p(style = "margin-top: 6px; font-size: 12px; color: #777;",
       shiny::tags$strong("Data vs. rules: "),
-      "this table is the gating spec. A few rule phenotypes have no cells in the ",
-      "shipped dataset because the upstream scVI labeling merged or renamed them ",
+      "the full original rule matrix has not been verified. Some rule phenotypes ",
+      "have no cells in the shipped dataset because upstream labeling merged or renamed them ",
       "(e.g. Dendritic cell folds into the ", shiny::tags$code("APCs"),
       "/Immune aggregates; Exocrine splits into Acinar/Ductal). ",
       shiny::tags$code("APCs"),
@@ -851,9 +852,9 @@ phenotype_rules_modal_ui <- function() {
       "the original Rules1 template also listed ", shiny::tags$code("CD99"),
       " (Endocrine) and ", shiny::tags$code("CD56"),
       " (Neural), but neither antibody is in this 31-plex panel, so the ",
-      "phenotyping step dropped them. The effective gates were therefore ",
+      "available Rules1 implementation omitted them. In that reference, the gates become ",
       shiny::tags$code("Endocrine = any of INS/GCG/SST+"), " and ",
-      shiny::tags$code("Neural = B3TUBB+"), " — reflected in the table above."
+      shiny::tags$code("Neural = B3TUBB+"), ". These are not a complete reconstruction of shipped labels."
     )
   )
 }
