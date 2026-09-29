@@ -113,6 +113,25 @@ test_that("manifest artifact paths cannot escape the release root", {
                "Unsafe artifact path")
 })
 
+test_that("development uses the selected source root even when a manifest exists", {
+  root <- tempfile("islet-development-")
+  dir.create(root)
+  writeLines("historical manifest", file.path(root, "manifest.json"))
+  env <- make_backend_env(root)
+  sys.source(.find_source("R/data_loading.R"), envir = env)
+  env$islet_is_production <- function() FALSE
+  env$load_prepared_release <- function(...) stop("development selected release")
+  env$load_master_auto <- function(h5ad_path, excel_path) {
+    expect_identical(h5ad_path, file.path(root, "islet_explorer.h5ad"))
+    expect_identical(excel_path, file.path(root, "master_results.xlsx"))
+    list(source = "development")
+  }
+  env$prep_data <- identity
+  env$audit_na <- function(...) invisible(NULL)
+
+  expect_identical(env$load_shared_prepared_data(root)$source, "development")
+})
+
 test_that("GeoPackage loading applies an indexed bounding-box filter", {
   skip_if_not_installed("sf")
   root <- tempfile("islet-geometry-")

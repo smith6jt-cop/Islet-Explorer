@@ -591,22 +591,18 @@ load_prepared_release <- function(root = data_root) {
 #' Process-wide prepared data object.
 #'
 #' Production is fail-closed: it must have a complete manifest-backed release.
-#' A repository checkout without a manifest retains the H5AD/Excel development
-#' fallback, but the resulting prepared object is still shared by all sessions.
+#' Development reads H5AD (or Excel) directly from its selected data root,
+#' regardless of whether a manifest happens to be present there.
 load_shared_prepared_data <- function(root = data_root) {
   cache_key <- paste0("prepared::", normalizePath(root, mustWork = FALSE))
   if (!is.null(.islet_backend[[cache_key]])) return(.islet_backend[[cache_key]])
 
-  manifest_exists <- file.exists(islet_manifest_path(root))
-  prepared <- if (manifest_exists) {
+  prepared <- if (islet_is_production()) {
     load_prepared_release(root)
   } else {
-    if (islet_is_production()) {
-      stop("Production requires a manifest-backed data release under ISLET_DATA_ROOT: ",
-           root, call. = FALSE)
-    }
-    message("[DATA] No release manifest; using development H5AD/Excel source")
-    prep_data(load_master_auto(h5ad_path = h5ad_path, excel_path = master_path))
+    message("[DATA] Using development H5AD/Excel source under ", root)
+    prep_data(load_master_auto(h5ad_path = file.path(root, "islet_explorer.h5ad"),
+                               excel_path = file.path(root, "master_results.xlsx")))
   }
 
   if (!islet_is_production()) {

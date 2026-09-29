@@ -141,8 +141,8 @@ try({
   }
 }, silent = TRUE)
 
-# Runtime paths. Production sets ISLET_DATA_ROOT to the mounted, versioned data
-# release; a repository checkout keeps the historical ../../data default.
+# Runtime paths. Production points ISLET_DATA_ROOT at its verified release;
+# development uses one selected root, defaulting to the repository data dir.
 .repo_data_root <- file.path("..", "..", "data")
 data_root <- Sys.getenv("ISLET_DATA_ROOT", unset = .repo_data_root)
 data_root <- tryCatch(normalizePath(data_root, mustWork = FALSE),
