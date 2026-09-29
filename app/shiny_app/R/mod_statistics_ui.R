@@ -45,13 +45,7 @@ statistics_ui <- function(id) {
 
   tagList(
 
-    phenotype_rules_button("show_phenotype_rules_stats"),
-
-    # ===== Top: General-use description banner =====
-    div(class = "card",
-        style = paste0("padding: 14px 18px; margin-bottom: 18px; ",
-                       "background: linear-gradient(135deg, #f4f8fc 0%, #eaf2fa 100%); ",
-                       "border-left: 4px solid #4477AA;"),
+    tab_help("Statistics help", "show_phenotype_rules_stats",
       h4("About this tab",
          style = "margin: 0 0 6px 0; font-size: 16px; color: #2c4760;"),
       p(style = "margin: 0 0 6px 0; font-size: 13px; line-height: 1.5; color: #333;",

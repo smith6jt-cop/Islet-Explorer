@@ -21,7 +21,8 @@ spatial_ui <- function(id) {
   }
 
   tagList(
-    phenotype_rules_button("show_phenotype_rules_spatial"),
+    tab_help("Spatial help", "show_phenotype_rules_spatial",
+      "Drag to zoom, double-click to reset the tissue scatter plot."),
     # ==== ROW 1 (existing): Controls + Scatter + Leiden ====
     fluidRow(style = "display: flex; flex-wrap: wrap;",
       # ---- Left sidebar: Controls ----
@@ -70,7 +71,6 @@ spatial_ui <- function(id) {
                          style = "font-size: 12px; padding: 2px 10px;",
                          class = "btn-sm btn-outline-secondary")
           ),
-          tags$small("Drag to zoom, double-click to reset.", style = "color: #888; display: block; margin-bottom: 5px;"),
           plotOutput(ns("tissue_scatter"), height = "700px",
                      dblclick = ns("scatter_dblclick"),
                      brush = brushOpts(id = ns("scatter_brush"), resetOnNew = TRUE)),

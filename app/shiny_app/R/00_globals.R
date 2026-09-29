@@ -932,6 +932,24 @@ phenotype_rules_button <- function(input_id,
   )
 }
 
+tab_help <- function(title, rules_input_id, ...) {
+  shiny::tags$div(
+    style = "display: flex; justify-content: flex-end; margin-bottom: 6px;",
+    shiny::tags$details(style = "position: relative; z-index: 20;",
+      shiny::tags$summary(title = title,
+        style = "cursor: pointer; list-style: none; color: #4477AA; padding: 4px 8px;",
+        shiny::tags$span(class = "sr-only", title),
+        shiny::tags$i(class = "far fa-circle-question", `aria-hidden` = "true",
+                      style = "font-size: 24px;")),
+      shiny::tags$div(
+        style = paste0("position: absolute; right: 0; top: 100%; width: min(420px, calc(100vw - 32px));",
+                       " max-height: 70vh; overflow-y: auto; padding: 12px; background: white;",
+                       " border: 1px solid #c8d8e9; box-shadow: 0 4px 16px #0002; font-size: 13px;"),
+        phenotype_rules_button(rules_input_id), ...)
+    )
+  )
+}
+
 # UI helper: small muted hint block describing the currently selected phenotype.
 # Pass a literal phenotype name. The output is a tagList suitable for embedding
 # directly under a selectInput. `show_modal_link` controls the trailing

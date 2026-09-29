@@ -373,8 +373,10 @@ literal fallback). 10 is Barlow's own exclusion threshold, and below it an islet
 vector is mostly sampling noise -- 60.8% of our islets are <= 10 cells.
 
 The upper bound matters as much as the lower: the pseudotime is **refitted on whatever islets the
-range selects**, so capping it isolates a size band instead of letting the few 1,000+ cell islets
-dominate the embedding.
+applied range selects**, so capping it isolates a size band instead of letting the few 1,000+
+cell islets dominate the embedding. The slider moves in five-cell steps without recomputing;
+**Recalculate trajectory** applies the pending range. Loaded and fitted islet counts appear next
+to the slider. Until the button is pressed, plots and downloads retain the previous fit.
 
 ```
 range        n      median pseudotime
@@ -386,15 +388,15 @@ range        n      median pseudotime
 This is not the §6 axis-instability defect. That was the axis moving as a side effect of changing
 the *Y-axis feature*, which nobody asked for; it still cannot happen and is regression-tested
 (`all.equal` across a feature switch). Here the axis moves only when the islet set that defines it
-changes, and a progress bar plus a note under the selector say so.
+changes on recalculation; a progress bar appears during the fit.
 
 ### Y axis: markers AND cell types, never one replacing the other
 
 `traj_y_mode` switches the measure; both remain available at all times.
 
-- **Marker expression** -- scVI-denoised mean from `.X`, the 31 markers. Unchanged default.
+- **Marker expression** -- scVI-denoised mean from `.X`, the 31 markers.
 - **Cell-type ratio** -- `log1p(cells of type T / endocrine cells in the islet core)`, with a region
-  control for core / peri / **core + peri (default)**.
+  control for **core (default)** / peri / core + peri. This is the default Y-axis measure.
 
 Only the **retained** phenotypes are offered as ratio numerators: `barlow_ratio_types()` runs the
 list through `phenotype_keep()`, so the nine retired labels (`Endocrine, Acinar, Endothelial,
@@ -406,8 +408,13 @@ Separate input ids per mode (`traj_feature` vs `traj_ratio_type`) so switching c
 name selected against ratio data, which would silently plot nothing. `traj_validate()` branches
 before checking `var_names`, because cell-type names are deliberately not in the marker list.
 
+The multi-feature heatmap initially selects INS, GCG, SST, CHGA, CD45, CD31, panCK and B3TUBB;
+all 31 markers remain selectable. The scatter uses smaller points and wider vertical display
+jitter to separate overlapping islets. Hover values and LOESS trends use the unjittered data;
+the jitter does not change the fitted pseudotime or exported measurements.
+
 **A ratio does not cure the zero pile-up** -- `log1p(0) = 0`, and Barlow's own Fig 2F has the same
-problem. What reduces it is sampling more cells (hence the core+peri default and the range floor):
+problem. Counting core + peri or raising the range floor can reduce it:
 
 ```
                  core, all   core+peri, all   core+peri, >=25 cells
@@ -417,8 +424,7 @@ CD8a Tcell         0.956         0.864              0.718
 CD4 Tcell          0.993         0.969              0.927
 ```
 
-`output$traj_y_note` prints the exact zero percentage for the current selection and colour-codes it
-(blue < 40%, amber 40-80%, red >= 80% with "the trend line over them is close to meaningless").
+The zero-percentage callout was removed from the tab; the measured comparison remains here for reference.
 
 ### PAGA force-directed layout
 
