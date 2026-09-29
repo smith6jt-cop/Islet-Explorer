@@ -13,6 +13,7 @@ import argparse
 import hashlib
 import json
 import os
+import shutil
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,7 +21,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from common import sha256, write_json
+from common import require_fresh_output, sha256, write_json
 from trajectory import fixed_reference_rank
 
 
@@ -73,31 +74,37 @@ def coordinate_identity(frame: pd.DataFrame) -> str:
 
 
 def clone(source: Path, target: Path) -> tuple[int, int]:
+    source=source.resolve(strict=True)
+    target=require_fresh_output(target,[source])
     linked_files = linked_bytes = 0
+    paths=[p for p in sorted(source.rglob("*"))
+           if p.relative_to(source).as_posix() not in ROOT_FILES_TO_REBUILD
+           and p.relative_to(source).parts[0] not in SKIP_ROOTS]
+    for path in paths:
+        if path.is_symlink() and not path.is_file():
+            raise ValueError(f"Directory or broken symlink cannot be staged: {path}")
     target.mkdir(parents=True)
-    for path in sorted(source.rglob("*")):
+    for path in paths:
         relative = path.relative_to(source)
         if relative.as_posix() in ROOT_FILES_TO_REBUILD or relative.parts[0] in SKIP_ROOTS:
             continue
         destination = target / relative
-        if path.is_symlink():
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            destination.symlink_to(os.readlink(path), target_is_directory=path.is_dir())
-        elif path.is_dir():
+        if path.is_dir():
             destination.mkdir(parents=True, exist_ok=True)
         elif path.is_file():
             destination.parent.mkdir(parents=True, exist_ok=True)
-            os.link(path, destination)
-            linked_files += 1
-            linked_bytes += path.stat().st_size
+            if relative.parts[0] in {"raw", "images"}:
+                os.link(path.resolve(strict=True), destination)
+                linked_files += 1
+                linked_bytes += path.stat().st_size
+            else:
+                shutil.copy2(path, destination)
     return linked_files, linked_bytes
 
 
 def revise(source: Path, target: Path) -> dict:
     source = source.resolve(strict=True)
-    target = target.resolve()
-    if target.exists():
-        raise FileExistsError(f"Fresh output root required: {target}")
+    target = require_fresh_output(target, [source])
     identity = json.loads((source / "candidate.json").read_text())
     manifest = json.loads((source / "manifest.json").read_text())
     if str(identity.get("schema_version")) != "4" or str(manifest.get("schema_version")) != "4":

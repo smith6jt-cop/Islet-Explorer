@@ -7,7 +7,7 @@ import shutil
 from pathlib import Path
 from datetime import datetime, timezone
 import pandas as pd
-from common import require_cohort, sha256, write_json
+from common import require_cohort, require_fresh_output, sha256, write_json
 
 
 def main():
@@ -15,9 +15,8 @@ def main():
     p.add_argument('--input-root', required=True, type=Path)
     p.add_argument('--output-root', required=True, type=Path)
     a = p.parse_args()
-    source, target = a.input_root.resolve(strict=True), a.output_root.resolve()
-    if target.exists():
-        raise ValueError('Use a new revision directory; existing candidates are immutable')
+    source = a.input_root.resolve(strict=True)
+    target = require_fresh_output(a.output_root, [source])
     manifest = json.loads((source/'manifest.json').read_text())
     cohort = pd.read_csv(source/'cohort.csv', dtype=str)
     if len(cohort) != 21 or manifest['expected_images'] != 21:

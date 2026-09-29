@@ -1,5 +1,14 @@
 # All-donor local delivery
 
+## Phase-2 contract — 2026-09-23
+
+The [preservation-first contract](donor_expansion_phase2.md) is authoritative.
+The six additions are staged separately; original 15-donor data are never
+regenerated. Earlier all-21 census, scientific-method and service statements
+below describe historical experiments, not the current default app or an
+accepted expanded release. No optional loader or promotion is approved by raw
+staging alone.
+
 ## Restoration status — 2026-09-23
 
 The local default app is restored at `6b7884b`; the earlier candidate delivery
@@ -10,9 +19,9 @@ evaluation. Its historical restart commands now additionally require
 `--baseline-root` and a passing preservation check. No public service cutover
 or promotion was performed during the restoration.
 
-## Current schema-4 candidate — 2026-09-22
+## Historical schema-4 candidate — 2026-09-22
 
-The shared app at `http://10.15.152.7:8080/islet-explorer/` serves
+At the September 22 checkpoint, the shared app at `http://10.15.152.7:8080/islet-explorer/` served
 `data/development/all-donor-20260922-trajectory-fit-support-v1/`. Nginx on port 8080 is the only
 network-facing route and proxies to the loopback service on
 `127.0.0.1:3840`. The service record contains one-line restart and stop

@@ -9,12 +9,14 @@ overlap. Candidate launch now requires the read-only original-parity gate
 documented in `scripts/research/README.md`. This correction does not redeploy
 or attest to the separately running public service.
 
-Implementation started on 2026-09-20. The current local candidate is
-`data/development/all-donor-20260922-trajectory-fit-support-v1` and now supplies the shared
-workstation app. This remains an execution record, not UFRC or scientific
+The [phase-2 contract](donor_expansion_phase2.md) now governs additions.
+
+Implementation started on 2026-09-20. The historical candidate was
+`data/development/all-donor-20260922-trajectory-fit-support-v1` and supplied the shared
+workstation app at that checkpoint. This remains an execution record, not UFRC or scientific
 acceptance.
 
-## Approved scientific contract
+## Historical all-21 experiment contract (superseded)
 
 The candidate contains seven ND, seven autoantibody-positive and seven T1D
 donors. HPAP-078 provenance remains explicit. Original inputs and the frozen

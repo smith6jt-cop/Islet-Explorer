@@ -23,7 +23,7 @@ import pandas as pd
 import shapely
 from shapely.geometry import shape, mapping
 
-from common import MARKERS, read_cohort, sha256, write_json
+from common import MARKERS, read_cohort, require_fresh_output, sha256, write_json
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -55,9 +55,8 @@ def class_name(feature):
 
 
 def stage(args):
-    prior, out = args.input_root.resolve(strict=True), args.output_root.resolve()
-    if out.exists():
-        raise FileExistsError('A fresh candidate root is required: '+str(out))
+    prior = args.input_root.resolve(strict=True)
+    out = require_fresh_output(args.output_root, [prior])
     cohort = read_cohort(prior/'source_manifest.csv', REPO)
     out.mkdir(parents=True)
     for folder in ['provenance', 'logs', 'runtime', 'raw', 'corrected', 'typing',

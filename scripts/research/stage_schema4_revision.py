@@ -2,19 +2,20 @@
 """Stage a fresh schema-4 revision with immutable inputs hardlinked.
 
 Trajectory, runtime summaries, eligibility records and release manifests are
-omitted because they must be regenerated.  Large raw data, images, corrected
-measurements, cell typing and reviewed geometry are linked read-only by policy;
-all builders replace outputs atomically in the fresh root.
+omitted because they must be regenerated. Only raw data and images are linked
+read-only by policy. Derived files are independent copies, so later ordinary
+writes cannot change their parent revision.
 """
 from __future__ import annotations
 
 import argparse
 import json
 import os
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
-from common import sha256, write_json
+from common import require_fresh_output, sha256, write_json
 
 
 ROOT_FILES_TO_REBUILD = {
@@ -41,9 +42,7 @@ def omitted(relative: Path) -> bool:
 
 def stage(source: Path, target: Path) -> dict:
     source = source.resolve(strict=True)
-    target = target.resolve()
-    if target.exists():
-        raise FileExistsError(f"Fresh output root required: {target}")
+    target = require_fresh_output(target, [source])
     identity = json.loads((source / "candidate.json").read_text())
     manifest = json.loads((source / "manifest.json").read_text())
     if str(identity.get("schema_version")) != "4" or str(manifest.get("schema_version")) != "4":
@@ -51,24 +50,28 @@ def stage(source: Path, target: Path) -> dict:
     if manifest.get("expected_images") != 21:
         raise ValueError("The parent is not the explicit 21-donor candidate")
 
+    paths = [p for p in sorted(source.rglob("*")) if not omitted(p.relative_to(source))]
+    for path in paths:
+        if path.is_symlink() and (not path.is_file() or path.is_dir()):
+            raise ValueError(f"Directory or broken symlink cannot be staged: {path}")
     target.mkdir(parents=True)
     linked_files = 0
     linked_bytes = 0
-    for path in sorted(source.rglob("*")):
+    for path in paths:
         relative = path.relative_to(source)
         if omitted(relative):
             continue
         destination = target / relative
-        if path.is_symlink():
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            destination.symlink_to(os.readlink(path), target_is_directory=path.is_dir())
-        elif path.is_dir():
+        if path.is_dir():
             destination.mkdir(parents=True, exist_ok=True)
         elif path.is_file():
             destination.parent.mkdir(parents=True, exist_ok=True)
-            os.link(path, destination)
-            linked_files += 1
-            linked_bytes += path.stat().st_size
+            if relative.parts[0] in {"raw", "images"}:
+                os.link(path.resolve(strict=True), destination)
+                linked_files += 1
+                linked_bytes += path.stat().st_size
+            else:
+                shutil.copy2(path, destination)
 
     candidate = dict(identity)
     candidate.update(

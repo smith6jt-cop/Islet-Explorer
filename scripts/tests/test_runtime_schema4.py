@@ -116,8 +116,9 @@ def test_schema4_startup_verification_skips_large_immutable_trees():
 
 def test_version_two_reference_percentiles_are_even_and_missing_off_axis():
     coordinates=pd.DataFrame({
+        'islet_id':['a','b','c','d'],
         'pseudotime_raw':[.4,.4,.8,np.nan],
-        'pseudotime_percentile':[1/6,3/6,5/6,np.nan],
+        'pseudotime_percentile':[3/6,1/6,5/6,np.nan],
     })
     validate_reference_percentiles(coordinates,{'reference_percentile_version':2})
     coordinates.loc[1,'pseudotime_percentile']=.4

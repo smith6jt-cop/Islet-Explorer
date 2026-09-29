@@ -20,9 +20,10 @@ typing before composition and fits trajectory from typed counts per canonical
 cell inside the classifier-determined endocrine core. Whole-islet marker averages are excluded from both the
 primary trajectory and Spatial embedding.
 
-## Current offline defaults — 2026-09-22
+## Historical offline defaults — 2026-09-22 (superseded)
 
-The authoritative 21-donor pipeline is [research/README.md](research/README.md).
+Current additions follow [phase 2](../docs/donor_expansion_phase2.md).
+The historical 21-donor experiment is documented in [research/README.md](research/README.md).
 The schema-4 path is `research/reprocess_candidate.py` followed by correction,
 typing, composition, trajectory, `build_islet_embedding.py`, runtime
 materialization, validation and finalization. Every builder requires explicit

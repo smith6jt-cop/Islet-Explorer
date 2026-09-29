@@ -17,6 +17,18 @@ RETAINED = ['Alpha cell','Beta cell','Delta cell','B cell','CD4 Tcell','CD8a Tce
 ENDOCRINE = ['Alpha cell','Beta cell','Delta cell']
 SEED = 20260916
 
+def require_fresh_output(path, sources=()):
+    """Validate before creating anything; reject aliases and recursive staging."""
+    path = Path(path)
+    if path.is_symlink() or path.exists():
+        raise FileExistsError(f'Fresh output root required: {path}')
+    output = path.resolve()
+    for source in sources:
+        source = Path(source).resolve(strict=True)
+        if output == source or output.is_relative_to(source) or source.is_relative_to(output):
+            raise ValueError(f'Output must be separate from source: {source}')
+    return output
+
 def sha256(path):
     h = hashlib.sha256()
     with Path(path).open('rb') as stream:

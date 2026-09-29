@@ -20,7 +20,7 @@ from scipy.spatial.distance import cdist
 from scipy.stats import spearmanr, kruskal
 from sklearn.neighbors import NearestNeighbors
 from threadpoolctl import threadpool_limits
-from common import MARKERS, SEED, sha256, write_json
+from common import MARKERS, SEED, require_cohort, require_fresh_output, sha256, write_json
 from phenotypes import dependencies
 
 MODULES = [set('INS GCG SST CHGA'.split()), set('B3TUBB PGP9.5 GAP43'.split()),
@@ -81,6 +81,18 @@ def _spectral(graph,n_components=10):
     signs=np.sign(psi[np.abs(psi).argmax(axis=0),np.arange(psi.shape[1])]);signs[signs==0]=1
     return vals,psi*signs,q,d
 
+def require_training_donors(frame, supported, minimum=1):
+    """A declared fit cohort may not shrink when measurements are unavailable."""
+    if frame.case_id.isna().any() or frame.case_id.astype(str).str.strip().eq('').any():
+        raise ValueError('Missing trajectory donor identity')
+    expected=set(frame.case_id.astype(str))
+    counts=frame.loc[supported].groupby('case_id').size()
+    supported_donors=set(counts[counts >= minimum].index.astype(str))
+    unsupported=sorted(expected-supported_donors)
+    if not expected or unsupported:
+        raise ValueError(f'Insufficient training support; refusing to remove cohort donors: {unsupported}')
+    return sorted(expected)
+
 def fit(frame,k=15,cap=200,seed=SEED,excluded=(),feature_columns=None,legacy_intensity=False):
     if legacy_intensity:
         cols=features(excluded)
@@ -94,6 +106,8 @@ def fit(frame,k=15,cap=200,seed=SEED,excluded=(),feature_columns=None,legacy_int
             raise ValueError('Outcome exclusion requires rebuilding typing and the endocrine denominator, not column removal')
     missing=set(cols)-set(frame)
     if missing: raise ValueError(f'Missing required trajectory features: {sorted(missing)}')
+    if frame.islet_id.isna().any() or frame.islet_id.astype(str).str.strip().eq('').any():
+        raise ValueError('Missing trajectory IDs')
     if frame.islet_id.duplicated().any(): raise ValueError('Duplicate trajectory IDs')
     feature_supported=frame.eligible & np.isfinite(frame[cols]).all(axis=1)
     if 'trajectory_fit_supported' in frame:
@@ -103,6 +117,7 @@ def fit(frame,k=15,cap=200,seed=SEED,excluded=(),feature_columns=None,legacy_int
         training_supported=declared
     else:
         training_supported=feature_supported
+    require_training_donors(frame,training_supported)
     f=frame.loc[training_supported].sort_values('islet_id').reset_index(drop=True)
     if f.empty: raise ValueError('No eligible islets')
     li=landmarks(f,cap,seed); X=f[cols].to_numpy(float); L=X[li]
@@ -180,12 +195,14 @@ def fixed_reference_rank(values, identifiers):
     plotted outcome. The resulting supported reference coordinates occupy the
     evenly spaced midpoints of N bins on (0, 1).
     """
-    x=np.asarray(values,float);ids=np.asarray(identifiers,dtype=str)
-    if x.shape!=ids.shape:raise ValueError('Reference values and identifiers must align')
+    x=np.asarray(values,float);original_ids=np.asarray(identifiers);ids=np.asarray(identifiers,dtype=str)
+    if x.ndim!=1 or x.shape!=ids.shape:raise ValueError('Reference values and identifiers must align in one dimension')
+    if pd.isna(original_ids).any() or np.any(np.char.strip(ids)==''):
+        raise ValueError('Reference identifiers must not be missing')
+    if len(set(ids))!=len(ids):raise ValueError('Reference identifiers must be unique')
+    if np.isinf(x).any():raise ValueError('Reference values must be finite or missing')
     out=np.full(x.shape,np.nan);finite=np.flatnonzero(np.isfinite(x))
     if not len(finite):return out
-    finite_ids=ids[finite]
-    if len(set(finite_ids))!=len(finite_ids):raise ValueError('Reference identifiers must be unique')
     order=sorted(finite,key=lambda i:(x[i],hashlib.sha256(ids[i].encode()).digest(),ids[i]))
     out[np.asarray(order,int)]=(np.arange(len(order),dtype=float)+.5)/len(order)
     return out
@@ -312,6 +329,22 @@ def _validation_one(frame,reference,family,name,params,training,feature_columns)
     return dict(family=family,replicate=name,seconds=time.monotonic()-start,**score)
 
 
+def validation_fingerprint(frame, reference, columns):
+    """Include fit selection, reference coordinates, software and deterministic seed."""
+    digest=hashlib.sha256()
+    selected=['islet_id','case_id','area_um2','eligible']
+    selected += [c for c in ['trajectory_feature_supported','trajectory_fit_supported'] if c in frame]
+    for table in [frame[selected+columns],reference]:
+        digest.update(json.dumps({'columns':list(table.columns),'dtypes':list(map(str,table.dtypes)),
+                                  'rows':len(table)},sort_keys=True).encode())
+        digest.update(pd.util.hash_pandas_object(table,index=False).to_numpy().tobytes())
+    digest.update(json.dumps(dict(seed=SEED,runner_sha256=sha256(__file__),
+        common_sha256=sha256(Path(__file__).with_name('common.py')),
+        versions={p:importlib.metadata.version(p) for p in ['numpy','scipy','pandas','scikit-learn','joblib']}),
+        sort_keys=True).encode())
+    return digest.hexdigest()
+
+
 def validate(frame,reference,bootstrap=200,feature_columns=None,workers=1,checkpoint_root=None):
     from joblib import Parallel,delayed
     donors=sorted(frame.case_id.unique());rng=np.random.default_rng(SEED)
@@ -327,15 +360,14 @@ def validate(frame,reference,bootstrap=200,feature_columns=None,workers=1,checkp
     checkpoint=Path(checkpoint_root) if checkpoint_root else None
     if checkpoint:checkpoint.mkdir(parents=True,exist_ok=True)
     columns=list(feature_columns) if feature_columns is not None else sorted(c for c in frame if c.startswith(('core__count__','peri__count__')))
-    payload=pd.util.hash_pandas_object(frame[['islet_id','case_id','area_um2','eligible']+columns],index=False).to_numpy().tobytes()
-    fingerprint=hashlib.sha256(payload+json.dumps(columns).encode()+sha256(__file__).encode()).hexdigest()
+    fingerprint=validation_fingerprint(frame,reference,columns)
     def run(spec):
         family,name,params,training=spec;path=checkpoint/f'{family}-{name}.json' if checkpoint else None
         if path and path.exists():
             saved=json.loads(path.read_text())
-            if saved.get('input_fingerprint')==fingerprint:return saved['result']
+            if saved.get('input_fingerprint')==fingerprint and saved.get('parameters')==params:return saved['result']
         record=_validation_one(frame,reference,family,name,params,training,feature_columns)
-        if path:write_json(path,dict(input_fingerprint=fingerprint,result=record))
+        if path:write_json(path,dict(input_fingerprint=fingerprint,parameters=params,result=record))
         print(f'{family} {name}: {record.get("absolute_spearman")}',flush=True)
         return record
     return Parallel(n_jobs=workers)(delayed(run)(spec) for spec in specifications)
@@ -353,26 +385,30 @@ def apply_identity_review(frame, review, geometry_hashes):
         raise ValueError('Reviewed geometry differs from the feature source; rebuild geometry-dependent measurements')
     if review.loc[review.decision=='confirmed_islet','review_note'].fillna('').str.strip().eq('').any():
         raise ValueError('Confirmed islets require a recorded review note')
-    out=frame.merge(review[['islet_id','decision']],on='islet_id',validate='one_to_one',sort=False)
-    out['prescreen_eligible']=out.eligible
-    out['eligible']=out.eligible & out.decision.eq('confirmed_islet')
-    out.loc[out.decision!='confirmed_islet','exclusion_reason']='islet_identity_'+out.loc[out.decision!='confirmed_islet','decision']
-    if set(out.loc[out.eligible,'case_id']) != set(frame.case_id):
-        raise ValueError('Every cohort donor needs reviewed eligible islets before a new all-donor fit')
+    out=frame.merge(review[['islet_id','decision','review_note']].rename(columns={
+        'decision':'identity_review_decision','review_note':'identity_review_note'}),
+        on='islet_id',validate='one_to_one',sort=False)
+    # This annotation cannot override classifier eligibility, feature support,
+    # training support, or their exclusion reasons. Revised geometry requires
+    # new measurements in an isolated revision, not an eligibility back door.
     return out
 
-def main():
+def main(argv=None):
     p=argparse.ArgumentParser();p.add_argument('--input-root',required=True);p.add_argument('--output-root',required=True)
     p.add_argument('--islet-review',help='Optional geometry-bound review; no blanket fresh review requirement')
     p.add_argument('--bootstrap',type=int,default=200);p.add_argument('--workers',type=int,default=1)
-    args=p.parse_args();source=Path(args.input_root);out=Path(args.output_root);out.mkdir(parents=True,exist_ok=True)
+    args=p.parse_args(argv);source=Path(args.input_root).resolve(strict=True)
+    out=require_fresh_output(args.output_root,[source])
     feature_path=source/'trajectory/composition_features.parquet';manifest_path=source/'trajectory/feature_manifest.json'
     manifest=json.loads(manifest_path.read_text())
     if manifest.get('schema_version')!=4 or manifest.get('representation')!='typed_composition':
         raise ValueError('Runtime v4 requires the explicit post-typing composition feature manifest')
     if manifest.get('features_sha256')!=sha256(feature_path):raise ValueError('Composition features changed after manifest creation')
     frame=pd.read_parquet(feature_path);frame['case_id']=frame.case_id.astype(str);columns=manifest['columns']
-    if (out/'coordinates.csv').exists():raise ValueError('Preserve the previous fit; select a new trajectory output directory')
+    cohort=pd.read_csv(source/'cohort.csv',dtype={'case_id':str})
+    if cohort.case_id.isna().any() or cohort.case_id.duplicated().any():
+        raise ValueError('Missing or duplicate declared cohort donors')
+    require_cohort(frame,cohort.case_id)
     if args.islet_review:
         review=pd.read_csv(args.islet_review,dtype={'case_id':str})
         sources=pd.read_csv(source/'source_manifest.csv',dtype=str)
@@ -392,16 +428,8 @@ def main():
     recorded_fit_support=frame.trajectory_fit_supported.fillna(False).astype(bool)
     if not np.array_equal(expected_fit_support.to_numpy(),recorded_fit_support.to_numpy()):
         raise ValueError('Recorded trajectory graph-training support differs from the fixed technical rule')
-    eligible_counts=frame.loc[recorded_fit_support].groupby('case_id').size()
-    # Fit the fixed specification on donors with enough eligible islets for
-    # k=15 landmark neighbors. Donors without that support remain explicit
-    # unsupported observations; they are never forced onto the axis.
-    fit_donors=eligible_counts[eligible_counts >= 2].index.astype(str)
-    unsupported=sorted(set(frame.case_id)-set(fit_donors))
-    if len(fit_donors) < 2:
-        write_json(out/'validation.json',dict(status='unavailable',reason='Insufficient supported donors for k=15',unsupported_donors=unsupported))
-        raise ValueError(f'Insufficient supported donors for trajectory fit: {unsupported}')
-    frame=frame[frame.case_id.isin(fit_donors)].copy()
+    fit_donors=require_training_donors(frame,recorded_fit_support,minimum=2)
+    unsupported=[]
     # Eligibility comes from the classifier geometry and core-cell census.
     # The graph is trained on technically supported islets, then every eligible
     # islet with a complete typed-composition vector is Nyström-projected into
@@ -409,6 +437,12 @@ def main():
     fit_columns=list(primary_columns)
     if not feature_supported.any(): raise ValueError('No feature-supported eligible islets')
     with threadpool_limits(limits=1):coords,model=fit(frame,feature_columns=fit_columns)
+    require_cohort(coords,cohort.case_id)
+    if set(coords.islet_id)!=set(frame.islet_id) or len(coords)!=len(frame):
+        raise ValueError('Trajectory fit lost source islets')
+    out.mkdir(parents=True)
+    if args.islet_review:
+        review.to_csv(out/'identity_review.csv',index=False)
     coords.to_csv(out/'coordinates.csv',index=False);coords.to_parquet(out/'coordinates.parquet',index=False)
     layout=graph_layout(frame,coords,model);layout.to_csv(out/'graph_layout.csv',index=False);layout.to_parquet(out/'graph_layout.parquet',index=False)
     sparse.save_npz(out/'graph.npz',model['graph']);coo=sparse.triu(model['graph'],k=1).tocoo()
@@ -417,6 +451,8 @@ def main():
     spec={k:v for k,v in model.items() if not isinstance(v,(np.ndarray,sparse.spmatrix))}
     spec.update(schema_version=4,method='anisotropic cosine kNN diffusion, multiscale distance, Nystrom extension',
                 orientation='arbitrary hash endpoint; not elapsed disease time',runner_sha256=sha256(__file__),
+                identity_review_sha256=sha256(args.islet_review) if args.islet_review else None,
+                identity_review_role='annotation only; cannot override classifier eligibility or training support',
                 features_sha256=sha256(feature_path),feature_manifest_sha256=sha256(manifest_path),
                 versions={p:importlib.metadata.version(p) for p in ['numpy','scipy','pandas','scikit-learn','shapely']},
                 preprocessing='post-typing log1p(validated base-type count/classifier-defined core cell count); train on valid cores with at least 10 measured cells; landmark median/IQR scaling; project all eligible feature-supported islets',

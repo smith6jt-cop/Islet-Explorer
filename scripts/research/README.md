@@ -25,7 +25,11 @@ before creating a snapshot, changing preview files, or stopping a service.
 Passing preservation alone does not establish scientific acceptance or approve
 promotion. Existing candidate services are not changed by running this audit.
 
-**2026-09-22 implementation status:** trajectory follows cell typing and uses
+**Current contract:** [phase 2](../../docs/donor_expansion_phase2.md) preserves
+the original 15 donors exactly and stages the six additions separately. All
+schema-4 descriptions below are historical experimental records.
+
+**Historical 2026-09-22 implementation status:** trajectory follows cell typing and uses
 cell-type composition per canonical cell in the classifier-determined endocrine
 core. The nine explicitly required
 markers participate through the versioned typing requirements and refinement
@@ -34,13 +38,13 @@ paths. See the
 and `cell_typing_requirements-v1.json`. Whole-islet marker averages are not
 trajectory or Spatial-embedding features.
 
-The authoritative input selection is `cohort-v1.csv`: 21 donors, seven ND,
+The historical all-21 input selection is `cohort-v1.csv`: 21 donors, seven ND,
 seven Aab-positive and seven T1D, including HPAP-078 (analysis ID `78`, image
 ID `0078`). Paths are resolved against an explicit repository root; external
 regional exports have explicit absolute paths. Corrected 6539 is selected from
 the recovery tree. The rejected duplicate is never selected.
 
-The current candidate is `data/development/all-donor-20260922-trajectory-fit-support-v1/`; the preceding
+The historical candidate is `data/development/all-donor-20260922-trajectory-fit-support-v1/`; the preceding
 dated candidates and frozen original are preserved. Raw H5ADs,
 geometry, regional exports and TIFFs are immutable hardlinks; revised derived
 files are independent copies. **Never edit linked inputs.** Compatibility schema 3
@@ -74,52 +78,18 @@ provenance. It preserves the raw diffusion coordinate byte-for-value and
 requires a new output root. Run finalization and independent validation before
 serving that revision.
 
-## Reproduction
+## Phase-2 reproduction
 
-Use the installed analysis interpreter or an environment matching the versions
-in `trajectory/specification.json`. This workflow does not require Hugging Face
-services, remote training or scVI.
+Follow [the current contract](../../docs/donor_expansion_phase2.md). The former
+all-21 build/preview recipe has been withdrawn: it mixed schema generations,
+regenerated original identities, and did not pass the preservation gate. The
+restored app does not load the quarantined schema-4 helpers. Do not use the
+historical utilities below to promote an expanded release.
 
-```bash
-PY=/home/smith6jt/miniconda3/envs/scvi-env/bin/python
-REPO=/data/panc_CODEX/Islet-Explorer
-CANDIDATE="$REPO/data/development/all-donor-next"
-REPORTS="$REPO/data/reports/all-donor-research/next"
-ISLET_REVIEW="$REPO/data/reviews/islet-identity-next/islet_review_decisions.csv"
-GATE_REGISTRY="$REPO/data/reviews/phenotype-gates-next/gate_registry.csv"
-
-# Use a NEW output directory for a fresh build. --resume accepts the same
-# manifest and builder identity and reuses completed donor checkpoints.
-"$PY" scripts/research/build_candidate.py --cohort scripts/research/cohort-v1.csv \
-  --input-root "$REPO" --output-root "$CANDIDATE" --gate-registry "$GATE_REGISTRY"
-"$PY" scripts/research/prepare_preview.py --cohort scripts/research/cohort-v1.csv \
-  --input-root "$REPO" --output-root "$CANDIDATE"
-# Supply completed identity decisions tied to this exact source geometry.
-"$PY" scripts/research/trajectory.py --input-root "$CANDIDATE" \
-  --output-root "$CANDIDATE/trajectory" --islet-review "$ISLET_REVIEW"
-"$PY" scripts/research/run_hypotheses.py --input-root "$CANDIDATE" \
-  --registry scripts/research/hypotheses-v1.json --report-root "$REPORTS"
-"$PY" scripts/research/endocrine_profiles.py --input-root "$CANDIDATE" --report-root "$REPORTS"
-"$PY" scripts/research/structural_coupling.py --cohort scripts/research/cohort-v1.csv \
-  --input-root "$REPO" --output-root "$CANDIDATE" --report-root "$REPORTS"
-OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 "$PY" scripts/research/extended_tests.py --input-root "$CANDIDATE" --report-root "$REPORTS"
-"$PY" scripts/research/check_influence.py --input-root "$CANDIDATE" --report-root "$REPORTS"
-"$PY" scripts/research/build_cell_lookup.py --input-root "$CANDIDATE"
-RETICULATE_PYTHON="$PY" Rscript scripts/research/build_runtime.R "$REPO" "$CANDIDATE"
-"$PY" scripts/research/validate_candidate.py --input-root "$CANDIDATE" --report-root "$REPORTS"
-"$PY" scripts/research/finalize_candidate.py --input-root "$CANDIDATE"
-python3 scripts/research/serve_preview.py --data-root "$CANDIDATE" \
-  --app-root "$REPO/app/shiny_app" --python "$PY"
-```
-
-The preview can be staged before offline analysis completes. Its initial
-`candidate.json` explicitly prohibits production use. The launcher chooses the
-first free loopback port at 3838 or above, writes `preview/service.json`, and
-starts a separate Shiny Server with its own logs and application snapshot.
-`--restart` stops only the process matching that candidate's recorded server
-configuration. Preserve other services. Do not pass the unfinished candidate
-to production: both the R backend and deployment verifier reject schema-2/3
-data without scientific acceptance.
+Phase-2 staging and verification commands are recorded in the current contract.
+They create offline raw-only artifacts. Scientific method recovery and compatible
+projection are prerequisites to any optional loader; there is no current
+promotion command for this bundle.
 
 ## Revise counts and prepare review material
 

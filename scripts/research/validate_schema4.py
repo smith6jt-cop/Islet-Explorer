@@ -1,6 +1,7 @@
 """Independent schema-4 validation of native cell universes and typed endpoints."""
 from __future__ import annotations
 import json
+import hashlib
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -53,13 +54,26 @@ def validate_reference_percentiles(coordinates, specification):
     """Validate the version-2 fixed reference display rank."""
     if specification.get('reference_percentile_version') != 2:
         return
-    finite=coordinates.pseudotime_raw.notna()
+    if ('islet_id' not in coordinates or coordinates.islet_id.isna().any()
+            or coordinates.islet_id.astype(str).str.strip().eq('').any()
+            or coordinates.islet_id.astype(str).duplicated().any()):
+        raise ValueError('Reference rank requires unique nonmissing islet identities')
+    raw=coordinates.pseudotime_raw.to_numpy(float)
+    if np.isinf(raw).any():raise ValueError('Infinite raw reference coordinates')
+    finite=np.isfinite(raw)
     if not coordinates.loc[~finite,'pseudotime_percentile'].isna().all():
         raise ValueError('Unsupported coordinates received a reference percentile')
     observed=np.sort(coordinates.loc[finite,'pseudotime_percentile'].to_numpy(float))
     expected=(np.arange(len(observed),dtype=float)+.5)/len(observed)
     if not len(observed) or not np.allclose(observed,expected,rtol=0,atol=1e-12):
         raise ValueError('Reference percentiles are not fixed evenly spaced ordinal ranks')
+    # Independent reconstruction: a permutation of the midpoint grid is not
+    # sufficient. Values must follow raw order, then SHA-256 within exact ties.
+    ids=coordinates.islet_id.astype(str).to_numpy()
+    order=sorted(np.flatnonzero(finite),key=lambda i:(raw[i],hashlib.sha256(ids[i].encode()).digest(),ids[i]))
+    assigned=coordinates.iloc[order].pseudotime_percentile.to_numpy(float)
+    if not np.allclose(assigned,expected,rtol=0,atol=1e-12):
+        raise ValueError('Reference percentiles violate raw order or SHA-256 tie order')
 
 
 def validate(root, report_root=None):

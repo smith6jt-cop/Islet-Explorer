@@ -150,15 +150,17 @@ class ResearchContract(unittest.TestCase):
             self.assertFalse(os.path.samefile(source,copy))
             with self.assertRaises(ValueError):offline_report_root(root,root/'research')
 
-    def test_unreviewed_islet_candidates_cannot_enter_new_fit(self):
+    def test_identity_review_cannot_override_classifier_eligibility(self):
         frame=sample(40);review=frame[['islet_id','case_id']].copy()
         review['decision']='confirmed_islet';review['geometry_sha256']='geometry';review['review_note']='Reviewed matching marker channels and tissue context'
         hashes={str(i):'geometry' for i in range(4)}
         review.loc[0,'decision']='non_islet'
         reviewed=apply_identity_review(frame,review,hashes)
-        self.assertFalse(reviewed.loc[reviewed.islet_id==frame.islet_id.iloc[0],'eligible'].iloc[0])
+        pd.testing.assert_series_equal(reviewed.eligible,frame.eligible)
+        self.assertEqual(reviewed.identity_review_decision.iloc[0],'non_islet')
         review.loc[review.case_id=='3','decision']='unreviewed'
-        with self.assertRaisesRegex(ValueError,'Every cohort donor'):apply_identity_review(frame,review,hashes)
+        reviewed=apply_identity_review(frame,review,hashes)
+        pd.testing.assert_frame_equal(reviewed[frame.columns],frame)
         review['decision']='confirmed_islet';review.loc[0,'geometry_sha256']='modified'
         with self.assertRaisesRegex(ValueError,'geometry differs'):apply_identity_review(frame,review,hashes)
 

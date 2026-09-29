@@ -6,9 +6,9 @@ This file provides guidance to Claude Code when working with this repository.
 
 The default app and original pipeline entry points are restored from `000e970`.
 The owner requires exact preservation of the original 15 donors and their
-islet identities and values. The schema-4 contract below describes the isolated,
-untrusted candidate, not the default app; it requires revision and evaluation
-before reuse. Do not auto-source a candidate profile or overwrite original
+islet identities and values. Historical schema-4 records describe the isolated,
+untrusted experiment, not the default app; they require revision and evaluation
+before reuse under the phase-2 contract. Do not auto-source a candidate profile or overwrite original
 data artifacts. Candidate-only app helpers/tests are quarantined under
 `archive/schema4-before-restore-20260923/`. See the appended verification record
 in `app/shiny_app/docs/trajectory.md`.
@@ -23,42 +23,19 @@ to cell phenotypes. This supersedes the median-intensity fitting specification
 below; conversion is pending. Reconcile prior accepted typing work rather than
 assuming the active 15-marker rules capture it. Preserve the frozen release.
 
-## Current candidate contract — 2026-09-22
+## Current donor-expansion contract — 2026-09-23
 
-Use [scripts/research/README.md](scripts/research/README.md),
-[docs/reprocessing_execution_20260920.md](docs/reprocessing_execution_20260920.md)
-and [docs/all_donor_delivery.md](docs/all_donor_delivery.md) for the schema-4
-21-donor candidate. It includes HPAP-078, retains the retirement policy and
-uses the most recent approved regenerated geometry and typed-cell artifacts.
-Classifier eligibility has exactly two requirements: the endocrine
-pixel-classifier core does not contact an image edge, and at least one canonical
-cell centroid lies inside that core. The candidate contains 11,136 eligible
-islets across every donor; 7,493 have complete typed-composition features and
-7,490 have supported primary coordinates. The diffusion graph is trained on
-the 1,514 islets with valid geometry and at least ten measured core cells,
-using 20 deterministic landmarks per donor, then all feature-supported eligible
-islets are projected into the fixed representation. Typing support may make a
-measurement or coordinate unavailable, but cannot revoke islet eligibility. The saved
-outcome-blind trajectory does not fit scVI/Harmony,
-use an INS/ND root, tune disease ordering, or interpret Aab positivity as a
-clinical stage.
-
-The historical `pseudotime_percentile` column now stores a fixed ordinal
-display rank: raw pseudotime determines order and SHA-256 of the immutable
-islet ID spreads exact raw-coordinate ties. The 7,490 supported observations
-therefore occupy unique midpoint ranks across 0–1. This within-tie display
-order has no biological meaning and must not be used for inference;
-`pseudotime_raw` preserves all exact ties and remains the inferential
-coordinate. Shiny reads both saved coordinates and never reranks after a
-display filter.
-
-Trajectory y values are typed-cell ratios per canonical cell inside the
-classifier-determined endocrine core. A classifier core with no cells is
-ineligible; unavailable phenotype numerators remain missing. Spatial UMAP and
-Leiden read a fixed offline embedding of the 7,493 feature-supported rows. The
-31-marker heatmap is separate from the fit and defaults to typed-population
-expression. Research reports remain outside the app. Historical pipeline
-details below describe the frozen original and must not override this contract.
+[Phase 2](docs/donor_expansion_phase2.md) supersedes the regenerated-all-21
+candidate contract. Preserve the original 15 donors / 5,214 islets exactly,
+including all identities, values, missingness and coordinates. Stage the six
+additions separately as raw data. Their raw measurements and QuPath labels
+cannot substitute for unavailable legacy phenotypes, normalized expression or
+scVI fields. No common trajectory or combined islet count is yet accepted.
+The prior schema-4 geometry, typing and trajectory remain experimental evidence.
+An optional loader requires both parity and scientific validation; default
+promotion additionally requires explicit owner review. Keep the restored app
+and its data unchanged. See the phase-2 document for checkpoint commands and
+remaining scientific dependencies.
 
 ## Project Overview
 
