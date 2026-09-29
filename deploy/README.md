@@ -33,10 +33,11 @@ Six donor additions—HPAP-078, 6090, 6232, 6520, recovered 6539, and
 6558—are staged separately in a raw-only offline bundle. Its 943,068 objects
 and 852 passing original-preservation checks do not make it app-ready:
 `app_ready` and `scientific_acceptance` are false. Five donors still need
-boundary review, and compatible additions-only typing and trajectory
-projection remain unvalidated. There is no approved combined islet count,
-optional loader, or 21-image production release. The earlier schema-2/3/4
-all-donor runtimes and their capacity figures are historical experimental
+boundary review. The exact original phenotype rules, numeric gates, scVI
+weights and preprocessing have not been recovered and verified for their
+typing; a common 21-donor trajectory/UMAP/Leiden refit remains unvalidated.
+There is no approved combined islet count or 21-image production release. The
+earlier schema-2/3/4 all-donor runtimes and their capacity figures are historical experimental
 evidence; see [the phase-2 contract](../docs/donor_expansion_phase2.md).
 Production verification rejects unaccepted expanded manifests, and the
 raw-only bundle has no runtime manifest or app loader.

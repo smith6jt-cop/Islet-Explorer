@@ -42,9 +42,10 @@ The six donor additions—HPAP-078, 6090, 6232, 6520, recovered 6539, and
 6558—are staged only as raw offline evidence. Their bundle contains 943,068
 objects, including 201 wholly unmeasured objects; 852 zero-tolerance checks
 preserve the original donor artifacts. Its recorded `app_ready` and
-`scientific_acceptance` values are both false. No additions-only phenotype,
-normalized-expression, scVI, islet-composition, or compatible trajectory
-method has been accepted. HPAP-078 boundaries are owner-approved; the other
+`scientific_acceptance` values are both false. The exact original phenotype
+rules, numeric gates, scVI weights and preprocessing have not been recovered
+and verified for the additions; no common 21-donor trajectory, UMAP or Leiden
+refit has been accepted. HPAP-078 boundaries are owner-approved; the other
 five donors still need donor-specific visual review. There is no accepted
 combined islet count, optional app loader, or 21-image release. See the
 [phase-2 contract](donor_expansion_phase2.md). Continue request `83810` and
@@ -63,9 +64,9 @@ not current app counts or production acceptance.
 | Input selection and cohort size | Source mix-up resolved: 6090 matches all 36 raw channel planes; 6539 reconstructed and pixel-checked against its distinct raw acquisition. The candidate targets 20 nPOD images plus one HPAP image |
 | Viewer image conversion | Corrected six TIFFs totaled 46,877,746,573 bytes. The historical `reports/image_conversion/reconciled_inventory.json` excluded the duplicate 6539 TIFF; it is not an approved production image manifest |
 | Image preparation and scientific integration | The regenerated candidate retained 3,619,534 canonical raw objects and 3,592,722 archival source objects, including 248 wholly unmeasured canonical objects. It reported 11,944 islet annotations and 31 shared markers. These are not preservation-compatible expansion counts. See [local delivery](all_donor_delivery.md) |
-| Cell-phenotyping provenance | Schema 4 used experimental typed-cell outputs; these do not establish an accepted additions-only typing method. Unsupported identities and marker-positive calls remained unavailable rather than becoming zeros |
+| Cell-phenotyping provenance | Schema 4 used experimental typed-cell outputs; these do not establish equivalence to the original typing rules, gates and scVI model. Unsupported identities and marker-positive calls remained unavailable rather than becoming zeros |
 | Boundary review and integration | The regenerated geometry covered all 21 donors, including 1,431 corrected HPAP-078 annotations. Its original-donor boundaries were not preserved, and scientific/deployment acceptance remained false |
-| Fixed trajectory and Spatial embedding | The experimental classifier flagged 11,136 eligible islets across all 21 donors, with at least 137 per donor; typing did not revoke eligibility. Typed composition was available for 7,493 islets. The diffusion graph trained on 1,514 valid islets and projected feature-supported islets. The primary trajectory supported 7,490 coordinates, median leave-one-donor-out absolute Spearman 0.754 and 67.3% classifier-eligible coverage, below its prespecified stability/coverage checks. Spatial UMAP and four Leiden resolutions used 7,493 feature-supported rows. Orientation was arbitrary; none of these coordinates is an accepted projection onto the preserved 15-donor reference |
+| Fixed trajectory and Spatial embedding | The experimental classifier flagged 11,136 eligible islets across all 21 donors, with at least 137 per donor; typing did not revoke eligibility. Typed composition was available for 7,493 islets. The diffusion graph trained on 1,514 valid islets and projected feature-supported islets. The primary trajectory supported 7,490 coordinates, median leave-one-donor-out absolute Spearman 0.754 and 67.3% classifier-eligible coverage, below its prespecified stability/coverage checks. Spatial UMAP and four Leiden resolutions used 7,493 feature-supported rows. Orientation was arbitrary; these are not an accepted preservation-compatible 21-donor refit |
 | Release count contract | Version-2 `release.env` declares `EXPECTED_IMAGES`; generation checks the staged count. Verification/activation/rollback use the declaration; legacy version-1 releases remain fixed at 15 |
 | Count and recovery tests | Local synthetic image-evidence and recovery suites passed, including 21-image activation, 15-image legacy rollback, missing/duplicate/conflicting count failures, and checksum failures; these did not validate real expanded data |
 | Scientific counts and capacity | The historical runtime measured 188,900,659,274 bytes (175.927 GiB); two full copies would require 377,801,318,548 bytes before frozen releases/reports/OCI/logs/spill. This is not a capacity estimate for a preservation-compatible expansion. Full-worker peak/concurrency and assigned-host tests remained pending |
@@ -91,9 +92,10 @@ A second scientific blocker is recorded in the historical
 `7571b6d:scripts/phenotype_evaluator.py` note: the original rules that produced
 the shipped ECAD-positive/Structural labels were unavailable; v2 rules were a
 reconstruction requiring biological review. The current `data/phenotype_rules.csv`
-cannot produce all 21 shipped labels. The current phase-2 contract requires an
-independently validated additions-only typing method that preserves the original
-donor records. Completing segmentation does not establish equivalent phenotype
+cannot produce all 21 shipped labels. The current phase-2 contract requires
+recovering and verifying the exact original rules, numeric gates and scVI model,
+then applying them to the additions while preserving original donor records.
+Completing segmentation does not establish equivalent phenotype
 assignments. Raw-marker and mask analyses retain explicit limitations;
 certified new-cell phenotypes still require reviewed gate evidence.
 The tested transfer models did not meet their predeclared accuracy/F1/recall
@@ -211,10 +213,11 @@ with 15 approved images. Retain new full checksums, source-to-release parity,
 SBOM/scan, browser, and capacity evidence for that exact revision. The dated
 `5809be4` evidence remains a reference; it does not certify the current UI.
 
-For any later expansion, finish the five donor-specific boundary reviews and
-validate additions-only typing and compatible trajectory projection while
-preserving all original donor records exactly. Only after scientific and owner
-acceptance should a new final image/data inventory, count, capacity estimate,
+For any later expansion, finish the five donor-specific boundary reviews,
+recover and verify the original typing/scVI method and gates, and validate a
+common 21-donor trajectory, UMAP and Leiden refit while preserving original
+IDs, geometry, measurements, missingness and phenotype labels. Only after
+scientific and owner acceptance should a new final image/data inventory, count, capacity estimate,
 and matching release evidence be documented. Do not replace the preserved
 original release or reuse its passing results as expansion evidence.
 

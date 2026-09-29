@@ -489,11 +489,12 @@ Configuration and service continuation may proceed while the release is being bu
 manifest-backed runtime is a production prerequisite. Before promotion it must reproduce
 the selected source's canonical prepared tables and plotted statistics, including row
 counts and identifiers, with exact categorical values and documented numeric tolerance.
-Any future additions-only release must also pass zero-tolerance preservation checks
-for all original donor records and independently validate compatible new-donor typing
-and trajectory projection. The earlier joint refits do not satisfy that contract. If
-parity or scientific acceptance is incomplete, keep the reviewer site closed until a
-validated release exists.
+Any future expansion release must also pass zero-tolerance preservation checks
+for original IDs, geometry, measurements, missingness and phenotype labels,
+apply the verified original rules, gates and scVI model to the additions, and
+validate a common 21-donor trajectory, UMAP and Leiden refit. The earlier joint
+refits do not satisfy that contract. If parity or scientific acceptance is
+incomplete, keep the reviewer site closed until a validated release exists.
 
 ## Information UFRC must return or confirm
 
