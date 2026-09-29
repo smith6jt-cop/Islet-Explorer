@@ -1,5 +1,7 @@
 """Small synthetic preservation fixtures; never write to the project data tree."""
+from contextlib import redirect_stdout
 import hashlib
+from io import StringIO
 import json
 from pathlib import Path
 import sys
@@ -20,15 +22,27 @@ def write_fixture(root, donors=(1, 1, 2), ids=("1_a", "1_b", "2_c")):
     n = len(ids)
     obs = pd.DataFrame({"imageid": donors, "combined_islet_id": ids,
                         "measurement": np.arange(n, dtype=float),
-                        "nullable": [np.nan] + [1.0] * (n - 1)}, index=ids)
+                        "centroid_x": np.arange(n, dtype=float) * 10,
+                        "count_Beta cell": np.arange(n, dtype=float),
+                        "nullable": [np.nan] + [1.0] * (n - 1),
+                        "dpt_pseudotime": np.arange(n, dtype=float) / n,
+                        "dpt_pseudotime_quality": np.ones(n, dtype=float),
+                        "leiden_0.3": [str(i % 2) for i in range(n)]}, index=ids)
     var = pd.DataFrame({"feature_type": ["protein", "protein"]}, index=["INS", "GCG"])
     matrix = np.arange(n * 2, dtype=float).reshape(n, 2)
     h5ad = ad.AnnData(matrix, obs=obs, var=var)
     h5ad.obsm["X_umap"] = matrix / 2
+    h5ad.obsm["X_scVI_mean"] = matrix / 3
+    h5ad.obsm["X_scVI_harmony_pt"] = matrix / 4
+    h5ad.obsm["X_scVI_combined_harmony_pt"] = matrix / 5
+    h5ad.obsm["phenotype_counts"] = matrix.copy()
+    h5ad.obsm["phenotype_proportions"] = matrix / 10
+    h5ad.obsm["morphology"] = matrix.copy()
     h5ad.obsp["connectivities"] = sparse.eye(n, format="csr")
     h5ad.varm["PCs"] = np.eye(2)
     h5ad.varp["feature_graph"] = sparse.eye(2, format="csr")
     h5ad.uns["neighbors"] = {"params": {"n_neighbors": 15, "metric": "cosine"}}
+    h5ad.uns["source_annotation"] = {"gate": 10}
     h5ad.uns["iroot"] = 0
     h5ad.uns["groovy_composition_columns"] = np.array(["Case ID", "islet_id", "value"])
     h5ad.uns["groovy_composition_Case ID"] = np.asarray(donors)
@@ -70,7 +84,11 @@ class OriginalParityTests(unittest.TestCase):
 
     def test_equal_is_read_only(self):
         before = hashes(self.baseline), hashes(self.candidate)
-        self.assertTrue(audit(self.baseline, self.candidate)["passed"])
+        report = audit(self.baseline, self.candidate)
+        self.assertTrue(report["passed"])
+        self.assertEqual(report["derived_differences"], [])
+        self.assertEqual(report["scope"], "islet_level_canonical_artifacts")
+        self.assertFalse(report["source_cell_parity_checked"])
         self.assertEqual(before, (hashes(self.baseline), hashes(self.candidate)))
 
     def test_appended_donor_and_reordering_pass(self):
@@ -123,12 +141,15 @@ class OriginalParityTests(unittest.TestCase):
         self.mutate_h5ad(modify)
         self.assertRejected("identity")
 
-    def test_changed_original_graph_edge(self):
+    def test_changed_refit_graph_edge_is_reported(self):
         def modify(value):
             value.obsp["connectivities"][0, 0] = 2
             return value
         self.mutate_h5ad(modify)
-        self.assertRejected("obsp/connectivities")
+        report = audit(self.baseline, self.candidate)
+        self.assertTrue(report["passed"], report)
+        self.assertTrue(any("obsp/connectivities" in d["name"]
+                            for d in report["derived_differences"]), report)
 
     def test_missing_embedded_table_column(self):
         def modify(value):
@@ -137,21 +158,108 @@ class OriginalParityTests(unittest.TestCase):
         self.mutate_h5ad(modify)
         self.assertRejected("comparison")
 
-    def test_changed_fit_metadata_and_root_fail(self):
+    def test_changed_fit_metadata_and_root_are_reported(self):
         def modify(value):
             value.uns["neighbors"]["params"]["n_neighbors"] = 99
             value.uns["iroot"] = 1
             return value
         self.mutate_h5ad(modify)
-        self.assertRejected("uns/neighbors/params/n_neighbors")
-        self.assertRejected("iroot_islet_identity")
+        report = audit(self.baseline, self.candidate)
+        self.assertTrue(report["passed"], report)
+        names = {d["name"] for d in report["derived_differences"]}
+        self.assertIn("adata_ins_root.h5ad/uns/neighbors/params/n_neighbors", names)
+        self.assertIn("adata_ins_root.h5ad/uns/iroot_islet_identity", names)
 
-    def test_changed_variable_loading_fails(self):
+    def test_changed_fit_variable_loading_is_reported(self):
         def modify(value):
             value.varm["PCs"][0, 0] = 2
             return value
         self.mutate_h5ad(modify)
-        self.assertRejected("varm/PCs")
+        report = audit(self.baseline, self.candidate)
+        self.assertTrue(report["passed"], report)
+        self.assertTrue(any("varm/PCs" in d["name"]
+                            for d in report["derived_differences"]), report)
+
+    def test_changed_refit_obs_and_umap_are_reported(self):
+        def modify(value):
+            value.obs.loc["1_a", "dpt_pseudotime"] = 0.9
+            value.obs.loc["1_a", "leiden_0.3"] = "1"
+            value.obsm["X_umap"][0, 0] = 42
+            return value
+        self.mutate_h5ad(modify)
+        report = audit(self.baseline, self.candidate)
+        self.assertTrue(report["passed"], report)
+        names = {d["name"] for d in report["derived_differences"]}
+        self.assertIn("adata_ins_root.h5ad/obs/dpt_pseudotime", names)
+        self.assertIn("adata_ins_root.h5ad/obs/leiden_0.3", names)
+        self.assertIn("adata_ins_root.h5ad/obsm/X_umap", names)
+
+    def test_changed_donor_harmony_embeddings_are_reported(self):
+        def modify(value):
+            value.obsm["X_scVI_harmony_pt"][0, 0] = 42
+            value.obsm["X_scVI_combined_harmony_pt"][0, 0] = 43
+            return value
+        self.mutate_h5ad(modify)
+        report = audit(self.baseline, self.candidate)
+        self.assertTrue(report["passed"], report)
+        names = {d["name"] for d in report["derived_differences"]}
+        self.assertIn("adata_ins_root.h5ad/obsm/X_scVI_harmony_pt", names)
+        self.assertIn("adata_ins_root.h5ad/obsm/X_scVI_combined_harmony_pt", names)
+
+    def test_missing_refit_fields_are_reported(self):
+        def modify(value):
+            del value.obs["dpt_pseudotime"]
+            del value.obsm["X_umap"]
+            del value.obsp["connectivities"]
+            del value.varm["PCs"]
+            del value.uns["neighbors"]
+            del value.uns["iroot"]
+            return value
+        self.mutate_h5ad(modify)
+        report = audit(self.baseline, self.candidate)
+        self.assertTrue(report["passed"], report)
+        missing = {d["name"] for d in report["derived_differences"]
+                   if d["change"] == "missing_in_candidate"}
+        self.assertEqual(missing, {
+            "adata_ins_root.h5ad/obs/dpt_pseudotime",
+            "adata_ins_root.h5ad/obsm/X_umap",
+            "adata_ins_root.h5ad/obsp/connectivities",
+            "adata_ins_root.h5ad/varm/PCs",
+            "adata_ins_root.h5ad/uns/neighbors",
+            "adata_ins_root.h5ad/uns/iroot",
+        })
+
+    def test_missing_nested_refit_metadata_is_reported(self):
+        def modify(value):
+            del value.uns["neighbors"]["params"]["metric"]
+            return value
+        self.mutate_h5ad(modify)
+        report = audit(self.baseline, self.candidate)
+        self.assertTrue(report["passed"], report)
+        self.assertIn({"name": "adata_ins_root.h5ad/uns/neighbors/params/metric",
+                       "change": "missing_in_candidate"}, report["derived_differences"])
+
+    def test_changed_original_geometry_typing_and_scvi_fail(self):
+        def modify(value):
+            value.obs.loc["1_a", "centroid_x"] = 99
+            value.obs.loc["1_b", "count_Beta cell"] = 99
+            value.obs.loc["1_a", "dpt_pseudotime_quality"] = 0
+            value.obsm["phenotype_counts"][0, 0] = 99
+            value.obsm["phenotype_proportions"][0, 0] = 99
+            value.obsm["X_scVI_mean"][0, 0] = 99
+            value.uns["source_annotation"]["gate"] = 99
+            return value
+        self.mutate_h5ad(modify)
+        report = audit(self.baseline, self.candidate)
+        self.assertFalse(report["passed"])
+        failed = {c["name"] for c in report["checks"] if not c["passed"]}
+        self.assertTrue(any(name.endswith("/obs/centroid_x") for name in failed))
+        self.assertTrue(any(name.endswith("/obs/count_Beta cell") for name in failed))
+        self.assertTrue(any(name.endswith("/obs/dpt_pseudotime_quality") for name in failed))
+        self.assertTrue(any(name.endswith("/obsm/phenotype_counts") for name in failed))
+        self.assertTrue(any(name.endswith("/obsm/phenotype_proportions") for name in failed))
+        self.assertTrue(any(name.endswith("/obsm/X_scVI_mean") for name in failed))
+        self.assertTrue(any(name.endswith("/uns/source_annotation/gate") for name in failed))
 
     def test_raw_presence_is_required(self):
         path = self.baseline / "adata_ins_root.h5ad"
@@ -189,6 +297,25 @@ class OriginalParityTests(unittest.TestCase):
         self.assertEqual(main(["--baseline-root", str(self.baseline), "--candidate-root", str(self.candidate),
                                "--report-root", str(output)]), 1)
         self.assertFalse(json.loads((output / "original_subset_parity.json").read_text())["passed"])
+
+    def test_cli_identifies_derived_difference_and_unchecked_source_cells(self):
+        def change_umap(value):
+            value.obsm["X_umap"][0, 0] = 42
+            return value
+        self.mutate_h5ad(change_umap)
+        output = self.root / "report"
+        summary = StringIO()
+        with redirect_stdout(summary):
+            self.assertEqual(main(["--baseline-root", str(self.baseline),
+                                   "--candidate-root", str(self.candidate),
+                                   "--report-root", str(output)]), 0)
+        result = json.loads(summary.getvalue())
+        self.assertTrue(result["passed"])
+        self.assertEqual(result["derived_difference_count"], 1)
+        self.assertFalse(result["source_cell_parity_checked"])
+        saved = json.loads((output / "original_subset_parity.json").read_text())
+        self.assertEqual(saved["derived_difference_count"], 1)
+        self.assertFalse(saved["source_cell_parity_checked"])
 
 
 if __name__ == "__main__":

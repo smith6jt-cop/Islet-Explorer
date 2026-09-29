@@ -1,16 +1,22 @@
 #!/usr/bin/env python3
-"""Fail closed unless a candidate preserves the original donor/islet values.
+"""Check original-donor source records while allowing joint derived refits.
 
 The gate aligns rows by identity, never by order. Original-donor islet additions,
 removals and duplicate identities fail. New donors and new fields are permitted;
-every original field, missing value, expression, embedding and original-to-original
-graph edge must remain equal. Absolute numeric tolerance defaults to zero (rtol=0).
-Original fit metadata in uns must also remain unchanged; new keys are permitted.
+original identities, geometry, measurements, missingness, phenotype composition
+and the unharmonized scVI latent must remain equal. Only explicitly named
+trajectory, UMAP, Leiden, donor-batch Harmony and supporting fit fields may differ;
+their differences are reported separately and do not fail source-record parity.
+Absolute numeric tolerance defaults to zero (rtol=0). New keys are permitted.
 No mapping from regenerated schema-4 annotations to frozen islets is invented.
 
 ``audit(baseline_root, candidate_root, atol=0.0)`` is read-only. The CLI alone
 writes a JSON report, exclusively to an explicit directory outside app data and
 both input roots. A missing canonical analogue is a failed/incomparable result.
+The checked artifacts are islet-level H5ADs, embedded tables, Barlow features
+and an optional workbook. This gate does not check the original single-cell
+H5ADs; source-cell identity, measurements and labels require separate parity
+evidence before any 21-donor integration.
 """
 from __future__ import annotations
 
@@ -27,6 +33,29 @@ from scipy import sparse
 
 DONOR_COLUMNS = ("imageid", "case_id", "Case ID")
 ARTIFACTS = ("adata_ins_root.h5ad", "islet_explorer.h5ad", "barlow_islet_features.csv")
+
+# Explicit allowlists from the frozen 15-donor H5ADs. These are results of a
+# cohort fit, not measurements or cell-type assignments. Unknown baseline fields
+# continue to require exact parity, including X_scVI_mean and phenotype arrays.
+DERIVED_OBS_COLUMNS = frozenset({
+    "dpt_pseudotime", "dpt_pseudotime_combined", "dpt_pseudotime_small",
+    "dpt_pseudotime_large", "DC1", "DC2", "DC1_combined", "DC2_combined",
+    "leiden_0.3", "leiden_0.5", "leiden_0.8", "leiden_1.0",
+    "leiden_umap_1", "leiden_umap_2",
+})
+DERIVED_OBSM_KEYS = frozenset({
+    "X_diffmap", "X_pca", "X_umap", "X_scVI_harmony_pt",
+    "X_scVI_combined_harmony_pt",
+})
+DERIVED_OBSP_KEYS = frozenset({
+    "connectivities", "distances", "neighbors_viz_connectivities",
+    "neighbors_viz_distances",
+})
+DERIVED_VARM_KEYS = frozenset({"PCs"})
+DERIVED_UNS_KEYS = frozenset({
+    "diffmap_evals", "donor_status_sizes", "iroot", "neighbors",
+    "neighbors_viz", "paga", "pca", "split_pseudotime", "umap",
+})
 
 
 def donor_id(value: Any) -> str:
@@ -108,12 +137,50 @@ def compare_values(report: dict, name: str, left, right, atol: float) -> None:
            max_absolute_difference=maximum)
 
 
+def _derived_missing(report: dict, name: str) -> None:
+    report["derived_differences"].append({"name": name, "change": "missing_in_candidate"})
+
+
+def compare_derived_values(report: dict, name: str, left, right, atol: float) -> None:
+    """Record an allowed refit difference without turning it into a parity pass."""
+    comparison = {"checks": []}
+    compare_values(comparison, name, left, right, atol)
+    result = comparison["checks"][0]
+    if not result["passed"]:
+        report["derived_differences"].append({
+            "name": name, "change": "changed",
+            **{key: value for key, value in result.items() if key not in {"name", "passed"}},
+        })
+
+
+def compare_derived_metadata(report: dict, name: str, left, right, atol: float) -> None:
+    if isinstance(left, dict):
+        if not isinstance(right, dict):
+            report["derived_differences"].append({"name": name, "change": "type_changed"})
+            return
+        for key, value in left.items():
+            child = name + "/" + str(key)
+            if key not in right:
+                _derived_missing(report, child)
+            else:
+                compare_derived_metadata(report, child, value, right[key], atol)
+    else:
+        compare_derived_values(report, name, left, right, atol)
+
+
 def compare_frame_values(report: dict, name: str, left: pd.DataFrame,
-                         right: pd.DataFrame, atol: float) -> None:
-    missing = sorted(set(left.columns) - set(right.columns))
+                         right: pd.DataFrame, atol: float,
+                         derived_columns: frozenset[str] = frozenset()) -> None:
+    missing = sorted(set(left.columns) - set(right.columns) - derived_columns)
     _check(report, name + "/required_columns", not missing, missing_columns=missing)
     for column in left.columns:
-        if column in right:
+        if column in derived_columns:
+            if column not in right:
+                _derived_missing(report, name + "/" + str(column))
+            else:
+                compare_derived_values(report, name + "/" + str(column),
+                                       left[column].to_numpy(), right[column].to_numpy(), atol)
+        elif column in right:
             compare_values(report, name + "/" + str(column), left[column].to_numpy(),
                            right[column].to_numpy(), atol)
 
@@ -195,7 +262,8 @@ def compare_h5ad(report: dict, name: str, left, right, donors: set[str], atol: f
     if aligned is None:
         return
     a, b = aligned
-    compare_frame_values(report, name + "/obs", left.obs.iloc[a], right.obs.iloc[b], atol)
+    compare_frame_values(report, name + "/obs", left.obs.iloc[a], right.obs.iloc[b],
+                         atol, DERIVED_OBS_COLUMNS)
     compare_values(report, name + "/obs_names", left.obs_names.to_numpy()[a], right.obs_names.to_numpy()[b], atol)
     vars_ok = left.var_names.is_unique and right.var_names.is_unique and left.var_names.isin(right.var_names).all()
     _check(report, name + "/var_identity", vars_ok,
@@ -212,12 +280,23 @@ def compare_h5ad(report: dict, name: str, left, right, donors: set[str], atol: f
         for slot in ("varm", "varp"):
             x, y = getattr(left, slot), getattr(right, slot)
             for key in x:
-                _check(report, name + "/" + slot + "/" + key + "/present", key in y)
-                if key in y:
+                field = name + "/" + slot + "/" + key
+                derived = slot == "varm" and key in DERIVED_VARM_KEYS
+                if key not in y:
+                    if derived:
+                        _derived_missing(report, field)
+                    else:
+                        _check(report, field + "/present", False)
+                else:
+                    if not derived:
+                        _check(report, field + "/present", True)
                     candidate = y[key][v]
                     if slot == "varp":
                         candidate = candidate[:, v]
-                    compare_values(report, name + "/" + slot + "/" + key, x[key], candidate, atol)
+                    if derived:
+                        compare_derived_values(report, field, x[key], candidate, atol)
+                    else:
+                        compare_values(report, field, x[key], candidate, atol)
     if left.raw is not None:
         _check(report, name + "/raw/present", right.raw is not None)
         if right.raw is not None:
@@ -226,12 +305,23 @@ def compare_h5ad(report: dict, name: str, left, right, donors: set[str], atol: f
     for slot in ("obsm", "obsp"):
         x, y = getattr(left, slot), getattr(right, slot)
         for key in x:
-            _check(report, name + "/" + slot + "/" + key + "/present", key in y)
-            if key in y:
+            field = name + "/" + slot + "/" + key
+            derived = key in (DERIVED_OBSM_KEYS if slot == "obsm" else DERIVED_OBSP_KEYS)
+            if key not in y:
+                if derived:
+                    _derived_missing(report, field)
+                else:
+                    _check(report, field + "/present", False)
+            else:
+                if not derived:
+                    _check(report, field + "/present", True)
                 left_value, right_value = x[key][a], y[key][b]
                 if slot == "obsp":
                     left_value, right_value = left_value[:, a], right_value[:, b]
-                compare_values(report, name + "/" + slot + "/" + key, left_value, right_value, atol)
+                if derived:
+                    compare_derived_values(report, field, left_value, right_value, atol)
+                else:
+                    compare_values(report, field, left_value, right_value, atol)
     original_tables, candidate_tables = _uns_tables(left), _uns_tables(right)
     for table, values in original_tables.items():
         _check(report, name + "/uns/" + table + "/present", table in candidate_tables)
@@ -244,16 +334,30 @@ def compare_h5ad(report: dict, name: str, left, right, donors: set[str], atol: f
     for key, value in left.uns.items():
         if key in table_keys_used:
             continue
-        _check(report, name + "/uns/" + key + "/present", key in right.uns)
+        field = name + "/uns/" + key
+        derived = key in DERIVED_UNS_KEYS
         if key not in right.uns:
+            if derived:
+                _derived_missing(report, field)
+            else:
+                _check(report, field + "/present", False)
             continue
+        if not derived:
+            _check(report, field + "/present", True)
         if key == "iroot":
             # iroot is a row index: compare the identified islet after reordering.
-            compare_values(report, name + "/uns/iroot_islet_identity",
-                           np.asarray(left.obs[identity].iloc[int(value)]),
-                           np.asarray(right.obs[identity].iloc[int(right.uns[key])]), atol)
+            try:
+                original_root = np.asarray(left.obs[identity].iloc[int(value)])
+                candidate_root = np.asarray(right.obs[identity].iloc[int(right.uns[key])])
+                compare_derived_values(report, name + "/uns/iroot_islet_identity",
+                                       original_root, candidate_root, atol)
+            except (IndexError, TypeError, ValueError) as error:
+                report["derived_differences"].append({
+                    "name": field, "change": "invalid_root_index", "reason": str(error)})
+        elif derived:
+            compare_derived_metadata(report, field, value, right.uns[key], atol)
         else:
-            compare_metadata(report, name + "/uns/" + key, value, right.uns[key], atol)
+            compare_metadata(report, field, value, right.uns[key], atol)
 
 
 def _candidate_census(report: dict, baseline, candidate_root: Path, donors: set[str]) -> None:
@@ -290,11 +394,17 @@ def _candidate_census(report: dict, baseline, candidate_root: Path, donors: set[
 
 
 def audit(baseline_root, candidate_root, atol: float = 0.0) -> dict:
-    """Read-only preservation gate; the returned ``passed`` is safe for preflight."""
+    """Read-only islet-artifact gate; ``passed`` does not certify cell-level parity."""
     baseline_root, candidate_root = Path(baseline_root).resolve(), Path(candidate_root).resolve()
-    report = {"schema_version": 1, "baseline_root": str(baseline_root),
+    report = {"schema_version": 2, "baseline_root": str(baseline_root),
               "candidate_root": str(candidate_root), "numeric_atol": atol, "numeric_rtol": 0,
-              "checks": [], "passed": False}
+              "scope": "islet_level_canonical_artifacts",
+              "source_cell_parity_checked": False,
+              "source_cell_parity_requirement": (
+                  "Check original single-cell IDs, measurements, missingness and labels "
+                  "separately before 21-donor integration"),
+              "checks": [], "derived_differences": [], "derived_difference_count": 0,
+              "passed": False}
     if not math.isfinite(atol) or atol < 0:
         _check(report, "numeric_tolerance", False, reason="atol must be finite and nonnegative")
         return report
@@ -342,6 +452,7 @@ def audit(baseline_root, candidate_root, atol: float = 0.0) -> dict:
     except Exception as error:
         _check(report, "baseline_readable", False, reason=str(error))
     report["passed"] = bool(report["checks"]) and all(c["passed"] for c in report["checks"])
+    report["derived_difference_count"] = len(report["derived_differences"])
     return report
 
 
@@ -364,7 +475,10 @@ def main(argv=None) -> int:
         json.dump(report, handle, indent=2, allow_nan=False)
         handle.write("\n")
     print(json.dumps({"passed": report["passed"], "checks": len(report["checks"]),
-                      "failures": sum(not c["passed"] for c in report["checks"]), "report": str(path)}))
+                      "failures": sum(not c["passed"] for c in report["checks"]),
+                      "derived_difference_count": report["derived_difference_count"],
+                      "source_cell_parity_checked": report["source_cell_parity_checked"],
+                      "report": str(path)}))
     return 0 if report["passed"] else 1
 
 

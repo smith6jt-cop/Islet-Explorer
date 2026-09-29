@@ -19,9 +19,11 @@ python scripts/research/audit_original_parity.py \
   --report-root tmp/original-parity-20260923
 ```
 
-The exact default tolerance is zero. Missing original fields or artifacts,
-changed values or missingness, duplicate IDs, and replaced/added islets from
-original donors fail the gate. A failed comparison is not permission to rename
+The exact default tolerance is zero for original source-record fields. Missing
+required source fields or artifacts, changed measurements or missingness,
+duplicate IDs, and replaced/added islets from original donors fail the gate.
+Explicit trajectory/UMAP/Leiden refit fields may differ and are reported
+separately. A failed comparison is not permission to rename
 regenerated islets or substitute raw intensities for legacy normalized values.
 `serve_preview.py` now requires `--baseline-root` and recomputes this comparison
 before creating a snapshot, changing preview files, or stopping a service.
