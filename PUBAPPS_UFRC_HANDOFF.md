@@ -1,13 +1,15 @@
 # Panc Floyd / Islet Explorer UFRC PubApps Request and Reviewer-Hosting Handoff
 
-Local revision update, 2026-09-17: the app on 3839 now uses
-`data/development/all-donor-20260917/`, schema 3, all 31 heatmap markers and
-offline research reports. The owner's QuPath review identified suspect islet
-candidates; scientific acceptance remains false and actual subtype ratios
-remain unavailable. Runtime size is 164,147,382,976 bytes (152.874 GiB), or
-414.799 GiB including the frozen original and one candidate staging copy.
-Fresh implementation, review evidence and local restart instructions are in
-[the revision record](docs/trajectory_revision_20260917.md). Institutional
+Local operating update, 2026-09-28: the development app again serves the
+original 15 donors and 5,214 islets at
+`http://10.15.152.7:8080/islet-explorer/` (nginx to loopback port 3840).
+Its `/local_images/` route still serves an earlier 21-image collection; the
+owner permits that mismatch only during local development. It is not an
+approved expanded app or a production configuration. Six donor additions are
+staged separately as raw-only evidence, with `app_ready: false` and
+`scientific_acceptance: false`. See [the current handoff](docs/HANDOFF_2026-09-28.md)
+and [phase-2 contract](docs/donor_expansion_phase2.md). Earlier regenerated
+21-donor schema-2/3/4 candidates remain historical experiments. Institutional
 status below remains as last verified on 2026-09-16; local checks do not
 establish a new UFRC acceptance.
 
@@ -38,46 +40,38 @@ recurring owner actions and from project recommendations. Project hardening in t
 deployment runbook remains part of this application's release process, but each such
 control is not a separate UFRC approval gate.
 
-Expansion update (2026-09-16): the owner authorized a separate candidate targeting
+Expansion work began on 2026-09-16 with a target of
 21 donor images: the original 15 nPOD donors plus 6090, 6232, 6539, the
 `PAN-6558-AAb_test35_35p-LED.tif` acquisition, 6520-01A, and HPAP-078. The alternate
 `CX_PAN-6558` image and 6520-01B are excluded. HPAP-078 retains its HPAP provenance;
-do not describe the expanded collection as 21 nPOD donors. InstanSeg 0.1.1 image
-preparation and joint cohort refitting are offline development steps, not new
-services on the PubApps VM. Preserve the frozen `5809be4` release and its dated
-15-image evidence. **The 6090/6539 source mix-up is resolved:** 6090 matches all
+do not describe the target as 21 nPOD donors. Image preparation and experimental
+model fitting took place offline, outside PubApps. The current phase-2 contract
+requires preserving the original 15 donors exactly and adding only independently
+validated new-donor measurements. Preserve the frozen `5809be4` release and its
+dated 15-image evidence. **The 6090/6539 source mix-up is resolved:** 6090 matches all
 36 original raw channel planes; the distinct 6539 stack was reconstructed from
 its own raw acquisition and checked pixel-for-pixel. The corrected six viewer
-TIFFs total 46,877,746,573 bytes. Preserve the rejected duplicate and its old
-annotation separately; use the corrected inventory when staging images.
-All six additions completed offline segmentation, export, raw import and QC
-preparation: 943,068 cell objects, including 942,867 fully measured objects and
-201 flagged unmeasured objects. Independent spatial checks reproduce all 2,989
-islet-core counts; biological review and final retained counts remain pending.
-Corrected local paths, preparation counts, validation and remaining scientific
-work are in [the expansion status record](docs/cohort_expansion_status.md).
-The separate 21-donor local candidate is now built at
-`data/development/all-donor-20260916/` and served at
-`http://127.0.0.1:3839/islet-explorer/`. It contains 3,592,722 raw objects,
-8,371 islets and a fixed outcome-blind trajectory for 3,499 eligible islets.
-Six primary hypotheses have provisional estimates; four explicitly await
-validated inputs. It uses runtime schema 2 and a complete hash manifest.
-The measured runtime is 164,130,834,281 bytes (152.859 GiB). Scientific
-acceptance, a matching immutable image/scan, and UFRC acceptance remain pending.
-See [the local delivery and evidence record](docs/all_donor_delivery.md). Update
-the existing request and assessment with the reviewed cohort
-inventory and applicable HPAP disclosure/usage terms through the authorized owner;
-this document does not infer an institutional policy or assessment disposition.
+TIFFs total 46,877,746,573 bytes, but no expanded image release is approved.
+Preserve the rejected duplicate and its old annotation separately. Source
+preparation and corrected paths remain in [the expansion status](docs/cohort_expansion_status.md).
 
-The current phenotype-retirement policy supersedes the earlier requirement to
-recover all 21 historical labels. Retained assignments and their full upstream
-gate chains are audited. Unvalidated gates still prevent certification of the
-alpha/beta/delta union denominator and several immune/ductal endpoints; those
-outputs remain unavailable. Historical transfer benchmarks and raw labels are
-preserved, with no replacement labels inferred from failed transfer models.
-The new axis uses raw compartment marker summaries and fixed diffusion
-ordering; the earlier proposed disease-oriented scVI/Harmony trajectory is
-not the candidate's method.
+The offline raw-only bundle at
+`data/development/donor-additions-20260923-raw-v1/` contains 943,068 new-donor
+objects: 942,867 fully measured and 201 wholly unmeasured. Its 852 zero-tolerance
+checks preserve the original donor artifacts, but it has no accepted new-cell
+phenotypes, normalized expression, scVI fields, islet composition, compatible
+trajectory, optional loader, or combined islet count. HPAP-078 boundaries are
+owner-approved; 6090, 6232, 6520, recovered 6539, and 6558 still require
+donor-specific visual review. Update the existing request and assessment with
+an approved final inventory and applicable HPAP disclosure/usage terms through
+the authorized owner; this document does not infer an institutional disposition.
+
+The earlier schema-2/3/4 all-donor runtimes, phenotype-retirement analyses,
+and raw-compartment diffusion axes are experimental evidence, not the current
+app or an accepted additions-only method. The September 16 schema-2 candidate
+reported 8,371 islets and 3,499 eligible trajectory islets; these are not
+preservation-compatible expansion counts. See [the historical delivery record](docs/all_donor_delivery.md) and
+[September 17 revision](docs/trajectory_revision_20260917.md).
 
 ## Deployment decisions
 
@@ -90,7 +84,7 @@ not the candidate's method.
 | Access during peer review | **Public Restricted**, with whole-site shared Basic Auth |
 | UF data classification during peer review | **Sensitive** |
 | Expected audience | 1–8 editors/reviewers total, up to 5 concurrent sessions, plus 2 named UF maintainers |
-| Reviewer-visible features | Plot, Trajectory, Viewer, Spatial. Current schema-3 candidate keeps research reports outside the app; legacy Spatial analyses are explicitly unavailable |
+| Reviewer-visible features | Plot, Trajectory, Viewer, Spatial in the planned reviewer profile; the exact production release still needs acceptance |
 | Disabled features | AI, Statistics, and Inflammation |
 | Production URL request | `https://islet-explorer.rc.ufl.edu/islet-explorer/` |
 | Production backend request | Shiny listens on container `0.0.0.0:3838`; the project requests rootless Podman publication on VM `127.0.0.1:3838`, subject to UFRC confirming the reachable proxy target |
@@ -98,20 +92,19 @@ not the candidate's method.
 | Runtime writes | Temporary files and operational logs only; scientific data are immutable and read-only |
 | External AI/API traffic | None |
 
-The frozen release inventory measures 117,092,780,533 bytes (109.05 GiB),
-including 116,225,236,881 bytes of images and sidecars. Adding the corrected six
-TIFFs gives approximately 151.90 GiB of candidate images before the expanded
-derived tables. Those images plus the retained frozen runtime bundle require
-at least 260.95 GiB, before candidate tables, logs, transfer staging, spill space
-and container storage. These are measured inputs and a lower bound, not a final
-expanded-release capacity acceptance. UFRC's price page listed the
-one-year base at $300 when this handoff was prepared, but price and availability must be
-confirmed in the purchase form.
-The completed candidate's declared runtime plus the frozen original requires
-261.910 GiB; including one complete candidate staging copy requires 414.769 GiB
-before OCI storage, logs and temporary/spill space. The local candidate uses
-hardlinks for unchanged source material; deployment copies require full bytes.
-One preview R worker used approximately 1 GiB RSS. Five-session memory/latency
+The frozen 15-image release inventory measures 117,092,780,533 bytes (109.05 GiB),
+including 116,225,236,881 bytes of images and sidecars. The corrected six
+experimental TIFFs total 46,877,746,573 bytes; they are not part of an
+accepted expanded release. Earlier planning estimated 151.90 GiB for all 21
+images and a 260.95 GiB lower bound when retaining the frozen bundle. The
+regenerated candidates reported 164,130,834,281 bytes for schema 2 and
+164,147,382,976 bytes for schema 3; the associated frozen-plus-candidate-staging
+estimates were 414.769 and 414.799 GiB. These dated sizes are historical planning
+evidence, not current expanded-release capacity acceptance.
+Full deployment copies require their own bytes even where local development
+used hardlinks. UFRC's price page listed the one-year base at $300 when this
+handoff was prepared; price and availability must be confirmed in the purchase form.
+One earlier candidate preview R worker used approximately 1 GiB RSS. Five-session memory/latency
 and assigned-host measurements remain pending; local availability does not
 establish capacity or deployment acceptance.
 
@@ -272,8 +265,9 @@ Maigan Brusko, PhD — `[GATORLINK, EMAIL, DEPARTMENT]`
 > Islet Explorer is an R Shiny research application through which confidential journal
 > editors and reviewers explore de-identified and derived pancreatic-islet data and
 > browser-streamed OME-TIFF multiplexed images. The frozen reference release contains
-> 15 nPOD donors; the expanded candidate targets 21 donor images, including HPAP-078
-> with separate HPAP provenance and applicable usage terms. It provides marker
+> 15 nPOD donors. Six additional donors, including HPAP-078 with separate HPAP
+> provenance and applicable usage terms, are staged as raw-only offline evidence;
+> no expanded reviewer release is accepted. The application provides marker
 > and cell-population plots, composition-based trajectory/PAGA analysis, spatial
 > analysis, and image/segmentation drill-down. The application is non-mutating: it
 > accepts no user uploads and cannot alter its canonical scientific data. Reviewers may
@@ -387,11 +381,10 @@ not record a completed attestation.
 >
 > The requested starting allocation is the standard PubApps base: 2 vCPU, 16 GiB RAM,
 > 1 TiB `/pubapps`, and standard local container storage. The frozen 15-image
-> runtime bundle measures 109.05 GiB. A separate 21-image candidate adds five nPOD
-> acquisitions and HPAP-078; its corrected image collection alone is approximately
-> 151.90 GiB. Candidate images plus the retained frozen bundle require at least
-> 260.95 GiB before new derived tables, transfer staging, logs and container storage.
-> Expanded scientific analysis and final runtime measurements remain pending.
+> runtime bundle measures 109.05 GiB. Six new donors are staged separately as
+> raw-only research evidence, not as an app-ready or deployable 21-image release.
+> Any future expansion requires a reviewed image/data inventory and new capacity
+> measurements before deployment.
 > Segmentation and model fitting are offline; no GPU,
 > additional storage, Slurm access, database service, or HPG filesystem mount is
 > requested.
@@ -487,18 +480,20 @@ The 2026-09-08 canonical source preparation produced 5,382 `core_area` rows,
 21 `combined_pairs` definitions. The separate trajectory H5AD has 5,214
 observations; the drill-down file count and trajectory count must not be used as
 the count of all prepared runtime summaries. These measurements describe the
-original 15-image cohort; expanded-candidate counts must be regenerated and recorded.
+original 15-image cohort; any accepted future additions require new release counts
+while preserving the original 15-donor records exactly.
 See [`docs/ufrc_readiness.md`](docs/ufrc_readiness.md) for the source evidence and
 the remaining release-parity check.
 
 Configuration and service continuation may proceed while the release is being built, but the
 manifest-backed runtime is a production prerequisite. Before promotion it must reproduce
-the candidate's canonical prepared tables and plotted statistics, including row counts
-and identifiers, with exact categorical values and documented numeric tolerance.
-The expanded cohort is jointly refit, so its trajectories and clustering may differ
-from the original release; retain and report those scientific differences separately
-from source-to-release conversion parity. If parity is not complete,
-do not promote that release; keep the reviewer site closed until a validated release exists.
+the selected source's canonical prepared tables and plotted statistics, including row
+counts and identifiers, with exact categorical values and documented numeric tolerance.
+Any future additions-only release must also pass zero-tolerance preservation checks
+for all original donor records and independently validate compatible new-donor typing
+and trajectory projection. The earlier joint refits do not satisfy that contract. If
+parity or scientific acceptance is incomplete, keep the reviewer site closed until a
+validated release exists.
 
 ## Information UFRC must return or confirm
 

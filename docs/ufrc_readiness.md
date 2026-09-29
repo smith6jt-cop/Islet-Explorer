@@ -1,6 +1,6 @@
 # Islet Explorer UFRC readiness and evidence index
 
-Updated 2026-09-21 for the schema-4 local candidate; institutional status remains as
+Updated 2026-09-28 for the restored 15-donor local app; institutional status remains as
 last verified on 2026-09-16. This is the review index for the supplied
 [`UFIT_PubApps_Instance_Request.docx`](../UFIT_PubApps_Instance_Request.docx),
 including its hosting policy, project plan, and development standards. It records
@@ -27,46 +27,60 @@ or production external API. The proposed URL is
 `https://islet-explorer.rc.ufl.edu/islet-explorer/`. The backend address and port
 must come from UFRC; `127.0.0.1:3838` is a request, not an established proxy route.
 
-### Expanded cohort candidate
+### Current local app and raw-only additions
 
-The owner authorized six additions on 2026-09-11, targeting 21 donor images:
-6090, 6232, 6539, `PAN-6558-AAb_test35_35p-LED.tif`, 6520-01A, and HPAP-078.
-Exclude the alternate `CX_PAN-6558` acquisition and 6520-01B. Preserve HPAP-078's
-HPAP provenance and separately review its applicable disclosure/usage terms;
-the expanded cohort must not be described as 21 nPOD donors. Continue request
-`83810` and assessment `IRM-456246` with the updated inventory through the owner.
-No new UFRC acceptance or classification disposition has been established here.
+The only intended local development URL is
+`http://10.15.152.7:8080/islet-explorer/`, proxied to loopback port 3840.
+The app uses the restored original 15 donors and 5,214 islets. Its image route
+temporarily points to an earlier 21-image collection; the owner permits that
+development-only mismatch, not an expanded release. Neither this checkout nor
+its image route is a PubApps release.
+Keep the dated `5809be4` 15-image production artifact and its evidence separate
+from the current development app. See [the September 28 handoff](HANDOFF_2026-09-28.md).
 
-InstanSeg 0.1.1 image preparation, fixed diffusion ordering and hypothesis
-fitting are offline work. They do not add model training, GPU requirements, uploads, or
-external API traffic to the PubApps runtime. Keep the frozen original `5809be4`
-release and its source/evidence intact. Record shifts in original-donor
-trajectories or clustering as scientific changes; source-to-release parity for
-the expanded candidate compares against its own verified canonical preparation.
+The six donor additions—HPAP-078, 6090, 6232, 6520, recovered 6539, and
+6558—are staged only as raw offline evidence. Their bundle contains 943,068
+objects, including 201 wholly unmeasured objects; 852 zero-tolerance checks
+preserve the original donor artifacts. Its recorded `app_ready` and
+`scientific_acceptance` values are both false. No additions-only phenotype,
+normalized-expression, scVI, islet-composition, or compatible trajectory
+method has been accepted. HPAP-078 boundaries are owner-approved; the other
+five donors still need donor-specific visual review. There is no accepted
+combined islet count, optional app loader, or 21-image release. See the
+[phase-2 contract](donor_expansion_phase2.md). Continue request `83810` and
+assessment `IRM-456246` with an approved final inventory through the owner;
+no new UFRC acceptance or classification disposition has been established.
 
-| Expanded-candidate item | Status |
+### Historical regenerated 21-image candidate
+
+The September 21 schema-4 results below describe an earlier all-cohort
+regeneration. Its original-donor geometry and trajectory do not satisfy the
+current preservation contract. The results remain experimental evidence,
+not current app counts or production acceptance.
+
+| Historical candidate item | Recorded result and limit |
 |---|---|
 | Input selection and cohort size | Source mix-up resolved: 6090 matches all 36 raw channel planes; 6539 reconstructed and pixel-checked against its distinct raw acquisition. The candidate targets 20 nPOD images plus one HPAP image |
-| Viewer image conversion | Corrected six TIFFs total 46,877,746,573 bytes. Use `reports/image_conversion/reconciled_inventory.json`; the original duplicate 6539 TIFF is excluded |
-| Image preparation and scientific integration | Current candidate retains 3,619,534 canonical raw objects and 3,592,722 archival source objects. All 248 wholly unmeasured canonical objects remain recorded; 11,944 islet annotations and 31 shared markers are available. Earlier offline research results are historical and were not recalculated for this final candidate. See [local delivery](all_donor_delivery.md) |
-| Cell-phenotyping provenance | Schema 4 uses the most recent approved typed-cell outputs and exposes no identity-review blocker in the app. The retirement policy still supersedes reconstruction of retired labels. Unsupported identities and marker-positive calls remain explicitly unavailable rather than becoming zeros |
-| Boundary review and integration | The most recent regenerated geometry is integrated for all 21 donors. HPAP-078 retains its 1,431 corrected annotations and HPAP provenance. Raw annotations and excluded measurements remain preserved; scientific/deployment acceptance remain false |
-| Fixed trajectory and Spatial embedding | Classifier eligibility requires no image-edge contact and at least one canonical cell inside the endocrine pixel-classifier core. It yields 11,136 eligible islets across all 21 donors, with at least 137 per donor; typing cannot revoke eligibility. Typed composition is available for 7,493 islets. The diffusion graph trains on 1,514 valid islets with at least ten measured core cells and one connected landmark component, then projects all feature-supported islets. The primary trajectory supports 7,490 coordinates, median leave-one-donor-out absolute Spearman 0.754 and 67.3% total classifier-eligible coverage, so it remains unstable by the prespecified checks. Spatial UMAP and four Leiden resolutions use the 7,493 feature-supported rows. Orientation remains arbitrary |
+| Viewer image conversion | Corrected six TIFFs totaled 46,877,746,573 bytes. The historical `reports/image_conversion/reconciled_inventory.json` excluded the duplicate 6539 TIFF; it is not an approved production image manifest |
+| Image preparation and scientific integration | The regenerated candidate retained 3,619,534 canonical raw objects and 3,592,722 archival source objects, including 248 wholly unmeasured canonical objects. It reported 11,944 islet annotations and 31 shared markers. These are not preservation-compatible expansion counts. See [local delivery](all_donor_delivery.md) |
+| Cell-phenotyping provenance | Schema 4 used experimental typed-cell outputs; these do not establish an accepted additions-only typing method. Unsupported identities and marker-positive calls remained unavailable rather than becoming zeros |
+| Boundary review and integration | The regenerated geometry covered all 21 donors, including 1,431 corrected HPAP-078 annotations. Its original-donor boundaries were not preserved, and scientific/deployment acceptance remained false |
+| Fixed trajectory and Spatial embedding | The experimental classifier flagged 11,136 eligible islets across all 21 donors, with at least 137 per donor; typing did not revoke eligibility. Typed composition was available for 7,493 islets. The diffusion graph trained on 1,514 valid islets and projected feature-supported islets. The primary trajectory supported 7,490 coordinates, median leave-one-donor-out absolute Spearman 0.754 and 67.3% classifier-eligible coverage, below its prespecified stability/coverage checks. Spatial UMAP and four Leiden resolutions used 7,493 feature-supported rows. Orientation was arbitrary; none of these coordinates is an accepted projection onto the preserved 15-donor reference |
 | Release count contract | Version-2 `release.env` declares `EXPECTED_IMAGES`; generation checks the staged count. Verification/activation/rollback use the declaration; legacy version-1 releases remain fixed at 15 |
-| Count and recovery tests | Local synthetic image-evidence and recovery suites pass, including 21-image activation, 15-image legacy rollback, missing/duplicate/conflicting count failures, and checksum failures; these do not validate real expanded data |
-| Scientific counts and capacity | Current runtime 188,900,659,274 bytes (175.927 GiB); two full runtime copies require 377,801,318,548 bytes before frozen releases/reports/OCI/logs/spill. Shared trajectory tables are cached per worker, and the cell cache is bounded at 64 entries/64 MiB. Current full-worker peak/concurrency and assigned-host tests remain pending |
-| Local candidate evidence | Schema-4 candidate `all-donor-20260922-trajectory-fit-support-v1` is the only network-facing app at http://10.15.152.7:8080/islet-explorer/, proxied to 127.0.0.1:3840. The independent schema validator passes 21 donors, 31 markers, 11,944 annotations and the corrected 11,136-islet eligibility census. The fixed reference scale assigns all 7,490 supported observations unique midpoint ranks across 0–1 while preserving 1,729 unique raw values and the 2,234-islet raw tie for audit/inference. Browser acceptance verifies nonzero canonical beta/core ratios, the rank grid, 7,493-point Spatial UMAP and Leiden views, all 31 heatmap markers, ratio arithmetic, donor filtering, islet click-through and cell download with no visible Shiny or JavaScript errors. This workstation cutover does not establish UFRC acceptance |
-| Exact production release evidence | Pending clean source revision, matching immutable image/data identity, production source parity, SBOM/scan and assigned-runtime browser checks. Production loading rejects scientific_acceptance=false |
+| Count and recovery tests | Local synthetic image-evidence and recovery suites passed, including 21-image activation, 15-image legacy rollback, missing/duplicate/conflicting count failures, and checksum failures; these did not validate real expanded data |
+| Scientific counts and capacity | The historical runtime measured 188,900,659,274 bytes (175.927 GiB); two full copies would require 377,801,318,548 bytes before frozen releases/reports/OCI/logs/spill. This is not a capacity estimate for a preservation-compatible expansion. Full-worker peak/concurrency and assigned-host tests remained pending |
+| Local candidate evidence | The schema-4 candidate `all-donor-20260922-trajectory-fit-support-v1` previously used the local URL now serving the restored 15-donor app. Its validator and browser checks recorded 21 donors, 31 markers, 11,944 annotations, 11,136 classifier-eligible islets, 7,490 ranked trajectory coordinates, 7,493 Spatial UMAP points and click-through/download behavior. Its display ranks preserved 1,729 unique raw values and a 2,234-islet raw tie for audit/inference. Those checks do not certify the current app or UFRC acceptance |
+| Exact production release evidence | No matching immutable image/data release, source parity, SBOM/scan, or assigned-runtime browser evidence was completed for this candidate. Production loading rejects `scientific_acceptance=false` |
 | Institutional and deployed acceptance | Pending updated owner-reviewed inventory/disclosure terms, UFRC assessment follow-up, assigned-host/proxy checks, and production acceptance |
 
 The validation tables below describe the original release and their stated dates.
-Their passing results are not expanded-candidate evidence.
+Their passing results do not certify the current development UI or any expansion.
 
 Conversion and preparation evidence is retained under the restricted, Git-ignored
 `data/development/expanded-20260911/` directory. The initial duplicate audit and
-mislabeled image remain as rejected evidence. The reconciled inventory selects
-the correct source paths, records distinct source/pixel signatures and verifies
-current TIFF/sidecar hashes against completed pixel-validation reports. The
+mislabeled image remain as rejected evidence. The reconciled inventory recorded
+the selected source paths, distinct source/pixel signatures, and TIFF/sidecar
+hashes against completed pixel-validation reports. The
 recovered 6539 source hash is
 `1866d5e8856dc096c1829e04b3622bc796cd9b81be4225bff12b864d4df1c69e`.
 Its old exclusion annotation was drawn on duplicated 6090 pixels and was preserved
@@ -77,11 +91,11 @@ A second scientific blocker is recorded in the historical
 `7571b6d:scripts/phenotype_evaluator.py` note: the original rules that produced
 the shipped ECAD-positive/Structural labels were unavailable; v2 rules were a
 reconstruction requiring biological review. The current `data/phenotype_rules.csv`
-cannot produce all 21 shipped labels. The revised scope requires validation of
-retained labels and their upstream gates rather than recovery of retired labels.
-Completing segmentation does not establish equivalent retained assignments.
-Raw-marker and mask analyses proceed with explicit limitations; certified
-new-cell phenotypes still require reviewed gate evidence.
+cannot produce all 21 shipped labels. The current phase-2 contract requires an
+independently validated additions-only typing method that preserves the original
+donor records. Completing segmentation does not establish equivalent phenotype
+assignments. Raw-marker and mask analyses retain explicit limitations;
+certified new-cell phenotypes still require reviewed gate evidence.
 The tested transfer models did not meet their predeclared accuracy/F1/recall
 screen; their design and per-class results are retained. This is a scientific
 provenance issue, not a newly inferred UFRC rule.
@@ -99,7 +113,7 @@ UFRC approval gates.
 | Project plan 2: UF branding and accessibility | App skip link/landmarks and UF accessibility footer; the browser viewer URL input is disabled | Record automated and manual checks across all four tabs, keyboard/focus, labels, contrast/zoom, plots and viewer alternatives; fix defects before claiming conformance |
 | Development standards: input validation and minimal, appropriate output | Allowlisted browser inputs and asset basenames; centralized fixed-field JSON events; viewer bootstrap rejects external/missing/traversal URLs before vendor import | Source CI and native production-profile negative-input/log evidence retained; final deployed runtime and UFRC log-collection checks remain |
 | Development standards: lint, secure coding and static analysis | R runtime lint gate; security-boundary tests; focused deployment and viewer tests | Dated CI/lint/SAST results retained for `5809be4`; browser-vendor coverage limitations remain explicit |
-| Development standards: maintained SBOM and code/package/container vulnerability review | Build/scan tooling records image identity, resolved R/Python manifests, CycloneDX and Grype results; DuckDB source/version and Rocker interpreter handling corrected | Exact-candidate SBOM/scan and scanner/database identity retained; the no High/Critical gate passed. UFRC pre-production review remains; lower-severity findings and incomplete browser-vendor coverage are recorded |
+| Development standards: maintained SBOM and code/package/container vulnerability review | Build/scan tooling records image identity, resolved R/Python manifests, CycloneDX and Grype results; DuckDB source/version and Rocker interpreter handling corrected | The dated `5809be4` image passed the no High/Critical gate. A new exact-release SBOM/scan and scanner/database identity remain required, as does UFRC pre-production review; lower-severity findings and incomplete browser-vendor coverage remain recorded |
 | Development standards: one event per line and UFIT-monitored logging | Central timestamped JSON emitter in `00_audit.R`; [log inventory](pubapps_log_inventory.md); dedicated worker log mount | Candidate runtime capture, native/framework output review, effective permissions, and UFRC collector destination. Record applicable access/retention rules |
 | UFRC team: pre-production vulnerability/availability review and owner attestation; continuing UFIT network scans | Deployment verification and rollback tooling; review request text | UFRC production acceptance and network-scan process; exact HTTPS/auth/WebSocket/download/TIFF Range tests; genuine PI/data-owner go-live attestation |
 | Conditional project-plan obligations and the existing individual assessment | Individual Risk Assessment already open; Sensitive access-review applicability awaiting UFRC | Assessment follow-up responses and disposition; quarterly access reviews if UFRC applies item 6; any additional controls explicitly assigned by the assessment |
@@ -191,14 +205,18 @@ verification record are retained in the restricted release record; earlier
 
 ## Remaining release sequence
 
-For the expanded candidate, use the reconciled six-source inventory, recover or
-review the cell-phenotyping method, and finish biological review and the joint
-scientific analysis. Record the final retained cohort/row counts and storage
-requirements, then produce a
-matching clean-revision image and copied immutable data bundle. Generate the
-manifest with the explicitly reviewed final count (21 remains the target) and retain new full checksum,
-source-to-release parity, SBOM/scan, browser, and capacity evidence. Do not replace
-the preserved original release or reuse its passing results as candidate results.
+For the 15-donor reviewer release, select and freeze the exact app revision,
+then produce a matching immutable image and copied schema-1 data/image bundle
+with 15 approved images. Retain new full checksums, source-to-release parity,
+SBOM/scan, browser, and capacity evidence for that exact revision. The dated
+`5809be4` evidence remains a reference; it does not certify the current UI.
+
+For any later expansion, finish the five donor-specific boundary reviews and
+validate additions-only typing and compatible trajectory projection while
+preserving all original donor records exactly. Only after scientific and owner
+acceptance should a new final image/data inventory, count, capacity estimate,
+and matching release evidence be documented. Do not replace the preserved
+original release or reuse its passing results as expansion evidence.
 
 1. Reconcile provisioning and record the remaining owner/UFRC details in request
    `83810` and assessment `IRM-456246`;

@@ -20,36 +20,26 @@ tracked in [`PUBAPPS_UFRC_HANDOFF.md`](../PUBAPPS_UFRC_HANDOFF.md); proportional
 logging requirements and additional hardening guidance are in
 [`docs/pubapps_log_inventory.md`](../docs/pubapps_log_inventory.md).
 
-The expansion, updated 2026-09-16, is a separate candidate targeting 21 donor images. The
-frozen 15-image release at `5809be4` and its evidence remain the reference release.
-The candidate adds 6090, 6232, 6539, the selected `PAN-6558` acquisition,
-6520-01A, and HPAP-078; it excludes `CX_PAN-6558` and 6520-01B. Image preparation
-with InstanSeg 0.1.1 and joint cohort model fitting run offline, outside PubApps.
-The 6090/6539 source mix-up has been resolved from raw channel acquisitions:
-6090 was verified and the distinct 6539 stack reconstructed and pixel-checked.
-The corrected six viewer TIFFs total 46,877,746,573 bytes. Stage them from
-`data/development/expanded-20260911/reports/image_conversion/reconciled_inventory.json`;
-the main development `images/` directory still retains the rejected duplicate
-6539 as historical evidence and must not be copied wholesale. Corrected paths,
-preparation counts and QC are in [the expansion status](../docs/cohort_expansion_status.md).
-The current separate schema-3 runtime is built and served locally at
-http://127.0.0.1:3839/islet-explorer/. It contains 21 donors, fixed offline
-trajectory artifacts and all 31 heatmap markers; research reports are outside
-the app. Missing gates and the newly identified islet-identity review are
-explicitly labeled. Its declared runtime measures 164,147,382,976 bytes
-(152.874 GiB); retaining the frozen original and one candidate staging copy
-requires 414.799 GiB before review reports/containers/logs/spill. Scientific acceptance,
-exact-image scans and UFRC runtime acceptance remain pending. Local operation
-and candidate-specific evidence are in [the revision record](../docs/trajectory_revision_20260917.md).
-Original-release results do not certify the candidate. See
-[the readiness record](../docs/ufrc_readiness.md).
+The current local development app serves the restored original 15 donors and
+5,214 islets at `http://10.15.152.7:8080/islet-explorer/` through loopback
+port 3840. Its `/local_images/` route still points to an earlier 21-image
+collection under an explicit development-only allowance; this is not a
+production image/data pairing. The frozen 15-image release at `5809be4` and
+its dated image, scan, and parity evidence remain the reference release, not
+evidence for the current development UI. See [the September 28 handoff](../docs/HANDOFF_2026-09-28.md)
+and [the readiness record](../docs/ufrc_readiness.md).
 
-The retirement policy requires retained-label and upstream-gate validation,
-superseding the earlier requirement to recreate all 21 historical labels.
-Unvalidated subtype denominators and immune/ductal endpoints remain unavailable.
-Both deployment verification and the production R profile reject this
-schema-2/3 candidates while `scientific_acceptance` remains false. Keep the local
-development service separate from production and the frozen rollback release.
+Six donor additions—HPAP-078, 6090, 6232, 6520, recovered 6539, and
+6558—are staged separately in a raw-only offline bundle. Its 943,068 objects
+and 852 passing original-preservation checks do not make it app-ready:
+`app_ready` and `scientific_acceptance` are false. Five donors still need
+boundary review, and compatible additions-only typing and trajectory
+projection remain unvalidated. There is no approved combined islet count,
+optional loader, or 21-image production release. The earlier schema-2/3/4
+all-donor runtimes and their capacity figures are historical experimental
+evidence; see [the phase-2 contract](../docs/donor_expansion_phase2.md).
+Production verification rejects unaccepted expanded manifests, and the
+raw-only bundle has no runtime manifest or app loader.
 
 ## Fixed production contract
 
@@ -298,30 +288,29 @@ deploy/load-image.sh \
 
 IMAGE_REF='sha256:<image-id-printed-by-load-image>'
 GIT_COMMIT='<40-character-release-commit>'
-EXPECTED_IMAGES=21 # expanded candidate; use 15 for the original cohort
-DATA_SCHEMA=2 # fixed offline trajectory contract; frozen original uses 1
+EXPECTED_IMAGES=15
+DATA_SCHEMA=1
 
 deploy/generate-release-manifest.sh \
   "${RELEASE_DIR}" "${RELEASE}" "${IMAGE_REF}" "${GIT_COMMIT}" "${DATA_SCHEMA}" "${EXPECTED_IMAGES}"
 deploy/verify-release.sh "${RELEASE_DIR}"
 ```
 
-The 21-image cohort is built locally; it remains unaccepted for production.
-This example applies only after scientific review and fresh immutable-image
-evidence are complete. Do not change the acceptance field merely to bypass
-the verifier. Stage only declared runtime artifacts from the reviewed candidate;
-do not deploy its raw working directories, preview logs or rejected images.
+This example is for an exact, accepted 15-image release built from a clean
+revision and matched to its immutable image. Do not substitute the local
+21-image development route or raw-only additions bundle for the approved
+image source. Stage only declared runtime artifacts; do not deploy raw working
+directories, preview logs, or rejected images.
 
 Generation hashes the builder's `data/` output once, including its `images/`
 subtree, and rejects symlinks that escape the release plus filenames associated
 with credentials or mutable backups. Supply the independently reviewed OME-TIFF
 count as the sixth argument; generation rejects a different staged count and
 writes `MANIFEST_VERSION=2` and `EXPECTED_IMAGES` into the hashed `release.env`.
-The original runtime data schema is `1`. The new offline trajectory contract
-is schema `2`, declaring cohort, trajectory, research and cell drill-down artifacts;
-it preserves schema-1 reader/verifier compatibility for the frozen release.
-Omitting the count retains the original generator default of 15, so an expanded
-bundle cannot silently redefine its expected cohort from the files present.
+The preserved 15-donor runtime uses data schema `1`. Later schema-2/3/4
+experiments do not establish an accepted production contract for the six
+additions. The explicit 15-image declaration here binds the selected cohort;
+omitting the count retains the generator's original default of 15.
 
 Verification reads that declaration automatically, checks every manifest hash,
 and writes `.verified` tied to the manifest hash. Activation, the manual launcher,
