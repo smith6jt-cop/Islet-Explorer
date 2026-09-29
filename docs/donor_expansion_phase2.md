@@ -1,15 +1,20 @@
-# Donor expansion, phase 2 — 2026-09-23
+# Donor expansion, phase 2 — 2026-09-23, revised 2026-09-29
 
-This contract supersedes the regenerated-all-21 contract in the September
-17–22 candidate records. It implements the phase-2 repo-memory handoff
-`islet-explorer-phase2-donor-handoff.md`. The restored app from `6b7884b`
-and the preservation gate from `70f8171` are the starting point.
+The September 23 raw-only checkpoint remains the starting evidence. The owner's
+September 29 direction replaces its projection-only and strict development
+loader constraints. The regenerated-all-21 September 17–22 candidates remain
+unaccepted experiments. The restored app from `6b7884b` and the preservation
+gate from `70f8171` provide the baseline; the gate will need to distinguish
+preserved source records from derived outputs allowed to change in a joint refit.
 
 ## Artifact and method contract
 
-- The original 15 donors and 5,214 islets are immutable. Preserve their
-  literal identities, values, missingness, variable metadata, embedded tables,
-  graph edges, coordinates and Barlow features. Do not rebuild or remap them.
+- Preserve the original 15 donors' identities and 5,214 islets, cell/islet IDs,
+  physical geometry, measured values, missingness and phenotype labels exactly.
+  Keep their baseline artifacts intact for comparison. A common 21-donor
+  trajectory, UMAP and Leiden refit may change those derived coordinates,
+  graph edges and cluster assignments for the original donors; report such
+  changes separately from source-record parity.
 - Stage donors 78 (HPAP-078), 6090, 6232, 6520, 6539 and 6558 separately.
   Select recovered 6090 and corrected 6539 from `cohort-v1.csv`. The expected
   raw universe is 943,068 objects, including 201 wholly unmeasured objects.
@@ -23,19 +28,25 @@ and the preservation gate from `70f8171` are the starting point.
   annotation. Neither substitutes for legacy normalized expression,
   `phenotype`, scVI, islet composition or trajectory coordinates. Missing
   methods remain explicitly unavailable in a donor availability table.
+- Recover and verify the exact phenotype rules, scVI model weights and
+  preprocessing used for the original donors, then apply them to the six
+  additions with the original numeric gates and thresholds. Do not retune
+  gates for the new donors or infer that the current UI rule CSV reproduces
+  the full original typing method. The proposed enhancement using CHGA, CD45,
+  VIM, LGALS3, CD44, PGP9.5, GAP43, CD35 and NaKATPase is deferred.
 - Regenerated original-donor geometry, typing and coordinates from schema 4
   remain experimental evidence. Their 11,944 regions / 11,136 eligible islets
-  are not counts for a preservation-compatible expansion. No combined islet
-  count or common fitted axis is declared by this staging checkpoint.
-- For experimental classifier-derived additions, classifier eligibility is
-  only no image-edge contact and at least one canonical core-cell centroid.
-  Identity-review decisions are annotations; they cannot change this flag.
-  Measurement and graph-training support are separate. Every requested donor
-  must be accounted for, and insufficient training support must fail explicitly.
-- Any future addition to the original trajectory requires an independently
-  validated compatible measurement/projection method that leaves the original
-  coordinate reference unchanged. An all-cohort refit cannot satisfy this
-  preservation contract. The experimental diffusion code is not that method.
+  are not accepted expansion counts. No combined islet count or common fitted
+  axis has yet been accepted.
+- The owner will visually review the new-donor annotations before scientific
+  acceptance. The earlier classifier-eligibility and identity-review rules
+  remain experimental audit behavior, not substitutes for the original numeric
+  gates. Account for every requested donor and fail explicitly when required
+  measurement or training support is insufficient.
+- Once the six additions have comparable typed measurements, a common
+  21-donor trajectory, UMAP and Leiden refit is allowed. Preserve the original
+  donor source records and validate the resulting science; the experimental
+  schema-4 diffusion axis is not an accepted refit.
 
 ## Checkpoints and acceptance
 
@@ -46,12 +57,18 @@ and the preservation gate from `70f8171` are the starting point.
    on focused fixtures without running the all-donor regeneration pipeline.
 3. Independently verify the staged bundle and run `audit_original_parity.py`.
    Preserve checkpoint reports outside app data; never overwrite a prior run.
-4. Recover or validate an additions-only phenotype/measurement method and a
-   compatible trajectory projection. Re-evaluate boundary evidence separately.
-   Passing software tests or raw staging does not certify scientific acceptance.
-5. Only after preservation and scientific validation pass, implement an optional
-   loader behind an explicit flag. Default promotion requires owner review and
-   approval. Do not install an auto-sourced local candidate profile.
+4. Have the owner visually review donor annotations. Recover and verify the
+   original phenotype rules, scVI weights/preprocessing and numeric gates;
+   process the six additions with those exact methods and audit original donor
+   IDs, measurements and labels separately from derived coordinates.
+5. Fit and validate a common 21-donor trajectory, UMAP and Leiden result from
+   comparable inputs. Passing software tests or raw staging does not certify
+   scientific acceptance.
+6. Assemble a separate, simple development data root and point the local app to
+   it with `ISLET_DATA_ROOT` after validation. No additional candidate-version
+   manifest, source-selection gate, or optional loader flag is required for
+   development. Keep the original baseline artifacts intact; production release
+   gates are separate.
 
 Historical transfer-screen evidence is
 `data/development/expanded-20260911/reports/phenotyping_method_audit.json`:
@@ -107,13 +124,16 @@ frozen hashes) and `tmp/donor-additions-20260923-final-validation/validation.jso
 (final independent validation). No original data, app code, service or profile
 was changed. Pre-existing untracked research files remain untouched.
 
-The optional-loader checkpoint remains unmet: no accepted compatible typing
-and projection method exists for the additions. The earlier donor-disjoint
+The integration checkpoint remains unmet: the exact original phenotype rules,
+scVI weights/preprocessing and numeric gates have not yet been recovered and
+verified for the six additions. The earlier donor-disjoint
 transfer screens reported raw-feature accuracy/macro-F1 0.86668/0.8380 and
 rescaled-feature accuracy/macro-F1 0.87988/0.8526 against required minima
 0.97/0.90 (plus per-label recall requirements). These are historical failure
 records, not new validation. Their proposed labels must not enter the bundle.
-No all-21 refit was performed and no scientific acceptance is claimed.
+No common 21-donor refit or six-donor app integration was performed, and no
+scientific acceptance is claimed. The saved 852-check parity result applies to
+the raw-only baseline copies; it does not validate a future joint refit.
 
 ## Reproduction
 
