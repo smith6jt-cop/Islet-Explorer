@@ -1,0 +1,18 @@
+parent,label,all_positive,any_positive,all_negative,note
+all,Endocrine,,INS|GCG|SST,,Hormone-positive lineage; multiple hormones retain residual Endocrine
+Endocrine,Beta cell,INS,,GCG|SST,Exclusive hormone subtype
+Endocrine,Alpha cell,GCG,,INS|SST,Exclusive hormone subtype
+Endocrine,Delta cell,SST,,INS|GCG,Exclusive hormone subtype
+all,Immune,,CD20|CD3e|CD68|CD163|CD8a|CD4|HLADR,INS|GCG|SST,Retains the upstream immune marker set
+Immune,B cell,CD20,,CD3e|CD68|CD163,Conflicting immune subtypes retain Immune
+Immune,Macrophage,,CD68|CD163,CD20|CD3e,Positive macrophage evidence required
+Immune,T cell,CD3e,,CD20|CD68|CD163,CD3e establishes T-cell lineage
+Immune,APCs,HLADR,,CD20|CD3e|CD68|CD163,Positive HLADR evidence replaces a negative-only dendritic rule
+T cell,CD8a Tcell,CD8a,,CD4,Documented mutually exclusive T-cell correction
+T cell,CD4 Tcell,CD4,,CD8a,Double-positive or double-negative retains T cell
+all,Neural,B3TUBB,,INS|GCG|SST|CD20|CD3e|CD68|CD163|CD8a|CD4|HLADR,Retains upstream neural evidence
+all,SMA+,SMA,,INS|GCG|SST|CD20|CD3e|CD68|CD163|CD8a|CD4|HLADR,Retains upstream smooth-muscle evidence
+all,Endothelial,,PDPN|CD34|CD31,INS|GCG|SST|CD20|CD3e|CD68|CD163|CD8a|CD4|HLADR,Retains upstream vascular lineage
+Endothelial,Lymphatic,PDPN,,CD34|CD31,Exclusive PDPN-supported vascular subtype; requires review
+Endothelial,Blood Vessel,,CD34|CD31,PDPN,Exclusive blood-vessel marker support
+all,Ductal,,CK19|panCK,INS|GCG|SST|CD20|CD3e|CD68|CD163|CD8a|CD4|HLADR,Adds positive epithelial evidence to resolve identical Acinar/Ductal rules
