@@ -826,7 +826,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
 
       # Labels
       # The y-axis label MUST name the quantity, not just the feature: a ratio
-      # and a denoised marker mean are different units on the same plot slot.
+      # and a gate-rescaled marker mean are different units on the same plot slot.
       if (identical(input$traj_y_mode %||% "ratio", "ratio")) {
         selected_feature <- input$traj_ratio_type %||% "Selected cell type"
         reg <- input$traj_ratio_region %||% "core"

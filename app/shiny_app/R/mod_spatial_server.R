@@ -13,6 +13,16 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                            outlier_threshold = reactive(3.0)) {
 
   moduleServer(id, function(input, output, session) {
+    output$embedding_method <- renderText({
+      method <- prepared()$protein_embedding
+      if (is.null(method)) return("")
+      correction <- if (identical(as.character(method$donor_correction), "harmony")) {
+        " Donor-adjusted with Harmony; donor and biological effects may overlap."
+      } else {
+        " No donor correction; clusters may reflect donor differences."
+      }
+      paste0("Protein PCA: UMAP and Leiden use the same marker graph.", correction)
+    })
     ns <- session$ns
 
     # ---- Outlier-table reactiveVals (parity with Plot/Trajectory) ----

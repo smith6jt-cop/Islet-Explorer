@@ -384,7 +384,8 @@ prep_data <- function(master) {
     " markers_all=", paste(class(markers_all), collapse='/'),
     " comp=", paste(class(comp), collapse='/'))
   list(core_area = size_area, targets_all = targets_all, markers_all = markers_all,
-       comp = comp, combined_pairs = combined_pairs)
+       comp = comp, combined_pairs = combined_pairs,
+       protein_embedding = master$protein_embedding)
 }
 
 # Simple NA audit
@@ -497,7 +498,7 @@ load_master_h5ad <- function(path) {
 
     list(markers = markers, targets = targets, comp = comp, lgals3 = lgals3,
          phenotypes = phenotype_df, donor_demographics = donor_demographics,
-         neighborhood = neighborhood_df)
+         neighborhood = neighborhood_df, protein_embedding = uns[["protein_embedding"]])
   }, error = function(e) {
     message("event=h5ad_load_failed")
     NULL

@@ -25,7 +25,7 @@ trajectory_ui <- function(id) {
           ),
           fluidRow(
             column(4,
-              # Y-axis measure. Marker expression is a scVI-denoised mean from
+              # Y-axis measure. Marker expression is a gate-rescaled protein mean from
               # .X; the cell-type ratio is Barlow et al.'s Fig 2F y-axis,
               # log(# cells / # endocrine cells), which removes the islet-size
               # confound that a raw count or proportion carries.

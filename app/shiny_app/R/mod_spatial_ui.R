@@ -84,6 +84,7 @@ spatial_ui <- function(id) {
       column(4,
         div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible; height: 100%;",
           h5("Islet-Level UMAPs"),
+          textOutput(ns("embedding_method")),
           uiOutput(ns("leiden_not_available")),
           fluidRow(
             column(6,

@@ -795,6 +795,28 @@ phenotype_rules_table_df <- function() {
 # Modal builder. Pure shiny — no DT dependency. Pass to showModal() from any tab's
 # Phenotype-Rules button handler.
 phenotype_rules_modal_ui <- function() {
+  protein_path <- data_path("protein_phenotype_rules.csv")
+  if (file.exists(protein_path)) {
+    rules <- utils::read.csv(protein_path, stringsAsFactors = FALSE, na.strings = "")
+    rules[is.na(rules)] <- ""
+    headings <- c("Parent", "Label", "All positive", "Any positive", "All negative", "Note")
+    rows <- lapply(seq_len(nrow(rules)), function(i) {
+      shiny::tags$tr(lapply(unname(as.list(rules[i, ])), shiny::tags$td))
+    })
+    return(shiny::modalDialog(
+      title = "Cell Phenotype Rules", size = "l", easyClose = TRUE,
+      footer = shiny::modalButton("Close"),
+      shiny::tags$p("The original 15 donors retain their saved phenotype labels. ",
+        "The rules below were accepted for donors 78, 6090, 6232, 6520, 6539 and 6558."),
+      shiny::tags$p("A marker is positive at a gate-rescaled signal of 0.5 or higher. ",
+        "Rules are applied from parent to child. Conflicting lineages and unsupported cells remain Unknown; ",
+        "conflicting subtypes retain their parent label. These rules do not assign Acinar, ECAD+ or Structural."),
+      shiny::tags$div(style = "max-height: 60vh; overflow: auto;",
+        shiny::tags$table(class = "table table-striped",
+          shiny::tags$thead(shiny::tags$tr(lapply(headings, shiny::tags$th))),
+          shiny::tags$tbody(rows)))
+    ))
+  }
   df <- phenotype_rules_table_df()
   header_row <- shiny::tags$tr(
     shiny::tags$th("Phenotype",          style = "text-align:left; padding:6px 10px;"),
