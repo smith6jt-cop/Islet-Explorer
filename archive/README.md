@@ -10,6 +10,18 @@ untracked work acquires history when committed.
 The app does not depend on these files. Preserve the historical record when a
 method or delivery document still cites it.
 
+## joint-scvi-retrain-superseded-20261003/
+
+`retrain_joint_scvi.py` and its HiPerGator `retrain_joint_scvi_hpg.sbatch` staged
+a joint 21-donor scVI retrain (September 29). Only the `prepare` step ran
+(`tmp/joint-scvi-20260929/preparation.json`, status `prepared_not_trained`);
+no model was trained. The 2026-10-03 owner decision replaced scVI with Harmony
+on protein PCA. The script's `original_qc()` first derived the QC cutoff now
+pinned as `QC_TOTAL_MFI` in `scripts/protein_phenotyping.py`, whose
+`derive_original_qc_threshold()` carries that derivation forward. The script
+expects to sit in `scripts/`; its repository-relative paths do not resolve from
+here.
+
 ## sam-r5-withdrawn-20260917/
 
 R5-only SAM inference, finalization, rendering, QuPath import, and mask-geometry
