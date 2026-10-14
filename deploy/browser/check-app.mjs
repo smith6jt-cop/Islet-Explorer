@@ -11,8 +11,8 @@ const require = createRequire(import.meta.url);
 const options = {};
 for (let index = 2; index < process.argv.length; index += 2) {
   const key = process.argv[index];
-  if (!['--url', '--output', '--chrome'].includes(key) || !process.argv[index + 1]) {
-    throw new Error('Usage: check-app.mjs --url APP_URL --output REPORT.json [--chrome CHROME_PATH]');
+  if (!['--url', '--output', '--chrome', '--expanded'].includes(key) || !process.argv[index + 1]) {
+    throw new Error('Usage: check-app.mjs --url APP_URL --output REPORT.json [--chrome CHROME_PATH] [--expanded true]');
   }
   options[key.slice(2)] = process.argv[index + 1];
 }
@@ -34,7 +34,8 @@ const report = {
   checks: [],
   accessibility: [],
   browserErrors: { page: 0, console: 0 },
-  httpErrors: { missingDefaultFavicon: 0, application: 0 },
+  httpErrors: { missingDefaultFavicon: 0, optionalImageSidecar404: 0, application: 0, applicationPaths: [] },
+  httpErrorClasses: {},
   externalRequestsBlocked: 0,
   limitations: [
     'Automated checks are a subset of accessibility review; visualizations and assistive-technology use still require manual review.',
@@ -81,10 +82,24 @@ async function instrument(page) {
   page.on('response', response => {
     if (response.status() < 400) return;
     const url = new URL(response.url());
-    if (response.status() === 404 && url.origin === appUrl.origin && url.pathname === '/favicon.ico') {
+    if (response.status() === 404 && url.origin === appUrl.origin && url.pathname.endsWith('/favicon.ico')) {
       report.httpErrors.missingDefaultFavicon += 1;
+    } else if (response.status() === 404 && url.origin === appUrl.origin &&
+        url.pathname.startsWith(`${appUrl.pathname}images/`) && url.pathname.endsWith('.offsets.json')) {
+      // Avivator tries an optional sidecar before scanning OME-TIFF IFDs itself.
+      // The Viewer canvas/range checks below verify that its native fallback works.
+      report.httpErrors.optionalImageSidecar404 += 1;
     } else {
       report.httpErrors.application += 1;
+      const normalizedPath = url.pathname
+        .replace(/[A-Za-z][A-Za-z0-9+.-]*_\d+(?=\.ome\.tiff?$)/gi, '{image}')
+        .replace(/\/\d+(?=\/|$)/g, '/{id}');
+      if (!report.httpErrors.applicationPaths.includes(normalizedPath)) report.httpErrors.applicationPaths.push(normalizedPath);
+      const path = url.pathname.toLowerCase();
+      const category = path.endsWith('.ome.tiff') || path.endsWith('.ome.tif') ? 'image' :
+        path.includes('/avivator/') ? 'viewer' : path.includes('/favicon') ? 'favicon' : 'app';
+      report.httpErrorClasses[`${response.status()}:${category}`] =
+        (report.httpErrorClasses[`${response.status()}:${category}`] || 0) + 1;
     }
   });
 }
@@ -150,6 +165,26 @@ try {
     await page.waitForFunction(() => window.Shiny?.shinyapp?.$socket?.readyState === 1);
     return true;
   });
+  await check('plot_population_short_vocabulary_and_hidden_help', async () => {
+    await page.waitForSelector('#plot-which option');
+    return page.evaluate(() => {
+      const selector = document.querySelector('#plot-which');
+      const labels = selector?.selectize
+        ? Object.values(selector.selectize.options).map(option => option.label)
+        : [...(selector?.options || [])].map(option => option.textContent.trim());
+      const retired = ['Endocrine', 'Acinar', 'Endothelial', 'T cell', 'Immune',
+        'Unknown', 'ECAD+', 'Structural', 'APCs'];
+      const hormoneLabels = ['Insulin+ positivity fraction', 'Glucagon+ positivity fraction',
+        'Somatostatin+ positivity fraction'];
+      const plotHelp = [...document.querySelectorAll('summary[title="Plot help"]')]
+        .map(summary => summary.parentElement).find(details => details);
+      return labels.length > 0 && hormoneLabels.every(label => labels.includes(label)) &&
+        !labels.some(label => retired.includes(label)) &&
+        !document.querySelector('#plot-metric, input[name="plot-metric"]') &&
+        Boolean(plotHelp) && !plotHelp.open &&
+        !document.querySelector('#plot-dynamic_selector .help-block, #plot-metric_selector .help-block, #plot-dynamic_selector .phenotype-hint');
+    });
+  });
   await check('reviewer_tabs', async () => page.evaluate(() => {
     const tabs = [...document.querySelectorAll('#tabs > li > a')].map(link => link.dataset.value);
     return JSON.stringify(tabs) === JSON.stringify(['Plot', 'Trajectory', 'Viewer', 'Spatial']);
@@ -189,9 +224,54 @@ try {
     for (const selector of tab.downloads) {
       await check(`download_${selector.slice(1)}`, () => download(page, selector));
     }
+    if (options.expanded === 'true' && tab.name === 'Spatial') {
+      await check('expanded_donor_census_and_method', async () => page.evaluate(() => {
+        const select = document.querySelector('#spatial-donor');
+        const values = select?.selectize ? Object.keys(select.selectize.options) : [...select.options].map(option => option.value);
+        return { passed: values.length === 21 && ['78', '6090', '6232', '6520', '6539', '6558'].every(id => values.includes(id)) &&
+          document.querySelector('#spatial-embedding_method')?.textContent.includes('Harmony'), donors: values.length };
+      }));
+      await check('render_expanded_leiden_umap', () => rendered(page, '#spatial-leiden_umap', 'plotly'));
+      for (const donor of ['78', '6090', '6232', '6520', '6539', '6558']) {
+        await check(`expanded_donor_${donor}_tissue`, async () => {
+          const previous = await page.$eval('#spatial-tissue_scatter img', image => image.src);
+          await page.$eval('#spatial-donor', (element, value) => {
+            if (element.selectize) element.selectize.setValue(value);
+            else { element.value = value; element.dispatchEvent(new Event('change', { bubbles: true })); }
+          }, donor);
+          await page.waitForFunction(old => document.querySelector('#spatial-tissue_scatter img')?.src !== old, {}, previous);
+          return rendered(page, '#spatial-tissue_scatter', 'image');
+        });
+      }
+    }
     if (tab.name === 'Viewer') {
+      if (options.expanded === 'true') {
+        await check('expanded_image_inventory_and_ranges', async () => {
+          await page.waitForSelector('#viewer-selected_image option');
+          return page.evaluate(async base => {
+            const select = document.querySelector('#viewer-selected_image');
+            const names = select?.selectize ? Object.keys(select.selectize.options) : [...select.options].map(option => option.value);
+            let checked = 0;
+            for (const id of [78, 6090, 6232, 6520, 6539, 6558]) {
+              const name = names.find(value => Number(value.match(/_(\d+)\.ome\.tiff?$/i)?.[1]) === id);
+              if (!name) return { passed: false, checked };
+              const response = await fetch(new URL(`images/${name}`, base), { headers: { Range: 'bytes=0-15' } });
+              if (response.status !== 206) { await response.body?.cancel(); return { passed: false, checked }; }
+              if ((await response.arrayBuffer()).byteLength !== 16) return { passed: false, checked };
+              checked += 1;
+            }
+            return { passed: names.length === 21 && checked === 6, images: names.length, checked };
+          }, appUrl.href);
+        });
+      }
       await check('viewer_local_image_url', async () => {
         await page.waitForSelector('#viewer-avivator_viewer');
+        // renderUI creates the frame before its first navigation completes.
+        await page.waitForFunction(() => {
+          const frame = document.querySelector('#viewer-avivator_viewer');
+          try { return Boolean(new URL(frame?.contentWindow?.location.href).searchParams.get('image_url')); }
+          catch { return false; }
+        });
         const iframe = await page.$('#viewer-avivator_viewer');
         const frame = await iframe.contentFrame();
         viewerHref = frame.url();
@@ -233,6 +313,48 @@ try {
     await check(`accessibility_${tab.name.toLowerCase()}`, () => accessibility(page, tab.name));
     await check(`session_${tab.name.toLowerCase()}`, () => page.evaluate(() =>
       window.Shiny?.shinyapp?.$socket?.readyState === 1 && !document.querySelector('#shiny-disconnected-overlay')));
+  }
+
+  if (options.expanded === 'true') {
+    await page.click('#tabs a[data-value="Trajectory"]');
+    await check('trajectory_range_requires_recalculate', async () => {
+      await rendered(page, '#traj-traj_scatter', 'plotly');
+      const before = await page.$eval('#traj-traj_scatter', element => JSON.stringify(element.data));
+      await page.evaluate(() => {
+        const slider = window.jQuery('#traj-cell_range').data('ionRangeSlider');
+        slider.update({ from: 20, to: 200 });
+        window.jQuery('#traj-cell_range').trigger('change');
+      });
+      await page.waitForFunction(() => document.querySelector('#traj-traj_range_pending')?.textContent.includes('Range not applied'));
+      return page.$eval('#traj-traj_scatter', (element, old) => JSON.stringify(element.data) === old, before);
+    });
+    await check('trajectory_range_recalculated', async () => {
+      await page.click('#traj-recalculate_trajectory');
+      await page.waitForFunction(() => !document.querySelector('#traj-traj_range_pending')?.textContent.includes('Range not applied'));
+      await rendered(page, '#traj-traj_scatter', 'plotly');
+      return page.$eval('#traj-dl_umap_csv', async link => {
+        const response = await fetch(link.href); const text = await response.text();
+        const lines = text.trim().split('\n');
+        const split = line => {
+          const fields = []; let field = ''; let quoted = false;
+          for (let i = 0; i < line.length; i += 1) {
+            const char = line[i];
+            if (char === '"' && quoted && line[i + 1] === '"') { field += '"'; i += 1; }
+            else if (char === '"') quoted = !quoted;
+            else if (char === ',' && !quoted) { fields.push(field); field = ''; }
+            else field += char;
+          }
+          fields.push(field); return fields;
+        };
+        const headerIndex = lines.findIndex(line => split(line).includes('total_cells'));
+        const count = headerIndex < 0 ? -1 : split(lines[headerIndex]).indexOf('total_cells');
+        const values = count < 0 ? [] : lines.slice(headerIndex + 1)
+          .filter(line => line && !line.startsWith('#')).map(line => Number(split(line)[count]));
+        const invalid = values.filter(value => !Number.isFinite(value) || value < 20 || value > 200).length;
+        return { passed: response.ok && count >= 0 && values.length > 0 && invalid === 0,
+          rows: values.length, invalidRows: invalid };
+      });
+    });
   }
 
   const viewerPage = await browser.newPage();

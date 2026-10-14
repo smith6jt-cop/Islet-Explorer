@@ -82,10 +82,10 @@ viewer_server <- function(id, forced_image, current_tab) {
         if (!is.null(local_images_root) && dir.exists(local_images_root)) {
           resource_candidate <- file.path(local_images_root, sel_basename)
         }
-        if (file.exists(www_candidate)) {
-          rel_url <- paste("local_images", sel_basename, sep = "/")
-        } else if (!is.null(resource_candidate) && file.exists(resource_candidate)) {
+        if (!is.null(resource_candidate) && file.exists(resource_candidate)) {
           rel_url <- paste("images", sel_basename, sep = "/")
+        } else if (file.exists(www_candidate)) {
+          rel_url <- paste("local_images", sel_basename, sep = "/")
         } else {
           rel_url <- paste("local_images", sel_basename, sep = "/")
         }

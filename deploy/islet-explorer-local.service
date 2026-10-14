@@ -1,0 +1,27 @@
+# DEVELOPMENT ONLY: local research app on loopback port 3840. Not the production
+# path; production uses the rootless Podman/Quadlet release in deploy/README.md.
+[Unit]
+Description=Islet Explorer local Shiny backend
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/data/panc_CODEX/Islet-Explorer
+Environment=ISLET_RUNTIME_MODE=development
+Environment=ISLET_DATA_ROOT=/data/panc_CODEX/Islet-Explorer/data
+Environment=RETICULATE_PYTHON=/home/smith6jt/miniconda3/envs/scvi-env/bin/python
+Environment=ISLET_ENABLE_AI=FALSE
+Environment=SHOW_STATISTICS_TAB=0
+Environment=SHOW_INFLAMMATION_TAB=0
+Environment=OPENBLAS_NUM_THREADS=1
+Environment=OMP_NUM_THREADS=1
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=R=/data/panc_CODEX/Islet-Explorer/deploy/run-local-r.sh
+EnvironmentFile=-/data/panc_CODEX/Islet-Explorer/tmp/local-app.env
+ExecStart=/opt/shiny-server/bin/shiny-server /data/panc_CODEX/Islet-Explorer/deploy/shiny-server-local.conf
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+
+[Install]
+WantedBy=default.target

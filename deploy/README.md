@@ -20,27 +20,29 @@ tracked in [`PUBAPPS_UFRC_HANDOFF.md`](../PUBAPPS_UFRC_HANDOFF.md); proportional
 logging requirements and additional hardening guidance are in
 [`docs/pubapps_log_inventory.md`](../docs/pubapps_log_inventory.md).
 
-The current local development app serves the restored original 15 donors and
-5,214 islets at `http://10.15.152.7:8080/islet-explorer/` through loopback
-port 3840. Its `/local_images/` route still points to an earlier 21-image
-collection under an explicit development-only allowance; this is not a
-production image/data pairing. The frozen 15-image release at `5809be4` and
-its dated image, scan, and parity evidence remain the reference release, not
-evidence for the current development UI. See [the September 28 handoff](../docs/HANDOFF_2026-09-28.md)
+The local development app at `http://10.15.152.7:8080/islet-explorer/`
+(loopback port 3840) serves the 2026-10-03 protein expansion: 21 donors and
+8,436 islets from `data/development/protein-expanded-20261003-v2/`, selected by
+`ISLET_DATA_ROOT` in the untracked `tmp/local-app.env`. Its
+development-only service files are `deploy/islet-explorer-local.service`,
+`deploy/shiny-server-local.conf` and `deploy/run-local-r.sh`; they are not the
+production path described below. See
+[the protein expansion record](../docs/protein_expansion_20261003.md) for
+lineage and rollback to the frozen 15-donor root. The frozen 15-image release at
+`5809be4` and its dated image, scan, and parity evidence remain the reference
+production release. See [the September 28 handoff](../docs/HANDOFF_2026-09-28.md)
 and [the readiness record](../docs/ufrc_readiness.md).
 
-Six donor additions—HPAP-078, 6090, 6232, 6520, recovered 6539, and
-6558—are staged separately in a raw-only offline bundle. Its 943,068 objects
-and 852 passing original-preservation checks do not make it app-ready:
-`app_ready` and `scientific_acceptance` are false. Five donors still need
-boundary review. The exact original phenotype rules, numeric gates, scVI
-weights and preprocessing have not been recovered and verified for their
-typing; a common 21-donor trajectory/UMAP/Leiden refit remains unvalidated.
-There is no approved combined islet count or 21-image production release. The
-earlier schema-2/3/4 all-donor runtimes and their capacity figures are historical experimental
-evidence; see [the phase-2 contract](../docs/donor_expansion_phase2.md).
-Production verification rejects unaccepted expanded manifests, and the
-raw-only bundle has no runtime manifest or app loader.
+On 2026-10-03 the owner approved all six donor boundary sets (HPAP-078, 6090,
+6232, 6520, recovered 6539 and 6558) and the reconstruction phenotype rules,
+and selected Harmony on protein PCA with the uncorrected fit retained. The
+expanded root passed its release validator and browser acceptance on
+2026-10-05. It is not yet a production release: `scripts/build_release_data.R`
+and the runtime Parquet backend do not yet carry the protein embedding metadata
+or the expansion phenotype rules, and its images are symlinks to source paths
+outside the root. The earlier schema-2/3/4 all-donor runtimes and their
+capacity figures are historical experimental evidence; see
+[the phase-2 contract](../docs/donor_expansion_phase2.md).
 
 ## Fixed production contract
 

@@ -53,8 +53,9 @@ channel_names_vec <- load_channel_names()
 
 # ---- Local images setup ---------------------------------------------------
 
-# Prefer static www/local_images so shiny-server can serve large OME-TIFFs with HTTP Range support.
-# Only add a dynamic resource path if www/local_images does not exist.
+# The Viewer prefers the data-root `images/` route (served by shiny-server with
+# HTTP Range support) and falls back to static www/local_images. Only add a
+# dynamic resource path if www/local_images does not exist.
 local_images_env <- Sys.getenv("LOCAL_IMAGE_ROOT", unset = "")
 local_images_root <- NULL
 if (nzchar(local_images_env)) {
