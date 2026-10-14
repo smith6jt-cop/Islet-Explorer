@@ -331,6 +331,11 @@ def compare_h5ad(report: dict, name: str, left, right, donors: set[str], atol: f
     for table, frame in original_tables.items():
         table_keys_used.add(table + "_columns")
         table_keys_used.update(table + "_" + str(column) for column in frame.columns)
+        count_key = table + "_n_rows"
+        if count_key in left.uns and table in candidate_tables:
+            _check(report, name + "/uns/" + count_key + "/consistent",
+                   int(right.uns.get(count_key, -1)) == len(candidate_tables[table]))
+            table_keys_used.add(count_key)
     for key, value in left.uns.items():
         if key in table_keys_used:
             continue

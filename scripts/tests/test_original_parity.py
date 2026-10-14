@@ -151,6 +151,31 @@ class OriginalParityTests(unittest.TestCase):
         self.assertTrue(any("obsp/connectivities" in d["name"]
                             for d in report["derived_differences"]), report)
 
+    def test_embedded_table_row_count_follows_appended_rows(self):
+        # `<table>_n_rows` grows with appended donors, so it is checked for
+        # consistency with the candidate table rather than for equality.
+        for root, n in ((self.baseline, 3), (self.candidate, 3)):
+            for filename in ("adata_ins_root.h5ad", "islet_explorer.h5ad"):
+                path = root / filename
+                value = ad.read_h5ad(path)
+                value.uns["groovy_composition_n_rows"] = n
+                value.write_h5ad(path)
+
+        def append_row(value, n_rows):
+            value.uns["groovy_composition_Case ID"] = np.append(value.uns["groovy_composition_Case ID"], 9)
+            value.uns["groovy_composition_islet_id"] = np.append(value.uns["groovy_composition_islet_id"], "9_z")
+            value.uns["groovy_composition_value"] = np.append(value.uns["groovy_composition_value"], 7.0)
+            value.uns["groovy_composition_n_rows"] = n_rows
+            return value
+
+        self.mutate_h5ad(lambda a: append_row(a, 4))
+        report = audit(self.baseline, self.candidate)
+        self.assertTrue(report["passed"], report)
+        self.assertTrue(any(c["name"].endswith("/uns/groovy_composition_n_rows/consistent")
+                            and c["passed"] for c in report["checks"]))
+        self.mutate_h5ad(lambda a: (a.uns.__setitem__("groovy_composition_n_rows", 3), a)[1])
+        self.assertRejected("groovy_composition_n_rows/consistent")
+
     def test_missing_embedded_table_column(self):
         def modify(value):
             del value.uns["groovy_composition_value"]
