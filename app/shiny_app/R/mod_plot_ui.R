@@ -84,6 +84,12 @@ plot_main_ui <- function(id, extra_panel = NULL) {
   tagList(
     column(12,
       tab_help("Plot help", "show_phenotype_rules_plot",
+        tags$p(tags$strong("Cell Populations."),
+               " Core includes cells inside the islet boundary. Peri-Islet includes cells in the 20 µm zone around it. Core+Peri pools both regions and uses the matching pooled cell denominator."),
+        tags$p(tags$strong("Metrics."),
+               " Percentages use the cells in the selected region as the denominator. Counts are phenotype-positive cells per islet. Density divides the count by the QuPath-measured annotation area; Core+Peri density uses the summed core and peri areas."),
+        tags$p(tags$strong("Phenotype definitions."),
+               " Open the marker-definition reference below to review the documented rules."),
         tags$p("Enable \"Show individual points\" then click any point on the ",
                tags$strong("Islet Size Distribution"), " scatter to view its segmentation map below."),
         tags$p("Enable \"Show individual points\" and set \"Color points by\" to Donor ID, then click a donor in the legend to show/hide it."),

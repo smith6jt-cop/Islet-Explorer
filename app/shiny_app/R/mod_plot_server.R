@@ -35,42 +35,9 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
     }
 
     composition_selection_choices <- function(pd) {
-      base_choices <- c(
-        "Ins_frac" = "Ins_any",
-        "Glu_frac" = "Glu_any",
-        "Stt_frac" = "Stt_any"
+      plot_composition_selection_choices(
+        colnames(pd$comp), pd$combined_pairs
       )
-      comp_cols <- colnames(pd$comp)
-      prop_cols <- grep("^prop_", comp_cols, value = TRUE)
-      peri_prop_cols <- grep("^peri_prop_", comp_cols, value = TRUE)
-      combined_pairs <- pd$combined_pairs
-      combined_vals <- if (!is.null(combined_pairs) && nrow(combined_pairs) > 0) {
-        setNames(paste0("combined_prop_", combined_pairs$stem), combined_pairs$label)
-      } else {
-        character(0)
-      }
-
-      if (!length(prop_cols) && !length(peri_prop_cols)) return(base_choices)
-
-      choices <- list("Core — Hormone Positivity (QuPath threshold)" = base_choices)
-      if (length(prop_cols) > 0) {
-        prop_cols <- prop_cols[phenotype_is_kept(gsub("^prop_", "", prop_cols))]
-        choices[["Core — Phenotype Proportions (scVI)"]] <-
-          setNames(prop_cols, gsub("^prop_", "", prop_cols))
-      }
-      if (length(peri_prop_cols) > 0) {
-        peri_labels <- vapply(
-          peri_prop_cols,
-          function(cl) extract_phenotype_from_column(cl) %||% cl,
-          character(1), USE.NAMES = FALSE
-        )
-        choices[["Peri-Islet — Phenotype Proportions (scVI)"]] <-
-          setNames(peri_prop_cols, peri_labels)
-      }
-      if (length(combined_vals) > 0) {
-        choices[["Core+Peri — Phenotype Proportions (scVI)"]] <- combined_vals
-      }
-      choices
     }
 
     selection_values <- function(choices) {
@@ -130,6 +97,9 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       # Microenvironment has a single implicit area-percentage metric; a stale
       # Composition radio value is irrelevant while that mode is active.
       if (identical(validated_mode(), "Microenvironment")) return("Percentage")
+      # Hormone positivity is already one QuPath-derived fraction per hormone;
+      # don't expose or honor a second counts/density measurement selector.
+      if (validated_selection() %in% c("Ins_any", "Glu_any", "Stt_any")) return("Percentage")
       value <- input$metric %||% "Percentage"
       if (!islet_valid_scalar_choice(
         value, c("Percentage", "Counts", "Density"), "plot_metric_invalid"
@@ -216,18 +186,9 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
                     selected = selected)
       } else {
         choices <- vocabularies$composition
-        pheno_label <- extract_phenotype_from_column(selected)
-        hint <- if (!is.null(pheno_label) && !is.null(get_phenotype_rule(pheno_label))) {
-          phenotype_hint_ui(pheno_label, show_modal_link = ns("show_phenotype_rules_inline"))
-        }
         tagList(
           selectInput(ns("which"), "Population Measure", choices = choices,
-                      selected = selected),
-          hint,
-          helpText(
-            "Core = cells within the islet boundary. Peri-Islet = cells within a 20 µm zone around the islet. ",
-            "Core+Peri = phenotype cells pooled across both zones, with the matching pooled denominator."
-          )
+                      selected = selected)
         )
       }
     })
@@ -244,17 +205,14 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         # peri_region_um2) for all three region variants. Peri-islet area is the
         # QuPath `_exp20um` annotation area, merged in via prep_data().
         w <- validated_selection() %||% ""
+        if (w %in% c("Ins_any", "Glu_any", "Stt_any")) return(NULL)
         if (startsWith(w, "combined_prop_")) {
           tagList(
             radioButtons(ns("metric"), "Metric",
                          choices = c("% of all (core+peri) cells"      = "Percentage",
                                      "Cells per islet (core+peri)"     = "Counts",
                                      "Cells per mm² of core+peri area" = "Density"),
-                         selected = "Percentage", inline = TRUE),
-            helpText(style = "font-size: 12px; color: #555; margin-top: -4px;",
-                     "Per islet = phenotype cells in core + 20 µm peri-islet zone. ",
-                     "Per mm² of core+peri area = phenotype cells ÷ (core_region_um2 + peri_region_um2), ",
-                     "using QuPath-measured annotation areas.")
+                         selected = "Percentage", inline = TRUE)
           )
         } else if (startsWith(w, "peri_prop_")) {
           tagList(
@@ -262,11 +220,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
                          choices = c("% of peri cells"          = "Percentage",
                                      "Cells per islet (peri)"   = "Counts",
                                      "Cells per mm² of peri area" = "Density"),
-                         selected = "Percentage", inline = TRUE),
-            helpText(style = "font-size: 12px; color: #555; margin-top: -4px;",
-                     "Per islet = phenotype cells tallied in the 20 µm peri-islet zone. ",
-                     "Per mm² of peri area = peri cells ÷ peri_region_um2 (QuPath-measured ",
-                     "`_exp20um` annotation area).")
+                         selected = "Percentage", inline = TRUE)
           )
         } else {
           tagList(
@@ -274,11 +228,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
                          choices = c("% of core cells"            = "Percentage",
                                      "Cells per islet (core)"     = "Counts",
                                      "Cells per mm² of core area" = "Density"),
-                         selected = "Percentage", inline = TRUE),
-            helpText(style = "font-size: 12px; color: #555; margin-top: -4px;",
-                     "Per islet = phenotype cells tallied in the islet core. ",
-                     "Per mm² of core area = core cells ÷ core_region_um2 ",
-                     "(QuPath-measured islet annotation area).")
+                         selected = "Percentage", inline = TRUE)
           )
         }
       }
@@ -1456,10 +1406,6 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
 
       return(desc)
     }
-
-    # ---- Inline "see all rules" link under the Population Measure hint ----
-    observeEvent(input$show_phenotype_rules_inline,
-                 { showModal(phenotype_rules_modal_ui()) }, ignoreInit = TRUE)
 
     # ===========================================================================
     # Return values for other modules (Statistics, etc.)
