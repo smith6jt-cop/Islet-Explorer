@@ -2035,7 +2035,7 @@ statistics_server <- function(id, raw_df, get_selection_description,
                     os$n_excluded, if (os$n_excluded == 1) "" else "s", os$label),
             "The control is local to the Statistics tab (Section 1 ", tags$em("Exclude outliers"),
             " checkbox + threshold slider); the Plot / Trajectory / Spatial tabs share their own synced controls. ",
-            "Spatial Card A uses Tukey 1.5×IQR per donor status, since enrichment z is already a standardised quantity.",
+            "The Spatial peri enrichment plot uses Tukey 1.5×IQR per donor status, since enrichment z is already a standardised quantity.",
             tags$br()
           )
         } else {

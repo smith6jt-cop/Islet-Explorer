@@ -222,9 +222,9 @@ GLOBAL_OUTLIER_TOOLTIP <- paste0(
   "Detection is two-sided — both high and low extremes are flagged. When MAD = 0 ",
   "(zero-inflated groups), the rule falls back to classical mean/SD. Excluded ",
   "points still appear on scatter and box plots as faint grey × markers; counts ",
-  "are shown next to each plot title. Spatial Card A (infiltration) uses Tukey ",
+  "are shown next to each plot title. The Spatial peri enrichment plot uses Tukey ",
   "1.5×IQR instead, since enrichment z-scores are already a standardised, ",
-  "roughly symmetric quantity; Spatial Card C distance plots apply the z-score ",
+  "roughly symmetric quantity; the Spatial distance box plot applies the z-score ",
   "rule on log(1 + distance)."
 )
 

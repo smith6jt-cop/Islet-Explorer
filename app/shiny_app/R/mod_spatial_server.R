@@ -876,7 +876,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           names(out)[names(out) == "hi"] <- if (stat_mode == "Median") "q75" else "mean_plus_sem"
         }
         write_islet_csv(file, out, islet_csv_header(
-          "Spatial Card B — phenotype enrichment / proportion by donor status",
+          "Spatial — phenotype composition & enrichment by donor status",
           paste("Region:", switch(region, peri = "peri-islet enrichment z-score",
                                   core = "core proportion", "peri-islet proportion")),
           paste("Statistic:", stat_mode, "of per-donor means"),
@@ -907,7 +907,15 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           span("|", style = "color: #ccc;"),
           actionLink(ns("enrich_pheno_none"), "None", style = "font-size: 11px;")
         ),
-        div(style = "column-count: 3; column-gap: 12px;",
+        # Flow the checkboxes across the full-width card (same pattern as
+        # .cd-comp-cols for the distance-profile composition picker).
+        tags$style(HTML(paste0(
+          ".enrich-pheno-cols,.enrich-pheno-cols .shiny-input-checkboxgroup,",
+          ".enrich-pheno-cols .shiny-options-group{width:100%;max-width:none;",
+          "display:block;box-sizing:border-box;}",
+          ".enrich-pheno-cols .shiny-options-group{column-width:150px;column-gap:12px;}",
+          ".enrich-pheno-cols .checkbox{break-inside:avoid;margin:2px 0;}"))),
+        div(class = "enrich-pheno-cols",
           checkboxGroupInput(ns("enrich_phenos"), NULL,
                              choices = labels, selected = selected, inline = FALSE)
         )
@@ -923,235 +931,192 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
     })
 
     # ---- Neighborhood cards UI (conditional on data availability) ----
+    # Layout (Oct 2026 streamlining): the Neighborhood Analysis control bar sits
+    # directly above the three islet-level cards it drives (point size and
+    # transparency reach the scatter and the distance box plot; the outlier
+    # toggle reaches the enrichment bars and the distance box plot). The
+    # composition card and the distance-profile card follow without their own
+    # section headings. All explanatory prose lives in the tab help popover
+    # (`tab_help()` in mod_spatial_ui.R), not inline.
     output$neighborhood_cards <- renderUI({
       if (!has_neighborhood()) return(NULL)
 
-      # section_heading helper (inline — cannot share with UI function directly)
-      sec_heading <- function(step, title, subtitle) {
-        div(style = "margin-bottom: 14px; margin-top: 22px; padding-bottom: 8px; border-bottom: 2px solid #d0e0f0;",
-          div(style = "display: flex; align-items: baseline; gap: 10px;",
-            span(step,
-                 style = paste0("display: inline-block; background: linear-gradient(135deg, #4477AA, #5599CC);",
-                                " color: white; font-weight: 700; font-size: 14px; padding: 2px 10px;",
-                                " border-radius: 12px; min-width: 28px; text-align: center;")),
-            span(title, style = "font-weight: 700; font-size: 18px;")
-          ),
-          tags$small(subtitle, style = "color: #777; display: block; margin-top: 4px;")
-        )
-      }
+      card_style <- "padding: 15px; margin-bottom: 15px; overflow: visible; height: 100%; box-sizing: border-box;"
+      card_title <- function(txt) h5(txt, style = "font-size: 15px; font-weight: 600; margin: 0 0 8px 0; align-self: center;")
+      ctrl_row   <- "display: flex; gap: 6px 18px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 4px;"
+      dl_csv <- function(id) div(style = "margin-top: 6px;",
+        downloadButton(ns(id), "Download CSV", style = "font-size: 12px; padding: 3px 10px;"))
 
       tagList(
-        # ==== Global filter for neighborhood cards ====
-        # The "Exclude outliers" checkbox is the non-namespaced mirror of the
-        # Plot/Trajectory controls — wired up by app.R synchronisation
-        # observers so all three move together. Cards A (z-score) and C
-        # (z on log1p(distance)) honour it; Card B's "Clip z > 5" is a
-        # display saturation, kept separate.
+        # ==== Control bar ====
+        # The "Exclude outliers" checkbox and z slider are the non-namespaced
+        # mirrors of the Plot/Trajectory controls — app.R synchronisation
+        # observers keep all three tabs in step.
         fluidRow(column(12,
-          div(class = "card", style = "padding: 12px 15px; margin-bottom: 10px; margin-top: 10px; display: flex; align-items: center; gap: 20px; overflow: visible;",
+          div(class = "card", style = "padding: 12px 15px; margin-bottom: 10px; margin-top: 10px; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 20px; overflow: visible;",
             span(style = "font-weight: 600; font-size: 15px; white-space: nowrap;", "Neighborhood Analysis"),
             numericInput(ns("nbr_min_cells"), "Min cells/islet", value = 1, min = 1, max = 100, step = 1, width = "130px"),
             sliderInput(ns("nbr_pt_size"), "Point size", min = 2, max = 12, value = 5, step = 1, width = "150px"),
             sliderInput(ns("nbr_pt_alpha"), "Point transparency", min = 0, max = 0.95, value = 0.6, step = 0.05, width = "150px"),
-            tags$div(title = GLOBAL_OUTLIER_TOOLTIP, style = "min-width: 200px;",
-              checkboxInput("spatial_remove_outliers",
-                            "Exclude outliers",
-                            value = FALSE)
+            tags$div(title = GLOBAL_OUTLIER_TOOLTIP, style = "min-width: 160px;",
+              checkboxInput("spatial_remove_outliers", "Exclude outliers", value = FALSE)
             ),
-            tags$div(style = "min-width: 230px;",
-              sliderInput("spatial_outlier_z", "Outlier z-threshold",
-                          min = 0.5, max = 10, value = 3, step = 0.5, width = "220px")
-            ),
+            sliderInput("spatial_outlier_z", "Outlier z-threshold",
+                        min = 0.5, max = 10, value = 3, step = 0.5, width = "200px"),
             uiOutput(ns("nbr_islet_count"))
           )
         )),
 
-        # ==== Card A: Immune Infiltration Overview ====
-        fluidRow(column(12, sec_heading(
-          "A", "Peri-Islet Phenotype Enrichment",
-          "Per-phenotype peri-zone enrichment across disease stages, with peri vs core proportion scatter."
-        ))),
+        # ==== Row 1: the islet-level cards the control bar drives ====
         fluidRow(style = "display: flex; flex-wrap: wrap;",
-          column(6,
-            div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible; height: 100%; box-sizing: border-box;",
-              div(style = "display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 8px;",
+          column(4,
+            div(class = "card", style = card_style,
+              card_title("Peri enrichment by status"),
+              div(style = ctrl_row,
                 div(style = "flex: 1; min-width: 180px;",
                   # Populated server-side from phenotype_choices().
-                  selectInput(ns("infiltration_phenotype"), "Phenotype (peri enrichment z)",
+                  selectInput(ns("infiltration_phenotype"), "Phenotype",
                               choices = NULL, width = "100%"),
                   uiOutput(ns("infiltration_pheno_hint"))
                 ),
                 checkboxInput(ns("infiltration_show_outlier_table"),
-                              "Show excluded-outlier table", value = FALSE),
-                tags$small(style = "color: #666; flex-basis: 100%;",
-                  "Outlier exclusion follows the global toggle above (Tukey 1.5×IQR per donor status — enrichment z is already standardised, so the IQR fence is used instead of the modified z-score).")
+                              "Show outlier table", value = FALSE)
               ),
-              plotlyOutput(ns("infiltration_bars"), height = "400px"),
-              div(style = "margin-top: 6px;",
-                downloadButton(ns("dl_infiltration_csv"), "Download CSV",
-                               style = "font-size: 12px; padding: 3px 10px;")),
+              plotlyOutput(ns("infiltration_bars"), height = "420px"),
+              dl_csv("dl_infiltration_csv"),
               uiOutput(ns("infiltration_outlier_info"))
             )
           ),
-          column(6,
-            div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible; height: 100%; box-sizing: border-box;",
-              div(style = "display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 8px;",
+          column(4,
+            div(class = "card", style = card_style,
+              card_title("Peri vs core proportion"),
+              div(style = ctrl_row,
                 div(style = "flex: 1; min-width: 180px;",
-                  # Populated server-side from phenotype_choices().
-                  selectInput(ns("scatter_phenotype"), "Phenotype (peri vs core)",
+                  selectInput(ns("scatter_phenotype"), "Phenotype",
                               choices = NULL, width = "100%"),
                   uiOutput(ns("scatter_pheno_hint"))
                 ),
                 checkboxInput(ns("scatter_sqrt"), "Sqrt scale", value = TRUE),
                 checkboxInput(ns("scatter_trend"), "Trend lines", value = FALSE)
               ),
-              plotlyOutput(ns("infiltration_scatter"), height = "400px")
-            )
-          )
-        ),
-        fluidRow(column(12,
-          div(style = "background: #f0f6ff; padding: 10px 15px; border-radius: 6px; margin-bottom: 20px; font-size: 13px; color: #555;",
-            tags$em("Immune infiltration quantifies the proportion of immune cells among all cells in the peri-islet zone (20\u00b5m expansion) and islet core. Higher fractions indicate increased immune surveillance or active infiltration.")
-          )
-        )),
-
-        # ==== Card B: Immune Cell Enrichment by Type ====
-        fluidRow(column(12, sec_heading(
-          "B", "Phenotype Composition & Enrichment",
-          "Which phenotypes are present in islet core vs peri-islet zones, and which are enriched vs tissue-wide background?"
-        ))),
-        # Shared phenotype filter — governs BOTH plots below. Default hides bulk
-        # classes (Acinar etc.) so the shared color/axis scale is driven by the
-        # immune/endocrine classes rather than exocrine abundance.
-        fluidRow(column(12,
-          div(class = "card", style = "padding: 8px 15px; margin-bottom: 10px; overflow: visible;",
-            uiOutput(ns("enrich_pheno_filter"))
-          )
-        )),
-        fluidRow(style = "display: flex; flex-wrap: wrap;",
-          column(6,
-            div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible; height: 100%; box-sizing: border-box;",
-              div(style = "display: flex; gap: 15px; align-items: center; flex-wrap: wrap; margin-bottom: 8px;",
-                radioButtons(ns("enrich_region"), "Region",
-                             c("Peri-islet (enrichment z)" = "peri",
-                               "Core (proportion)" = "core",
-                               "Peri-islet (proportion)" = "peri_prop"),
-                             selected = "peri", inline = TRUE),
-                radioButtons(ns("enrich_stat"), "Summary", c("Median", "Mean"),
-                             selected = "Median", inline = TRUE),
-                conditionalPanel(
-                  condition = paste0("input['", ns("enrich_region"), "'] == 'peri'"),
-                  checkboxInput(ns("enrich_clip"), "Clip extreme z > 5", value = TRUE)
-                )
-              ),
-              plotlyOutput(ns("enrichment_bars"), height = "500px")
+              plotlyOutput(ns("infiltration_scatter"), height = "420px")
             )
           ),
-          column(6,
-            div(class = "card", style = "padding: 15px; margin-bottom: 15px; height: 100%; box-sizing: border-box;",
-              div(style = "display: flex; align-items: center; justify-content: space-between; gap: 10px;",
-                h5("Heatmap", style = "font-size: 15px; margin-top: 0; margin-bottom: 0;"),
-                checkboxInput(ns("enrich_show_values"), "Show values", value = TRUE)
+          column(4,
+            div(class = "card", style = card_style,
+              card_title("Distance to nearest cell"),
+              div(style = ctrl_row,
+                div(style = "flex: 1; min-width: 180px;",
+                  # Populated server-side: "Immune (all)" + every phenotype with min_dist_*.
+                  selectInput(ns("distance_metric"), "Phenotype",
+                              choices = NULL, width = "100%"),
+                  uiOutput(ns("distance_pheno_hint"))
+                ),
+                checkboxInput(ns("distance_show_outlier_table"),
+                              "Show outlier table", value = FALSE)
               ),
-              plotlyOutput(ns("enrichment_heatmap"), height = "520px"),
-              div(style = "margin-top: 6px;",
-                downloadButton(ns("dl_enrichment_csv"), "Download CSV",
-                               style = "font-size: 12px; padding: 3px 10px;"))
-            )
-          )
-        ),
-        fluidRow(column(12,
-          div(style = "background: #f0f6ff; padding: 10px 15px; border-radius: 6px; margin-bottom: 20px; font-size: 13px; color: #555;",
-            tags$em("Enrichment z-scores (peri-islet mode) compare observed immune cell counts in the peri-islet zone vs expected counts based on tissue-wide proportions (Poisson model). z > 0 = enriched; z < 0 = depleted. Core and peri-islet proportion modes show raw cell type fractions (0\u20131) within each compartment.")
-          )
-        )),
-
-        # ==== Card C: Immune Proximity to Islets ====
-        fluidRow(column(12, sec_heading(
-          "C", "Phenotype Proximity to Islet",
-          "Left: per-islet minimum distance to nearest peri-islet cells of each phenotype. Right: per-cell signed distance-to-islet on a symlog axis — a density (by disease status) or a phenotype composition, spanning islet interior to bulk tissue."
-        ))),
-        fluidRow(style = "display: flex; flex-wrap: wrap;",
-          column(6,
-            div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible; height: 100%; box-sizing: border-box;",
-              # Populated server-side: "Immune (all)" + every phenotype with min_dist_*.
-              selectInput(ns("distance_metric"), "Distance to nearest",
-                          choices = NULL, width = "100%"),
-              uiOutput(ns("distance_pheno_hint")),
-              checkboxInput(ns("distance_show_outlier_table"),
-                            "Show excluded-outlier table", value = FALSE),
-              tags$small(style = "color: #666;",
-                "Outlier exclusion follows the global toggle above (robust |z| from median/MAD on log(1+distance), per donor status — two-sided; threshold from the slider). Excluded points still appear as faint × markers."),
               plotlyOutput(ns("distance_boxplot"), height = "420px"),
-              div(style = "margin-top: 6px;",
-                downloadButton(ns("dl_distance_csv"), "Download CSV",
-                               style = "font-size: 12px; padding: 3px 10px;")),
+              dl_csv("dl_distance_csv"),
               uiOutput(ns("distance_outlier_info"))
             )
-          ),
-          column(6,
-            div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible; height: 100%; box-sizing: border-box;",
-              # Two views: the donor-averaged KDE (default) or the Senior-ported
-              # per-cell tissue-wide density/composition. CODEX phenotypes only.
+          )
+        ),
+
+        # ==== Row 2: phenotype composition (one card, two plots) ====
+        # The phenotype filter and the Region / Summary radios feed
+        # enrich_summary(), which BOTH plots consume.
+        fluidRow(column(12,
+          div(class = "card", style = card_style,
+            div(style = ctrl_row,
+              card_title("Phenotype composition & enrichment"),
+              radioButtons(ns("enrich_region"), "Region",
+                           c("Peri-islet (enrichment z)" = "peri",
+                             "Core (proportion)" = "core",
+                             "Peri-islet (proportion)" = "peri_prop"),
+                           selected = "peri", inline = TRUE),
+              radioButtons(ns("enrich_stat"), "Summary", c("Median", "Mean"),
+                           selected = "Median", inline = TRUE),
+              conditionalPanel(
+                condition = paste0("input['", ns("enrich_region"), "'] == 'peri'"),
+                checkboxInput(ns("enrich_clip"), "Clip extreme z > 5", value = TRUE)
+              ),
+              checkboxInput(ns("enrich_show_values"), "Show heatmap values", value = TRUE)
+            ),
+            uiOutput(ns("enrich_pheno_filter")),
+            fluidRow(
+              column(6, plotlyOutput(ns("enrichment_bars"), height = "500px")),
+              column(6,
+                plotlyOutput(ns("enrichment_heatmap"), height = "500px"),
+                dl_csv("dl_enrichment_csv"))
+            )
+          )
+        )),
+
+        # ==== Row 3: tissue-wide distance profile ====
+        fluidRow(column(12,
+          div(class = "card", style = card_style,
+            # Two views: the donor-averaged KDE (default) or the Senior-ported
+            # per-cell tissue-wide density/composition. CODEX phenotypes only.
+            div(style = ctrl_row,
+              card_title("Distance-to-islet profile"),
               radioButtons(ns("dist_view"), "View",
                            choices = c("Donor-averaged KDE" = "kde",
                                        "Per-cell distance" = "cellwise"),
-                           selected = "kde", inline = TRUE),
-              conditionalPanel(
-                condition = "input.dist_view == 'kde'", ns = ns,
-                selectInput(ns("kde_immune_type"), "Phenotype",
-                            choices = NULL, width = "100%"),
-                uiOutput(ns("kde_pheno_hint")),
-                radioButtons(ns("kde_metric"), NULL, inline = TRUE, selected = "shape",
+                           selected = "kde", inline = TRUE)
+            ),
+            conditionalPanel(
+              condition = "input.dist_view == 'kde'", ns = ns,
+              div(style = ctrl_row,
+                div(style = "min-width: 240px;",
+                  selectInput(ns("kde_immune_type"), "Phenotype",
+                              choices = NULL, width = "260px"),
+                  uiOutput(ns("kde_pheno_hint"))
+                ),
+                radioButtons(ns("kde_metric"), "Y-axis", inline = TRUE, selected = "shape",
                              choices = c("Distribution shape" = "shape",
                                          "Cell abundance" = "abundance"))
-              ),
-              conditionalPanel(
-                condition = "input.dist_view == 'cellwise'", ns = ns,
-                fluidRow(
-                  column(6, radioButtons(ns("dist_mode"), "Group by",
-                                         choices = c("Phenotype" = "phenotype", "Marker+" = "marker"),
-                                         selected = "phenotype", inline = TRUE)),
-                  column(6, radioButtons(ns("dist_norm"), "Y-axis",
-                                         choices = c("Proportion of class" = "prop", "Raw count" = "count"),
-                                         selected = "prop", inline = TRUE))
-                ),
+              )
+            ),
+            conditionalPanel(
+              condition = "input.dist_view == 'cellwise'", ns = ns,
+              div(style = ctrl_row,
+                radioButtons(ns("dist_mode"), "Group by",
+                             choices = c("Phenotype" = "phenotype", "Marker+" = "marker"),
+                             selected = "phenotype", inline = TRUE),
+                radioButtons(ns("dist_norm"), "Y-axis",
+                             choices = c("Proportion of class" = "prop", "Raw count" = "count"),
+                             selected = "prop", inline = TRUE),
                 radioButtons(ns("dist_ptype"), "Plot",
                              choices = c("Density curves" = "density",
                                          "Composition bars" = "composition"),
                              selected = "density", inline = TRUE),
+                checkboxGroupInput(ns("dist_status"), "Disease status",
+                                   choices = c("ND", "Aab+", "T1D"),
+                                   selected = c("ND", "Aab+", "T1D"), inline = TRUE),
                 # dist_group / dist_comp_items choices are populated server-side by
                 # observeEvent(input$dist_mode) (phenotypes vs markers).
                 conditionalPanel(
                   condition = "input.dist_ptype == 'density'", ns = ns,
-                  selectInput(ns("dist_group"), "Show", choices = NULL, width = "100%")
-                ),
-                conditionalPanel(
-                  condition = "input.dist_ptype == 'composition'", ns = ns,
-                  # Flow the (up to ~20) checkboxes into as many ~120px columns
-                  # as fit, instead of one tall column. Targets the options-group
-                  # so it survives the observeEvent(dist_mode) rebuild.
-                  tags$style(HTML(paste0(
-                    ".cd-comp-cols,.cd-comp-cols .shiny-input-checkboxgroup,",
-                    ".cd-comp-cols .shiny-options-group{width:100%;max-width:none;",
-                    "display:block;box-sizing:border-box;}",
-                    ".cd-comp-cols .shiny-options-group{column-width:100px;column-gap:16px;}",
-                    ".cd-comp-cols .checkbox{break-inside:avoid;margin:2px 0;}"))),
-                  tags$div(class = "cd-comp-cols",
-                           checkboxGroupInput(ns("dist_comp_items"), "Show",
-                                              choices = NULL))
-                ),
-                checkboxGroupInput(ns("dist_status"), "Disease status",
-                                   choices = c("ND", "Aab+", "T1D"),
-                                   selected = c("ND", "Aab+", "T1D"), inline = TRUE)
+                  selectInput(ns("dist_group"), "Show", choices = NULL, width = "260px")
+                )
               ),
-              plotlyOutput(ns("immune_distance_kde"), height = "520px")
-            )
-          )
-        ),
-        fluidRow(column(12,
-          div(style = "background: #f0f6ff; padding: 10px 15px; border-radius: 6px; margin-bottom: 20px; font-size: 13px; color: #555;",
-            tags$em("Left: Distance metrics measure minimum Euclidean distance (\u00b5m) from islet core centroid to nearest peri-islet immune cells. NAs indicate no cells of that type in the peri-islet zone. Right: per-cell signed distance-to-islet on a symlog axis — a density split by disease status (per phenotype or all cells) or a phenotype composition (stacked bars, one facet per status, zero-anchored at the islet border). Negative = inside islet, positive = outside; the dashed line marks the border. Pooled per cell (descriptive) — for donor-fair group comparison see Card A.")
+              conditionalPanel(
+                condition = "input.dist_ptype == 'composition'", ns = ns,
+                # Flow the (up to ~20) checkboxes into as many ~100px columns
+                # as fit, instead of one tall column. Targets the options-group
+                # so it survives the observeEvent(dist_mode) rebuild.
+                tags$style(HTML(paste0(
+                  ".cd-comp-cols,.cd-comp-cols .shiny-input-checkboxgroup,",
+                  ".cd-comp-cols .shiny-options-group{width:100%;max-width:none;",
+                  "display:block;box-sizing:border-box;}",
+                  ".cd-comp-cols .shiny-options-group{column-width:100px;column-gap:16px;}",
+                  ".cd-comp-cols .checkbox{break-inside:avoid;margin:2px 0;}"))),
+                tags$div(class = "cd-comp-cols",
+                         checkboxGroupInput(ns("dist_comp_items"), "Show",
+                                            choices = NULL))
+              )
+            ),
+            plotlyOutput(ns("immune_distance_kde"), height = "520px")
           )
         ))
       )
@@ -1569,7 +1534,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         }
         fs <- if (is.null(d)) NULL else d$filter_summary
         write_islet_csv(file, out, islet_csv_header(
-          "Spatial Card A — peri-islet enrichment by donor status",
+          "Spatial — peri enrichment by donor status",
           paste("Phenotype:", if (is.null(d)) "(none)" else d$itm$label),
           paste("Donor groups:", paste(input$groups %||% "(all)", collapse = ", ")),
           paste("Min cells per islet (core+peri):", input$nbr_min_cells %||% 1),
@@ -2019,7 +1984,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         }
         fs <- if (is.null(d)) NULL else d$filter_summary
         write_islet_csv(file, out, islet_csv_header(
-          "Spatial Card C — min distance to nearest cell of type, per islet",
+          "Spatial — distance to nearest cell of type, per islet",
           paste("Metric:", if (is.null(d)) "(none)" else d$label),
           paste("Donor groups:", paste(input$groups %||% "(all)", collapse = ", ")),
           paste("Min cells per islet (core+peri):", input$nbr_min_cells %||% 1),
