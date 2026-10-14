@@ -129,11 +129,8 @@ INSTALL_VITESSCER=1 Rscript scripts/install_shiny_deps.R
 Primary exploration interface with sidebar controls shared with Statistics.
 
 - **Scatter mode**: Feature expression vs islet diameter (31 markers, targets)
-- **Composition mode**: Cell type proportions with 4 option groups:
-  - Hormone Fractions (INS, GCG, SST)
-  - Cell Type Proportions (12 reviewer-facing phenotypes; 21 labels remain in source data)
-  - Peri-Islet Proportions (20 μm expansion zone)
-  - Immune Metrics (infiltration ratios, density)
+- **Composition mode**: Phenotype proportions in the islet core, peri-islet band, and combined core+peri region (12 reviewer-facing phenotypes; 21 labels remain in source data). QuPath threshold-based INS/GCG/SST counts are retained in source data for provenance but are not offered as comparable population measures.
+- Phenotype labels for the original 15 donors are preserved; the six added donors use reviewed reconstructed rules. See the [expanded-cohort comparability audit](docs/data_comparability_20261014.md) before interpreting pooled comparisons.
 - **Filters**: Donor status, autoantibody (GADA, IA2A, ZnT8A, IAA, mIAA), age range, sex, diameter range
 - **Normalization**: None, global z-score, robust per-donor (median/MAD×1.4826)
 - **Click interaction**: Click any point to open islet segmentation + single-cell drill-down
@@ -144,7 +141,9 @@ The reviewer view uses one composition-derived trajectory rather than a menu of
 non-comparable pseudotimes. It follows the Barlow-style workflow: phenotype-composition
 features, scanpy diffusion pseudotime, and a PAGA-initialized ForceAtlas2 graph;
 `destiny` supplies the explicit local fallback for the pseudotime axis when scanpy is
-unavailable. Changing the cell-count range refits the trajectory on that selected cohort.
+unavailable. The scatter fits DPT first; Leiden/PAGA/ForceAtlas2 is deferred until the
+reviewer asks to show the PAGA layout. Changing the cell-count range refits the trajectory
+on that selected cohort.
 
 - **Pseudotime scatter**: Marker expression or cell-type/endocrine-cell ratio against rank-normalized or raw DPT
 - **PAGA layout**: Interactive force-directed embedding colored by status, donor, cluster, or feature

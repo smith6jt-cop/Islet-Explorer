@@ -1,16 +1,38 @@
 trajectory_ui <- function(id) {
   ns <- NS(id)
   tagList(
-    tags$style(HTML(".trajectory-controls .form-group { margin-bottom: 6px; } .trajectory-controls h5 { margin-bottom: 6px; }")),
+    tags$style(HTML(paste0(
+      ".trajectory-controls .form-group { margin-bottom: 6px; } ",
+      ".trajectory-controls h5 { margin-bottom: 6px; } ",
+      ".trajectory-control-panel { border: 1px solid #cbd5df; border-radius: 6px; ",
+      "padding: 0 12px; margin-bottom: 12px; background: #f8fafc; } ",
+      ".trajectory-control-panel > summary { cursor: pointer; list-style: none; ",
+      "font-weight: 600; color: #24465c; padding: 10px 0; display: flex; ",
+      "align-items: center; gap: 8px; } ",
+      ".trajectory-control-panel > summary::-webkit-details-marker { display: none; } ",
+      ".trajectory-control-panel > summary::marker { content: ''; } ",
+      ".trajectory-control-panel > summary:before { content: '▸'; color: #4477aa; ",
+      "font-size: 14px; } ",
+      ".trajectory-control-panel[open] > summary:before { content: '▾'; } ",
+      ".trajectory-control-panel > summary:after { content: 'Click to show'; margin-left: auto; ",
+      "font-size: 12px; font-weight: 400; color: #64748b; } ",
+      ".trajectory-control-panel[open] > summary:after { content: 'Click to hide'; } ",
+      ".trajectory-control-panel[open] > summary { border-bottom: 1px solid #dbe3ea; ",
+      "margin-bottom: 10px; } ",
+      ".trajectory-control-panel .form-group:last-child { margin-bottom: 8px; }"
+    ))),
     tab_help("Trajectory help", "show_phenotype_rules_traj",
       "Click any point on the pseudotime scatter plot to view the segmentation map for that islet."),
     fluidRow(
       # Left card: Scatterplot and heatmaps (narrowed from col-8)
       column(7,
         div(class = "card trajectory-controls", style = "padding: 15px; margin-bottom: 20px;",
-          h5("Data controls", style = "margin-top: 0;"),
+          tags$details(class = "trajectory-control-panel", open = "open",
+            tags$summary("Data controls"),
           fluidRow(
             column(8,
+              tags$p(class = "text-muted",
+                "Phenotype counts preserve the original 15 donors' saved labels; the six additions use reviewed reconstructed rules."),
               sliderInput(ns("cell_range"), "Cells per islet:",
                           min = 1, max = traj_max_islet_cells(),
                           value = c(TRAJ_DEFAULT_MIN_CELLS, traj_max_islet_cells()),
@@ -25,8 +47,9 @@ trajectory_ui <- function(id) {
           ),
           fluidRow(
             column(4,
-              # Y-axis measure. Marker expression is a gate-rescaled protein mean from
-              # .X; the cell-type ratio is Barlow et al.'s Fig 2F y-axis,
+              # Y-axis measure. Marker expression is a protein mean from .X
+              # (the rescaling provenance differs between original and added donors);
+              # the cell-type ratio is Barlow et al.'s Fig 2F y-axis,
               # log(# cells / # endocrine cells), which removes the islet-size
               # confound that a raw count or proportion carries.
               selectInput(ns("traj_y_mode"), "Y axis:",
@@ -61,11 +84,12 @@ trajectory_ui <- function(id) {
             ),
             column(4,
               checkboxInput(ns("traj_trend_ci"), "95% CI band on trends",
-                            value = TRUE)
+                            value = FALSE)
             )
+          )
           ),
-          tags$details(style = "border-top: 1px solid #ddd; padding-top: 8px; margin: 8px 0 12px;",
-            tags$summary("View controls", style = "cursor: pointer; font-weight: 600; color: #333;"),
+          tags$details(class = "trajectory-control-panel",
+            tags$summary("View controls"),
             fluidRow(
               column(4,
                 selectInput(ns("traj_color_by"), "Color points by:",
@@ -153,6 +177,10 @@ trajectory_ui <- function(id) {
         div(class = "card", style = "padding: 15px; margin-bottom: 20px;",
           h5("PAGA force-directed layout (Barlow et al. 2024)",
              style = "color: #2c5aa0; margin-top: 0;"),
+          checkboxInput(ns("paga_show_layout"), "Build and show PAGA layout",
+                        value = FALSE),
+          conditionalPanel(
+            condition = "input.paga_show_layout", ns = ns,
           fluidRow(
             column(3,
               selectInput(ns("paga_color_by"), "Color islets by:",
@@ -173,6 +201,7 @@ trajectory_ui <- function(id) {
           div(style = "text-align: right; margin-top: 8px;",
             downloadButton(ns("dl_paga_csv"), "Download CSV",
                            class = "btn-sm btn-outline-secondary"))
+          )
         )
       )
     )

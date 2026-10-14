@@ -362,6 +362,11 @@ Method (Barlow et al., eLife 2024;13:RP100535, Methods -> "PAGA analysis"), all 
 the fallback when scanpy is unreachable from reticulate. Both are diffusion pseudotime over the same
 graph on the same features.
 
+The main scatter computes the selected cohort's neighbor graph and DPT first. Leiden clustering,
+PAGA abstraction, and ForceAtlas2 run only after the reviewer selects **Build and show PAGA layout**.
+The selected feature table and neighbor graph are cached and reused between those steps (up to two
+recent cell-count ranges), so opening the PAGA card does not rebuild the neighbor graph or DPT.
+
 Two deliberate deviations, stated not hidden: their hand-picked "temporarily omit 25 islets in the
 middle of the map" path-isolation step is **not** ported (unauditable, and undefinable on our data),
 and the root is restricted to ND islets because the globally nearest islet to the ND centroid was

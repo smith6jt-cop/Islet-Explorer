@@ -4,17 +4,13 @@
 # every region. Legacy residual labels can remain in source data for provenance
 # but must not reappear in a selector.
 plot_composition_selection_choices <- function(comp_cols, combined_pairs = NULL) {
-  base_choices <- c("Insulin+ positivity fraction" = "Ins_any",
-                    "Glucagon+ positivity fraction" = "Glu_any",
-                    "Somatostatin+ positivity fraction" = "Stt_any")
   prop_cols <- grep("^prop_", comp_cols, value = TRUE)
   peri_prop_cols <- grep("^peri_prop_", comp_cols, value = TRUE)
   combined_vals <- if (!is.null(combined_pairs) && nrow(combined_pairs) > 0) {
     setNames(paste0("combined_prop_", combined_pairs$stem), combined_pairs$label)
   } else character(0)
 
-  if (!length(prop_cols) && !length(peri_prop_cols)) return(base_choices)
-  choices <- list("Core — Hormone Positivity (QuPath threshold)" = base_choices)
+  choices <- list()
   if (length(prop_cols)) {
     labels <- sub("^prop_", "", prop_cols)
     keep <- phenotype_is_kept(labels)

@@ -27,7 +27,7 @@ Detailed reference for the Spatial tab. Linked from `app/shiny_app/CLAUDE.md`.
 - All 5,214 islets have peri-islet data (100% coverage with min_cells=0 + require_paired=True)
 - Column naming sanitizes phenotype names: spaces -> `_`, `+` -> `plus` (e.g., `peri_prop_ECADplus`)
 - Immune signal validated: T1D immune_frac_peri (0.155) > Aab+ (0.106) > ND (0.069)
-- **Plot composition selector** has 3 option groups: Hormone Positivity, Phenotype Proportions, Peri-Islet Proportions. The 5 aggregate ratio metrics were removed (Apr 2026) in favour of phenotype-driven Spatial UI selectors.
+- **Plot composition selector** has 3 option groups: Core Phenotype Proportions, Peri-Islet Proportions, and Core+Peri Phenotype Proportions. QuPath threshold-based INS/GCG/SST measures are excluded because original and added donors use different threshold pipelines. The 5 aggregate ratio metrics were removed (Apr 2026) in favour of phenotype-driven Spatial UI selectors.
 - **`IMMUNE_TYPES`** in `compute_neighborhood_metrics.py` (CD8a Tcell, CD4 Tcell, T cell, B cell, Macrophage, APCs, Immune) is intentionally narrow — drives only aggregates where "what counts as immune" needs definition. **`per_type_phenotypes`** (all `obs.phenotype.unique()` minus `PER_TYPE_EXCLUDE = {"Unknown"}`) drives `enrich_z_*` and `min_dist_*` per-phenotype loops.
 
 ### Spatial Tab Layout (Phase 9+13+15, mod_spatial_ui/server.R)

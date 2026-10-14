@@ -198,9 +198,11 @@ The Plot tab is the primary exploration interface. It has a **sidebar** (left) a
 - **Feature/Composition selector**: Choose what to plot
   - *Scatter mode*: Select from markers (31 proteins) or targets (hormone intensities)
   - *Composition mode*: Three option groups (the previous "Immune Metrics" group of 5 hand-curated ratios was removed in Apr 2026 — use the Spatial tab's per-phenotype enrichment / proportion / distance views instead):
-    - **Hormone Positivity (QuPath threshold)** — Ins_any, Glu_any, Stt_any
-    - **Phenotype Proportions (scVI)** — the 12 retained reviewer-facing phenotypes from the 21-label source artifact
+    - **Phenotype Proportions** — the 12 retained reviewer-facing phenotypes from the 21-label source artifact. The original 15 retain historical labels; six additions use reviewed reconstructed rules, so pooled phenotype comparisons span both methods.
     - **Peri-Islet Proportions** — proportions of those retained phenotypes in the 20 μm expansion zone around the islet
+    - **Core+Peri Proportions** — combined phenotype proportions using core and peri cell counts
+
+  QuPath threshold-based INS/GCG/SST measures remain in source artifacts for provenance, but are excluded from Population Measure because the original and added donors do not use the same threshold-counting method.
 - **Metric** (Composition / Microenvironment): Picks the y-axis unit. Labels spell out the denominator explicitly so "density" is never ambiguous — see [Density terminology](#density-terminology) below.
 - **Region**: Filter by tissue region (core only, peri-islet, or all)
 - **Donor Status**: Select disease groups to include (ND, Aab+, T1D)

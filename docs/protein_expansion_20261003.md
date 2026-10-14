@@ -1,5 +1,9 @@
 # Protein donor expansion — 2026-10-03
 
+The 2026-10-14 [expanded-cohort grouping and comparability audit](data_comparability_20261014.md)
+records which fields are consistently grouped and which retain method
+differences between the original 15 donors and the six additions.
+
 The owner approved the proposed phenotype rules and the six native boundary
 sets, and selected Harmony on protein PCA with the uncorrected result retained.
 This supersedes earlier requests to recover the complete historical phenotype

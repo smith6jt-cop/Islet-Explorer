@@ -13,6 +13,7 @@ spatial_ui <- function(id) {
       tags$p("Drag to zoom, double-click to reset the tissue scatter plot."),
       tags$p("Phenotype pickers list the 12 retained labels. The residual and parent labels ",
              "(Endocrine, Immune, T cell, Endothelial, APCs, Acinar, ECAD+, Structural, Unknown) are excluded."),
+      tags$p("Phenotype provenance: the original 15 donors retain saved labels; the six additions use reviewed reconstructed rules. Spatial phenotype comparisons span both methods."),
       phenotype_marker_definitions_ui(),
       # Explanatory prose for the neighborhood cards lives here, not inline
       # under the plots (Oct 2026 streamlining).

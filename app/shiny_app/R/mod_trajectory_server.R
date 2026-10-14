@@ -47,7 +47,7 @@ traj_pseudotime_column <- function(obs, cell_range = c(1, Inf)) {
   # scanpy DPT is primary. The destiny implementation is the fallback if scanpy
   # is unreachable from reticulate. PAGA/ForceAtlas2 is the two-dimensional graph
   # card; it is not the pseudotime algorithm itself.
-  bp <- paga_result(lo, hi)
+  bp <- compute_scanpy_pseudotime(lo, hi)
   engine <- "scanpy diffusion pseudotime"
   if (is.null(bp)) {
     bp <- compute_barlow_pseudotime(lo, hi)
@@ -537,22 +537,6 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       }
 
       # Add spatial coordinates from segmentation data
-      if (!is.null(islet_spatial_lookup)) {
-        result_df$centroid_x_um <- NA_real_
-        result_df$centroid_y_um <- NA_real_
-        result_df$has_spatial <- FALSE
-
-        for (i in seq_len(nrow(result_df))) {
-          annot <- get_islet_annotations(result_df$case_id[i], result_df$islet_key[i])
-          if (!is.null(annot)) {
-            result_df$centroid_x_um[i] <- annot$centroid_x
-            result_df$centroid_y_um[i] <- annot$centroid_y
-            result_df$has_spatial[i] <- TRUE
-          }
-        }
-
-      }
-
       # Filter valid rows
       valid_idx <- which(
         is.finite(result_df$pt) &
@@ -1640,6 +1624,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
     # PAGA force-directed layout (Barlow et al. 2024, Fig 2B/2E)
     # =====================================================================
     paga_data <- reactive({
+      req(isTRUE(input$paga_show_layout))
       cr <- applied_cell_range()
       if (!paga_available()) return(NULL)
       withProgress(
@@ -1650,6 +1635,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
     })
 
     output$paga_note <- renderUI({
+      req(isTRUE(input$paga_show_layout))
       if (!paga_available()) {
         return(div(style = paste0("padding: 7px 9px; border-radius: 4px; font-size: 11px;",
                                   " line-height: 1.45; color: #8a1c12; background: #fdecea;",

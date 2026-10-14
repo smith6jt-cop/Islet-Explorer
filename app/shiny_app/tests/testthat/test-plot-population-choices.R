@@ -23,22 +23,16 @@ test_that("Plot Cell Populations applies the short phenotype list to every regio
   ), pairs)
 
   expect_named(choices, c(
-    "Core — Hormone Positivity (QuPath threshold)",
     "Core — Phenotype Proportions",
     "Peri-Islet — Phenotype Proportions",
     "Core+Peri — Phenotype Proportions"
   ))
-  expect_named(choices[["Core — Hormone Positivity (QuPath threshold)"]], c(
-    "Insulin+ positivity fraction", "Glucagon+ positivity fraction",
-    "Somatostatin+ positivity fraction"
-  ))
-  expect_identical(unname(choices[["Core — Hormone Positivity (QuPath threshold)"]]),
-                   c("Ins_any", "Glu_any", "Stt_any"))
   expect_setequal(names(choices[["Core — Phenotype Proportions"]]),
                   c("Beta cell", "Macrophage"))
   expect_setequal(names(choices[["Peri-Islet — Phenotype Proportions"]]),
                   c("Beta cell", "Macrophage"))
   expect_setequal(names(choices[["Core+Peri — Phenotype Proportions"]]),
                   c("Beta cell", "Macrophage"))
-  expect_false(any(c("Unknown", "APCs") %in% unlist(lapply(choices[-1], names))))
+  expect_false(any(c("Unknown", "APCs", "Ins_any", "Glu_any", "Stt_any") %in%
+                   c(unlist(lapply(choices, names)), unlist(choices, use.names = FALSE))))
 })

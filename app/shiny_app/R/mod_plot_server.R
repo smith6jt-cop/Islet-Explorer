@@ -97,9 +97,6 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       # Microenvironment has a single implicit area-percentage metric; a stale
       # Composition radio value is irrelevant while that mode is active.
       if (identical(validated_mode(), "Microenvironment")) return("Percentage")
-      # Hormone positivity is already one QuPath-derived fraction per hormone;
-      # don't expose or honor a second counts/density measurement selector.
-      if (validated_selection() %in% c("Ins_any", "Glu_any", "Stt_any")) return("Percentage")
       value <- input$metric %||% "Percentage"
       if (!islet_valid_scalar_choice(
         value, c("Percentage", "Counts", "Density"), "plot_metric_invalid"
@@ -205,7 +202,6 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         # peri_region_um2) for all three region variants. Peri-islet area is the
         # QuPath `_exp20um` annotation area, merged in via prep_data().
         w <- validated_selection() %||% ""
-        if (w %in% c("Ins_any", "Glu_any", "Stt_any")) return(NULL)
         if (startsWith(w, "combined_prop_")) {
           tagList(
             radioButtons(ns("metric"), "Metric",
@@ -388,31 +384,11 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
           } else {
             df <- df %>% dplyr::mutate(value = raw_val * 100.0)
           }
-        } else if (w %in% c("immune_frac_peri", "immune_frac_core", "immune_ratio",
-                             "cd8_to_macro_ratio", "tcell_density_peri")) {
-          # Immune metrics — only immune_frac_peri/core are true fractions (×100 for %)
-          raw_val <- suppressWarnings(as.numeric(df[[w]]))
-          if (w %in% c("immune_frac_peri", "immune_frac_core") && metric == "Percentage") {
-            df <- df %>% dplyr::mutate(value = raw_val * 100.0)
-          } else {
-            df <- df %>% dplyr::mutate(value = raw_val)
-          }
         } else {
-          # Hormone fractions (Ins_any, Glu_any, Stt_any) — QuPath threshold counts.
-          # Must use cells_total (same QuPath/groovy pipeline), NOT total_cells_core
-          # (DeepCell single-cell pipeline) — mismatched denominators can yield >100%.
-          num <- suppressWarnings(as.numeric(df[[w]]))
-          den <- suppressWarnings(as.numeric(df$cells_total))
-          if (metric == "Counts") {
-            df <- df %>% dplyr::mutate(value = num)
-          } else if (metric == "Density") {
-            df <- df %>% dplyr::mutate(value = ifelse(is.finite(core_area_um2) & core_area_um2 > 0,
-              num / core_area_um2 * 1e6, NA_real_))
-          } else {
-            df <- df %>%
-              dplyr::mutate(value = ifelse(is.finite(num) & is.finite(den) & den > 0,
-                                           100.0 * num / den, NA_real_))
-          }
+          # The server validator only admits retained core/peri phenotype
+          # proportion columns here. Refuse unexpected values instead of
+          # interpreting a retired QuPath threshold count as a fraction.
+          df <- df %>% dplyr::mutate(value = NA_real_)
         }
       }
 
@@ -506,7 +482,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       selection_label <- attr(df, "selection_used") %||% validated_selection()
       if (is.null(selection_label) || length(selection_label) == 0 ||
           is.na(selection_label[1]) || !nzchar(selection_label[1])) {
-        selection_label <- if (identical(mode, "Cell Populations")) "Ins_any" else ""
+        selection_label <- ""
       }
       selection_label <- selection_label[1]
 
@@ -631,11 +607,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         } else if (startsWith(wsel, "prop_")) {
           nm <- paste0(gsub("^prop_", "", wsel), " proportion")
         } else {
-          nm <- switch(wsel,
-                       Ins_any = "Insulin+ fraction",
-                       Glu_any = "Glucagon+ fraction",
-                       Stt_any = "Somatostatin+ fraction",
-                       wsel)
+          nm <- wsel
         }
         paste0(nm, " vs Islet Size")
       }
