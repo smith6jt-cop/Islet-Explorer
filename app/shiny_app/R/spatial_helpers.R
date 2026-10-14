@@ -57,7 +57,9 @@ get_available_donors <- function() {
 #' @return Canonical names first (PHENOTYPE_COLORS order), then any extras.
 canonical_phenotype_order <- function(extra = character(0)) {
   canon <- phenotype_keep(names(PHENOTYPE_COLORS))
-  extra <- unique(as.character(extra[!is.na(extra) & nzchar(extra)]))
+  # Extras pass the same retired-label gate; otherwise a retired label observed
+  # in the data (absent from `canon` because it was gated out) came back here.
+  extra <- phenotype_keep(unique(as.character(extra[!is.na(extra) & nzchar(extra)])))
   c(canon, sort(setdiff(extra, canon)))
 }
 

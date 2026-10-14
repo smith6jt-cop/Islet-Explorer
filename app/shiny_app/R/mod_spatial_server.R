@@ -572,6 +572,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
 
       # Get phenotype proportion columns (prop_*), filtered by selected phenotypes
       prop_cols <- grep("^prop_", colnames(plot_comp), value = TRUE)
+      prop_cols <- prop_cols[phenotype_is_kept(sub("^prop_", "", prop_cols))]
       if (length(prop_cols) == 0) {
         return(plotly_islet_empty("No phenotype proportion data"))
       }
@@ -759,6 +760,11 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         )
       }
       recs <- lapply(ez_cols, build)
+      # The shared retired-phenotype gate: every neighborhood selector, the
+      # composition filter, both composition plots and the CSV exports read
+      # phenotype_options(), so filtering here keeps them all on the 12 labels.
+      recs <- Filter(function(r) phenotype_is_kept(r$label), recs)
+      if (length(recs) == 0) return(list())
       recs <- recs[order(sapply(recs, function(r) r$label))]
       names(recs) <- sapply(recs, function(r) r$label)
       recs
@@ -976,8 +982,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                 div(style = "flex: 1; min-width: 180px;",
                   # Populated server-side from phenotype_choices().
                   selectInput(ns("infiltration_phenotype"), "Phenotype",
-                              choices = NULL, width = "100%"),
-                  uiOutput(ns("infiltration_pheno_hint"))
+                              choices = NULL, width = "100%")
                 ),
                 checkboxInput(ns("infiltration_show_outlier_table"),
                               "Show outlier table", value = FALSE)
@@ -993,8 +998,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
               div(style = ctrl_row,
                 div(style = "flex: 1; min-width: 180px;",
                   selectInput(ns("scatter_phenotype"), "Phenotype",
-                              choices = NULL, width = "100%"),
-                  uiOutput(ns("scatter_pheno_hint"))
+                              choices = NULL, width = "100%")
                 ),
                 checkboxInput(ns("scatter_sqrt"), "Sqrt scale", value = TRUE),
                 checkboxInput(ns("scatter_trend"), "Trend lines", value = FALSE)
@@ -1007,10 +1011,9 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
               card_title("Distance to nearest cell"),
               div(style = ctrl_row,
                 div(style = "flex: 1; min-width: 180px;",
-                  # Populated server-side: "Immune (all)" + every phenotype with min_dist_*.
+                  # Populated server-side: every retained phenotype with min_dist_*.
                   selectInput(ns("distance_metric"), "Phenotype",
-                              choices = NULL, width = "100%"),
-                  uiOutput(ns("distance_pheno_hint"))
+                              choices = NULL, width = "100%")
                 ),
                 checkboxInput(ns("distance_show_outlier_table"),
                               "Show outlier table", value = FALSE)
@@ -1069,8 +1072,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
               div(style = ctrl_row,
                 div(style = "min-width: 240px;",
                   selectInput(ns("kde_immune_type"), "Phenotype",
-                              choices = NULL, width = "260px"),
-                  uiOutput(ns("kde_pheno_hint"))
+                              choices = NULL, width = "260px")
                 ),
                 radioButtons(ns("kde_metric"), "Y-axis", inline = TRUE, selected = "shape",
                              choices = c("Distribution shape" = "shape",
@@ -1125,7 +1127,11 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
     # ---- Islet count display ----
     output$nbr_islet_count <- renderUI({
       comp <- nbr_comp()
-      n <- if (!is.null(comp)) nrow(comp) else 0
+      # Count islets with neighborhood metrics. `comp` also carries QuPath
+      # composition rows for islets without a paired core+peri cell census,
+      # which no neighborhood card can plot.
+      n <- if (is.null(comp)) 0 else if ("total_cells_peri" %in% colnames(comp))
+             sum(is.finite(comp$total_cells_peri)) else nrow(comp)
       span(style = "color: #555; font-size: 13px; white-space: nowrap;",
            paste0(formatC(n, big.mark = ","), " islets"))
     })
@@ -1235,15 +1241,16 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       cur_b <- isolate(input$scatter_phenotype)
       sel_b <- if (!is.null(cur_b) && cur_b %in% ch_b) cur_b else pick_default(ch_b)
       updateSelectInput(session, "scatter_phenotype", choices = ch_b, selected = sel_b)
-      # Card C-Left: distance metric — "Immune (all)" plus min_dist_<phenotype>
+      # Card C-Left: distance metric — min_dist_<phenotype> for retained labels.
+      # The "Immune (all)" aggregate was removed: it pools the retired residual
+      # labels (Immune, T cell, APCs) with the retained immune subtypes.
       dist_opts <- Filter(function(o) !is.na(o$min_dist), opts)
-      dist_ch <- c("Immune (all)" = "min_dist_immune_mean",
-                   stats::setNames(
-                     vapply(dist_opts, function(o) o$min_dist, character(1)),
-                     vapply(dist_opts, function(o) o$label, character(1))
-                   ))
+      dist_ch <- stats::setNames(
+                   vapply(dist_opts, function(o) o$min_dist, character(1)),
+                   vapply(dist_opts, function(o) o$label, character(1)))
       cur_c <- isolate(input$distance_metric)
-      sel_c <- if (!is.null(cur_c) && cur_c %in% dist_ch) cur_c else "min_dist_immune_mean"
+      sel_c <- if (!is.null(cur_c) && cur_c %in% dist_ch) cur_c else
+                 pick_default(dist_ch, prefer = paste0("min_dist_", c("Macrophage", "CD8a_Tcell")))
       updateSelectInput(session, "distance_metric", choices = dist_ch, selected = sel_c)
 
       # Card C-Right "kde" view: populate kde_immune_type from phenotype_options()
@@ -1253,13 +1260,11 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       if (!is.null(kde_df) && "phenotype" %in% colnames(kde_df)) {
         present <- unique(as.character(kde_df$phenotype))
         kopts <- Filter(function(o) o$safe %in% present, opts)
-        ch_kde <- c("Immune (all)" = "all",
-                    stats::setNames(
-                      vapply(kopts, function(o) o$safe,  character(1)),
-                      vapply(kopts, function(o) o$label, character(1))
-                    ))
+        ch_kde <- stats::setNames(
+                    vapply(kopts, function(o) o$safe,  character(1)),
+                    vapply(kopts, function(o) o$label, character(1)))
         cur_k <- isolate(input$kde_immune_type)
-        sel_k <- if (!is.null(cur_k) && cur_k %in% ch_kde) cur_k else "all"
+        sel_k <- if (!is.null(cur_k) && cur_k %in% ch_kde) cur_k else pick_default(ch_kde)
         updateSelectInput(session, "kde_immune_type", choices = ch_kde, selected = sel_k)
       }
     })
@@ -1277,60 +1282,22 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       def <- if (identical(mode, "marker"))
                intersect(c("INS", "GCG", "CD3e", "CD8a", "CD68", "CD31"), items)
              else
-               intersect(c("Beta cell", "Alpha cell", "Acinar", "Ductal",
-                           "Macrophage", "CD8a Tcell", "APCs"), items)
+               intersect(phenotype_keep(c("Beta cell", "Alpha cell", "Ductal",
+                                         "Macrophage", "CD8a Tcell", "B cell")), items)
       cur_c <- isolate(input$dist_comp_items)
       sel_c <- if (!is.null(cur_c) && length(cur_c) > 0 && all(cur_c %in% items)) cur_c else def
       updateCheckboxGroupInput(session, "dist_comp_items", choices = items, selected = sel_c)
     }, ignoreNULL = FALSE)
 
-    # ---- Inline marker-rule hints under the four phenotype selectors ----
-    # Each looks up the selected phenotype's label via phenotype_options() and
-    # renders phenotype_hint_ui(). "Immune (all)" aggregates have no single
-    # rule — we display a description instead.
+    # Selected safe-name or min_dist column -> display label. Marker-rule hints
+    # are not shown inline; the definitions live in the Spatial help popover.
     .lookup_pheno_label <- function(safe_or_metric) {
       if (is.null(safe_or_metric) || !nzchar(safe_or_metric)) return(NULL)
-      if (safe_or_metric == "min_dist_immune_mean" || safe_or_metric == "all") {
-        return("Immune (all)")
-      }
       opts <- phenotype_options()
-      # Direct match by safe-name
       for (o in opts) if (identical(o$safe, safe_or_metric)) return(o$label)
-      # Match by min_dist column
       for (o in opts) if (identical(o$min_dist, safe_or_metric)) return(o$label)
-      # Fallback: assume it's already a label
       safe_or_metric
     }
-    .hint_for <- function(label, inline_id) {
-      if (is.null(label)) return(NULL)
-      if (identical(label, "Immune (all)")) {
-        return(shiny::tags$div(
-          style = "margin-top: -6px; margin-bottom: 8px; padding: 6px 10px; background-color: #f7f9fc; border-left: 3px solid #4477AA; border-radius: 3px; font-size: 13px; color: #333; line-height: 1.4;",
-          shiny::tags$strong(style = "color:#4477AA;", "Markers: "),
-          shiny::tags$em("Aggregate of all immune phenotypes (any of CD20, CD3e, CD68, CD163, CD8a, CD4, HLADR positive)."),
-          shiny::tags$span(style = "color:#888;", " · "),
-          shiny::actionLink(inline_id, "see all rules →",
-                            style = "font-size: 12px; color: #4477AA;")
-        ))
-      }
-      phenotype_hint_ui(label, show_modal_link = inline_id)
-    }
-    output$infiltration_pheno_hint <- renderUI({
-      .hint_for(.lookup_pheno_label(input$infiltration_phenotype),
-                ns("show_phenotype_rules_inline_a"))
-    })
-    output$scatter_pheno_hint <- renderUI({
-      .hint_for(.lookup_pheno_label(input$scatter_phenotype),
-                ns("show_phenotype_rules_inline_scatter"))
-    })
-    output$distance_pheno_hint <- renderUI({
-      .hint_for(.lookup_pheno_label(input$distance_metric),
-                ns("show_phenotype_rules_inline_dist"))
-    })
-    output$kde_pheno_hint <- renderUI({
-      .hint_for(.lookup_pheno_label(input$kde_immune_type),
-                ns("show_phenotype_rules_inline_kde"))
-    })
 
     # ==== Card A-Left: Per-phenotype peri-zone enrichment z-score (donor-level) ====
     # Card A data, extracted from the renderer so `dl_infiltration_csv` exports
@@ -1485,8 +1452,10 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       p %>% layout(
         font = fonts$global,
         title = list(text = paste0(metric_label,
-                                   "<br><sup>Donor-level means \u00b1 SEM (N=donors) | ", p_label, excl_text, "</sup>"),
+                                   "<br><sup>Donor-level means \u00b1 SEM (N=donors)<br>",
+                                   sub("^ \\| ", "", paste0(p_label, excl_text)), "</sup>"),
                      font = fonts$title),
+        margin = list(t = 110),
         xaxis = list(title = list(text = "", font = fonts$axis_title),
                      tickfont = fonts$axis_tick,
                      categoryorder = "array",
@@ -1808,18 +1777,12 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
     distance_data <- reactive({
       comp <- nbr_comp()
       req(comp, "Donor Status" %in% colnames(comp))
-      metric <- input$distance_metric %||% "min_dist_immune_mean"
-      req(metric %in% colnames(comp))
-
-      # Build label dynamically: aggregate "Immune (all)" or per-phenotype label
-      if (metric == "min_dist_immune_mean") {
-        metric_label <- "Min Distance to Immune (all)"
-      } else {
-        opts <- phenotype_options()
-        match <- Filter(function(o) !is.na(o$min_dist) && o$min_dist == metric, opts)
-        metric_label <- if (length(match) > 0)
-          paste0("Min Distance to ", match[[1]]$label) else metric
-      }
+      metric <- input$distance_metric
+      req(metric, metric %in% colnames(comp))
+      opts <- phenotype_options()
+      match <- Filter(function(o) !is.na(o$min_dist) && o$min_dist == metric, opts)
+      req(length(match) > 0)  # retained phenotypes only
+      metric_label <- paste0("Min Distance to ", match[[1]]$label)
 
       df <- data.frame(
         value = comp[[metric]],
@@ -1905,7 +1868,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         paste0(s, ": ", nv, "/", nt)
       })
       subtitle <- paste0("Non-NA: ", paste(n_labels, collapse = ", "),
-                          " (", round(na_rate * 100, 0), "% NA overall)")
+                          "<br>", round(na_rate * 100, 0), "% NA overall")
       excl_suffix <- if (filter_summary$enabled && filter_summary$n_excluded > 0) {
         sprintf(" | %d excluded (%s)", filter_summary$n_excluded, filter_summary$label)
       } else if (!filter_summary$enabled) {
@@ -1953,6 +1916,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         font = fonts$global,
         title = list(text = paste0(metric_label, "<br><sup>", subtitle, excl_suffix, "</sup>"),
                      font = fonts$title),
+        margin = list(t = 110),
         xaxis = list(title = list(text = "", font = fonts$axis_title),
                      tickfont = fonts$axis_tick, categoryorder = "array",
                      categoryarray = c("ND", "Aab+", "T1D")),
@@ -2017,18 +1981,11 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         # status (degrades to pooled, never crashes). The regenerated CSV has it.
         if (!"case_id" %in% colnames(kde_df)) kde_df$case_id <- kde_df$donor_status
 
-        cell_type <- input$kde_immune_type %||% "all"
+        cell_type <- input$kde_immune_type
+        req(cell_type, phenotype_is_kept(.lookup_pheno_label(cell_type)))
         metric <- input$kde_metric %||% "shape"
-        # Filter to selected phenotype. "all" = the IMMUNE_TYPES aggregate,
-        # flagged by is_immune (same set as Card C-left's min_dist_immune_mean).
-        if (identical(cell_type, "all")) {
-          df <- if ("is_immune" %in% colnames(kde_df))
-                  kde_df[kde_df$is_immune == 1, , drop = FALSE] else kde_df
-          type_label <- "Immune (all)"
-        } else {
-          df <- kde_df[kde_df$phenotype == cell_type, , drop = FALSE]
-          type_label <- .lookup_pheno_label(cell_type)
-        }
+        df <- kde_df[kde_df$phenotype == cell_type, , drop = FALSE]
+        type_label <- .lookup_pheno_label(cell_type)
 
         # Filter to selected donor status groups (sidebar)
         if (!is.null(input$groups)) {
@@ -2234,19 +2191,6 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         }
       }
     })
-
-    # ---- Inline "see all rules" links under Card A/C phenotype hints ----
-    for (id in c("show_phenotype_rules_inline_a",
-                 "show_phenotype_rules_inline_scatter",
-                 "show_phenotype_rules_inline_dist",
-                 "show_phenotype_rules_inline_kde")) {
-      local({
-        nm <- id
-        observeEvent(input[[nm]],
-                     { showModal(phenotype_rules_modal_ui()) },
-                     ignoreInit = TRUE)
-      })
-    }
 
   })
 }

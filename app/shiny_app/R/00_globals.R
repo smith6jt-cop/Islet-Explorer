@@ -1027,6 +1027,66 @@ phenotype_keep <- function(x) setdiff(x, PHENOTYPE_RETIRED)
 #' TRUE for rows whose phenotype is still in use. NA-safe.
 phenotype_is_kept <- function(x) !(as.character(x) %in% PHENOTYPE_RETIRED)
 
+#' Marker definition text for each retained phenotype, for help popovers.
+#'
+#' When the data root ships `protein_phenotype_rules.csv` (the accepted rules
+#' for the six added donors), each label's rule is composed with its parents:
+#' required positives and negatives accumulate down the tree, and a parent's
+#' "any of" group is omitted when the child's own positive evidence already
+#' satisfies it. Otherwise the Rules1 reference (`format_phenotype_rule()`) is
+#' used. Returns a named character vector in palette order.
+phenotype_marker_definitions <- function(path = data_path("protein_phenotype_rules.csv")) {
+  kept <- phenotype_keep(names(PHENOTYPE_COLORS))
+  if (!file.exists(path)) {
+    out <- vapply(kept, function(n) format_phenotype_rule(n, "plain"), character(1))
+    return(out[!startsWith(out, "No marker rule")])
+  }
+  rules <- utils::read.csv(path, stringsAsFactors = FALSE, na.strings = "", check.names = FALSE)
+  rules[is.na(rules)] <- ""
+  split_markers <- function(x) if (nzchar(x)) strsplit(x, "|", fixed = TRUE)[[1]] else character(0)
+  by_label <- split(rules, rules$label)
+  compose <- function(label) {
+    row <- by_label[[label]]
+    pos <- split_markers(row$all_positive); any_child <- split_markers(row$any_positive)
+    neg <- split_markers(row$all_negative); groups <- list()
+    if (length(any_child)) groups <- list(any_child)
+    parent <- row$parent
+    while (nzchar(parent) && parent != "all" && !is.null(by_label[[parent]])) {
+      prow <- by_label[[parent]]
+      pos <- union(pos, split_markers(prow$all_positive))
+      pany <- split_markers(prow$any_positive)
+      if (length(pany) && !length(intersect(pany, c(pos, any_child)))) groups <- c(groups, list(pany))
+      neg <- union(neg, split_markers(prow$all_negative))
+      parent <- prow$parent
+    }
+    parts <- c(if (length(pos)) paste0(pos, "+"),
+               vapply(groups, function(g) if (length(g) == 1) paste0(g, "+")
+                      else paste0("any of ", paste0(g, "+", collapse = " / ")), character(1)))
+    txt <- paste(parts, collapse = ", ")
+    if (length(neg)) txt <- paste0(txt, "  \u2014  ", paste0(neg, "\u2212", collapse = ", "))
+    txt
+  }
+  kept <- kept[kept %in% names(by_label)]
+  stats::setNames(vapply(kept, compose, character(1)), kept)
+}
+
+#' Help-popover block listing the retained phenotypes' marker definitions.
+phenotype_marker_definitions_ui <- function() {
+  defs <- phenotype_marker_definitions()
+  if (!length(defs)) return(NULL)
+  protein <- file.exists(data_path("protein_phenotype_rules.csv"))
+  shiny::tagList(
+    shiny::tags$h6(style = "margin-top: 12px; font-weight: 700;", "Phenotype marker definitions"),
+    shiny::tags$p(style = "color: #555;",
+      if (protein) paste0("Rules accepted for the six added donors (a marker is positive at a gate-rescaled ",
+                          "signal of 0.5 or higher). The original 15 donors keep their saved labels.")
+      else "Rules1 marker reference (a partial reference for the saved labels)."),
+    shiny::tags$ul(style = "padding-left: 18px; margin-bottom: 6px;",
+      lapply(names(defs), function(n)
+        shiny::tags$li(shiny::tags$strong(n), ": ", defs[[n]])))
+  )
+}
+
 #' Drop retired phenotypes from a data frame with a phenotype column.
 phenotype_filter_rows <- function(df, col = "phenotype") {
   if (is.null(df) || !is.data.frame(df) || !(col %in% names(df))) return(df)

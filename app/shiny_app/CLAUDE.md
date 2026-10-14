@@ -426,27 +426,21 @@ Helpers:
 
 Per-tab integration:
 
-- **Plot tab** (`mod_plot_server.R::output$which_ui`) — when in `"Cell
-  Populations"` mode, parses `input$which` via `extract_phenotype_from_column()`
-  and emits `phenotype_hint_ui()` directly under the metric `selectInput`.
-- **Spatial Card A** — `output$infiltration_pheno_hint` and
-  `output$scatter_pheno_hint` look up the selected `safe` name via
-  `phenotype_options()` and emit the hint UI.
-- **Spatial Card C** — `output$distance_pheno_hint` and `output$kde_pheno_hint`
-  follow the same pattern. The aggregate `"Immune (all)"` selection emits a
-  custom description rather than a per-phenotype rule.
+- **Plot tab** — no inline hints since Oct 2026; the Plot help popover carries
+  the explanation. `phenotype_hint_ui()` is now unused by any tab.
+- **Spatial tab** — no inline hints (removed Oct 2026, at the owner's request).
+  The help popover lists every retained phenotype's markers via
+  `phenotype_marker_definitions_ui()`, which composes `protein_phenotype_rules.csv`
+  parent chains when the data root ships it and otherwise uses the Rules1 reference.
 - **Drill-down composition panel** — root-level `output$islet_drilldown_rules`
   in `app.R` renders an expandable `<details>` element listing colour-coded
   swatches + rules for every phenotype present in the clicked islet. Embedded
   via `uiOutput("islet_drilldown_rules")` inside both the Plot and Trajectory
   `segmentation_viewer_panel` renderUIs.
 
-When adding a new phenotype-selecting input anywhere in the app, follow the
-existing pattern: resolve the selected value to a label via
-`extract_phenotype_from_column()` (or your existing `phenotype_options()`
-record), then emit `phenotype_hint_ui(label, show_modal_link = ns("…"))` and
-register an `observeEvent(input$…, showModal(phenotype_rules_modal_ui()))` to
-wire the inline link.
+When adding a new phenotype-selecting input anywhere in the app, route its
+choices through `phenotype_keep()` / `phenotype_is_kept()` and put any marker
+explanation in that tab's help popover, not inline under the control.
 
 ## Plot Fonts & Publication-Quality Downloads (May 2026)
 

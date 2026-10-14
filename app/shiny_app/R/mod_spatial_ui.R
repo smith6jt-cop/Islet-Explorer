@@ -11,6 +11,9 @@ spatial_ui <- function(id) {
   tagList(
     tab_help("Spatial help", "show_phenotype_rules_spatial",
       tags$p("Drag to zoom, double-click to reset the tissue scatter plot."),
+      tags$p("Phenotype pickers list the 12 retained labels. The residual and parent labels ",
+             "(Endocrine, Immune, T cell, Endothelial, APCs, Acinar, ECAD+, Structural, Unknown) are excluded."),
+      phenotype_marker_definitions_ui(),
       # Explanatory prose for the neighborhood cards lives here, not inline
       # under the plots (Oct 2026 streamlining).
       tags$h6(style = "margin-top: 12px; font-weight: 700;", "Neighborhood Analysis controls"),
