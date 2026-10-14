@@ -1,5 +1,7 @@
 # CLAUDE.md - Shiny App (Islet Explorer)
 
+> **2026-10-03 implementation:** the expanded cohort preserves the original source data and uses Harmony on protein PCA for spatial UMAP and Leiden. The live trajectory uses endocrine-normalized composition features; marker expression is the mean gate-rescaled protein signal. Earlier scVI descriptions below are historical. See the [current implementation record](../../docs/protein_expansion_20261003.md).
+
 Deep details for the modular Shiny app under `app/shiny_app/`. The top-level `CLAUDE.md` covers the entrypoint architecture, root-level outputs, shared reactive state, and data loading. This file documents per-tab features and conventions.
 
 ## Spatial Neighborhood Analysis

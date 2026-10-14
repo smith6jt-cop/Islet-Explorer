@@ -1,5 +1,7 @@
 # CLAUDE.md - Islet Explorer
 
+> **2026-10-03 owner decision:** the accepted reconstruction rules and all six donor boundaries are approved. Use Harmony on protein PCA, retain the uncorrected comparison, and preserve original source records. Exact historical typing/encoder recovery and scVI retraining are no longer prerequisites. See the [current implementation record](docs/protein_expansion_20261003.md); earlier directions below are historical.
+
 This file provides guidance to Claude Code when working with this repository.
 
 ## Restoration checkpoint — 2026-09-23
@@ -14,19 +16,26 @@ Candidate-only app helpers/tests are quarantined under
 `archive/schema4-before-restore-20260923/`. See the appended verification record
 in `app/shiny_app/docs/trajectory.md`.
 
-## Typing reference and revised owner direction — 2026-09-29
+## Typing reference and revised owner direction — 2026-09-29 (historical)
+
+*Superseded by the 2026-10-03 owner decision at the top of this file; kept as the record of the September 29 direction.*
 
 Read [the typing/trajectory reference record](docs/trajectory_typing_reference_20260919.md)
 before further phenotype or trajectory work. Cell typing must precede the
 endocrine-normalized composition features used to fit trajectory. The owner now
-directs the six additions to use the exact original phenotype rules and scVI
-weights/preprocessing, with the original numeric gates. Recover and verify those
-artifacts before applying them; the active UI rules or QuPath labels are not proof
-of the original typing method. The September 19 proposal to enhance phenotypes
+directs the six additions to use the original phenotype and scVI methods. The
+original numeric gates and input scale were recovered from the frozen H5AD;
+the checked-in rule CSV fails a 21-label replay, and the original scVI encoder
+weights remain missing. Recover and verify the complete rule chain, then either
+locate the encoder or explicitly review a joint scVI retrain. The active UI
+rules or QuPath labels are not proof of the original typing method. The
+September 19 proposal to enhance phenotypes
 with CHGA, CD45, VIM, LGALS3, CD44, PGP9.5, GAP43, CD35 and NaKATPase is deferred,
 not an acceptance gate for this expansion. Preserve the frozen release.
 
-## Current donor-expansion contract — 2026-09-29
+## Donor-expansion contract — 2026-09-29 (historical)
+
+*Superseded by the 2026-10-03 owner decision at the top of this file; kept as the record of the September 29 direction.*
 
 [Phase 2](docs/donor_expansion_phase2.md) starts from the restored 15-donor app
 and raw-only six-donor checkpoint. Preserve all original donor IDs, spatial
@@ -36,8 +45,8 @@ original typing/scVI method and numeric gates to the additions. A common
 the original donors without changing their preserved source records. The owner
 will visually review donor annotations. A simple development data root selected
 with `ISLET_DATA_ROOT` needs no additional candidate-version or optional-loader
-gate. No six-donor integration or common refit has been accepted
-or completed. The prior schema-4 geometry, typing and trajectory remain
+gate. As of 2026-09-29 no six-donor integration or common refit had been accepted
+or completed; the 2026-10-03 protein expansion has since been built and accepted. The prior schema-4 geometry, typing and trajectory remain
 experimental evidence. See the phase-2 document for checkpoint evidence and
 remaining scientific dependencies.
 

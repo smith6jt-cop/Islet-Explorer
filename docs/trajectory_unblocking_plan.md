@@ -1,9 +1,12 @@
 # Trajectory unblocking plan — 2026-09-17
 
+> **2026-10-03 owner decision:** the accepted reconstruction rules and all six donor boundaries are approved. Use Harmony on protein PCA, retain the uncorrected comparison, and preserve original source records. Exact historical typing/encoder recovery and scVI retraining are no longer prerequisites. See the [current implementation record](protein_expansion_20261003.md); earlier directions below are historical.
+
 **Historical plan:** this records the September 17–22 regenerated 21-donor
-candidate. The [current phase-2 contract](donor_expansion_phase2.md) instead
-requires the exact original phenotype rules, numeric gates, scVI weights and
-preprocessing for the additions; the nine-marker enhancement proposed on
+candidate. The September 29 [phase-2 contract](donor_expansion_phase2.md) instead
+required original-equivalent typing and scVI methods for the additions; the
+2026-10-03 owner decision replaced that with the accepted reconstruction rules
+and Harmony on protein PCA. The nine-marker enhancement proposed on
 September 19 is deferred. The candidate's fitted data and acceptance statements
 below do not describe the restored 15-donor app.
 

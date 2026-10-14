@@ -1,7 +1,7 @@
 # Islet Explorer UFRC readiness and evidence index
 
-Updated 2026-09-28 for the restored 15-donor local app; institutional status remains as
-last verified on 2026-09-16. This is the review index for the supplied
+Updated 2026-10-14 for the 2026-10-03 protein expansion in the local app; institutional
+status remains as last verified on 2026-09-16. This is the review index for the supplied
 [`UFIT_PubApps_Instance_Request.docx`](../UFIT_PubApps_Instance_Request.docx),
 including its hosting policy, project plan, and development standards. It records
 implementation separately from acceptance. It is not a signed attestation or
@@ -27,30 +27,28 @@ or production external API. The proposed URL is
 `https://islet-explorer.rc.ufl.edu/islet-explorer/`. The backend address and port
 must come from UFRC; `127.0.0.1:3838` is a request, not an established proxy route.
 
-### Current local app and raw-only additions
+### Current local app and protein expansion
 
 The only intended local development URL is
 `http://10.15.152.7:8080/islet-explorer/`, proxied to loopback port 3840.
-The app uses the restored original 15 donors and 5,214 islets. Its image route
-temporarily points to an earlier 21-image collection; the owner permits that
-development-only mismatch, not an expanded release. Neither this checkout nor
-its image route is a PubApps release.
+Since 2026-10-05 it serves the protein-expanded root
+`data/development/protein-expanded-20261003-v2/`: 21 donors and 8,436 islets.
+Neither this checkout nor its image route is a PubApps release.
 Keep the dated `5809be4` 15-image production artifact and its evidence separate
 from the current development app. See [the September 28 handoff](HANDOFF_2026-09-28.md).
 
-The six donor additions—HPAP-078, 6090, 6232, 6520, recovered 6539, and
-6558—are staged only as raw offline evidence. Their bundle contains 943,068
-objects, including 201 wholly unmeasured objects; 852 zero-tolerance checks
-preserve the original donor artifacts. Its recorded `app_ready` and
-`scientific_acceptance` values are both false. The exact original phenotype
-rules, numeric gates, scVI weights and preprocessing have not been recovered
-and verified for the additions; no common 21-donor trajectory, UMAP or Leiden
-refit has been accepted. HPAP-078 boundaries are owner-approved; the other
-five donors still need donor-specific visual review. There is no accepted
-combined islet count, optional app loader, or 21-image release. See the
-[phase-2 contract](donor_expansion_phase2.md). Continue request `83810` and
-assessment `IRM-456246` with an approved final inventory through the owner;
-no new UFRC acceptance or classification disposition has been established.
+On 2026-10-03 the owner approved all six donor boundary sets (HPAP-078, 6090,
+6232, 6520, recovered 6539 and 6558) and the reconstruction phenotype rules,
+and selected Harmony on protein PCA with the uncorrected fit retained. Exact
+historical typing recovery and scVI retraining are no longer prerequisites.
+The original 15-donor source records are preserved; the expanded root passed
+its zero-tolerance original parity audit, its release validator and browser
+acceptance. See [the protein expansion record](protein_expansion_20261003.md).
+It is not yet a production release: the release builder and runtime Parquet
+backend do not carry the expansion metadata, and its images are symlinks to
+source paths outside the root. Continue request `83810` and assessment
+`IRM-456246` with an approved final inventory through the owner; no new UFRC
+acceptance or classification disposition has been established.
 
 ### Historical regenerated 21-image candidate
 
@@ -92,9 +90,12 @@ A second scientific blocker is recorded in the historical
 `7571b6d:scripts/phenotype_evaluator.py` note: the original rules that produced
 the shipped ECAD-positive/Structural labels were unavailable; v2 rules were a
 reconstruction requiring biological review. The current `data/phenotype_rules.csv`
-cannot produce all 21 shipped labels. The current phase-2 contract requires
-recovering and verifying the exact original rules, numeric gates and scVI model,
-then applying them to the additions while preserving original donor records.
+cannot produce all 21 shipped labels. The September 29 phase-2 contract required
+reproducing original labels from the recovered gates and complete rule chain,
+then either recovering the scVI model or validating a reviewed joint retrain.
+The 2026-10-03 owner decision replaced that requirement with the accepted
+reconstruction rules, applied to the additions only, while preserving original
+donor records.
 Completing segmentation does not establish equivalent phenotype
 assignments. Raw-marker and mask analyses retain explicit limitations;
 certified new-cell phenotypes still require reviewed gate evidence.

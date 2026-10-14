@@ -1,5 +1,7 @@
 # CLAUDE.md - Pipeline Scripts
 
+> **2026-10-03 owner decision:** the accepted reconstruction rules and all six donor boundaries are approved. Use Harmony on protein PCA, retain the uncorrected comparison, and preserve original source records. Exact historical typing/encoder recovery and scVI retraining are no longer prerequisites. See the [current implementation record](../docs/protein_expansion_20261003.md); earlier directions below are historical.
+
 Pipeline scripts that build the data files consumed by the Shiny app.
 
 ## Restoration checkpoint — 2026-09-23
@@ -18,8 +20,11 @@ phase-2 contract before any app integration.
 [Typing must precede endocrine-normalized trajectory features](../docs/trajectory_typing_reference_20260919.md).
 The nine-marker enhancement recorded in
 `research/cell_typing_requirements-v1.json` is deferred for the current expansion.
-First recover and verify the exact original phenotype rules, numeric gates,
-scVI weights and preprocessing, then apply them to the six additions. Historical
+As of 2026-09-29 the original numeric gates were recovered, but the complete
+phenotype rules and scVI encoder were unavailable, and the plan was to resolve
+model projection versus a reviewed joint retrain. The 2026-10-03 owner decision
+superseded that plan: the six additions use the accepted reconstruction rules
+and Harmony on protein PCA, and `retrain_joint_scvi.py` is archived. Historical
 schema 4 ran cell typing before composition and fitted trajectory from typed
 counts; its outputs are not accepted for the restored app.
 

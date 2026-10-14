@@ -1,5 +1,7 @@
 # Trajectory / Pseudotime — Accuracy Reference
 
+> **2026-10-03 implementation:** the expanded cohort preserves the original source data and uses Harmony on protein PCA for spatial UMAP and Leiden. The live trajectory uses endocrine-normalized composition features; marker expression is the mean gate-rescaled protein signal. Earlier scVI descriptions below are historical. See the [current implementation record](../../../docs/protein_expansion_20261003.md).
+
 Companion to [`statistics.md`](statistics.md). Linked from `app/shiny_app/CLAUDE.md`.
 
 This file is the in-repo record of the **pseudotime accuracy audit (2026-07-20/21)**, plus

@@ -1,5 +1,7 @@
 # Donor expansion, phase 2 — 2026-09-23, revised 2026-09-29
 
+> **2026-10-03 owner decision:** the accepted reconstruction rules and all six donor boundaries are approved. Use Harmony on protein PCA, retain the uncorrected comparison, and preserve original source records. Exact historical typing/encoder recovery and scVI retraining are no longer prerequisites. See the [current implementation record](protein_expansion_20261003.md); earlier directions below are historical.
+
 The September 23 raw-only checkpoint remains the starting evidence. The owner's
 September 29 direction replaces its projection-only and strict development
 loader constraints. The regenerated-all-21 September 17–22 candidates remain
@@ -28,11 +30,14 @@ preserved source records from derived outputs allowed to change in a joint refit
   annotation. Neither substitutes for legacy normalized expression,
   `phenotype`, scVI, islet composition or trajectory coordinates. Missing
   methods remain explicitly unavailable in a donor availability table.
-- Recover and verify the exact phenotype rules, scVI model weights and
-  preprocessing used for the original donors, then apply them to the six
-  additions with the original numeric gates and thresholds. Do not retune
-  gates for the new donors or infer that the current UI rule CSV reproduces
-  the full original typing method. The proposed enhancement using CHGA, CD45,
+- *(Historical; superseded 2026-10-03.)* Recover and verify the exact phenotype rules and postprocessing used for the
+  original donors. The original 31-marker numeric gates and input scale have
+  now been recovered from the frozen H5AD, but the checked-in rules table does
+  not reproduce its labels. To obtain comparable scVI coordinates, either
+  locate the original model weights and preprocessing or explicitly review a
+  joint retrain with the notebook method. Do not retune gates for the new
+  donors or infer that the current UI rule CSV reproduces the full original
+  typing method. The proposed enhancement using CHGA, CD45,
   VIM, LGALS3, CD44, PGP9.5, GAP43, CD35 and NaKATPase is deferred.
 - Regenerated original-donor geometry, typing and coordinates from schema 4
   remain experimental evidence. Their 11,944 regions / 11,136 eligible islets
@@ -57,10 +62,12 @@ preserved source records from derived outputs allowed to change in a joint refit
    on focused fixtures without running the all-donor regeneration pipeline.
 3. Independently verify the staged bundle and run `audit_original_parity.py`.
    Preserve checkpoint reports outside app data; never overwrite a prior run.
-4. Have the owner visually review donor annotations. Recover and verify the
-   original phenotype rules, scVI weights/preprocessing and numeric gates;
-   process the six additions with those exact methods and audit original donor
-   IDs, measurements and labels separately from derived coordinates.
+4. *(Historical; superseded 2026-10-03 — boundaries approved, accepted
+   reconstruction rules and Harmony protein PCA used instead.)* Have the owner visually review donor annotations. Reproduce frozen labels
+   with the exact phenotype rule chain and recovered numeric gates; resolve
+   original-model projection versus a reviewed joint scVI retrain. Process the
+   six additions with the selected methods and audit original donor IDs,
+   measurements and labels separately from derived coordinates.
 5. Fit and validate a common 21-donor trajectory, UMAP and Leiden result from
    comparable inputs. Passing software tests or raw staging does not certify
    scientific acceptance.
@@ -124,9 +131,11 @@ frozen hashes) and `tmp/donor-additions-20260923-final-validation/validation.jso
 (final independent validation). No original data, app code, service or profile
 was changed. Pre-existing untracked research files remain untouched.
 
-The integration checkpoint remains unmet: the exact original phenotype rules,
-scVI weights/preprocessing and numeric gates have not yet been recovered and
-verified for the six additions. The searched locations and precise resume
+As of 2026-09-29 the integration checkpoint was unmet: the original numeric gates were
+recovered, but the complete phenotype rule chain and scVI encoder were not. The
+2026-10-03 owner decision removed that prerequisite; see
+[the protein expansion record](protein_expansion_20261003.md).
+The searched locations, replay results and precise resume
 requirements are in [the method recovery record](original_method_recovery_20260929.md).
 The earlier donor-disjoint
 transfer screens reported raw-feature accuracy/macro-F1 0.86668/0.8380 and
