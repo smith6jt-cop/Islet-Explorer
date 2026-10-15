@@ -1,6 +1,57 @@
 # CLAUDE.md - Pipeline Scripts
 
-Pipeline scripts that build the data files consumed by the Shiny app. The top-level `CLAUDE.md` covers the high-level data lineage and run commands. This file documents the batch-correction pipeline, pseudotime modes, and per-script details.
+> **2026-10-03 owner decision:** the accepted reconstruction rules and all six donor boundaries are approved. Use Harmony on protein PCA, retain the uncorrected comparison, and preserve original source records. Exact historical typing/encoder recovery and scVI retraining are no longer prerequisites. See the [current implementation record](../docs/protein_expansion_20261003.md); earlier directions below are historical.
+
+Pipeline scripts that build the data files consumed by the Shiny app.
+
+## Restoration checkpoint — 2026-09-23
+
+The original 15-donor builders and trajectory entry points have been restored
+from `000e970`. Their restored defaults are for the frozen original lineage;
+do not run them in place or apply them to candidate inputs. The research
+pipeline below remains isolated and untrusted pending revision and evaluation.
+The owner requires preservation of original IDs, physical geometry,
+measurements, missingness and phenotype labels. A validated common 21-donor
+trajectory, UMAP and Leiden refit may change derived outputs. See the current
+phase-2 contract before any app integration.
+
+## Historical owner correction — 2026-09-19, revised 2026-09-29
+
+[Typing must precede endocrine-normalized trajectory features](../docs/trajectory_typing_reference_20260919.md).
+The nine-marker enhancement recorded in
+`research/cell_typing_requirements-v1.json` is deferred for the current expansion.
+As of 2026-09-29 the original numeric gates were recovered, but the complete
+phenotype rules and scVI encoder were unavailable, and the plan was to resolve
+model projection versus a reviewed joint retrain. The 2026-10-03 owner decision
+superseded that plan: the six additions use the accepted reconstruction rules
+and Harmony on protein PCA, and `retrain_joint_scvi.py` is archived. Historical
+schema 4 ran cell typing before composition and fitted trajectory from typed
+counts; its outputs are not accepted for the restored app.
+
+## Historical offline defaults — 2026-09-22 (superseded)
+
+Current additions follow [phase 2](../docs/donor_expansion_phase2.md).
+The historical 21-donor experiment is documented in [research/README.md](research/README.md).
+The schema-4 path is `research/reprocess_candidate.py` followed by correction,
+typing, composition, trajectory, `build_islet_embedding.py`, runtime
+materialization, validation and finalization. Every builder requires explicit
+input/output roots. Research runners require `--report-root` outside app data.
+The historical local candidate was
+`data/development/all-donor-20260922-trajectory-rank-v2`; preserve the native QuPath
+project, source images, prior candidates and frozen release.
+The fixed 0–1 reference rank is a display/binning artifact: raw pseudotime
+orders observations, and exact ties are spread by SHA-256 of islet ID. Outcome
+trajectory inference uses `pseudotime_raw`, where the ties remain intact.
+The former ND/INS-root, disease-order validation and small/large refits are
+archived under `archive/trajectory-pre-20260916/`. Preserve those historical
+sources and frozen outputs; do not run their defaults against the new candidate.
+Retained gates replace reconstruction of retired labels; unresolved outputs
+remain unavailable. See [the delivery record](../docs/all_donor_delivery.md).
+
+## Historical original-cohort methods
+
+The following descriptions and commands document the frozen original pipeline;
+their old parameters and entry-point arguments are not current defaults.
 
 ## Donor Batch Correction & Pseudotime Modes (Phase 17, Apr 2026)
 

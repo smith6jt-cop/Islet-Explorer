@@ -1,27 +1,43 @@
 # ---------- Spatial Tab module UI ----------
 # Exports: spatial_ui(id)
 # Layout: Controls sidebar (col-2) + Tissue Scatter (col-6) + Leiden Panel (col-4)
-# + 3 neighborhood analysis card rows below (A: Infiltration, B: Enrichment, C: Proximity)
+# + Neighborhood Analysis control bar and card rows below (rendered server-side in
+#   output$neighborhood_cards): enrichment/scatter/distance row, composition card,
+#   distance-to-islet profile card. Card prose lives in the tab_help() popover.
 
 spatial_ui <- function(id) {
   ns <- NS(id)
 
-  # Helper: numbered section heading (matches statistics tab pattern)
-  section_heading <- function(step, title, subtitle) {
-    div(style = "margin-bottom: 14px; margin-top: 22px; padding-bottom: 8px; border-bottom: 2px solid #d0e0f0;",
-      div(style = "display: flex; align-items: baseline; gap: 10px;",
-        span(step,
-             style = paste0("display: inline-block; background: linear-gradient(135deg, #4477AA, #5599CC);",
-                            " color: white; font-weight: 700; font-size: 14px; padding: 2px 10px;",
-                            " border-radius: 12px; min-width: 28px; text-align: center;")),
-        span(title, style = "font-weight: 700; font-size: 18px;")
-      ),
-      tags$small(subtitle, style = "color: #777; display: block; margin-top: 4px;")
-    )
-  }
-
   tagList(
-    phenotype_rules_button("show_phenotype_rules_spatial"),
+    tab_help("Spatial help", "show_phenotype_rules_spatial",
+      tags$p("Drag to zoom, double-click to reset the tissue scatter plot."),
+      tags$p("Phenotype pickers list the 12 retained labels. The residual and parent labels ",
+             "(Endocrine, Immune, T cell, Endothelial, APCs, Acinar, ECAD+, Structural, Unknown) are excluded."),
+      tags$p("Phenotype provenance: the original 15 donors retain saved labels; the six additions use reviewed reconstructed rules. Spatial phenotype comparisons span both methods."),
+      phenotype_marker_definitions_ui(),
+      # Explanatory prose for the neighborhood cards lives here, not inline
+      # under the plots (Oct 2026 streamlining).
+      tags$h6(style = "margin-top: 12px; font-weight: 700;", "Neighborhood Analysis controls"),
+      tags$p(tags$strong("Point size / transparency"),
+             " apply to Peri vs core proportion and Distance to nearest cell."),
+      tags$p(tags$strong("Exclude outliers / z-threshold"),
+             " apply to Peri enrichment by status and Distance to nearest cell. The checkbox and slider are synced with the Plot tab."),
+      tags$p(tags$strong("Min cells/islet"),
+             " filters islets for every neighborhood card except the Distance-to-islet profile, which reads per-cell data."),
+      tags$h6(style = "margin-top: 12px; font-weight: 700;", "Peri enrichment by status & Peri vs core proportion"),
+      tags$p("Per-phenotype peri-zone enrichment across disease stages, with peri vs core proportion scatter."),
+      tags$p("Immune infiltration quantifies the proportion of immune cells among all cells in the peri-islet zone (20\u00b5m expansion) and islet core. Higher fractions indicate increased immune surveillance or active infiltration."),
+      tags$p("Outlier exclusion in Peri enrichment by status follows the Neighborhood Analysis toggle (Tukey 1.5\u00d7IQR per donor status \u2014 enrichment z is already standardised, so the IQR fence is used instead of the modified z-score)."),
+      tags$h6(style = "margin-top: 12px; font-weight: 700;", "Phenotype composition & enrichment"),
+      tags$p("Which phenotypes are present in islet core vs peri-islet zones, and which are enriched vs tissue-wide background?"),
+      tags$p("Enrichment z-scores (peri-islet mode) compare observed immune cell counts in the peri-islet zone vs expected counts based on tissue-wide proportions (Poisson model). z > 0 = enriched; z < 0 = depleted. Core and peri-islet proportion modes show raw cell type fractions (0\u20131) within each compartment."),
+      tags$p("The phenotype checkboxes and the Region / Summary choices apply to both the bar chart and the heatmap. Clip extreme z > 5 only saturates the display scale; it is not an outlier filter."),
+      tags$h6(style = "margin-top: 12px; font-weight: 700;", "Distance to nearest cell & Distance-to-islet profile"),
+      tags$p(tags$strong("Distance to nearest cell:"),
+             " per-islet minimum Euclidean distance (\u00b5m) from islet core centroid to nearest peri-islet cells of each phenotype. NAs indicate no cells of that type in the peri-islet zone."),
+      tags$p("Outlier exclusion follows the Neighborhood Analysis toggle (robust |z| from median/MAD on log(1+distance), per donor status \u2014 two-sided; threshold from the slider). Excluded points still appear as faint \u00d7 markers."),
+      tags$p(tags$strong("Distance-to-islet profile:"),
+             " per-cell signed distance-to-islet on a symlog axis \u2014 a density split by disease status (per phenotype or all cells) or a phenotype composition (stacked bars, one facet per status, zero-anchored at the islet border), spanning islet interior to bulk tissue. Negative = inside islet, positive = outside; the dashed line marks the border. Pooled per cell (descriptive) \u2014 for donor-fair group comparison see Peri enrichment by status.")),
     # ==== ROW 1 (existing): Controls + Scatter + Leiden ====
     fluidRow(style = "display: flex; flex-wrap: wrap;",
       # ---- Left sidebar: Controls ----
@@ -70,7 +86,6 @@ spatial_ui <- function(id) {
                          style = "font-size: 12px; padding: 2px 10px;",
                          class = "btn-sm btn-outline-secondary")
           ),
-          tags$small("Drag to zoom, double-click to reset.", style = "color: #888; display: block; margin-bottom: 5px;"),
           plotOutput(ns("tissue_scatter"), height = "700px",
                      dblclick = ns("scatter_dblclick"),
                      brush = brushOpts(id = ns("scatter_brush"), resetOnNew = TRUE)),
@@ -84,6 +99,7 @@ spatial_ui <- function(id) {
       column(4,
         div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible; height: 100%;",
           h5("Islet-Level UMAPs"),
+          textOutput(ns("embedding_method")),
           uiOutput(ns("leiden_not_available")),
           fluidRow(
             column(6,
@@ -105,7 +121,7 @@ spatial_ui <- function(id) {
       )
     ),
 
-    # ==== ROW 2: Card A — Immune Infiltration Overview ====
+    # ==== ROW 2+: Neighborhood Analysis bar + cards ====
     uiOutput(ns("neighborhood_cards"))
   )
 }

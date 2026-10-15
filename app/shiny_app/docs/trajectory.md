@@ -1,6 +1,84 @@
 # Trajectory / Pseudotime — Accuracy Reference
 
+> **2026-10-03 implementation:** the expanded cohort preserves the original source data and uses Harmony on protein PCA for spatial UMAP and Leiden. The live trajectory uses endocrine-normalized composition features; marker expression is the mean gate-rescaled protein signal. Earlier scVI descriptions below are historical. See the [current implementation record](../../../docs/protein_expansion_20261003.md).
+
 Companion to [`statistics.md`](statistics.md). Linked from `app/shiny_app/CLAUDE.md`.
+
+### Retired-feature correction (2026-10-14)
+
+The live trajectory previously selected **all 42 core/peri phenotype ratios**,
+even though nine phenotype categories had been retired elsewhere in the app.
+This created a cohort artifact: Acinar, ECAD+ and Structural are absent by
+construction in the added donors, while their unresolved cells accumulate in
+Unknown. Original donors retain their historical labels. For islets with
+25–1902 cells, original/added cohort membership explained 99.3% of raw DPT
+variation, and every islet in the highest pseudotime decile was an addition.
+At 25–200 cells the graph split exactly by cohort, leaving all 178 additions
+unreachable from the original-donor root.
+
+Both Scanpy and destiny now use the app's **12 retained phenotypes**, in core
+and peri separately (24 candidate columns, followed by the existing constant
+column removal). This is the existing phenotype policy, not a feature set
+chosen to maximize insulin correlation. The stored endocrine denominator,
+source data, ND-centroid root rule, beta-ratio orientation convention,
+15-neighbor cosine graph and range-dependent fitting are preserved. PAGA
+uses the same corrected graph.
+
+Measured on expanded-v2, before/after this feature correction:
+
+| Cell range | Islets in range | INS Spearman before → after | Cohort share of raw-DPT variance before → after |
+|---|---:|---:|---:|
+| 10–1902 | 2,696 | −0.169 → −0.288 | 44.6% → 2.7% |
+| 25–1902 | 1,120 | −0.265 → −0.801 | 99.3% → 1.7% |
+| 25–200 | 957 | −0.497 → −0.783 | Before: disconnected; after: 2.8% |
+
+The old 25–200 correlation includes only 779 reachable original islets;
+the corrected graph reaches all 957. These are descriptive islet-level
+diagnostics, not donor-level significance tests. The original/addition
+labeling and intensity-scale differences still require scientific validation;
+removing retired categories does not establish full method equivalence.
+
+The recent rendering/deferred-PAGA changes were checked separately: the old
+and new calculation code produced identical DPT on identical inputs. The live
+CSV matched a direct calculation within 9e-7, marker means matched within
+3e-8, and the original donors' stored marker means were exactly preserved.
+The saved September 23 composition-axis export already had a high-insulin
+tail at the 10-cell threshold. Older INS-rooted scVI columns describe a
+different method and must not be used as expected values for this fit.
+
+DPT measures distance from its chosen root; eigenvector signs cannot reverse
+that distance. Its current root and beta-ratio convention do not guarantee a
+monotonic INS curve, particularly for small islets. The correction changes
+computed pseudotime values; the historical fitted values below are not the
+expected results of the corrected 24-feature calculation.
+
+Reproduce the comparison without modifying data:
+
+```bash
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 NUMBA_NUM_THREADS=2 \
+  python scripts/tests/audit_live_trajectory_inputs.py \
+  --data-root data/development/protein-expanded-20261003-v2 \
+  --output tmp/trajectory-audit-20261014/feature-audit.json
+```
+
+### Linked islet inspection (2026-10-14)
+
+The pseudotime scatter and both UMAPs share a donor + full islet-name key.
+Hovering an islet previews it in all three plots; clicking pins it and opens
+the existing segmentation/details card. Moving away restores the pinned
+highlight. **Clear selection** and the details card's **Close** button clear it.
+Display changes preserve the pin while the islet remains in the plotted data;
+recalculating a range that excludes it clears the selection. An islet without
+UMAP coordinates can still be highlighted in the scatter. PAGA and heatmaps
+are not part of this interaction.
+
+The UMAPs are interactive Plotly widgets, while their PNG downloads still use
+the original ggplots. Browser-local SVG rings follow the actual plotted
+coordinates, including scatter jitter, zoom and resize. Hover events do not
+reach Shiny, recompute pseudotime, redraw the point cloud or change axis ranges.
+Clicks use one server-validated selection route; coordinate-nearest matching
+is not used. The interaction check is
+[`check-trajectory-links.mjs`](../../../deploy/browser/check-trajectory-links.mjs).
 
 This file is the in-repo record of the **pseudotime accuracy audit (2026-07-20/21)**, plus
 the follow-up measurements of 2026-08-14. Until then the audit's findings lived only in
@@ -360,6 +438,11 @@ Method (Barlow et al., eLife 2024;13:RP100535, Methods -> "PAGA analysis"), all 
 the fallback when scanpy is unreachable from reticulate. Both are diffusion pseudotime over the same
 graph on the same features.
 
+The main scatter computes the selected cohort's neighbor graph and DPT first. Leiden clustering,
+PAGA abstraction, and ForceAtlas2 run only after the reviewer selects **Build and show PAGA layout**.
+The selected feature table and neighbor graph are cached and reused between those steps (up to two
+recent cell-count ranges), so opening the PAGA card does not rebuild the neighbor graph or DPT.
+
 Two deliberate deviations, stated not hidden: their hand-picked "temporarily omit 25 islets in the
 middle of the map" path-isolation step is **not** ported (unauditable, and undefinable on our data),
 and the root is restricted to ND islets because the globally nearest islet to the ND centroid was
@@ -373,8 +456,10 @@ literal fallback). 10 is Barlow's own exclusion threshold, and below it an islet
 vector is mostly sampling noise -- 60.8% of our islets are <= 10 cells.
 
 The upper bound matters as much as the lower: the pseudotime is **refitted on whatever islets the
-range selects**, so capping it isolates a size band instead of letting the few 1,000+ cell islets
-dominate the embedding.
+applied range selects**, so capping it isolates a size band instead of letting the few 1,000+
+cell islets dominate the embedding. The slider moves in five-cell steps without recomputing;
+**Recalculate trajectory** applies the pending range. Loaded and fitted islet counts appear next
+to the slider. Until the button is pressed, plots and downloads retain the previous fit.
 
 ```
 range        n      median pseudotime
@@ -386,15 +471,15 @@ range        n      median pseudotime
 This is not the §6 axis-instability defect. That was the axis moving as a side effect of changing
 the *Y-axis feature*, which nobody asked for; it still cannot happen and is regression-tested
 (`all.equal` across a feature switch). Here the axis moves only when the islet set that defines it
-changes, and a progress bar plus a note under the selector say so.
+changes on recalculation; a progress bar appears during the fit.
 
 ### Y axis: markers AND cell types, never one replacing the other
 
 `traj_y_mode` switches the measure; both remain available at all times.
 
-- **Marker expression** -- scVI-denoised mean from `.X`, the 31 markers. Unchanged default.
+- **Marker expression** -- scVI-denoised mean from `.X`, the 31 markers.
 - **Cell-type ratio** -- `log1p(cells of type T / endocrine cells in the islet core)`, with a region
-  control for core / peri / **core + peri (default)**.
+  control for **core (default)** / peri / core + peri. This is the default Y-axis measure.
 
 Only the **retained** phenotypes are offered as ratio numerators: `barlow_ratio_types()` runs the
 list through `phenotype_keep()`, so the nine retired labels (`Endocrine, Acinar, Endothelial,
@@ -406,8 +491,13 @@ Separate input ids per mode (`traj_feature` vs `traj_ratio_type`) so switching c
 name selected against ratio data, which would silently plot nothing. `traj_validate()` branches
 before checking `var_names`, because cell-type names are deliberately not in the marker list.
 
+The multi-feature heatmap initially selects INS, GCG, SST, CHGA, CD45, CD31, panCK and B3TUBB;
+all 31 markers remain selectable. The scatter uses smaller points and wider vertical display
+jitter to separate overlapping islets. Hover values and LOESS trends use the unjittered data;
+the jitter does not change the fitted pseudotime or exported measurements.
+
 **A ratio does not cure the zero pile-up** -- `log1p(0) = 0`, and Barlow's own Fig 2F has the same
-problem. What reduces it is sampling more cells (hence the core+peri default and the range floor):
+problem. Counting core + peri or raising the range floor can reduce it:
 
 ```
                  core, all   core+peri, all   core+peri, >=25 cells
@@ -417,8 +507,7 @@ CD8a Tcell         0.956         0.864              0.718
 CD4 Tcell          0.993         0.969              0.927
 ```
 
-`output$traj_y_note` prints the exact zero percentage for the current selection and colour-codes it
-(blue < 40%, amber 40-80%, red >= 80% with "the trend line over them is close to meaningless").
+The zero-percentage callout was removed from the tab; the measured comparison remains here for reference.
 
 ### PAGA force-directed layout
 
@@ -456,3 +545,71 @@ selects it through `RETICULATE_PYTHON`. Local development may use another compat
 Without scanpy, the axis falls back to destiny and the PAGA card reports that it is unavailable.
 Without `fa2-modified`, scanpy can fall back to Fruchterman–Reingold; the card reports the resulting
 layout key rather than hiding the change.
+
+## 12. Restoration audit — 2026-09-23
+
+Sections 1–11 above are restored verbatim from `000e970`. The default app's
+R/Python sources and entry point are byte-identical to that revision. The
+ignored `R/00_00_candidate_profile.R` had silently selected the September 18
+schema-3 candidate: its browser showed 8,568 selected islets, zero trajectory
+points, and no UMAP panels. That profile and the candidate-only helpers/tests
+are now outside Shiny's auto-loaded directories. Schema 4 remains separate;
+the owner requires exact preservation of original islet identities and values
+before expansion, and revision/evaluation of the candidate contract.
+
+The three canonical app artifacts remain unchanged and contain 15 donors.
+Independent backup copies and hashes are in
+`data/_pre_restore_backup/20260923/manifest.json`. Original-source aggregation
+reproduces all 5,214 islets' marker means, latent means, phenotype counts and
+proportions, morphology, cell counts and donor metadata exactly. The original
+enriched-H5AD builder reproduces all shared values; the April enriched file
+predates the August split columns. The original Barlow builder reproduces all
+5,214 × 90 CSV values. No rebuilding or `.bak` substitution was necessary.
+
+The read-only `scripts/tests/audit_frozen_trajectory.py` verifies the documented
+H5AD statistics and immutable file hashes. Re-measured donor/status eta-squared
+are 0.09128898/0.04445529; core INS/GCG/SST correlations are
+−0.570334/0.143115/−0.205998. The documented ND/Aab+ p-values use an exact
+**one-sided** donor-level Mann–Whitney test; their two-sided values are twice
+as large and also nonsignificant.
+
+**Contradiction to the historical metadata-fix claim in section 6:** the
+preserved trajectory file and its August backup both still store `DC1`/`DC2`
+from `X_diffmap` columns 0/1, not 1/2. This is a pre-existing documentation/data
+discrepancy, not verified evidence that the on-disk fix was applied. Neither
+the restored live composition axis nor its UMAP/heatmaps consumes these
+columns. They were preserved rather than silently repaired or refitted.
+
+The September 2025 Excel fallback also differs from current original TSVs in
+historical `islet_union` target rows; core/band rows and its other three sheets
+match. Rebuilding would discard 13,140 saved union rows and change some union
+measurements. The external donor-key workbook's primary columns now describe
+a different cohort, so a blind Excel rebuild is unsafe for original metadata.
+
+Live verification on `127.0.0.1:7777` passes all nine browser checks, including
+all six rendered trajectory outputs and marker/ratio switches that leave the
+axis unchanged. Raw composition-pseudotime results reproduce section 11:
+
+| Core-cell range | Islets | Median raw pseudotime |
+|---|---:|---:|
+| 10–1902 | 2,310 | 0.2524542212 |
+| 25–1902 | 908 | 0.3825007379 |
+| 10–200 | 2,181 | 0.2385783792 |
+
+The median tolerance is half the last documented decimal (`0.00005`). The
+six export checks compare UMAP coordinates and INS/GCG values directly to
+the frozen H5AD, and ratio values to original core-plus-peri counts divided
+by floored endocrine counts; maximum errors are below `5e-14`. Independent
+heatmap bin means/counts and clamped z-scores agree within `5e-15`.
+The frozen-data audit passes 46 checks; testthat passes 192 assertions and
+the relevant Python trajectory/data-loading suite passes 52 tests. Browser
+and export harnesses are `deploy/browser/check-frozen-trajectory.mjs` and
+`scripts/tests/audit_frozen_trajectory_exports.py`. Local reports, exports,
+screenshots and test logs are under `tmp/restoration-20260923/`.
+
+The ignored `www/local_images` symlink also pointed to the September 18
+candidate. Its old target is quarantined alongside the profile. The local
+static image route now uses the frozen `release-5809be4/data/images` bundle
+under `tmp/ufrc-release-20260908/artifacts/`, containing exactly the original
+15 donor images. These workstation routes are local configuration; no public
+service deployment or candidate promotion is part of this checkpoint.

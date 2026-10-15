@@ -1,10 +1,61 @@
 # CLAUDE.md - Islet Explorer
 
+> **2026-10-03 owner decision:** the accepted reconstruction rules and all six donor boundaries are approved. Use Harmony on protein PCA, retain the uncorrected comparison, and preserve original source records. Exact historical typing/encoder recovery and scVI retraining are no longer prerequisites. See the [current implementation record](docs/protein_expansion_20261003.md); earlier directions below are historical.
+
 This file provides guidance to Claude Code when working with this repository.
+
+## Restoration checkpoint — 2026-09-23
+
+The default app and original pipeline entry points are restored from `000e970`.
+The owner requires exact preservation of the original 15 donors and their
+islet identities and values. Historical schema-4 records describe the isolated,
+untrusted experiment, not the default app; they require revision and evaluation
+before reuse under the phase-2 contract. Keep the original data artifacts
+untouched and do not select the experimental schema-4 candidate by default.
+Candidate-only app helpers/tests are quarantined under
+`archive/schema4-before-restore-20260923/`. See the appended verification record
+in `app/shiny_app/docs/trajectory.md`.
+
+## Typing reference and revised owner direction — 2026-09-29 (historical)
+
+*Superseded by the 2026-10-03 owner decision at the top of this file; kept as the record of the September 29 direction.*
+
+Read [the typing/trajectory reference record](docs/trajectory_typing_reference_20260919.md)
+before further phenotype or trajectory work. Cell typing must precede the
+endocrine-normalized composition features used to fit trajectory. The owner now
+directs the six additions to use the original phenotype and scVI methods. The
+original numeric gates and input scale were recovered from the frozen H5AD;
+the checked-in rule CSV fails a 21-label replay, and the original scVI encoder
+weights remain missing. Recover and verify the complete rule chain, then either
+locate the encoder or explicitly review a joint scVI retrain. The active UI
+rules or QuPath labels are not proof of the original typing method. The
+September 19 proposal to enhance phenotypes
+with CHGA, CD45, VIM, LGALS3, CD44, PGP9.5, GAP43, CD35 and NaKATPase is deferred,
+not an acceptance gate for this expansion. Preserve the frozen release.
+
+## Donor-expansion contract — 2026-09-29 (historical)
+
+*Superseded by the 2026-10-03 owner decision at the top of this file; kept as the record of the September 29 direction.*
+
+[Phase 2](docs/donor_expansion_phase2.md) starts from the restored 15-donor app
+and raw-only six-donor checkpoint. Preserve all original donor IDs, spatial
+geometry, measured values, missingness and phenotype labels; apply the exact
+original typing/scVI method and numeric gates to the additions. A common
+21-donor trajectory, UMAP and Leiden refit may change those derived outputs for
+the original donors without changing their preserved source records. The owner
+will visually review donor annotations. A simple development data root selected
+with `ISLET_DATA_ROOT` needs no additional candidate-version or optional-loader
+gate. As of 2026-09-29 no six-donor integration or common refit had been accepted
+or completed; the 2026-10-03 protein expansion has since been built and accepted. The prior schema-4 geometry, typing and trajectory remain
+experimental evidence. See the phase-2 document for checkpoint evidence and
+remaining scientific dependencies.
 
 ## Project Overview
 
-Interactive Shiny app for exploring pancreatic islet CODEX multiplexed imaging data from nPOD donors. Tracks insulin loss and immune infiltration across ND -> Aab+ -> T1D progression. Features islet-level aggregated views, pseudotime trajectory, spatial neighborhood analysis, and single-cell drill-down.
+Interactive Shiny app for exploring pancreatic islet CODEX multiplexed imaging
+data from nPOD and HPAP donors. Compares endocrine composition and the islet
+microenvironment across ND, autoantibody-positive and T1D donors. Section-level
+associations and arbitrary trajectory orientation do not establish progression.
 
 ## Sub-directory CLAUDE.md files
 
@@ -185,7 +236,7 @@ Per-tab implementation details — Spatial Neighborhood Analysis (Phase 7), Sing
 - `PIXEL_SIZE_UM = 0.3774` - micrometers per pixel conversion constant
 - UMAP "Selected Feature" uses continuous viridis (inferno) colormap scaled to data min/max
 - Donor status colors: ND = steel blue (#4477AA), Aab+ = burnt umber (#CC6633), T1D = forest green (#228833) — Paul Tol bright variant, colorblind-safe, centralized as `DONOR_COLORS` in `00_globals.R`
-- Phenotyping uses Rules1 (`data/phenotype_rules.csv`) - 19 phenotypes, 15 markers. CSV headers use adata.var_names (CD8a, HLADR, PDPN — not CD8, HLA-DR, Podoplanin). The upstream Rules1 template also listed `CD99` (Endocrine) and `CD56` (Neural), but neither is in this 31-plex panel (`adata.uns['all_markers']` in `single_cell_analysis/CODEX_Panc_scimap_Analysis.ipynb`), so `scimap.tl.phenotype_cells` silently dropped them — effective gates were `Endocrine = any of INS/GCG/SST+` and `Neural = B3TUBB+`. Both phantom columns were removed from the app's CSV (Jul 2026) so the rules helper matches what was applied.
+- Phenotyping uses Rules1 (`data/phenotype_rules.csv`) - 19 phenotypes, 15 markers. CSV headers use adata.var_names (CD8a, HLADR, PDPN — not CD8, HLA-DR, Podoplanin). The upstream Rules1 template also listed `CD99` (Endocrine) and `CD56` (Neural), but neither is in this 31-plex panel (`adata.uns['all_markers']` in `single_cell_analysis/CODEX_Panc_scimap_Analysis.ipynb`), so `scimap.tl.phenotype_cells` silently dropped them — effective gates were `Endocrine = any of INS/GCG/SST+` and `Neural = B3TUBB+`. Both phantom columns were removed from the app's CSV (Jul 2026) so the rules helper matches what was applied. This app-facing CSV is not verified as the complete original typing method for the six additions.
 - **Donor metadata**: Comes from `islets_core_fixed.h5ad` obs, NOT from `CODEX_Pancreas_Donors.xlsx` (different cohort)
 - **User-facing terminology**: Use "Sex" not "Gender" in all UI labels, plot titles, and methods text. The underlying data column remains `gender` for backwards compatibility.
 - **H5AD obs index**: `islets_core_fixed.h5ad` index name is `islet_id` -- same as column, use `reset_index(drop=True)`
@@ -205,7 +256,7 @@ App-specific UI conventions (CSS overflow, font minimums, large-scatter renderin
 ## Deployment Architecture
 
 - **Requested reviewer URL (pending UFRC confirmation)**: `https://islet-explorer.rc.ufl.edu/islet-explorer/`
-- The UFRC high-availability proxy terminates HTTPS and Basic Auth, then proxies to VM loopback `127.0.0.1:3838`.
+- The project requests that the UFRC high-availability proxy terminate HTTPS and Basic Auth and proxy to VM loopback `127.0.0.1:3838`; the final reachable backend address and port must be agreed in the UFRC ticket before deployment.
 - Rootless Podman/Quadlet runs one immutable, digest-pinned image; code, scientific data, and images are read-only.
 - Releases are checksummed and atomically activated. Never update a live review round from a mutable branch or symlink.
 - Dev server (`Rscript -e 'shiny::runApp(".", port=7777)'`) is for local testing only

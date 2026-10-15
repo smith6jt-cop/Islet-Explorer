@@ -1,5 +1,7 @@
 # CLAUDE.md - Shiny App (Islet Explorer)
 
+> **2026-10-03 implementation:** the expanded cohort preserves the original source data and uses Harmony on protein PCA for spatial UMAP and Leiden. The live trajectory uses endocrine-normalized composition features; marker expression is the mean gate-rescaled protein signal. Earlier scVI descriptions below are historical. See the [current implementation record](../../docs/protein_expansion_20261003.md).
+
 Deep details for the modular Shiny app under `app/shiny_app/`. The top-level `CLAUDE.md` covers the entrypoint architecture, root-level outputs, shared reactive state, and data loading. This file documents per-tab features and conventions.
 
 ## Spatial Neighborhood Analysis
@@ -133,13 +135,14 @@ Click a point -> `selected_islet()` updates -> embedded panel renders inline wit
 
 ### Metric Label Vocabulary (May 2026)
 Sidebar radio labels and axis titles are unit-explicit — never use the bare word "density" without naming the denominator. Canonical phrasing:
+- **Hormone positivity** → each QuPath threshold result is shown as its positivity fraction only. It has no second Percentage / Counts / Density selector; `validated_metric()` forces `Percentage` even if a stale radio value remains in the session.
 - **Cell Populations Counts** → `"Cells per islet (core)"` / `"Cells per islet (peri)"` / `"Cells per islet (core+peri)"`.
 - **Cell Populations Density** → selector `"Cells per mm² of core area"` / `"… peri area"` / `"… core+peri area"`; y-axis `"Cells per mm² (core area)"` / `"(peri area)"` / `"(core+peri area)"`. Denominator is the QuPath-measured annotation area (`core_region_um2`, `peri_region_um2`, or their sum), joined into `comp` by `prep_data()` from `targets_all` rows. Peri-islet area comes from the `_exp20um` annotation in `annotations.tsv`.
 - **Microenvironment** → metric radio hidden (only one option). Y-axis names both the class and the region: `"Nerve area (% of core area)"` / `"Capillary area (% of peri-islet area)"` / `"Lymphatic area (% of core+peri area)"`. **Value computed from `100 * area_um2 / region_um2`** (% of the selected region's QuPath annotation area occupied by the structure). Counts are not exposed — these targets (Nerve / Capillary / Lymphatic) are area-valued (a single nerve may segment into several pieces), so object counts depend on segmentation morphology, not biology.
 - **Core+Peri combined proportions** → computed on the fly: `value = (prop_X · total_cells_core + peri_prop_X · total_cells_peri)` divided by either `(total_cells_core + total_cells_peri)` (Percentage) or `(core_region_um2 + peri_region_um2)` (Density). NA totals/areas are treated as 0 so islets with only one zone still contribute.
 - **Spatial Card C distance KDE** is **donor-aware** — it averages per-donor signed-distance densities with equal donor weight (a `shape`/`abundance` radio toggle), reading the signed-distance release artifact (Parquet in production, CSV in development). Y-axis is `"Per-donor mean density (area = 1)"` (shape, default) or `"Median cells per µm per donor"` (abundance), never a per-area density. This replaced the earlier pooled `density × N`, which pseudoreplicated large donors (ND 6356 = 71% of ND's APC cells). Card C-right also has a `dist_view` toggle exposing a Senior-ported **"Per-cell distance"** view over ~2.65M tissue-wide cells: a symlog-axis density or a zero-anchored composition view. `dist_mode` switches Phenotype vs Marker+ and `dist_norm` switches class proportion vs raw count. Production queries immutable Parquet through embedded DuckDB; CSV is development-only. The picker observer depends on both `dist_view` and `dist_mode`, preventing stale choices when users switch views.
 
-A `helpText` block under the Plot metric selector restates the active mode's denominator. Keep this phrasing if you add new metrics. The y-axis class name is parsed from `input$which` (encoded as `className|region`).
+The closed-by-default Plot help menu explains core / peri regions and the active metric denominators. Keep that explanation current when adding metrics; do not put explanatory `helpText` blocks in the Plot sidebar. The y-axis class name is parsed from `input$which` (encoded as `className|region`).
 
 ## Inflammation Tab (Jul 2026) — **currently hidden**
 
@@ -325,7 +328,7 @@ Required env vars: `KEY` (API key), `BASE` (API base URL, optional).
 - **UF Navigator uses `/chat/completions` only**: The code detects `api.ai.it.ufl.edu` in the base URL and skips the `/responses` endpoint.
 - **Streaming parser must handle `reasoning_content`**: For reasoning models, `delta.reasoning_content` chunks arrive first — use a "Thinking..." indicator.
 - **Token budget**: Controlled by `OPENAI_TOKEN_BUDGET` env var. Chat panel shows cumulative usage and blocks requests when budget exhausted.
-- **Debug mode**: Set `DEBUG_CREDENTIALS=1` env var for verbose credential loading logs.
+- **Debug mode**: In development only, set `DEBUG_CREDENTIALS=1` for fixed-code credential setup diagnostics. Production rejects this flag.
 - **Plain-text display**: `strip_markdown()` in `mod_ai_assistant_server.R` removes markdown formatting from AI responses before display.
 
 ## Viewer Tab (Avivator) — iframe Persistence (Jun 2026)
@@ -423,27 +426,21 @@ Helpers:
 
 Per-tab integration:
 
-- **Plot tab** (`mod_plot_server.R::output$which_ui`) — when in `"Cell
-  Populations"` mode, parses `input$which` via `extract_phenotype_from_column()`
-  and emits `phenotype_hint_ui()` directly under the metric `selectInput`.
-- **Spatial Card A** — `output$infiltration_pheno_hint` and
-  `output$scatter_pheno_hint` look up the selected `safe` name via
-  `phenotype_options()` and emit the hint UI.
-- **Spatial Card C** — `output$distance_pheno_hint` and `output$kde_pheno_hint`
-  follow the same pattern. The aggregate `"Immune (all)"` selection emits a
-  custom description rather than a per-phenotype rule.
+- **Plot tab** — no inline hints since Oct 2026; the Plot help popover carries
+  the explanation. `phenotype_hint_ui()` is now unused by any tab.
+- **Spatial tab** — no inline hints (removed Oct 2026, at the owner's request).
+  The help popover lists every retained phenotype's markers via
+  `phenotype_marker_definitions_ui()`, which composes `protein_phenotype_rules.csv`
+  parent chains when the data root ships it and otherwise uses the Rules1 reference.
 - **Drill-down composition panel** — root-level `output$islet_drilldown_rules`
   in `app.R` renders an expandable `<details>` element listing colour-coded
   swatches + rules for every phenotype present in the clicked islet. Embedded
   via `uiOutput("islet_drilldown_rules")` inside both the Plot and Trajectory
   `segmentation_viewer_panel` renderUIs.
 
-When adding a new phenotype-selecting input anywhere in the app, follow the
-existing pattern: resolve the selected value to a label via
-`extract_phenotype_from_column()` (or your existing `phenotype_options()`
-record), then emit `phenotype_hint_ui(label, show_modal_link = ns("…"))` and
-register an `observeEvent(input$…, showModal(phenotype_rules_modal_ui()))` to
-wire the inline link.
+When adding a new phenotype-selecting input anywhere in the app, route its
+choices through `phenotype_keep()` / `phenotype_is_kept()` and put any marker
+explanation in that tab's help popover, not inline under the control.
 
 ## Plot Fonts & Publication-Quality Downloads (May 2026)
 

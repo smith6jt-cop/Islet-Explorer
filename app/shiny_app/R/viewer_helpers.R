@@ -42,11 +42,10 @@ load_channel_names <- function() {
     labels <- labels[nzchar(labels)]
     if (!length(labels)) next
 
-    message(sprintf("[CHANNELS] Loaded %d channel names from %s", length(labels), cand))
     return(labels)
   }
 
-  message("[CHANNELS] Channel names not found. Embed names with: tiffcomment -set \"ChannelNames=<comma-separated>\" <file.ome.tif>")
+  islet_log_event("viewer_channels_unavailable")
   NULL
 }
 
@@ -54,8 +53,9 @@ channel_names_vec <- load_channel_names()
 
 # ---- Local images setup ---------------------------------------------------
 
-# Prefer static www/local_images so shiny-server can serve large OME-TIFFs with HTTP Range support.
-# Only add a dynamic resource path if www/local_images does not exist.
+# The Viewer prefers the data-root `images/` route (served by shiny-server with
+# HTTP Range support) and falls back to static www/local_images. Only add a
+# dynamic resource path if www/local_images does not exist.
 local_images_env <- Sys.getenv("LOCAL_IMAGE_ROOT", unset = "")
 local_images_root <- NULL
 if (nzchar(local_images_env)) {
@@ -81,7 +81,6 @@ has_www_local_images <- dir.exists(www_local_images_dir)
 if (!is.null(local_images_root) && dir.exists(local_images_root)) {
   try({
     shiny::addResourcePath("images", local_images_root)
-    cat("[SETUP] Registered resource path /images ->", local_images_root, "\n")
   }, silent = TRUE)
 }
 
@@ -91,7 +90,6 @@ if (has_www_local_images) {
     # Register local_images path for both local and remote compatibility
     # Use 'img_data' to avoid conflict warning with www/local_images subdirectory
     shiny::addResourcePath("img_data", file.path("www", "local_images"))
-    cat("[SETUP] Registered /img_data -> www/local_images\n")
   }, silent = TRUE)
 }
 
@@ -99,19 +97,7 @@ label_exports_dir <- file.path("www", "LabelExports")
 if (dir.exists(label_exports_dir)) {
   try({
     shiny::addResourcePath("label_exports", label_exports_dir)
-    cat("[SETUP] Registered /label_exports ->", label_exports_dir, "\n")
-    seg_files <- list.files(label_exports_dir, pattern = "\\.ome\\.tiff?$", ignore.case = TRUE)
-    cat("[SETUP] Found", length(seg_files), "segmentation OME-TIFF files\n")
   }, silent = TRUE)
-} else {
-  cat("[SETUP] LabelExports directory not found at", label_exports_dir, "\n")
-}
-
-# Log the setup for debugging
-cat("[SETUP] www/local_images exists:", has_www_local_images, "\n")
-if (has_www_local_images) {
-  local_files <- list.files(www_local_images_dir, pattern = "\\.(ome\\.)?tiff?$", ignore.case = TRUE)
-  cat("[SETUP] Found", length(local_files), "images in www/local_images\n")
 }
 
 # ---- Viewer helpers/defaults (Avivator) -----------------------------------
@@ -215,7 +201,6 @@ find_image_for_case <- function(case_id, www_dir, local_root) {
   if (!is.null(www_dir) && dir.exists(www_dir)) {
     matches <- list.files(www_dir, pattern = pattern, ignore.case = TRUE, full.names = TRUE)
     if (length(matches) > 0) {
-      cat("[IMAGE] Found in www:", matches[1], "\n")
       return(matches[1])
     }
   }
@@ -224,12 +209,10 @@ find_image_for_case <- function(case_id, www_dir, local_root) {
   if (!is.null(local_root) && dir.exists(local_root)) {
     matches <- list.files(local_root, pattern = pattern, ignore.case = TRUE, full.names = TRUE)
     if (length(matches) > 0) {
-      cat("[IMAGE] Found in LOCAL_IMAGE_ROOT:", matches[1], "\n")
       return(matches[1])
     }
   }
 
-  cat("[IMAGE] Not found for case:", case_id, "\n")
   return(NULL)
 }
 

@@ -8,6 +8,20 @@ viewer_server <- function(id, forced_image, current_tab) {
     iframe_id <- ns("avivator_viewer")
     wrap_id   <- ns("viewer_wrap")
 
+    # Wait for the browser's actual origin and application path before making
+    # an image URL. Latch this session metadata once complete so subsequent
+    # clientData updates cannot reload the WebGL iframe.
+    session_origin <- reactiveVal(NULL)
+    observe({
+      if (!is.null(isolate(session_origin()))) return()
+      fields <- c("url_protocol", "url_hostname", "url_port", "url_pathname")
+      origin <- setNames(lapply(fields, function(field) session$clientData[[field]]), fields)
+      if (any(vapply(origin, is.null, logical(1)))) return()
+      if (!origin$url_protocol %in% c("http:", "https:") ||
+          !nzchar(origin$url_hostname) || !nzchar(origin$url_pathname)) return()
+      session_origin(origin)
+    })
+
     # Images available to pick from (www/local_images + LOCAL_IMAGE_ROOT).
     available_images_r <- reactive({
       imgs <- character(0)
@@ -25,11 +39,11 @@ viewer_server <- function(id, forced_image, current_tab) {
     # The basename currently being viewed (forced image wins, then the user's
     # dropdown choice, then the first available image).
     selected_basename_r <- reactive({
-      fi <- forced_image()
-      if (!is.null(fi) && nzchar(fi)) return(fi)
-      si <- input$selected_image
-      if (!is.null(si) && nzchar(si)) return(si)
       ai <- available_images_r()
+      fi <- forced_image()
+      if (!is.null(fi) && islet_valid_asset_basename(fi, ai)) return(fi)
+      si <- input$selected_image
+      if (!is.null(si) && islet_valid_asset_basename(si, ai)) return(si)
       if (length(ai) > 0) return(ai[[1]])
       NULL
     })
@@ -42,7 +56,9 @@ viewer_server <- function(id, forced_image, current_tab) {
     # changes are instead pushed into the existing iframe (see observeEvent).
     has_image_now <- reactive({
       sb <- selected_basename_r()
-      !is.null(avivator_base) && !is.null(sb) && nzchar(sb)
+      info <- viewer_info()
+      !is.null(avivator_base) && !is.null(sb) && nzchar(sb) &&
+        isTRUE(info$ok) && !is.null(info$image_url) && nzchar(info$image_url)
     })
     has_image_stable <- reactiveVal(FALSE)
     observe({ has_image_stable(isTRUE(has_image_now())) })
@@ -54,6 +70,8 @@ viewer_server <- function(id, forced_image, current_tab) {
         image_rel = NULL, image_app_url = NULL, asset_diag = NULL, env = NULL
       )
       if (is.null(avivator_base)) return(info)
+      origin <- session_origin()
+      if (is.null(origin)) return(info)
 
       sel_basename <- selected_basename_r()
 
@@ -64,10 +82,10 @@ viewer_server <- function(id, forced_image, current_tab) {
         if (!is.null(local_images_root) && dir.exists(local_images_root)) {
           resource_candidate <- file.path(local_images_root, sel_basename)
         }
-        if (file.exists(www_candidate)) {
-          rel_url <- paste("local_images", sel_basename, sep = "/")
-        } else if (!is.null(resource_candidate) && file.exists(resource_candidate)) {
+        if (!is.null(resource_candidate) && file.exists(resource_candidate)) {
           rel_url <- paste("images", sel_basename, sep = "/")
+        } else if (file.exists(www_candidate)) {
+          rel_url <- paste("local_images", sel_basename, sep = "/")
         } else {
           rel_url <- paste("local_images", sel_basename, sep = "/")
         }
@@ -78,12 +96,9 @@ viewer_server <- function(id, forced_image, current_tab) {
       resolved_public_url <- NULL
       if (!is.null(rel_url) && nzchar(rel_url)) {
         info$image_rel <- rel_url
-        # The session URL origin (protocol/host/port/pathname) is fixed for the
-        # lifetime of the session. Isolate the clientData reads so any churn in
-        # session$clientData$url_* cannot re-trigger this reactive — which would
-        # otherwise rebuild the viewer iframe and flicker the WebGL canvas.
-        resolved_app_url    <- isolate(build_app_absolute_url(session, rel_url))
-        resolved_public_url <- isolate(build_public_http_url(session, rel_url))
+        origin_session <- list(clientData = origin)
+        resolved_app_url    <- build_app_absolute_url(origin_session, rel_url)
+        resolved_public_url <- build_public_http_url(origin_session, rel_url)
         info$image_app_url    <- resolved_app_url
         info$image_public_url <- resolved_public_url
       }
@@ -97,11 +112,9 @@ viewer_server <- function(id, forced_image, current_tab) {
         sel_url <- default_image_url
       }
 
-      params <- list()
-      if (!is.null(sel_url)) {
-        params[["image_url"]] <- utils::URLencode(sel_url, reserved = FALSE)
-        info$image_url <- resolved_app_url %||% sel_url
-      }
+      if (is.null(sel_url) || !nzchar(sel_url)) return(info)
+      params <- list(image_url = utils::URLencode(sel_url, reserved = FALSE))
+      info$image_url <- resolved_app_url %||% sel_url
 
       ch_b64 <- tryCatch(build_channel_config_b64(channel_names_vec), error = function(e) NULL)
       if (!is.null(ch_b64) && nzchar(ch_b64)) {
@@ -122,9 +135,6 @@ viewer_server <- function(id, forced_image, current_tab) {
       if (VIEWER_DEBUG_ENABLED) {
         info$env <- isolate(detect_environment(session))
         info$asset_diag <- isolate(probe_viewer_asset(session, rel_url))
-        cat("[VIEWER] sel:", sel_basename %||% "NULL",
-            "rel:", rel_url %||% "NULL",
-            "src:", info$iframe_src %||% "NULL", "\n")
       }
       info
     })
@@ -218,6 +228,7 @@ viewer_server <- function(id, forced_image, current_tab) {
         ),
         tags$iframe(
           id = iframe_id, src = src0, `data-relsrc` = src0,
+          title = "Interactive pancreatic tissue image viewer",
           width = "100%", frameBorder = 0, allowfullscreen = NA,
           tabindex = "0", allow = "fullscreen",
           style = "width:100%; height:calc(100vh - 180px); border:0;"

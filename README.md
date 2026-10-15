@@ -1,6 +1,6 @@
 # Islet Explorer
 
-Interactive R Shiny application for exploring pancreatic islet CODEX multiplexed imaging data from nPOD donors. Tracks insulin loss, immune infiltration, and cellular microenvironment changes across the ND → Aab+ → T1D disease progression.
+Interactive R Shiny application for exploring pancreatic islet CODEX multiplexed imaging data from nPOD and HPAP donors. Compares ND, autoantibody-positive and T1D donor groups using cross-sectional measurements; autoantibody positivity is not treated as a clinical disease stage.
 
 <div align="center">
 
@@ -9,11 +9,32 @@ Interactive R Shiny application for exploring pancreatic islet CODEX multiplexed
 
 </div>
 
-## Overview
+## Current all-donor local candidate
 
-Islet Explorer is a non-mutating R Shiny research application for exploring an
-analytical cohort of **5,214 islets** from **15 nPOD donors** across three disease
-stages. It combines marker and cell-population plots, composition-based trajectory
+The separate `data/development/all-donor-20260917/` candidate includes **21
+donors (7 ND, 7 Aab+, 7 T1D)**, corrected images, 3,592,722 raw objects and
+8,371 islets. The preview is at **http://127.0.0.1:3839/islet-explorer/**;
+`preview/service.json` records the current URL, PID, logs and restart command.
+The original service on port 3838 is preserved.
+
+Trajectory coordinates are fitted offline from outcome-blind marker features.
+Donor filters never refit or rescale them. All 31 panel markers are enabled in
+the heatmap. Research outputs are in
+`data/reports/all-donor-research/20260917/`, outside the app. The existing fit
+and estimates remain provisional: the owner's QuPath review identified suspect
+islet candidates, and subtype ratios still need validated upstream gates.
+The app displays this review status and retains corrected image access.
+
+See the [current implementation and validation record](docs/trajectory_revision_20260917.md) and
+[reproducible offline workflow](scripts/research/README.md). This is local
+delivery, not scientific or UFRC deployment acceptance.
+
+## Frozen publication-review baseline
+
+Islet Explorer is a non-mutating R Shiny research application for exploring
+pancreatic-islet measurements from **15 nPOD donors** across three disease
+stages. The trajectory H5AD contains **5,214 observations**; prepared core-area
+and composition tables each contain **5,382 rows**. It combines marker and cell-population plots, composition-based trajectory
 analysis, spatial analysis, single-cell segmentation drill-down, and browser-streamed
 OME-TIFF imagery. Reviewers can download generated CSV and PNG files, but cannot upload
 data or alter the versioned scientific release.
@@ -108,11 +129,8 @@ INSTALL_VITESSCER=1 Rscript scripts/install_shiny_deps.R
 Primary exploration interface with sidebar controls shared with Statistics.
 
 - **Scatter mode**: Feature expression vs islet diameter (31 markers, targets)
-- **Composition mode**: Cell type proportions with 4 option groups:
-  - Hormone Fractions (INS, GCG, SST)
-  - Cell Type Proportions (12 reviewer-facing phenotypes; 21 labels remain in source data)
-  - Peri-Islet Proportions (20 μm expansion zone)
-  - Immune Metrics (infiltration ratios, density)
+- **Composition mode**: Phenotype proportions in the islet core, peri-islet band, and combined core+peri region (12 reviewer-facing phenotypes; 21 labels remain in source data). QuPath threshold-based INS/GCG/SST counts are retained in source data for provenance but are not offered as comparable population measures.
+- Phenotype labels for the original 15 donors are preserved; the six added donors use reviewed reconstructed rules. See the [expanded-cohort comparability audit](docs/data_comparability_20261014.md) before interpreting pooled comparisons.
 - **Filters**: Donor status, autoantibody (GADA, IA2A, ZnT8A, IAA, mIAA), age range, sex, diameter range
 - **Normalization**: None, global z-score, robust per-donor (median/MAD×1.4826)
 - **Click interaction**: Click any point to open islet segmentation + single-cell drill-down
@@ -123,7 +141,9 @@ The reviewer view uses one composition-derived trajectory rather than a menu of
 non-comparable pseudotimes. It follows the Barlow-style workflow: phenotype-composition
 features, scanpy diffusion pseudotime, and a PAGA-initialized ForceAtlas2 graph;
 `destiny` supplies the explicit local fallback for the pseudotime axis when scanpy is
-unavailable. Changing the cell-count range refits the trajectory on that selected cohort.
+unavailable. The scatter fits DPT first; Leiden/PAGA/ForceAtlas2 is deferred until the
+reviewer asks to show the PAGA layout. Changing the cell-count range refits the trajectory
+on that selected cohort.
 
 - **Pseudotime scatter**: Marker expression or cell-type/endocrine-cell ratio against rank-normalized or raw DPT
 - **PAGA layout**: Interactive force-directed embedding colored by status, donor, cluster, or feature
@@ -181,10 +201,16 @@ Available from both Plot and Trajectory tabs when clicking an islet:
 ### Development sources
 
 `data/islet_explorer.h5ad` is the enriched analytical source used to construct the
-reviewer summaries. It contains the 5,214-islet analytical cohort, 31 protein-marker
+reviewer summaries. It contains a 5,214-observation H5AD axis, 31 protein-marker
 features, donor metadata, phenotype proportions, neighborhood metrics, UMAP coordinates,
 Leiden clusters, and QuPath-derived measurements. `data/master_results.xlsx` remains a
 reduced-feature **development fallback only**.
+
+H5AD observation counts do not describe all embedded QuPath measurements. The
+2026-09-08 source preparation produces `core_area` and `comp` with 5,382 rows
+each, `targets_all` with 48,438 rows, `markers_all` with 64,584 rows, and
+21 `combined_pairs` definitions. See [the readiness evidence index](docs/ufrc_readiness.md)
+for these source measurements and the pending source-to-release parity check.
 
 The composition trajectory uses `data/barlow_islet_features.csv` plus the prepared app
 tables. `data/adata_ins_root.h5ad` is retained as a versioned scientific/provenance
@@ -344,7 +370,8 @@ R -q -e "shiny::runApp('app/shiny_app', launch.browser=FALSE)"
 
 The reviewer deployment is an immutable, rootless Podman service managed by a
 user-mode Quadlet unit. Shiny listens on container port 3838; Podman publishes it
-only to the PubApps VM loopback address `127.0.0.1:3838`, and UFRC supplies TLS,
+to the requested PubApps VM loopback address `127.0.0.1:3838`, subject to UFRC
+confirming the final reachable backend address and port. UFRC supplies TLS,
 whole-site Basic Auth, and the public reverse proxy. Code is baked into the OCI
 image. The manifest-backed data root and its `images/` subtree are mounted read-only;
 only bounded temp and log directories are writable.
@@ -383,8 +410,8 @@ Rscript scripts/verify_release_data.R --root /path/to/release --mode full
 | `ISLET_ENABLE_AI` | Dormant AI module; must be `FALSE` in reviewer production |
 | `SHOW_STATISTICS_TAB` | Dormant Statistics tab; must be `0` in reviewer production |
 | `SHOW_INFLAMMATION_TAB` | Dormant Inflammation tab; must be `0` in reviewer production |
-| `DEBUG_CREDENTIALS` | Set to `1` for verbose credential loading |
-| `VIEWER_DEBUG` | Set to `1` for Viewer tab debug output |
+| `DEBUG_CREDENTIALS` | Development only: set to `1` for fixed-code credential setup diagnostics |
+| `VIEWER_DEBUG` | Development only: set to `1` for Viewer diagnostics; production rejects it |
 
 `KEY`, `OPENAI_API_KEY`, and external AI endpoint variables are forbidden in the
 reviewer container. Its entrypoint fails if an AI credential is supplied.

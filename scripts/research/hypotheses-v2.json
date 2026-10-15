@@ -1,0 +1,256 @@
+{
+  "version": "2.0.0",
+  "registered_specification_date": "2026-09-20",
+  "primary_family_size": 10,
+  "primary_contrast": "T1D versus ND",
+  "secondary_contrasts": "Aab+ contrasts; no assumption that Aab+ is a clinical disease stage",
+  "replicate": "donor",
+  "alpha": 0.05,
+  "multiplicity": "BH across ten slots; unavailable tests retain a slot and no fabricated p-value",
+  "covariates": [
+    "age",
+    "sex",
+    "log section area unless area is the exposure"
+  ],
+  "spatial_primary": "non-overlapping, geometrically valid, assessable tissue-clipped regions; 20 um band",
+  "spatial_sensitivities": [
+    "10 um",
+    "30 um",
+    "include flagged regions",
+    "leave one donor out",
+    "exclude HPAP"
+  ],
+  "clinical_secondary": [
+    "BMI",
+    "duration",
+    "HbA1c",
+    "C-peptide with censoring retained",
+    "autoantibody profile with missingness retained"
+  ],
+  "hypotheses": [
+    {
+      "id": "H1",
+      "title": "Size-dependent endocrine preservation",
+      "test": "Disease by within-donor log section-area interaction for insulin-positive endocrine fraction",
+      "endpoint": "INS-positive validated endocrine cells / expanded validated endocrine union",
+      "markers": [
+        "INS",
+        "GCG",
+        "SST",
+        "CHGA"
+      ],
+      "family": "beta-binomial",
+      "term": "disease:log_area_within",
+      "donor_selection": "ND and T1D primary; Aab+ secondary"
+    },
+    {
+      "id": "H2",
+      "title": "Innervation",
+      "test": "Disease by compartment interaction for nerve area fraction, adjusted for size",
+      "endpoint": "peri minus core nerve-positive area fraction",
+      "markers": [
+        "B3TUBB",
+        "PGP9.5",
+        "GAP43"
+      ],
+      "family": "continuous donor-clustered",
+      "term": "disease",
+      "donor_selection": "ND and T1D primary; Aab+ secondary"
+    },
+    {
+      "id": "H3",
+      "title": "Vascularization",
+      "test": "Disease by compartment interaction for capillary area fraction, adjusted for size",
+      "endpoint": "peri minus core capillary-positive area fraction",
+      "markers": [
+        "CD31",
+        "CD34",
+        "SMA",
+        "ColIV"
+      ],
+      "family": "continuous donor-clustered",
+      "term": "disease",
+      "donor_selection": "ND and T1D primary; Aab+ secondary"
+    },
+    {
+      "id": "H4",
+      "title": "Lymphatic\u2013immune association",
+      "test": "Within-donor lymphatic area fraction association with CD45-positive counts and log area offset",
+      "endpoint": "validated local CD45 count",
+      "markers": [
+        "PDPN",
+        "CD45",
+        "CD3e",
+        "CD8a",
+        "CD4",
+        "CD20",
+        "CD68",
+        "CD163",
+        "HLADR"
+      ],
+      "family": "negative-binomial",
+      "term": "lymphatic_within",
+      "donor_selection": "all 21 donors; ND, Aab+, T1D separate adjustment categories"
+    },
+    {
+      "id": "H5",
+      "title": "Neurovascular coupling",
+      "test": "T1D versus ND excess nerve proximity to capillaries within 20 um under compartment-constrained spatial nulls, adjusting for area and densities",
+      "endpoint": "Core/peri excess proximity weighted by actual nerve-positive area; 999 shape-preserving valid placements per positive-nerve compartment",
+      "markers": [
+        "B3TUBB",
+        "PGP9.5",
+        "GAP43",
+        "CD31",
+        "CD34",
+        "SMA",
+        "ColIV"
+      ],
+      "family": "continuous donor-clustered",
+      "term": "disease",
+      "donor_selection": "ND and T1D primary; Aab+ secondary"
+    },
+    {
+      "id": "H6",
+      "title": "Cytotoxic-cell access",
+      "test": "Within-donor association of core CD3e+/CD8a+ density and insulin-positive endocrine fraction",
+      "endpoint": "insulin-positive endocrine fraction",
+      "markers": [
+        "CD3e",
+        "CD8a",
+        "INS",
+        "GCG",
+        "SST",
+        "CD4",
+        "CD68",
+        "CD163",
+        "HLADR",
+        "CD20",
+        "CD35"
+      ],
+      "family": "beta-binomial",
+      "term": "cd8_within",
+      "donor_selection": "all 21 donors; ND, Aab+, T1D separate adjustment categories"
+    },
+    {
+      "id": "H7",
+      "title": "Basement-membrane organization",
+      "test": "ColIV boundary coverage association with the fraction of nearby CD45-positive cells inside core",
+      "endpoint": "core CD45 / nearby CD45 union",
+      "markers": [
+        "ColIV",
+        "CD45",
+        "VIM",
+        "SMA",
+        "CD44"
+      ],
+      "family": "beta-binomial",
+      "term": "coliv_within",
+      "donor_selection": "all 21 donors; ND, Aab+, T1D separate adjustment categories"
+    },
+    {
+      "id": "H8",
+      "title": "Ductal\u2013stromal niches",
+      "test": "Within-donor distance to validated CK19/panCK duct association with insulin-positive endocrine fraction",
+      "endpoint": "insulin-positive endocrine fraction",
+      "markers": [
+        "CK19",
+        "panCK",
+        "INS",
+        "GCG",
+        "SST",
+        "ECAD",
+        "BCatenin",
+        "KRT14",
+        "VIM",
+        "LGALS3"
+      ],
+      "family": "beta-binomial",
+      "term": "duct_distance_within",
+      "donor_selection": "all 21 donors; ND, Aab+, T1D separate adjustment categories"
+    },
+    {
+      "id": "H9",
+      "title": "Islet heterogeneity",
+      "test": "T1D versus ND donor-level dispersion of size-adjusted endocrine-cell profiles",
+      "endpoint": "Donor dispersion of size-adjusted mean log1p intensities within validated endocrine cells, all 31 markers",
+      "markers": "all 31, including BActin and NaKATPase",
+      "family": "donor-level continuous",
+      "term": "disease",
+      "donor_selection": "ND and T1D primary; Aab+ secondary"
+    },
+    {
+      "id": "H10",
+      "title": "Added microenvironment information",
+      "test": "Nested donor-held-out balanced accuracy improvement of full regularized profile over demographics, size and endocrine composition; permute donor labels through the whole procedure",
+      "endpoint": "held-out balanced accuracy difference",
+      "markers": "all 31 plus structural densities and spatial summaries",
+      "family": "nested donor-held-out classifier",
+      "term": "full minus baseline",
+      "donor_selection": "ND and T1D primary; Aab+ secondary",
+      "permutation": "All balanced binary donor-label allocations, complete nested fitting; 3432 for 7 ND + 7 T1D"
+    }
+  ],
+  "followups": [
+    {
+      "id": "F1",
+      "rule": "If H1 and H2/H3 have q<0.05, test size by implicated structural density; choose smaller q, capillary on tie. Otherwise test H1 adjusted for both densities."
+    },
+    {
+      "id": "F2",
+      "rule": "If H4 has q<0.05, omnibus lymphatic-neighborhood enrichment of CD8, CD4, B and macrophage-associated subsets; otherwise peri versus distant lymphatic localization."
+    },
+    {
+      "id": "F3",
+      "rule": "If H7 and H8 have q<0.05, test duct distance by ColIV coverage; if only one, its disease interaction; if neither, report unsupported mechanism and uncertainty. Missing tests cannot establish non-support."
+    },
+    {
+      "id": "F4",
+      "rule": "If H9/H10 yield stable features, test an INS-independent signature against held-out insulin-positive tissue burden, then secondary C-peptide association; otherwise prespecified size plus structural density signature."
+    }
+  ],
+  "followup_family": "exploratory same-cohort; independent replication requires new donors",
+  "pseudotime_family": "separate BH family; full-cohort descriptive curves are not inferential tests",
+  "references": [
+    "https://www.nature.com/articles/nmeth.3971",
+    "https://www.nature.com/articles/s41587-019-0071-9",
+    "https://pmc.ncbi.nlm.nih.gov/articles/PMC12727770/",
+    "https://pmc.ncbi.nlm.nih.gov/articles/PMC10027091/",
+    "https://www.nature.com/articles/s41467-025-59626-0"
+  ],
+  "typing_required": true,
+  "bootstrap_replicates": 999,
+  "endocrine_denominator": "All canonical cell centroids inside the endocrine pixel-classifier core, counted once; downstream typing cannot revoke classifier eligibility",
+  "feature_stability": {
+    "minimum_reconstructions": 10,
+    "sign_agreement_min": 0.8,
+    "top_quartile_frequency_min": 0.8,
+    "comparison_features": "standardized H9 marker-dispersion disease coefficients or nested H10 classifier coefficients",
+    "excluded_signature_marker": "INS"
+  },
+  "F4_stable_signature": {
+    "typing_omitted_markers": [
+      "INS"
+    ],
+    "typing_reconstructed": "each outer and inner donor-held-out fold",
+    "conditional_labels": "aligned only to reviewed training-donor identities; no production changes",
+    "profile": "mean log1p within conditionally typed expanded endocrine cells; minimum five per islet",
+    "candidate_features": "remaining 30 markers plus log area and validated core nerve/core capillary/peri lymphatic densities",
+    "selection": "top eight absolute training-donor Spearman associations with tissue burden, repeated inside inner and outer folds",
+    "ridge_alpha": [
+      0.01,
+      0.1,
+      1.0,
+      10.0
+    ],
+    "endpoint": "validated INS-positive tissue area / valid core area; never substitute cell composition"
+  },
+  "supporting_trajectory": {
+    "typing_omission": "complete outcome marker module and relevant phenotype dependencies",
+    "preprocessing": "four cell-typing fits reconstructed in each donor-held-out fold; outcome-independent training reference alignment",
+    "effect": "donor-mean held-out MSE improvement from a cubic trajectory smooth over demographic/size baseline",
+    "bootstrap": 200,
+    "endocrine_outcomes": "descriptive only because complete endocrine-module omission removes denominator evidence",
+    "family": "separate BH family; no primary hypothesis reuse"
+  }
+}

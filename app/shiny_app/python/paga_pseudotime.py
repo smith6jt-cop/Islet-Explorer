@@ -25,6 +25,7 @@ module rather than inline R strings so it can be run and tested standalone:
 """
 
 import os
+from collections import OrderedDict
 import numpy as np
 import pandas as pd
 
@@ -34,7 +35,25 @@ METRIC = "cosine"
 LEIDEN_RESOLUTION = 1.0
 N_DIFFMAP_COMPS = 10
 
+# Match PHENOTYPE_RETIRED in R/00_globals.R (covered by a regression test).
+# These labels are not comparable trajectory features across the original
+# and added donors. In particular, Acinar/ECAD+/Structural are absent by
+# construction in the additions, while Unknown absorbs unresolved cells.
+RETIRED_PHENOTYPES = frozenset({
+    "Endocrine", "Acinar", "Endothelial", "T cell", "Immune", "Unknown",
+    "ECAD+", "Structural", "APCs",
+})
+
 _FEATURES_CSV = None
+_FEATURES = None
+_FIT_CACHE = OrderedDict()
+_FIT_CACHE_LIMIT = 2
+
+
+def composition_features(columns):
+    """Use retained core/peri ratios, preserving the stored endocrine denominator."""
+    return [c for c in columns if c.startswith(("core_", "peri_"))
+            and c.split("_", 1)[1] not in RETIRED_PHENOTYPES]
 
 
 def _features_path():
@@ -55,14 +74,27 @@ def _features_path():
     return None
 
 
-def compute(min_cells=1, max_cells=None):
-    """
-    Returns a dict of equal-length lists (islet_id, case_id, donor_status, leiden,
-    fa_1, fa_2, pseudotime) plus scalar diagnostics, or {'error': msg}.
+def _range_values(min_cells, max_cells):
+    try:
+        mc = max(1, int(float(min_cells)))
+    except (TypeError, ValueError):
+        mc = 1
+    try:
+        xc = None if max_cells is None else int(float(max_cells))
+    except (TypeError, ValueError):
+        xc = None
+    return mc, xc
 
-    R/reticulate converts this to a data.frame; returning plain lists rather than
-    a DataFrame keeps the conversion predictable across reticulate versions.
-    """
+
+def _context(min_cells, max_cells):
+    """Cache the selected cohort and its neighbor graph for DPT and PAGA."""
+    global _FEATURES
+    mc, xc = _range_values(min_cells, max_cells)
+    key = (mc, xc)
+    if key in _FIT_CACHE:
+        _FIT_CACHE.move_to_end(key)
+        return _FIT_CACHE[key]
+
     path = _features_path()
     if path is None:
         return {"error": "data/barlow_islet_features.csv not found "
@@ -73,16 +105,9 @@ def compute(min_cells=1, max_cells=None):
     except ImportError as e:
         return {"error": f"scanpy/anndata unavailable in this interpreter: {e}"}
 
-    try:
-        mc = max(1, int(float(min_cells)))
-    except (TypeError, ValueError):
-        mc = 1
-    try:
-        xc = None if max_cells is None else int(float(max_cells))
-    except (TypeError, ValueError):
-        xc = None
-
-    b = pd.read_csv(path)
+    if _FEATURES is None:
+        _FEATURES = pd.read_csv(path)
+    b = _FEATURES
     n = b["total_cells_core"]
     sel = n >= mc
     if xc is not None:
@@ -93,7 +118,7 @@ def compute(min_cells=1, max_cells=None):
                          f"[{mc}, {xc if xc is not None else 'inf'}]; "
                          "a diffusion map needs more"}
 
-    feat = [c for c in sub.columns if c.startswith(("core_", "peri_"))]
+    feat = composition_features(sub.columns)
     X = sub[feat].to_numpy(dtype=float)
     # Constant columns carry no information and make the cosine metric unstable.
     keep = X.std(axis=0) > 0
@@ -107,24 +132,21 @@ def compute(min_cells=1, max_cells=None):
     obs.index = pd.Index(sub.index.astype(str), name="obs_id")
     A = ad.AnnData(X=X, obs=obs)
     sc.pp.neighbors(A, n_neighbors=N_NEIGHBORS, metric=METRIC, use_rep="X")
-    # flavor="igraph" is scanpy's supported non-deprecated path and is what the
-    # future default will be; n_iterations=2 matches that default.
-    sc.tl.leiden(A, resolution=LEIDEN_RESOLUTION, key_added="leiden",
-                 flavor="igraph", n_iterations=2, directed=False, random_state=0)
-    sc.tl.paga(A, groups="leiden")
-    # PAGA connectivities must be computed before they can seed the layout.
-    sc.pl.paga(A, plot=False)
-    sc.tl.draw_graph(A, init_pos="paga", random_state=0)
-    lay_key = next(k for k in A.obsm if k.startswith("X_draw_graph"))
-    xy = np.asarray(A.obsm[lay_key])
+    ctx = {"sc": sc, "A": A, "sub": sub, "mc": mc, "xc": xc,
+           "features": [c for c, used in zip(feat, keep) if used],
+           "root": None, "pt": None, "layout": None}
+    _FIT_CACHE[key] = ctx
+    while len(_FIT_CACHE) > _FIT_CACHE_LIMIT:
+        _FIT_CACHE.popitem(last=False)
+    return ctx
 
-    # ---- Root: "pseudotemporal distance from the centroid of non-T1D islets" ----
-    # DPT needs an actual vertex, so use the ND islet nearest the ND centroid --
-    # the medoid of the healthy cloud. Candidates are restricted to ND because
-    # the globally nearest islet to that centroid can be Aab+, which anchors the
-    # axis in the wrong disease stage.
+
+def _ensure_dpt(ctx):
+    if ctx.get("pt") is not None:
+        return ctx["pt"]
+    sc, A, sub = ctx["sc"], ctx["A"], ctx["sub"]
     sc.tl.diffmap(A, n_comps=N_DIFFMAP_COMPS)
-    dm = np.asarray(A.obsm["X_diffmap"])[:, 1:4]   # skip the trivial 0th eigenvector
+    dm = np.asarray(A.obsm["X_diffmap"])[:, 1:4]
     nd = np.where(A.obs["donor_status"].to_numpy() == "ND")[0]
     if nd.size == 0:
         return {"error": "no ND islets above this threshold; no root available"}
@@ -133,18 +155,62 @@ def compute(min_cells=1, max_cells=None):
     A.uns["iroot"] = root
     sc.tl.dpt(A)
     pt = A.obs["dpt_pseudotime"].to_numpy(dtype=float)
-
-    # Orient so beta-cell content DECREASES with pseudotime. The diffusion map's
-    # sign is arbitrary, so without this the axis can flip between thresholds and
-    # the same islet appears at opposite ends on consecutive settings.
     beta = sub["core_Beta cell"].to_numpy(dtype=float)
     fin = np.isfinite(pt) & np.isfinite(beta)
     flipped = False
+    # Keep the existing beta-ratio orientation convention. DPT is a distance
+    # from the root, so an eigenvector sign change cannot reverse it; this
+    # convention also does not guarantee a monotonic insulin relationship.
     if fin.sum() > 10:
         from scipy.stats import spearmanr
         if spearmanr(pt[fin], beta[fin]).statistic > 0:
             pt = np.nanmax(pt[np.isfinite(pt)]) - pt
             flipped = True
+    ctx["root"], ctx["pt"], ctx["flipped"] = root, pt, flipped
+    return pt
+
+
+def compute_pseudotime(min_cells=1, max_cells=None):
+    """Return only the DPT axis; leave clustering and force layout deferred."""
+    ctx = _context(min_cells, max_cells)
+    if "error" in ctx:
+        return ctx
+    pt = _ensure_dpt(ctx)
+    if isinstance(pt, dict):
+        return pt
+    sub = ctx["sub"]
+    return {"islet_id": sub["islet_id"].astype(str).tolist(),
+            "pseudotime": pt.astype(float).tolist()}
+
+
+def compute(min_cells=1, max_cells=None):
+    """Return DPT plus the PAGA-seeded force-directed layout and diagnostics."""
+    ctx = _context(min_cells, max_cells)
+    if "error" in ctx:
+        return ctx
+    sc, A, sub = ctx["sc"], ctx["A"], ctx["sub"]
+    mc, xc = ctx["mc"], ctx["xc"]
+
+    if ctx["layout"] is None:
+        # flavor="igraph" is scanpy's supported non-deprecated path and is what the
+        # future default will be; n_iterations=2 matches that default.
+        sc.tl.leiden(A, resolution=LEIDEN_RESOLUTION, key_added="leiden",
+                     flavor="igraph", n_iterations=2, directed=False, random_state=0)
+        sc.tl.paga(A, groups="leiden")
+        # PAGA connectivities must be computed before they can seed the layout.
+        sc.pl.paga(A, plot=False)
+        sc.tl.draw_graph(A, init_pos="paga", random_state=0)
+        lay_key = next(k for k in A.obsm if k.startswith("X_draw_graph"))
+        xy = np.asarray(A.obsm[lay_key])
+        ctx["layout"] = (lay_key, xy)
+    else:
+        lay_key, xy = ctx["layout"]
+
+    pt = _ensure_dpt(ctx)
+    if isinstance(pt, dict):
+        return pt
+    root = ctx["root"]
+    flipped = ctx.get("flipped", False)
 
     return {
         "islet_id": sub["islet_id"].astype(str).tolist(),

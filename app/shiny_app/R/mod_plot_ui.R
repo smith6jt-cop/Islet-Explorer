@@ -12,6 +12,9 @@ plot_sidebar_ui <- function(id) {
                 choices = c("Microenvironment", "Cell Populations"),
                 selected = "Cell Populations"),
     uiOutput(ns("dynamic_selector")),
+    conditionalPanel(condition = "input.mode == 'Cell Populations'", ns = ns,
+      tags$small(class = "text-muted",
+        "Expanded cohort: 21 donors, 7 per donor status. The original 15 retain their saved cell labels; the six additions use reviewed reconstructed phenotype rules. Phenotype-based comparisons span both methods.")),
     uiOutput(ns("metric_selector")),
     hr(),
     h5("Autoantibody filter (Aab+ donors only)"),
@@ -82,20 +85,18 @@ plot_sidebar_ui <- function(id) {
 plot_main_ui <- function(id, extra_panel = NULL) {
   ns <- NS(id)
   tagList(
-    column(10,
-      phenotype_rules_button("show_phenotype_rules_plot"),
-      div(style = "display: flex; gap: 10px; margin-bottom: 15px;",
-        div(style = "flex: 1; background-color: #e8f4fd; border: 1px solid #b8daff; border-radius: 5px; padding: 10px 12px; color: #004085; font-size: 13px;",
-          "Enable \"Show individual points\" then click any point on the ",
-          tags$strong("Islet Size Distribution"), " scatter to view its segmentation map below."
-        ),
-        div(style = "flex: 1; background-color: #e8f4fd; border: 1px solid #b8daff; border-radius: 5px; padding: 10px 12px; color: #004085; font-size: 13px;",
-          "Enable \"Show individual points\" and set \"Color points by\" to Donor ID, then click a donor in the legend to show/hide it."
-        ),
-        div(style = "flex: 1; background-color: #e8f4fd; border: 1px solid #b8daff; border-radius: 5px; padding: 10px 12px; color: #004085; font-size: 13px;",
-          "Use browser zoom (Ctrl +/\u2212) to resize cards. Scroll within cards to reveal hidden controls."
-        )
-      )
+    column(12,
+      tab_help("Plot help", "show_phenotype_rules_plot",
+        tags$p(tags$strong("Cell Populations."),
+               " Core includes cells inside the islet boundary. Peri-Islet includes cells in the 20 µm zone around it. Core+Peri pools both regions and uses the matching pooled cell denominator."),
+        tags$p(tags$strong("Metrics."),
+               " Percentages use the cells in the selected region as the denominator. Counts are phenotype-positive cells per islet. Density divides the count by the QuPath-measured annotation area; Core+Peri density uses the summed core and peri areas."),
+        tags$p(tags$strong("Phenotype definitions."),
+               " Open the marker-definition reference below to review the documented rules."),
+        tags$p("Enable \"Show individual points\" then click any point on the ",
+               tags$strong("Islet Size Distribution"), " scatter to view its segmentation map below."),
+        tags$p("Enable \"Show individual points\" and set \"Color points by\" to Donor ID, then click a donor in the legend to show/hide it."),
+        tags$p("Use browser zoom (Ctrl +/\u2212) to resize cards. Scroll within cards to reveal hidden controls."))
     ),
     # Left card: Main scatter plot
     column(6,

@@ -113,6 +113,25 @@ test_that("manifest artifact paths cannot escape the release root", {
                "Unsafe artifact path")
 })
 
+test_that("development uses the selected source root even when a manifest exists", {
+  root <- tempfile("islet-development-")
+  dir.create(root)
+  writeLines("historical manifest", file.path(root, "manifest.json"))
+  env <- make_backend_env(root)
+  sys.source(.find_source("R/data_loading.R"), envir = env)
+  env$islet_is_production <- function() FALSE
+  env$load_prepared_release <- function(...) stop("development selected release")
+  env$load_master_auto <- function(h5ad_path, excel_path) {
+    expect_identical(h5ad_path, file.path(root, "islet_explorer.h5ad"))
+    expect_identical(excel_path, file.path(root, "master_results.xlsx"))
+    list(source = "development")
+  }
+  env$prep_data <- identity
+  env$audit_na <- function(...) invisible(NULL)
+
+  expect_identical(env$load_shared_prepared_data(root)$source, "development")
+})
+
 test_that("GeoPackage loading applies an indexed bounding-box filter", {
   skip_if_not_installed("sf")
   root <- tempfile("islet-geometry-")
@@ -138,4 +157,22 @@ test_that("GeoPackage loading applies an indexed bounding-box filter", {
                                    centroid_y_um = 1, buffer_um = 5)
   expect_equal(nrow(cropped), 1L)
   expect_equal(cropped$id, "near")
+})
+
+test_that("development segmentation reads compressed GeoJSON for padded donor IDs", {
+  skip_if_not_installed("sf")
+  root <- tempfile("islet-compressed-geometry-")
+  dir.create(file.path(root, "gson"), recursive = TRUE)
+  on.exit(unlink(root, recursive = TRUE), add = TRUE)
+  con <- gzfile(file.path(root, "gson", "0078.geojson.gz"), "wt")
+  writeLines('{"type":"FeatureCollection","features":[{"type":"Feature","properties":{"name":"Islet_1234"},"geometry":{"type":"Polygon","coordinates":[[[0,0],[2,0],[2,2],[0,2],[0,0]]]}}]}', con)
+  close(con)
+  env <- make_backend_env(root)
+  env$islet_is_production <- function() FALSE
+  env$SF_AVAILABLE <- TRUE
+  sys.source(.find_source("R/segmentation_helpers.R"), envir = env)
+  geometry <- env$load_case_geojson("78")
+  expect_equal(nrow(geometry), 1L)
+  expect_identical(geometry$name, "Islet_1234")
+  expect_true(is.na(sf::st_crs(geometry)))
 })

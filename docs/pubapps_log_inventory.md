@@ -1,15 +1,25 @@
-# Islet Explorer PubApps Log Inventory and Handling Standard
+# Islet Explorer PubApps Log Inventory and Project Handling Guidance
 
-Status: **pre-go-live security artifact; owner and UFRC confirmations remain open**
-Repository snapshot reviewed: **2026-09-01**
+Status: **application hardening recorded; exact-release and UFRC confirmations remain open**
+Repository snapshot reviewed: **2026-09-08**
 Production profile: **journal-review deployment, Public Restricted access, Sensitive collection**
+
+UFRC support ticket #83810 (SYSCONFIG-8173) exists, and the individual Risk
+Assessment IRM-456246-Panc Floyd was submitted on 2026-09-01. VM provisioning is
+owner-reported; the 2026-09-08 UFRC response says setup normally follows completed
+assessments and checklists. Reconcile the assigned host and provisioning status with
+UFRC. Collector/retention settings and production acceptance remain unconfirmed.
+See [`ufrc_readiness.md`](ufrc_readiness.md) for the evidence index.
 
 ## Purpose and scope
 
-This document inventories the log and error output that the current Islet Explorer
-repository can produce when deployed on UFRC PubApps. It also defines the minimum
-format, redaction, access, rotation, retention, and acceptance controls for reviewer
-hosting.
+This document inventories the log and error output that Islet Explorer can produce on
+UFRC PubApps. It distinguishes the required hosting outcome—appropriate
+industry-standard one-event-per-line logging in a UFIT-monitored location—from the
+project's more detailed JSONL, minimization, rotation, retention, and verification
+recommendations. UFRC may satisfy collection, access, and retention centrally; the
+project must record the values UFRC assigns rather than treating every recommendation
+below as a separate UFRC approval gate.
 
 The inventory covers:
 
@@ -26,69 +36,81 @@ log or support ticket.
 
 ## Current disposition
 
-The deployment is **not log-ready for production until the unchecked controls in the
-go-live checklist are closed**. In particular:
+The documented UFIT logging outcome remains open until the exact release candidate
+produces appropriate one-event-per-line application records and UFRC confirms the
+UFIT-monitored location. Separately, the project must resolve its acceptance questions
+about minimization, access, and retention. Repository hardening has removed the reviewed identifier-bearing
+Plot, Trajectory, viewer, drilldown, spatial, segmentation, and root-render error
+messages and has replaced their failure paths with fixed event codes. Production now
+fails closed if credential or viewer debugging is enabled.
 
-1. Current R output includes case IDs, islet keys, image IDs or filenames, selected
-   image URLs, full paths, and raw `conditionMessage()` text.
-2. Most application output is free-form and some credential diagnostics are multiline;
-   it does not meet the one-event-per-line standard below.
-3. `preserve_logs true` retains Shiny worker logs, but the repository defines no
-   host-side rotation, byte cap, or deletion schedule.
-4. The UFRC reverse proxy is outside this repository. Its access-log fields, query-string
-   treatment, authentication-event handling, central collection, and retention are not
-   yet known.
-5. A shared Basic-Auth account cannot identify an individual reviewer. If UFRC or the
-   data owner requires person-level access attribution, named accounts or another
-   approved access method are required before go-live.
+The reviewed startup, capability, release-loading, PAGA, Barlow, segmentation,
+drilldown, and spatial paths now call the centralized `islet_log_event()` emitter.
+It produces UTC timestamped JSON records with allowlisted event, level, component,
+result, and optional validation error code; it accepts no raw exception or selected
+scientific value. The focused tests in
+`app/shiny_app/tests/testthat/test-application-logging.R` cover record shape and
+hostile inputs; 180 checks passed locally on 2026-09-08 before the final release
+commit. That result is not an exact-release runtime capture.
+Native R/package output and other framework messages still require review.
+Credential and AI failures use fixed event codes,
+provider details are not logged or shown, and production rejects the AI path before any
+request; the production fail-closed controls must remain in place. The exact release
+output still needs a source/runtime review for line discipline and minimization. Two
+external questions also remain: UFRC owns the proxy/auth collector and its retention
+rules, and a shared Basic-Auth identity cannot attribute activity to an individual
+reviewer. If UFRC or the data owner requires person-level attribution, use named
+accounts or another approved access method.
 
 Existing controls that reduce risk are:
 
-- `sanitize_errors true` keeps detailed R errors out of the reviewer browser while
-  retaining server-side diagnostics (`deploy/shiny-server.conf:6-7`).
+- `sanitize_errors true` keeps detailed R errors out of the reviewer browser;
+  `preserve_logs false` avoids indefinitely preserving per-worker files and
+  `log_file_mode 0640` restricts any created Shiny log (`deploy/shiny-server.conf`).
 - Shiny worker logs are directed to `/var/log/shiny-server`, which is a dedicated
-  read-write host mount (`deploy/shiny-server.conf:21` and
-  `deploy/islet-explorer.container.in:23`).
+  read-write host mount (`deploy/shiny-server.conf` and `deploy/islet-explorer.container.in`).
 - The activation script creates the runtime log directory with mode `0750`
-  (`deploy/activate-release.sh:80-85`). Actual file modes and ACLs still require a
+  (`deploy/activate-release.sh`). Actual file modes and ACLs still require a
   deployment-time check.
 - Production sets `DEBUG_CREDENTIALS=0` and `VIEWER_DEBUG=0`, disables AI, and rejects
-  `KEY` or `OPENAI_API_KEY` if supplied (`deploy/islet-explorer.container.in:39-43` and
-  `deploy/container-entrypoint.sh:15-24`).
+  either debug mode or `KEY`/`OPENAI_API_KEY` if supplied
+  (`deploy/islet-explorer.container.in`, `deploy/container-entrypoint.sh`, and
+  `app/shiny_app/R/00_globals.R`).
+- Browser-controlled validation failures use a fixed one-line JSON event that cannot
+  accept the rejected value (`app/shiny_app/R/00_audit.R`).
 
 ## Log-flow inventory
 
 | Stream | Current producer and transport | Current or expected destination | Security disposition |
 |---|---|---|---|
-| Shiny worker output | R `message()`, `cat()`, `warning()`, uncaught `stop()`, package output | Container `/var/log/shiny-server`; host `runtime/logs` mount | Sensitive operational record. Identifier-bearing emissions must be removed or redacted. Rotate explicitly because worker logs are preserved. |
-| Shiny Server supervisor output | Shiny Server lifecycle, worker start/stop, configuration and fatal errors | Container stdout/stderr and/or Shiny Server's native log destination; exact base-image behavior must be verified | Internal operational record. Do not assume it shares the worker-log mount. Confirm with `podman logs` and the user journal. |
-| Container and unit output | Entrypoint checks, health failures, Podman runtime, systemd restart events | User journal for `islet-explorer.service`; visible through `journalctl --user` and `podman logs` | Internal operational/security record. Current messages do not print secret values, but can reveal UID/GID and paths. UFRC must set journal limits and retention. |
+| Shiny worker output | Central application JSON emitter, remaining R/framework messages, uncaught conditions, package output | Container `/var/log/shiny-server`; host `runtime/logs` mount | Potentially Sensitive operational record. Reviewed application events use fixed fields; validate native output in the exact release. Shiny does not preserve completed worker logs, and any separately retained host copy follows the applicable UFRC or project limits. |
+| Shiny Server supervisor output | Shiny Server lifecycle, worker start/stop, configuration and fatal errors | Container stdout/stderr and/or Shiny Server's native log destination; exact rebuilt-candidate behavior must be verified | Internal operational record. Do not assume it shares the worker-log mount. Confirm with `podman logs` and the user journal. |
+| Container and unit output | Entrypoint checks, health failures, Podman runtime, systemd restart events | User journal for `islet-explorer.service`; visible through `journalctl --user` and `podman logs` | Internal operational/security record. Current messages do not print secret values, but can reveal UID/GID and paths. Record the effective UFRC host limits and retention. |
 | Reverse-proxy access | HTTPS, WebSocket upgrade, downloads, and TIFF Range requests | UFRC-managed proxy/access log and any central UFRC collector | Sensitive access metadata. Log a normalized route, never a query string, credential, cookie, or full TIFF/case filename. |
 | Basic-Auth events | Successful and failed authentication at the UFRC proxy | UFRC-managed authentication/security log | Sensitive security record. Never log the `Authorization` header or password. A shared username is not individual attribution. |
 | Proxy/TLS errors | TLS, upstream connection, timeout, WebSocket, and Range failures | UFRC-managed error/security log | Potentially Sensitive because native error text may include URI, backend, header, username, or client address. Redact before collection. |
 | Deployment commands | `build-image.sh`, `scan-image.sh`, release verification, activation, rollback, and deployment verification | Operator terminal unless deliberately captured; some state is written under release evidence/deployments | Internal release record, not an application log. It may contain image digests, Git commits, hostnames, UIDs, absolute paths, and registry names. Never capture shell history containing credentials. |
 | Host administrative access | SSH, login, service-account and privilege events | UFRC host/security logs | UFRC-owned security record. Restrict to named maintainers and UFRC administrators; confirm review and retention. |
 
-The Quadlet does not select a Podman log driver. UFRC must confirm the effective driver,
-whether `podman logs` and the user journal contain the same records, and which store is
-authoritative.
+The Quadlet does not select a Podman log driver. On the confirmed deployment host, record the
+effective driver, whether `podman logs` and the user journal contain the same records,
+and which store is authoritative.
 
-## Current R application emissions
+## Reviewed R application emissions
 
-The table groups repository evidence by risk. Line numbers identify the reviewed
-snapshot and may move as the app changes.
+The table records the disposition of the reviewed snapshot. Re-run the same source and
+runtime review against the exact candidate because dependencies and future code changes
+can add output.
 
-| Category | Current evidence and example content | Risk | Required production handling |
-|---|---|---|---|
-| Startup and capability checks | `app/shiny_app/R/00_globals.R:42-119,174-183` reports package state, app version, working directory, and Python path. `app/shiny_app/R/viewer_helpers.R:45-114` reports channel-file and image/resource paths and file counts. | Paths, usernames, runtime topology, release state, and unpublished aggregate counts may be exposed. | Keep stable capability/result event codes and release ID. Remove working directory, home path, interpreter path, and source-file paths. Log counts only where operationally necessary. |
-| Release and data loading | `app/shiny_app/R/data_loading.R:235-397,425-502,555-608` reports joins, row counts, H5AD/Excel paths, manifest-backed release path, and raw read errors. `app/shiny_app/R/01_runtime_data_backend.R:22-223` and `app/shiny_app/R/utils_safe_join.R:6-21` raise detailed validation errors. | Raw errors can contain absolute paths, artifact names, schema details, values, or package text. Multiline `stop()` text breaks line discipline. | Emit an allowlisted event such as `data.release.validation_failed` with release ID and error code. Keep raw exception text only in a short-lived, access-restricted diagnostic capture after approval. |
-| Plot interactions | `app/shiny_app/R/mod_plot_server.R:545-547,994,1158-1170` reports outlier state, donor count, and raw plot-click key. | A click key combines case/islet pseudonyms; it is Sensitive scientific and reviewer-behavior metadata. | Do not log clicks, selections, donor IDs, case IDs, islet keys, or phenotype values. Aggregate performance metrics only if approved. |
-| Trajectory processing and interactions | `app/shiny_app/R/mod_trajectory_server.R:467,568-613,932-994`, `app/shiny_app/R/paga_layout.R:34-70`, and `app/shiny_app/R/barlow_pseudotime.R:140` report feature-processing errors, row counts, cell-range selections, case IDs, islet keys, and raw Python/R errors. | Case/islet identifiers and reviewer-selected ranges are Sensitive; Python exceptions can include data paths and values. | Suppress routine click and selection events. Use stable compute-success/failure codes, duration, and non-identifying row counts only. Never emit raw selected feature, case, islet, donor, or stack trace. |
-| Drilldown and spatial data | `app/shiny_app/R/drilldown_helpers.R:152-158` reports `combined_id`; `app/shiny_app/R/spatial_helpers.R:87-181` reports `imageid`, row counts, and raw errors. | `combined_id` and `imageid` are donor-derived pseudonyms. Errors may include Parquet paths or query detail. | Replace identifiers with no value or, only if incident response requires correlation, a short-lived keyed digest controlled by UFRC. Prefer event code plus result/duration. |
-| Segmentation | `app/shiny_app/R/segmentation_helpers.R:59-208` reports case IDs, GeoPackage/GeoJSON paths, feature counts, and raw geometry errors. `app/shiny_app/app.R:648` reports raw segmentation exceptions. | Case IDs, image filenames, paths, geometry errors, and counts are Sensitive in combination. | Log `segmentation.query_failed` or `segmentation.asset_missing` without case, filename, path, bounding box, or raw exception. |
-| Image lookup and viewer | `app/shiny_app/R/viewer_helpers.R:218-232` reports matched filenames and missing case IDs. With `VIEWER_DEBUG=1`, `app/shiny_app/R/mod_viewer_server.R:122-127` logs the selected image and full iframe source. | The iframe source contains `image_url` and encoded `channel_config`; filenames can encode a case ID. Query strings may also reach proxy access logs. | Keep `VIEWER_DEBUG=0` in every production and staging unit. Do not log full URI/query strings, image names, case IDs, or channel configuration. Normalize proxy routes to route classes. |
-| Credential and AI diagnostics | `app/shiny_app/R/ai_helpers.R:18-140` can report user/home, `.Renviron` search paths, file size/readability, key presence and length, and API base. `app/shiny_app/R/ai_helpers.R:255-564` and `app/shiny_app/R/mod_ai_assistant_server.R:203-205` can report endpoint/model and raw upstream error detail. | Although the key value is not intentionally printed, these are credential-discovery signals. Upstream errors can include submitted content or vendor detail. A future debug change could expose a secret. | AI must remain disabled, no AI credential may enter the container, and `DEBUG_CREDENTIALS` must remain `0`. Treat any credential-debug or AI request event in production as a security alert. Never enable this diagnostics path on the reviewer instance. |
-| Generic caught and uncaught errors | `app/shiny_app/app.R:633-648` prints raw drilldown/segmentation exceptions; R/package warnings and Shiny worker failures can also enter worker logs. | `conditionMessage()` and stack traces are uncontrolled fields and can contain Sensitive values, paths, or injected newlines. | Map expected failures to stable codes. Sanitize unexpected messages before a single-line record; do not copy raw traces into tickets without a security review. Browser error sanitization must remain enabled. |
+| Category | Reviewed disposition | Remaining release check |
+|---|---|---|
+| Startup and capability | Reviewed capability/setup emissions now use the centralized timestamped JSON emitter; identifier/path diagnostics remain removed. | Confirm native package and remaining framework records stay on one physical line and disclose no unnecessary environment detail. |
+| Release and data loading | Reviewed production release-loading and data-preparation events use the central emitter; development fallbacks are not evidence of production behavior. | Exercise production startup with the immutable manifest and inspect failures without copying raw data or paths into tickets. |
+| Plot, Trajectory, PAGA, and Barlow | Reviewed click keys, selected features/ranges, case/islet values, and raw compute exceptions were removed from operational output. Fixed failure codes and validation events remain. | Confirm UI values cannot enter log fields and validation JSON remains one line. |
+| Drilldown, spatial, and segmentation | Reviewed combined IDs, image IDs, paths, geometry details, and raw render/read exceptions were replaced with fixed event codes. | Confirm expected errors expose no case, islet, filename, path, coordinate, or raw exception. |
+| Viewer | Reviewed filename/path lookup and iframe-source output was removed. `VIEWER_DEBUG` now fails closed in both the entrypoint and R production startup. | Keep debug disabled and verify UFRC proxy logs do not retain `image_url`, `channel_config`, or the full query string. |
+| Credential and AI diagnostics | Credential discovery and provider failures now emit fixed codes without paths, endpoint/model values, raw provider errors, or secret metadata. Production disables AI, rejects credentials, skips credential-file discovery, and fails closed if credential debug is enabled. | Treat any AI/credential-debug activity on the reviewer instance as a configuration failure; never place a real secret in a canary test. |
+| Framework/native errors | Browser sanitization remains enabled; reviewed root render catches now emit fixed event codes. R, Shiny Server, and package failures can still produce native text. | Inspect the exact-candidate stream for credentials, unnecessary Sensitive values, uncontrolled newlines, and paths before reviewer access. |
 
 ### Output that is not an operational log
 
@@ -105,17 +127,25 @@ snapshot and may move as the app changes.
   are release evidence. Protect them as internal records, but do not mix them with
   rotating runtime logs.
 
-## Production event standard
+## Implemented format and recommended extensions
 
 ### One event per line
 
-Application-owned operational events must be UTF-8 JSON Lines. Each physical line is
-one complete JSON object and one event. Values must be JSON-escaped; embedded CR/LF,
-tabs, control characters, and terminal escape sequences must never create another log
-line. A native component that cannot emit JSON must still emit exactly one escaped
-event per physical line and remain in its own stream.
+UFIT requires an appropriate industry-standard one-event-per-line format. UTF-8 JSON
+Lines is implemented for the reviewed application-owned events: each
+physical line is one complete JSON object and one event. Values must be JSON-escaped;
+embedded CR/LF, tabs, control characters, and terminal escape sequences must never
+create another log line. The exact UFIT outcome does not require every native framework
+or capability message to adopt this project schema; those records should still remain
+one event per physical line and in a separately identified stream.
 
-Required application fields:
+The current emitter implements `ts`, `level`, `event`, `component`, `result`, and
+allowlisted validation `error_code`. `release`, metrics, and correlation fields
+below are optional design guidance and are not claimed as implemented output.
+The example event names illustrate the recommended extended schema; the current
+event allowlist is defined in `app/shiny_app/R/00_audit.R`.
+
+Application fields and optional extensions:
 
 | Field | Rule |
 |---|---|
@@ -132,7 +162,7 @@ Required application fields:
 Example acceptable application event:
 
 ```json
-{"ts":"2026-08-31T14:05:16Z","level":"INFO","event":"data.release.loaded","component":"shiny","release":"pubapps-2026-01","result":"ok","rows":5214}
+{"ts":"2026-09-08T19:01:08Z","level":"INFO","event":"release_data_loaded","component":"shiny","result":"ok"}
 ```
 
 Example acceptable proxy event after field minimization:
@@ -160,11 +190,12 @@ or support-ticket logs:
 - the neutral reviewer password in test commands, shell history, screenshots, or ticket
   comments.
 
-The UFRC proxy must consume Basic Auth and strip the `Authorization` header before
-forwarding to the Shiny backend. It must log a normalized route such as `app`,
-`websocket`, `download`, `viewer.image`, or `static`, rather than `$request_uri` or the
-TIFF basename. In particular, the Avivator iframe query contains `image_url` and
-`channel_config` and must not be recorded.
+Ask UFRC to confirm that its proxy consumes Basic Auth without forwarding the
+`Authorization` header to Shiny and that its logs do not retain the password, raw
+header, or sensitive query values. Normalized route classes such as `app`, `websocket`,
+`download`, `viewer.image`, or `static` are a project recommendation in place of a full
+request URI or TIFF basename. In particular, the Avivator iframe query contains
+`image_url` and `channel_config` and should not be recorded.
 
 ### Allowed Sensitive security metadata
 
@@ -177,14 +208,17 @@ represented as proof of an individual reviewer's identity.
 
 ## Rotation, retention, access, and disposal
 
-The following is the proposed minimum baseline. UFRC policy, an incident hold, an
-agreement, or a written data-owner requirement may require longer retention. The final
-values and the responsible system must be recorded before go-live.
+The following is the project's recommended baseline, not a statement of UFRC policy.
+UFRC may provide host- or collector-level controls, and UFRC policy, an incident hold,
+an agreement, or a written data-owner requirement may require different retention.
+Before reviewer access, record the applicable destination, access rule, retention, and
+responsible system; use the project values below only where the project owns the store
+and no controlling requirement supersedes them.
 
 | Record | Proposed baseline pending approval | Access and disposal |
 |---|---|---|
 | Shiny worker logs in `runtime/logs` | Rotate daily or at 100 MiB, whichever occurs first; compress completed logs; retain 30 days; cap the set at 2 GiB | Service account, two named maintainers, and UFRC administrators only. Delete automatically after the approved period; no copy in a public release or repository. |
-| Container/user-journal output | Retain 30 days searchable, subject to UFRC journal limits; cap by bytes as well as time | Named maintainers and UFRC administrators. UFRC must identify the authoritative store and deletion mechanism. |
+| Container/user-journal output | Retain 30 days searchable, subject to UFRC journal limits; cap by bytes as well as time | Named maintainers and UFRC administrators. Record the authoritative store and deletion mechanism UFRC provides. |
 | Proxy access/auth/security logs | Retain through the active review period and for 90 days after reviewer access closes, or the longer UFRC-required period | UFRC security/operations and explicitly authorized maintainers. Central storage, backup, export, and deletion inherit the Sensitive classification. |
 | Approved temporary diagnostic capture | Maximum 72 hours, scoped to a specific incident, with no credentials or scientific identifiers | Start only with maintainer/UFRC approval. Record the ticket and delete or sanitize when the incident closes. Never enable credential debugging. |
 | Release/security evidence | Retain with the publication release record for the owner-approved publication retention period | This is not runtime telemetry. Restrict write access, preserve integrity, and store separately from reviewer-facing files. |
@@ -205,62 +239,53 @@ Additional controls:
   be high volume and must not be allowed to exhaust the PubApps allocation.
 - An incident, litigation, or records hold overrides automatic deletion only when issued
   by the authorized UF/UFRC office. Document the hold and subsequent release.
-- Record quarterly access reviews while reviewer authentication remains active and
-  document final deletion when the review deployment is retired.
+- If UFRC confirms that project-plan item 6 applies to this Sensitive deployment,
+  record quarterly access reviews while reviewer authentication remains active.
+  Document final disposal when the review deployment is retired.
 
-## Owner confirmations required
+## Project owner acceptance questions
 
-The PI/data owner and technical owner must complete and retain these decisions:
+The PI/data owner and technical owner should resolve and retain these project decisions:
 
 - [ ] Confirm that de-identified case/islet/image codes, scientific selections, and
   authentication metadata are Sensitive for this combined reviewer deployment.
-- [ ] Approve the allowed application event fields and the prohibition on scientific
-  identifiers and raw errors.
+- [ ] Approve minimization of application logs, including exclusion of credentials,
+  unnecessary scientific identifiers, and uncontrolled raw errors.
 - [ ] Name the two technical maintainers who may read runtime logs.
-- [ ] Name the security/incident contact and the escalation route for suspected
-  disclosure or credential exposure.
-- [ ] Approve the final application, unit-journal, proxy/security, diagnostic, and
-  release-evidence retention periods.
 - [ ] Confirm whether shared Basic Auth supplies sufficient auditability. If individual
   attribution is required, replace it with named accounts before go-live.
 - [ ] Confirm that no AI credential, external telemetry key, or external log destination
   is authorized for the reviewer instance.
-- [ ] Confirm that support tickets and journal correspondence will not contain raw logs,
-  reviewer credentials, case IDs, islet IDs, image filenames, or scientific rows.
-- [ ] Approve the final log-deletion record when reviewer hosting ends.
 
-## UFRC confirmations required
+## Documented UFRC logging outcome
 
-Ask UFRC to answer these items in the restricted PubApps ticket:
+- [ ] Application logs use an appropriate industry-standard one-event-per-line format
+  and are sent to a UFIT-monitored location.
 
-- [ ] Identify the reverse-proxy product, access/auth/error log locations, authoritative
-  collector, and staff roles that can read each store.
-- [ ] Provide the exact proxy log field list. Confirm that it excludes the
-  `Authorization` header, password, cookies, session tokens, request/response bodies,
-  query strings, full referrer, TIFF basename, and `image_url`/`channel_config`.
-- [ ] Confirm that the proxy strips the Basic-Auth `Authorization` header before sending
-  the request to `127.0.0.1:3838`.
-- [ ] Describe successful/failed-login logging, source-IP handling, rate limiting,
-  lockout/brute-force alerts, and how the shared credential is rotated and revoked.
-- [ ] Confirm the effective Podman log driver and whether user-journal records duplicate
-  `podman logs`; designate one authoritative service stream.
-- [ ] Configure and document host-side rotation for `runtime/logs`. `preserve_logs true`
-  without rotation is not acceptable.
-- [ ] Provide journal and proxy byte/time caps, central retention, backup behavior,
-  deletion mechanism, and disk-usage alerts.
-- [ ] Confirm directory/file ownership, group membership, umask/ACLs, and that only the
-  service account, named maintainers, and authorized UFRC administrators can read logs.
-- [ ] Confirm clock synchronization and the proxy request-ID format, if request IDs are
-  retained.
-- [ ] Provide the security incident, credential-exposure, and emergency log-preservation
-  process, including after-hours contact.
-- [ ] Confirm whether UFRC policy requires a longer schedule than the proposed baseline;
-  record the approved schedule in this document and the ticket.
+## Project acceptance questions for UFRC
 
-## Pre-go-live leakage test
+Ask UFRC to answer these operational questions in the restricted PubApps ticket. They
+support project acceptance but are not presented as separately documented UFRC gates:
 
-Run this test against staging using only synthetic canary strings, never a real password
-or API key:
+- [ ] Identify the UFIT-monitored destinations for application and proxy/auth records,
+  who may read them, and the applicable retention/deletion rules.
+- [ ] Confirm that proxy/auth logging does not retain credentials or unnecessary
+  Sensitive query values and that the Basic-Auth header is consumed before the request
+  reaches Shiny.
+- [ ] Provide the procedure for creating, changing, and revoking the reviewer credential
+  and the support route for a suspected disclosure.
+
+Recommended operating decisions, not separate UFRC gates, include selecting an
+authoritative Podman/journal stream, documenting effective rotation and byte caps,
+confirming clock/request-ID behavior, recording alert ownership, and exercising log
+preservation and deletion. Adopt details from the tables above when the project owns
+the relevant store; otherwise record UFRC's implementation.
+
+## Recommended leakage exercise
+
+Run this project assurance exercise against the exact release candidate through the
+confirmed UFRC route before reviewer credentials are distributed. Use synthetic canary
+strings, never a real password or API key:
 
 1. Record the image digest, data-release ID, test start/end time, and canary values in a
    restricted test record.
@@ -271,68 +296,54 @@ or API key:
    Auth attempt with a synthetic username.
 4. Inspect `runtime/logs`, `journalctl --user -u islet-explorer.service`, `podman logs`,
    and a UFRC-provided proxy/auth log export for the test interval.
-5. Verify that application-owned records are one JSON object per line and native
-   component records are one escaped event per line.
+5. Verify that application and native-component events remain one physical line. For
+   records using the project JSONL format, also validate the JSON object and schema.
 6. Search for the synthetic password, `Authorization`, `Cookie`, session-token names,
    `KEY=`, `OPENAI_API_KEY`, `image_url`, `channel_config`, full query strings, source
    paths, and known test case/islet/image identifiers. The required result is zero.
 7. Verify proxy events use route classes and that failed authentication is visible
    without recording a password or raw header.
-8. Force a worker-log rotation and verify the running service continues, completed logs
-   are compressed with restricted permissions, and expiration removes the correct file.
+8. If the project retains a durable worker-log store, force a rotation and verify the
+   running service continues, completed logs are compressed with restricted permissions,
+   and expiration removes the correct file.
 9. Verify an unauthorized local account and the reviewer identity cannot read any log
    store.
 10. Attach only the pass/fail record and sanitized field samples to the release evidence;
     do not attach a raw log bundle.
 
-Any prohibited-field match is a failed security gate. Keep production closed, correct
-the producer or collector, repeat the full test, and retain the remediation record.
+This detailed exercise is recommended project evidence rather than a separately
+mandated UFRC test. Any credential or prohibited-field match still fails the project's
+release assurance: keep reviewer access closed, correct the producer or collector,
+repeat the relevant checks, and retain the remediation record.
 
-## Go-live checklist
+## Release-acceptance checklist
 
-### Application and container
+### Documented UFRC logging outcome
 
-- [x] Shiny browser errors are sanitized.
-- [x] Reviewer production flags disable AI, Statistics, Inflammation, credential debug,
-  and viewer debug.
-- [x] The entrypoint rejects AI credentials in the reviewer profile without printing
-  their values.
-- [x] Shiny worker logs have a dedicated host-mounted directory created as `0750`.
-- [ ] Identifier-bearing plot, trajectory, drilldown, spatial, segmentation, and image
-  lookup messages are removed or transformed to the approved event schema.
-- [ ] Raw `conditionMessage()`, full paths, multiline errors, and environment diagnostics
-  are removed from routine production output.
-- [ ] Application-owned events pass the one-event-per-line validation.
-- [ ] Actual worker-log and temporary-file modes/ACLs are verified on the PubApps VM.
-- [ ] A credential-debug or AI event in production produces an operational alert.
+- [ ] Application logs use an appropriate industry-standard one-event-per-line format
+  and are sent to a UFIT-monitored location.
 
-### UFRC proxy and host
+### Project acceptance questions and recommended evidence
 
-- [ ] UFRC has supplied and approved the proxy/auth/error field inventory.
-- [ ] Query strings, authentication headers, cookies, bodies, full referrers, and image
-  filenames are absent from proxy logs.
-- [ ] The proxy consumes Basic Auth and does not forward its header to Shiny.
-- [ ] Failed-login controls, rotation/revocation, rate limiting, and alert ownership are
-  documented and tested.
-- [ ] Podman/user-journal destination, duplication, access, byte cap, and retention are
-  documented.
-- [ ] Host-side worker-log rotation, compression, byte cap, retention, and deletion are
-  installed and tested.
-- [ ] Disk and journal-capacity alerts have named recipients.
-- [ ] Named maintainer, service-account, UFRC administrator, and unauthorized-user access
-  tests pass.
+- [ ] The exact release candidate emits no credentials, uncontrolled multiline errors,
+  or unnecessary Sensitive scientific fields.
+- [ ] Browser errors remain sanitized and the reviewer profile fails closed if AI,
+  credential debug, viewer debug, or an AI credential is enabled.
+- [ ] UFRC has supplied the monitored application and proxy/auth destinations plus the
+  applicable access and retention rules.
+- [ ] UFRC has confirmed safe Basic-Auth handling and a credential
+  creation/change/revocation procedure; the owner has accepted shared-account
+  auditability or selected an approved named-account alternative.
+- [ ] The technical owner has accepted the project logging controls and recorded UFRC's
+  answers before reviewer credentials are distributed.
 
-### Approval and evidence
-
-- [ ] Owner and UFRC retention decisions are written into the restricted ticket.
-- [ ] Shared-account auditability is accepted in writing, or named authentication is in
-  place.
-- [ ] The staging leakage test passes with zero prohibited-field matches.
-- [ ] A sanitized log-format sample, rotation result, access test, and deletion test are
-  retained with the immutable reviewer release evidence.
-- [ ] Incident contacts and the after-hours escalation path have been exercised.
-- [ ] Technical owner and UFRC security/operations sign off before reviewer credentials
-  are delivered.
+- Validate project JSONL events against the project schema and retain a sanitized sample.
+- Run the synthetic-canary leakage exercise across the application, relevant host
+  stream, and a UFRC-provided proxy/auth sample.
+- Where the project owns a log store, test its rotation, permissions, byte cap,
+  retention, and deletion; otherwise record the corresponding UFRC controls.
+- Record the authoritative runtime stream, alert/incident contact, and any approved log
+  preservation procedure.
 
 ## Final approval record
 
@@ -349,6 +360,6 @@ details or credentials to the public repository.
 | UFRC proxy/collector | `[VALUE]` |
 | Named maintainer group | `[RESTRICTED RECORD REFERENCE]` |
 | Shared-auth auditability accepted | `[YES / NO / APPROVER / DATE]` |
-| Leakage-test evidence | `[RELEASE-EVIDENCE PATH OR TICKET]` |
+| Recommended leakage-exercise evidence | `[RELEASE-EVIDENCE PATH OR TICKET / NOT RUN]` |
 | UFRC approval | `[TICKET / APPROVER / DATE]` |
 | Technical-owner approval | `[APPROVER / DATE]` |

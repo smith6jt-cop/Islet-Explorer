@@ -109,12 +109,16 @@ write_frame_parquet <- function(con, frame, target, view_name) {
   invisible(target)
 }
 
-csv_to_parquet <- function(con, source, target, character_case_id = FALSE) {
+csv_to_parquet <- function(con, source, target, character_case_id = FALSE,
+                           preserve_blank_islet_name = FALSE) {
   dir.create(dirname(target), recursive = TRUE, showWarnings = FALSE)
   types <- if (character_case_id) ", types={'case_id':'VARCHAR'}" else ""
+  # fread(), used by the legacy donor-tissue path, keeps empty character
+  # islet_name values as strings. Do not change numeric-field null handling.
+  blank_strings <- if (preserve_blank_islet_name) ", force_not_null=['islet_name']" else ""
   sql <- paste0(
     "COPY (SELECT * FROM read_csv(", sql_string(con, normalizePath(source, mustWork = TRUE)),
-    ", header=true, sample_size=-1", types, ")) TO ",
+    ", header=true, sample_size=-1", types, blank_strings, ")) TO ",
     sql_string(con, normalizePath(target, mustWork = FALSE)),
     " (FORMAT PARQUET, COMPRESSION ZSTD)"
   )
@@ -258,7 +262,7 @@ build_release <- function(options) {
     if (!grepl("^[A-Za-z0-9._-]+$", donor)) stop("Unsafe donor filename: ", basename(src))
     target <- file.path(staging, "spatial", "tissue", paste0("case_id=", donor),
                         paste0(donor, ".parquet"))
-    csv_to_parquet(con, src, target)
+    csv_to_parquet(con, src, target, preserve_blank_islet_name = TRUE)
     tissue_rows <- tissue_rows + parquet_rows(con, target)
   }
   artifacts$donor_tissue <- tree_artifact(file.path(staging, "spatial", "tissue"), staging)

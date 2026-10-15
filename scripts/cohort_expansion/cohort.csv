@@ -1,0 +1,7 @@
+case_id,donor_source,source_filename,qupath_entry_id,inclusion_status
+6090,nPOD,6090AAbtest31_35p_led.tif,39,identity_hold
+6232,nPOD,CX_PAN-6232-ND_test33_35p_led.tif,43,selected
+6539,nPOD,PAN-6539-ND test 34.tif,38,identity_hold
+6558,nPOD,PAN-6558-AAb_test35_35p-LED.tif,44,selected
+6520,nPOD,CX_PANT6520-01A_T1D_Test22_34p-16LED50.tif,40,selected
+78,HPAP,CX_PANT-HPAP-078-T1D_test28_34p_16LED50.tif,42,selected

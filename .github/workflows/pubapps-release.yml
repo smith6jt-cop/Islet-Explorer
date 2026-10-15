@@ -1,0 +1,214 @@
+name: PubApps Image Build and Security Gate
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'app/shiny_app/**'
+      - 'app/docs/logo.png'
+      - 'deploy/**'
+      - 'scripts/install_shiny_deps.R'
+      - 'scripts/build_release_data.R'
+      - 'scripts/verify_release_data.R'
+      - 'scripts/verify_release_parity.R'
+      - '.github/workflows/pubapps-release.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  image-and-scan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      # PR evidence must identify the reviewed head, not GitHub's merge commit.
+      EXPECTED_REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
+      SYFT_CHECK_FOR_APP_UPDATE: 'false'
+      GRYPE_CHECK_FOR_APP_UPDATE: 'false'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Initialize isolated build directories and source evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          build_root="${RUNNER_TEMP}/pubapps-release"
+          mkdir -p "${build_root}"/{bin,downloads,evidence/tools,oci,tmp,storage,runroot,grype-db,cache}
+          printf 'TMPDIR=%s\n' "${build_root}/tmp" >> "${GITHUB_ENV}"
+          printf 'XDG_CACHE_HOME=%s\n' "${build_root}/cache" >> "${GITHUB_ENV}"
+          printf 'GRYPE_DB_CACHE_DIR=%s\n' "${build_root}/grype-db" >> "${GITHUB_ENV}"
+          printf 'CONTAINER_HOST=unix://%s\n' "${build_root}/podman.sock" >> "${GITHUB_ENV}"
+          printf '%s\n' "${build_root}/bin" >> "${GITHUB_PATH}"
+          revision="$(git rev-parse HEAD)"
+          [[ "${EXPECTED_REVISION}" =~ ^[0-9a-f]{40}$ && "${revision}" == "${EXPECTED_REVISION}" ]]
+          test -z "$(git status --porcelain --untracked-files=all)"
+          mapfile -t bases < <(sed '/^[[:space:]]*#/d; /^[[:space:]]*$/d' deploy/base-image.lock)
+          [[ ${#bases[@]} == 1 && "${bases[0]}" =~ ^docker\.io/rocker/shiny@sha256:[0-9a-f]{64}$ ]]
+          printf 'BASE_IMAGE=%s\n' "${bases[0]}" >> "${GITHUB_ENV}"
+          cp deploy/base-image.lock deploy/containerignore "${build_root}/evidence/"
+          {
+            printf 'GIT_COMMIT=%s\n' "${revision}"
+            printf 'BASE_IMAGE=%s\n' "${bases[0]}"
+            printf 'GIT_DIRTY=false\n'
+            printf 'RUN_ID=%s\nRUN_ATTEMPT=%s\n' "${GITHUB_RUN_ID}" "${GITHUB_RUN_ATTEMPT}"
+            printf 'ARCHITECTURE=%s\n' "$(uname -m)"
+          } > "${build_root}/evidence/source-identity.txt"
+          sha256sum deploy/Containerfile deploy/containerignore deploy/base-image.lock \
+            deploy/harden-base.sh deploy/tests/smoke-shiny-server.py \
+            deploy/shiny-server.conf deploy/container-entrypoint.sh deploy/r-worker.py \
+            deploy/scan-image.sh deploy/correct-syft-vim-cpe.py \
+            scripts/install_shiny_deps.R deploy/install-production-r-deps.R \
+            deploy/requirements-python.lock > "${build_root}/evidence/build-inputs.sha256"
+
+      - name: Install Podman and reserve image/export disk space
+        shell: bash
+        run: |
+          set -euo pipefail
+          # These SDKs belong to this disposable hosted runner. None is used by
+          # the scientific image build; removing them leaves room for OCI export.
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
+          # Use Ubuntu's package indexes; unrelated hosted-runner repositories
+          # must not prevent installation of these Ubuntu packages.
+          test -s /etc/apt/sources.list.d/ubuntu.sources
+          apt_sources=(-o Dir::Etc::sourcelist=/etc/apt/sources.list.d/ubuntu.sources -o Dir::Etc::sourceparts=-)
+          sudo apt-get "${apt_sources[@]}" update -qq
+          sudo apt-get "${apt_sources[@]}" install -y --no-install-recommends podman curl ca-certificates xz-utils
+          free_kib="$(df -Pk "${RUNNER_TEMP}" | awk 'NR == 2 {print $4}')"
+          [[ "${free_kib}" =~ ^[0-9]+$ ]] && (( free_kib >= 16 * 1024 * 1024 ))
+          df -h "${RUNNER_TEMP}" > "${RUNNER_TEMP}/pubapps-release/evidence/disk-before-build.txt"
+          # Host-side sudo avoids hosted-runner user-namespace restrictions.
+          # Explicit storage paths keep build state outside the clean checkout;
+          # the image's unprivileged shiny USER is preserved.
+          cat > "${RUNNER_TEMP}/pubapps-release/bin/podman" <<'SH'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          exec sudo env -u CONTAINER_HOST "TMPDIR=${TMPDIR:?}" /usr/bin/podman \
+            --root "${RUNNER_TEMP:?}/pubapps-release/storage" \
+            --runroot "${RUNNER_TEMP}/pubapps-release/runroot" "$@"
+          SH
+          chmod 0755 "${RUNNER_TEMP}/pubapps-release/bin/podman"
+          podman --version > "${RUNNER_TEMP}/pubapps-release/evidence/tools/podman-version.txt"
+          podman info --format json > "${RUNNER_TEMP}/pubapps-release/evidence/tools/podman-info.json"
+          # Syft's podman: provider uses the API, so provide the same isolated
+          # store through a private Unix socket rather than a network listener.
+          nohup podman system service --time=0 "${CONTAINER_HOST}" \
+            > "${RUNNER_TEMP}/pubapps-release/evidence/podman-service.log" 2>&1 &
+          printf '%s\n' "$!" > "${RUNNER_TEMP}/pubapps-release/podman-service.pid"
+          socket="${RUNNER_TEMP}/pubapps-release/podman.sock"
+          for _ in {1..50}; do
+            [[ -S "${socket}" ]] && break
+            sleep 0.2
+          done
+          test -S "${socket}"
+          sudo chown "$(id -u):$(id -g)" "${socket}"
+          sudo chmod 0600 "${socket}"
+          curl --fail --silent --show-error --unix-socket "${socket}" http://localhost/_ping
+
+      - name: Install checksum-verified pinned Syft and Grype
+        shell: bash
+        run: |
+          set -euo pipefail
+          build_root="${RUNNER_TEMP}/pubapps-release"
+          cd "${build_root}/downloads"
+          while read -r tool version expected_sha; do
+            archive="${tool}_${version}_linux_amd64.tar.gz"
+            checksums="${tool}_${version}_checksums.txt"
+            url="https://github.com/anchore/${tool}/releases/download/v${version}"
+            curl --fail --location --retry 3 --proto '=https' --tlsv1.2 --silent --show-error \
+              "${url}/${archive}" --output "${archive}"
+            curl --fail --location --retry 3 --proto '=https' --tlsv1.2 --silent --show-error \
+              "${url}/${checksums}" --output "${checksums}"
+            awk -v archive="${archive}" '$2 == archive {print}' "${checksums}" > "${archive}.sha256"
+            test "$(wc -l < "${archive}.sha256")" -eq 1
+            test "$(awk '{print $1}' "${archive}.sha256")" = "${expected_sha}"
+            sha256sum --check "${archive}.sha256"
+            tar --extract --gzip --file "${archive}" --directory "${build_root}/bin" "${tool}"
+            "${build_root}/bin/${tool}" --version > "${build_root}/evidence/tools/${tool}-version.txt"
+            cp "${checksums}" "${archive}.sha256" "${build_root}/evidence/tools/"
+          done <<'TOOLS'
+          syft 1.51.1 8fcb33017a0dc1058298c923c436d19dfa68ae93968e0b423248542e3afb9fc3
+          grype 0.118.0 1d444c5e7360471815f7158f71935fcecc68a3c417d85c7344f770854300bba2
+          TOOLS
+
+      - name: Build exact source revision and run security gate
+        id: build
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence="${RUNNER_TEMP}/pubapps-release/evidence"
+          test "$(git rev-parse HEAD)" = "${EXPECTED_REVISION}"
+          test -z "$(git status --porcelain --untracked-files=all)"
+          # The existing context whitelist excludes data, local_images and
+          # credentials. No external scientific collection is fetched or mounted
+          # by this job; existing tracked provenance files stay outside context.
+          bash deploy/build-image.sh \
+            --tag "localhost/islet-explorer:ci-${EXPECTED_REVISION}" \
+            --version "ci-${EXPECTED_REVISION}" \
+            --base-image "${BASE_IMAGE}" \
+            --scan-dir "${evidence}/image-scan" 2>&1 | tee "${evidence}/build-and-scan.log"
+          publication="${evidence}/image-scan/published-image.txt"
+          mapfile -t image_ids < <(sed -n 's/^LOCAL_IMAGE_ID=//p' "${publication}")
+          [[ ${#image_ids[@]} == 1 && "${image_ids[0]}" =~ ^sha256:[0-9a-f]{64}$ ]]
+          grep -Fx "GIT_COMMIT=${EXPECTED_REVISION}" "${publication}"
+          grep -Fx "BASE_IMAGE=${BASE_IMAGE}" "${publication}"
+          test -z "$(git status --porcelain --untracked-files=all)"
+          printf 'image_id=%s\n' "${image_ids[0]}" >> "${GITHUB_OUTPUT}"
+
+      - name: Export the passing immutable image
+        id: export
+        if: success() && steps.build.outcome == 'success'
+        env:
+          IMAGE_ID: ${{ steps.build.outputs.image_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "${IMAGE_ID}" =~ ^sha256:[0-9a-f]{64}$ ]]
+          # Keep the upstream server tests, static-route smoke, and source/Node
+          # provenance alongside the scan, as well as inside the OCI image.
+          podman run --rm --entrypoint /bin/tar "${IMAGE_ID}" \
+            -C /opt/islet-explorer-build -cf - shiny-server | \
+            tar -xf - -C "${RUNNER_TEMP}/pubapps-release/evidence"
+          archive="${RUNNER_TEMP}/pubapps-release/oci/islet-explorer-${EXPECTED_REVISION}.oci.tar"
+          bash deploy/export-image.sh "${IMAGE_ID}" "${archive}" 2>&1 | \
+            tee "${RUNNER_TEMP}/pubapps-release/evidence/export.log"
+          grep -Fx "IMAGE_ID=${IMAGE_ID}" "${archive}.metadata"
+          grep -Fx "GIT_COMMIT=${EXPECTED_REVISION}" "${archive}.metadata"
+          grep -Fx "BASE_IMAGE=${BASE_IMAGE}" "${archive}.metadata"
+          cd "${RUNNER_TEMP}/pubapps-release/oci"
+          sha256sum --check "$(basename -- "${archive}").sha256"
+
+      - name: Preserve scanner database and final disk state
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence="${RUNNER_TEMP}/pubapps-release/evidence"
+          mkdir -p "${evidence}"
+          df -h "${RUNNER_TEMP}" > "${evidence}/disk-after-build.txt"
+          if [[ -x "${RUNNER_TEMP}/pubapps-release/bin/grype" ]]; then
+            "${RUNNER_TEMP}/pubapps-release/bin/grype" db status -o json \
+              > "${evidence}/grype-db-status.json" 2> "${evidence}/grype-db-status.stderr" || true
+          fi
+
+      - name: Retain security reports even when the gate fails
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pubapps-image-evidence-${{ env.EXPECTED_REVISION }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/pubapps-release/evidence/
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Retain verified OCI archive and transfer checksums
+        if: success() && steps.export.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pubapps-oci-${{ env.EXPECTED_REVISION }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/pubapps-release/oci/
+          compression-level: 0
+          retention-days: 30
+          if-no-files-found: error

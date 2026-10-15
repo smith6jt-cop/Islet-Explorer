@@ -2,7 +2,7 @@
 
 Interactive web application for exploring pancreatic islet CODEX multiplexed imaging data from nPOD donors. Tracks insulin loss, immune infiltration, and cellular microenvironment changes across the ND → Aab+ → T1D disease progression.
 
-**Requested reviewer URL (use only after UFRC confirms provisioning)**:
+**Requested reviewer URL (use only after UFRC confirms production access)**:
 `https://islet-explorer.rc.ufl.edu/islet-explorer/`
 
 > **Publication profile (August 2026):** Reviewers see Plot, Trajectory, Viewer,
@@ -41,7 +41,8 @@ read-only Parquet, queries large spatial tables through embedded DuckDB, and rea
 trajectory H5AD and composition feature table as separate immutable artifacts. The
 underlying cohort contains:
 
-- **5,214 islets** from 15 nPOD donors (ND, Aab+, T1D)
+- **15 nPOD donors** (ND, Aab+, T1D); the trajectory H5AD has **5,214 observations**,
+  while the prepared core-area and composition tables each have **5,382 rows**
 - **31 protein markers** (mean expression per islet)
 - **Trajectory source coordinates and marker values**, plus a separately released
   phenotype-composition matrix used to refit diffusion pseudotime in the app
@@ -49,6 +50,11 @@ underlying cohort contains:
 - **Donor demographics** (age, sex, autoantibody status)
 - **62 neighborhood metrics** (peri-islet composition, immune infiltration, enrichment z-scores, distances)
 - **QuPath groovy data** (targets, markers, composition, LGALS3)
+
+The source preparation measured 48,438 target rows, 64,584 marker rows, and 21
+paired core/peri feature definitions. These are distinct table counts; filters
+and available measurements determine the count in each view. The release
+manifest is authoritative for the frozen reviewer data.
 
 Local development retains the legacy H5AD/Excel loader for pipeline work. Production fails
 closed if a required manifest artifact or hash is missing; it does not silently fall back
@@ -142,7 +148,7 @@ of Plot/Spatial. A caption reports how many rows the most recent run excluded.
 
 ### Why this matters
 
-With 5,214 islets from only 15 donors, a single extreme islet within one donor can dominate the group mean and pull mixed-effects estimates. Keeping the rule visible (count badge + ghost × markers) means you can audit at a glance whether a striking effect is being driven by one or two unusual islets.
+With thousands of islet measurements from only 15 donors, a single extreme islet within one donor can dominate the group mean and pull mixed-effects estimates. Keeping the rule visible (count badge + ghost × markers) means you can audit at a glance whether a striking effect is being driven by one or two unusual islets.
 
 ---
 
@@ -192,9 +198,11 @@ The Plot tab is the primary exploration interface. It has a **sidebar** (left) a
 - **Feature/Composition selector**: Choose what to plot
   - *Scatter mode*: Select from markers (31 proteins) or targets (hormone intensities)
   - *Composition mode*: Three option groups (the previous "Immune Metrics" group of 5 hand-curated ratios was removed in Apr 2026 — use the Spatial tab's per-phenotype enrichment / proportion / distance views instead):
-    - **Hormone Positivity (QuPath threshold)** — Ins_any, Glu_any, Stt_any
-    - **Phenotype Proportions (scVI)** — the 12 retained reviewer-facing phenotypes from the 21-label source artifact
+    - **Phenotype Proportions** — the 12 retained reviewer-facing phenotypes from the 21-label source artifact. The original 15 retain historical labels; six additions use reviewed reconstructed rules, so pooled phenotype comparisons span both methods.
     - **Peri-Islet Proportions** — proportions of those retained phenotypes in the 20 μm expansion zone around the islet
+    - **Core+Peri Proportions** — combined phenotype proportions using core and peri cell counts
+
+  QuPath threshold-based INS/GCG/SST measures remain in source artifacts for provenance, but are excluded from Population Measure because the original and added donors do not use the same threshold-counting method.
 - **Metric** (Composition / Microenvironment): Picks the y-axis unit. Labels spell out the denominator explicitly so "density" is never ambiguous — see [Density terminology](#density-terminology) below.
 - **Region**: Filter by tissue region (core only, peri-islet, or all)
 - **Donor Status**: Select disease groups to include (ND, Aab+, T1D)
@@ -363,7 +371,7 @@ Stratified analysis testing whether group differences depend on islet size (effe
 Full-width **Demographics** card (H5AD only, hidden for Excel fallback):
 
 - **Donor Summary Table**: N islets (primary), N donors, age median/range, % male/female per disease group
-- **Age vs Feature** (left): Islet-level scatter plot (all ~5,214 islets) with overall linear regression line and Pearson correlation. Subtitle notes that islets are correlated within donors.
+- **Age vs Feature** (left): Scatter plot of eligible prepared islet rows after filtering, with overall linear regression line and Pearson correlation. Subtitle notes that islets are correlated within donors.
 - **Sex vs Feature** (right): Box plot of feature value by donor status, faceted by sex (Male/Female). Sex-stratified pairwise tests are **BH-corrected across all 6 contrasts** (3 pairs × 2 sexes); the subtitle reports the minimum adjusted q per sex (low-power sex × group cells, n=2-3 donors, are flagged but still corrected jointly).
 - **Autoantibody Profile** (Aab+ only, hidden when no AAb data): Per-donor table showing which AAbs are positive, total AAb count, N islets, and mean feature value. Box plot of feature by number of positive autoantibodies (1, 2, 3+) with Kruskal-Wallis test.
 - **Covariate-Adjusted Model**: Donor-level linear model adjusting for age and sex, testing whether donor status retains significance.
@@ -385,6 +393,17 @@ Dynamic text (subdued grey background) describing all statistical tests, correct
 ## Spatial Tab
 
 Tissue-wide spatial visualization and peri-islet microenvironment analysis. Combines single-cell tissue scatter plots with Leiden clustering and neighborhood enrichment metrics.
+
+For the current 21-donor schema-4 candidate, the right panel shows 7,493
+feature-supported islets from 11,136 classifier-eligible islets. UMAP and Leiden
+are saved offline from typed cell counts per canonical cell inside the
+classifier-determined endocrine core; disease status only colors the fixed
+coordinates. Eligibility requires only that the classifier core does not touch
+an image edge and contains at least one canonical cell. Downstream phenotype
+support cannot revoke eligibility. The four Leiden resolutions and cluster
+composition remain visible without refitting. References below to 15 donors,
+5,214 islets and H5AD raw-marker PCA describe the frozen original compatibility
+path.
 
 ### 3-Panel Layout
 
@@ -449,7 +468,8 @@ Below the tissue scatter and Leiden panel, three interactive analysis sections v
 
 ### Data Coverage
 
-- All 5,214 islets have peri-islet data (100% coverage)
+- The historical 5,214-row neighborhood artifact covers the trajectory cohort;
+  its coverage must not be inferred for every row in the larger prepared summaries.
 - Donor 6533 has 191 islets (fully integrated after Parent annotation fix)
 - Biological validation: T1D immune_frac_peri > Aab+ > ND (immune infiltration increases with disease progression)
 
@@ -492,7 +512,8 @@ Per-islet cell CSVs in `data/cells/` (5,214 files, ~203 MB total). Each file con
 
 ### Availability
 
-- All 5,214 islets have cell data
+- The source drill-down collection contains 5,214 per-islet CSV files; availability
+  for a selected prepared row depends on its identifier mapping.
 - If cell data is unavailable for a clicked islet, the panel shows "Boundaries" mode with a message
 
 ---

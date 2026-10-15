@@ -1,0 +1,3 @@
+case_id,donor_source,source_filename,qupath_entry_id,inclusion_status
+6090,nPOD,6090AAbtest31_35p_led.tif,39,selected
+6539,nPOD,PAN-6539-ND test 34.tif,38,selected

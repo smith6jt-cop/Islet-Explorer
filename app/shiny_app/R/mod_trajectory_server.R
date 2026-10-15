@@ -47,7 +47,7 @@ traj_pseudotime_column <- function(obs, cell_range = c(1, Inf)) {
   # scanpy DPT is primary. The destiny implementation is the fallback if scanpy
   # is unreachable from reticulate. PAGA/ForceAtlas2 is the two-dimensional graph
   # card; it is not the pseudotime algorithm itself.
-  bp <- paga_result(lo, hi)
+  bp <- compute_scanpy_pseudotime(lo, hi)
   engine <- "scanpy diffusion pseudotime"
   if (is.null(bp)) {
     bp <- compute_barlow_pseudotime(lo, hi)
@@ -112,8 +112,17 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
     # ---------- Reactive state ----------
     traj <- reactiveVal(NULL)
     traj_load_attempted <- reactiveVal(FALSE)
-    traj_coord_lookup <- reactiveVal(NULL)
-    traj_plot_registered <- reactiveVal(FALSE)
+    applied_cell_range <- reactiveVal(c(TRAJ_DEFAULT_MIN_CELLS, traj_max_islet_cells()))
+
+    observeEvent(input$recalculate_trajectory, {
+      applied_cell_range(traj_cell_range(input$cell_range, traj_max_islet_cells()))
+    })
+
+    output$traj_range_pending <- renderUI({
+      pending <- traj_cell_range(input$cell_range, traj_max_islet_cells())
+      if (all(pending == applied_cell_range())) return(NULL)
+      tags$small("Range not applied. Press Recalculate trajectory.")
+    })
 
     # ---------- Lazy H5AD loader ----------
     observe({
@@ -131,19 +140,22 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       }
 
       ad <- NULL
-      load_err <- NULL
       norm_path <- tryCatch(normalizePath(cur, mustWork = TRUE), error = function(e) cur)
 
       ad <- tryCatch(
-        islet_read_h5ad_shared(norm_path),
+        withProgress(message = "Loading data", value = 0.2, {
+          result <- islet_read_h5ad_shared(norm_path)
+          incProgress(0.7)
+          result
+        }),
         error = function(e) {
-          load_err <<- conditionMessage(e)
+          islet_log_event("trajectory_data_load_failed")
           NULL
         }
       )
 
       if (is.null(ad)) {
-        traj(list(error = sprintf("Failed to read H5AD: %s", norm_path), error_detail = load_err))
+        traj(list(error = "Trajectory data could not be loaded.", error_detail = NULL))
         return()
       }
 
@@ -216,9 +228,9 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       obs <- tr$obs
       ad  <- tr$adata
 
-      # The cell range is a REACTIVE DEPENDENCY: it defines which islets the
-      # diffusion map is fitted on, so the axis is rebuilt when it moves.
-      rng <- traj_cell_range(input$cell_range, traj_max_islet_cells())
+      # Only the applied range defines the fitted cohort. Slider drags alone
+      # must not invalidate the diffusion map or its downstream plots.
+      rng <- applied_cell_range()
       pt <- withProgress(
         # Seconds to tens of seconds depending on how many islets are in range.
         # Without a progress bar the tab simply freezes and reads as a hang.
@@ -257,40 +269,9 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
            pseudotime_n = pseudotime_n, cell_range = rng)
     })
 
-    # State the actual engine used. This must follow traj_with_pseudotime() rather
-    # than probing PAGA independently, or a destiny fallback would be mislabeled.
-    output$pseudotime_note <- renderUI({
-      rng <- traj_cell_range(input$cell_range, traj_max_islet_cells())
-      tr <- traj_with_pseudotime()
-      engine <- if (is.null(tr) || !is.null(tr$error)) "unavailable" else
-        tr$pseudotime_engine %||% "unavailable"
-      n <- if (is.null(tr) || !is.null(tr$error)) 0L else tr$pseudotime_n %||% 0L
-      if (identical(engine, "unavailable") || n < 1L) {
-        return(div(style = paste0("padding: 7px 9px; border-radius: 4px; font-size: 11px;",
-                                  " line-height: 1.45; color: #8a1c12; background: #fdecea;",
-                                  " border-left: 3px solid #d9534f;"),
-          tags$strong("Pseudotime unavailable. "),
-          "Needs data/barlow_islet_features.csv plus either scanpy or ",
-          "the destiny package."))
-      }
-      method <- if (identical(engine, "scanpy diffusion pseudotime")) {
-        "scanpy diffusion pseudotime; PAGA/ForceAtlas2 is used for the graph card below"
-      } else {
-        "destiny diffusion-pseudotime fallback; the PAGA graph card requires scanpy"
-      }
-      div(style = paste0("padding: 7px 9px; border-radius: 4px; font-size: 11px;",
-                         " line-height: 1.45; color: #31556e; background: #eaf3f8;",
-                         " border-left: 3px solid #4477AA;"),
-        tags$strong("The axis is computed on the islets in range, not filtered. "),
-        "Islet composition (core + 20 \u00b5m peri cell-type counts \u00f7 endocrine cells, log), ",
-        sprintf("cosine 15-NN, %s, rooted at the ND-centroid islet \u2014 refitted on %s islets with %g\u2013%g cells. ",
-                method, format(n, big.mark = ","), rng[1], rng[2]),
-        "Moving the range rebuilds it, so pseudotime values shift between ranges by design.")
-    })
-
     selected_measure_label <- reactive({
-      if (identical(input$traj_y_mode %||% "marker", "ratio")) {
-        region <- switch(input$traj_ratio_region %||% "both",
+      if (identical(input$traj_y_mode %||% "ratio", "ratio")) {
+        region <- switch(input$traj_ratio_region %||% "core",
                          core = "core", peri = "peri", "core + 20 µm peri")
         sprintf("%s — log1p(cells / endocrine cells, %s)",
                 input$traj_ratio_type %||% "(none)", region)
@@ -302,12 +283,14 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
 
     trajectory_provenance <- reactive({
       tr <- tryCatch(traj_with_pseudotime(), error = function(e) NULL)
-      rng <- traj_cell_range(input$cell_range, traj_max_islet_cells())
+      rng <- applied_cell_range()
       engine <- if (is.null(tr) || !is.null(tr$error)) "unavailable" else
         tr$pseudotime_engine %||% "unavailable"
       n <- if (is.null(tr) || !is.null(tr$error)) 0L else tr$pseudotime_n %||% 0L
       list(
         method = sprintf("Pseudotime method: %s", engine),
+        features = paste("Trajectory features: retained core/peri phenotype ratios;",
+                         "nine retired categories excluded; stored endocrine denominator preserved"),
         scale = sprintf("Pseudotime scale: %s",
                         if (identical(input$pt_scale %||% "rank", "raw"))
                           "raw diffusion pseudotime" else "rank-normalized within fitted cohort"),
@@ -316,38 +299,6 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
                         rng[1], rng[2], format(n, big.mark = ",")),
         measure = paste("Selected measure:", selected_measure_label())
       )
-    })
-
-    # A flat line of points at y = 0 must read as "these cells are absent from
-    # most islets", not as a broken axis. No transform can move an exact zero, so
-    # the honest move is to state how much of the plot it accounts for and point
-    # at the two things that actually reduce it: counting peri cells too, and
-    # raising the lower bound of the cell-count range.
-    output$traj_y_note <- renderUI({
-      if (!identical(input$traj_y_mode %||% "marker", "ratio")) return(NULL)
-      ct <- input$traj_ratio_type
-      if (is.null(ct) || !nzchar(ct)) return(NULL)
-      reg <- input$traj_ratio_region %||% "both"
-      rng <- traj_cell_range(input$cell_range, traj_max_islet_cells())
-      z <- traj_ratio_zero_fraction(ct, reg, rng[1], rng[2])
-      if (!is.finite(z)) return(NULL)
-      sev <- if (z >= 0.80) "high" else if (z >= 0.40) "mid" else "low"
-      col <- switch(sev, high = c("#8a1c12", "#fdecea", "#d9534f"),
-                         mid  = c("#6a5200", "#fff8e1", "#f0ad4e"),
-                         low  = c("#31556e", "#eaf3f8", "#4477AA"))
-      alt <- if (identical(reg, "both")) {
-        "Raising the cell-count range's lower bound is the only lever left."
-      } else {
-        "Counting core + peri instead of one region, and raising the cell-count range's lower bound, both reduce it."
-      }
-      div(style = sprintf(paste0("margin: -4px 0 8px; padding: 7px 9px; border-radius: 4px;",
-                                 " font-size: 11px; line-height: 1.45; color: %s;",
-                                 " background: %s; border-left: 3px solid %s;"),
-                          col[1], col[2], col[3]),
-        sprintf("%.0f%% of these islets contain no %s at all, so they sit on a flat line at 0. ",
-                100 * z, ct),
-        if (sev == "high") tags$strong("The trend line over them is close to meaningless. ") else "",
-        alt)
     })
 
     output$traj_feature_selector <- renderUI({
@@ -362,7 +313,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       # cannot leave a marker name selected against the ratio data (or vice
       # versa) -- the two namespaces do not overlap and a stale value would
       # silently plot nothing.
-      if (identical(input$traj_y_mode %||% "marker", "ratio")) {
+      if (identical(input$traj_y_mode %||% "ratio", "ratio")) {
         types <- barlow_ratio_types()
         if (!length(types)) {
           return(selectInput(ns("traj_ratio_type"), "Select cell type:",
@@ -427,15 +378,24 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
 
     # ---------- Validate selected feature ----------
     traj_validate <- reactive({
+      y_mode <- input$traj_y_mode %||% "ratio"
+      if (!islet_valid_scalar_choice(y_mode, c("marker", "ratio"),
+                                     "trajectory_mode_invalid")) return(NULL)
       # Ratio mode selects a cell type, which is deliberately NOT in var_names --
       # validating it against the marker list would reject every valid choice.
-      if (identical(input$traj_y_mode %||% "marker", "ratio")) {
+      if (identical(y_mode, "ratio")) {
         ct <- input$traj_ratio_type
-        if (is.null(ct) || !nzchar(ct) || !(ct %in% barlow_ratio_types())) return(NULL)
-        return(list(feature = ct, status = "ready", y_mode = "ratio"))
+        if (is.null(ct)) return(NULL)
+        if (!islet_valid_scalar_choice(ct, barlow_ratio_types(),
+                                       "trajectory_ratio_invalid")) return(NULL)
+        region <- input$traj_ratio_region %||% "core"
+        if (!islet_valid_scalar_choice(region, c("both", "core", "peri"),
+                                       "trajectory_region_invalid")) return(NULL)
+        return(list(feature = ct, status = "ready", y_mode = "ratio",
+                    ratio_region = region))
       }
       selected_feature <- input$traj_feature
-      if (is.null(selected_feature) || !nzchar(selected_feature)) return(NULL)
+      if (is.null(selected_feature)) return(NULL)
 
       adata_path <- resolve_traj_path()
       if (is.null(adata_path) || !file.exists(adata_path)) return(NULL)
@@ -444,7 +404,8 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       if (is.null(adata)) return(NULL)
 
       var_names <- rownames(adata$var)
-      if (!selected_feature %in% var_names) return(NULL)
+      if (!islet_valid_scalar_choice(selected_feature, var_names,
+                                     "trajectory_feature_invalid")) return(NULL)
 
       list(feature = selected_feature, status = "ready")
     })
@@ -480,7 +441,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       expression_vals <- if (identical(y_mode, "ratio")) {
         # Barlow Fig 2F: log(# cells / # endocrine cells). Joined by islet_id,
         # which is the same key as `combined_islet_id` here.
-        rv <- barlow_ratio_values(selected_feature, input$traj_ratio_region %||% "both")
+        rv <- barlow_ratio_values(selected_feature, ms$ratio_region)
         if (is.null(rv)) rep(NA_real_, nrow(obs_df))
         else rv$value[match(as.character(obs_df$combined_islet_id), rv$islet_id)]
       } else {
@@ -489,7 +450,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
           idx <- which(var_names == selected_feature)
           as.numeric(adata$X[, idx])
         }, error = function(e) {
-          message("[traj_data_clean] Error extracting feature: ", e$message)
+          islet_log_event("trajectory_feature_extract_failed")
           rep(NA_real_, nrow(obs_df))
         })
       }
@@ -576,24 +537,6 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       }
 
       # Add spatial coordinates from segmentation data
-      if (!is.null(islet_spatial_lookup)) {
-        result_df$centroid_x_um <- NA_real_
-        result_df$centroid_y_um <- NA_real_
-        result_df$has_spatial <- FALSE
-
-        for (i in seq_len(nrow(result_df))) {
-          annot <- get_islet_annotations(result_df$case_id[i], result_df$islet_key[i])
-          if (!is.null(annot)) {
-            result_df$centroid_x_um[i] <- annot$centroid_x
-            result_df$centroid_y_um[i] <- annot$centroid_y
-            result_df$has_spatial[i] <- TRUE
-          }
-        }
-
-        cat("[traj_data_clean] Added spatial coordinates for",
-            sum(result_df$has_spatial), "islets\n")
-      }
-
       # Filter valid rows
       valid_idx <- which(
         is.finite(result_df$pt) &
@@ -603,7 +546,6 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       )
 
       if (length(valid_idx) == 0) {
-        message("[traj_data_clean] No valid rows after filtering")
         return(NULL)
       }
 
@@ -612,7 +554,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       # Enforce the same cell-count cohort used to fit the trajectory. This is
       # intentionally redundant with the NA pseudotime mask and prevents a key
       # mismatch from leaking an out-of-range islet into the plot.
-      cr <- traj_cell_range(input$cell_range, traj_max_islet_cells())
+      cr <- applied_cell_range()
       if ("total_cells" %in% colnames(result_df)) {
         tc <- suppressWarnings(as.integer(result_df$total_cells))
         result_df <- result_df[is.finite(tc) & tc >= cr[1] & tc <= cr[2], , drop = FALSE]
@@ -632,9 +574,11 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       # selected cell-range cohort, so it does not shift with the selected
       # feature. Do not re-rank here.
       result_df <- apply_pt_scale(result_df, input$pt_scale %||% "rank")
+      result_df$link_key <- trajectory_link_key(result_df$case_id, result_df$islet_key)
+      if (anyNA(result_df$link_key) || anyDuplicated(result_df$link_key)) {
+        stop("Trajectory islets must have unique donor and islet identities")
+      }
 
-      message("[traj_data_clean] Successfully processed ", nrow(result_df),
-              " observations for ", selected_feature)
       return(result_df)
     })
 
@@ -656,21 +600,17 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
           "AnnData object not available or H5AD failed to load."))
       }
       if (!is.null(tr$error)) {
-        det <- if (!is.null(tr$error_detail) && nzchar(tr$error_detail)) paste0(" Details: ", tr$error_detail) else ""
         install_hint <- if (grepl("anndata", tr$error, ignore.case = TRUE)) " Install with: BiocManager::install('anndata')" else ""
         return(tags$div(style = "color:#b00;",
-          sprintf("Trajectory load error: %s%s%s", tr$error, det, install_hint)))
+          sprintf("Trajectory load error: %s%s", tr$error, install_hint)))
       }
-      jn <- traj_data_clean()
-      nj <- if (is.null(jn)) 0 else nrow(jn)
-      ndist <- if (is.null(jn)) 0 else nrow(dplyr::distinct(jn, case_id, islet_key))
       nfit <- tr$pseudotime_n %||% 0L
       src <- if (!is.null(traj_path) && file.exists(traj_path)) traj_path else cur
 
-      tags$div(style = "color:#555;",
-        sprintf(paste0("Loaded AnnData (%d observations). Composition pseudotime fitted for ",
-                       "%d islets; current measure has %d rows (%d unique islets). Source: %s"),
-                nrow(tr$obs), nfit, nj, ndist, basename(src))
+      tags$div(style = "color: #555; font-size: 12px; margin-bottom: 10px;",
+        title = paste("Source:", basename(src)),
+        sprintf("Islets: %s total | %s fitted",
+          format(nrow(tr$obs), big.mark = ","), format(nfit, big.mark = ","))
       )
     })
 
@@ -678,7 +618,13 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
     output$traj_scatter <- renderPlotly({
       df <- traj_data_clean()
       if (is.null(df) || nrow(df) == 0) {
-        return(plotly_islet_empty("No trajectory data available"))
+        tr <- traj()
+        if (is.null(tr) || (is.null(tr$error) &&
+            identical(input$traj_y_mode %||% "ratio", "ratio") &&
+            is.null(input$traj_ratio_type))) {
+          return(trajectory_link_plot(plotly_islet_empty("Loading data"), ns))
+        }
+        return(trajectory_link_plot(plotly_islet_empty("No trajectory data available"), ns))
       }
 
 
@@ -691,6 +637,8 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       # 95% CI bands on the LOESS trends (Bodenmiller 2025 Fig 2D/5E convention:
       # every smoothed trajectory carries a confidence band).
       show_ci    <- isTRUE(input$traj_trend_ci %||% TRUE)
+      df$loess_weight <- log1p(df$total_cells)
+      trend_df <- df
 
       # Pseudotime extent, taken from the data rather than assumed to be [0, 1] — on the
       # "raw" scale the axis is true DPT and does not span [0, 1]. Shared with the strip
@@ -713,7 +661,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       } else NULL
       set.seed(42)
       jitter_amount_x <- pt_ext$jitter
-      jitter_amount_y <- diff(range(df$value, na.rm = TRUE)) * 0.02
+      jitter_amount_y <- diff(range(df$value, na.rm = TRUE)) * 0.08
       df$pt    <- df$pt + runif(nrow(df), -jitter_amount_x, jitter_amount_x)
       df$value <- df$value + runif(nrow(df), -jitter_amount_y, jitter_amount_y)
       if (is.null(.seed_saved)) {
@@ -727,13 +675,12 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       # same padded limits (traj_pt_extent()$lim) so the panels stay aligned.
       pt_lim <- pt_ext$lim
 
-      # Log-transform cell counts for LOESS weights (raw counts too skewed: median=9, max=1902)
-      df$loess_weight <- log1p(df$total_cells)
-
       # Create base aesthetic mapping with cell count for hover
-      df$hover_cells <- paste0("Cells: ", df$total_cells)
-      df$click_key <- paste(df$case_id, df$islet_key, sep = "|")
-      aes_mapping <- aes(x = pt, y = value, text = hover_cells, key = click_key)
+      df$hover_cells <- paste0("Donor: ", df$case_id, "<br>Islet: ", df$islet_key,
+              "<br>Pseudotime: ", signif(trend_df$pt, 3),
+              "<br>Value: ", signif(trend_df$value, 3),
+              "<br>Cells: ", df$total_cells)
+      aes_mapping <- aes(x = pt, y = value, text = hover_cells, key = link_key)
 
       # Add color aesthetic
       if (color_by == "donor_status") {
@@ -830,7 +777,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       pt_range <- range(df$pt, na.rm = TRUE)
 
       if (trend_type == "overall") {
-        g <- g + geom_smooth(method = "loess", se = show_ci, color = "black",
+        g <- g + geom_smooth(data = trend_df, method = "loess", se = show_ci, color = "black",
                              linewidth = 1, fullrange = FALSE, span = 0.75,
                              inherit.aes = FALSE,
                              aes(x = pt, y = value, weight = loess_weight))
@@ -843,7 +790,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
             # Use explicit color per-status loop — adding a second scale_color_manual
             # after a Leiden/donor_id cluster scale would override it and blank out the points.
             for (status in c("ND", "Aab+", "T1D")) {
-              df_subset <- df[df$donor_status == status & !is.na(df$donor_status), ]
+              df_subset <- trend_df[trend_df$donor_status == status & !is.na(trend_df$donor_status), ]
               if (nrow(df_subset) > 0) {
                 g <- g + geom_smooth(data = df_subset,
                                      aes(x = pt, y = value, weight = loess_weight),
@@ -855,7 +802,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
               }
             }
           } else {
-            g <- g + geom_smooth(
+            g <- g + geom_smooth(data = trend_df,
               method = "loess", se = show_ci,
               linewidth = 0.8, show.legend = FALSE, fullrange = FALSE, span = 0.75,
               inherit.aes = FALSE,
@@ -867,10 +814,10 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
 
       # Labels
       # The y-axis label MUST name the quantity, not just the feature: a ratio
-      # and a denoised marker mean are different units on the same plot slot.
-      if (identical(input$traj_y_mode %||% "marker", "ratio")) {
+      # and a gate-rescaled marker mean are different units on the same plot slot.
+      if (identical(input$traj_y_mode %||% "ratio", "ratio")) {
         selected_feature <- input$traj_ratio_type %||% "Selected cell type"
-        reg <- input$traj_ratio_region %||% "both"
+        reg <- input$traj_ratio_region %||% "core"
         metric_label <- sprintf("\u2014 log(cells per endocrine cell, %s)",
                                 switch(reg, core = "core", peri = "peri",
                                        "core + 20 \u00b5m peri"))
@@ -892,25 +839,12 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       coord_cartesian(xlim = pt_lim, ylim = range(df$value, na.rm = TRUE) * c(1, 1) + c(-0.05, 0.05) * diff(range(df$value, na.rm = TRUE)))
 
       # Convert to plotly with custom data for reliable click handling
-      p <- ggplotly(g, tooltip = c("x", "y", "colour", "text"), source = ns("traj_scatter"))
+      p <- ggplotly(g, tooltip = c("colour", "text"), source = ns("traj_scatter"))
       # Strip "colour: black" leak (from overall LOESS line's color="black"
       # parameter) and collapse duplicate donor_status entries in hover text.
       p <- strip_plotly_color_leak(p)
 
-      # Store coordinate lookup as fallback for click handling
-      if ("combined_islet_id" %in% colnames(df) && "case_id" %in% colnames(df)) {
-        traj_coord_lookup(data.frame(
-          pt                = df$pt,
-          value             = df$value,
-          case_id           = df$case_id,
-          islet_key         = df$islet_key,
-          combined_islet_id = df$combined_islet_id,
-          donor_status      = df$donor_status,
-          stringsAsFactors  = FALSE
-        ))
-      }
-
-      # Layout and register click events
+      # Layout and attach browser-local linked highlighting.
       fonts <- plotly_islet_fonts()
       p <- p %>%
         layout(
@@ -927,110 +861,56 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
           legend = list(font = fonts$legend_text,
                         title = list(font = fonts$legend_title))
         ) %>%
-        plotly_islet_config("trajectory_scatter") %>%
-        event_register("plotly_click") %>%
-        islet_click_bridge(ns("traj_native_click"))
-      # Invalidating this flag schedules the click observer for a later reactive
-      # pass, after renderPlotly() has recorded the registered source in the
-      # session. Keeping event_data() dormant until then avoids plotly's deferred
-      # false-positive registration warning.
-      traj_plot_registered(TRUE)
-      p
+        plotly_islet_config("trajectory_scatter")
+      trajectory_link_plot(p, ns)
     })
 
-    # ---------- Click handler for trajectory scatter ----------
-    # Do not ask plotly for this event while the Trajectory tab (and therefore
-    # its suspended plot output) is still hidden. event_data() schedules its
-    # registration check for the end of the flush, outside suppressWarnings(),
-    # so probing it at startup produces a false warning even though the rendered
-    # plot correctly calls event_register().
-    traj_click_event <- reactive({
+    # One validated selection route for all three linked plots. Hover stays in JS.
+    linked_selection_key <- function() {
+      info <- selected_islet()
+      if (is.null(info)) return(NULL)
+      key <- trajectory_link_key(info$case_id, info$islet_key)
+      if (length(key) != 1L || is.na(key)) NULL else key
+    }
+    send_linked_state <- function() {
+      session$sendCustomMessage(ns("linked_state"), list(
+        key = linked_selection_key(), active = identical(active_tab(), "Trajectory")))
+    }
+    observeEvent(input$linked_click, {
       req(identical(active_tab(), "Trajectory"))
-      req(isTRUE(traj_plot_registered()))
-      event_data("plotly_click", source = ns("traj_scatter"))
-    })
-    observeEvent(traj_click_event(), {
-      click_data <- traj_click_event()
-      if (is.null(click_data)) return()
-
-      # Check if segmentation viewer is available
-      if (!SF_AVAILABLE) {
-        showNotification("Segmentation viewer requires the 'sf' package. Install with: install.packages('sf')",
-                         type = "warning", duration = 5)
+      event <- input$linked_click
+      df <- traj_data_clean()
+      key <- event$key
+      sources <- ns(c("traj_scatter", "traj_umap_donor", "traj_umap_feature"))
+      if (!is.character(key) || length(key) != 1L || is.na(key) ||
+          !is.character(event$source) || length(event$source) != 1L ||
+          !(event$source %in% sources) || is.null(df) || !(key %in% df$link_key)) {
+        islet_log_validation_failure("trajectory_link_invalid")
+        send_linked_state()
         return()
       }
-
-      if (is.null(islet_spatial_lookup)) {
-        showNotification("Islet spatial lookup data not available", type = "warning", duration = 5)
-        return()
-      }
-
-      cat("[TRAJ CLICK] Received click event\n")
-
-      # --- Priority 1: Parse key (format "case_id|islet_key") ---
-      case_id   <- NULL
-      islet_key <- NULL
-      click_key <- click_data$key
-      if (!is.null(click_key) && length(click_key) > 0 && !is.na(click_key[1]) && nzchar(click_key[1])) {
-        key_parts <- strsplit(as.character(click_key[1]), "\\|")[[1]]
-        if (length(key_parts) >= 2) {
-          case_id   <- key_parts[1]
-          islet_key <- key_parts[2]
-          cat("[TRAJ CLICK] From key:", case_id, islet_key, "\n")
-        }
-      }
-
-      # --- Priority 2: Fallback to customdata ---
-      if (is.null(case_id) || is.null(islet_key)) {
-        custom <- click_data$customdata
-        if (!is.null(custom) && length(custom) >= 2) {
-          case_id   <- custom[[1]]
-          islet_key <- custom[[2]]
-          cat("[TRAJ CLICK] From customdata:", case_id, islet_key, "\n")
-        }
-      }
-
-      # --- Priority 3: Fallback to coordinate lookup ---
-      if (is.null(case_id) || is.null(islet_key) || is.na(case_id) || is.na(islet_key)) {
-        lookup <- traj_coord_lookup()
-        if (!is.null(lookup) && nrow(lookup) > 0) {
-          # Tolerances are scaled to each axis's actual span rather than a flat
-          # 0.01, which only made sense while pt was always rank-normalized to
-          # [0, 1]. On the "raw" DPT scale the span is much narrower, and a
-          # fixed 0.01 would match nearly the whole axis.
-          pt_span  <- diff(range(lookup$pt, na.rm = TRUE))
-          val_span <- diff(range(lookup$value, na.rm = TRUE))
-          if (!is.finite(pt_span)  || pt_span  <= 0) pt_span  <- 1
-          if (!is.finite(val_span) || val_span <= 0) val_span <- 1
-          matches <- which(
-            abs(lookup$pt - click_data$x) < 0.01 * pt_span &
-            abs(lookup$value - click_data$y) < 0.01 * val_span
-          )
-          if (length(matches) > 0) {
-            idx <- matches[1]
-            case_id   <- lookup$case_id[idx]
-            islet_key <- lookup$islet_key[idx]
-            cat("[TRAJ CLICK] From coord lookup:", case_id, islet_key, "\n")
-          }
-        }
-      }
-
-      cat("[TRAJ CLICK] resolved key:", paste(case_id, islet_key, sep = "|"), "\n")
-      # Centroid lookup + zero-pad fallback + donor join + selected_islet() —
-      # shared with the Plot handler and the native-click bridge.
-      select_islet_from_key(case_id, islet_key, prepared, selected_islet)
+      row <- df[match(key, df$link_key), , drop = FALSE]
+      select_islet_from_key(row$case_id, row$islet_key, prepared, selected_islet)
+      send_linked_state()
     }, ignoreInit = TRUE)
-
-    # macOS-proof native-click bridge (see islet_click_bridge in 00_globals.R).
-    # Fires on a native click even when plotly_click is suppressed by plotly's
-    # click/drag discrimination on macOS.
-    observeEvent(input$traj_native_click, {
-      nc <- input$traj_native_click
-      if (is.null(nc) || is.null(nc$key) || !nzchar(as.character(nc$key)[1])) return()
-      cat("[TRAJ CLICK] native bridge; key:", as.character(nc$key)[1], "\n")
-      parts <- strsplit(as.character(nc$key)[1], "\\|")[[1]]
-      if (length(parts) < 2) return()
-      select_islet_from_key(parts[1], parts[2], prepared, selected_islet)
+    observeEvent(input$linked_ready, { send_linked_state() }, ignoreInit = TRUE)
+    observe({
+      active <- identical(active_tab(), "Trajectory")
+      key <- linked_selection_key()
+      if (active && !is.null(key)) {
+        df <- traj_data_clean()
+        # A transient empty feature selector must not discard a pinned islet.
+        # Once a feature is valid, an empty result means the pin was filtered out.
+        if ((!is.null(df) && !(key %in% df$link_key)) ||
+            (is.null(df) && !is.null(traj_validate()))) {
+          selected_islet(NULL)
+        }
+      }
+      send_linked_state()
+    })
+    observeEvent(input$clear_link_selection, {
+      selected_islet(NULL)
+      send_linked_state()
     })
 
     # ---------- Segmentation viewer panel ----------
@@ -1038,7 +918,10 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       # Only render when Trajectory tab is active to avoid duplicate non-namespaced output IDs
       if (active_tab() != "Trajectory") return(NULL)
       info <- selected_islet()
-      if (is.null(info)) return(NULL)
+      if (is.null(info)) {
+        return(div(style = "min-height: 275px; display: flex; align-items: center; justify-content: center; color: #666;",
+                   "No islet selected"))
+      }
 
       # Check if single-cell drill-down data exists for this islet
       has_cells <- drilldown_available() &&
@@ -1062,17 +945,22 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       if (!is.null(info$donor_age) && !is.na(info$donor_age)) title_detail <- paste0(title_detail, ", age ", round(info$donor_age))
       if (!is.null(info$donor_gender) && !is.na(info$donor_gender) && nzchar(info$donor_gender)) title_detail <- paste0(title_detail, ", ", info$donor_gender)
 
-      div(class = "card", style = "padding: 20px; margin-bottom: 20px; border: 2px solid #0066CC;",
+      div(
         # Header: title + close button
         div(style = "display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;",
           h4(paste0(info$islet_key, " (", title_detail, ")"),
              style = "margin: 0; color: #0066CC; font-size: 20px;"),
           actionButton(ns("clear_segmentation"), "Close", class = "btn btn-sm btn-outline-secondary")
         ),
-        # Main content: controls sidebar (left) + plot (right)
+        # Map uses the full card width; controls and composition sit beneath it.
         fluidRow(
-          # Left sidebar: all controls
-          column(2,
+          column(12,
+            plotOutput("islet_segmentation_view", height = "430px"),
+            div(style = "text-align: right; margin-top: 6px;",
+              downloadButton("dl_islet_segmentation_view", "Download PNG",
+                             class = "btn-sm btn-outline-primary"))
+          ),
+          column(5,
             div(style = "padding: 10px; background-color: #f8f9fa; border-radius: 5px;",
               if (has_cells) {
                 tagList(
@@ -1121,15 +1009,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
                    style = "color: #666; font-size: 13px;")
             )
           ),
-          # Center: plot
-          column(6,
-            plotOutput("islet_segmentation_view", height = "550px"),
-            div(style = "text-align: right; margin-top: 6px;",
-              downloadButton("dl_islet_segmentation_view", "Download PNG",
-                             class = "btn-sm btn-outline-primary"))
-          ),
-          # Right: composition sidebar
-          column(4,
+          column(7,
             if (has_cells) {
               conditionalPanel(
                 condition = "input.drilldown_show_cells",
@@ -1287,7 +1167,37 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         theme(axis.text = element_blank(), axis.ticks = element_blank(),
               panel.grid = element_blank(), axis.line = element_blank())
     })
-    output$traj_umap_donor <- renderPlot({ traj_umap_donor_plot() })
+    interactive_umap <- function(g, source) {
+      df <- traj_data_clean()
+      if (is.null(g) || is.null(df) || !nrow(df)) {
+        return(trajectory_link_plot(plotly_islet_empty("No trajectory data available"), ns))
+      }
+      if (!any(is.finite(df$umap_1) & is.finite(df$umap_2))) {
+        return(trajectory_link_plot(plotly_islet_empty("UMAP coordinates not available"), ns))
+      }
+      # Add interaction metadata only to the screen version; PNGs retain the
+      # original ggplot object and never contain selection rings or tooltips.
+      g$data$link_hover <- paste0("Donor: ", df$case_id, "<br>Islet: ", df$islet_key,
+        "<br>Status: ", df$donor_status, "<br>Pseudotime: ", signif(df$pt, 3),
+        "<br>", selected_measure_label(), ": ", signif(df$value, 3))
+      g$mapping$key <- ggplot2::aes(key = link_key)$key
+      g$mapping$text <- ggplot2::aes(text = link_hover)$text
+      g <- g + labs(title = NULL)
+      fonts <- plotly_islet_fonts()
+      p <- ggplotly(g, tooltip = "text", source = ns(source)) %>%
+        layout(margin = list(l = 40, r = 15, t = 10, b = 40),
+               font = fonts$global,
+               xaxis = list(title = list(font = fonts$axis_title)),
+               yaxis = list(title = list(font = fonts$axis_title),
+                            scaleanchor = "x", scaleratio = 1),
+               legend = list(font = fonts$legend_text,
+                             title = list(font = fonts$legend_title))) %>%
+        plotly_islet_config(paste0("trajectory_", source))
+      trajectory_link_plot(p, ns)
+    }
+    output$traj_umap_donor <- renderPlotly({
+      interactive_umap(traj_umap_donor_plot(), "traj_umap_donor")
+    })
     output$dl_umap_donor <- downloadHandler(
       filename = function() islet_png_filename("trajectory_umap_donor"),
       content = function(file) {
@@ -1299,6 +1209,9 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
     )
 
     # ---------- UMAP: Selected Feature ----------
+    output$traj_umap_feature_title <- renderText({
+      paste("UMAP:", selected_measure_label())
+    })
     traj_umap_feature_plot <- reactive({
       df <- traj_data_clean()
       if (is.null(df) || nrow(df) == 0) return(NULL)
@@ -1310,7 +1223,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       }
 
       selected_feature <- selected_measure_label()
-      color_label <- if (identical(input$traj_y_mode %||% "marker", "ratio"))
+      color_label <- if (identical(input$traj_y_mode %||% "ratio", "ratio"))
         "Log cell ratio" else "Expression"
 
       g <- ggplot(df, aes(x = umap_1, y = umap_2, color = value)) +
@@ -1332,7 +1245,9 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
 
       g
     })
-    output$traj_umap_feature <- renderPlot({ traj_umap_feature_plot() })
+    output$traj_umap_feature <- renderPlotly({
+      interactive_umap(traj_umap_feature_plot(), "traj_umap_feature")
+    })
     output$dl_umap_feature <- downloadHandler(
       filename = function() islet_png_filename("trajectory_umap_feature"),
       content = function(file) {
@@ -1469,7 +1384,10 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       tr <- traj()
       if (is.null(tr) || !is.null(tr$error) || is.null(tr$var_names)) return(NULL)
       checkboxGroupInput(ns("multi_heatmap_markers"), "Select markers:",
-                         choices = tr$var_names, selected = tr$var_names, inline = TRUE)
+                         choices = tr$var_names,
+                         selected = intersect(tr$var_names,
+                           c("INS", "GCG", "SST", "CHGA", "CD45", "CD31", "panCK", "B3TUBB")),
+                         inline = TRUE)
     })
 
     # Multi-feature data reactive
@@ -1493,7 +1411,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       result <- result[is.finite(result$pt_raw), , drop = FALSE]
 
       # Enforce the fitted cell-count cohort (matches traj_data_clean).
-      cr <- traj_cell_range(input$cell_range, traj_max_islet_cells())
+      cr <- applied_cell_range()
       {
         result <- result[is.finite(result$total_cells) &
                          result$total_cells >= cr[1] &
@@ -1642,6 +1560,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         write_islet_csv(file, out, islet_csv_header(
           "Trajectory — multi-feature expression along pseudotime",
           pr$method,
+          pr$features,
           pr$scale,
           pr$range,
           paste("Markers:", paste(input$multi_heatmap_markers %||% "(none)", collapse = ", ")),
@@ -1675,6 +1594,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         write_islet_csv(file, out, islet_csv_header(
           "Trajectory — UMAP coordinates and per-islet trajectory values",
           pr$method,
+          pr$features,
           pr$scale,
           pr$measure,
           pr$range,
@@ -1688,7 +1608,8 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
     # PAGA force-directed layout (Barlow et al. 2024, Fig 2B/2E)
     # =====================================================================
     paga_data <- reactive({
-      cr <- traj_cell_range(input$cell_range, traj_max_islet_cells())
+      req(isTRUE(input$paga_show_layout))
+      cr <- applied_cell_range()
       if (!paga_available()) return(NULL)
       withProgress(
         message = "Computing PAGA layout",
@@ -1698,6 +1619,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
     })
 
     output$paga_note <- renderUI({
+      req(isTRUE(input$paga_show_layout))
       if (!paga_available()) {
         return(div(style = paste0("padding: 7px 9px; border-radius: 4px; font-size: 11px;",
                                   " line-height: 1.45; color: #8a1c12; background: #fdecea;",
@@ -1771,7 +1693,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       }
       g <- g +
         labs(x = "Layout dim 1", y = "Layout dim 2",
-             title = {cr <- traj_cell_range(input$cell_range, traj_max_islet_cells())
+             title = {cr <- applied_cell_range()
                       sprintf("PAGA force-directed layout — %s islets (%g–%g cells)",
                               format(nrow(d), big.mark = ","), cr[1], cr[2])}) +
         theme_islet() +
@@ -1796,8 +1718,8 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
     output$dl_paga_csv <- downloadHandler(
       filename = function() sprintf(
         "paga_layout_%g-%g_%s.csv",
-        traj_cell_range(input$cell_range, traj_max_islet_cells())[1],
-        traj_cell_range(input$cell_range, traj_max_islet_cells())[2],
+        applied_cell_range()[1],
+        applied_cell_range()[2],
         format(Sys.time(), "%Y%m%d_%H%M%S")),
       content = function(file) {
         d <- paga_data()
@@ -1810,7 +1732,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
           sprintf("Neighbors: cosine, %d NN | Leiden resolution %g | layout %s",
                   15L, 1.0, attr(d, "layout_key") %||% "(n/a)"),
           "Root: ND islet nearest the ND centroid in diffusion space",
-          {cr <- traj_cell_range(input$cell_range, traj_max_islet_cells())
+          {cr <- applied_cell_range()
            sprintf("Cells per islet range: %g-%g (rebuilds the embedding, not a display filter)",
                    cr[1], cr[2])},
           "fa_1 / fa_2 are unitless layout coordinates; only relative position is meaningful",

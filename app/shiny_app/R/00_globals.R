@@ -1,3 +1,15 @@
+# Debug modes are a deployment error in production. Keep this check before
+# package loading and other startup work so a misconfigured worker fails closed
+# without entering either diagnostic path.
+DEBUG_CREDS <- islet_flag_enabled(Sys.getenv("DEBUG_CREDENTIALS", "0"))
+VIEWER_DEBUG_ENABLED <- islet_flag_enabled(Sys.getenv("VIEWER_DEBUG", "0"))
+if (identical(tolower(trimws(Sys.getenv("ISLET_RUNTIME_MODE", "development"))),
+              "production") &&
+    (DEBUG_CREDS || VIEWER_DEBUG_ENABLED)) {
+  islet_log_event("runtime_profile_rejected")
+  stop("Production does not permit credential or viewer debug modes.", call. = FALSE)
+}
+
 library(shiny)
 library(shinyjs)
 library(readxl)
@@ -39,23 +51,22 @@ suppressPackageStartupMessages({
   if (requireNamespace("sf", quietly = TRUE)) {
     library(sf)
     SF_AVAILABLE <- TRUE
-    message("[SF] Package sf loaded for segmentation viewer")
+    islet_log_event("sf_ready")
   } else {
-    message("[SF] Package 'sf' not found. Islet segmentation viewer will be disabled.")
-    message("[SF] Install with: install.packages('sf')")
+    islet_log_event("sf_unavailable")
   }
 })
 
 # Check for httr2 package (required for AI assistant)
 httr2_available <- requireNamespace("httr2", quietly = TRUE)
 if (!httr2_available) {
-  message("Package 'httr2' not found. The AI assistant will be disabled until you install it (install.packages('httr2')).")
+  islet_log_event("httr2_unavailable")
 }
 
 # Load anndata package for trajectory analysis (install with BiocManager::install('anndata'))
 suppressPackageStartupMessages({
   if (!requireNamespace("anndata", quietly = TRUE)) {
-    message("Package 'anndata' not found. Install with: BiocManager::install('anndata')")
+    islet_log_event("anndata_unavailable")
   }
 })
 
@@ -63,20 +74,19 @@ suppressPackageStartupMessages({
 VITESSCE_AVAILABLE <- FALSE
 suppressPackageStartupMessages({
   if (!requireNamespace("vitessceR", quietly = TRUE)) {
-    message("Package 'vitessceR' not found. Install with: remotes::install_github('vitessce/vitessceR')")
-    message("Version required: >= 0.1.0")
+    islet_log_event("vitessce_unavailable")
   } else {
     # Verify we have the GitHub version with required features
     tryCatch({
       pkg_version <- packageVersion("vitessceR")
       if (pkg_version < "0.1.0") {
-        warning("vitessceR version ", pkg_version, " detected. Please upgrade to >= 0.1.0 from GitHub")
+        islet_log_event("vitessce_version_unsupported")
       }
       test_vc <- vitessceR::VitessceConfig$new(schema_version = "1.0.16", name = "Test")
-      message("[VITESSCE] Package verified working (version ", pkg_version, ")")
+      islet_log_event("vitessce_ready")
       VITESSCE_AVAILABLE <<- TRUE
     }, error = function(e) {
-      warning("[VITESSCE] Package installed but failed basic test: ", conditionMessage(e))
+      islet_log_event("vitessce_check_failed")
     })
 
     # CRITICAL FIX: Ensure all child routes from MultiImageWrapper are registered
@@ -92,9 +102,9 @@ suppressPackageStartupMessages({
           }
           routes
         }, overwrite = TRUE)
-        message("[VITESSCE] Applied MultiImageWrapper get_routes fix for segmentation layer routing")
+        islet_log_event("vitessce_routes_ready")
       }, error = function(e) {
-        warning("[VITESSCE] Failed to apply get_routes fix: ", conditionMessage(e))
+        islet_log_event("vitessce_routes_failed")
       })
     }
   }
@@ -110,9 +120,7 @@ suppressPackageStartupMessages({
 # ---- Runtime diagnostics ----
 APP_VERSION <- "modular-v1"
 try({
-  message("[APP LOAD] Version=", APP_VERSION, " time=", Sys.time())
-  message("[APP LOAD] getwd=", tryCatch(getwd(), error = function(e) NA))
-  message("[APP LOAD] list.files(.) contains app.R? ", any(grepl('^app.R$', list.files('.'))))
+  islet_log_event("app_loaded")
   # Publication containers keep the application and release mounts read-only.
   # Write a load flag only when an operator explicitly requests one, and only
   # below the process temporary directory (never below the source tree).
@@ -123,7 +131,7 @@ try({
     is_below_temp <- identical(flag_path, temp_root) ||
       startsWith(flag_path, paste0(temp_root, .Platform$file.sep))
     if (!is_below_temp) {
-      warning("ISLET_APP_LOAD_FLAG must resolve below tempdir(); flag not written.")
+      islet_log_event("app_load_flag_rejected")
     } else {
       if (!dir.exists(dirname(flag_path))) {
         dir.create(dirname(flag_path), recursive = TRUE, showWarnings = FALSE)
@@ -133,8 +141,8 @@ try({
   }
 }, silent = TRUE)
 
-# Runtime paths. Production sets ISLET_DATA_ROOT to the mounted, versioned data
-# release; a repository checkout keeps the historical ../../data default.
+# Runtime paths. Production points ISLET_DATA_ROOT at its verified release;
+# development uses one selected root, defaulting to the repository data dir.
 .repo_data_root <- file.path("..", "..", "data")
 data_root <- Sys.getenv("ISLET_DATA_ROOT", unset = .repo_data_root)
 data_root <- tryCatch(normalizePath(data_root, mustWork = FALSE),
@@ -185,22 +193,16 @@ if (!nzchar(Sys.getenv("RETICULATE_PYTHON", ""))) {
   # back to the first existing candidate so behaviour is no worse than before.
   if (!nzchar(candidate_python) && length(.py_candidates)) {
     candidate_python <- .py_candidates[[1]]
-    message("[PYTHON] WARNING: no candidate interpreter could import anndata; ",
-            "H5AD loading may fail and fall back to Excel. Set RETICULATE_PYTHON ",
-            "to a python that has the anndata module.")
+    islet_log_event("python_anndata_unavailable")
   }
 
   if (nzchar(candidate_python)) {
     Sys.setenv(RETICULATE_PYTHON = candidate_python)
-    message("[PYTHON] RETICULATE_PYTHON=", candidate_python)
+    islet_log_event("python_configured")
   } else {
-    message("[PYTHON] No python executable found. Set RETICULATE_PYTHON to a valid interpreter.")
+    islet_log_event("python_unavailable")
   }
 }
-
-# Debug flags
-DEBUG_CREDS <- isTRUE(as.logical(Sys.getenv("DEBUG_CREDENTIALS", "0")))
-VIEWER_DEBUG_ENABLED <- identical(Sys.getenv("VIEWER_DEBUG", "0"), "1")
 
 # Feature flags
 #
@@ -502,14 +504,12 @@ function(el, x){
       if (d && d.points && d.points.length){ var k = keyOf(d.points[0]); if (k != null) lastKey = k; }
     });
     gd.on('plotly_unhover', function(){ lastKey = null; });
-    gd.on('plotly_click', function(){ console.log('[ISLET] plotly_click fired'); });
   }
   (gd || el).addEventListener('mousedown', function(e){ downX = e.clientX; downY = e.clientY; downKey = lastKey || hoverKey(); }, true);
   (gd || el).addEventListener('mouseup', function(e){
     if (Math.abs(e.clientX - downX) > 5 || Math.abs(e.clientY - downY) > 5) return;
     var k = downKey || lastKey || hoverKey();
     if (k == null) return;
-    console.log('[ISLET] native click -> ' + k);
     Shiny.setInputValue('%s', {key: k, nonce: (Date.now() + Math.random())}, {priority: 'event'});
   }, true);
 }", input_id)
@@ -528,7 +528,8 @@ islet_png_filename <- function(stem) {
 # ============================================================================
 # Phenotype rules (May 2026) — marker -> celltype definitions surfaced in UI
 # ============================================================================
-# Source of truth: data/phenotype_rules.csv (parsed once at startup).
+# UI reference: data/phenotype_rules.csv (parsed once at startup). This is not
+# verified as the complete original method that produced all shipped labels.
 # Column-1 is the parent rule, column-2 the phenotype, columns 3+ are markers
 # with cell values:
 #   "pos"    -> required positive
@@ -597,7 +598,7 @@ PHENOTYPE_RESIDUALS <- list(
 # Returns NULL if the file is missing — callers should guard.
 .parse_phenotype_rules_csv <- function(path) {
   if (!file.exists(path)) {
-    message("[PHENOTYPE] Rules CSV not found at ", path, " — modal/hints disabled")
+    islet_log_event("phenotype_rules_unavailable")
     return(NULL)
   }
   raw <- utils::read.csv(path, header = FALSE, stringsAsFactors = FALSE,
@@ -794,6 +795,28 @@ phenotype_rules_table_df <- function() {
 # Modal builder. Pure shiny — no DT dependency. Pass to showModal() from any tab's
 # Phenotype-Rules button handler.
 phenotype_rules_modal_ui <- function() {
+  protein_path <- data_path("protein_phenotype_rules.csv")
+  if (file.exists(protein_path)) {
+    rules <- utils::read.csv(protein_path, stringsAsFactors = FALSE, na.strings = "")
+    rules[is.na(rules)] <- ""
+    headings <- c("Parent", "Label", "All positive", "Any positive", "All negative", "Note")
+    rows <- lapply(seq_len(nrow(rules)), function(i) {
+      shiny::tags$tr(lapply(unname(as.list(rules[i, ])), shiny::tags$td))
+    })
+    return(shiny::modalDialog(
+      title = "Cell Phenotype Rules", size = "l", easyClose = TRUE,
+      footer = shiny::modalButton("Close"),
+      shiny::tags$p("The original 15 donors retain their saved phenotype labels. ",
+        "The rules below were accepted for donors 78, 6090, 6232, 6520, 6539 and 6558."),
+      shiny::tags$p("A marker is positive at a gate-rescaled signal of 0.5 or higher. ",
+        "Rules are applied from parent to child. Conflicting lineages and unsupported cells remain Unknown; ",
+        "conflicting subtypes retain their parent label. These rules do not assign Acinar, ECAD+ or Structural."),
+      shiny::tags$div(style = "max-height: 60vh; overflow: auto;",
+        shiny::tags$table(class = "table table-striped",
+          shiny::tags$thead(shiny::tags$tr(lapply(headings, shiny::tags$th))),
+          shiny::tags$tbody(rows)))
+    ))
+  }
   df <- phenotype_rules_table_df()
   header_row <- shiny::tags$tr(
     shiny::tags$th("Phenotype",          style = "text-align:left; padding:6px 10px;"),
@@ -812,12 +835,12 @@ phenotype_rules_modal_ui <- function() {
     )
   })
   shiny::modalDialog(
-    title = shiny::tagList(shiny::icon("dna"), "Cell Phenotype Rules — Marker Definitions"),
+    title = shiny::tagList(shiny::icon("dna"), "Cell Phenotype Rule Reference"),
     size = "l", easyClose = TRUE, fade = TRUE,
     footer = shiny::modalButton("Close"),
     shiny::tags$p(
-      "Every cell in the app is classified into one of these phenotypes by the upstream ",
-      shiny::tags$code("data/phenotype_rules.csv"), " gating rules. A ",
+      "This table describes a documented upstream Rules1 marker-gating stage. ",
+      "It does not fully reproduce the phenotype labels saved in the app data. A ",
       shiny::tags$code("+"),
       " means the marker is required to be positive; a ",
       shiny::tags$code("−"),
@@ -832,14 +855,14 @@ phenotype_rules_modal_ui <- function() {
       )
     ),
     shiny::tags$p(style = "margin-top: 10px; font-size: 12px; color: #777;",
-      "Rule source: ",
+      "Reference CSV: ",
       shiny::tags$code("data/phenotype_rules.csv"),
       " (15 markers: INS, GCG, SST, SMA, CD20, CD3e, CD68, CD163, CD8a, CD4, HLADR, PDPN, CD34, CD31, B3TUBB)."
     ),
     shiny::tags$p(style = "margin-top: 6px; font-size: 12px; color: #777;",
       shiny::tags$strong("Data vs. rules: "),
-      "this table is the gating spec. A few rule phenotypes have no cells in the ",
-      "shipped dataset because the upstream scVI labeling merged or renamed them ",
+      "the full original rule matrix has not been verified. Some rule phenotypes ",
+      "have no cells in the shipped dataset because upstream labeling merged or renamed them ",
       "(e.g. Dendritic cell folds into the ", shiny::tags$code("APCs"),
       "/Immune aggregates; Exocrine splits into Acinar/Ductal). ",
       shiny::tags$code("APCs"),
@@ -851,9 +874,9 @@ phenotype_rules_modal_ui <- function() {
       "the original Rules1 template also listed ", shiny::tags$code("CD99"),
       " (Endocrine) and ", shiny::tags$code("CD56"),
       " (Neural), but neither antibody is in this 31-plex panel, so the ",
-      "phenotyping step dropped them. The effective gates were therefore ",
+      "available Rules1 implementation omitted them. In that reference, the gates become ",
       shiny::tags$code("Endocrine = any of INS/GCG/SST+"), " and ",
-      shiny::tags$code("Neural = B3TUBB+"), " — reflected in the table above."
+      shiny::tags$code("Neural = B3TUBB+"), ". These are not a complete reconstruction of shipped labels."
     )
   )
 }
@@ -932,6 +955,24 @@ phenotype_rules_button <- function(input_id,
   )
 }
 
+tab_help <- function(title, rules_input_id, ...) {
+  shiny::tags$div(
+    style = "display: flex; justify-content: flex-end; margin-bottom: 6px;",
+    shiny::tags$details(style = "position: relative; z-index: 20;",
+      shiny::tags$summary(title = title,
+        style = "cursor: pointer; list-style: none; color: #4477AA; padding: 4px 8px;",
+        shiny::tags$span(class = "sr-only", title),
+        shiny::tags$i(class = "far fa-circle-question", `aria-hidden` = "true",
+                      style = "font-size: 24px;")),
+      shiny::tags$div(
+        style = paste0("position: absolute; right: 0; top: 100%; width: min(420px, calc(100vw - 32px));",
+                       " max-height: 70vh; overflow-y: auto; padding: 12px; background: white;",
+                       " border: 1px solid #c8d8e9; box-shadow: 0 4px 16px #0002; font-size: 13px;"),
+        phenotype_rules_button(rules_input_id), ...)
+    )
+  )
+}
+
 # UI helper: small muted hint block describing the currently selected phenotype.
 # Pass a literal phenotype name. The output is a tagList suitable for embedding
 # directly under a selectInput. `show_modal_link` controls the trailing
@@ -985,6 +1026,66 @@ phenotype_keep <- function(x) setdiff(x, PHENOTYPE_RETIRED)
 
 #' TRUE for rows whose phenotype is still in use. NA-safe.
 phenotype_is_kept <- function(x) !(as.character(x) %in% PHENOTYPE_RETIRED)
+
+#' Marker definition text for each retained phenotype, for help popovers.
+#'
+#' When the data root ships `protein_phenotype_rules.csv` (the accepted rules
+#' for the six added donors), each label's rule is composed with its parents:
+#' required positives and negatives accumulate down the tree, and a parent's
+#' "any of" group is omitted when the child's own positive evidence already
+#' satisfies it. Otherwise the Rules1 reference (`format_phenotype_rule()`) is
+#' used. Returns a named character vector in palette order.
+phenotype_marker_definitions <- function(path = data_path("protein_phenotype_rules.csv")) {
+  kept <- phenotype_keep(names(PHENOTYPE_COLORS))
+  if (!file.exists(path)) {
+    out <- vapply(kept, function(n) format_phenotype_rule(n, "plain"), character(1))
+    return(out[!startsWith(out, "No marker rule")])
+  }
+  rules <- utils::read.csv(path, stringsAsFactors = FALSE, na.strings = "", check.names = FALSE)
+  rules[is.na(rules)] <- ""
+  split_markers <- function(x) if (nzchar(x)) strsplit(x, "|", fixed = TRUE)[[1]] else character(0)
+  by_label <- split(rules, rules$label)
+  compose <- function(label) {
+    row <- by_label[[label]]
+    pos <- split_markers(row$all_positive); any_child <- split_markers(row$any_positive)
+    neg <- split_markers(row$all_negative); groups <- list()
+    if (length(any_child)) groups <- list(any_child)
+    parent <- row$parent
+    while (nzchar(parent) && parent != "all" && !is.null(by_label[[parent]])) {
+      prow <- by_label[[parent]]
+      pos <- union(pos, split_markers(prow$all_positive))
+      pany <- split_markers(prow$any_positive)
+      if (length(pany) && !length(intersect(pany, c(pos, any_child)))) groups <- c(groups, list(pany))
+      neg <- union(neg, split_markers(prow$all_negative))
+      parent <- prow$parent
+    }
+    parts <- c(if (length(pos)) paste0(pos, "+"),
+               vapply(groups, function(g) if (length(g) == 1) paste0(g, "+")
+                      else paste0("any of ", paste0(g, "+", collapse = " / ")), character(1)))
+    txt <- paste(parts, collapse = ", ")
+    if (length(neg)) txt <- paste0(txt, "  \u2014  ", paste0(neg, "\u2212", collapse = ", "))
+    txt
+  }
+  kept <- kept[kept %in% names(by_label)]
+  stats::setNames(vapply(kept, compose, character(1)), kept)
+}
+
+#' Help-popover block listing the retained phenotypes' marker definitions.
+phenotype_marker_definitions_ui <- function() {
+  defs <- phenotype_marker_definitions()
+  if (!length(defs)) return(NULL)
+  protein <- file.exists(data_path("protein_phenotype_rules.csv"))
+  shiny::tagList(
+    shiny::tags$h6(style = "margin-top: 12px; font-weight: 700;", "Phenotype marker definitions"),
+    shiny::tags$p(style = "color: #555;",
+      if (protein) paste0("Rules accepted for the six added donors (a marker is positive at a gate-rescaled ",
+                          "signal of 0.5 or higher). The original 15 donors keep their saved labels.")
+      else "Rules1 marker reference (a partial reference for the saved labels)."),
+    shiny::tags$ul(style = "padding-left: 18px; margin-bottom: 6px;",
+      lapply(names(defs), function(n)
+        shiny::tags$li(shiny::tags$strong(n), ": ", defs[[n]])))
+  )
+}
 
 #' Drop retired phenotypes from a data frame with a phenotype column.
 phenotype_filter_rows <- function(df, col = "phenotype") {

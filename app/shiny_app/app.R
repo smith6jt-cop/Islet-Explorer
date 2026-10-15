@@ -5,6 +5,8 @@
 # ---------- UI ----------
 
 ui <- fluidPage(
+  title = "Islet Explorer",
+  lang = "en",
   useShinyjs(),
   tags$head(
     # Favicons for browser tab, bookmarks, and mobile pinning. Browsers pick
@@ -44,6 +46,32 @@ ui <- fluidPage(
       padding-top: 0;
       min-width: 1200px;
       overflow-x: auto;
+    }
+
+    .skip-link {
+      position: absolute;
+      left: 12px;
+      top: -80px;
+      z-index: 10000;
+      padding: 10px 14px;
+      background: #ffffff;
+      color: #1e3a72;
+      border: 3px solid #1e3a72;
+      border-radius: 4px;
+      font-weight: 700;
+    }
+
+    .skip-link:focus {
+      top: 12px;
+    }
+
+    a:focus-visible,
+    button:focus-visible,
+    input:focus-visible,
+    select:focus-visible,
+    [tabindex]:focus-visible {
+      outline: 3px solid #ffbf47 !important;
+      outline-offset: 2px !important;
     }
 
     .container-fluid {
@@ -128,7 +156,7 @@ ui <- fluidPage(
     }
 
     .sidebar .btn {
-      background: linear-gradient(145deg, #66b3ff 0%, #4da6ff 100%);
+      background: linear-gradient(145deg, #1d70b8 0%, #1261a0 100%);
       border: none;
       border-radius: 6px;
       color: white;
@@ -136,7 +164,7 @@ ui <- fluidPage(
     }
 
     .sidebar .btn:hover {
-      background: linear-gradient(145deg, #4da6ff 0%, #3399ff 100%);
+      background: linear-gradient(145deg, #1261a0 0%, #0b4778 100%);
       transform: translateY(-1px);
     }
 
@@ -210,6 +238,22 @@ ui <- fluidPage(
     .irs--shiny .irs-handle {
       background: #2c5aa0;
       border: 3px solid #ffffff;
+    }
+
+    /* Keep the slider's small white value labels readable. */
+    .irs--shiny .irs-from,
+    .irs--shiny .irs-to,
+    .irs--shiny .irs-single {
+      background: #2c5aa0;
+    }
+    .irs--shiny .irs-from:before,
+    .irs--shiny .irs-to:before,
+    .irs--shiny .irs-single:before {
+      border-top-color: #2c5aa0;
+    }
+    [id^='spatial-'][id$='_pheno_hint'] strong,
+    [id^='spatial-show_phenotype_rules_inline'] .action-label {
+      color: #315f8b !important;
     }
 
     /* Help text styling */
@@ -336,6 +380,29 @@ ui <- fluidPage(
   uiOutput("theme_css"),
   tags$script(HTML("
     $(document).on('shiny:connected', function() {
+      function markDecorativeIcons() {
+        // These buttons already have text labels. Some Shiny/fontawesome
+        // versions also label their presentation-only icons, which is invalid
+        // ARIA and duplicates the button name in assistive technology.
+        $('.shiny-download-link i[aria-label], .action-button i[aria-label]')
+          .removeAttr('aria-label').attr('aria-hidden', 'true');
+      }
+      markDecorativeIcons();
+      $(document).on('shiny:bound shiny:value', function() {
+        window.requestAnimationFrame(markDecorativeIcons);
+      });
+
+      function updateTabAccessibility() {
+        $('#tabs > li > a').each(function() {
+          var active = $(this).parent().hasClass('active');
+          $(this).attr({ 'aria-selected': String(active), tabindex: active ? '0' : '-1' });
+        });
+      }
+
+      // Shiny supplies keyboard tab navigation. Keep its selected-state
+      // semantics and a single Tab stop synchronized after activation.
+      updateTabAccessibility();
+
       function adjustLayout() {
         var activeTab = $('#tabs li.active a').text().trim();
         var sidebar = $('.equal-height-panel').first();
@@ -365,12 +432,16 @@ ui <- fluidPage(
       // Adjust when tabs change
       $('a[data-toggle=\"tab\"]').on('shown.bs.tab', function() {
         adjustLayout();
+        updateTabAccessibility();
       });
     });
   ")),
+  tags$a(class = "skip-link", href = "#main-content", "Skip to main content"),
+  tags$h1(class = "sr-only", "Islet Explorer"),
   fluidRow(class = "equal-height-row",
     # Left Sidebar Panel (Plot controls, hidden on other tabs via JS)
     column(width = 1.4, class = "equal-height-panel",
+      role = "complementary", `aria-label` = "Plot controls",
       # 'Statistics' stays in this condition while that tab is hidden: with no
       # such tab mounted `input.tabs` can never take that value, so the branch is
       # inert, and keeping it means SHOW_STATISTICS_TAB=1 needs no second edit.
@@ -381,6 +452,7 @@ ui <- fluidPage(
     ),
     # Main Panel
     column(width = 10.6, class = "equal-height-panel main-content-panel",
+      id = "main-content", role = "main", tabindex = "-1",
       tabsetPanel(id = "tabs",
         tabPanel("Plot",
           fluidRow(
@@ -412,6 +484,11 @@ ui <- fluidPage(
         }
       )
     )
+  ),
+  tags$footer(
+    class = "app-footer", role = "contentinfo",
+    style = "padding: 10px 0 0; text-align: right;",
+    tags$a(href = "https://accessibility.ufl.edu/", "UF Accessibility")
   )
 )
 
@@ -419,7 +496,13 @@ ui <- fluidPage(
 
 # Load and prepare the immutable summaries once per R worker, not once per
 # browser session. In production this call also enforces the release manifest.
-.shared_prepared_data <- load_shared_prepared_data()
+.shared_prepared_data <- tryCatch(
+  load_shared_prepared_data(),
+  error = function(e) {
+    islet_log_event("release_data_validation_failed")
+    stop("Application data validation failed.", call. = FALSE)
+  }
+)
 
 server <- function(input, output, session) {
 
@@ -624,16 +707,20 @@ server <- function(input, output, session) {
       cells <- load_islet_cells(info$case_id, info$islet_key)
       if (!is.null(cells)) {
         color_by <- input$drilldown_color_by %||% "phenotype"
+        if (!islet_valid_scalar_choice(color_by, colnames(cells),
+                                       "drilldown_color_invalid")) {
+          color_by <- "phenotype"
+        }
         show_peri_cells <- if (!is.null(input$drilldown_show_peri)) input$drilldown_show_peri else TRUE
         return(tryCatch(
           render_islet_drilldown_plot(info, cells, color_by = color_by, show_peri = show_peri_cells,
                                       show_peri_boundary = show_peri_bd, show_structures = show_structs,
                                       palette = active_palette()),
           error = function(e) {
-            cat("[DRILLDOWN ERROR]", conditionMessage(e), "\n")
+            islet_log_event("drilldown_render_failed")
             ggplot2::ggplot() +
               ggplot2::annotate("text", x = 0.5, y = 0.5,
-                                label = paste("Render error:", conditionMessage(e)),
+                                label = "Unable to render this view.",
                                 size = ISLET_ANNOTATE_SIZE, color = "red") +
               ggplot2::theme_void() + ggplot2::xlim(0, 1) + ggplot2::ylim(0, 1)
           }
@@ -645,10 +732,10 @@ server <- function(input, output, session) {
       render_islet_segmentation_plot(info, show_peri_boundary = show_peri_bd,
                                       show_structures = show_structs),
       error = function(e) {
-        cat("[SEGMENTATION ERROR]", conditionMessage(e), "\n")
+        islet_log_event("segmentation_render_failed")
         ggplot2::ggplot() +
           ggplot2::annotate("text", x = 0.5, y = 0.5,
-                            label = paste("Render error:", conditionMessage(e)),
+                            label = "Unable to render this view.",
                             size = ISLET_ANNOTATE_SIZE, color = "red") +
           ggplot2::theme_void() + ggplot2::xlim(0, 1) + ggplot2::ylim(0, 1)
       }

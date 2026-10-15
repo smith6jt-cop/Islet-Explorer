@@ -1,0 +1,107 @@
+{
+  "schema_version": 1,
+  "requirement_date": "2026-09-20",
+  "status": "implementation_in_progress",
+  "authority": "Owner's explicit cell-typing and trajectory corrections in this session",
+  "reference_record": "../../docs/trajectory_typing_reference_20260919.md",
+  "required_typing_markers": [
+    "CHGA",
+    "CD45",
+    "VIM",
+    "LGALS3",
+    "CD44",
+    "PGP9.5",
+    "GAP43",
+    "CD35",
+    "NaKATPase"
+  ],
+  "required_participation": {
+    "CHGA": "endocrine_identity_evidence",
+    "CD45": "immune_identity_evidence",
+    "VIM": "lineage_and_state_refinement",
+    "LGALS3": "lineage_conditioned_phenotype_refinement",
+    "CD44": "lineage_conditioned_phenotype_refinement",
+    "PGP9.5": "neural_identity_with_endocrine_disambiguation",
+    "GAP43": "neural_phenotype_refinement",
+    "CD35": "lineage_conditioned_complement_receptor_phenotype",
+    "NaKATPase": "multivariate_cell_phenotype_expression_feature"
+  },
+  "insufficient_evidence_of_use": [
+    "finite_measurement_check",
+    "unused_threshold",
+    "heatmap_presence",
+    "generic_quality_flag",
+    "manifest_entry_without_algorithmic_use"
+  ],
+  "primary_trajectory": {
+    "prerequisite": "validated_cell_typing_then_compartment_counts",
+    "observation": "islet",
+    "input_measure": "log1p(cell_type_count / core_endocrine_union_count)",
+    "compartments": [
+      "core",
+      "tissue_clipped_peri_20um"
+    ],
+    "compartments_are_separate_features": true,
+    "denominator": "all canonical cell centroids inside the endocrine pixel-classifier core, counted once",
+    "unknown_or_zero_denominator": "a classifier core with zero cells is ineligible; downstream typing cannot override classifier eligibility",
+    "disease_labels_used_to_fit_or_orient": false,
+    "fit_on_display_interaction": false,
+    "supersedes": "compartment_median_marker_intensity_fitting_inputs",
+    "features": "mutually exclusive base identities; overlapping states are sensitivity features only"
+  },
+  "heatmap": {
+    "panel_size": 31,
+    "all_markers_available": true,
+    "cell_population_and_measure_must_be_explicit": true,
+    "raw_fluorescence_sum_per_endocrine_formula_established": false,
+    "default_measure": "log1p(marker-positive count / expanded core endocrine union count)",
+    "alternative_measure": "mean log1p corrected marker intensity within selected typed population",
+    "default_alternative_population": "Endocrine union",
+    "bin_aggregation": "within-donor equal-islet means then equal-donor means"
+  },
+  "historical_evidence_scope": "Original 15 donors; do not silently transfer acceptance to six added donors",
+  "production_classifier_updated": false,
+  "trajectory_refitted": false,
+  "source_pdfs": [
+    {
+      "path": "literature/Barlow2025.pdf",
+      "sha256": "30a8ffb18e9fa5d1cc62525ea0cd04b93078957e64ee26c71775e9b750a2d462"
+    },
+    {
+      "path": "literature/Bodenmiller2025.pdf",
+      "sha256": "f4517646ec08fb8282424c16bc1fb3c132bc3dd8d78e326a4a0875f45d6fce4c"
+    }
+  ],
+  "cell_typing": {
+    "method": "hierarchical_four_ensemble_Leiden",
+    "inputs": "REDSEA_corrected_whole_cell_31_marker_means",
+    "old_gates": "reference_evidence_only",
+    "donor_balanced_landmarks_per_donor": 20000,
+    "seed": 20260919,
+    "transformations": [
+      "log1p_landmark_median_IQR_with_SD_fallback",
+      "arcsinh_training_q90_divided_by_5_floor1_then_training_zscore"
+    ],
+    "neighbors": [
+      15,
+      30
+    ],
+    "metric": "euclidean",
+    "resolution": 1.0,
+    "consensus": "at_least_3_of_4_supported_reviewed_identity_votes",
+    "base_identity_and_states_separate": true,
+    "disease_and_clinical_inputs": false,
+    "required_nine_marker_ablation": true
+  },
+  "boundaries": {
+    "regenerate_donors": 21,
+    "markers": [
+      "INS",
+      "GCG",
+      "SST"
+    ],
+    "method": "frozen reference-trained random forest plus IO60 size-adaptive native morphology",
+    "CHGA_in_boundary_features": false,
+    "review_authority": "evidence-based agent image audit; escalate unresolved consequential choices only"
+  }
+}

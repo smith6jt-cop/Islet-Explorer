@@ -41,6 +41,12 @@
 
 barlow_features_path <- function() data_path("barlow_islet_features.csv")
 
+barlow_trajectory_features <- function(columns) {
+  features <- grep("^(core|peri)_", columns, value = TRUE)
+  labels <- sub("^(core|peri)_", "", features)
+  features[labels %in% phenotype_keep(labels)]
+}
+
 barlow_available <- function() {
   file.exists(barlow_features_path()) &&
     requireNamespace("destiny", quietly = TRUE) &&
@@ -74,7 +80,10 @@ compute_barlow_pseudotime <- function(min_cells = 1, max_cells = NA) {
   # A diffusion map on a handful of points is meaningless; fail closed.
   if (nrow(sub) < 50) return(NULL)
 
-  feat <- grep("^(core|peri)_", names(sub), value = TRUE)
+  # Use the same retained phenotype set as Scanpy and the app selectors.
+  # Stored ratios keep their original endocrine denominator, including the
+  # residual Endocrine category; only graph input columns are excluded here.
+  feat <- barlow_trajectory_features(names(sub))
   M <- as.matrix(sub[, feat, with = FALSE])
   keep_col <- apply(M, 2, function(v) is.finite(stats::sd(v)) && stats::sd(v) > 0)
   M <- M[, keep_col, drop = FALSE]
@@ -115,9 +124,9 @@ compute_barlow_pseudotime <- function(min_cells = 1, max_cells = NA) {
     ptu <- destiny::DPT(dm, tips = root)[root, ]
     pt <- ptu[back]
 
-    # Orient so that beta-cell content DECREASES with pseudotime. The diffusion
-    # map's sign is arbitrary; without this the axis can flip between thresholds
-    # and the same islet appears at both ends on consecutive settings.
+    # Retain the beta-ratio orientation convention. DPT is a root distance,
+    # invariant to eigenvector sign; this convention does not guarantee a
+    # monotonic insulin relationship or comparability between fitted ranges.
     bc <- suppressWarnings(as.numeric(sub[["core_Beta cell"]]))
     fin <- is.finite(pt) & is.finite(bc)
     if (sum(fin) > 10 &&
@@ -133,8 +142,7 @@ compute_barlow_pseudotime <- function(min_cells = 1, max_cells = NA) {
       stringsAsFactors = FALSE
     )
   }, error = function(e) {
-    message("[BARLOW] pseudotime failed for cell range [", mc, ", ",
-            if (is.finite(xc)) xc else "inf", "]: ", conditionMessage(e))
+    islet_log_event("barlow_pseudotime_failed")
     NULL
   })
 
