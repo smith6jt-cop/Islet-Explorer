@@ -4,6 +4,82 @@
 
 Companion to [`statistics.md`](statistics.md). Linked from `app/shiny_app/CLAUDE.md`.
 
+### Retired-feature correction (2026-10-14)
+
+The live trajectory previously selected **all 42 core/peri phenotype ratios**,
+even though nine phenotype categories had been retired elsewhere in the app.
+This created a cohort artifact: Acinar, ECAD+ and Structural are absent by
+construction in the added donors, while their unresolved cells accumulate in
+Unknown. Original donors retain their historical labels. For islets with
+25–1902 cells, original/added cohort membership explained 99.3% of raw DPT
+variation, and every islet in the highest pseudotime decile was an addition.
+At 25–200 cells the graph split exactly by cohort, leaving all 178 additions
+unreachable from the original-donor root.
+
+Both Scanpy and destiny now use the app's **12 retained phenotypes**, in core
+and peri separately (24 candidate columns, followed by the existing constant
+column removal). This is the existing phenotype policy, not a feature set
+chosen to maximize insulin correlation. The stored endocrine denominator,
+source data, ND-centroid root rule, beta-ratio orientation convention,
+15-neighbor cosine graph and range-dependent fitting are preserved. PAGA
+uses the same corrected graph.
+
+Measured on expanded-v2, before/after this feature correction:
+
+| Cell range | Islets in range | INS Spearman before → after | Cohort share of raw-DPT variance before → after |
+|---|---:|---:|---:|
+| 10–1902 | 2,696 | −0.169 → −0.288 | 44.6% → 2.7% |
+| 25–1902 | 1,120 | −0.265 → −0.801 | 99.3% → 1.7% |
+| 25–200 | 957 | −0.497 → −0.783 | Before: disconnected; after: 2.8% |
+
+The old 25–200 correlation includes only 779 reachable original islets;
+the corrected graph reaches all 957. These are descriptive islet-level
+diagnostics, not donor-level significance tests. The original/addition
+labeling and intensity-scale differences still require scientific validation;
+removing retired categories does not establish full method equivalence.
+
+The recent rendering/deferred-PAGA changes were checked separately: the old
+and new calculation code produced identical DPT on identical inputs. The live
+CSV matched a direct calculation within 9e-7, marker means matched within
+3e-8, and the original donors' stored marker means were exactly preserved.
+The saved September 23 composition-axis export already had a high-insulin
+tail at the 10-cell threshold. Older INS-rooted scVI columns describe a
+different method and must not be used as expected values for this fit.
+
+DPT measures distance from its chosen root; eigenvector signs cannot reverse
+that distance. Its current root and beta-ratio convention do not guarantee a
+monotonic INS curve, particularly for small islets. The correction changes
+computed pseudotime values; the historical fitted values below are not the
+expected results of the corrected 24-feature calculation.
+
+Reproduce the comparison without modifying data:
+
+```bash
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 NUMBA_NUM_THREADS=2 \
+  python scripts/tests/audit_live_trajectory_inputs.py \
+  --data-root data/development/protein-expanded-20261003-v2 \
+  --output tmp/trajectory-audit-20261014/feature-audit.json
+```
+
+### Linked islet inspection (2026-10-14)
+
+The pseudotime scatter and both UMAPs share a donor + full islet-name key.
+Hovering an islet previews it in all three plots; clicking pins it and opens
+the existing segmentation/details card. Moving away restores the pinned
+highlight. **Clear selection** and the details card's **Close** button clear it.
+Display changes preserve the pin while the islet remains in the plotted data;
+recalculating a range that excludes it clears the selection. An islet without
+UMAP coordinates can still be highlighted in the scatter. PAGA and heatmaps
+are not part of this interaction.
+
+The UMAPs are interactive Plotly widgets, while their PNG downloads still use
+the original ggplots. Browser-local SVG rings follow the actual plotted
+coordinates, including scatter jitter, zoom and resize. Hover events do not
+reach Shiny, recompute pseudotime, redraw the point cloud or change axis ranges.
+Clicks use one server-validated selection route; coordinate-nearest matching
+is not used. The interaction check is
+[`check-trajectory-links.mjs`](../../../deploy/browser/check-trajectory-links.mjs).
+
 This file is the in-repo record of the **pseudotime accuracy audit (2026-07-20/21)**, plus
 the follow-up measurements of 2026-08-14. Until then the audit's findings lived only in
 session plan files and agent memory, so a reader of this repository had no way to learn that

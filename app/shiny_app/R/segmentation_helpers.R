@@ -104,7 +104,11 @@ load_case_geojson <- function(case_id, centroid_x_um = NULL,
   }
 
   geojson <- tryCatch({
-    gj <- sf::st_read(json_path, quiet = TRUE)
+    # GDAL needs its gzip virtual filesystem to open compressed GeoJSON.
+    dsn <- if (grepl("\\.gz$", json_path)) {
+      paste0("/vsigzip/", normalizePath(json_path, mustWork = TRUE))
+    } else json_path
+    gj <- sf::st_read(dsn, quiet = TRUE)
     # Remove geographic CRS - these are actually image pixel/micron coordinates, not geographic
     # The GeoJSON export from QuPath uses pixel coordinates but sf assigns WGS84 by default
     sf::st_crs(gj) <- NA

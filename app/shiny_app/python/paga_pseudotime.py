@@ -35,10 +35,25 @@ METRIC = "cosine"
 LEIDEN_RESOLUTION = 1.0
 N_DIFFMAP_COMPS = 10
 
+# Match PHENOTYPE_RETIRED in R/00_globals.R (covered by a regression test).
+# These labels are not comparable trajectory features across the original
+# and added donors. In particular, Acinar/ECAD+/Structural are absent by
+# construction in the additions, while Unknown absorbs unresolved cells.
+RETIRED_PHENOTYPES = frozenset({
+    "Endocrine", "Acinar", "Endothelial", "T cell", "Immune", "Unknown",
+    "ECAD+", "Structural", "APCs",
+})
+
 _FEATURES_CSV = None
 _FEATURES = None
 _FIT_CACHE = OrderedDict()
 _FIT_CACHE_LIMIT = 2
+
+
+def composition_features(columns):
+    """Use retained core/peri ratios, preserving the stored endocrine denominator."""
+    return [c for c in columns if c.startswith(("core_", "peri_"))
+            and c.split("_", 1)[1] not in RETIRED_PHENOTYPES]
 
 
 def _features_path():
@@ -103,7 +118,7 @@ def _context(min_cells, max_cells):
                          f"[{mc}, {xc if xc is not None else 'inf'}]; "
                          "a diffusion map needs more"}
 
-    feat = [c for c in sub.columns if c.startswith(("core_", "peri_"))]
+    feat = composition_features(sub.columns)
     X = sub[feat].to_numpy(dtype=float)
     # Constant columns carry no information and make the cosine metric unstable.
     keep = X.std(axis=0) > 0
@@ -118,6 +133,7 @@ def _context(min_cells, max_cells):
     A = ad.AnnData(X=X, obs=obs)
     sc.pp.neighbors(A, n_neighbors=N_NEIGHBORS, metric=METRIC, use_rep="X")
     ctx = {"sc": sc, "A": A, "sub": sub, "mc": mc, "xc": xc,
+           "features": [c for c, used in zip(feat, keep) if used],
            "root": None, "pt": None, "layout": None}
     _FIT_CACHE[key] = ctx
     while len(_FIT_CACHE) > _FIT_CACHE_LIMIT:
@@ -142,6 +158,9 @@ def _ensure_dpt(ctx):
     beta = sub["core_Beta cell"].to_numpy(dtype=float)
     fin = np.isfinite(pt) & np.isfinite(beta)
     flipped = False
+    # Keep the existing beta-ratio orientation convention. DPT is a distance
+    # from the root, so an eigenvector sign change cannot reverse it; this
+    # convention also does not guarantee a monotonic insulin relationship.
     if fin.sum() > 10:
         from scipy.stats import spearmanr
         if spearmanr(pt[fin], beta[fin]).statistic > 0:

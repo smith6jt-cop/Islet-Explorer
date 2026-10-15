@@ -112,8 +112,6 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
     # ---------- Reactive state ----------
     traj <- reactiveVal(NULL)
     traj_load_attempted <- reactiveVal(FALSE)
-    traj_coord_lookup <- reactiveVal(NULL)
-    traj_plot_registered <- reactiveVal(FALSE)
     applied_cell_range <- reactiveVal(c(TRAJ_DEFAULT_MIN_CELLS, traj_max_islet_cells()))
 
     observeEvent(input$recalculate_trajectory, {
@@ -291,6 +289,8 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       n <- if (is.null(tr) || !is.null(tr$error)) 0L else tr$pseudotime_n %||% 0L
       list(
         method = sprintf("Pseudotime method: %s", engine),
+        features = paste("Trajectory features: retained core/peri phenotype ratios;",
+                         "nine retired categories excluded; stored endocrine denominator preserved"),
         scale = sprintf("Pseudotime scale: %s",
                         if (identical(input$pt_scale %||% "rank", "raw"))
                           "raw diffusion pseudotime" else "rank-normalized within fitted cohort"),
@@ -574,6 +574,10 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       # selected cell-range cohort, so it does not shift with the selected
       # feature. Do not re-rank here.
       result_df <- apply_pt_scale(result_df, input$pt_scale %||% "rank")
+      result_df$link_key <- trajectory_link_key(result_df$case_id, result_df$islet_key)
+      if (anyNA(result_df$link_key) || anyDuplicated(result_df$link_key)) {
+        stop("Trajectory islets must have unique donor and islet identities")
+      }
 
       return(result_df)
     })
@@ -618,9 +622,9 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         if (is.null(tr) || (is.null(tr$error) &&
             identical(input$traj_y_mode %||% "ratio", "ratio") &&
             is.null(input$traj_ratio_type))) {
-          return(plotly_islet_empty("Loading data"))
+          return(trajectory_link_plot(plotly_islet_empty("Loading data"), ns))
         }
-        return(plotly_islet_empty("No trajectory data available"))
+        return(trajectory_link_plot(plotly_islet_empty("No trajectory data available"), ns))
       }
 
 
@@ -672,11 +676,11 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       pt_lim <- pt_ext$lim
 
       # Create base aesthetic mapping with cell count for hover
-      df$hover_cells <- paste0("Pseudotime: ", signif(trend_df$pt, 3),
+      df$hover_cells <- paste0("Donor: ", df$case_id, "<br>Islet: ", df$islet_key,
+              "<br>Pseudotime: ", signif(trend_df$pt, 3),
               "<br>Value: ", signif(trend_df$value, 3),
               "<br>Cells: ", df$total_cells)
-      df$click_key <- paste(df$case_id, df$islet_key, sep = "|")
-      aes_mapping <- aes(x = pt, y = value, text = hover_cells, key = click_key)
+      aes_mapping <- aes(x = pt, y = value, text = hover_cells, key = link_key)
 
       # Add color aesthetic
       if (color_by == "donor_status") {
@@ -840,20 +844,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       # parameter) and collapse duplicate donor_status entries in hover text.
       p <- strip_plotly_color_leak(p)
 
-      # Store coordinate lookup as fallback for click handling
-      if ("combined_islet_id" %in% colnames(df) && "case_id" %in% colnames(df)) {
-        traj_coord_lookup(data.frame(
-          pt                = df$pt,
-          value             = df$value,
-          case_id           = df$case_id,
-          islet_key         = df$islet_key,
-          combined_islet_id = df$combined_islet_id,
-          donor_status      = df$donor_status,
-          stringsAsFactors  = FALSE
-        ))
-      }
-
-      # Layout and register click events
+      # Layout and attach browser-local linked highlighting.
       fonts <- plotly_islet_fonts()
       p <- p %>%
         layout(
@@ -870,100 +861,56 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
           legend = list(font = fonts$legend_text,
                         title = list(font = fonts$legend_title))
         ) %>%
-        plotly_islet_config("trajectory_scatter") %>%
-        event_register("plotly_click") %>%
-        islet_click_bridge(ns("traj_native_click"))
-      # Invalidating this flag schedules the click observer for a later reactive
-      # pass, after renderPlotly() has recorded the registered source in the
-      # session. Keeping event_data() dormant until then avoids plotly's deferred
-      # false-positive registration warning.
-      traj_plot_registered(TRUE)
-      p
+        plotly_islet_config("trajectory_scatter")
+      trajectory_link_plot(p, ns)
     })
 
-    # ---------- Click handler for trajectory scatter ----------
-    # Do not ask plotly for this event while the Trajectory tab (and therefore
-    # its suspended plot output) is still hidden. event_data() schedules its
-    # registration check for the end of the flush, outside suppressWarnings(),
-    # so probing it at startup produces a false warning even though the rendered
-    # plot correctly calls event_register().
-    traj_click_event <- reactive({
+    # One validated selection route for all three linked plots. Hover stays in JS.
+    linked_selection_key <- function() {
+      info <- selected_islet()
+      if (is.null(info)) return(NULL)
+      key <- trajectory_link_key(info$case_id, info$islet_key)
+      if (length(key) != 1L || is.na(key)) NULL else key
+    }
+    send_linked_state <- function() {
+      session$sendCustomMessage(ns("linked_state"), list(
+        key = linked_selection_key(), active = identical(active_tab(), "Trajectory")))
+    }
+    observeEvent(input$linked_click, {
       req(identical(active_tab(), "Trajectory"))
-      req(isTRUE(traj_plot_registered()))
-      event_data("plotly_click", source = ns("traj_scatter"))
-    })
-    observeEvent(traj_click_event(), {
-      click_data <- traj_click_event()
-      if (is.null(click_data)) return()
-
-      # --- Priority 1: Parse key (format "case_id|islet_key") ---
-      case_id   <- NULL
-      islet_key <- NULL
-      click_key <- click_data$key
-      if (!is.null(click_key) && length(click_key) > 0 && !is.na(click_key[1]) && nzchar(click_key[1])) {
-        key_parts <- strsplit(as.character(click_key[1]), "\\|")[[1]]
-        if (length(key_parts) == 2L &&
-            islet_safe_path_segment(key_parts[1]) &&
-            islet_safe_path_segment(key_parts[2])) {
-          case_id   <- key_parts[1]
-          islet_key <- key_parts[2]
-        } else {
-          islet_log_validation_failure("islet_key_invalid")
-        }
-      }
-
-      # --- Priority 2: Fallback to customdata ---
-      if (is.null(case_id) || is.null(islet_key)) {
-        custom <- click_data$customdata
-        if (!is.null(custom) && length(custom) >= 2) {
-          case_id   <- custom[[1]]
-          islet_key <- custom[[2]]
-        }
-      }
-
-      # --- Priority 3: Fallback to coordinate lookup ---
-      if (is.null(case_id) || is.null(islet_key) || is.na(case_id) || is.na(islet_key)) {
-        lookup <- traj_coord_lookup()
-        if (!is.null(lookup) && nrow(lookup) > 0) {
-          # Tolerances are scaled to each axis's actual span rather than a flat
-          # 0.01, which only made sense while pt was always rank-normalized to
-          # [0, 1]. On the "raw" DPT scale the span is much narrower, and a
-          # fixed 0.01 would match nearly the whole axis.
-          pt_span  <- diff(range(lookup$pt, na.rm = TRUE))
-          val_span <- diff(range(lookup$value, na.rm = TRUE))
-          if (!is.finite(pt_span)  || pt_span  <= 0) pt_span  <- 1
-          if (!is.finite(val_span) || val_span <= 0) val_span <- 1
-          matches <- which(
-            abs(lookup$pt - click_data$x) < 0.01 * pt_span &
-            abs(lookup$value - click_data$y) < 0.01 * val_span
-          )
-          if (length(matches) > 0) {
-            idx <- matches[1]
-            case_id   <- lookup$case_id[idx]
-            islet_key <- lookup$islet_key[idx]
-          }
-        }
-      }
-
-      # Centroid lookup + zero-pad fallback + donor join + selected_islet() —
-      # shared with the Plot handler and the native-click bridge.
-      select_islet_from_key(case_id, islet_key, prepared, selected_islet)
-    }, ignoreInit = TRUE)
-
-    # macOS-proof native-click bridge (see islet_click_bridge in 00_globals.R).
-    # Fires on a native click even when plotly_click is suppressed by plotly's
-    # click/drag discrimination on macOS.
-    observeEvent(input$traj_native_click, {
-      nc <- input$traj_native_click
-      if (is.null(nc) || is.null(nc$key) || !nzchar(as.character(nc$key)[1])) return()
-      parts <- strsplit(as.character(nc$key)[1], "\\|")[[1]]
-      if (length(parts) != 2L ||
-          !islet_safe_path_segment(parts[1]) ||
-          !islet_safe_path_segment(parts[2])) {
-        islet_log_validation_failure("islet_key_invalid")
+      event <- input$linked_click
+      df <- traj_data_clean()
+      key <- event$key
+      sources <- ns(c("traj_scatter", "traj_umap_donor", "traj_umap_feature"))
+      if (!is.character(key) || length(key) != 1L || is.na(key) ||
+          !is.character(event$source) || length(event$source) != 1L ||
+          !(event$source %in% sources) || is.null(df) || !(key %in% df$link_key)) {
+        islet_log_validation_failure("trajectory_link_invalid")
+        send_linked_state()
         return()
       }
-      select_islet_from_key(parts[1], parts[2], prepared, selected_islet)
+      row <- df[match(key, df$link_key), , drop = FALSE]
+      select_islet_from_key(row$case_id, row$islet_key, prepared, selected_islet)
+      send_linked_state()
+    }, ignoreInit = TRUE)
+    observeEvent(input$linked_ready, { send_linked_state() }, ignoreInit = TRUE)
+    observe({
+      active <- identical(active_tab(), "Trajectory")
+      key <- linked_selection_key()
+      if (active && !is.null(key)) {
+        df <- traj_data_clean()
+        # A transient empty feature selector must not discard a pinned islet.
+        # Once a feature is valid, an empty result means the pin was filtered out.
+        if ((!is.null(df) && !(key %in% df$link_key)) ||
+            (is.null(df) && !is.null(traj_validate()))) {
+          selected_islet(NULL)
+        }
+      }
+      send_linked_state()
+    })
+    observeEvent(input$clear_link_selection, {
+      selected_islet(NULL)
+      send_linked_state()
     })
 
     # ---------- Segmentation viewer panel ----------
@@ -1220,7 +1167,37 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         theme(axis.text = element_blank(), axis.ticks = element_blank(),
               panel.grid = element_blank(), axis.line = element_blank())
     })
-    output$traj_umap_donor <- renderPlot({ traj_umap_donor_plot() })
+    interactive_umap <- function(g, source) {
+      df <- traj_data_clean()
+      if (is.null(g) || is.null(df) || !nrow(df)) {
+        return(trajectory_link_plot(plotly_islet_empty("No trajectory data available"), ns))
+      }
+      if (!any(is.finite(df$umap_1) & is.finite(df$umap_2))) {
+        return(trajectory_link_plot(plotly_islet_empty("UMAP coordinates not available"), ns))
+      }
+      # Add interaction metadata only to the screen version; PNGs retain the
+      # original ggplot object and never contain selection rings or tooltips.
+      g$data$link_hover <- paste0("Donor: ", df$case_id, "<br>Islet: ", df$islet_key,
+        "<br>Status: ", df$donor_status, "<br>Pseudotime: ", signif(df$pt, 3),
+        "<br>", selected_measure_label(), ": ", signif(df$value, 3))
+      g$mapping$key <- ggplot2::aes(key = link_key)$key
+      g$mapping$text <- ggplot2::aes(text = link_hover)$text
+      g <- g + labs(title = NULL)
+      fonts <- plotly_islet_fonts()
+      p <- ggplotly(g, tooltip = "text", source = ns(source)) %>%
+        layout(margin = list(l = 40, r = 15, t = 10, b = 40),
+               font = fonts$global,
+               xaxis = list(title = list(font = fonts$axis_title)),
+               yaxis = list(title = list(font = fonts$axis_title),
+                            scaleanchor = "x", scaleratio = 1),
+               legend = list(font = fonts$legend_text,
+                             title = list(font = fonts$legend_title))) %>%
+        plotly_islet_config(paste0("trajectory_", source))
+      trajectory_link_plot(p, ns)
+    }
+    output$traj_umap_donor <- renderPlotly({
+      interactive_umap(traj_umap_donor_plot(), "traj_umap_donor")
+    })
     output$dl_umap_donor <- downloadHandler(
       filename = function() islet_png_filename("trajectory_umap_donor"),
       content = function(file) {
@@ -1232,6 +1209,9 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
     )
 
     # ---------- UMAP: Selected Feature ----------
+    output$traj_umap_feature_title <- renderText({
+      paste("UMAP:", selected_measure_label())
+    })
     traj_umap_feature_plot <- reactive({
       df <- traj_data_clean()
       if (is.null(df) || nrow(df) == 0) return(NULL)
@@ -1265,7 +1245,9 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
 
       g
     })
-    output$traj_umap_feature <- renderPlot({ traj_umap_feature_plot() })
+    output$traj_umap_feature <- renderPlotly({
+      interactive_umap(traj_umap_feature_plot(), "traj_umap_feature")
+    })
     output$dl_umap_feature <- downloadHandler(
       filename = function() islet_png_filename("trajectory_umap_feature"),
       content = function(file) {
@@ -1578,6 +1560,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         write_islet_csv(file, out, islet_csv_header(
           "Trajectory — multi-feature expression along pseudotime",
           pr$method,
+          pr$features,
           pr$scale,
           pr$range,
           paste("Markers:", paste(input$multi_heatmap_markers %||% "(none)", collapse = ", ")),
@@ -1611,6 +1594,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         write_islet_csv(file, out, islet_csv_header(
           "Trajectory — UMAP coordinates and per-islet trajectory values",
           pr$method,
+          pr$features,
           pr$scale,
           pr$measure,
           pr$range,

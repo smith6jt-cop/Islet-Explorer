@@ -44,7 +44,13 @@ read as a negative result.
   reconstruction. Thus phenotype proportions, cell labels, neighborhood
   summaries, and the phenotype-count inputs to trajectory span two labeling
   procedures. Identical column names and complete coverage do not make those
-  calls method-equivalent.
+  calls method-equivalent. The live trajectory now excludes the nine retired
+  categories from both core and peri graph inputs. Previously those categories
+  nearly separated the original and added donors by themselves (99.3% of raw
+  DPT variance at 25–1902 cells was associated with cohort membership). The
+  corrected graph uses the same 12 retained categories as the app selectors;
+  residual comparability limits remain. See the
+  [trajectory input audit](../app/shiny_app/docs/trajectory.md#retired-feature-correction-2026-10-14).
 - **Marker intensity scale:** the original `X` values preserve scimap's
   per-image piecewise min–max rescaling using historical gates. Additions use
   per-donor rescaling against recovered gates, including explicit handling for

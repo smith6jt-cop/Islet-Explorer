@@ -158,3 +158,21 @@ test_that("GeoPackage loading applies an indexed bounding-box filter", {
   expect_equal(nrow(cropped), 1L)
   expect_equal(cropped$id, "near")
 })
+
+test_that("development segmentation reads compressed GeoJSON for padded donor IDs", {
+  skip_if_not_installed("sf")
+  root <- tempfile("islet-compressed-geometry-")
+  dir.create(file.path(root, "gson"), recursive = TRUE)
+  on.exit(unlink(root, recursive = TRUE), add = TRUE)
+  con <- gzfile(file.path(root, "gson", "0078.geojson.gz"), "wt")
+  writeLines('{"type":"FeatureCollection","features":[{"type":"Feature","properties":{"name":"Islet_1234"},"geometry":{"type":"Polygon","coordinates":[[[0,0],[2,0],[2,2],[0,2],[0,0]]]}}]}', con)
+  close(con)
+  env <- make_backend_env(root)
+  env$islet_is_production <- function() FALSE
+  env$SF_AVAILABLE <- TRUE
+  sys.source(.find_source("R/segmentation_helpers.R"), envir = env)
+  geometry <- env$load_case_geojson("78")
+  expect_equal(nrow(geometry), 1L)
+  expect_identical(geometry$name, "Islet_1234")
+  expect_true(is.na(sf::st_crs(geometry)))
+})

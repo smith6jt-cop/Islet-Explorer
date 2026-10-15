@@ -1,5 +1,26 @@
 # Browser acceptance
 
+## Linked trajectory inspection
+
+The focused regression check for the current expanded-cohort development app
+uses an isolated Shiny worker (port 3841 by default):
+
+```bash
+node deploy/browser/check-trajectory-links.mjs \
+  --url http://127.0.0.1:3841/ \
+  --output /tmp/trajectory-links-check.json
+```
+
+It checks bidirectional hover across all three plots, exact donor/islet identity,
+browser-only hover latency below 100 ms, pin/clear/close behavior, preservation
+through display changes and tab switching, zoom/resize, missing UMAP coordinates,
+native click/drag deduplication, range exclusion, and the 3000 × 2100 UMAP PNGs.
+The test expects the expanded cohort, including donor 78 and long islet names.
+Its JSON and screenshots are local test artifacts; screenshots contain plotted
+scientific data and should stay in the restricted local evidence directory.
+
+## Full application checks
+
 Use `check-app.mjs` below for the restored 15-donor development app and for a
 matching selected release. Its URL can be the shared local development URL or
 an isolated loopback Shiny worker.

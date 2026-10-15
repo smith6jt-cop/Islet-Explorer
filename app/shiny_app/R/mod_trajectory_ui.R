@@ -1,9 +1,11 @@
 trajectory_ui <- function(id) {
   ns <- NS(id)
   tagList(
+    singleton(tags$script(src = "trajectory-links.js")),
     tags$style(HTML(paste0(
       ".trajectory-controls .form-group { margin-bottom: 6px; } ",
       ".trajectory-controls h5 { margin-bottom: 6px; } ",
+      ".trajectory-linked-plot.html-widget.plotly { padding-top: 0; margin-top: 28px; } ",
       ".trajectory-control-panel { border: 1px solid #cbd5df; border-radius: 6px; ",
       "padding: 0 12px; margin-bottom: 12px; background: #f8fafc; } ",
       ".trajectory-control-panel > summary { cursor: pointer; list-style: none; ",
@@ -22,7 +24,10 @@ trajectory_ui <- function(id) {
       ".trajectory-control-panel .form-group:last-child { margin-bottom: 8px; }"
     ))),
     tab_help("Trajectory help", "show_phenotype_rules_traj",
-      "Click any point on the pseudotime scatter plot to view the segmentation map for that islet."),
+      "Hover over an islet in either UMAP or the pseudotime scatter to highlight it across all three plots. Click to select it and view its segmentation map."),
+    div(style = "display: flex; align-items: center; gap: 12px; margin-bottom: 12px;",
+      span("Hover to highlight across plots; click to select and view details."),
+      actionButton(ns("clear_link_selection"), "Clear selection", class = "btn-sm btn-outline-secondary")),
     fluidRow(
       # Left card: Scatterplot and heatmaps (narrowed from col-8)
       column(7,
@@ -33,6 +38,8 @@ trajectory_ui <- function(id) {
             column(8,
               tags$p(class = "text-muted",
                 "Phenotype counts preserve the original 15 donors' saved labels; the six additions use reviewed reconstructed rules."),
+              tags$p(class = "text-muted",
+                "Trajectory uses the 12 retained phenotypes in core and peri regions. Retired categories are excluded from the calculation."),
               sliderInput(ns("cell_range"), "Cells per islet:",
                           min = 1, max = traj_max_islet_cells(),
                           value = c(TRAJ_DEFAULT_MIN_CELLS, traj_max_islet_cells()),
@@ -123,7 +130,8 @@ trajectory_ui <- function(id) {
               )
             )
           ),
-          plotlyOutput(ns("traj_scatter"), height = 850),
+          tagAppendAttributes(plotlyOutput(ns("traj_scatter"), height = 850),
+                              class = "trajectory-linked-plot"),
           plotlyOutput(ns("traj_heatmap"), height = 100)
         )
       ),
@@ -131,13 +139,16 @@ trajectory_ui <- function(id) {
       column(5,
         div(class = "card", style = "padding: 15px; margin-bottom: 20px;",
           h5("UMAP: Donor Status", style = "font-size: 13px; margin-top: 0;"),
-          plotOutput(ns("traj_umap_donor"), height = 320),
+          tagAppendAttributes(plotlyOutput(ns("traj_umap_donor"), height = 320),
+                              class = "trajectory-linked-plot"),
           div(style = "text-align: right; margin-top: 6px;",
             downloadButton(ns("dl_umap_donor"), "Download PNG",
                            class = "btn-sm btn-outline-primary")),
           hr(style = "margin: 12px 0;"),
-          h5("UMAP: Selected Feature", style = "font-size: 13px; margin-top: 0;"),
-          plotOutput(ns("traj_umap_feature"), height = 320),
+          h5(textOutput(ns("traj_umap_feature_title"), inline = TRUE),
+             style = "font-size: 13px; margin-top: 0;"),
+          tagAppendAttributes(plotlyOutput(ns("traj_umap_feature"), height = 320),
+                              class = "trajectory-linked-plot"),
           div(style = "text-align: right; margin-top: 6px;",
             downloadButton(ns("dl_umap_csv"), "Download CSV",
                            class = "btn-sm btn-outline-secondary"),
