@@ -2,6 +2,15 @@
 
 > **2026-10-15:** donor 78 (HDL078 / HPAP-078) is removed from the app. `ISLET_EXCLUDED_DONORS` in `00_globals.R` (kept in step with `scripts/excluded_donors.csv` by a pipeline test) makes `load_shared_prepared_data()` refuse a data root that contains it, and the Viewer never lists its image. The local app is offline at the owner's direction until the reprocessed root is accepted; the last served root was `data/development/protein-expanded-20261015-v3/`.
 
+> **2026-10-16 uniform root (awaiting owner review):** `data/development/uniform-20donor-20261016-v1/`, built
+> by `scripts/uniform/assemble_uniform.py`. All 20 donors are retyped with the Islet-Explorer-Senior method. Rows
+> are endocrine objects of three classes (`Islet_N`, `Cluster_N`, `Single_N`; `object_class`). An app-wide
+> checkbox group `object_classes` (app.R) filters `prepared()` via `filter_prepared_by_object_class()`; the
+> Trajectory tab passes it to `compute_scanpy_pseudotime` / `compute_barlow_pseudotime` / `paga_result`.
+> `add_islet_key` and `trajectory_link_key` accept all three prefixes (`ISLET_KEY_PATTERN`). Endocrine, T cell
+> and Immune are real classes there and no longer retired; `Exocrine` is new. A root without `object_class` is
+> treated as islets only.
+
 > **2026-10-03 implementation:** the expanded cohort preserves the original source data and uses Harmony on protein PCA for spatial UMAP and Leiden. The live trajectory uses endocrine-normalized composition features; marker expression is the mean gate-rescaled protein signal. Earlier scVI descriptions below are historical. See the [current implementation record](../../docs/protein_expansion_20261003.md).
 
 Deep details for the modular Shiny app under `app/shiny_app/`. The top-level `CLAUDE.md` covers the entrypoint architecture, root-level outputs, shared reactive state, and data loading. This file documents per-tab features and conventions.

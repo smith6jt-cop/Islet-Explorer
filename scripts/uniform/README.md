@@ -218,6 +218,29 @@ Owner rulings later on 2026-10-16, applied:
 Run of 2026-10-16 after these rulings: `$OUT/typing/summary.csv` (per image: kept cells, Beta / Alpha / Delta,
 Excluded and its three kinds, Immune by definition, structure calls, Exocrine, refined Unresolved).
 
+## App root (P4), 2026-10-16
+
+```bash
+$PY scripts/uniform/assemble_uniform.py --run $OUT --donor-source data/development/protein-expanded-20261015-v3 \
+    --output data/development/uniform-20donor-<date>-v<N> --report-root tmp/uniform-20donor-<date>-v<N>
+```
+
+Every endocrine object (Islet_N, Cluster_N, Single_N) is a row with `object_class`. Its core is the cells whose
+centroid it contains. Its peri band is the 20 um ring inside Tissue, minus every endocrine object. Cells are
+shown under the app's labels: Beta / Alpha / Delta cell; Endocrine; CD8a Tcell and CD4 Tcell (Senior's
+T-CD8 / T-CD4-helper); T cell; Macrophage; Immune (CD45-only or supporting tier); Blood Vessel; Neural;
+Lymphatic; and the new Exocrine. Excluded cells and cells without a nucleus are counted in `census.csv` and
+kept out of every table. Hormone positivity is the image's hormone level on the scaled hormone (D4), and the
+regional and per-cell `_pos` flags are scaled >= 0.10.
+
+Two things are carried from v3 because they were never computed from cells: donor demographics and
+autoantibodies, and the viewer image links. The embedding is Harmony protein PCA, UMAP and Leiden
+(`build_protein_embedding.fit_embedding`). Seven objects made only of cells whose nucleus fills the cell have
+no cytoplasmic mean; X keeps the NaN, and the embedding is fitted with the marker's cohort mean in its place
+(`embedding_imputation.json`).
+
+The app reads `object_class` through an app-wide "Endocrine objects" selector (Islet / Cluster / Single).
+
 ## Canary, 2026-10-15
 
 Aab_6505 and ND_6232 went through every step. Cells matched to the earlier typing show what the first fit did with

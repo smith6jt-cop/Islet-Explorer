@@ -29,6 +29,17 @@ from the endocrine and structure objects, Senior's structure, endocrine, immune 
 immune subtypes. Nerve, blood-vessel and lymphatic cells come only from the structure objects. The first run on
 all 20 images is in `$OUT/typing/`; see [the README](../scripts/uniform/README.md#cell-typing-islet-explorer-seniors-method-owner-2026-10-16).
 
+**App root, 2026-10-16 (P4 built, awaiting review).** `scripts/uniform/assemble_uniform.py` builds the whole
+cohort from the uniform run, with nothing appended to the frozen release:
+`data/development/uniform-20donor-20261016-v1/`. It holds 20 donors and 10,113 endocrine objects (1,491 islets,
+3,415 clusters and 5,207 singles), of which 9,437 have analysed cells in both core and 20 um band. That is 3.08
+million analysed cells, with 28,247 Excluded and 320,737 without a nucleus. The app serves all three object
+classes behind an app-wide selector (A5). Local checks: R tests pass. The browser harness passes 37 of 45 checks,
+including the 20-donor census, no donor 78 and the Harmony method. The four Viewer checks need the Range-capable
+image route that only the nginx deployment provides. The other four (PAGA render and download, Plot vocabulary,
+Trajectory contrast) also failed on v3, because the harness predates the 2026-10-14 app change. The service
+stays stopped until the owner accepts the root (P6); the build report is `tmp/uniform-20donor-20261016-v1/`.
+
 ## Cohort
 
 | Status | Original 15 | Additions |
