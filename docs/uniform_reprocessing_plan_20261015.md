@@ -97,10 +97,13 @@ is accepted.
 |---|---|---|
 | D1 | Cell segmentation | **Decided 2026-10-15:** InstanSeg 0.1.1 on 9 channels for all 20 images; the additions are re-run too, since they used 22 channels. |
 | D2 | Islet boundaries | **Decided 2026-10-15:** Senior's v3 islet method on all 20 images, CHGA in CD99's role, existing Tissue outlines reused; owner review of all 20. |
-| D3 | Cell-type rules | Freeze one table before typing. Either keep `protein_phenotype_rules.csv` as accepted on 2026-10-03, or revise it once (for example explicit Acinar, ECAD+ and Structural rules, or the deferred CHGA/CD45/VIM/LGALS3/CD44/PGP9.5/GAP43/CD35/NaKATPase enhancement) and accept it again. |
-| D4 | Hormone and regional immune positivity | Keep mean + 1.5 SD for every donor, which preserves the current definitions, or switch to gate-based positivity with the recovered gates so these measures match typing. |
-| D5 | Marker gates | Keep the 31 recovered thresholds as fixed parameters. They were set interactively in November 2025; re-gating would add a new manual step. |
+| D3 | Cell-type rules | **Decided 2026-10-16:** use Islet-Explorer-Senior's cell typing as far as this panel allows. Earlier recommendation: freeze one table before typing. Either keep `protein_phenotype_rules.csv` as accepted on 2026-10-03, or revise it once (for example explicit Acinar, ECAD+ and Structural rules, or the deferred CHGA/CD45/VIM/LGALS3/CD44/PGP9.5/GAP43/CD35/NaKATPase enhancement) and accept it again. |
+| D4 | Hormone and regional immune positivity | **Decided 2026-10-16:** as in Senior's typing. Earlier options: keep mean + 1.5 SD for every donor, which preserves the current definitions, or switch to gate-based positivity with the recovered gates so these measures match typing. |
+| D5 | Marker gates | **Decided 2026-10-16:** as in Senior's typing. Earlier recommendation: keep the 31 recovered thresholds as fixed parameters. They were set interactively in November 2025; re-gating would add a new manual step. |
 | D6 | What the app serves meanwhile | **Decided 2026-10-15: offline** until the reprocessed root is accepted (P6). |
+| A3 | Endocrine object categories | **Decided 2026-10-16: keep** EndocrineSingle = one cell; EndocrineCluster = two or more cells, mean diameter under 35 µm; Islet = two or more cells, 35 µm or more. |
+| A5 | App analysis unit | **Decided 2026-10-16:** all three categories, with a filter. |
+| A6 | Structures | **Decided 2026-10-16:** drop the cell classes that stand for nerve, blood vessel or lymphatic and use structure objects instead; the five additions already have such objects. |
 
 ## Engineering before any compute
 
