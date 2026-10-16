@@ -5,7 +5,7 @@ trajectory_link_key <- function(case_id, islet_key) {
   islet <- sub("^Islet_Islet_", "Islet_", as.character(islet_key))
   donor <- sub("^0+(?=[0-9])", "", donor, perl = TRUE)
   valid <- !is.na(donor) & !is.na(islet) &
-    grepl("^[0-9]+$", donor) & grepl("^Islet_[0-9]+$", islet)
+    grepl("^[0-9]+$", donor) & grepl("^(Islet|Cluster|Single)_[0-9]+$", islet)
   out <- rep(NA_character_, length(donor))
   out[valid] <- paste(donor[valid], islet[valid], sep = "|")
   out

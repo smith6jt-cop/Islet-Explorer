@@ -65,17 +65,20 @@ barlow_features <- function() {
 #'
 #' Returns a data.frame(islet_id, case_id, donor_status, pseudotime) covering
 #' ONLY the islets in range, or NULL when unavailable. Cached per range.
-compute_barlow_pseudotime <- function(min_cells = 1, max_cells = NA) {
+compute_barlow_pseudotime <- function(min_cells = 1, max_cells = NA, object_classes = NULL) {
   mc <- suppressWarnings(as.numeric(min_cells))
   if (!is.finite(mc) || mc < 1) mc <- 1
   xc <- suppressWarnings(as.numeric(max_cells))
-  key <- paste0("pt_", mc, "_", if (is.finite(xc)) xc else "inf")
+  key <- paste0("pt_", mc, "_", if (is.finite(xc)) xc else "inf", object_class_key(object_classes))
   if (!is.null(.barlow_cache[[key]])) return(.barlow_cache[[key]])
 
   d <- barlow_features()
   if (is.null(d) || !nrow(d)) return(NULL)
   keep <- d$total_cells_core >= mc
   if (is.finite(xc)) keep <- keep & d$total_cells_core <= xc
+  if (!is.null(object_classes) && "object_class" %in% names(d)) {
+    keep <- keep & d$object_class %in% object_classes
+  }
   sub <- d[keep, , drop = FALSE]
   # A diffusion map on a handful of points is meaningless; fail closed.
   if (nrow(sub) < 50) return(NULL)

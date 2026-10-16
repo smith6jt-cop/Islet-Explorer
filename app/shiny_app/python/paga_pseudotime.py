@@ -40,8 +40,7 @@ N_DIFFMAP_COMPS = 10
 # and added donors. In particular, Acinar/ECAD+/Structural are absent by
 # construction in the additions, while Unknown absorbs unresolved cells.
 RETIRED_PHENOTYPES = frozenset({
-    "Endocrine", "Acinar", "Endothelial", "T cell", "Immune", "Unknown",
-    "ECAD+", "Structural", "APCs",
+    "Acinar", "Endothelial", "Unknown", "ECAD+", "Structural", "APCs",
 })
 
 _FEATURES_CSV = None
@@ -86,11 +85,21 @@ def _range_values(min_cells, max_cells):
     return mc, xc
 
 
-def _context(min_cells, max_cells):
+def _classes(object_classes):
+    """The endocrine-object classes to fit on (Islet / EndocrineCluster / EndocrineSingle); None = all."""
+    if object_classes is None:
+        return None
+    if isinstance(object_classes, str):
+        object_classes = [object_classes]
+    return tuple(sorted(str(c) for c in object_classes))
+
+
+def _context(min_cells, max_cells, object_classes=None):
     """Cache the selected cohort and its neighbor graph for DPT and PAGA."""
     global _FEATURES
     mc, xc = _range_values(min_cells, max_cells)
-    key = (mc, xc)
+    classes = _classes(object_classes)
+    key = (mc, xc, classes)
     if key in _FIT_CACHE:
         _FIT_CACHE.move_to_end(key)
         return _FIT_CACHE[key]
@@ -112,6 +121,8 @@ def _context(min_cells, max_cells):
     sel = n >= mc
     if xc is not None:
         sel &= n <= xc
+    if classes is not None and "object_class" in b.columns:
+        sel &= b["object_class"].astype(str).isin(classes)
     sub = b[sel].reset_index(drop=True)
     if len(sub) < 50:
         return {"error": f"only {len(sub)} islets in cell range "
@@ -170,9 +181,9 @@ def _ensure_dpt(ctx):
     return pt
 
 
-def compute_pseudotime(min_cells=1, max_cells=None):
+def compute_pseudotime(min_cells=1, max_cells=None, object_classes=None):
     """Return only the DPT axis; leave clustering and force layout deferred."""
-    ctx = _context(min_cells, max_cells)
+    ctx = _context(min_cells, max_cells, object_classes)
     if "error" in ctx:
         return ctx
     pt = _ensure_dpt(ctx)
@@ -183,9 +194,9 @@ def compute_pseudotime(min_cells=1, max_cells=None):
             "pseudotime": pt.astype(float).tolist()}
 
 
-def compute(min_cells=1, max_cells=None):
+def compute(min_cells=1, max_cells=None, object_classes=None):
     """Return DPT plus the PAGA-seeded force-directed layout and diagnostics."""
-    ctx = _context(min_cells, max_cells)
+    ctx = _context(min_cells, max_cells, object_classes)
     if "error" in ctx:
         return ctx
     sc, A, sub = ctx["sc"], ctx["A"], ctx["sub"]

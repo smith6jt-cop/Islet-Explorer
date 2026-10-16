@@ -52,18 +52,19 @@ paga_available <- function() {
 #' Compute only the Scanpy diffusion-pseudotime axis for a cell-count range.
 #' Keep Leiden/PAGA/ForceAtlas2 out of the initial scatter render; the graph
 #' layout is computed separately only when the user requests that card.
-compute_scanpy_pseudotime <- function(min_cells = 1, max_cells = NA) {
+compute_scanpy_pseudotime <- function(min_cells = 1, max_cells = NA, object_classes = NULL) {
   mc <- suppressWarnings(as.numeric(min_cells))
   if (!is.finite(mc) || mc < 1) mc <- 1
   xc <- suppressWarnings(as.numeric(max_cells))
-  key <- paste0("dpt_", mc, "_", if (is.finite(xc)) xc else "inf")
+  key <- paste0("dpt_", mc, "_", if (is.finite(xc)) xc else "inf", object_class_key(object_classes))
   cached <- .scanpy_pt_cache[[key]]
   if (!is.null(cached)) return(if (isTRUE(cached$failed)) NULL else cached$data)
   if (!paga_available()) return(NULL)
   m <- .paga_module()
   if (is.null(m)) return(NULL)
 
-  res <- tryCatch(m$compute_pseudotime(mc, if (is.finite(xc)) xc else NULL),
+  res <- tryCatch(m$compute_pseudotime(mc, if (is.finite(xc)) xc else NULL,
+                                       object_class_arg(object_classes)),
                   error = function(e) {
                     islet_log_event("scanpy_dpt_failed")
                     NULL
@@ -84,17 +85,18 @@ compute_scanpy_pseudotime <- function(min_cells = 1, max_cells = NA) {
 #'
 #' Returns data.frame(islet_id, case_id, donor_status, leiden, fa_1, fa_2,
 #' pseudotime) with attributes n_clusters / layout_key / root_donor, or NULL.
-compute_paga_layout <- function(min_cells = 1, max_cells = NA) {
+compute_paga_layout <- function(min_cells = 1, max_cells = NA, object_classes = NULL) {
   mc <- suppressWarnings(as.numeric(min_cells))
   if (!is.finite(mc) || mc < 1) mc <- 1
   xc <- suppressWarnings(as.numeric(max_cells))
-  key <- paste0("paga_", mc, "_", if (is.finite(xc)) xc else "inf")
+  key <- paste0("paga_", mc, "_", if (is.finite(xc)) xc else "inf", object_class_key(object_classes))
   if (!is.null(.paga_cache[[key]])) return(.paga_cache[[key]])
   if (!paga_available()) return(NULL)
   m <- .paga_module()
   if (is.null(m)) return(NULL)
 
-  res <- tryCatch(m$compute(mc, if (is.finite(xc)) xc else NULL), error = function(e) {
+  res <- tryCatch(m$compute(mc, if (is.finite(xc)) xc else NULL,
+                            object_class_arg(object_classes)), error = function(e) {
     islet_log_event("paga_compute_failed")
     NULL
   })
@@ -126,7 +128,7 @@ compute_paga_layout <- function(min_cells = 1, max_cells = NA) {
 }
 
 # `NA` is the cached-failure sentinel; callers want NULL.
-paga_result <- function(min_cells = 1, max_cells = NA) {
-  r <- compute_paga_layout(min_cells, max_cells)
+paga_result <- function(min_cells = 1, max_cells = NA, object_classes = NULL) {
+  r <- compute_paga_layout(min_cells, max_cells, object_classes)
   if (is.null(r) || (length(r) == 1 && is.na(r))) NULL else r
 }

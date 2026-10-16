@@ -824,11 +824,21 @@ phenotype_rules_modal_ui <- function() {
     return(shiny::modalDialog(
       title = "Cell Phenotype Rules", size = "l", easyClose = TRUE,
       footer = shiny::modalButton("Close"),
-      shiny::tags$p("The original 15 donors retain their saved phenotype labels. ",
-        "The rules below were accepted for the added donors 6090, 6232, 6520, 6539 and 6558."),
-      shiny::tags$p("A marker is positive at a gate-rescaled signal of 0.5 or higher. ",
-        "Rules are applied from parent to child. Conflicting lineages and unsupported cells remain Unknown; ",
-        "conflicting subtypes retain their parent label. These rules do not assign Acinar, ECAD+ or Structural."),
+      if (file.exists(data_path("uniform_release.json"))) shiny::tagList(
+        shiny::tags$p("All 20 donors are typed by one workflow: the Islet-Explorer-Senior cell typing, ported to ",
+          "this CODEX panel. Marker values are spillover-corrected (REDSEA), aligned between images (UniFORM) and ",
+          "put on one cohort scale from background to the 99.9th percentile."),
+        shiny::tags$p("Endocrine cells are called only inside an endocrine object (Islet, Cluster or Single); ",
+          "nerve, blood-vessel and lymphatic cells only inside the matching structure object. Immune rules count a ",
+          "marker at 0.10 or above on the cohort scale. Every other cell is Exocrine; exocrine cells inside an ",
+          "endocrine object and cells without a nucleus are left out of the analysis.")
+      ) else shiny::tagList(
+        shiny::tags$p("The original 15 donors retain their saved phenotype labels. ",
+          "The rules below were accepted for the added donors 6090, 6232, 6520, 6539 and 6558."),
+        shiny::tags$p("A marker is positive at a gate-rescaled signal of 0.5 or higher. ",
+          "Rules are applied from parent to child. Conflicting lineages and unsupported cells remain Unknown; ",
+          "conflicting subtypes retain their parent label. These rules do not assign Acinar, ECAD+ or Structural.")
+      ),
       shiny::tags$div(style = "max-height: 60vh; overflow: auto;",
         shiny::tags$table(class = "table table-striped",
           shiny::tags$thead(shiny::tags$tr(lapply(headings, shiny::tags$th))),
@@ -1036,8 +1046,25 @@ phenotype_hint_ui <- function(name, prefix = "Markers:",
 #
 # `phenotype_keep()` is the single gate. Anything enumerating phenotypes for a
 # selector, a legend, a family or a test goes through it.
-PHENOTYPE_RETIRED <- c("Endocrine", "Acinar", "Endothelial", "T cell",
-                       "Immune", "Unknown", "ECAD+", "Structural", "APCs")
+# Since the uniform 20-donor root (2026-10-16) "Endocrine", "T cell" and "Immune" are real classes of the
+# Islet-Explorer-Senior typing -- an endocrine cell without a unique hormone, a T cell without a CD4/CD8 subtype,
+# a CD45+ leukocyte the panel cannot name further -- and are no longer retired. The rest are labels of the frozen
+# typing that the uniform root does not produce. Keep python/paga_pseudotime.py RETIRED_PHENOTYPES in step.
+PHENOTYPE_RETIRED <- c("Acinar", "Endothelial", "Unknown", "ECAD+", "Structural", "APCs")
+
+# Endocrine object classes of the uniform workflow (owner A5, 2026-10-16: all three, with a filter).
+OBJECT_CLASSES <- c("Islet" = "Islet", "Cluster" = "EndocrineCluster", "Single" = "EndocrineSingle")
+
+#' Cache-key suffix for an object-class selection (NULL = all classes).
+object_class_key <- function(object_classes) {
+  if (is.null(object_classes)) return("")
+  paste0("_", paste(sort(as.character(object_classes)), collapse = "+"))
+}
+
+#' The selection as the Python bridge takes it (NULL = all classes).
+object_class_arg <- function(object_classes) {
+  if (is.null(object_classes)) NULL else as.list(as.character(object_classes))
+}
 
 #' Drop retired phenotypes from a character vector of labels.
 phenotype_keep <- function(x) setdiff(x, PHENOTYPE_RETIRED)

@@ -224,7 +224,18 @@ prep_data <- function(master) {
   # Composition by islet
   comp <- master$comp %>% add_islet_key() %>% dplyr::filter(!is.na(islet_key))
   comp <- comp %>% dplyr::select(dplyr::all_of(c("Case ID", "Donor Status")), dplyr::all_of(aab_cols_comp), islet_key, cells_total, Ins_single, Glu_single, Stt_single,
-                          Multi_Pos, Triple_Neg, Ins_any, Glu_any, Stt_any)
+                          Multi_Pos, Triple_Neg, Ins_any, Glu_any, Stt_any, dplyr::any_of("object_class"))
+  # Endocrine object class (uniform root: Islet / EndocrineCluster / EndocrineSingle). A root without it holds
+  # islets only. Carried onto the region tables so one app-wide selection filters every table.
+  if (!"object_class" %in% names(comp)) comp$object_class <- "Islet"
+  object_class_of <- dplyr::distinct(comp[, c("Case ID", "islet_key", "object_class")])
+  for (tbl in c("targets_all", "markers_all")) {
+    d <- get(tbl)
+    if (nrow(d) > 0 && !"object_class" %in% names(d)) {
+      d <- safe_left_join(d, object_class_of, by = c("Case ID", "islet_key"), context = paste0(tbl, ":object_class"))
+      assign(tbl, d)
+    }
+  }
   comp <- comp %>% { safe_left_join(., region_areas, by = c("Case ID", "Donor Status", "islet_key"), context = "comp:region_areas") }
 
   # Merge phenotype proportions into comp (H5AD only; NULL from Excel path)
@@ -622,5 +633,19 @@ load_shared_prepared_data <- function(root = data_root) {
     }
   }
   .islet_backend[[cache_key]] <- prepared
+  prepared
+}
+
+
+#' Keep only the selected endocrine-object classes in every per-object table of a prepared list.
+#' `classes` NULL keeps everything; an empty selection keeps nothing.
+filter_prepared_by_object_class <- function(prepared, classes) {
+  if (is.null(prepared) || is.null(classes)) return(prepared)
+  for (tbl in c("comp", "targets_all", "markers_all")) {
+    d <- prepared[[tbl]]
+    if (!is.null(d) && "object_class" %in% names(d)) {
+      prepared[[tbl]] <- d[d$object_class %in% classes, , drop = FALSE]
+    }
+  }
   prepared
 }

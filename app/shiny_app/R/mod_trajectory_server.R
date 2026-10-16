@@ -42,15 +42,16 @@ traj_pt_extent <- function(pt, jitter_frac = 0.012) {
 # reintroduce the axis-instability defect (docs/trajectory.md), which was the
 # axis moving as a side effect of changing the Y-axis FEATURE -- that still
 # cannot happen, and is regression-tested.
-traj_pseudotime_column <- function(obs, cell_range = c(1, Inf)) {
+traj_pseudotime_column <- function(obs, cell_range = c(1, Inf), object_classes = NULL) {
   lo <- cell_range[1]; hi <- cell_range[2]
+  # Only the selected endocrine-object classes are fitted; the others get no pseudotime.
   # scanpy DPT is primary. The destiny implementation is the fallback if scanpy
   # is unreachable from reticulate. PAGA/ForceAtlas2 is the two-dimensional graph
   # card; it is not the pseudotime algorithm itself.
-  bp <- compute_scanpy_pseudotime(lo, hi)
+  bp <- compute_scanpy_pseudotime(lo, hi, object_classes)
   engine <- "scanpy diffusion pseudotime"
   if (is.null(bp)) {
-    bp <- compute_barlow_pseudotime(lo, hi)
+    bp <- compute_barlow_pseudotime(lo, hi, object_classes)
     engine <- "destiny diffusion-pseudotime fallback"
   }
   if (is.null(bp)) {
@@ -86,7 +87,9 @@ apply_pt_scale <- function(df, pt_scale) {
 trajectory_server <- function(id, prepared, selected_islet, forced_image, active_tab = reactive("Trajectory"),
                               donor_colors_reactive = reactive(DONOR_COLORS_BRIGHT),
                               remove_outliers = reactive(FALSE),
-                              outlier_threshold = reactive(3.0)) {
+                              outlier_threshold = reactive(3.0),
+                              object_classes = reactive(NULL)) {
+  # `object_classes` is the app-wide endocrine-object selection (NULL = all; see OBJECT_CLASSES).
   # `remove_outliers` / `outlier_threshold` are accepted but UNUSED: app.R still
   # passes them to every analysis module, and changing that signature is a wider
   # edit than this tab. The Trajectory tab no longer exposes or applies them.
@@ -198,9 +201,8 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
 
       if ("combined_islet_id" %in% names(obs2)) {
         cid <- stringr::str_extract(obs2$combined_islet_id, "^[0-9]{3,4}")
-        islet_num <- stringr::str_extract(obs2$combined_islet_id, "(?<=_Islet_)[0-9]{1,3}")
         obs2$`Case ID` <- dplyr::coalesce(obs2$`Case ID`, cid)
-        obs2$islet_key <- ifelse(!is.na(islet_num), paste0("Islet_", islet_num), NA_character_)
+        obs2$islet_key <- stringr::str_extract(obs2$combined_islet_id, "(?<=_)(Islet|Cluster|Single)_[0-9]+$")
       }
 
       # Normalize donor_status
@@ -238,7 +240,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         detail = sprintf("islet-composition diffusion map, %g-%g cells/islet",
                          rng[1], rng[2]),
         value = 0.4,
-        traj_pseudotime_column(obs, rng))
+        traj_pseudotime_column(obs, rng, object_classes()))
       pseudotime_engine <- attr(pt, "engine") %||% "unavailable"
       pseudotime_n <- as.integer(attr(pt, "n_islets") %||% 0L)
       obs$pseudotime <- as.numeric(pt)
@@ -1615,7 +1617,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         message = "Computing PAGA layout",
         detail = sprintf("Leiden + ForceAtlas2, %g-%g cells/islet", cr[1], cr[2]),
         value = 0.4,
-        paga_result(cr[1], cr[2]))
+        paga_result(cr[1], cr[2], object_classes()))
     })
 
     output$paga_note <- renderUI({

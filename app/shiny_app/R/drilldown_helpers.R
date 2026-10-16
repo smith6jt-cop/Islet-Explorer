@@ -11,6 +11,7 @@ PHENOTYPE_COLORS <- c(
   "Delta cell"    = "#E9C46A",  # gold
   "Endocrine"     = "#D4A373",  # tan
   "Acinar"        = "#A8DADC",  # light teal
+  "Exocrine"     = "#A8DADC",  # Senior's residual class: the Acinar colour
   "Ductal"        = "#457B9D",  # steel blue
   "ECAD+"         = "#6A994E",  # olive green
   "Structural"    = "#9B9B9B",  # gray
@@ -36,6 +37,7 @@ PHENOTYPE_COLORS_HIGH_CONTRAST <- c(
   "Delta cell"    = "#FDD835",  # bright yellow
   "Endocrine"     = "#8D6E63",  # brown
   "Acinar"        = "#00ACC1",  # cyan
+  "Exocrine"     = "#00ACC1",  # Senior's residual class: the Acinar colour
   "Ductal"        = "#43A047",  # green
   "ECAD+"         = "#7CB342",  # lime green
   "Structural"    = "#9E9E9E",  # gray
@@ -61,6 +63,7 @@ PHENOTYPE_COLORS_COLORBLIND <- c(
   "Delta cell"    = "#999933",  # olive
   "Endocrine"     = "#AA4499",  # purple
   "Acinar"        = "#44AA99",  # teal
+  "Exocrine"     = "#44AA99",  # Senior's residual class: the Acinar colour
   "Ductal"        = "#332288",  # indigo
   "ECAD+"         = "#117733",  # green
   "Structural"    = "#888888",  # gray
@@ -86,6 +89,7 @@ PHENOTYPE_COLORS_MAX_DISTINCT <- c(
   "Delta cell"    = "#875692",  # strong purple
   "Endocrine"     = "#F38400",  # vivid orange
   "Acinar"        = "#A1CAF1",  # very light blue
+  "Exocrine"     = "#A1CAF1",  # Senior's residual class: the Acinar colour
   "Ductal"        = "#008856",  # vivid green
   "ECAD+"         = "#C2B280",  # dark yellowish brown
   "Structural"    = "#848482",  # medium gray

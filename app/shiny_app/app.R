@@ -453,6 +453,9 @@ ui <- fluidPage(
     # Main Panel
     column(width = 10.6, class = "equal-height-panel main-content-panel",
       id = "main-content", role = "main", tabindex = "-1",
+      div(class = "object-class-filter", style = "margin: 4px 0 6px; font-size: 15px;",
+        checkboxGroupInput("object_classes", "Endocrine objects",
+                           choices = OBJECT_CLASSES, selected = unname(OBJECT_CLASSES), inline = TRUE)),
       tabsetPanel(id = "tabs",
         tabPanel("Plot",
           fluidRow(
@@ -512,7 +515,11 @@ server <- function(input, output, session) {
 
   # Immutable process-wide object; reactive() preserves the existing module
   # interface without repeating I/O or prep_data() for each reviewer.
-  prepared <- reactive(.shared_prepared_data)
+  # The app-wide endocrine-object selection (owner A5): Islet, EndocrineCluster, EndocrineSingle. Every tab reads
+  # prepared(), so filtering it here is the one place the selection applies; the Trajectory tab's own feature
+  # table takes it through `object_classes`.
+  object_classes <- reactive(as.character(input$object_classes %||% character(0)))
+  prepared <- reactive(filter_prepared_by_object_class(.shared_prepared_data, object_classes()))
 
   # ---- Theme CSS (light/dark toggle, if theme_bg input exists) ----
   output$theme_css <- renderUI({
@@ -651,7 +658,8 @@ server <- function(input, output, session) {
   # Trajectory module
   trajectory_server("traj", prepared, selected_islet, forced_image, active_tab, active_donor_colors,
                     remove_outliers = remove_outliers_global,
-                    outlier_threshold = outlier_z_global)
+                    outlier_threshold = outlier_z_global,
+                    object_classes = object_classes)
 
   # Viewer module
   viewer_server("viewer", forced_image, reactive(input$tabs))
