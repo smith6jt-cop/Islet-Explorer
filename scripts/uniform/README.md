@@ -101,6 +101,12 @@ cells cut by an object's edge and up to 45 cells inside two objects (`check_isle
 objects, any cell cut by an object's edge (5–95 % inside), any single that is not one cell, or any cluster / islet with
 fewer than two.
 
+Rerun of 2026-10-16 (`islets_all_20_v4.log`, fits unchanged): **all 20 images pass every check**
+(`$OUT/review/object_check.csv`). Earlier beta / alpha / delta cells inside the final objects are now 80–100 / 88–99 /
+93–100 % (were 75–99 / 74–96 / 85–100 %; T1D_6563 had 3 earlier beta cells). Clusters and singles roughly double, since
+the former Hormone Fragments now pick up the cells under them (e.g. T1D_6533 100 → 316 clusters, 297 → 422 singles);
+islets rise slightly (e.g. ND_0112 130 → 146).
+
 ## Canary, 2026-10-15
 
 Aab_6505 and ND_6232 went through every step. Cells matched to the earlier typing show what the first fit did with
