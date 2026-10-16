@@ -23,6 +23,12 @@ segmentations: no cell cut by an edge, no cell in two objects, no object smaller
 20 images pass `check_islet_objects.py`. The owner reviewed the objects the same day: "The islet annotations look good."
 See [the README](../scripts/uniform/README.md#endocrine-objects-are-made-of-whole-cells-owner-2026-10-16).
 
+**Cell typing, 2026-10-16.** As the owner decided (D3-D5, A6), every cell is typed with Islet-Explorer-Senior's
+method, ported in `scripts/uniform/typing/`: compartment REDSEA, UniFORM alignment and the cohort scale, context
+from the endocrine and structure objects, Senior's structure, endocrine, immune and Exocrine calls, refinement and
+immune subtypes. Nerve, blood-vessel and lymphatic cells come only from the structure objects. The first run on
+all 20 images is in `$OUT/typing/`; see [the README](../scripts/uniform/README.md#cell-typing-islet-explorer-seniors-method-owner-2026-10-16).
+
 ## Cohort
 
 | Status | Original 15 | Additions |

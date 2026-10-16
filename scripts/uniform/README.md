@@ -110,6 +110,82 @@ islets rise slightly (e.g. ND_0112 130 → 146).
 Owner review, 2026-10-16: "The islet annotations look good." The four images saved during the review (Aab_6450, 6505,
 6521, 6538) hold the same objects, class by class, as `$OUT/islets/`, so the exports stand for the reviewed project.
 
+## Cell typing: Islet-Explorer-Senior's method (owner, 2026-10-16)
+
+Owner decisions of 2026-10-16: D3, D4 and D5, "use the cell typing from Islet-Explorer-Senior as much as possible";
+A6, "drop cell classes that indicate neural, blood vessel or lymphatic and use the objects instead". The port is
+`typing/` (sources and checksums in `PORTED_FROM.json` under `typing`; the Senior files are byte-identical to the
+snapshots of its 2026-10-08 run). It writes to `$OUT/typing/`:
+
+| Stage | Script | Senior source | Output |
+|---|---|---|---|
+| Geometry QC, compartment REDSEA | `redsea_cells.py` | `phenocycler/redsea.py`, `geometry_qc.py` | `redsea/<image>.parquet` |
+| UniFORM shift, cohort scale | `align_scale.py` | `celltype/run_step2.py`, `run_step3.py` | `aligned/`, `scale.parquet`, `shifts.json` |
+| Context: endocrine object, structure object, tissue | `cell_context.py` | `typing/context.py`, `islet_membership.py` | `context/`, `$OUT/structures/` |
+| Structure, endocrine, immune, Exocrine calls | `classify.py` | `typing/subpanel.py` | `calls/<image>.parquet`, `.json` audit |
+| Refinement, once | `refine.py` | `typing/refine.py` | `refine/` (`refined_class` beside `cell_class`) |
+| Immune class and subtype | `immune_subtype.py` | `typing/immune_subtype.py` | `immune/` |
+
+```bash
+PY=/home/smith6jt/miniconda3/envs/scvi-env/bin/python
+SENIOR_PY=$HOME/IO60panc2nd/Islet-Explorer-Senior-v3/.venv/bin/python   # has scikit-fda, which UniFORM needs
+$PY typing/redsea_cells.py --out $OUT --images all --workers 6        # ~1.5 min and ~12 GB per image
+$SENIOR_PY typing/align_scale.py --out $OUT
+$PY typing/cell_context.py --out $OUT --images all
+$PY typing/classify.py --out $OUT --images all
+$PY typing/refine.py --out $OUT
+$PY typing/immune_subtype.py --out $OUT
+```
+
+What Senior's method means here:
+
+- **Neural, blood-vessel and lymphatic cells come only from structure objects** (A6). A cell is Nerve, Blood vessel
+  or Lymphatic only when its centroid is in such an object, more than half its area is inside, its own marker
+  clears the image's level and the object's marker is its top expressed identity marker. Every other cell keeps
+  its own identity. The objects are each image's Nerve, Capillary and Lymphatic annotations from the original
+  project's pixel classifiers, copied to `$OUT/structures/` with their source and the 2026-09-21 audit verdict
+  (`structures/provenance.json`). That audit rejected Nerve on Aab_6505 and T1D_6520 and reviewed few Capillary
+  and Lymphatic sets.
+- **Endocrine cells are called only inside the accepted endocrine objects**, on the highest scaled hormone
+  against the image's ordinary-tissue level; an EndocrineSingle's cell is named by its highest hormone. Exocrine
+  inside an endocrine object is Excluded (`exocrine_inside_islet_border`). The CHGA route (Senior's CD99) needs 500
+  hormone-confirmed cells per islet-size stratum and fired in no stratum, so admission is the hormone route, as on
+  96 of Senior's 100 donor strata.
+- **Gates (D5)**: no fixed gates. UniFORM aligns each marker per image; one cohort floor/top scale puts it on
+  [0, 1]; structure and hormone levels are each image's p99 of ordinary tissue; immune rules use scaled >= 0.10.
+- **Positivity (D4)**: hormone positivity is endocrine admission; immune positivity is a marker at scaled >= 0.10.
+- **Labels (D3)**: Beta, Alpha, Delta, Endocrine (unresolved / ambiguous subtype), Immune (with its definition,
+  class and subtype), Blood vessel, Nerve, Lymphatic, Exocrine (one label, the residual: Senior never calls
+  acinar or ductal), Excluded, and after refinement "Unresolved (no lineage evidence)".
+
+Departures, all for this panel (`typing/codex_typing.py`):
+
+- CHGA in CD99's place; Capillary objects (drawn on CD31) are Senior's Blood vessel, read on CD31.
+- Compartments for this panel's own markers by analogy (granule and cytoskeletal markers Cytoplasm, surface
+  markers Membrane).
+- KRT8-18 and epCAM (absent from 7 images) and Ghrelin (4) are left out of the typing on every image: Senior's
+  rule test reads an unmeasured negative as unknown, so no immune rule could fire on those seven donors.
+- Rule terms on markers this panel never acquired are removed and recorded
+  (`typing/immune_rules_on_this_panel.json`); a rule that loses a required positive is unavailable. Available:
+  Imm-T-cell, Imm-macrophage; T-CD4-helper, T-CD8, Mac-M2-like (LGALS3 is Senior's M2Gal3). Unavailable: B, NK,
+  plasma, dendritic, neutrophil; regulatory, exhausted, cytotoxic, progenitor-memory T; M1-like macrophage.
+  Reducing Imm-B-cell to CD20 alone was tried and withdrawn: it called 4,000-14,000 B cells per image against
+  33-1,182 in the frozen typing.
+- No reference donor is pinned for UniFORM (Senior pinned its own); no hormone is masked (step 1b makes no
+  fragments); Senior's unshifted-CD8 refinement exception is not ported.
+
+Run of 2026-10-16 (`$OUT/typing/summary.csv`):
+
+- Senior's geometry QC keeps 81 % of cells (62 % on ND_6232, 82-85 % elsewhere); most exclusions are cells under
+  20 um2, InstanSeg objects without a nucleus, and solidity under 0.70.
+- No marker was refused by UniFORM. 24 of 35 stay above Senior's 0.10 background-mode bar after the shift (Senior
+  had 11); they are carried with the residual recorded in `shifts.json`.
+- Immune T cells are close to the frozen typing (Aab_6450 1,672 vs 1,848; T1D_6534 3,464 vs 3,703).
+- Structure calls are few by design: 89-2,272 Blood vessel, 22-958 Nerve and 3-549 Lymphatic cells per image.
+- Excluded cells, exocrine markers inside an endocrine object, are 4-29 % of the cells in the objects (Aab_6558
+  the highest, the image whose islet area grew most with the CHGA aid).
+- Refinement demotes 6-15 % of Exocrine cells to Unresolved (Senior: about 5 % by construction plus its excess).
+
 ## Canary, 2026-10-15
 
 Aab_6505 and ND_6232 went through every step. Cells matched to the earlier typing show what the first fit did with

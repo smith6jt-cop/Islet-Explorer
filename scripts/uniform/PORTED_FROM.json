@@ -59,5 +59,117 @@
       "source": "/home/smith6jt/IO60panc2nd/scripts/v3/islet_cell_test.py",
       "source_sha256": "90b78d366f95beaafe60d86f918987b1793ddf23ef3f48e5bdbea8dbfd80754d"
     }
+  },
+  "typing": {
+    "source_repo": "/home/smith6jt/IO60panc2nd/Islet-Explorer-Senior-v3",
+    "source_commit": "2714261a9e21cf2d575f97968bfd0e628089c152 2026-10-02 11:02:13 -0400",
+    "source_uncommitted": [
+      " M core/phenocycler/scripts/celltype/run_step2.py",
+      " M core/phenocycler/scripts/typing/immune_subtype.py",
+      " M core/phenocycler/scripts/typing/islet_identity.py",
+      " M core/phenocycler/scripts/typing/islet_membership.py",
+      " M core/phenocycler/scripts/typing/refine.py",
+      " M core/phenocycler/scripts/typing/subpanel.py",
+      " M core/phenocycler/scripts/typing/subpanel_io.py",
+      "?? results/v3/release_20261003/calibration_review/marker_redsea_ruling.csv"
+    ],
+    "run_reproduced": "/data/io60-calibration/own_compartment_frozen_reference_repair_20261008 (source snapshots byte-identical to these files, checked 2026-10-16)",
+    "uniform_checkout": "/home/smith6jt/IO60panc2nd/Islet-Explorer-Senior-v3/external/UniFORM @ 7c33396d12e5a19dc0b36e46a94c3293de0cd814",
+    "files": {
+      "typing/redsea_cells.py": [
+        {
+          "source": "/home/smith6jt/IO60panc2nd/Islet-Explorer-Senior-v3/core/phenocycler/phenocycler/redsea.py",
+          "source_sha256": "0667b2e2042314bf234621a6c04b922b3d83b631bd9df59b6bc73a6feea0a196"
+        },
+        {
+          "source": "/home/smith6jt/IO60panc2nd/Islet-Explorer-Senior-v3/core/phenocycler/phenocycler/geometry_qc.py",
+          "source_sha256": "462a8eb368e6bd6900de3be17f5e17931138086b6eb13368978d19b5300b0710"
+        },
+        {
+          "source": "/home/smith6jt/IO60panc2nd/Islet-Explorer-Senior-v3/core/phenocycler/phenocycler/config.py",
+          "source_sha256": "c5dbc26e803306577c38cad840a751389fc2aba6385c5681f470f400336b1b19"
+        }
+      ],
+      "typing/align_scale.py": [
+        {
+          "source": "/home/smith6jt/IO60panc2nd/Islet-Explorer-Senior-v3/core/phenocycler/scripts/celltype/run_step2.py",
+          "source_sha256": "7e39e63c23a4756ef749101642028eee4abeae39b994ae38128fb6e07030e882"
+        },
+        {
+          "source": "/home/smith6jt/IO60panc2nd/Islet-Explorer-Senior-v3/core/phenocycler/scripts/celltype/uniform_adapter.py",
+          "source_sha256": "788e1bf6d8ac0569480c02cf92b9654c9c03968b6365132ac75983d99fe6973f"
+        },
+        {
+          "source": "/home/smith6jt/IO60panc2nd/Islet-Explorer-Senior-v3/core/phenocycler/scripts/celltype/run_step3.py",
+          "source_sha256": "fb9ad374d1bf17631aa806b02839d6cfc61eec4d55c749aeb69a892007d510af"
+        },
+        {
+          "source": "/home/smith6jt/IO60panc2nd/Islet-Explorer-Senior-v3/core/phenocycler/scripts/celltype/score.py",
+          "source_sha256": "32d291b2acf51f86f754972bc3b84a5f1a55ffca72419b337863cc89394ca799"
+        },
+        {
+          "source": "/home/smith6jt/IO60panc2nd/Islet-Explorer-Senior-v3/core/phenocycler/scripts/celltype/usability.py",
+          "source_sha256": "7fc94d58a856df27ffd112c0df30f98a5a0109c01f8abf8740e29aafb82c0832"
+        }
+      ],
+      "typing/cell_context.py": [
+        {
+          "source": "/home/smith6jt/IO60panc2nd/Islet-Explorer-Senior-v3/core/phenocycler/scripts/typing/context.py",
+          "source_sha256": "7d090702ab006608d1a6511fa647bae6f9d35f2cb2a69ba070490b2fe6896e76"
+        },
+        {
+          "source": "/home/smith6jt/IO60panc2nd/Islet-Explorer-Senior-v3/core/phenocycler/scripts/typing/islet_membership.py",
+          "source_sha256": "3697d1c9f89d727ba345f27505318612ff09ee382787d92ccb17a640e044d1bd"
+        }
+      ],
+      "typing/classify.py": [
+        {
+          "source": "/home/smith6jt/IO60panc2nd/Islet-Explorer-Senior-v3/core/phenocycler/scripts/typing/subpanel.py",
+          "source_sha256": "f6e49e749600627d9af6abf6371621b2368ab7ed0d975b481a0a76dcfd3ccde9"
+        },
+        {
+          "source": "/home/smith6jt/IO60panc2nd/Islet-Explorer-Senior-v3/core/phenocycler/scripts/typing/subpanel_io.py",
+          "source_sha256": "7b763801b56092d77b85aba820d56ed2dd0ab09b7392cd6453d0e38b3d884bd7"
+        },
+        {
+          "source": "/home/smith6jt/IO60panc2nd/Islet-Explorer-Senior-v3/core/phenocycler/scripts/typing/islet_identity.py",
+          "source_sha256": "3dd09dffa72dc01dc9d72a7afc6bc837af0a0181fa1c8824a951ff14fdf7d1a0"
+        }
+      ],
+      "typing/refine.py": [
+        {
+          "source": "/home/smith6jt/IO60panc2nd/Islet-Explorer-Senior-v3/core/phenocycler/scripts/typing/refine.py",
+          "source_sha256": "0ca08447ca5af60e538ce04ac9bc0354e012a99aa81f23ad7a4f0bb10000d7cf"
+        }
+      ],
+      "typing/immune_subtype.py": [
+        {
+          "source": "/home/smith6jt/IO60panc2nd/Islet-Explorer-Senior-v3/core/phenocycler/scripts/typing/immune_subtype.py",
+          "source_sha256": "0efbde0c64a3c6ee8cceec40062530fd9a6295614a37f5a97a802011b1584803"
+        }
+      ],
+      "typing/codex_typing.py": [
+        {
+          "source": "/home/smith6jt/IO60panc2nd/Islet-Explorer-Senior-v3/phenotype_workflow.csv",
+          "source_sha256": "b010a3f9c6ca40cb4b76957f65a25c39f12849387ef72c616a201deb885a0956"
+        },
+        {
+          "source": "/home/smith6jt/IO60panc2nd/Islet-Explorer-Senior-v3/core/phenocycler/scripts/celltype/rules.py",
+          "source_sha256": "a65ee5179bc361e3bb7c393450dde42142138e426db8ea9eba65c82aa87d6864"
+        },
+        {
+          "source": "/home/smith6jt/IO60panc2nd/Islet-Explorer-Senior-v3/core/phenocycler/scripts/typing/lineages.py",
+          "source_sha256": "1e01c1a82d42b729c276a2e03240bc05e6e799909ad5af6760811feb518840e8"
+        },
+        {
+          "source": "/home/smith6jt/IO60panc2nd/Islet-Explorer-Senior-v3/results/v3/release_20261003/calibration_review/marker_redsea_ruling.csv",
+          "source_sha256": "126ceba3a014cc6e1dcf80dff79f759c97d80d14551a05b783d2890a03481a99"
+        },
+        {
+          "source": "/home/smith6jt/IO60panc2nd/Islet-Explorer-Senior-v3/core/phenocycler/phenocycler/marker_registry.json",
+          "source_sha256": "577ab46728ed857943e80d91c1b47d02239b71eb3cc473e84e528b0253edc074"
+        }
+      ]
+    }
   }
 }
