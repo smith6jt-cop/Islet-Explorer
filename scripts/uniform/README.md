@@ -51,6 +51,56 @@ Copied scripts and their source checksums are listed in `PORTED_FROM.json` (Seni
   reruns. CHGA is still compared with its level on raw values. These changes followed the first canary (below) and
   await the owner's review.
 
+## CHGA is an aid, not a gate (owner, 2026-10-16)
+
+Senior's fit trains on "confirmed" endocrine cells: a hormone as the cell's highest identity marker **and** its CD99
+(here CHGA) at or above the image's tissue level. With CHGA in that role the gate discarded most hormone-highest cells
+in every image (Aab_6505 kept 669 of 8,033; ND_6548 168 of 1,616) and refused T1D_6563 outright (45 of 3,007: its
+alpha cells carry glucagon, median about 4,000, but little CHGA, median 132). On the original 15 images 94–99.5 % of
+hormone-highest cells lie within 10 µm of a cell the earlier typing called endocrine (T1D_6533 81 %). The owner's
+direction: "CHGA is supposed to be an aid to endocrine identification, not a blocker ... GCG and SST can be used."
+
+So a hormone as the cell's highest marker (on the per-image scale, insulin and somatostatin floored) now confirms it.
+CHGA still adds hormone-less, CHGA-bright cells within 30 µm of a confirmed cell, and stays a channel the classifier
+may use where a hormone seeds it. An image with no usable CHGA level is fitted on its hormones alone. A fit made by
+other fit code is stale (`run_uniform.py` compares the recorded script checksums), so the change reran every image's
+islet steps; cells and segmentation were not touched. The 2026-10-15 islet outputs are kept in
+`$OUT/superseded/chga-gate-20261015/`.
+
+Rerun of 2026-10-16 (`islets_all_20_v3.log`): **all 20 images have islet objects.** T1D_6563 fits on glucagon and
+somatostatin (8 insulin-highest cells; the earlier typing had 3 beta cells): 42 islets, 95 clusters, 226 singles,
+91 % / 89 % of the earlier alpha / delta cells inside the final objects. Earlier beta / alpha / delta cells inside the
+final objects now 75–99 / 74–96 / 85–100 % (were 25–98 / 51–92 / 22–100 %); the largest gains are where the gate had
+hurt most (beta: T1D_6551 25 → 75 %, Aab_6558 37 → 85 %, T1D_6550 35 → 77 %, Aab_6505 63 → 98 %, ND_6548 54 → 93 %).
+Islets broken into many small objects joined up again on Aab_6505 and Aab_6558. The cost is a wider margin: in the
+fit's emulation of script 1 the islet area grew 5–15 % on most images and about 50 % on Aab_6505 and Aab_6558; the
+non-endocrine cells taken in lie a median 8–10 µm from an earlier endocrine cell. On T1D_6563 a third of them lie
+farther than 20 µm, many earlier-typed Ductal: duct-associated alpha cells or over-reach, for the owner's review.
+
+## Endocrine objects are made of whole cells (owner, 2026-10-16)
+
+"The endocrine objects outlines need to also pick up the cell segmentations. There should not be multiple annotations
+in one cell outline; among other problems this causes a single-cell to be counted as a cluster. There should never be
+an annotation for endocrine object that is smaller than a cell."
+
+Senior's step 1b took a cell only when it reached no farther than one classifier pixel beyond the outline, cut every
+other cell out, and turned an outline holding no such cell into a Hormone Fragment shaped like the hormone's own pixels.
+On the 2026-10-16 refit that left, per image, 62–522 Hormone Fragments, 42–307 objects holding no whole cell, 106–905
+cells cut by an object's edge and up to 45 cells inside two objects (`check_islet_objects.py`; the objects are kept in
+`$OUT/superseded/fragments-20261016/`). Step 1b now:
+
+- picks up every cell an outline covers by at least half, whole, also where it reaches beyond the outline (a cell two
+  outlines cover goes to the one covering more of it);
+- lets an outline that picks up no cell that way (hormone signal inside one cell or across a few) pick up the cell
+  holding most of it, unless another outline has that cell -- largest overlaps first, so one cell never holds two
+  objects;
+- removes an outline that ends up with no cell, and makes no Hormone Fragments;
+- keeps pieces that hold parts of one cell together: about 7 % of InstanSeg cell outlines come in parts.
+
+`check_islet_objects.py` reads the exports and fails an image with any object holding no whole cell, any cell in two
+objects, any cell cut by an object's edge (5–95 % inside), any single that is not one cell, or any cluster / islet with
+fewer than two.
+
 ## Canary, 2026-10-15
 
 Aab_6505 and ND_6232 went through every step. Cells matched to the earlier typing show what the first fit did with

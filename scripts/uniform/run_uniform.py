@@ -233,7 +233,11 @@ class Runner:
         if rec.get('status') != 'pass':
             return False
         if step == 'fit':   # stale if made with another cohort scale, if any image's cells changed since the scale,
-            import cohort_scale  # noqa: PLC0415   or if the scale was built under another rule
+            import cohort_scale  # noqa: PLC0415   if the scale was built under another rule, or by other fit code
+            made_by = rec.get('script') or {}
+            if (made_by.get('sha256'), made_by.get('library_sha256')) != (sha256(HERE / 'islet_classifier_fit.py'),
+                                                                          sha256(HERE / 'islet_cell_test.py')):
+                return False
             scale = self.cohort_scale_file()
             used = (rec.get('cohort_scale') or {}).get('sha256')
             if not (used and scale.is_file() and sha256(scale) == used):

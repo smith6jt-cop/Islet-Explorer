@@ -65,14 +65,15 @@ dilation is "any pixel of the disk is on", an erosion "every pixel of the disk i
 HOW THE FOUR THRESHOLDS ARE SET. From the image's own cells, used ONLY here (no cell test is a workflow step):
 
   endocrine  cells this image itself confirms: a hormone (INS / GCG / SST) is the cell's highest identity marker
-             AND its CD99 is at or above the image's CD99 reference level ("confirmed"); or, within TERRITORY_UM
+             ("confirmed"; CODEX, owner 2026-10-16: CHGA is an aid, not a gate -- Senior also required CD99 at or
+             above the image's CD99 reference level, see label_cells); or, within TERRITORY_UM
              of a confirmed cell, a cell whose CD99 reaches the 10th percentile of the confirmed cells' CD99 and
              whose highest marker is not another lineage's.
   other      no hormone highest, and either CD99 below the reference level or the cell is ordinary tissue (farther
              than TERRITORY_UM from every hormone-highest cell -- the population the reference level is drawn
              from, whatever its CD99). Those enclosed by endocrine cells (an islet's own capillaries) are not
              counted against the classifier -- they belong inside.
-  left out   everything in between (a hormone highest without CD99; CD99 between the two levels, or on a vessel or
+  left out   everything in between (CD99 between the two levels, or on a vessel or
              immune cell, beside an islet): they neither pull the thresholds down nor push them up.
 
   The thresholds are the four numbers that minimise
@@ -259,12 +260,23 @@ def label_cells(values: pd.DataFrame, x_um: np.ndarray, y_um: np.ndarray, eligib
     xy = np.column_stack([x_um, y_um])
     territory = within(xy, hormone_top, TERRITORY_UM)
     reference = eligible & ~in_structure & ~territory
-    level = ict.reference_level(cd99[reference], quantile)
-    confirmed = hormone_top & measured & (cd99 >= level)
+    # CODEX (owner, 2026-10-16): CHGA is an aid to endocrine identification, not a gate. A hormone as the cell's
+    # highest identity marker confirms it; Senior also required CD99 at its level. With CHGA in that role the gate
+    # kept 669 of 8,033 hormone-highest cells on 6505 and refused T1D_6563 outright (45 of 3,007: its alpha cells
+    # carry glucagon but little CHGA), while 94-99.5 % of hormone-highest cells lie within 10 um of an earlier
+    # endocrine cell on all but one original image (T1D_6533 81 %).
+    confirmed = hormone_top
     if int(confirmed.sum()) < MIN_CONFIRMED:
-        raise SystemExit(f"only {int(confirmed.sum())} cells have a hormone highest AND {LEVEL} at or above the reference level ({level:.1f}); "
+        raise SystemExit(f"only {int(confirmed.sum())} cells have a hormone highest; "
                          f"fewer than {MIN_CONFIRMED} cannot set a classifier -- this image needs to be looked at")
-    by_cd99_level = max(level, float(np.percentile(cd99[confirmed], CONFIRMED_QUANTILE)))
+    try:
+        level = ict.reference_level(cd99[reference], quantile)
+    except SystemExit as e:   # no usable CHGA level: the image is fitted on its hormones alone
+        print(f"{LEVEL} gives no reference level ({e}); {LEVEL} adds no cells", flush=True)
+        level = float("nan")
+    with_cd99 = confirmed & measured
+    by_cd99_level = (max(level, float(np.percentile(cd99[with_cd99], CONFIRMED_QUANTILE))) if np.isfinite(level) and with_cd99.any()
+                     else float("nan"))
     by_cd99 = (eligible & ~hormone_top & has_top & measured & (cd99 >= by_cd99_level) & ~np.isin(top, list(other_lineage_markers))
                & within(xy, confirmed, TERRITORY_UM))
     endocrine = confirmed | by_cd99

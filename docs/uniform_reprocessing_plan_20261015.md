@@ -16,6 +16,8 @@ reused, not rerun.
 
 **Islet run, 2026-10-15.** All 20 images were segmented again; 19 have islet objects ready for review in `data/development/uniform-20donor-20261015/qupath/project.qpproj`. T1D_6563's fit was refused by Senior's minimum of 50 confirmed cells (its alpha cells carry little CHGA) and needs an owner decision. Step 1b drops endocrine cells that cross script 1's outline by more than 0.75 µm, which costs from about 1 to 43 points of beta-cell coverage depending on the image. See [the README](../scripts/uniform/README.md#islet-run-on-all-20-images-2026-10-15).
 
+**CHGA aid, 2026-10-16.** At the owner's direction CHGA no longer gates which cells train the islet classifier: a hormone (INS, GCG or SST) as the cell's highest marker confirms it, and CHGA only adds cells beside confirmed ones. All 20 images were refitted and now have islet objects, including T1D_6563 (glucagon and somatostatin). Coverage of the earlier endocrine cells rose on every image, with somewhat wider islet margins. See [the README](../scripts/uniform/README.md#chga-is-an-aid-not-a-gate-owner-2026-10-16). All 20 await the owner's review.
+
 ## Cohort
 
 | Status | Original 15 | Additions |

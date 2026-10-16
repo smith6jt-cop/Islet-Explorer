@@ -174,9 +174,11 @@ def test_a_fit_on_a_scale_built_under_another_rule_is_stale(tmp_path):
     rec = runner.record("T1D_0001", "fit")
     rec.parent.mkdir(parents=True)
 
+    code = {"sha256": ru.sha256(ru.HERE / "islet_classifier_fit.py"), "library_sha256": ru.sha256(ru.HERE / "islet_cell_test.py")}
+
     def write(scale: dict) -> None:
         scale_file.write_text(json.dumps(scale))
-        rec.write_text(json.dumps({"status": "pass", "cohort_scale": {"sha256": ru.sha256(scale_file)}}))
+        rec.write_text(json.dumps({"status": "pass", "cohort_scale": {"sha256": ru.sha256(scale_file)}, "script": code}))
 
     images = {"T1D_0001": cohort_scale.file_id(cells)}
     write({**cohort_scale.rule(), "images": images})
@@ -184,3 +186,29 @@ def test_a_fit_on_a_scale_built_under_another_rule_is_stale(tmp_path):
     write({"quantile": ict.SCALE_QUANTILE, "floor_markers": list(ict.HORMONES), "images": images})   # the first rule
     assert not runner.passed("T1D_0001", "fit")
     assert not cohort_scale.follows_rule(json.loads(scale_file.read_text()))
+    write({**cohort_scale.rule(), "images": images})
+    assert runner.passed("T1D_0001", "fit")
+    code["sha256"] = "made by other fit code"
+    write({**cohort_scale.rule(), "images": images})
+    assert not runner.passed("T1D_0001", "fit")                     # a rule change in the fit reruns it
+
+
+def test_chga_aids_but_does_not_gate():
+    """T1D_6563, 2026-10-16: alpha cells with clear glucagon and little CHGA are confirmed by their hormone."""
+    rng = np.random.default_rng(2)
+    n = 3000
+    values = pd.DataFrame({"ECAD": rng.lognormal(np.log(7600), 0.5, n), "GCG": rng.lognormal(np.log(60), 0.3, n),
+                           "CHGA": rng.lognormal(np.log(270), 0.3, n)})
+    alpha = np.zeros(n, dtype=bool)
+    alpha[:80] = True
+    values.loc[alpha, "GCG"] = rng.lognormal(np.log(4000), 0.2, alpha.sum())
+    values.loc[alpha, "ECAD"] = 2700.0
+    values.loc[alpha, "CHGA"] = 130.0                                # below every tissue level
+    x = rng.uniform(0, 5000, n)
+    y = rng.uniform(0, 5000, n)
+    x[alpha] = 2500 + rng.uniform(-40, 40, alpha.sum())
+    y[alpha] = 2500 + rng.uniform(-40, 40, alpha.sum())
+    lab = fit.label_cells(values, x, y, np.ones(n, dtype=bool), np.zeros(n, dtype=bool), set(), 99.0)
+    assert lab["confirmed"][alpha].mean() > 0.95
+    assert lab["endocrine"][alpha].mean() > 0.95
+    assert not lab["confirmed"][~alpha].any()
