@@ -10,6 +10,22 @@ untracked work acquires history when committed.
 The app does not depend on these files. Preserve the historical record when a
 method or delivery document still cites it.
 
+## Removed: nested RESTORE submodule (2026-10-15)
+
+`external/Phenocycler_Analysis` (pinned at `8db37af`) declares a nested
+`external/RESTORE` submodule (`github.com/smith6jt-cop/RESTORE`, `38df59b`). Only
+upstream's `phenocycler/restore.py` loaded it, for the vendored RESTORE
+`Normalization` class and the SSC clusterer. No Islet-Explorer script imports that
+module: the `scripts/codex_phenocycler/` and `scripts/research/restore_*` consumers
+use `phenocycler.restore_validation`, `restore_pair_review` and `redsea`, which are
+pure Python. The checkout and its git directory were deleted, and it was marked
+`active = false` / `update = none` in the submodule's local git config, so
+`git submodule update --init --recursive` skips it. The source remains on GitHub.
+The upstream pin was not bumped. Upstream removed RESTORE at `ac00c18`, but that
+commit also deletes `restore_validation.py`, which the CODEX scripts above need and
+which `codex_lineage.UPSTREAM_PINNED_SHA` guards. On a fresh clone, rerun those two
+`git config` lines inside `external/Phenocycler_Analysis` before recursing.
+
 ## joint-scvi-retrain-superseded-20261003/
 
 `retrain_joint_scvi.py` and its HiPerGator `retrain_joint_scvi_hpg.sbatch` staged

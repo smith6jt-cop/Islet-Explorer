@@ -312,7 +312,7 @@ A separate review register records candidate assistant references and AI-feature
 | `scripts/Python/`, `scripts/R_files/`, `scripts/Shell_scripts/` | Ignored organizational copies and legacy experiments. Several have stale paths or mutable deployment behavior; individually review before reuse. |
 | `external/Phenocycler_Analysis/phenocycler/` | Upstream reusable research package: ingestion, correction, lineage, validation, figures, parallelism, and configuration. |
 | External `notebooks/`, `scripts/groovy/`, `scripts/slurm/`, `scripts/R/`, `tests/` | Upstream research entrypoints, QuPath jobs, scheduled processing, diagnostics, and tests. Not Shiny production services. |
-| Nested `external/RESTORE/` | Separately versioned/vendored normalization reference implementation, including MATLAB/Python reference code. |
+| Nested `external/RESTORE/` | Removed 2026-10-15: deinitialized and excluded from recursive updates (`submodule.external/RESTORE.update none`). Nothing in this repository used it; the empty gitlink directory remains only because the pinned `8db37af` upstream still declares it. See [archive/README.md](../archive/README.md). |
 | `tmp/ufrc-release-20260908/artifacts/` | Multiple retained candidates, including rejected/historical data and the assembled selected release; identify by manifest, not directory size. |
 | `tmp/ufrc-release-20260908/evidence/` | Local restricted build/scan/parity/browser/request evidence. Durable retention must be arranged outside disposable local staging. |
 | `node_modules/`, `.venv/`, `__pycache__/` | Installed third-party dependencies and generated interpreter caches. Inventory by environment/manifest and path; these are not individually authored app modules. |
