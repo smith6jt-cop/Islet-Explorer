@@ -1,7 +1,6 @@
 # Islet Explorer UFRC readiness and evidence index
 
-Updated 2026-10-14 for the 2026-10-03 protein expansion in the local app; institutional
-status remains as last verified on 2026-09-16. This is the review index for the supplied
+Updated 2026-10-16 for UFRC comment 13 and the owner-directed processing reset. This is the review index for the supplied
 [`UFIT_PubApps_Instance_Request.docx`](../UFIT_PubApps_Instance_Request.docx),
 including its hosting policy, project plan, and development standards. It records
 implementation separately from acceptance. It is not a signed attestation or
@@ -9,16 +8,21 @@ production approval.
 
 ## Current status
 
-The existing records are UFRC support request `83810`, configuration reference
-`SYSCONFIG-8173`, and individual assessment `IRM-456246` (submission confirmed
-2026-09-01). Read-only UF Outlook search on 2026-09-16 found an assigned ISM's
-request that day for a brief Teams meeting for the risk review. Scheduling and
-completion are unconfirmed. Comment 8, received 2026-09-11, had reported the ISO
-waiting for local ISM review. Comment 7 requested an assessment technical contact;
-completion is not established. The owner previously reported a provisioned VM,
-but hostname, service-account, SSH and proxy details remain unconfirmed.
-Continue the existing requests. Trial allocation
-`RC83797` for group `maigan` is recorded for 2026-08-31 through 2026-11-30.
+UFRC support request `83810` and configuration reference `SYSCONFIG-8173` remain
+the active project records. The owner confirms that the instance request form was
+submitted with the original ticket on 2026-08-31. UFIT canceled individual
+assessment `IRM-456246` on 2026-10-15; its closure notice says the project will be
+added to the PubApps master assessment. Confirm that the original form and current
+evidence are linked there, and ask UFRC whether it wants an amended form after the
+final release inventory is accepted. Do not reopen the canceled assessment or
+submit a duplicate form unless UFRC directs. Closure of the individual assessment
+is not production approval. Trial allocation `RC83797` for group `maigan` is
+recorded for 2026-08-31 through 2026-11-30.
+
+UFRC comment 13, received 2026-10-16, says the VM will be provisioned next and
+asks for the first app's DNS and proxy requirements. The project reply is drafted
+in the [launch-preparation note](ufrc_launch_preparation_20261015.md); the
+proxy-reachable backend address remains pending UFRC's VM assignment.
 
 The selected reviewer profile remains Public Restricted access to a Sensitive
 collection: Plot, Trajectory, Viewer, and Spatial; AI, Statistics, and Inflammation
@@ -27,28 +31,27 @@ or production external API. The proposed URL is
 `https://islet-explorer.rc.ufl.edu/islet-explorer/`. The backend address and port
 must come from UFRC; `127.0.0.1:3838` is a request, not an established proxy route.
 
-### Current local app and protein expansion
+### Current local app and reprocessing status
 
 The only intended local development URL is
 `http://10.15.152.7:8080/islet-explorer/`, proxied to loopback port 3840.
-Since 2026-10-05 it serves the protein-expanded root
-`data/development/protein-expanded-20261003-v2/`: 21 donors and 8,436 islets.
-Neither this checkout nor its image route is a PubApps release.
-Keep the dated `5809be4` 15-image production artifact and its evidence separate
-from the current development app. See [the September 28 handoff](HANDOFF_2026-09-28.md).
+It has been offline at the owner's direction since 2026-10-15 and must remain
+offline until the uniform reprocessing output is accepted. Its last development
+root was `data/development/protein-expanded-20261015-v3/` (20 donors, 7,028
+islets); that root is not the selected launch candidate. Donor 78 (HDL078 /
+HPAP-078) was permanently removed from the app and all analysis by owner
+directive. The target is the other 20 donors, to be reprocessed through one
+reproducible workflow; that work has not started and decisions D1–D5 remain
+open. See the [owner directive](owner_directive_20261015.md) and
+[uniform reprocessing plan](uniform_reprocessing_plan_20261015.md).
 
-On 2026-10-03 the owner approved all six donor boundary sets (HPAP-078, 6090,
-6232, 6520, recovered 6539 and 6558) and the reconstruction phenotype rules,
-and selected Harmony on protein PCA with the uncorrected fit retained. Exact
-historical typing recovery and scVI retraining are no longer prerequisites.
-The original 15-donor source records are preserved; the expanded root passed
-its zero-tolerance original parity audit, its release validator and browser
-acceptance. See [the protein expansion record](protein_expansion_20261003.md).
-It is not yet a production release: the release builder and runtime Parquet
-backend do not carry the expansion metadata, and its images are symlinks to
-source paths outside the root. Continue request `83810` and assessment
-`IRM-456246` with an approved final inventory through the owner; no new UFRC
-acceptance or classification disposition has been established.
+The frozen `5809be4` 15-image production artifact and its evidence remain a
+historical reference; they are not the selected launch candidate. Earlier
+October protein-expansion and September all-donor checks document historical
+roots only and do not establish acceptance of the new 20-donor workflow. Neither
+this checkout nor its static image route is a PubApps release. The current
+ticket, form, and IRM status are tracked in the
+[launch-preparation note](ufrc_launch_preparation_20261015.md).
 
 ### Historical regenerated 21-image candidate
 
@@ -86,22 +89,14 @@ Its old exclusion annotation was drawn on duplicated 6090 pixels and was preserv
 separately. Corrected source paths and the raw acquisition evidence are documented
 in [the expansion status](cohort_expansion_status.md).
 
-A second scientific blocker is recorded in the historical
-`7571b6d:scripts/phenotype_evaluator.py` note: the original rules that produced
-the shipped ECAD-positive/Structural labels were unavailable; v2 rules were a
-reconstruction requiring biological review. The current `data/phenotype_rules.csv`
-cannot produce all 21 shipped labels. The September 29 phase-2 contract required
-reproducing original labels from the recovered gates and complete rule chain,
-then either recovering the scVI model or validating a reviewed joint retrain.
-The 2026-10-03 owner decision replaced that requirement with the accepted
-reconstruction rules, applied to the additions only, while preserving original
-donor records.
-Completing segmentation does not establish equivalent phenotype
-assignments. Raw-marker and mask analyses retain explicit limitations;
-certified new-cell phenotypes still require reviewed gate evidence.
-The tested transfer models did not meet their predeclared accuracy/F1/recall
-screen; their design and per-class results are retained. This is a scientific
-provenance issue, not a newly inferred UFRC rule.
+Historical method-recovery work found that the original phenotype rules and
+trained scVI model behind the first 15 donors were lost. On 2026-10-15, the
+owner directed that all 20 retained donors be reprocessed through one
+reproducible workflow rather than append results from a different method. The
+uniform plan is proposed and its compute work has not started; D1–D5 and the
+acceptance gates remain open. See the [owner directive](owner_directive_20261015.md)
+and [uniform reprocessing plan](uniform_reprocessing_plan_20261015.md). This is
+a scientific-provenance requirement, not an additional UFRC rule.
 
 ## Requirements mapped to evidence
 
@@ -111,7 +106,7 @@ UFRC approval gates.
 
 | Supplied requirement | Current implementation or document | Evidence still needed to close it |
 |---|---|---|
-| Project plan 1: purpose, audience, complete data-flow map, data categories | Populated DOCX; [handoff](../PUBAPPS_UFRC_HANDOFF.md); [SVG](pubapps_architecture.svg)/[PNG](pubapps_architecture.png) describe the planned profile and reported provisioning status | Assigned configuration and reconciled provisioning status; final reviewed form with genuine dated PI acknowledgment |
+| Project plan 1: purpose, audience, complete data-flow map, data categories | Instance request form submitted with ticket `83810` on 2026-08-31 (owner-confirmed); [handoff](../PUBAPPS_UFRC_HANDOFF.md); [SVG](pubapps_architecture.svg)/[PNG](pubapps_architecture.png) describe the planned profile | Confirm form linkage to the master assessment; ask UFRC whether it wants an amendment after the final inventory; verify actual PI acknowledgment and assigned configuration |
 | Project plan 3–4: controls appropriate to the data and lawful data handling | Sensitive profile; whole-site proxy authentication request; read-only releases; production rejects AI credentials/debugging | Owner review of the retained asset/field inventory, authorized classification and disclosure approval, applicable IRB/DUA/MTA disposition; no Restricted asset may enter the reviewer release |
 | Project plan 2: UF branding and accessibility | App skip link/landmarks and UF accessibility footer; the browser viewer URL input is disabled | Record automated and manual checks across all four tabs, keyboard/focus, labels, contrast/zoom, plots and viewer alternatives; fix defects before claiming conformance |
 | Development standards: input validation and minimal, appropriate output | Allowlisted browser inputs and asset basenames; centralized fixed-field JSON events; viewer bootstrap rejects external/missing/traversal URLs before vendor import | Source CI and native production-profile negative-input/log evidence retained; final deployed runtime and UFRC log-collection checks remain |
@@ -119,11 +114,12 @@ UFRC approval gates.
 | Development standards: maintained SBOM and code/package/container vulnerability review | Build/scan tooling records image identity, resolved R/Python manifests, CycloneDX and Grype results; DuckDB source/version and Rocker interpreter handling corrected | The dated `5809be4` image passed the no High/Critical gate. A new exact-release SBOM/scan and scanner/database identity remain required, as does UFRC pre-production review; lower-severity findings and incomplete browser-vendor coverage remain recorded |
 | Development standards: one event per line and UFIT-monitored logging | Central timestamped JSON emitter in `00_audit.R`; [log inventory](pubapps_log_inventory.md); dedicated worker log mount | Candidate runtime capture, native/framework output review, effective permissions, and UFRC collector destination. Record applicable access/retention rules |
 | UFRC team: pre-production vulnerability/availability review and owner attestation; continuing UFIT network scans | Deployment verification and rollback tooling; review request text | UFRC production acceptance and network-scan process; exact HTTPS/auth/WebSocket/download/TIFF Range tests; genuine PI/data-owner go-live attestation |
-| Conditional project-plan obligations and the existing individual assessment | Individual Risk Assessment already open; Sensitive access-review applicability awaiting UFRC | Assessment follow-up responses and disposition; quarterly access reviews if UFRC applies item 6; any additional controls explicitly assigned by the assessment |
+| Conditional project-plan obligations and master-assessment routing | Individual assessment `IRM-456246` canceled 2026-10-15; UFIT says project will be added to the PubApps master assessment | Confirm linkage and any remaining review/control requirements with UFRC; quarterly access reviews if UFRC applies item 6 |
 
 Public UFRC guidance normally permits attaching the instance form to its main
-assessment, with individual assessment when required. This project's already-open
-individual assessment is the record to continue. [UFRC assessment guidance](https://docs.rc.ufl.edu/services/web_hosting/risk_assessment/).
+assessment, with individual assessment when UFRC requires it. The original form
+was submitted with ticket `83810` on 2026-08-31; confirm its master-assessment
+linkage and requested update path through that ticket. [UFRC assessment guidance](https://docs.rc.ufl.edu/services/web_hosting/risk_assessment/).
 
 ## Implementation and validation record
 
@@ -208,29 +204,25 @@ verification record are retained in the restricted release record; earlier
 
 ## Remaining release sequence
 
-For the 15-donor reviewer release, select and freeze the exact app revision,
-then produce a matching immutable image and copied schema-1 data/image bundle
-with 15 approved images. Retain new full checksums, source-to-release parity,
-SBOM/scan, browser, and capacity evidence for that exact revision. The dated
-`5809be4` evidence remains a reference; it does not certify the current UI.
-
-For any later expansion, finish the five donor-specific boundary reviews,
-recover and verify the original typing/scVI method and gates, and validate a
-common 21-donor trajectory, UMAP and Leiden refit while preserving original
-IDs, geometry, measurements, missingness and phenotype labels. Only after
-scientific and owner acceptance should a new final image/data inventory, count, capacity estimate,
-and matching release evidence be documented. Do not replace the preserved
-original release or reuse its passing results as expansion evidence.
-
-1. Reconcile provisioning and record the remaining owner/UFRC details in request
-   `83810` and assessment `IRM-456246`;
-   complete classification/disclosure review and genuine PI acknowledgment.
-2. Apply the UFRC-confirmed backend/proxy configuration, transfer and activate
-   the exact artifacts, then verify authentication, WebSocket, downloads, small
-   TIFF ranges, logs, health/restart/rollback, and representative five-session use.
-3. Retain UFRC acceptance and owner go-live approval before delivering reviewer
-   credentials. Assign both maintainers, incident/rotation responsibilities, and
-   continuation before the trial expires on 2026-11-30.
+1. Continue current UFRC coordination on ticket `83810` / `SYSCONFIG-8173`:
+   confirm that the August 31 instance form is linked to the PubApps master
+   assessment, and ask whether UFRC wants an amendment. Individual assessment
+   `IRM-456246` was canceled on 2026-10-15; do not reopen it unless UFRC directs.
+2. Keep the local app offline while the owner resolves decisions D1–D5 and the
+   20-donor workflow is implemented and run. Donor 78/HDL078 remains permanently
+   excluded. Follow the gates and acceptance criteria in the
+   [uniform reprocessing plan](uniform_reprocessing_plan_20261015.md); the
+   October 15 v3 and frozen 15-donor root are comparison history, not launch
+   candidates.
+3. After the owner accepts the reprocessed data, create a fresh release
+   inventory and update the submitted request only in the way UFRC specifies.
+   Then produce candidate-specific image/data artifacts, hashes, source parity,
+   SBOM/scan, browser, capacity, and operational evidence.
+4. Confirm the assigned host, account, storage quotas, SSH route, proxy/backend,
+   authentication, logging, and ongoing scan process with UFRC. Retain UFRC
+   production acceptance and PI/data-owner go-live approval before bringing up
+   a production service or delivering reviewer credentials. Arrange allocation
+   continuation before the recorded trial term ends on 2026-11-30.
 
 ## Browser dependency coverage
 

@@ -10,6 +10,17 @@ Developer- and maintainer-facing reference for rebuilding the app data, deployin
 > deployment. Any older mutable-code, direct-nginx, Apptainer, or AI-key instruction in
 > historical notes is not a production procedure.
 
+> **Current migration status, 2026-10-16:** The local app is offline pending
+> uniform reprocessing of the 20-donor target; donor 78/HDL078 is permanently
+> excluded. The PubApps instance request form was submitted with ticket `83810`
+> on 2026-08-31, and UFIT canceled individual assessment `IRM-456246` on
+> 2026-10-15 while routing the project to the master assessment. UFRC comment 13
+> says VM provisioning is next and asks for DNS/proxy requirements; the reply is
+> drafted in the [launch-preparation note](ufrc_launch_preparation_20261015.md).
+> See the [reprocessing plan](uniform_reprocessing_plan_20261015.md) for the
+> processing gates. Do not start or deploy a local candidate before the
+> reprocessed root is accepted.
+
 ---
 
 ## Data Pipeline

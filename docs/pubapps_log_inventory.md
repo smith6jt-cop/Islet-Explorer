@@ -1,15 +1,23 @@
 # Islet Explorer PubApps Log Inventory and Project Handling Guidance
 
 Status: **application hardening recorded; exact-release and UFRC confirmations remain open**
-Repository snapshot reviewed: **2026-09-08**
+Repository snapshot reviewed: **2026-09-08; institutional status updated 2026-10-16**
 Production profile: **journal-review deployment, Public Restricted access, Sensitive collection**
 
-UFRC support ticket #83810 (SYSCONFIG-8173) exists, and the individual Risk
-Assessment IRM-456246-Panc Floyd was submitted on 2026-09-01. VM provisioning is
-owner-reported; the 2026-09-08 UFRC response says setup normally follows completed
-assessments and checklists. Reconcile the assigned host and provisioning status with
-UFRC. Collector/retention settings and production acceptance remain unconfirmed.
-See [`ufrc_readiness.md`](ufrc_readiness.md) for the evidence index.
+UFRC support ticket #83810 (SYSCONFIG-8173) remains the project request. The
+owner confirms the PubApps instance request form was submitted with that ticket
+on 2026-08-31. UFIT canceled individual assessment IRM-456246 on 2026-10-15; the
+closure notice says the project will be added to the PubApps master assessment.
+Confirm the original form's linkage and any remaining requirements with UFRC.
+Comment 13 on 2026-10-16 says the VM will be provisioned next and asks for
+DNS/proxy requirements; the project has prepared a response with the requested
+hostname, path, protocols, authentication, and backend caveat.
+The local app is offline pending uniform processing of the target 20 donors;
+donor HDL078/HPAP-078 is permanently excluded. Assigned host details, collector
+and retention settings, and production acceptance remain unconfirmed. The
+current coordination packet is in
+[`ufrc_launch_preparation_20261015.md`](ufrc_launch_preparation_20261015.md);
+the readiness index remains the broader evidence record.
 
 ## Purpose and scope
 

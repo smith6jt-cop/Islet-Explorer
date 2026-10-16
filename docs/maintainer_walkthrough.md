@@ -4,6 +4,8 @@ Prepared 2026-09-10 for a maintainer experienced with R, Python, Linux, and Git,
 
 This walkthrough describes the inspected checkout, its retained release records, and UF's public documentation checked on this date. It does not attest that the requested UFRC endpoint is configured or approved. No deployment or scientific recomputation was performed for this walkthrough.
 
+> **Status update, 2026-10-15:** Sections 14–16 below preserve the September 2026 meeting brief and are historical. The owner confirms the instance request form was submitted with UFRC ticket `83810` on 2026-08-31. UFIT canceled individual assessment `IRM-456246` on 2026-10-15 and stated that the project will be added to the PubApps master assessment. The local app is offline pending uniform reprocessing of the remaining 20 donors; donor 78/HDL078 is permanently excluded. Use the [current UFRC launch-preparation note](ufrc_launch_preparation_20261015.md) for coordination status and the [uniform reprocessing plan](uniform_reprocessing_plan_20261015.md) for processing gates.
+
 **1. The architectural model to keep in your head**
 
 There are three related systems in this workspace:
@@ -389,7 +391,7 @@ Examples and scientific counts earlier in this walkthrough describe the frozen
 | Item | Recorded state |
 |---|---|
 | Support/configuration references | UFRC `83810`; `SYSCONFIG-8173` |
-| Individual assessment | `IRM-456246`; assigned ISM requested a brief Teams meeting on 2026-09-16; scheduling and review completion unconfirmed |
+| Individual assessment | `IRM-456246` canceled 2026-10-15; UFIT said project will be added to PubApps master assessment; linkage confirmation pending |
 | Allocation | Trial `RC83797`, group `maigan`, 2026-08-31 through 2026-11-30 |
 | Provisioning | Owner reported a VM; local assessment review and assigned host/account/SSH/proxy details remain pending |
 | Frozen candidate | Source `5809be4`; image/security, full hashes, and 22 real-data parity checks recorded as passing |
@@ -402,7 +404,7 @@ Examples and scientific counts earlier in this walkthrough describe the frozen
 
 Do not describe the current dirty working tree as the already tested frozen release. The teaching documents created with this walkthrough also make the development checkout differ from the candidate. Use a clean checkout of the intended release when building; preserve the retained candidate's identity if deploying those existing artifacts.
 
-UF's public assessment guidance allows many projects to use the instance form attached to the infrastructure assessment, with individual assessment when UFRC requires it. This project already has an individual record; continue that record and the existing ticket. A started assessment or allocated VM is not a production acceptance record. [UFRC assessment guidance](https://docs.rc.ufl.edu/services/web_hosting/risk_assessment/).
+UF's public assessment guidance allows many projects to use the instance form attached to the infrastructure assessment, with individual assessment when UFRC requires it. The form was submitted with ticket `83810` on 2026-08-31; UFIT canceled the individual record and plans to add the project to the master assessment. Confirm linkage and next steps through the existing ticket. A submitted form or allocated VM is not a production acceptance record. [UFRC assessment guidance](https://docs.rc.ufl.edu/services/web_hosting/risk_assessment/).
 
 **15. Responsibility boundaries for the setup meeting**
 

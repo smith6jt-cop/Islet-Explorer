@@ -1,77 +1,12 @@
 # Panc Floyd / Islet Explorer UFRC PubApps Request and Reviewer-Hosting Handoff
 
-Local operating update, 2026-09-28: the development app again serves the
-original 15 donors and 5,214 islets at
-`http://10.15.152.7:8080/islet-explorer/` (nginx to loopback port 3840).
-Its `/local_images/` route still serves an earlier 21-image collection; the
-owner permits that mismatch only during local development. It is not an
-approved expanded app or a production configuration. Six donor additions are
-staged separately as raw-only evidence, with `app_ready: false` and
-`scientific_acceptance: false`. See [the current handoff](docs/HANDOFF_2026-09-28.md)
-and [phase-2 contract](docs/donor_expansion_phase2.md). Earlier regenerated
-21-donor schema-2/3/4 candidates remain historical experiments. Institutional
-status below remains as last verified on 2026-09-16; local checks do not
-establish a new UFRC acceptance.
+> **Current status — 2026-10-16:** The owner confirms that the PubApps instance request form was submitted with the original UFRC ticket `83810` on 2026-08-31 (`SYSCONFIG-8173`). UFIT canceled individual assessment `IRM-456246` on 2026-10-15 and said the project will be added to the PubApps master assessment. In comment 13, UFRC says the VM will be provisioned next and asks for DNS/proxy requirements; see the current [launch-preparation note](docs/ufrc_launch_preparation_20261015.md) for the reply draft. Confirm that the submitted form and evidence are linked to the master assessment and ask whether UFRC wants an amendment after the final inventory is accepted. Do not open a duplicate request or resubmit the form unless UFRC asks.
+>
+> The local app is offline pending uniform reprocessing of the 20-donor target. Donor 78 (HDL078 / HPAP-078) has been permanently removed from the app and all analysis. The reprocessing plan is proposed, its compute work has not started, and decisions D1–D5 remain open. There is no accepted production inventory or launch candidate. See the [owner directive](docs/owner_directive_20261015.md), [uniform reprocessing plan](docs/uniform_reprocessing_plan_20261015.md), and [current UFRC launch-preparation note](docs/ufrc_launch_preparation_20261015.md).
+>
+> Everything below this notice is retained as historical planning material from before the October 15 processing reset. Its cohort descriptions, risk-assessment status, checklists, and copy-ready form/ticket language are not current instructions. Use the launch-preparation note for the current addendum draft; do not send the legacy text or submit a duplicate form.
 
-This document is the actionable companion to
-`UFIT_PubApps_Instance_Request.docx`. It provides copy-ready form and support-ticket
-text, identifies information that the project owner must supply, and records the
-operational decisions for the journal-review deployment. The technical deployment
-procedure is in [`deploy/README.md`](deploy/README.md), and the detailed project log
-inventory is in [`docs/pubapps_log_inventory.md`](docs/pubapps_log_inventory.md).
-Do not submit the request with bracketed placeholders left unresolved.
-
-Status updated 2026-09-16: the existing records are UFRC request `83810`,
-configuration reference `SYSCONFIG-8173`, and individual assessment `IRM-456246`
-(submission confirmed 2026-09-01). These references were recovered through
-read-only UF Outlook search. On 2026-09-16 an assigned ISM requested a brief
-Microsoft Teams meeting for the risk review; scheduling and completion are not
-established. UFRC comment 8, received 2026-09-11, had reported its ISO waiting
-for that local review. Comment 7 requested that the UFRC-designated technical
-contact be added to the assessment; completion is not established. The owner
-previously reported a provisioned VM, but assigned host/account/SSH/proxy details
-remain unconfirmed.
-Continue the existing records; do not open duplicate requests. Neither allocation
-nor an open assessment establishes production approval. The current requirement-to-evidence index is
-[`docs/ufrc_readiness.md`](docs/ufrc_readiness.md).
-
-The checklists below distinguish UFRC/policy requirements from conditional and
-recurring owner actions and from project recommendations. Project hardening in the
-deployment runbook remains part of this application's release process, but each such
-control is not a separate UFRC approval gate.
-
-Expansion work began on 2026-09-16 with a target of
-21 donor images: the original 15 nPOD donors plus 6090, 6232, 6539, the
-`PAN-6558-AAb_test35_35p-LED.tif` acquisition, 6520-01A, and HPAP-078. The alternate
-`CX_PAN-6558` image and 6520-01B are excluded. HPAP-078 retains its HPAP provenance;
-do not describe the target as 21 nPOD donors. Image preparation and experimental
-model fitting took place offline, outside PubApps. The current phase-2 contract
-requires preserving the original 15 donors exactly and adding only independently
-validated new-donor measurements. Preserve the frozen `5809be4` release and its
-dated 15-image evidence. **The 6090/6539 source mix-up is resolved:** 6090 matches all
-36 original raw channel planes; the distinct 6539 stack was reconstructed from
-its own raw acquisition and checked pixel-for-pixel. The corrected six viewer
-TIFFs total 46,877,746,573 bytes, but no expanded image release is approved.
-Preserve the rejected duplicate and its old annotation separately. Source
-preparation and corrected paths remain in [the expansion status](docs/cohort_expansion_status.md).
-
-The offline raw-only bundle at
-`data/development/donor-additions-20260923-raw-v1/` contains 943,068 new-donor
-objects: 942,867 fully measured and 201 wholly unmeasured. Its 852 zero-tolerance
-checks preserve the original donor artifacts, but it has no accepted new-cell
-phenotypes, normalized expression, scVI fields, islet composition, compatible
-trajectory, optional loader, or combined islet count. HPAP-078 boundaries are
-owner-approved; 6090, 6232, 6520, recovered 6539, and 6558 still require
-donor-specific visual review. Update the existing request and assessment with
-an approved final inventory and applicable HPAP disclosure/usage terms through
-the authorized owner; this document does not infer an institutional disposition.
-
-The earlier schema-2/3/4 all-donor runtimes, phenotype-retirement analyses,
-and raw-compartment diffusion axes are experimental evidence, not the current
-app or an accepted additions-only method. The September 16 schema-2 candidate
-reported 8,371 islets and 3,499 eligible trajectory islets; these are not
-preservation-compatible expansion counts. See [the historical delivery record](docs/all_donor_delivery.md) and
-[September 17 revision](docs/trajectory_revision_20260917.md).
+## Historical planning record (superseded 2026-10-15)
 
 ## Deployment decisions
 
@@ -242,6 +177,8 @@ period.
 
 ## Copy-ready PubApps form content
 
+> **Superseded:** this was draft wording prepared before the 2026-10-15 processing reset. The instance request form was already submitted with ticket `83810` on 2026-08-31. Do not submit a duplicate form or reuse this cohort/status text. Use the current [addendum draft](docs/ufrc_launch_preparation_20261015.md), and amend the original form only if UFRC requests it after final processing is accepted.
+
 ### Project Name
 
 Panc Floyd (Islet Explorer reviewer application)
@@ -361,7 +298,9 @@ Faculty PI/HPG Group Sponsor Name: Maigan Brusko, PhD
 Date: `[ACTUAL PI ATTESTATION DATE]` — this draft was updated 2026-09-16 and does
 not record a completed attestation.
 
-## Copy-ready follow-up for the existing UFRC ticket
+## Superseded copy-ready follow-up for the existing UFRC ticket
+
+> **Do not send the legacy text below.** The current addendum draft is in [the launch-preparation note](docs/ufrc_launch_preparation_20261015.md). It reflects the August 31 form submission, the October 15 IRM cancellation, and the pending 20-donor reprocessing.
 
 **Subject:** `Request 83810: Islet Explorer production review — IRM-456246`
 
