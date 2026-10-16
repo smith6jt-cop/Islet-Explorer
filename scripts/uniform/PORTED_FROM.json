@@ -1,0 +1,63 @@
+{
+  "source_repo": "/home/smith6jt/IO60panc2nd/scripts",
+  "source_commit": "340bf0c5f284bc1f039864a879929f88edfc6a38 2026-10-02 15:59:28 -0400",
+  "source_uncommitted": [],
+  "files": {
+    "qupath/lib/common.groovy": {
+      "source": "/home/smith6jt/IO60panc2nd/scripts/lib/common.groovy",
+      "source_sha256": "2f4e40ef28db10ba74e31c173ea6a0e6fd294a49a5a74897939c54920f0d12c0"
+    },
+    "qupath/preflight.groovy": {
+      "source": "/home/smith6jt/IO60panc2nd/scripts/v3/preflight.groovy",
+      "source_sha256": "b49c45b99e61c21d6bd5af89d386e5e4c5b9df54a748e17f1cd966599e4f6fd2"
+    },
+    "qupath/0_cell_detection.groovy": {
+      "source": "/home/smith6jt/IO60panc2nd/scripts/v3/qupath/0_cell_detection_panc_v3.groovy",
+      "source_sha256": "58d8aba7b33565384b00873907d5c1b0e5be57665e86a9631ea5d586afce4495"
+    },
+    "qupath/2_cell_measurements.groovy": {
+      "source": "/home/smith6jt/IO60panc2nd/scripts/2_fast_cell_measurements.groovy",
+      "source_sha256": "f68ed3b1761beb6a77b81547e6d64032e90997d86a8e98147a4b14253205aac2"
+    },
+    "qupath/exports.groovy": {
+      "source": "/home/smith6jt/IO60panc2nd/scripts/v3/exports.groovy",
+      "source_sha256": "e245d78fcbd7b7009bc0942bcaf45c03e2c28e3a0754ed3aff315e2c740b0c3b"
+    },
+    "qupath/1_islet_objects.groovy": {
+      "source": "/home/smith6jt/IO60panc2nd/scripts/v3/qupath/1_panc_objects_perimage.groovy",
+      "source_sha256": "7545386f80c771ebe5435b1886ca5db014d024452725746212f3dd1867dc950a"
+    },
+    "qupath/1b_islet_outlines_to_cells.groovy": {
+      "source": "/home/smith6jt/IO60panc2nd/scripts/v3/qupath/1b_islet_outlines_to_cells.groovy",
+      "source_sha256": "212d0be4922fd3585af161ff4f1c72d62243eb727eb0d861d502410c61a5f547"
+    },
+    "qupath/4_islet_naming.groovy": {
+      "source": "/home/smith6jt/IO60panc2nd/scripts/v3/qupath/4_islet_expander_v3.groovy",
+      "source_sha256": "7ae04ff8d14e5f6f463eff1a06921ce08a2ae47699239e766a9b2b8fe1f55774"
+    },
+    "qupath/3_signed_distance.groovy": {
+      "source": "/home/smith6jt/IO60panc2nd/scripts/v3/qupath/3_signed_distance_v3.groovy",
+      "source_sha256": "d6452ff58c1a2b0188007d6f4c8b05cbc843e57b4326e36543645ef55df50a34"
+    },
+    "qupath/8_hierarchy_parenting.groovy": {
+      "source": "/home/smith6jt/IO60panc2nd/scripts/v3/qupath/8_hierarchy_parenting_v3.groovy",
+      "source_sha256": "ebe96100e6998b7330baef4b8e977e2a28b618348185a63883c1b27c711d5650"
+    },
+    "qupath/export_cells_geojson.groovy": {
+      "source": "/home/smith6jt/IO60panc2nd/scripts/v3/qupath/export_cells_geojson_v3.groovy",
+      "source_sha256": "9c76b617b969188ee8e333c451f2467a3cf7af80094e4e95ac975fdab3c47cd3"
+    },
+    "qupath/footer_template.groovy": {
+      "source": "/home/smith6jt/IO60panc2nd/scripts/v3/footer_template.groovy",
+      "source_sha256": "be8d42ab83e3f40003098615c8e020a459346c8501405b4a2baf1ac9b1115c88"
+    },
+    "islet_classifier_fit.py": {
+      "source": "/home/smith6jt/IO60panc2nd/scripts/v3/islet_classifier_fit.py",
+      "source_sha256": "d43b5d568cfbd38fb43a8f176a164cac0c54b7c1e0fd0c3bad0cb03c79c8ae4d"
+    },
+    "islet_cell_test.py": {
+      "source": "/home/smith6jt/IO60panc2nd/scripts/v3/islet_cell_test.py",
+      "source_sha256": "90b78d366f95beaafe60d86f918987b1793ddf23ef3f48e5bdbea8dbfd80754d"
+    }
+  }
+}
