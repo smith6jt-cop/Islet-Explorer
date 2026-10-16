@@ -33,7 +33,9 @@ viewer_server <- function(id, forced_image, current_tab) {
       if (!is.null(local_root) && nzchar(local_root) && dir.exists(local_root)) {
         imgs <- unique(c(imgs, list.files(local_root, pattern = "\\.ome\\.tiff?$", ignore.case = TRUE)))
       }
-      imgs
+      # Never offer an excluded donor's image, whichever folder supplies it.
+      donor <- sub("^.*_([0-9]+)\\.ome\\.tiff?$", "\\1", imgs, ignore.case = TRUE)
+      imgs[!islet_canonical_donor_id(donor) %in% ISLET_EXCLUDED_DONORS]
     })
 
     # The basename currently being viewed (forced image wins, then the user's

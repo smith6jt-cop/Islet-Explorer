@@ -1,5 +1,14 @@
 # Protein donor expansion — 2026-10-03
 
+> **2026-10-15:** donor 78 (HDL078 / HPAP-078) was removed from the app and all
+> analysis by owner directive. The current build has five additions and 20
+> donors (7 ND, 7 Aab+, 6 T1D; 7,028 islets) and is described under
+> [Five-addition rebuild](#five-addition-rebuild--2026-10-15). The local app is
+> offline at the owner's direction until the reprocessed root is accepted.
+> Mentions of six
+> additions below record the 2026-10-03 build. See the
+> [directive record](owner_directive_20261015.md).
+
 The 2026-10-14 [expanded-cohort grouping and comparability audit](data_comparability_20261014.md)
 records which fields are consistently grouped and which retain method
 differences between the original 15 donors and the six additions.
@@ -63,11 +72,13 @@ the frozen baseline. No scVI training or inference is required by this build.
 | Frozen original baseline | `data/` |
 | Immutable original cell partition | `single_cell_analysis/CODEX_scvi_BioCov_phenotyped_newDuctal.h5ad` |
 | Raw additions | `data/development/donor-additions-20260923-raw-v1/additions/raw/` |
-| Accepted prepared inputs | `data/development/protein-additions-20261003-v2/` |
-| Native geometry snapshot | `data/development/protein-review-geometry-20261003-v2/` |
-| Owner acceptance and exact hashes | `tmp/protein-expansion-20261003/owner_acceptance.json` |
-| Expanded app root | `data/development/protein-expanded-20261003-v2/` |
-| Build diagnostics and uncorrected fit | `tmp/protein-expansion-20261003/expanded-v2/` |
+| Accepted prepared inputs | `data/development/protein-additions-20261015-v3/` (v2 superseded) |
+| Native geometry snapshot | `data/development/protein-review-geometry-20261015-v3/` (v2 superseded) |
+| Owner acceptance and exact hashes | `tmp/protein-expansion-20261015/owner_acceptance.json` (derived from the 2026-10-03 record) |
+| Cohort manifest | `scripts/protein_expansion_cohort.csv` (20 donors) |
+| Excluded donors | `scripts/excluded_donors.csv` |
+| Expanded app root | `data/development/protein-expanded-20261015-v3/` (v2, with donor 78, superseded and refused by the app) |
+| Build diagnostics and uncorrected fit | `tmp/protein-expansion-20261015/expanded-v3/` |
 | Native membership validation | `tmp/protein-expansion-20261003/geometry-validated/validation.json` |
 
 The v1 prepared inputs and geometry-v1 snapshot are superseded. The first expanded build failed during H5AD serialization and was never served; expanded-v2 is the corrected build. Geometry-v2's
@@ -89,7 +100,63 @@ its inclusion/QC status, including objects without measured markers. The
 expanded-v2 release validator passed, and the browser acceptance run passed all
 45 checks on 2026-10-05 (report: `tmp/protein-expansion-20261003/expanded-browser-acceptance.json`). Automated accessibility checks found no violations; color-contrast findings on plots remain for manual review.
 
+## Five-addition rebuild — 2026-10-15
+
+The owner directed that donor HDL078 (case 78) be removed completely from the
+app and all analysis. `stage_original_gate_calls.DONORS` now lists 6090, 6232,
+6520, 6539 and 6558. Preparation, assembly, validation and the browser check
+reject any donor named in `scripts/excluded_donors.csv`. Commands, run from the
+repository root with the scVI environment's Python:
+
+```bash
+PY=/home/smith6jt/miniconda3/envs/scvi-env/bin/python
+"$PY" scripts/prepare_protein_expansion.py \
+  --frozen single_cell_analysis/CODEX_scvi_BioCov_phenotyped_newDuctal.h5ad \
+  --raw-root data/development/donor-additions-20260923-raw-v1/additions/raw \
+  --output data/development/protein-additions-20261015-v3 \
+  --report-root tmp/protein-expansion-20261015/preparation-v3
+"$PY" scripts/assemble_protein_expansion.py --baseline data \
+  --prepared data/development/protein-additions-20261015-v3 \
+  --geometry data/development/protein-review-geometry-20261015-v3 \
+  --acceptance tmp/protein-expansion-20261015/owner_acceptance.json \
+  --cohort scripts/protein_expansion_cohort.csv \
+  --clinical data/development/expanded-20260911/metadata/selected_donor_metadata.csv \
+  --output data/development/protein-expanded-20261015-v3 \
+  --report-root tmp/protein-expansion-20261015/expanded-v3 --donor-correction harmony
+"$PY" scripts/validate_protein_release.py --baseline data \
+  --candidate data/development/protein-expanded-20261015-v3 \
+  --raw-root data/development/donor-additions-20260923-raw-v1/additions/raw \
+  --comparison tmp/protein-expansion-20261015/expanded-v3 \
+  --report tmp/protein-expansion-20261015/expanded-v3/release_validation.json
+```
+
+- The five prepared donor files are byte-identical to v2 (same SHA-256), as
+  expected for per-donor preparation.
+- The geometry snapshot is a five-donor copy of v2; geometry, centroid and
+  native-project hashes are unchanged.
+- The acceptance record carries the 2026-10-03 rule, embedding and boundary
+  approvals over unchanged for the five donors and records the removal. No new
+  review was performed.
+- Assembly produced 7,028 paired islets (5,214 original + 443 6090, 137 6232,
+  428 6520, 211 6539, 595 6558). The Harmony protein PCA, UMAP and Leiden fits
+  were refit without donor 78, so derived coordinates and clusters differ from
+  v2. Original-subset parity and the release validator passed: 5,277 original
+  files byte-identical, 20 images, no excluded donor in any table.
+- A scan of every table, H5AD (including embedded QuPath tables), workbook,
+  file name, image link and acceptance/boundary record found no donor-78 entry.
+- Browser check on the live app (`tmp/protein-expansion-20261015/expanded-v3-browser-acceptance.json`):
+  41 of 45 checks passed, including the 20-donor census, absence of 78 and the
+  five additions' tissue and image checks. The four failures do not involve
+  donor 78. Three come from the 2026-10-14 app change (`b1ce947`), which removed
+  the hormone fractions from Plot and made the PAGA layout build only on request;
+  the harness was not updated for it. The fourth is a Trajectory color-contrast
+  finding.
+
 ## Local service and rollback
+
+*Since 2026-10-15 the service is stopped and disabled and the static image route
+is closed, at the owner's direction; do not restart it before the reprocessed
+root is accepted. The description below is how it ran.*
 
 The user service `islet-explorer-local.service` runs Shiny on loopback port 3840;
 the existing nginx endpoint is `http://10.15.152.7:8080/islet-explorer/`.

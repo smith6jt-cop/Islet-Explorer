@@ -10,13 +10,17 @@ from assemble_protein_expansion import BASELINE_DIRS, ENDOCRINE
 from build_protein_embedding import sha256
 from protein_phenotyping import qc_mask
 from stage_original_gate_calls import DONORS
+from excluded_donors import assert_no_excluded
 
 
 def validate(baseline, candidate, raw_root, comparison, report):
     a=ad.read_h5ad(candidate/'islet_explorer.h5ad')
     old=ad.read_h5ad(baseline/'islet_explorer.h5ad')
     assert a.n_obs==old.n_obs+sum(a.obs.imageid.astype(str).isin([cid]).sum() for cid in DONORS)
-    assert a.obs_names.is_unique and a.obs.imageid.nunique()==21
+    expected_donors=old.obs.imageid.nunique()+len(DONORS)
+    assert a.obs_names.is_unique and a.obs.imageid.nunique()==expected_donors
+    assert_no_excluded(a.obs.imageid.astype(str).unique(),'Release islets')
+    assert_no_excluded([p.stem for p in (candidate/'donors').glob('*.csv')],'Release donor tables')
     assert np.isfinite(a.X).all()
     trajectory=ad.read_h5ad(candidate/'adata_ins_root.h5ad')
     for key in ['leiden_0.3','leiden_0.5','leiden_0.8','leiden_1.0','leiden_umap_1','leiden_umap_2']:
@@ -64,14 +68,15 @@ def validate(baseline, candidate, raw_root, comparison, report):
     assert u.uns['protein_embedding']['donor_correction']=='none'
     assert not np.array_equal(a.obsm['X_protein_pca'],u.obsm['X_protein_pca'])
     images=json.loads((candidate/'image_sources.json').read_text())
-    assert len(images)==21
+    assert len(images)==expected_donors
+    assert_no_excluded([row['case_id'] for row in images],'Release images')
     for row in images:
         path=candidate/'images'/row['image']
         assert path.resolve()==Path(row['source']) and path.stat().st_size==row['bytes']
     result=dict(passed=True,islets=a.n_obs,donors=donors,original_islets=old.n_obs,
         original_files_byte_identical=preserved,original_csv_prefixes_byte_identical=True,
         raw_addition_values_exact=True,composition_formulas_checked=True,
-        harmony_and_uncorrected_retained=True,images=21)
+        harmony_and_uncorrected_retained=True,images=len(images))
     report.write_text(json.dumps(result,indent=2)+'\n')
     print(json.dumps({k:v for k,v in result.items() if k!='donors'},indent=2))
 

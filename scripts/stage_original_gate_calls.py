@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Apply the frozen 15-donor numeric marker gates to six raw donor H5ADs.
+"""Apply the frozen 15-donor numeric marker gates to five raw donor H5ADs.
 
 This stages nullable per-cell marker calls only. It does not assign phenotypes,
 fit scVI, or make an app dataset. The gates are the original ``log1p(raw MFI)``
@@ -21,11 +21,16 @@ import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from excluded_donors import assert_no_excluded
+
 
 ROOT = Path(__file__).resolve().parents[1]
 FROZEN = ROOT / "single_cell_analysis/CODEX_scvi_BioCov_phenotyped_newDuctal.h5ad"
 RAW = ROOT / "data/development/donor-additions-20260923-raw-v1/additions/raw"
-DONORS = ("78", "6090", "6232", "6520", "6539", "6558")
+# The current additions. Donor 78 (HDL078/HPAP-078) was removed on 2026-10-15;
+# see excluded_donors.csv.
+DONORS = ("6090", "6232", "6520", "6539", "6558")
+assert_no_excluded(DONORS, "Protein expansion additions")
 
 
 def strings(dataset):

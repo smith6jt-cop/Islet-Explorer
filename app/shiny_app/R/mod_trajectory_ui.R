@@ -37,7 +37,7 @@ trajectory_ui <- function(id) {
           fluidRow(
             column(8,
               tags$p(class = "text-muted",
-                "Phenotype counts preserve the original 15 donors' saved labels; the six additions use reviewed reconstructed rules."),
+                "Phenotype counts preserve the original 15 donors' saved labels; the five additions use reviewed reconstructed rules."),
               tags$p(class = "text-muted",
                 "Trajectory uses the 12 retained phenotypes in core and peri regions. Retired categories are excluded from the calculation."),
               sliderInput(ns("cell_range"), "Cells per islet:",

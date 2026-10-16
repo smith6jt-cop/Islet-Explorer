@@ -25,14 +25,14 @@ class DonorMetadataTests(unittest.TestCase):
         self.key = self.root / "donor_key.csv"
         self.source = self.root / "npod.csv"
         self.cohort.write_text(
-            "case_id,donor_source,inclusion_status\n6232,nPOD,selected\n78,HPAP,selected\n"
+            "case_id,donor_source,inclusion_status\n6232,nPOD,selected\n101,HPAP,selected\n"
         )
         self.key.write_text(
-            "Case ID,Donor Status,Age,Gender\n6232.0,ND,20,Female\n78.0,T1D,25,Male\n"
+            "Case ID,Donor Status,Age,Gender\n6232.0,ND,20,Female\n101.0,T1D,25,Male\n"
         )
         self.source.write_text(
             "case_id,age_years,BMI,HbA1c_percent,C_peptide_ng_mL,GADA_Result\n"
-            "6232.0,20,22,5.2,<0.02,Positive\n78,99,99,99,99,Positive\n"
+            "6232.0,20,22,5.2,<0.02,Positive\n101,99,99,99,99,Positive\n"
         )
 
     def build(self, with_source=False):
@@ -42,8 +42,8 @@ class DonorMetadataTests(unittest.TestCase):
 
     def test_hpap_never_joins_numeric_npod_donor(self):
         out = self.build(with_source=True)
-        hpap = out.loc["78"]
-        self.assertEqual(hpap["source_donor_id"], "HPAP-078")
+        hpap = out.loc["101"]
+        self.assertEqual(hpap["source_donor_id"], "HPAP-101")
         self.assertEqual(hpap["donor_source"], "HPAP")
         self.assertTrue(pd.isna(hpap["npod_case_id"]))
         self.assertEqual(hpap["age_years_key"], 25)
@@ -64,7 +64,7 @@ class DonorMetadataTests(unittest.TestCase):
 
     def test_demographics_only_has_explicit_provenance(self):
         out = self.build()
-        self.assertEqual(list(out.index), ["6232", "78"])
+        self.assertEqual(list(out.index), ["6232", "101"])
         self.assertTrue(out["BMI"].isna().all())
         self.assertTrue((out["metadata_source"] == "donor_key_only").all())
         self.assertTrue(out["donor_key_sha256"].str.fullmatch("[a-f0-9]{64}").all())
@@ -76,21 +76,21 @@ class DonorMetadataTests(unittest.TestCase):
         self.assertEqual(out.loc["6232", "inclusion_status"], "identity_hold")
 
     def test_spreadsheet_ids_and_prefixed_ids_normalize(self):
-        for value in [78, 78.0, "78.0", "0078", "HPAP-078"]:
-            self.assertEqual(metadata.normalize_case_id(value), "78")
-        for invalid in [78.5, "78.1", "78junk", None, True, "nan", ""]:
+        for value in [101, 101.0, "101.0", "0101", "HPAP-101"]:
+            self.assertEqual(metadata.normalize_case_id(value), "101")
+        for invalid in [101.5, "101.1", "101junk", None, True, "nan", ""]:
             with self.subTest(invalid=invalid), self.assertRaises(ValueError):
                 metadata.normalize_case_id(invalid)
 
     def test_duplicate_cohort_identity_is_rejected(self):
         with self.cohort.open("a") as handle:
-            handle.write("0078.0,HPAP,selected\n")
+            handle.write("0101.0,HPAP,selected\n")
         with self.assertRaisesRegex(ValueError, "duplicate normalized case_id"):
             self.build()
 
     def test_duplicate_donor_key_is_rejected(self):
         with self.key.open("a") as handle:
-            handle.write("0078,T1D,25,Male\n")
+            handle.write("0101,T1D,25,Male\n")
         with self.assertRaisesRegex(ValueError, "duplicate normalized case_id"):
             self.build()
 
@@ -100,7 +100,7 @@ class DonorMetadataTests(unittest.TestCase):
             self.build()
 
     def test_explicit_npod_source_must_have_exactly_one_match(self):
-        self.source.write_text("case_id,age_years\n78,99\n")
+        self.source.write_text("case_id,age_years\n101,99\n")
         with self.assertRaisesRegex(ValueError, "exactly one nPOD row"):
             self.build(with_source=True)
         self.source.write_text("case_id,age_years\n6232,20\n6232.0,20\n")
@@ -108,10 +108,17 @@ class DonorMetadataTests(unittest.TestCase):
             self.build(with_source=True)
 
     def test_wrong_source_assignment_and_status_are_rejected(self):
-        for row in [" HPAP-078,nPOD,selected", "HDL78,HPAP,selected", "78,unknown,selected", "78,HPAP,excluded"]:
+        for row in [" HPAP-101,nPOD,selected", "HDL101,HPAP,selected", "101,unknown,selected", "101,HPAP,excluded"]:
             with self.subTest(row=row):
                 self.cohort.write_text("case_id,donor_source,inclusion_status\n" + row + "\n")
                 with self.assertRaises(ValueError):
+                    self.build()
+
+    def test_excluded_donor_is_rejected_in_every_spelling(self):
+        for row in ["78,HPAP,selected", "HPAP-078,HPAP,selected", "HDL078,nPOD,selected", "0078,HPAP,identity_hold"]:
+            with self.subTest(row=row):
+                self.cohort.write_text("case_id,donor_source,inclusion_status\n6232,nPOD,selected\n" + row + "\n")
+                with self.assertRaisesRegex(ValueError, "excluded donor"):
                     self.build()
 
     def test_prefixed_donor_key_cannot_cross_source_namespaces(self):
@@ -145,8 +152,8 @@ class DonorMetadataTests(unittest.TestCase):
             metadata.main()
         result = pd.read_csv(output, dtype={"case_id": str}).set_index("case_id")
         self.assertEqual(len(result), 2)
-        self.assertTrue(pd.isna(result.loc["78", "npod_case_id"]))
-        self.assertTrue(pd.isna(result.loc["78", "AAb_GADA"]))
+        self.assertTrue(pd.isna(result.loc["101", "npod_case_id"]))
+        self.assertTrue(pd.isna(result.loc["101", "AAb_GADA"]))
         for path, contents in before.items():
             self.assertEqual(path.read_bytes(), contents)
 

@@ -8,6 +8,13 @@ make_backend_env <- function(root) {
   env$phenotype_filter_rows <- function(df) {
     df[!(as.character(df$phenotype) %in% env$PHENOTYPE_RETIRED), , drop = FALSE]
   }
+  for (expr in parse(.find_source("R/00_globals.R"))) {
+    if (is.call(expr) && identical(expr[[1]], as.name("<-")) &&
+        as.character(expr[[2]]) %in% c("ISLET_EXCLUDED_DONORS", "islet_canonical_donor_id",
+                                       "islet_excluded_donors_in")) {
+      eval(expr, envir = env)
+    }
+  }
   sys.source(.find_source("R/01_runtime_data_backend.R"), envir = env)
   env
 }
@@ -130,6 +137,36 @@ test_that("development uses the selected source root even when a manifest exists
   env$audit_na <- function(...) invisible(NULL)
 
   expect_identical(env$load_shared_prepared_data(root)$source, "development")
+})
+
+test_that("excluded donor IDs match in every spelling and other donors pass", {
+  env <- make_backend_env(tempfile("islet-excluded-"))
+  expect_identical(env$ISLET_EXCLUDED_DONORS, "78")
+  expect_identical(env$islet_canonical_donor_id(c("78", "0078", "HPAP-078", "HDL078", "78.0", "112", "6232")),
+                   c("78", "78", "78", "78", "78", "112", "6232"))
+  expect_identical(env$islet_excluded_donors_in(c("112", "0078", NA, "6232", "0078")), "0078")
+  expect_length(env$islet_excluded_donors_in(c("112", "780", "1078", "6232")), 0)
+})
+
+test_that("a data root that still carries an excluded donor is refused, not filtered", {
+  root <- tempfile("islet-excluded-root-")
+  dir.create(root)
+  env <- make_backend_env(root)
+  sys.source(.find_source("R/data_loading.R"), envir = env)
+  env$islet_is_production <- function() FALSE
+  env$audit_na <- function(...) invisible(NULL)
+  env$prep_data <- identity
+  env$load_master_auto <- function(h5ad_path, excel_path) {
+    list(comp = data.frame(`Case ID` = c("112", "78"), check.names = FALSE),
+         targets_all = data.frame(`Case ID` = "112", check.names = FALSE))
+  }
+  expect_error(env$load_shared_prepared_data(root), "excluded donor\\(s\\) 78")
+
+  env$.islet_backend <- new.env(parent = emptyenv())
+  env$load_master_auto <- function(h5ad_path, excel_path) {
+    list(comp = data.frame(`Case ID` = c("112", "6232"), check.names = FALSE))
+  }
+  expect_identical(env$load_shared_prepared_data(root)$comp$`Case ID`, c("112", "6232"))
 })
 
 test_that("GeoPackage loading applies an indexed bounding-box filter", {

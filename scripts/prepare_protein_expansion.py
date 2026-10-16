@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare six donors' measured protein inputs and a concrete rule review.
+"""Prepare the added donors' measured protein inputs and a concrete rule review.
 
 This does not assign addition phenotypes or publish app data. Owner-reviewed
 rules and boundaries are required by the assembly step. Original data is read
@@ -138,7 +138,7 @@ def prepare(frozen, raw_root, output, report_root):
         original_source=str(Path(frozen).resolve()),original_source_sha256=frozen_digest,
         raw_source_sha256=raw_digests,rules_sha256=sha256(RULES),donors=records,
         app_ready=False,phenotypes_assigned=False,
-        next_step='Review rules and five donor boundary decisions before assembly')
+        next_step=f'Review rules and {len(DONORS)} donor boundary decisions before assembly')
     (output/'preparation.json').write_text(json.dumps(manifest,indent=2)+'\n')
     rules_frame=pd.read_csv(RULES).fillna('')
     (report_root/'index.html').write_text('''<!doctype html><html lang="en"><meta charset="utf-8">
@@ -151,8 +151,8 @@ def prepare(frozen, raw_root, output, report_root):
         '. This is a stratified diagnostic, not an acceptance threshold or a population accuracy estimate.</p>'+
         '<p><a href="confusion.csv">Confusion table</a> · <a href="agreement_by_donor_and_label.csv">Per-donor and label results</a> · <a href="original_sample.csv">Representative cell IDs and coordinates</a></p>'+
         '<img src="original_marker_evidence.png" alt="Median marker evidence by frozen phenotype">'+
-        '<h2>Six-donor QC census</h2>'+pd.DataFrame(records).drop(columns=['prepared_sha256']).to_html(index=False,escape=True)+
-        '<h2>Boundary review</h2><p>HPAP-078 approved; 6090, 6232, 6520, 6539 and 6558 await donor-specific decisions. Use the current native QuPath project and the existing gallery linked in the execution record.</p></html>')
+        '<h2>Added-donor QC census</h2>'+pd.DataFrame(records).drop(columns=['prepared_sha256']).to_html(index=False,escape=True)+
+        '<h2>Boundary review</h2><p>Each donor needs an explicit owner boundary decision in the acceptance record. Use the current native QuPath project and the existing gallery linked in the execution record.</p></html>')
     return manifest
 
 

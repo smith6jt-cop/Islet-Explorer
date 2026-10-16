@@ -1,5 +1,7 @@
 # CLAUDE.md - Pipeline Scripts
 
+> **2026-10-15 owner directives:** donor 78 (HDL078 / HPAP-078) is removed from all analysis. `excluded_donors.csv` is the record and `excluded_donors.py` the guard: cohort loaders (`research/common.py`, `cohort_expansion/prepare_analysis.py`, `build_donor_metadata.py`) and the protein pipeline reject it, so the historical 21-donor `research/cohort-v1.csv` no longer loads. The current protein cohort is `protein_expansion_cohort.csv` (20 donors). All 20 donors are to be reprocessed through one scripted workflow; see [the reprocessing plan](../docs/uniform_reprocessing_plan_20261015.md).
+
 > **2026-10-03 owner decision:** the accepted reconstruction rules and all six donor boundaries are approved. Use Harmony on protein PCA, retain the uncorrected comparison, and preserve original source records. Exact historical typing/encoder recovery and scVI retraining are no longer prerequisites. See the [current implementation record](../docs/protein_expansion_20261003.md); earlier directions below are historical.
 
 Pipeline scripts that build the data files consumed by the Shiny app.

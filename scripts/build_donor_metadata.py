@@ -56,6 +56,9 @@ import sys
 
 import pandas as pd
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from excluded_donors import assert_no_excluded
+
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 DEFAULT_OUT = os.path.join(REPO_ROOT, "data", "donor_metadata.csv")
 
@@ -184,6 +187,7 @@ def read_cohort(path):
         cohort["inclusion_status"] = "selected"
     if not cohort["inclusion_status"].isin(["selected", "identity_hold"]).all():
         raise ValueError("inclusion_status must be selected or identity_hold; no rows are silently filtered")
+    assert_no_excluded(cohort["case_id"], "Donor metadata cohort")
     return cohort
 
 

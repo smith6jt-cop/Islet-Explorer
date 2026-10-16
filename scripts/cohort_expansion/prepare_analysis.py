@@ -12,9 +12,14 @@ import hashlib
 import json
 from pathlib import Path
 
+import sys
+
 import anndata as ad
 import numpy as np
 import pandas as pd
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from excluded_donors import find_excluded
 
 
 REPO = Path(__file__).resolve().parents[2]
@@ -60,6 +65,8 @@ def read_cohort(path):
             raise ValueError("Explicit nPOD or HPAP provenance is required")
         if row["inclusion_status"] not in {"selected", "identity_hold", "excluded"}:
             raise ValueError("Unrecognized cohort inclusion status")
+        if find_excluded([row["case_id"]]) and row["inclusion_status"] != "excluded":
+            raise ValueError(f"Case {row['case_id']} is in excluded_donors.csv and must be marked excluded")
     return rows
 
 

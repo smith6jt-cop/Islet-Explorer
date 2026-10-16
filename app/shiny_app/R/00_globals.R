@@ -153,6 +153,24 @@ master_path <- data_path("master_results.xlsx")
 h5ad_path   <- data_path("islet_explorer.h5ad")
 project_root <- tryCatch(normalizePath(file.path("..", ".."), mustWork = FALSE), error = function(e) NULL)
 
+# Donors removed from the app and all analysis by owner direction. Keep in step
+# with scripts/excluded_donors.csv (a pipeline test checks that they match).
+# Donor 78 (HDL078 / HPAP-078) was removed on 2026-10-15.
+ISLET_EXCLUDED_DONORS <- c("78")
+
+#' Bare numeric donor ID: drops an HPAP/HDL prefix, separators and leading
+#' zeros, so "0078", "HPAP-078" and "HDL078" all compare as "78".
+islet_canonical_donor_id <- function(x) {
+  x <- trimws(as.character(x))
+  sub("^(?:HPAP|HDL)?[-_ ]?0*([0-9]+)(?:\\.0+)?$", "\\1", x, ignore.case = TRUE, perl = TRUE)
+}
+
+#' The supplied donor IDs that name an excluded donor.
+islet_excluded_donors_in <- function(ids) {
+  ids <- unique(as.character(ids[!is.na(ids)]))
+  ids[islet_canonical_donor_id(ids) %in% ISLET_EXCLUDED_DONORS]
+}
+
 # Ensure reticulate/anndata can discover a Python binary when RETICULATE_PYTHON
 # isn't set (shiny-server environments often lack PATH).
 #
@@ -807,7 +825,7 @@ phenotype_rules_modal_ui <- function() {
       title = "Cell Phenotype Rules", size = "l", easyClose = TRUE,
       footer = shiny::modalButton("Close"),
       shiny::tags$p("The original 15 donors retain their saved phenotype labels. ",
-        "The rules below were accepted for donors 78, 6090, 6232, 6520, 6539 and 6558."),
+        "The rules below were accepted for the added donors 6090, 6232, 6520, 6539 and 6558."),
       shiny::tags$p("A marker is positive at a gate-rescaled signal of 0.5 or higher. ",
         "Rules are applied from parent to child. Conflicting lineages and unsupported cells remain Unknown; ",
         "conflicting subtypes retain their parent label. These rules do not assign Acinar, ECAD+ or Structural."),
@@ -1030,7 +1048,7 @@ phenotype_is_kept <- function(x) !(as.character(x) %in% PHENOTYPE_RETIRED)
 #' Marker definition text for each retained phenotype, for help popovers.
 #'
 #' When the data root ships `protein_phenotype_rules.csv` (the accepted rules
-#' for the six added donors), each label's rule is composed with its parents:
+#' for the five added donors), each label's rule is composed with its parents:
 #' required positives and negatives accumulate down the tree, and a parent's
 #' "any of" group is omitted when the child's own positive evidence already
 #' satisfies it. Otherwise the Rules1 reference (`format_phenotype_rule()`) is
@@ -1078,7 +1096,7 @@ phenotype_marker_definitions_ui <- function() {
   shiny::tagList(
     shiny::tags$h6(style = "margin-top: 12px; font-weight: 700;", "Phenotype marker definitions"),
     shiny::tags$p(style = "color: #555;",
-      if (protein) paste0("Rules accepted for the six added donors (a marker is positive at a gate-rescaled ",
+      if (protein) paste0("Rules accepted for the five added donors (a marker is positive at a gate-rescaled ",
                           "signal of 0.5 or higher). The original 15 donors keep their saved labels.")
       else "Rules1 marker reference (a partial reference for the saved labels)."),
     shiny::tags$ul(style = "padding-left: 18px; margin-bottom: 6px;",

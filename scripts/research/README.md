@@ -1,5 +1,7 @@
 # All-donor candidate and offline research
 
+**2026-10-15:** donor 78 (HDL078 / HPAP-078) was removed from all analysis. `common.read_cohort()` now rejects any manifest naming it, so `cohort-v1.csv` and the tools built on it are retained as historical records only.
+
 **2026-09-29 restoration and owner direction:** `6b7884b` restored the default
 15-donor app. Original IDs, geometry, measurements, missingness and phenotype
 labels must be preserved; a validated common 21-donor trajectory, UMAP and

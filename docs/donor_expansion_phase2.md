@@ -1,5 +1,7 @@
 # Donor expansion, phase 2 — 2026-09-23, revised 2026-09-29
 
+> **2026-10-15 owner directive:** donor 78 (HDL078 / HPAP-078) is removed from the app and all analysis ([record](owner_directive_20261015.md); `scripts/excluded_donors.csv`). Its mentions below are historical. The original 15 donors' generating files could not all be located; see the [reprocessing plan](uniform_reprocessing_plan_20261015.md).
+
 > **2026-10-03 owner decision:** the accepted reconstruction rules and all six donor boundaries are approved. Use Harmony on protein PCA, retain the uncorrected comparison, and preserve original source records. Exact historical typing/encoder recovery and scVI retraining are no longer prerequisites. See the [current implementation record](protein_expansion_20261003.md); earlier directions below are historical.
 
 The September 23 raw-only checkpoint remains the starting evidence. The owner's

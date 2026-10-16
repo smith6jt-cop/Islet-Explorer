@@ -9,27 +9,28 @@ Interactive R Shiny application for exploring pancreatic islet CODEX multiplexed
 
 </div>
 
-## Current all-donor local candidate
+## Historical all-donor candidate — offline and superseded
 
-The separate `data/development/all-donor-20260917/` candidate includes **21
-donors (7 ND, 7 Aab+, 7 T1D)**, corrected images, 3,592,722 raw objects and
-8,371 islets. The preview is at **http://127.0.0.1:3839/islet-explorer/**;
-`preview/service.json` records the current URL, PID, logs and restart command.
-The original service on port 3838 is preserved.
+The `data/development/all-donor-20260917/` candidate was a 21-donor experiment
+(7 ND, 7 Aab+, 7 T1D), including donor 78/HDL078. The owner has since
+permanently removed that donor from the app and all analysis. This candidate and
+its recorded preview at `http://127.0.0.1:3839/islet-explorer/` are historical;
+the preview URL is not a current service endpoint and must not be started or
+used as a launch candidate. The local app is offline while the remaining 20
+donors await uniform reprocessing. See the [owner directive](docs/owner_directive_20261015.md),
+[uniform reprocessing plan](docs/uniform_reprocessing_plan_20261015.md), and
+[current UFRC launch-preparation note](docs/ufrc_launch_preparation_20261015.md).
 
-Trajectory coordinates are fitted offline from outcome-blind marker features.
-Donor filters never refit or rescale them. All 31 panel markers are enabled in
-the heatmap. Research outputs are in
-`data/reports/all-donor-research/20260917/`, outside the app. The existing fit
-and estimates remain provisional: the owner's QuPath review identified suspect
-islet candidates, and subtype ratios still need validated upstream gates.
-The app displays this review status and retains corrected image access.
-
-See the [current implementation and validation record](docs/trajectory_revision_20260917.md) and
-[reproducible offline workflow](scripts/research/README.md). This is local
-delivery, not scientific or UFRC deployment acceptance.
+The historical preview included 3,592,722 raw objects and 8,371 islets. Its
+outcome-blind trajectory, research outputs, and review limitations remain
+documented in the [trajectory revision](docs/trajectory_revision_20260917.md)
+and [reproducible offline workflow](scripts/research/README.md). These records
+are not scientific or UFRC deployment acceptance.
 
 ## Frozen publication-review baseline
+
+This 15-donor artifact is retained as historical evidence and is not the selected
+launch candidate while the owner-directed 20-donor reprocessing is pending.
 
 Islet Explorer is a non-mutating R Shiny research application for exploring
 pancreatic-islet measurements from **15 nPOD donors** across three disease
@@ -65,6 +66,10 @@ and direct-lookup drill-down files in file formats suited to their access patter
 | **T1D** | Forest Green (#228833) | Type 1 diabetic donors |
 
 ## Quick Start
+
+> **Current launch gate:** the local app is offline pending acceptance of the
+> uniformly reprocessed 20-donor root. Do not use these generic development
+> commands to restart a candidate before that gate is cleared.
 
 ```bash
 # Install R dependencies, including the local diffusion-pseudotime fallback
@@ -130,7 +135,7 @@ Primary exploration interface with sidebar controls shared with Statistics.
 
 - **Scatter mode**: Feature expression vs islet diameter (31 markers, targets)
 - **Composition mode**: Phenotype proportions in the islet core, peri-islet band, and combined core+peri region (12 reviewer-facing phenotypes; 21 labels remain in source data). QuPath threshold-based INS/GCG/SST counts are retained in source data for provenance but are not offered as comparable population measures.
-- Phenotype labels for the original 15 donors are preserved; the six added donors use reviewed reconstructed rules. See the [expanded-cohort comparability audit](docs/data_comparability_20261014.md) before interpreting pooled comparisons.
+- Phenotype labels for the original 15 donors are preserved; the five added donors use reviewed reconstructed rules. See the [expanded-cohort comparability audit](docs/data_comparability_20261014.md) before interpreting pooled comparisons.
 - **Filters**: Donor status, autoantibody (GADA, IA2A, ZnT8A, IAA, mIAA), age range, sex, diameter range
 - **Normalization**: None, global z-score, robust per-donor (median/MAD×1.4826)
 - **Click interaction**: Click any point to open islet segmentation + single-cell drill-down

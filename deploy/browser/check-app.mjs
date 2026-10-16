@@ -8,6 +8,11 @@ import { createRequire } from 'node:module';
 import puppeteer from 'puppeteer-core';
 
 const require = createRequire(import.meta.url);
+// Expanded cohort: the original 15 plus these additions. Donor 78 (HDL078/HPAP-078)
+// was removed on 2026-10-15 (scripts/excluded_donors.csv) and must not appear.
+const ADDITIONS = ['6090', '6232', '6520', '6539', '6558'];
+const EXCLUDED = ['78'];
+const EXPANDED_DONORS = 15 + ADDITIONS.length;
 const options = {};
 for (let index = 2; index < process.argv.length; index += 2) {
   const key = process.argv[index];
@@ -225,14 +230,16 @@ try {
       await check(`download_${selector.slice(1)}`, () => download(page, selector));
     }
     if (options.expanded === 'true' && tab.name === 'Spatial') {
-      await check('expanded_donor_census_and_method', async () => page.evaluate(() => {
+      await check('expanded_donor_census_and_method', async () => page.evaluate((additions, excluded, expected) => {
         const select = document.querySelector('#spatial-donor');
         const values = select?.selectize ? Object.keys(select.selectize.options) : [...select.options].map(option => option.value);
-        return { passed: values.length === 21 && ['78', '6090', '6232', '6520', '6539', '6558'].every(id => values.includes(id)) &&
+        const bare = values.map(value => String(Number(value)));
+        return { passed: values.length === expected && additions.every(id => values.includes(id)) &&
+          !excluded.some(id => bare.includes(id)) &&
           document.querySelector('#spatial-embedding_method')?.textContent.includes('Harmony'), donors: values.length };
-      }));
+      }, ADDITIONS, EXCLUDED, EXPANDED_DONORS));
       await check('render_expanded_leiden_umap', () => rendered(page, '#spatial-leiden_umap', 'plotly'));
-      for (const donor of ['78', '6090', '6232', '6520', '6539', '6558']) {
+      for (const donor of ADDITIONS) {
         await check(`expanded_donor_${donor}_tissue`, async () => {
           const previous = await page.$eval('#spatial-tissue_scatter img', image => image.src);
           await page.$eval('#spatial-donor', (element, value) => {
@@ -248,20 +255,22 @@ try {
       if (options.expanded === 'true') {
         await check('expanded_image_inventory_and_ranges', async () => {
           await page.waitForSelector('#viewer-selected_image option');
-          return page.evaluate(async base => {
+          return page.evaluate(async (base, additions, excluded, expected) => {
             const select = document.querySelector('#viewer-selected_image');
             const names = select?.selectize ? Object.keys(select.selectize.options) : [...select.options].map(option => option.value);
+            const donorOf = value => Number(value.match(/_(\d+)\.ome\.tiff?$/i)?.[1]);
+            if (names.some(value => excluded.map(Number).includes(donorOf(value)))) return { passed: false, excluded_image: true };
             let checked = 0;
-            for (const id of [78, 6090, 6232, 6520, 6539, 6558]) {
-              const name = names.find(value => Number(value.match(/_(\d+)\.ome\.tiff?$/i)?.[1]) === id);
+            for (const id of additions.map(Number)) {
+              const name = names.find(value => donorOf(value) === id);
               if (!name) return { passed: false, checked };
               const response = await fetch(new URL(`images/${name}`, base), { headers: { Range: 'bytes=0-15' } });
               if (response.status !== 206) { await response.body?.cancel(); return { passed: false, checked }; }
               if ((await response.arrayBuffer()).byteLength !== 16) return { passed: false, checked };
               checked += 1;
             }
-            return { passed: names.length === 21 && checked === 6, images: names.length, checked };
-          }, appUrl.href);
+            return { passed: names.length === expected && checked === additions.length, images: names.length, checked };
+          }, appUrl.href, ADDITIONS, EXCLUDED, EXPANDED_DONORS);
         });
       }
       await check('viewer_local_image_url', async () => {

@@ -198,7 +198,7 @@ The Plot tab is the primary exploration interface. It has a **sidebar** (left) a
 - **Feature/Composition selector**: Choose what to plot
   - *Scatter mode*: Select from markers (31 proteins) or targets (hormone intensities)
   - *Composition mode*: Three option groups (the previous "Immune Metrics" group of 5 hand-curated ratios was removed in Apr 2026 — use the Spatial tab's per-phenotype enrichment / proportion / distance views instead):
-    - **Phenotype Proportions** — the 12 retained reviewer-facing phenotypes from the 21-label source artifact. The original 15 retain historical labels; six additions use reviewed reconstructed rules, so pooled phenotype comparisons span both methods.
+    - **Phenotype Proportions** — the 12 retained reviewer-facing phenotypes from the 21-label source artifact. The original 15 retain historical labels; five additions use reviewed reconstructed rules, so pooled phenotype comparisons span both methods.
     - **Peri-Islet Proportions** — proportions of those retained phenotypes in the 20 μm expansion zone around the islet
     - **Core+Peri Proportions** — combined phenotype proportions using core and peri cell counts
 

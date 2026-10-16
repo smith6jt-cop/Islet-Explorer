@@ -1,5 +1,7 @@
 # Original typing and scVI method recovery — 2026-09-29
 
+> **2026-10-15 owner directive:** donor 78 (HDL078 / HPAP-078) is removed from the app and all analysis ([record](owner_directive_20261015.md); `scripts/excluded_donors.csv`). The 2026-10-15 search, which recovered the scVI training and import code and confirmed the rule file and model weights are lost, is in [the directive record](owner_directive_20261015.md#original-15-donor-files).
+
 > **2026-10-03 owner decision:** the accepted reconstruction rules and all six donor boundaries are approved. Use Harmony on protein PCA, retain the uncorrected comparison, and preserve original source records. Exact historical typing/encoder recovery and scVI retraining are no longer prerequisites. See the [current implementation record](protein_expansion_20261003.md); earlier directions below are historical.
 
 As of 2026-09-29, the six additions could not yet be processed with the exact method used for the

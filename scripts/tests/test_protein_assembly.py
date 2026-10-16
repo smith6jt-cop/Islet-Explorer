@@ -24,10 +24,10 @@ def test_region_counts_and_append_preserve_originals(tmp_path):
     # Two measured core cells, one measured peri cell and an unmeasured core
     # object: raw QuPath and QC phenotype denominators must remain distinct.
     xy=np.array([[10,10],[20,20],[60,20],[25,25]],dtype=float)
-    index=['78:a','78:b','78:c','78:d']
+    index=['6232:a','6232:b','6232:c','6232:d']
     obs=pd.DataFrame({'Object ID':['a','b','c','d'],'X_centroid':xy[:,0]*.3774,
         'Y_centroid':xy[:,1]*.3774,'Cell Area':[10.]*4,'Nucleus Area':[5.]*4,
-        'Parent':['old']*4,'Age':[20.]*4,'Gender':['F']*4,'imageid':[78]*4},index=index)
+        'Parent':['old']*4,'Age':[20.]*4,'Gender':['F']*4,'imageid':[6232]*4},index=index)
     raw_values=np.full((4,31),1000.);raw_values[-1]=np.nan
     raw=ad.AnnData(raw_values,obs=obs,var=pd.DataFrame(index=MARKERS))
     scaled=np.full((3,31),.1);scaled[:,MARKERS.index('INS')]=.8
@@ -41,17 +41,17 @@ def test_region_counts_and_append_preserve_originals(tmp_path):
     pd.DataFrame(dict(object_id=['a','b','c','d'],x_source_px=xy[:,0],y_source_px=xy[:,1])).to_csv(centroid,sep='\t',index=False)
     for d in ['cells','donors','gson','additions']:(tmp_path/d).mkdir()
     snapshot=dict(geometry=str(geometry),centroids=str(centroid),pixel_size_um=.3774)
-    meta={'Case ID':'78','Donor Status':'T1D','Age':20.,'Gender':'F',
+    meta={'Case ID':'6232','Donor Status':'ND','Age':20.,'Gender':'F',
           'AAb_GADA':np.nan,'AAb_IA2A':np.nan,'AAb_ZnT8A':np.nan,'AAb_mIAA':np.nan}
     frequencies={k:0.2 for k in [*ENDOCRINE,'Unknown']}
-    result,tables=process_donor('78',cells,raw,snapshot,meta,frequencies,tmp_path,['Cell Area','Nucleus Area'])
+    result,tables=process_donor('6232',cells,raw,snapshot,meta,frequencies,tmp_path,['Cell Area','Nucleus Area'])
     assert result.n_obs==1
     assert result.obs.total_cells.iloc[0]==2
     assert tables['composition'][0]['cells_total']==3
     assert tables['composition'][0]['unmeasured_cells']==1
     assert tables['features'][0]['n_endocrine_core']==2
     assert result.obs['peri_count_Beta_cell'].iloc[0]==1
-    assert set(pd.read_csv(tmp_path/'cells/78_Islet_1.csv').cell_region)=={'core','peri'}
+    assert set(pd.read_csv(tmp_path/'cells/6232_Islet_1.csv').cell_region)=={'core','peri'}
     old=result.copy();old.obs_names=['1_Islet_1'];old.obs['imageid']=1
     old.obs['islet_id']='1_Islet_1';old.obs['combined_islet_id']='1_Islet_1'
     old.obs.index.name='islet_id'

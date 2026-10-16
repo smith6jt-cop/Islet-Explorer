@@ -606,6 +606,16 @@ load_shared_prepared_data <- function(root = data_root) {
                                excel_path = file.path(root, "master_results.xlsx")))
   }
 
+  # Fail closed rather than filter: a root that still carries an excluded donor
+  # was built before the removal and must not be served.
+  served <- unlist(lapply(intersect(c("comp", "targets_all", "markers_all"), names(prepared)),
+                          function(name) prepared[[name]][["Case ID"]]))
+  excluded <- islet_excluded_donors_in(served)
+  if (length(excluded)) {
+    stop("Data root ", root, " contains excluded donor(s) ", paste(excluded, collapse = ", "),
+         "; select a root built without them (see scripts/excluded_donors.csv).", call. = FALSE)
+  }
+
   if (!islet_is_production()) {
     for (name in intersect(c("targets_all", "markers_all", "comp"), names(prepared))) {
       try(audit_na(prepared[[name]], name), silent = TRUE)

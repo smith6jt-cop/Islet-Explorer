@@ -3,10 +3,14 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import sys
 import tempfile
 from pathlib import Path
 import numpy as np
 import pandas as pd
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from excluded_donors import assert_no_excluded
 
 MARKERS = ['CD31','CD8a','CD3e','SMA','CD4','CD34','HLADR','PDPN','panCK','ECAD',
            'CD163','SST','ColIV','VIM','CD20','LGALS3','B3TUBB','GCG','KRT14','GAP43',
@@ -53,6 +57,8 @@ def write_json(path, value):
 
 def read_cohort(path, input_root):
     d = pd.read_csv(path, dtype=str).fillna('')
+    # The historical 21-donor manifests name donor 78, removed 2026-10-15.
+    assert_no_excluded(d.get('case_id', []), f'Cohort {Path(path).name}')
     required = {'case_id','donor_source','donor_status','cells','cell_slot','geometry','image','regional_root','metadata'}
     if not required.issubset(d) or d.case_id.duplicated().any():
         raise ValueError('Incomplete or duplicate cohort manifest')

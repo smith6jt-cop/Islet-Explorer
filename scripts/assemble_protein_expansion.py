@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Assemble the restored app plus six REVIEWED protein-processed donors.
+"""Assemble the restored app plus the five REVIEWED protein-processed donors.
 
 All outputs are new. Approval records bind the exact rules and geometry hashes;
 no historical candidate, scVI model, original islet regeneration or default-path
@@ -26,6 +26,7 @@ from build_protein_embedding import fit_embedding, sha256
 from prepare_protein_expansion import read_column
 from protein_phenotyping import RULES, classify
 from stage_original_gate_calls import DONORS
+from excluded_donors import assert_no_excluded
 from compute_neighborhood_metrics import IMMUNE_TYPES, POS_MARKERS_CODEX
 sys.path.insert(0, str(Path(__file__).resolve().parent / 'research'))
 from build_candidate import geometry_data, membership, positive_area
@@ -43,6 +44,9 @@ def validate_review(prepared_root, geometry_root, acceptance):
     prepared=json.loads((prepared_root/'preparation.json').read_text())
     geometry=json.loads((geometry_root/'manifest.json').read_text())
     review=json.loads(Path(acceptance).read_text())
+    for name,ids in [('Owner acceptance',review.get('boundaries',{})),('Prepared inputs',[r['case_id'] for r in prepared['donors']]),
+                     ('Geometry snapshot',[r['case_id'] for r in geometry['donors']])]:
+        assert_no_excluded(ids,name)
     rules_hash=sha256(RULES)
     if review.get('phenotype_rules_sha256') != rules_hash or review.get('phenotypes_accepted') is not True:
         raise ValueError('The exact proposed phenotype rules require owner acceptance')
@@ -336,8 +340,9 @@ def assemble(args):
     if out.exists() or reports.exists():raise FileExistsError('Use fresh output and report roots')
     if out==baseline or reports.is_relative_to(out):raise ValueError('Unsafe output or report root')
     cohort=pd.read_csv(args.cohort,dtype=str)
+    assert_no_excluded(cohort.case_id,'Cohort manifest')
     if set(cohort.case_id)!=set(DONORS)|set(ad.read_h5ad(baseline/'islet_explorer.h5ad').obs.imageid.astype(str)):
-        raise ValueError('Expected original 15 plus exactly the six additions')
+        raise ValueError(f'Expected original 15 plus exactly the {len(DONORS)} additions')
     clinical=pd.read_csv(args.clinical,dtype={'case_id':str})
     frequencies=reference_frequencies(prepared['original_source'])
     copy_baseline(baseline,out,skip=['islet_explorer.h5ad','adata_ins_root.h5ad'])
@@ -408,8 +413,8 @@ def assemble(args):
     (reports/'original_subset_parity.json').write_text(json.dumps(parity,indent=2)+'\n')
     if not parity['passed']:raise ValueError('Original source-artifact preservation failed; do not publish')
     if sha256(prepared['original_source'])!=prepared['original_source_sha256']:raise ValueError('Original source changed')
-    result=dict(status='assembled_pending_browser_verification',donors=21,islets=combined.n_obs,
-        original_source_unchanged=True,original_single_cell_storage='immutable source partition plus six additions',
+    result=dict(status='assembled_pending_browser_verification',donors=len(cohort),islets=combined.n_obs,
+        original_source_unchanged=True,original_single_cell_storage=f'immutable source partition plus {len(DONORS)} additions',
         original_subset_parity=True,scvi_required=False,donor_correction=args.donor_correction,
         zero_endocrine_islets=int(pd.read_csv(out/'barlow_islet_features.csv').n_endocrine_core.eq(0).sum()))
     (out/'protein_release.json').write_text(json.dumps(result,indent=2)+'\n')

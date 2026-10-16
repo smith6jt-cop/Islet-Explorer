@@ -1,5 +1,7 @@
 # Expanded-cohort image processing
 
+**2026-10-15:** donor 78 (HDL078 / HPAP-078) was removed from all analysis. It is marked `excluded` in `cohort.csv` (the importer refuses non-selected cases), and the runner case maps no longer offer `0078`. Its mentions below are historical.
+
 **18 September delivery:** [HPAP approval and five-donor rollout](../../docs/endocrine_boundary_rollout_20260918.md)
 documents the current six-donor review project. `stage_adaptive_rollout.py` and
 `promote_reviewed_islets.groovy` bind the owner's approval to exact saved HPAP

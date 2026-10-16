@@ -15,7 +15,7 @@ ROOT = REPO / 'data/development/expanded-20260911'
 QUPATH = '/home/smith6jt/QuPath/bin/QuPath'
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--cases', nargs='+', choices=['6232', '6558', '6520', '0078'], default=['6232', '6558', '6520', '0078'])
+parser.add_argument('--cases', nargs='+', choices=['6232', '6558', '6520'], default=['6232', '6558', '6520'])
 args = parser.parse_args()
 os.chdir(REPO)
 env = dict(os.environ)
@@ -53,7 +53,7 @@ if not (ROOT / 'logs/6232/cells.done.json').exists():
 subprocess.run([sys.executable, str(HERE / 'prepare_qupath.py')], check=True)
 for case in args.cases:
     run_env = dict(os.environ)
-    if case in ('6520', '0078'):
+    if case == '6520':
         evidence = ROOT / 'reports/channel_mapping/krt8_workflow_alias_evidence.json'
         if not evidence.is_file():
             raise SystemExit('Missing accepted KRT8 workflow-alias evidence')

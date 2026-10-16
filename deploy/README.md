@@ -21,8 +21,12 @@ logging requirements and additional hardening guidance are in
 [`docs/pubapps_log_inventory.md`](../docs/pubapps_log_inventory.md).
 
 The local development app at `http://10.15.152.7:8080/islet-explorer/`
-(loopback port 3840) serves the 2026-10-03 protein expansion: 21 donors and
-8,436 islets from `data/development/protein-expanded-20261003-v2/`, selected by
+(loopback port 3840) is offline at the owner's direction since 2026-10-15,
+until all donors are reprocessed through one reproducible workflow. Its service
+is stopped and disabled, and the nginx static image route is closed (see
+[the directive record](../docs/owner_directive_20261015.md#follow-up-decisions--2026-10-15)).
+Its last root was the 20-donor protein expansion rebuilt without donor 78
+(7,028 islets, `data/development/protein-expanded-20261015-v3/`), selected by
 `ISLET_DATA_ROOT` in the untracked `tmp/local-app.env`. Its
 development-only service files are `deploy/islet-explorer-local.service`,
 `deploy/shiny-server-local.conf` and `deploy/run-local-r.sh`; they are not the
@@ -33,11 +37,13 @@ lineage and rollback to the frozen 15-donor root. The frozen 15-image release at
 production release. See [the September 28 handoff](../docs/HANDOFF_2026-09-28.md)
 and [the readiness record](../docs/ufrc_readiness.md).
 
-On 2026-10-03 the owner approved all six donor boundary sets (HPAP-078, 6090,
+On 2026-10-03 the owner approved six donor boundary sets (HPAP-078, 6090,
 6232, 6520, recovered 6539 and 6558) and the reconstruction phenotype rules,
-and selected Harmony on protein PCA with the uncorrected fit retained. The
-expanded root passed its release validator and browser acceptance on
-2026-10-05. It is not yet a production release: `scripts/build_release_data.R`
+and selected Harmony on protein PCA with the uncorrected fit retained. On
+2026-10-15 the owner removed donor 78 (HDL078 / HPAP-078) from the app and all
+analysis (`scripts/excluded_donors.csv`); the app refuses any data root that
+still contains it. The 20-donor root passed its release validator; its browser
+check results are in [the protein expansion record](../docs/protein_expansion_20261003.md). It is not yet a production release: `scripts/build_release_data.R`
 and the runtime Parquet backend do not yet carry the protein embedding metadata
 or the expansion phenotype rules, and its images are symlinks to source paths
 outside the root. The earlier schema-2/3/4 all-donor runtimes and their

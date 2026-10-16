@@ -13,7 +13,7 @@ import subprocess
 import sys
 
 CASES = {'6232': 'CX_PAN-6232-ND_test33_35p_led.tif', '6558': 'PAN-6558-AAb_test35_35p-LED.tif',
-         '6520': 'CX_PANT6520-01A_T1D_Test22_34p-16LED50.tif', '0078': 'CX_PANT-HPAP-078-T1D_test28_34p_16LED50.tif',
+         '6520': 'CX_PANT6520-01A_T1D_Test22_34p-16LED50.tif',
          '6090': '6090AAbtest31_35p_led.tif', '6539': 'PAN-6539-ND test 34.tif'}
 
 

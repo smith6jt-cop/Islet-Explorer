@@ -1,5 +1,7 @@
 # Data Provenance — Islet Explorer
 
+> **2026-10-15 owner directive:** donor 78 (HDL078 / HPAP-078) is removed from the app and all analysis ([record](../docs/owner_directive_20261015.md); `scripts/excluded_donors.csv`). Rows and counts below that include HPAP-078 describe historical staging. The [recovery record](../docs/owner_directive_20261015.md#original-15-donor-files) lists which files behind the original 15 donors were located.
+
 This document describes the canonical data lineage for the Islet Explorer app.
 
 ## Revised local candidate — 2026-09-17

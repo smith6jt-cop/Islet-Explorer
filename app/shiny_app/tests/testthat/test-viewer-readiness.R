@@ -3,7 +3,7 @@ test_that("viewer waits for session origin and preserves the iframe across image
   image_root <- tempfile("viewer-readiness-")
   dir.create(image_root)
   on.exit(unlink(image_root, recursive = TRUE), add = TRUE)
-  file.create(file.path(image_root, c("first.ome.tiff", "second.ome.tiff")))
+  file.create(file.path(image_root, c("first.ome.tiff", "second.ome.tiff", "T1D_0078.ome.tiff")))
 
   env <- new.env(parent = asNamespace("shiny"))
   env$resolve_avivator_base <- function() "avivator/index.html"
@@ -14,6 +14,12 @@ test_that("viewer waits for session origin and preserves the iframe across image
   env$build_channel_config_b64 <- function(...) NULL
   env$VIEWER_DEBUG_ENABLED <- FALSE
   env$`%||%` <- function(a, b) if (is.null(a)) b else a
+  for (expr in parse(.find_source("R/00_globals.R"))) {
+    if (is.call(expr) && identical(expr[[1]], as.name("<-")) &&
+        as.character(expr[[2]]) %in% c("ISLET_EXCLUDED_DONORS", "islet_canonical_donor_id")) {
+      eval(expr, envir = env)
+    }
+  }
   env$build_app_absolute_url <- function(session, rel_path) {
     paste0(session$clientData$url_pathname, rel_path)
   }
@@ -31,6 +37,8 @@ test_that("viewer waits for session origin and preserves the iframe across image
                 current_tab = shiny::reactiveVal("Viewer")),
     session = mock, {
       session$flushReact()
+      # Donor 78 was removed from the app; its image is never offered.
+      expect_setequal(available_images_r(), c("first.ome.tiff", "second.ome.tiff"))
       expect_false(has_image_stable())
       expect_null(viewer_info()$iframe_src)
       expect_false(grepl("<iframe", output$viewer_frame$html, fixed = TRUE))

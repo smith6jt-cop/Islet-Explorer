@@ -1,23 +1,25 @@
 # Expanded-cohort grouping and comparability audit — 2026-10-14
 
-The local app's expanded-v2 source has 21 donors: seven ND, seven Aab+, and
-seven T1D. The H5AD, composition, target, marker, neighborhood-feature,
+> **Updated 2026-10-15:** donor 78 (HDL078 / HPAP-078) was removed from the app
+> and all analysis by owner directive. The figures below describe the current
+> v3 root; the 2026-10-14 audit covered the 21-donor v2 root.
+
+The local app's expanded-v3 source has 20 donors: seven ND, seven Aab+, and
+six T1D. The H5AD, composition, target, marker, neighborhood-feature,
 distance, and spatial tables all contain records for the full cohort. The
-8,436 islet rows in the H5AD have a valid status and non-missing core and
+7,028 islet rows in the H5AD have a valid status and non-missing core and
 peri-islet phenotype proportions. Donor status is assigned from the explicit
 cohort manifest for additions and retained from the frozen baseline for the
 original donors; it is not inferred from cell measurements.
 
-| Donor status | Original 15 | Added 6 |
+| Donor status | Original 15 | Added 5 |
 |---|---|---|
 | ND | 112, 6356, 6479, 6516, 6548 | 6232, 6539 |
 | Aab+ | 6450, 6505, 6521, 6538, 6549 | 6090, 6558 |
-| T1D | 6533, 6534, 6550, 6551, 6563 | 78 (HPAP-078), 6520 |
+| T1D | 6533, 6534, 6550, 6551, 6563 | 6520 |
 
-The donor-status groups are balanced. Age and sex are present for all 21
-donors. Autoantibody results are missing for donor 78, so AAb-specific filtering
-cannot classify that donor's flags; this missing clinical record should not be
-read as a negative result.
+The T1D group now has one donor fewer than the ND and Aab+ groups. Age, sex
+and autoantibody results are present for all 20 donors.
 
 ## Processing that is shared
 
@@ -27,11 +29,11 @@ read as a negative result.
 - Regional CD3e, CD163, CD68, and LGALS3 positivity follows the same
   mean-plus-1.5-sample-SD rule within each region. Original values come from
   QuPath exports; added-donor values are recomputed from raw measurements.
-- The protein-based UMAP and Leiden fits are refit over all 21 donors using
+- The protein-based UMAP and Leiden fits are refit over all 20 donors using
   Harmony on protein PCA. This gives the app one cohort-wide embedding and
   clustering rather than mixing the original 15-donor fit with a separate
-  six-donor fit.
-- App-wide donor-status controls use the same three labels for all 21 donors.
+  additions-only fit.
+- App-wide donor-status controls use the same three labels for all 20 donors.
 
 ## Remaining method differences
 
@@ -40,14 +42,15 @@ read as a negative result.
   Python from raw intensity. They are no longer offered as Plot Population
   Measures. The source fields remain stored for provenance and legacy analysis.
 - **Cell phenotypes:** the original 15 donors keep their saved historical
-  labels. The six additions use the reviewed `protein_phenotype_rules.csv`
+  labels. The five additions use the reviewed `protein_phenotype_rules.csv`
   reconstruction. Thus phenotype proportions, cell labels, neighborhood
   summaries, and the phenotype-count inputs to trajectory span two labeling
   procedures. Identical column names and complete coverage do not make those
   calls method-equivalent. The live trajectory now excludes the nine retired
   categories from both core and peri graph inputs. Previously those categories
   nearly separated the original and added donors by themselves (99.3% of raw
-  DPT variance at 25–1902 cells was associated with cohort membership). The
+  DPT variance at 25–1902 cells was associated with cohort membership, measured
+  on the 21-donor root). The
   corrected graph uses the same 12 retained categories as the app selectors;
   residual comparability limits remain. See the
   [trajectory input audit](../app/shiny_app/docs/trajectory.md#retired-feature-correction-2026-10-14).
@@ -73,5 +76,6 @@ should be treated as a correctly grouped cohort with the method limits above.
 
 Source details: [protein expansion record](protein_expansion_20261003.md),
 [original processing trace](current_nontrajectory_processing.md), and the
-expanded-v2 `protein_release.json` (`browser_verified`, 21 donors, 8,436
-islets, original subset parity passed).
+expanded-v3 `protein_release.json` (20 donors, 7,028 islets, original subset
+parity passed). A single reproducible workflow for all 20 donors is planned in
+[the reprocessing plan](uniform_reprocessing_plan_20261015.md).

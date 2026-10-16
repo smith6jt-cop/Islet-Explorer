@@ -38,7 +38,6 @@ SELECTION = {
     "6539": ("PAN-6539-ND test 34.tif", "ND_6539"),
     "6558": ("PAN-6558-AAb_test35_35p-LED.tif", "Aab_6558"),
     "6520": ("CX_PANT6520-01A_T1D_Test22_34p-16LED50.tif", "T1D_6520"),
-    "78": ("CX_PANT-HPAP-078-T1D_test28_34p_16LED50.tif", "T1D_0078"),
 }
 CHANNEL_ORDER = [
     "DAPI", "CD31", "CD8a", "CD3e", "SMA", "Ki67", "CD4", "CD34", "HLADR",

@@ -8,7 +8,7 @@ import re
 import shutil
 
 SOURCE = Path('/data/QuPath_Projects/QuPath_project_IsletExplorer')
-SELECTED = {38: '6539', 39: '6090', 40: '6520', 42: '0078', 43: '6232', 44: '6558'}
+SELECTED = {38: '6539', 39: '6090', 40: '6520', 43: '6232', 44: '6558'}  # 78 removed 2026-10-15
 
 
 def compatible(text):
