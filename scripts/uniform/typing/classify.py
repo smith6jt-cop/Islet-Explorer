@@ -259,6 +259,17 @@ def tissue_chain(values, rules, cell_class, definition, resolved_by, rule_audit=
         definition[hit] = phenotype
         resolved_by[hit] = 'definition'
         unclaimed &= ~hit
+    # this panel's added rules, after every Senior definition (codex_typing.ADDED_IMMUNE_RULES)
+    for phenotype, rule in CT.ADDED_IMMUNE_RULES.items():
+        satisfied, unavailable = rule_evidence(values, rule)
+        hit = unclaimed & satisfied
+        if rule_audit is not None:
+            rule_audit[phenotype] = {'n_firing': int(satisfied.sum()), 'n_called': int(hit.sum()),
+                                     'n_unavailable': int(unavailable.sum()), 'added_for_this_panel': True}
+        cell_class[hit] = 'Immune'
+        definition[hit] = phenotype
+        resolved_by[hit] = 'definition_added'
+        unclaimed &= ~hit
     tier = [m for m in CT.BOTTOM_TIER_IMMUNE if m in values.columns]
     exocrine = [m for m in CT.SUBPANEL['exocrine'] if m in values.columns]
     if tier:
@@ -334,7 +345,7 @@ def classify(tag: str, ctx: pd.DataFrame, aligned: pd.DataFrame, scale: pd.DataF
     wanted = set(CT.HORMONES) | {CT.LEVEL_MARKER} | set(CT.IDENTITY_MARKERS) | set(CT.BOTTOM_TIER_IMMUNE)
     for markers in CT.SUBPANEL.values():
         wanted |= set(markers)
-    for all_of, any_of, none_of in rules.values():
+    for all_of, any_of, none_of in list(rules.values()) + list(CT.ADDED_IMMUNE_RULES.values()):
         wanted |= set(all_of) | set(none_of) | {m for g in any_of for m in g}
     values = scaled_markers(aligned, wanted, scale)
     n = len(ctx)

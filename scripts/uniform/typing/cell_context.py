@@ -12,8 +12,9 @@ project's pixel classifiers (Nerve on B3TUBB and INS, Capillary on CD31, Lymphat
 image's Tissue in the original project (the 15) or by `scripts/cohort_expansion/prepare_qupath.py` (the five
 additions). They are read from the split files `all-donor-20260920/structural/<case>/<Class>_inherited.geojson.gz`
 and copied into `$OUT/structures/<Class>/<Class>__<image>.geojson` (Senior's layout), each with its source,
-sha256 and the 2026-09-21 audit verdict, in `$OUT/structures/provenance.json`. Senior's "Blood vessel" is
-Capillary here.
+sha256 and the 2026-09-21 audit verdict, in `$OUT/structures/provenance.json`. The five additions' objects are
+instead drawn by `structure_thresholds.py make` (thresholds fitted on the original 15) and are not overwritten
+here. Senior's "Blood vessel" is Capillary here.
 
 Endocrine objects are the accepted step-1b objects in `$OUT/islets/<image>.geojson` (Islet_N, Cluster_N,
 Single_N). Membership is checked against QuPath's own parenting (`$OUT/context/<image>.parquet` Parent) on every
@@ -68,6 +69,8 @@ def valid(g):
 def import_structures(out: Path, rows: list[dict]) -> dict:
     """Copy each image's three structure classes into the run, with provenance. Idempotent."""
     dest_root = out / 'structures'
+    made = dest_root / 'thresholded.json'
+    thresholded = json.loads(made.read_text())['images'] if made.exists() else {}
     record = {}
     for r in rows:
         case, tag = r['case_id'], r['image_name']
@@ -81,6 +84,10 @@ def import_structures(out: Path, rows: list[dict]) -> dict:
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 with gzip.open(src, 'rb') as fi, open(dest, 'wb') as fo:
                     shutil.copyfileobj(fi, fo)
+            if tag in thresholded:      # drawn by structure_thresholds.py make from the original 15's thresholds
+                record[tag][cls] = {'source': str(made), 'origin': 'thresholder fitted on the original 15',
+                                    'sha256': sha256(dest), **thresholded[tag][cls]}
+                continue
             m = audit.get(cls, {})
             record[tag][cls] = {'source': str(src), 'source_sha256': sha256(src), 'origin': m.get('source'),
                                 'sha256': sha256(dest), 'features': m.get('features'),

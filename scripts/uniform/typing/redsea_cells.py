@@ -12,10 +12,12 @@ CODEX differences: cells and nuclei come from `$OUT/cell_geojson/<image>.geojson
 InstanSeg cells, pixel coordinates, one feature per cell with its nucleusGeometry); the QuPath measurements
 `$OUT/cells/<image>.parquet` supply area, solidity and centroids; channels are read from the source image the
 QuPath entry names, in the entry's channel order. A cell without a nucleus is excluded from analysis and
-from spillover context (GeometryQCConfig.missing_geometry_policy "exclude"; Senior's default is fatal).
+from spillover context, as Senior's pipeline config sets it. Of Senior's other QC flags (area under 20 um2 or
+over 4x the median, solidity under 0.70, raster/reported area ratio) none excludes a cell here (owner,
+2026-10-16); they are written to `qc_flags`.
 
 Before writing, the uncorrected whole-cell mean of every channel is compared with QuPath's own
-`Cell: <channel>: Mean`; a channel whose correlation falls below ALIGN_MIN_R stops the image (Senior's
+`Cell: <channel>: Mean` over the cells of at least 20 um2 whose raster and polygon areas agree; a channel whose correlation falls below ALIGN_MIN_R stops the image (Senior's
 alignment_check: a key or channel mismatch invalidates every corrected value).
 
     python scripts/uniform/typing/redsea_cells.py --out data/development/uniform-20donor-20261015 --images all
@@ -217,20 +219,24 @@ def geometry_qc(oids, has_nucleus, cells, sizes_px, nuc_px, cfg=CT.GEOMETRY_QC):
         'nucleus_raster_empty': has_nucleus & ~valid_nuc_raster,
         'duplicate_detection': duplicate,
     }
-    reasons = np.full(len(oids), '', dtype=object)
+    reasons = np.full(len(oids), '', dtype=object)      # what excludes the cell (codex_typing.QC_EXCLUDES)
+    noted = np.full(len(oids), '', dtype=object)        # every flag, for the record
     for name, f in flags.items():
-        reasons[f] = np.where(reasons[f] == '', name, reasons[f] + ';' + name)
+        noted[f] = np.where(noted[f] == '', name, noted[f] + ';' + name)
+        if name in CT.QC_EXCLUDES:
+            reasons[f] = np.where(reasons[f] == '', name, reasons[f] + ';' + name)
     analysis = reasons == ''
     no_cyto = analysis & np.isfinite(nc_ratio) & (nc_ratio >= cfg['no_cytoplasm_nc_ratio'])
     spill = ~missing_nucleus & ~(has_nucleus & ~valid_nuc_raster) & valid_raster & ~duplicate
     frame = pd.DataFrame({'object_id': oids, 'qc_analysis_eligible': analysis,
                           'qc_estimation_eligible': analysis & ~no_cyto,
-                          'qc_spillover_context_eligible': spill, 'qc_reasons': reasons,
+                          'qc_spillover_context_eligible': spill, 'qc_reasons': reasons, 'qc_flags': noted,
                           'cell_area_px': sizes_px, 'nucleus_area_px': nuc_px})
     summary = {'n': len(oids), 'analysis_eligible': int(analysis.sum()),
                'estimation_eligible': int((analysis & ~no_cyto).sum()),
                'spillover_context_eligible': int(spill.sum()), 'duplicate_groups': n_groups,
                'cell_area_max_um2': max_area,
+               'excluding': list(CT.QC_EXCLUDES),
                'reasons': {k: int(v.sum()) for k, v in flags.items()}}
     return frame, summary
 
@@ -342,7 +348,11 @@ def process(out: Path, tag: str, force: bool = False) -> dict:
     with np.errstate(invalid='ignore', divide='ignore'):
         uncorr = data / np.where(sizes > 0, sizes, np.nan)[:, None]
     q = cells.set_index('Object ID').reindex(oids)
-    ok = qc['qc_analysis_eligible'].to_numpy()
+    # The check catches a key or channel mismatch, so it reads the cells whose raster and polygon agree in size:
+    # on cells of a few pixels the two pixel sets differ by construction (ND_6232 CD35, r 0.73 over all cells).
+    flags = qc['qc_flags'].astype(str)
+    ok = (qc['qc_analysis_eligible'].to_numpy()
+          & ~flags.str.contains('raster_area_mismatch|cell_area_below_min').to_numpy())
     align = {}
     for k, c in enumerate(names):
         a, b = uncorr[ok, k], q[f'Cell: {c}: Mean'].to_numpy(float)[ok]

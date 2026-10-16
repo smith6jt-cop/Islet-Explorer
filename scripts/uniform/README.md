@@ -125,16 +125,23 @@ snapshots of its 2026-10-08 run). It writes to `$OUT/typing/`:
 | Structure, endocrine, immune, Exocrine calls | `classify.py` | `typing/subpanel.py` | `calls/<image>.parquet`, `.json` audit |
 | Refinement, once | `refine.py` | `typing/refine.py` | `refine/` (`refined_class` beside `cell_class`) |
 | Immune class and subtype | `immune_subtype.py` | `typing/immune_subtype.py` | `immune/` |
+| Additions' structure objects (owner) | `structure_thresholds.py fit / make` | -- | `$OUT/structures/` |
+| Background check (owner) | `background_check.py` | -- | `background_check.csv` |
+| Endocrine checks (owner) | `endocrine_checks.py` | -- | `endocrine_checks.json` |
 
 ```bash
 PY=/home/smith6jt/miniconda3/envs/scvi-env/bin/python
 SENIOR_PY=$HOME/IO60panc2nd/Islet-Explorer-Senior-v3/.venv/bin/python   # has scikit-fda, which UniFORM needs
 $PY typing/redsea_cells.py --out $OUT --images all --workers 6        # ~1.5 min and ~12 GB per image
-$SENIOR_PY typing/align_scale.py --out $OUT
+MPLBACKEND=Agg $SENIOR_PY typing/align_scale.py --out $OUT
+$PY typing/structure_thresholds.py --out $OUT fit                     # once; then `make` for the five additions
+$PY typing/structure_thresholds.py --out $OUT make
 $PY typing/cell_context.py --out $OUT --images all
+$PY typing/background_check.py --out $OUT
 $PY typing/classify.py --out $OUT --images all
 $PY typing/refine.py --out $OUT
 $PY typing/immune_subtype.py --out $OUT
+$PY typing/endocrine_checks.py --out $OUT
 ```
 
 What Senior's method means here:
@@ -174,17 +181,42 @@ Departures, all for this panel (`typing/codex_typing.py`):
 - No reference donor is pinned for UniFORM (Senior pinned its own); no hormone is masked (step 1b makes no
   fragments); Senior's unshifted-CD8 refinement exception is not ported.
 
-Run of 2026-10-16 (`$OUT/typing/summary.csv`):
+Owner rulings later on 2026-10-16, applied:
 
-- Senior's geometry QC keeps 81 % of cells (62 % on ND_6232, 82-85 % elsewhere); most exclusions are cells under
-  20 um2, InstanSeg objects without a nucleus, and solidity under 0.70.
-- No marker was refused by UniFORM. 24 of 35 stay above Senior's 0.10 background-mode bar after the shift (Senior
-  had 11); they are carried with the residual recorded in `shifts.json`.
-- Immune T cells are close to the frozen typing (Aab_6450 1,672 vs 1,848; T1D_6534 3,464 vs 3,703).
-- Structure calls are few by design: 89-2,272 Blood vessel, 22-958 Nerve and 3-549 Lymphatic cells per image.
-- Excluded cells, exocrine markers inside an endocrine object, are 4-29 % of the cells in the objects (Aab_6558
-  the highest, the image whose islet area grew most with the CHGA aid).
-- Refinement demotes 6-15 % of Exocrine cells to Unresolved (Senior: about 5 % by construction plus its excess).
+- **Cell quality**: only cells without a nucleus (and the technical failures that leave no measurement: empty
+  raster, invalid centroid or area, duplicates) are excluded; size and solidity are recorded in `qc_flags` and
+  exclude nothing. 86-94 % of cells are kept. Dropping the nucleus-less cells does not remove most small cells:
+  of 302,619 cells under 20 um2, 23,602 have no nucleus, so 278,794 small cells (9 % of kept cells) stay.
+- **CD45 rule**: `Imm-CD45-leukocyte` (CD45 >= 0.10, E-cadherin and panCK below) is asked after every Senior
+  definition and before the supporting tier, so it never takes a cell from Imm-T-cell or Imm-macrophage; it names
+  574-10,762 leukocytes per image that the panel cannot name further (most in T1D_6533 and T1D_6534).
+- **Structure objects of the five additions** (`typing/structure_thresholds.py`): the original classifiers are
+  linear in smoothed intensity, and a plain threshold on the Gaussian-smoothed marker (sigma 2 px) reproduces the
+  original 15's objects at median Dice 0.88 (Nerve, B3TUBB), 0.89 (Capillary, CD31) and 0.73 (Lymphatic, PDPN; the
+  original was a random forest). Those thresholds agree across the 15 in RAW units (p90/p10 1.4, 1.4, 2.0) and
+  not after the UniFORM factors (4.6, 2.8, 14): the classifiers were one raw cut on images acquired alike. So each
+  addition's threshold is the median raw threshold of the 15 moved by the addition's UniFORM factor relative to
+  the 15's median, and its objects are drawn as `4_Islet_Cells.groovy` drew them (inside Tissue, split, 2 / 4 / 4
+  um2 minimum, no object touching a 10 um edge ring). Against the earlier objects of the additions: Nerve and
+  Capillary Dice 0.82-0.88; Lymphatic 0.49-0.58 (T1D_6520's lymphatic area 43,000 -> 112,000 um2). The earlier
+  objects are in `$OUT/structures/superseded_additions/`; records in `structures/thresholds_fit.json` and
+  `thresholded.json`.
+- **Background vs variation between images** (`typing/background_check.py`, `background_check.csv`): the
+  UniFORM bar reads each image's histogram mode, which for markers most cells carry is the positive population.
+  Measured instead in cells of a lineage that does not carry the marker (epithelial cells for hormone, immune,
+  vascular, stromal and neural markers; immune cells for epithelial markers), the background is aligned within
+  1.2-1.5x for INS, CD8a, CD35, SMA and Ki67, and still differs 5-14x between images for CD3e, CD45, CD68, CD163,
+  HLADR, PDPN, B3TUBB and GAP43. It stays below the typing cut: in those negative cells CD3e, CD8a, CD163, B3TUBB,
+  PDPN, CD31 and the hormones reach scaled 0.10 in under 1.5 % of cells on every image, CD68 and CD45 in up to
+  2-3 %, CD4 in up to 3.9 % (LGALS3 is excluded from this reading: ductal epithelium carries galectin-3).
+- **Endocrine checks** (`typing/endocrine_checks.py`): of the cells inside the endocrine objects, 64-85 % are
+  called endocrine. The Excluded cells there (exocrine fall-through inside an object) split into CHGA-positive
+  (other endocrine; 4-564 per image), a hormone above its floor but below the image's level (67-2,406; Aab_6558
+  the most), and no endocrine evidence (264-1,475). Islets almost always hold an endocrine call (2 of 1,568 do
+  not); clusters without one are 3-68 per image and singles 4-48.
+
+Run of 2026-10-16 after these rulings: `$OUT/typing/summary.csv` (per image: kept cells, Beta / Alpha / Delta,
+Excluded and its three kinds, Immune by definition, structure calls, Exocrine, refined Unresolved).
 
 ## Canary, 2026-10-15
 

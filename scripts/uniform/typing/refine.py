@@ -53,7 +53,7 @@ SENIOR_REFINE_MARKERS = ['B3TUBB', 'Bcl_2', 'Beta_actin', 'CD107a', 'CD11b', 'CD
                          'MPO', 'PCNA', 'PD_1', 'PD_L1', 'Pan_Cytokeratin', 'Podoplanin', 'SMA', 'SOX2', 'SST',
                          'TCF_1', 'TOX', 'TP63', 'VISTA', 'Vimentin', 'iNOS']
 REFINE_MARKERS = [CT.SENIOR_TO_CODEX[m] for m in SENIOR_REFINE_MARKERS
-                  if m in CT.SENIOR_TO_CODEX and CT.SENIOR_TO_CODEX[m] not in CT.NOT_ON_EVERY_IMAGE]
+                  if m in CT.SENIOR_TO_CODEX and CT.SENIOR_TO_CODEX[m] not in CT.NOT_ON_EVERY_IMAGE] + ['CD45']
 
 
 class RefinementAlreadyApplied(RuntimeError):
@@ -185,7 +185,7 @@ def immune_leaf(aligned: pd.DataFrame, scale: pd.DataFrame) -> np.ndarray:
     Xs = pd.DataFrame(CL.apply_scale(aligned[have].to_numpy(), have, scale), columns=have)
     hot, cold = Xs >= CT.IMMUNE_REQUIRE_MIN, Xs < CT.IMMUNE_REQUIRE_MIN
     ok = np.zeros(len(Xs), bool)
-    for name, (all_of, any_of, none_of) in rules.items():
+    for name, (all_of, any_of, none_of) in list(rules.items()) + list(CT.ADDED_IMMUNE_RULES.items()):
         if not name.startswith(('Imm-', 'T-', 'Mac-')):
             continue
         if any(m not in Xs for m in list(all_of) + list(none_of) + [x for g in any_of for x in g]):
@@ -258,11 +258,8 @@ def main() -> int:
     scale = CL.load_scale(a.out)
     pfile = typ / 'refine' / 'representation.parquet'
     pfile.parent.mkdir(parents=True, exist_ok=True)
-    if pfile.exists():
-        params = pd.read_parquet(pfile)
-    else:
-        params = representation_params(a.out, all_tags, REFINE_MARKERS)
-        params.to_parquet(pfile)
+    params = representation_params(a.out, all_tags, REFINE_MARKERS)   # rebuilt every run: it follows the alignment
+    params.to_parquet(pfile)
     markers = [m for m in REFINE_MARKERS if m in params.index]
     for t in tags:
         res, log = refine_donor(a.out, t, params, scale, markers)

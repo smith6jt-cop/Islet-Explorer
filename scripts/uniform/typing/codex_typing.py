@@ -84,6 +84,12 @@ REDSEA = {'comp_mode': 1, 'alpha': 1.0, 'edge_radius': 0, 'gap_bridge': 1, 'norm
 GEOMETRY_QC = {'min_cell_area_um2': 20.0, 'max_cell_area_median_multiple': 4.0, 'min_cell_solidity': 0.70,
                'min_raster_area_ratio': 0.50, 'max_raster_area_ratio': 2.00, 'no_cytoplasm_nc_ratio': 0.999,
                'duplicate_radius_um': 1.0, 'duplicate_area_tolerance': 0.15, 'missing_geometry_policy': 'exclude'}
+# Which of Senior's QC flags EXCLUDE a cell here (owner, 2026-10-16: "Cell quality check should drop cells without
+# a nucleus, and that should take care of small cells, but do not drop irregular cells"). Size, solidity and the
+# raster/reported area ratio are measured and written in `qc_flags`, but they exclude nothing; what excludes is a
+# missing nucleus and the technical failures that leave a cell with no measurement at all.
+QC_EXCLUDES = ('missing_nucleus_geometry', 'nucleus_raster_empty', 'raster_empty', 'invalid_centroid',
+               'invalid_cell_area', 'duplicate_detection')
 
 # --- the classification (typing/subpanel.py, subpanel_io.py), in this panel's names --------------------------
 HORMONES = ('INS', 'GCG', 'SST')
@@ -152,6 +158,12 @@ SENIOR_IMMUNE_RULES = {
     'T-progenitor-memory': (['Bcl_2', 'CD3e', 'TCF_1'], [['CD4', 'CD8']], ['E_cadherin', 'EpCAM', 'Ker8_18', 'Pan_Cytokeratin']),
     'T-regulatory': (['CD3e', 'CD4', 'FOXP3'], [['CD39', 'ICOS']], ['E_cadherin', 'EpCAM', 'Ker8_18', 'Pan_Cytokeratin']),
 }
+# Rules this panel adds to Senior's (owner, 2026-10-16: "add the CD45 rule"). CD45 is on this panel and not on
+# Senior's. It is a FALLBACK: asked only of cells no Senior definition claimed, before the supporting tier, with
+# Senior's epithelial negatives -- so a CD3e+ or CD68+ cell keeps its Senior definition, and a leukocyte the panel
+# cannot name further (Senior's B, NK, dendritic, neutrophil and plasma rules are unavailable here) is Immune
+# rather than falling through to Exocrine.
+ADDED_IMMUNE_RULES = {'Imm-CD45-leukocyte': (['CD45'], [], ['ECAD', 'panCK'])}
 # The rule table's hierarchy for immune_subtype.py.
 IMMUNE_LEVEL2 = ('Imm-B-cell', 'Imm-NK-cell', 'Imm-T-cell', 'Imm-dendritic-cell', 'Imm-macrophage',
                  'Imm-neutrophil', 'Imm-plasma-cell')
@@ -162,7 +174,7 @@ IMMUNE_LEVEL3 = {'Imm-T-cell': ('T-regulatory', 'T-exhausted', 'T-progenitor-mem
 OWN_MARKERS = {
     'Nerve': ('B3TUBB',), 'Lymphatic': ('PDPN',), 'Blood vessel': ('CD31', 'CD34'),
     'Beta': ('INS',), 'Alpha': ('GCG',), 'Delta': ('SST',),
-    'Immune': ('CD3e', 'CD68', 'CD20'), 'Exocrine': ('ECAD', 'panCK'),
+    'Immune': ('CD3e', 'CD68', 'CD20', 'CD45'), 'Exocrine': ('ECAD', 'panCK'),
 }
 
 

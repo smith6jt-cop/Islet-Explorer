@@ -88,6 +88,11 @@ def main() -> int:
     tags = [r['image_name'] for r in CT.cohort_rows()] if a.images == ['all'] else a.images
     rules, record = CT.codex_rules()
     specificity = {k: len(r[0]) + sum(len(g) for g in r[1]) + len(r[2]) for k, r in rules.items()}
+    # this panel's added rules rank below every Senior rule: they name a cell only when no Senior rule does
+    for k, r in CT.ADDED_IMMUNE_RULES.items():
+        rules[k] = r
+        specificity[k] = -1
+    level2 = tuple(CT.IMMUNE_LEVEL2) + tuple(CT.ADDED_IMMUNE_RULES)
     scale = CL.load_scale(a.out)
     (typ / 'immune').mkdir(parents=True, exist_ok=True)
     summary = {}
@@ -100,7 +105,7 @@ def main() -> int:
         values = immune.merge(aligned[['object_id'] + markers], on='object_id', how='left', validate='one_to_one')
         scaled = pd.DataFrame(CL.apply_scale(values[markers].to_numpy(), markers, scale), columns=markers)
         n = len(values)
-        call2, n2, other2, undec2, skip2 = resolve(n, CT.IMMUNE_LEVEL2, rules, scaled, set(markers), specificity)
+        call2, n2, other2, undec2, skip2 = resolve(n, level2, rules, scaled, set(markers), specificity)
         out = pd.DataFrame({'object_id': values['object_id'], 'immune_class': call2, 'immune_class_matches': n2,
                             'immune_class_also': other2, 'immune_class_undecided': undec2,
                             'immune_subtype': None, 'immune_subtype_matches': 0, 'immune_subtype_also': '',

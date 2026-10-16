@@ -51,6 +51,8 @@ QC_COLUMNS = ['object_id', 'qc_analysis_eligible', 'qc_estimation_eligible', 'qc
 
 
 def import_uniform():
+    import matplotlib
+    matplotlib.use('Agg')        # UniFORM draws a figure per marker; an interactive backend blocks on a desktop
     head = subprocess.run(['git', '-C', str(UNIFORM_PATH), 'rev-parse', 'HEAD'], capture_output=True,
                           text=True, check=True).stdout.strip()
     if head != UNIFORM_COMMIT:
