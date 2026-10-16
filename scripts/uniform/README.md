@@ -107,6 +107,9 @@ Rerun of 2026-10-16 (`islets_all_20_v4.log`, fits unchanged): **all 20 images pa
 the former Hormone Fragments now pick up the cells under them (e.g. T1D_6533 100 → 316 clusters, 297 → 422 singles);
 islets rise slightly (e.g. ND_0112 130 → 146).
 
+Owner review, 2026-10-16: "The islet annotations look good." The four images saved during the review (Aab_6450, 6505,
+6521, 6538) hold the same objects, class by class, as `$OUT/islets/`, so the exports stand for the reviewed project.
+
 ## Canary, 2026-10-15
 
 Aab_6505 and ND_6232 went through every step. Cells matched to the earlier typing show what the first fit did with

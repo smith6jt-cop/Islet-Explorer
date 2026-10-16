@@ -18,6 +18,11 @@ reused, not rerun.
 
 **CHGA aid, 2026-10-16.** At the owner's direction CHGA no longer gates which cells train the islet classifier: a hormone (INS, GCG or SST) as the cell's highest marker confirms it, and CHGA only adds cells beside confirmed ones. All 20 images were refitted and now have islet objects, including T1D_6563 (glucagon and somatostatin). Coverage of the earlier endocrine cells rose on every image, with somewhat wider islet margins. See [the README](../scripts/uniform/README.md#chga-is-an-aid-not-a-gate-owner-2026-10-16). All 20 await the owner's review.
 
+**Whole-cell objects, 2026-10-16.** At the owner's direction step 1b now builds every endocrine object from whole cell
+segmentations: no cell cut by an edge, no cell in two objects, no object smaller than a cell, no Hormone Fragments. All
+20 images pass `check_islet_objects.py`. The owner reviewed the objects the same day: "The islet annotations look good."
+See [the README](../scripts/uniform/README.md#endocrine-objects-are-made-of-whole-cells-owner-2026-10-16).
+
 ## Cohort
 
 | Status | Original 15 | Additions |
@@ -48,8 +53,8 @@ way for every donor:
 3. **Islets (2026-10-15 directive).** Senior's v3 method on every image: a per-image islet pixel
    classifier fitted on the image's own cells (CHGA in CD99's role; PGP9.5 not an identity marker; the
    highest marker read on each marker's image top, insulin's and somatostatin's never below the cohort median), script 1 (size-adaptive
-   erode/dilate, 50 µm² minimum) and step 1b, which ends every outline on whole-cell outlines and labels
-   the result Islet, EndocrineCluster, EndocrineSingle or Hormone Fragment. You review all 20 in QuPath
+   erode/dilate, 50 µm² minimum) and step 1b, which builds every object from whole cells and labels
+   it Islet, EndocrineCluster or EndocrineSingle. You review all 20 in QuPath
    before acceptance. As in Senior v3, QuPath draws no peri-islet bands; the app's 20 µm peri region is
    computed downstream. Structure objects (nerve, capillary, lymphatic) are not yet in the uniform chain.
 4. **Raw import.** `prepare_analysis.py --retain-unmeasured`: raw mean intensity,
