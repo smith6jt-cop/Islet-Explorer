@@ -12,7 +12,7 @@ segmentation.
 |---|---|---|
 | Model | InstanSeg `fluorescence_nuclei_and_cells` 0.1.1, the newest cell+nucleus model (v0.1.2 added only a DAPI nuclei model) | owner, 2026-10-15 |
 | InstanSeg channels | DAPI, CD68, CD44, VIM, ECAD, LGALS3, panCK, CD3e, BActin: Senior's 13 with a CODEX counterpart; CD99, HLA-A, CD79a and Iba1 are not in this panel and are dropped, as IO60pLN dropped CD99 | owner, 2026-10-15 |
-| Islet method | Senior v3: per-image islet pixel classifier (`islet_classifier_fit.py`), script 1 (size-adaptive erode/dilate, 50 µm² minimum), step 1b (outlines end on whole-cell outlines; Islet / EndocrineCluster / EndocrineSingle / Hormone Fragment) | owner, 2026-10-15 |
+| Islet method | Senior v3: per-image islet pixel classifier (`islet_classifier_fit.py`), script 1 (size-adaptive erode/dilate, 50 µm² minimum), step 1b (objects made of whole cell segmentations; Islet / EndocrineCluster / EndocrineSingle) | owner, 2026-10-15; step 1b rule 2026-10-16 |
 | CD99's role in the islet classifier | CHGA | owner, 2026-10-15 |
 | Tissue outlines | Reused unchanged: the original project's Tissue for the original 15, the six-donor review project's for the additions | owner, 2026-10-15 |
 | Peri-islet bands | None in QuPath, as in Senior v3 (per-cell signed distances instead); the app's 20 µm peri regions are computed downstream | Senior v3 |

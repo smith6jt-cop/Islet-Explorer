@@ -1,7 +1,7 @@
 /*
  * CODEX PORT (Islet-Explorer, 2026-10-15): copied from Islet-Explorer-Senior's IO60 v3 pipeline
  * (scripts/uniform/PORTED_FROM.json records the source file and checksum). Only the CODEX
- * parameters below were changed: FIT_TOLERANCE_UM = one pixel of the CODEX islet classifier (0.7548 um = 2 x 0.3774).
+ * parameters below were changed, and on 2026-10-16 the owner changed which cells an outline takes (below).
  * WHISKER_UM keeps Senior's 0.63475 um: the strips it removes are steps of InstanSeg's outlines, which InstanSeg draws
  * on its model's own 0.5 um grid in both pipelines (CODEX images are downsampled 0.5 / 0.3774 for it), so they are
  * 0.5 or 1.0 um wide here as in Senior. Everything else is the Senior script.
@@ -16,23 +16,29 @@
  *    Fragment" by cell segmentation outline: if one whole cell fits in islet outline, use cell segmentation; if not,
  *    label as hormone fragment, the object erodes to marker outline and markers do not contribute to cell type."
  *
+ * The owner, 2026-10-16, after looking at the result: "The endocrine objects outlines need to also pick up the cell
+ * segmentations. There should not be multiple annotations in one cell outline; among other problems this causes a
+ * single-cell to be counted as a cluster. There should never be an annotation for endocrine object that is smaller than
+ * a cell." That replaces the Hormone Fragment of 2026-10-02 and Senior's fit tolerance.
+ *
  * What it does to every Islet annotation script 1 made (geometry only; no measurement of any cell is read):
  *
- *   1. A detection FITS the outline when no part of it reaches farther than FIT_TOLERANCE_UM beyond the outline (one
- *      pixel of the islet classifier: the outline is drawn on a 1.0156 um grid, the cells on a 0.5 um one) and most of
- *      it lies inside. Every other detection the outline touches is CUT BY it.
- *   2. The outline erodes to the cells: the detections it cuts are taken out of it, so its edge now runs along their
- *      outlines; the strips left between two neighbouring cut cells are removed (WHISKER_UM: InstanSeg's outlines
- *      step in its own pixels, so those strips are 0.985 or 1.97 image pixels wide; everything under 2.5 px goes);
- *      the detections that fit are kept whole.
- *   3. What is left is split into its connected pieces. A piece holding two or more whole cells (a cell = a detection
- *      with a nucleus) is an Islet with that piece as its outline. A piece holding exactly one whole cell is an Islet
- *      whose outline IS that cell's segmentation outline. A piece holding none is dropped.
- *   4. An outline in which no whole cell fits becomes class "Hormone Fragment": its outline shrinks to the hormone
- *      marker's own outline inside it -- the image's classifier IsletHormone_<image tag> (a hormone above the
- *      image's threshold, nothing else; written by islet_classifier_fit.py next to Islets_<image tag>). A Hormone
- *      Fragment is never an islet: script 8 does not parent cells to it, and the typing reads islets only, so the
- *      hormone in it makes no cell endocrine.
+ *   1. The outline PICKS UP every detection it covers by at least PICK_SHARE of the detection's area; a detection two
+ *      outlines cover goes to the one covering more of it. An outline that picks up no cell that way (hormone signal
+ *      inside one cell, or spread across a few) picks up the cell holding most of it, unless another outline already
+ *      has that cell; largest overlaps first, so two outlines inside one cell give it one object. Every other detection
+ *      the outline touches is CUT BY it. A cell = a detection with a nucleus.
+ *   2. The outline takes the cells it picks up whole, and loses the ones it cuts: the detections it cuts are taken
+ *      out of it, so its edge runs along their outlines; the strips left between two neighbouring cut cells are
+ *      removed (WHISKER_UM: InstanSeg's outlines step in its own pixels, so those strips are 0.985 or 1.97 image pixels
+ *      wide; everything under 2.5 px goes); the picked-up detections are added whole, also where they reach beyond
+ *      the outline.
+ *   3. What is left is split into its connected pieces; pieces holding parts of one cell (InstanSeg draws some cells in
+ *      parts) stay one piece. A piece holding two or more cells is an object with that
+ *      piece as its outline. A piece holding exactly one cell is an object whose outline IS that cell's segmentation
+ *      outline. A piece holding none is dropped.
+ *   4. An outline that picked up no cell (hormone signal outside every cell) is removed. No object is smaller than a
+ *      cell, and no cell lies in two objects (check_islet_objects.py checks both on the exports).
  *
  *   5. Every object left is then DESIGNATED (the maintainer, 2026-10-02: "why are there no designations of
  *      EndocrineCluster or EndocrineSingle?" -- script 1 knows the one class Islet, and the sizes went with the
@@ -79,14 +85,13 @@ import qupath.opencv.ml.pixel.PixelClassifierTools
 evaluate(new File(buildFilePath(PROJECT_BASE_DIR, 'scripts', 'lib', 'common.groovy')))
 
 // ==================== PARAMETERS ====================
-double FIT_TOLERANCE_UM = 0.7548      // CODEX: one islet-classifier pixel (2 x 0.3774 um); a detection fits when it reaches no farther than this beyond the outline
+double PICK_SHARE = 0.5               // owner 2026-10-16: an outline covering at least this share of a cell picks the whole cell up
 double WHISKER_UM = 0.63475           // strips of an eroded outline narrower than twice this (2.5 px) are removed
-String CLASS_FRAGMENT = 'Hormone Fragment'
+String CLASS_FRAGMENT = 'Hormone Fragment'   // no longer made (owner 2026-10-16); an earlier run's are removed
 String CLASS_CLUSTER = 'EndocrineCluster'
 String CLASS_SINGLE = 'EndocrineSingle'
 double ISLET_MIN_DIAMETER_UM = 35.0   // two or more whole cells and this far across or more: an Islet (Drotar 2025)
 String KEY_CELLS = 'Whole cells'
-String MARKER_CLASSIFIER_PREFIX = 'IsletHormone_'
 // ====================================================
 
 def imageData = getCurrentImageData()
@@ -95,7 +100,6 @@ def hierarchy = imageData.getHierarchy()
 def server = imageData.getServer()
 def cal = server.getPixelCalibration()
 double pxUm = Math.sqrt(cal.getPixelWidthMicrons() * cal.getPixelHeightMicrons())
-double tolPx = FIT_TOLERANCE_UM / pxUm
 double whiskerPx = WHISKER_UM / pxUm
 String tag = getProjectEntry().getImageName().replaceAll('[^A-Za-z0-9._-]+', '_')
 long t0 = System.currentTimeMillis()
@@ -112,7 +116,7 @@ def oldFragments = getAnnotationObjects().findAll { clsOf(it) == CLASS_FRAGMENT 
 println "[01b] ${detections.size()} detections; ${fresh.size()} Islet annotations from script 1; ${finished.size()} objects already on cell outlines " +
         "${new TreeMap(finished.countBy { clsOf(it) })}; ${oldFragments.size()} ${CLASS_FRAGMENT} annotations"
 
-def details = [tag: tag, fit_tolerance_um: FIT_TOLERANCE_UM, whisker_um: WHISKER_UM, islet_min_diameter_um: ISLET_MIN_DIAMETER_UM,
+def details = [tag: tag, pick_share: PICK_SHARE, whisker_um: WHISKER_UM, islet_min_diameter_um: ISLET_MIN_DIAMETER_UM,
                detections: detections.size(), islets_from_script_1: fresh.size(), islets_already_done: finished.size()]
 
 // ---- 5. designation: one whole cell = EndocrineSingle; more = EndocrineCluster, or Islet from ISLET_MIN_DIAMETER_UM across ----
@@ -261,43 +265,68 @@ if (fresh.isEmpty()) {
         return g
     }
 
-    // ---- 1. which outline each detection fits (one at most: the outline covering more of it) ----
+    // ---- 1. which cells each outline picks up (owner, 2026-10-16: "the endocrine object outlines need to also pick up
+    // the cell segmentations"; no cell holds two objects; no object is smaller than a cell) ----
+    // a. An outline covering at least PICK_SHARE of a cell picks the whole cell up; a cell such outlines share goes to the
+    //    one covering most of it. (Senior took a cell only when it also reached no farther than one classifier pixel
+    //    beyond the outline, and cut the others out.)
+    // b. An outline that picks up no cell with a nucleus that way -- hormone signal inside one cell, or across a few --
+    //    picks up the cell with a nucleus holding most of it, if no other outline has that cell. Largest overlaps first,
+    //    so two outlines inside one cell give that cell one object. (Senior made such an outline a Hormone Fragment
+    //    shaped like the hormone's own pixels, smaller than a cell.)
+    // c. An outline that ends up with no cell (hormone signal outside every cell) is removed.
     int nIslets = fresh.size()
     def geoms = fresh.collect { fixed(it.getROI().getGeometry()) }
     def touching = new ArrayList<List<Integer>>(nIslets)
+    def overlapOf = new ArrayList<Map<Integer, Double>>(nIslets)
     def home = new HashMap<Integer, Integer>()
     def homeArea = new HashMap<Integer, Double>()
     for (int o = 0; o < nIslets; o++) {
         def g = geoms[o]
         def prepG = prepFactory.create(g)
-        def grown = tolPx > 0 ? prepFactory.create(g.buffer(tolPx)) : prepG
-        def env = new Envelope(g.getEnvelopeInternal())
-        env.expandBy(tolPx)
         def mine = new ArrayList<Integer>()
-        for (cand in tree.query(env)) {
+        def areas = new HashMap<Integer, Double>()
+        for (cand in tree.query(g.getEnvelopeInternal())) {
             int i = cand as int
             def c = cellGeom(i)
             if (!prepG.intersects(c)) continue
             double inside = overlay(g, c, OverlayNG.INTERSECTION).getArea()
             if (inside <= 0) continue                                  // touching along an edge is not overlapping
             mine << i
-            if (inside >= 0.5 * c.getArea() && grown.covers(c)) {
+            areas.put(i, inside)
+            if (inside >= PICK_SHARE * c.getArea()) {
                 def best = homeArea.get(i)
                 if (best == null || inside > best) { home.put(i, o); homeArea.put(i, inside) }
             }
         }
         touching << mine
+        overlapOf << areas
+    }
+    def picksANucleatedCell = new boolean[nIslets]
+    home.each { i, o -> if (hasNucleus(i)) picksANucleatedCell[o] = true }
+    def minorityPicks = []
+    for (int o = 0; o < nIslets; o++) {
+        if (picksANucleatedCell[o]) continue
+        touching[o].findAll { hasNucleus(it) }.each { i -> minorityPicks << [o: o, i: i, area: overlapOf[o].get(i)] }
+    }
+    int nPickedByMinority = 0
+    minorityPicks.sort { -it.area }.each { p ->
+        if (picksANucleatedCell[p.o] || home.containsKey(p.i)) return
+        home.put(p.i, p.o); homeArea.put(p.i, p.area)
+        picksANucleatedCell[p.o] = true
+        nPickedByMinority++
     }
 
-    // ---- 2 + 3. erode each outline to its cells; split; keep the pieces that hold a whole cell ----
+    // ---- 2 + 3. each outline: take out the cells it does not pick up, add the whole cells it does; split; keep the
+    // pieces that hold a cell ----
     def toAdd = []
-    def fragments = []
+    def noCell = []
     int nSplit = 0, nSingle = 0, nMulti = 0, nPiecesDropped = 0
     long wholeCells = 0, wholeDetections = 0
     for (int o = 0; o < nIslets; o++) {
         def obj = fresh[o]
         def whole = touching[o].findAll { home.get(it) == o }
-        if (!whole.any { hasNucleus(it) }) { fragments << obj; continue }
+        if (!whole.any { hasNucleus(it) }) { noCell << obj; continue }
         def cut = touching[o].findAll { home.get(it) != o }
         Geometry region = geoms[o]
         def wholeUnion = unionOf(whole.collect { cellGeom(it) })
@@ -306,12 +335,30 @@ if (fresh.isEmpty()) {
         region = overlay(region, wholeUnion, OverlayNG.UNION)
         def pieces = []
         PolygonExtracter.getPolygons(region, pieces)
+        // About 7 % of InstanSeg cell outlines come in parts (6,609 of 93,727 on ND_6232, median 14 % of the cell
+        // outside its largest part). Pieces holding parts of one picked-up cell are one object, so a cell is never split
+        // between objects or left partly outside its object.
+        int np = pieces.size()
+        int[] group = new int[np]
+        for (int p = 0; p < np; p++) group[p] = p
+        def root = { int a -> while (group[a] != a) { group[a] = group[group[a]]; a = group[a] }; a }
+        def prepPieces = pieces.collect { prepFactory.create(it) }
+        def pieceOf = new HashMap<Integer, Integer>()
+        for (i in whole) {
+            def c = cellGeom(i)
+            def hit = (0..<np).findAll { prepPieces[it].intersects(c) && overlay(pieces[it], c, OverlayNG.INTERSECTION).getArea() > 0 }
+            if (hit.isEmpty()) continue
+            for (int k = 1; k < hit.size(); k++) { int a = root(hit[0]), b = root(hit[k]); if (a != b) group[a] = b }
+            pieceOf.put(i, hit[0])
+        }
+        def groups = new LinkedHashMap<Integer, List<Integer>>()
+        for (int p = 0; p < np; p++) groups.computeIfAbsent(root(p), { new ArrayList<Integer>() }).add(p)
         def plane = obj.getROI().getImagePlane()
         def parent = obj.getParent()
         int kept = 0
-        for (piece in pieces) {
-            def prepPiece = prepFactory.create(piece)
-            def members = whole.findAll { prepPiece.contains(cellGeom(it).getInteriorPoint()) }
+        for (g in groups.entrySet()) {
+            def piece = g.value.size() == 1 ? pieces[g.value[0]] : unionOf(g.value.collect { pieces[it] })
+            def members = whole.findAll { pieceOf.containsKey(it) && root(pieceOf.get(it)) == g.key }
             def nucleated = members.findAll { hasNucleus(it) }
             if (nucleated.isEmpty()) { nPiecesDropped++; continue }
             // one whole cell: "use cell segmentation" -- the outline IS that cell's outline
@@ -329,55 +376,22 @@ if (fresh.isEmpty()) {
             putMeas(target, KEY_CELLS, nucleated.size() as double)
             kept++
         }
-        if (kept == 0) fragments << obj
+        if (kept == 0) noCell << obj
         else if (kept > 1) nSplit++
     }
     toAdd.groupBy { it.parent }.each { parent, items ->
         if (parent != null) parent.addChildObjects(items.collect { it.object }) else addObjects(items.collect { it.object })
     }
 
-    // ---- 4. Hormone Fragments: the marker's own outline inside the old outline ----
-    def markerClassifier
-    try {
-        markerClassifier = loadPixelClassifier(MARKER_CLASSIFIER_PREFIX + tag)
-    } catch (Throwable t) {
-        throw new IllegalStateException("[01b] No pixel classifier '${MARKER_CLASSIFIER_PREFIX}${tag}' for this image " +
-                "(islet_classifier_fit.py writes it next to Islets_${tag}): " + t.getMessage(), t)
-    }
-    def fragmentClass = getPathClass(CLASS_FRAGMENT)
-    def markerOutline = new java.util.concurrent.ConcurrentHashMap()
-    def privateServer = imageData.getServerBuilder().build()     // as in script 1: a private reader pool
-    try {
-        privateServer.setMetadata(server.getMetadata())
-        def privateData = new ImageData(privateServer, new PathObjectHierarchy(), imageData.getImageType())
-        def classServer = PixelClassifierTools.createPixelClassificationServer(privateData, markerClassifier)
-        fragments.parallelStream().forEach { f ->
-            def made = PixelClassifierTools.createObjectsFromPixelClassifier(classServer, null, f.getROI(),
-                    { r -> PathObjects.createAnnotationObject(r) } as java.util.function.Function, 0.0d, -1.0d, false)
-            def gs = made.collect { it.getROI().getGeometry() }.findAll { !it.isEmpty() }
-            if (!gs.isEmpty()) markerOutline.put(f, gs.size() == 1 ? gs[0] : areaOnly(OverlayNGRobust.union(gs.collect { fixed(it) })))
-        }
-    } finally {
-        privateServer.close()
-    }
-    def emptyFragments = []
-    for (f in fragments) {
-        def g = markerOutline.get(f)
-        if (g == null || g.isEmpty() || g.getArea() <= 0) { emptyFragments << f; continue }
-        f.setROI(GeometryTools.geometryToROI(g, f.getROI().getImagePlane()))
-        f.setPathClass(fragmentClass)
-        f.setName(null)
-        f.getMeasurementList().clear()
-    }
-    if (!emptyFragments.isEmpty()) removeObjects(emptyFragments, true)
+    // ---- 4. an outline that picked up no cell is removed: no endocrine object is smaller than a cell ----
+    if (!noCell.isEmpty()) removeObjects(noCell, true)
     def des = designate()
     fireHierarchyUpdate()
 
-    int nFragments = fragments.size() - emptyFragments.size()
     int nIsletsOut = nSingle + nMulti
     details += [islets: nIsletsOut, islets_one_whole_cell: nSingle, islets_two_or_more: nMulti, outlines_split: nSplit,
                 pieces_without_a_whole_cell_dropped: nPiecesDropped, whole_cells: wholeCells, whole_detections: wholeDetections,
-                hormone_fragments: nFragments, outlines_without_cell_or_hormone_removed: emptyFragments.size(),
+                cells_picked_up_by_a_minority_overlap: nPickedByMinority, outlines_without_a_cell_removed: noCell.size(),
                 stale_fragments_removed: staleFragments, stale_designated_removed: staleDesignated,
                 designation: des.counts, relabelled: des.relabelled, overlays_repaired: nRepaired,
                 openings_done_part_by_part: nOpenedByPart, openings_skipped: nOpeningSkipped,
@@ -385,7 +399,8 @@ if (fresh.isEmpty()) {
     boolean ok = nIsletsOut > 0
     V3_RESULT = [ok: ok, changed: true,
                  message: ("${fresh.size()} outlines from script 1 -> ${nIsletsOut} objects on cell outlines (${nSingle} one cell, ${nMulti} more; " +
-                         "${nSplit} outlines split) + ${nFragments} ${CLASS_FRAGMENT}; ${emptyFragments.size()} without cell or hormone removed; " +
+                         "${nSplit} outlines split; ${nPickedByMinority} cells picked up by an outline covering less than half of them); " +
+                         "${noCell.size()} outlines without a cell removed; " +
                          "designation ${des.counts}").toString(),
                  details: details]
     println "[01b] ${V3_RESULT.message} (${details.seconds} s)"
