@@ -15,13 +15,15 @@ byte-identical to the worktree files listed in `../PORTED_FROM.json` under "typi
   immune class and subtype, most specific rule wins  -> immune_subtype.py
 
 Everything below is a fact about THIS panel that the Senior code reads from its own registry; every departure
-from Senior is listed in DEPARTURES and repeated in README.md.
+from Senior is commented where it is made and repeated in README.md.
 """
 from __future__ import annotations
 
 import csv
 import json
 from pathlib import Path
+
+import numpy as np
 
 HERE = Path(__file__).resolve().parent
 UNIFORM = HERE.parent
@@ -121,6 +123,26 @@ LINEAGE_MARKERS = {
 }
 SUPPORTING_ONLY = ('LGALS3',)   # Senior: M2Gal3, CD11b, FOXP3, CD56, TP63
 IDENTITY_MARKERS = tuple(sorted({m for ms in LINEAGE_MARKERS.values() for m in ms}))
+
+# The hormone level, a departure (2026-10-17). Senior admits a cell inside an endocrine object when max(scaled INS,
+# GCG, SST) clears the tissue p99 of that max. Two changes:
+#  1. Each hormone is divided by its own ordinary-tissue p99 in the image (aligned values, so the image's UniFORM
+#     factor cancels) before the max is taken, so the level no longer compares INS against GCG's background on the
+#     cohort scale. Alone this changed little (Aab_6558 6,876 -> 6,888 endocrine cells).
+#  2. Inside the objects the level is lowered, never raised, to where the cells clearing it are still at least 9:1
+#     endocrine over background: the lowest level from which every bin up to the tissue p99 has a local false-
+#     discovery rate <= LOCAL_FDR_MAX, background being the tissue distribution scaled to the object cells below
+#     the tissue median (classify.object_hormone_level). The tissue p99 controls false positives among exocrine
+#     cells at 1 %, which inside the objects is a global FDR of 0.1-0.2 % on every image -- far stricter than the
+#     question needs, and on an image with a weak stain it cuts through the endocrine population: Aab_6558 (GADA+
+#     only, C-peptide 8 ng/mL) has INS at 2.4x its tissue p99 in the objects against 15-86x on the other ND and
+#     Aab+ images, a distinct INS-high / GCG-low cluster below the p99, and 35 % of its object cells Excluded.
+#     With the local-FDR level well-stained images gain 0.2-3 % endocrine cells and the weak ones more (Aab_6558
+#     22 %, T1D_6533 19 %, T1D_6534 9 %). The subtype winner is unchanged (highest scaled hormone).
+HORMONE_LEVEL_DEPARTURE = ('max over hormones of aligned / own tissue p99; level = tissue p99 of that max, lowered '
+                           'inside the objects to local FDR <= LOCAL_FDR_MAX')
+LOCAL_FDR_MAX = 0.10
+HORMONE_FOLD_BINS = np.exp(np.linspace(np.log(0.1), np.log(20.0), 41))   # log bins ~14 % wide
 
 # Constants, unchanged from Senior.
 REFERENCE_QUANTILE = 99.0

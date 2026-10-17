@@ -10,7 +10,11 @@ other endocrine  For each cell the classification did NOT call endocrine (Exclud
                  does it carry endocrine evidence other than a hormone clearing the image's level --
                    chga       CHGA at or above the image's ordinary-tissue CHGA level (Senior's CD99 reference level)
                    ghrelin    Ghrelin at or above its ordinary-tissue p99 (the four additions that carry it)
-                   sub_level  a hormone above its scale floor (scaled > 0) but below the image's hormone level
+                   sub_level  the hormone statistic (classify.hormone_statistic) at or above the ordinary-tissue
+                              p95 of that statistic but below the image's hormone level (its tissue p99): by
+                              construction 4 % of tissue cells fall in this band, so `sub_level_expected` is
+                              the count background alone would put there
+                 (Before 2026-10-17 sub_level was "scaled > 0", which two-thirds of ordinary exocrine cells pass.)
 object cells     For each object, how many of its cells are endocrine; objects whose cells hold no endocrine call,
                  by object class, and the share of such objects' cells by class.
 
@@ -55,18 +59,19 @@ def main() -> int:
         tissue = ctx.set_index('object_id').reindex(d['object_id'])['context'].eq('tissue').to_numpy()
         inside = d['islet_num'].notna().to_numpy()
         endo = d['cell_class'].isin(ENDOCRINE).to_numpy()
-        hmax = d[['INS', 'GCG', 'SST']].max(axis=1).to_numpy()
         chga = d['CHGA'].to_numpy() >= audit['levels']['CHGA']
         ghrelin = np.zeros(len(d), bool)
         if 'Ghrelin' in d:
             g = d['Ghrelin'].to_numpy()
             ghrelin = g >= np.nanpercentile(g[tissue], CT.REFERENCE_QUANTILE)
-        sub = (hmax > 0) & (hmax < audit['levels']['hormone'])
+        fold = d['hormone_fold'].to_numpy(dtype=float)
+        sub = (fold >= np.nanpercentile(fold[tissue], 95)) & (fold < audit['levels']['hormone'])
         rep = {'cells_in_objects': int(inside.sum()), 'endocrine': int((inside & endo).sum())}
         for cls in sorted(set(d.loc[inside & ~endo, 'cell_class'])):
             m = inside & (d['cell_class'] == cls).to_numpy()
             rep[cls] = {'cells': int(m.sum()), 'chga': int((m & chga).sum()), 'ghrelin': int((m & ghrelin).sum()),
                         'hormone_below_level': int((m & sub & ~chga).sum()),
+                        'hormone_below_level_expected': round(0.04 * int(m.sum())),
                         'no_endocrine_evidence': int((m & ~chga & ~ghrelin & ~sub).sum())}
         per = d[inside].groupby('islet_num').agg(object_class=('endocrine_object_class', 'first'),
                                                   cells=('object_id', 'size'),
@@ -81,6 +86,7 @@ def main() -> int:
         x = rep.get('Excluded', {'cells': 0})
         print(f"{t:10} in objects {rep['cells_in_objects']:6} endocrine {rep['endocrine']:6} | Excluded {x['cells']:5}"
               f" chga {x.get('chga', 0):5} ghrelin {x.get('ghrelin', 0):4} sub-level {x.get('hormone_below_level', 0):5}"
+              f" (bg {x.get('hormone_below_level_expected', 0):4})"
               f" none {x.get('no_endocrine_evidence', 0):5} | objects w/o endocrine {rep['objects_without_endocrine_cell']}",
               flush=True)
     (typ / 'endocrine_checks.json').write_text(json.dumps(report, indent=1))

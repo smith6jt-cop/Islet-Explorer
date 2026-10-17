@@ -6,14 +6,15 @@ calls) and `subpanel_io.py`, as run on 2026-10-08 with `--membership geometry --
 per-donor levels. One image per donor here, so "per donor" is "per image".
 
   levels      per donor: the p99 of max(scaled subpanel markers) over the donor's ORDINARY TISSUE cells (in no
-              islet object and no structure object) -- for the hormones, for CHGA (Senior's CD99) and for each
-              structure.
+              islet object and no structure object) -- for CHGA (Senior's CD99) and for each structure. The
+              hormone level is the same p99 of max over INS, GCG, SST of (aligned value / that hormone's own
+              tissue p99) -- a departure (codex_typing.HORMONE_LEVEL_DEPARTURE).
   1 STRUCTURE asked of every cell, islet included, weakest class first so Blood vessel > Nerve > Lymphatic:
               centroid inside an object of the class, MORE THAN HALF the cell's area inside the class's objects,
               the class's subpanel clearing the donor's level, and the marker that drew the objects being the
               cell's top expressed identity marker (correction C, on the aligned values before scaling).
               Otherwise the cell keeps its own identity and carries passed_through_<class>.
-  2 ENDOCRINE inside an endocrine object only. A first pass admits a cell whose highest scaled hormone clears
+  2 ENDOCRINE inside an endocrine object only. A first pass admits a cell whose hormone statistic clears
               the donor's hormone level; the islet sizes it leaves decide each cell's stratum (1 / 2-3 / 4-10 /
               >10 admitted cells). Then per donor x stratum a CHGA level is fitted as the 1st percentile of that
               stratum's hormone-confirmed cells (complete hormones, top >= 0.35 and >= 2x the runner-up; at least
@@ -110,11 +111,59 @@ def size_stratum(islet_cells) -> np.ndarray:
     return out
 
 
+def hormone_references(values: pd.DataFrame, tissue: np.ndarray) -> dict:
+    """Each hormone's own background in this image: the ordinary-tissue p99 of its aligned value."""
+    raw = values.attrs['expressed']
+    return {m: reference_level(raw.loc[tissue, m].to_numpy(dtype=float)) for m in CT.HORMONES
+            if m in raw.columns and raw[m].notna().any()}
+
+
+def hormone_statistic(values: pd.DataFrame, refs: dict) -> np.ndarray:
+    """max over the hormones of (aligned value / that hormone's tissue p99): each hormone over its own
+    background (codex_typing.HORMONE_LEVEL_DEPARTURE). NaN where no hormone was measured."""
+    raw = values.attrs['expressed']
+    folds = np.column_stack([raw[m].to_numpy(dtype=float) / refs[m] for m in refs])
+    with np.errstate(invalid='ignore'):
+        return np.where(np.isfinite(folds).any(axis=1), np.nanmax(np.where(np.isfinite(folds), folds, -np.inf),
+                                                                 axis=1), np.nan)
+
+
+def hormone_scaled_levels(level: float, refs: dict, scale: pd.DataFrame) -> dict:
+    """The hormone level as a cut on each hormone's SCALED value: aligned >= level x ref, mapped through the
+    cohort scale (for the app's per-hormone positivity)."""
+    return {m: float(apply_scale(np.array([[level * r]]), [m], scale)[0, 0]) for m, r in refs.items()}
+
+
+def object_hormone_level(fold, tissue, in_objects, p99_level) -> tuple[float, dict]:
+    """The hormone level inside the endocrine objects (codex_typing.HORMONE_LEVEL_DEPARTURE): the lowest level,
+    at or below the tissue p99, from which every bin up to the p99 has a local false-discovery rate within
+    LOCAL_FDR_MAX. Background in the objects is the ordinary-tissue distribution of the statistic, scaled to the
+    object cells below the tissue median (twice their count: half of background lies below its median)."""
+    edges = CT.HORMONE_FOLD_BINS
+    ft = fold[tissue & np.isfinite(fold)]
+    fo = fold[in_objects & np.isfinite(fold)]
+    n_background = 2.0 * float((fo < np.median(ft)).sum())
+    obj = np.histogram(fo, edges)[0]
+    expected = np.histogram(ft, edges)[0] / len(ft) * n_background
+    lfdr = np.where(obj > 0, expected / np.maximum(obj, 1), 1.0)
+    j = int(np.searchsorted(edges, p99_level)) - 1
+    while j - 1 >= 0 and lfdr[j - 1] <= CT.LOCAL_FDR_MAX:
+        j -= 1
+    level = float(min(edges[j], p99_level)) if j >= 0 else float(p99_level)
+    return level, {'tissue_p99': float(p99_level), 'level': level, 'local_fdr_max': CT.LOCAL_FDR_MAX,
+                   'background_cells_in_objects': n_background, 'object_cells': int(fo.size),
+                   'admitted_at_tissue_p99': int((fo >= p99_level).sum()), 'admitted': int((fo >= level).sum())}
+
+
 def fit_levels(ctx: pd.DataFrame, values: pd.DataFrame) -> dict:
-    """subpanel.fit_levels for one donor (per-donor mode)."""
+    """subpanel.fit_levels for one donor (per-donor mode). The hormone level departs: it is the tissue p99 of
+    hormone_statistic, not of the max scaled hormone (codex_typing.HORMONE_LEVEL_DEPARTURE)."""
     tissue = ctx['context'].to_numpy() == 'tissue'
-    levels = {}
-    for name, markers in [('hormone', list(CT.HORMONES)), (CT.LEVEL_MARKER, [CT.LEVEL_MARKER])] + \
+    refs = hormone_references(values, tissue)
+    if not refs:
+        raise ValueError('hormone: no marker measured -- refusing to classify')
+    levels = {'hormone': reference_level(hormone_statistic(values, refs)[tissue]), 'hormone_reference': refs}
+    for name, markers in [(CT.LEVEL_MARKER, [CT.LEVEL_MARKER])] + \
                          [(n, list(CT.SUBPANEL[n])) for n in STRUCTURES]:
         present = [m for m in markers if values[m].notna().any()]
         if not present:
@@ -364,7 +413,14 @@ def classify(tag: str, ctx: pd.DataFrame, aligned: pd.DataFrame, scale: pd.DataF
     horm = hormone_evidence(values)
     exo = [m for m in CT.SUBPANEL['exocrine'] if m in values.columns]
     exo_measured = values[exo].notna().any(axis=1).to_numpy()
-    base_endocrine = in_islet & horm['measured'] & (horm['top'] >= levels['hormone'])
+    hormone_fold = hormone_statistic(values, levels['hormone_reference'])
+    single_object = ctx['endocrine_object_class'].eq('EndocrineSingle').to_numpy()
+    tissue = ctx['context'].to_numpy() == 'tissue'
+    levels['hormone_tissue_p99'] = levels['hormone']
+    levels['hormone'], A['hormone_level_in_objects'] = object_hormone_level(
+        hormone_fold, tissue, in_islet & ~structural & ~single_object, levels['hormone_tissue_p99'])
+    levels['hormone_scaled'] = hormone_scaled_levels(levels['hormone'], levels['hormone_reference'], scale)
+    base_endocrine = in_islet & horm['measured'] & (hormone_fold >= levels['hormone'])
     endocrine_name, endocrine_status = ordinary_endocrine_identity(horm)
     endocrine_names = set(CT.HORMONE_NAMES.values()) | set(ORDINARY_ENDOCRINE_NAMES)
     base_class, _, _, _ = run_chain(values, rules, structure_class, structure_resolved, in_islet, base_endocrine,
@@ -439,6 +495,7 @@ def classify(tag: str, ctx: pd.DataFrame, aligned: pd.DataFrame, scale: pd.DataF
         'islet_cells': islet_cells, 'islet_stratum': stratum, 'islet_route': route,
         'immune_definition': definition.astype(str), 'resolved_by': resolved_by.astype(str),
         'top_expressed_marker': top_marker, 'endocrine_subtype_status': subtype_status,
+        'hormone_fold': hormone_fold,
         'immune_rules_unavailable_count': unavailable_count})
     for name in STRUCTURES:
         frame[f'passed_through_{name.replace(" ", "_")}'] = passed_through[name]

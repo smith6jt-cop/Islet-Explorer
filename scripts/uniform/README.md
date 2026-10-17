@@ -142,6 +142,7 @@ $PY typing/classify.py --out $OUT --images all
 $PY typing/refine.py --out $OUT
 $PY typing/immune_subtype.py --out $OUT
 $PY typing/endocrine_checks.py --out $OUT
+$PY typing/summary.py --out $OUT
 ```
 
 What Senior's method means here:
@@ -153,13 +154,14 @@ What Senior's method means here:
   project's pixel classifiers, copied to `$OUT/structures/` with their source and the 2026-09-21 audit verdict
   (`structures/provenance.json`). That audit rejected Nerve on Aab_6505 and T1D_6520 and reviewed few Capillary
   and Lymphatic sets.
-- **Endocrine cells are called only inside the accepted endocrine objects**, on the highest scaled hormone
-  against the image's ordinary-tissue level; an EndocrineSingle's cell is named by its highest hormone. Exocrine
+- **Endocrine cells are called only inside the accepted endocrine objects**, on each hormone over its own
+  ordinary-tissue background against the image's hormone level (a departure, below); an EndocrineSingle's cell is named by its highest hormone. Exocrine
   inside an endocrine object is Excluded (`exocrine_inside_islet_border`). The CHGA route (Senior's CD99) needs 500
   hormone-confirmed cells per islet-size stratum and fired in no stratum, so admission is the hormone route, as on
   96 of Senior's 100 donor strata.
 - **Gates (D5)**: no fixed gates. UniFORM aligns each marker per image; one cohort floor/top scale puts it on
-  [0, 1]; structure and hormone levels are each image's p99 of ordinary tissue; immune rules use scaled >= 0.10.
+  [0, 1]; structure levels are each image's p99 of ordinary tissue, the hormone level that p99 lowered inside the
+  objects to a local FDR of 10 % (below); immune rules use scaled >= 0.10.
 - **Positivity (D4)**: hormone positivity is endocrine admission; immune positivity is a marker at scaled >= 0.10.
 - **Labels (D3)**: Beta, Alpha, Delta, Endocrine (unresolved / ambiguous subtype), Immune (with its definition,
   class and subtype), Blood vessel, Nerve, Lymphatic, Exocrine (one label, the residual: Senior never calls
@@ -178,6 +180,22 @@ Departures, all for this panel (`typing/codex_typing.py`):
   plasma, dendritic, neutrophil; regulatory, exhausted, cytotoxic, progenitor-memory T; M1-like macrophage.
   Reducing Imm-B-cell to CD20 alone was tried and withdrawn: it called 4,000-14,000 B cells per image against
   33-1,182 in the frozen typing.
+- **The hormone level (2026-10-17, for the Aab_6558 open item).** Senior admits a cell inside an object when
+  max(scaled INS, GCG, SST) clears the tissue p99 of that max. Here each hormone is first divided by its own
+  ordinary-tissue p99 in the image (so the cohort scale no longer pits INS against GCG's background), and inside
+  the objects the level is lowered, never raised, to the lowest level from which every bin up to the p99 has a
+  local false-discovery rate of at most 10 %, background being the tissue distribution scaled to the object cells
+  below the tissue median (`classify.object_hormone_level`, `codex_typing.HORMONE_LEVEL_DEPARTURE`). The tissue
+  p99 holds false positives among exocrine cells to 1 %, which inside the objects is a global FDR of 0.1-0.2 % on
+  every image, and on a weak stain it cuts through the endocrine population. Aab_6558 is that case: its INS stain
+  is weak (in the objects INS reaches 2.4x its tissue p99, against 15-86x on the other ND and Aab+ images; the
+  donor is GADA+ only with C-peptide 8 ng/mL), a distinct INS-high / GCG-low cluster sits below the p99, and 35 %
+  of its object cells were Excluded, 1,284 of them with INS their top hormone. The per-hormone division alone
+  changed little (6,876 -> 6,888 endocrine cells); the local-FDR level lowers its level from 1.71 to 0.83 and
+  admits 1,474 more (Beta 722 -> 1,769; Excluded 35 % -> 21 %). Well-stained images gain 0.2-3 %; the weak-stain
+  images T1D_6533 19 %, T1D_6534 9 %, T1D_6563, T1D_6520 and ND_6232 5-7 %. The subtype winner stays Senior's
+  (highest scaled hormone): ranking the hormones by their folds instead would change 0.4-7 % of calls and none
+  from Alpha to Beta on Aab_6558, whose alpha-rich make-up (5,899 Alpha, 1,769 Beta) is what its stains show.
 - No reference donor is pinned for UniFORM (Senior pinned its own); no hormone is masked (step 1b makes no
   fragments); Senior's unshifted-CD8 refinement exception is not ported.
 
@@ -194,13 +212,21 @@ Owner rulings later on 2026-10-16, applied:
   linear in smoothed intensity, and a plain threshold on the Gaussian-smoothed marker (sigma 2 px) reproduces the
   original 15's objects at median Dice 0.88 (Nerve, B3TUBB), 0.89 (Capillary, CD31) and 0.73 (Lymphatic, PDPN; the
   original was a random forest). Those thresholds agree across the 15 in RAW units (p90/p10 1.4, 1.4, 2.0) and
-  not after the UniFORM factors (4.6, 2.8, 14): the classifiers were one raw cut on images acquired alike. So each
-  addition's threshold is the median raw threshold of the 15 moved by the addition's UniFORM factor relative to
-  the 15's median, and its objects are drawn as `4_Islet_Cells.groovy` drew them (inside Tissue, split, 2 / 4 / 4
-  um2 minimum, no object touching a 10 um edge ring). Against the earlier objects of the additions: Nerve and
-  Capillary Dice 0.82-0.88; Lymphatic 0.49-0.58 (T1D_6520's lymphatic area 43,000 -> 112,000 um2). The earlier
-  objects are in `$OUT/structures/superseded_additions/`; records in `structures/thresholds_fit.json` and
-  `thresholded.json`.
+  not after the UniFORM factors (4.6, 2.8, 14): the classifiers were one raw cut on images acquired alike.
+  **Revised 2026-10-17.** Each addition takes the 15's median raw threshold unscaled (Nerve 475, Capillary
+  1,951): predicting each original from the other 14, the raw median is the best transfer (|log error| median
+  0.07 and 0.17) and the UniFORM ratio used on 2026-10-16 among the worst (0.32, 0.27; UniFORM's PDPN factors
+  run 0.64-15.9 across images whose raw thresholds agree within 2x). The objects are drawn as
+  `4_Islet_Cells.groovy` drew them (inside Tissue, split, 2 / 4 um2 minimum, no object touching a 10 um edge
+  ring) and match the original classifiers' own objects on the additions (Dice 0.81-0.90).
+  **Lymphatic keeps the original classifier's objects on the additions** (`KEEP_CLASSIFIER`). That classifier is
+  a random forest on PDPN texture, not a threshold, and no transferred threshold reproduces it on both cohorts:
+  the raw median drew lymphatics on 0.06-0.15 % of tissue in four additions, below every original (0.15-3.22 %,
+  median 1.10 %), because their PDPN bright tail is dimmer; the UniFORM ratio drew T1D_6520 at 2.6x the
+  classifier (112,000 against 43,000 um2, the open item); rules that fit the additions fail on the 15. The
+  classifier's objects cover 0.39-0.54 % on all five, and T1D_6520's passed the 2026-09-21 audit. `make` still
+  draws and records the threshold alternative. The classifier objects are in `$OUT/structures/superseded_additions/`;
+  records in `structures/thresholds_fit.json` and `thresholded.json`.
 - **Background vs variation between images** (`typing/background_check.py`, `background_check.csv`): the
   UniFORM bar reads each image's histogram mode, which for markers most cells carry is the positive population.
   Measured instead in cells of a lineage that does not carry the marker (epithelial cells for hormone, immune,
@@ -210,12 +236,16 @@ Owner rulings later on 2026-10-16, applied:
   PDPN, CD31 and the hormones reach scaled 0.10 in under 1.5 % of cells on every image, CD68 and CD45 in up to
   2-3 %, CD4 in up to 3.9 % (LGALS3 is excluded from this reading: ductal epithelium carries galectin-3).
 - **Endocrine checks** (`typing/endocrine_checks.py`): of the cells inside the endocrine objects, 64-85 % are
-  called endocrine. The Excluded cells there (exocrine fall-through inside an object) split into CHGA-positive
-  (other endocrine; 4-564 per image), a hormone above its floor but below the image's level (67-2,406; Aab_6558
-  the most), and no endocrine evidence (264-1,475). Islets almost always hold an endocrine call (2 of 1,568 do
-  not); clusters without one are 3-68 per image and singles 4-48.
+  called endocrine (2026-10-17, after the hormone level: 75-86 %). The Excluded cells there (exocrine fall-through
+  inside an object) split into CHGA-positive (other endocrine; 4-405 per image), a hormone statistic between the
+  tissue p95 and the level, and no endocrine evidence. Before 2026-10-17 the middle band was "any hormone above its
+  floor", which two-thirds of ordinary exocrine cells pass; now `hormone_below_level_expected` gives the count
+  background alone puts there, and on every image the observed count is within 2x of it (Aab_6558 30 against 91):
+  what stays Excluded carries no more hormone than exocrine tissue does. Islets almost always hold an endocrine
+  call (2 of 1,491 do not); clusters without one are 2-22 per image (up to 75 before) and singles 4-48.
 
-Run of 2026-10-16 after these rulings: `$OUT/typing/summary.csv` (per image: kept cells, Beta / Alpha / Delta,
+Run of 2026-10-17 after these rulings and the two open items: `$OUT/typing/summary.csv`, written by
+`typing/summary.py` (per image: kept cells, Beta / Alpha / Delta,
 Excluded and its three kinds, Immune by definition, structure calls, Exocrine, refined Unresolved).
 
 ## App root (P4), 2026-10-16
@@ -230,7 +260,8 @@ centroid it contains. Its peri band is the 20 um ring inside Tissue, minus every
 shown under the app's labels: Beta / Alpha / Delta cell; Endocrine; CD8a Tcell and CD4 Tcell (Senior's
 T-CD8 / T-CD4-helper); T cell; Macrophage; Immune (CD45-only or supporting tier); Blood Vessel; Neural;
 Lymphatic; and the new Exocrine. Excluded cells and cells without a nucleus are counted in `census.csv` and
-kept out of every table. Hormone positivity is the image's hormone level on the scaled hormone (D4), and the
+kept out of every table. Hormone positivity is the image's hormone level on each scaled hormone (D4; the level
+times that hormone's own tissue p99, `levels.hormone_scaled` in the calls audit), and the
 regional and per-cell `_pos` flags are scaled >= 0.10.
 
 Two things are carried from v3 because they were never computed from cells: donor demographics and

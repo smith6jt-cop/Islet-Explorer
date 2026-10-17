@@ -14,7 +14,8 @@ additions). They are read from the split files `all-donor-20260920/structural/<c
 and copied into `$OUT/structures/<Class>/<Class>__<image>.geojson` (Senior's layout), each with its source,
 sha256 and the 2026-09-21 audit verdict, in `$OUT/structures/provenance.json`. The five additions' objects are
 instead drawn by `structure_thresholds.py make` (thresholds fitted on the original 15) and are not overwritten
-here. Senior's "Blood vessel" is Capillary here.
+here (Lymphatic there is the original classifier's own objects, structure_thresholds.KEEP_CLASSIFIER). Senior's
+"Blood vessel" is Capillary here.
 
 Endocrine objects are the accepted step-1b objects in `$OUT/islets/<image>.geojson` (Islet_N, Cluster_N,
 Single_N). Membership is checked against QuPath's own parenting (`$OUT/context/<image>.parquet` Parent) on every
@@ -84,9 +85,8 @@ def import_structures(out: Path, rows: list[dict]) -> dict:
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 with gzip.open(src, 'rb') as fi, open(dest, 'wb') as fo:
                     shutil.copyfileobj(fi, fo)
-            if tag in thresholded:      # drawn by structure_thresholds.py make from the original 15's thresholds
-                record[tag][cls] = {'source': str(made), 'origin': 'thresholder fitted on the original 15',
-                                    'sha256': sha256(dest), **thresholded[tag][cls]}
+            if tag in thresholded:      # written by structure_thresholds.py make (its record says how)
+                record[tag][cls] = {'source': str(made), 'sha256': sha256(dest), **thresholded[tag][cls]}
                 continue
             m = audit.get(cls, {})
             record[tag][cls] = {'source': str(src), 'source_sha256': sha256(src), 'origin': m.get('source'),

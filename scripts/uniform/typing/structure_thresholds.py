@@ -15,13 +15,35 @@ fit   On each ORIGINAL image, for each class, the threshold on the Gaussian-smoo
       0.3774 um) that best reproduces that image's existing objects: maximum Dice of (smoothed >= t) against the
       objects' pixels, inside Tissue and outside the edge ring. The best sigma is the one with the highest median
       Dice. Written to `$OUT/structures/thresholds_fit.json`.
-make  The thresholds agree across the original 15 in raw units, not after the UniFORM factors (the original
-      classifiers were one fixed raw cut), so the median raw threshold of the 15 is the reference, moved into each
-      ADDITION's intensity scale by the ratio of UniFORM factors (`$OUT/typing/shifts.json`):
-      t_addition = t_median x median(factor over the 15) / factor(addition); and that image's objects are drawn as the original script drew them:
+make  Each ADDITION takes the median raw threshold of the 15, unscaled, and its objects are drawn as the original
+      script drew them:
       smoothed >= t inside Tissue, 8-connected components split into separate objects, the class's minimum area,
       no object touching the 10 um edge ring. The additions' earlier objects (the same classifiers applied to
       their own raw intensities) are kept in `$OUT/structures/superseded_additions/` and compared.
+
+Why unscaled (2026-10-17; the 2026-10-16 make moved the threshold by the ratio of UniFORM factors, which drew
+T1D_6520's lymphatics at 2.6x the earlier area). Predicting each original's fitted threshold from the other 14
+(leave-one-out, |log error| median / p90) the plain raw median is the best transfer for every class -- Nerve
+0.07 / 0.24, Capillary 0.17 / 0.21, Lymphatic 0.19 / 0.48 -- and the UniFORM ratio among the worst (0.32 / 1.04,
+0.27 / 0.70, 0.54 / 2.20): UniFORM's PDPN factors run 0.64-15.9 across images whose fitted raw thresholds agree
+within 2x. Rescaling by the image's own tissue-pixel percentiles (p25-p95 of the smoothed channel) or matching
+the objects' area rank did no better than raw (best: Nerve p90 0.18 / 0.47, Capillary p50 0.20 / 0.64,
+Lymphatic any 0.36-0.52 / 0.99-2.84). And the additions' smoothed tissue percentiles (p50, p90, p99, p99.9) lie
+inside the 15's range for all three channels, so their raw intensities need no moving. `make` records the
+raw-versus-UniFORM leave-one-out in `thresholded.json`.
+
+Lymphatic keeps the original classifier's objects on the additions (KEEP_CLASSIFIER, 2026-10-17). The Nerve and
+Capillary classifiers are single-layer networks, linear in smoothed intensity, and a threshold reproduces them:
+Dice 0.88 / 0.89 on the 15, and on the additions the raw-median objects match the classifier's own objects (Dice
+0.81-0.90; area within 0.1-0.6 percentage points of tissue). The Lymphatics classifier is a 50-tree random forest
+on PDPN texture as well as intensity, and no transferred threshold reproduces it on both cohorts: the best
+threshold reaches Dice 0.73 on the 15 and 0.53-0.71 on the additions; the raw median draws lymphatics on 0.06-0.15 %
+of tissue in four additions, below every original (0.15-3.22 %, median 1.10 %), whose PDPN bright tail is dimmer
+(tissue p99.9 1,482-2,265 against 2,387-12,774 for the 15's p10-p90); the UniFORM ratio drew T1D_6520 at 1.38 %
+(2.6x the classifier's 0.53 %); background-quantile rules that match the additions fail leave-one-out on the 15
+(p90 error 1.4-2.4 in log). The classifier itself is a fixed function of raw pixel features, the same model that
+drew the 15's lymphatics, and gives 0.39-0.54 % on all five additions. `make` still draws the threshold
+alternative and records it (`threshold_alternative_not_used`).
 
     python scripts/uniform/typing/structure_thresholds.py --out $OUT fit
     python scripts/uniform/typing/structure_thresholds.py --out $OUT make
@@ -48,6 +70,9 @@ from redsea_cells import Channels  # noqa: E402
 CLASSES = {'Nerve': 'B3TUBB', 'Capillary': 'CD31', 'Lymphatic': 'PDPN'}
 MIN_AREA_UM2 = {'Nerve': 2.0, 'Capillary': 4.0, 'Lymphatic': 4.0}
 EDGE_MARGIN_UM = 10.0
+# Classes whose additions keep the original classifier's objects (`superseded_additions/`) rather than a transferred
+# threshold -- see the docstring: the Lymphatics classifier is a random forest, not a threshold.
+KEEP_CLASSIFIER = ('Lymphatic',)
 SIGMAS = (0.5, 1.0, 1.5, 2.0, 3.0)
 NBINS = 4000
 
@@ -185,12 +210,21 @@ def make_one(out: Path, tag: str, thresholds: dict, sigma: float) -> dict:
         new_mask = draw_mask.astype(bool)
         old_mask = object_mask(old, shp)
         inter = (new_mask & old_mask).sum()
-        rec[cls] = {'threshold_raw': thresholds[cls], 'objects': len(feats),
-                    'objects_before': len(json.loads(old.read_text())['features']),
-                    'area_um2': float(new_mask.sum() * CT.PIXEL_UM ** 2),
-                    'area_um2_before': float(old_mask.sum() * CT.PIXEL_UM ** 2),
-                    'dice_vs_before': float(2 * inter / max(new_mask.sum() + old_mask.sum(), 1))}
-        dest.write_text(json.dumps({'type': 'FeatureCollection', 'features': feats}))
+        drawn = {'threshold_raw': thresholds[cls], 'objects': len(feats),
+                 'objects_before': len(json.loads(old.read_text())['features']),
+                 'area_um2': float(new_mask.sum() * CT.PIXEL_UM ** 2),
+                 'area_um2_before': float(old_mask.sum() * CT.PIXEL_UM ** 2),
+                 'tissue_pct': float(100 * (new_mask & tissue).sum() / tissue.sum()),
+                 'tissue_pct_before': float(100 * (old_mask & tissue).sum() / tissue.sum()),
+                 'dice_vs_before': float(2 * inter / max(new_mask.sum() + old_mask.sum(), 1))}
+        if cls in KEEP_CLASSIFIER:
+            rec[cls] = {'origin': 'original classifier, kept (KEEP_CLASSIFIER)', 'objects': drawn['objects_before'],
+                        'area_um2': drawn['area_um2_before'], 'tissue_pct': drawn['tissue_pct_before'],
+                        'threshold_alternative_not_used': drawn}
+            shutil.copy2(old, dest)
+        else:
+            rec[cls] = {'origin': 'thresholder fitted on the original 15', **drawn}
+            dest.write_text(json.dumps({'type': 'FeatureCollection', 'features': feats}))
     print(tag, json.dumps(rec), flush=True)
     return rec
 
@@ -224,17 +258,21 @@ def main() -> int:
         f = shifts[marker]['scale']
         raw = {t: fit['images'][t][cls][sigma]['threshold'] for t in originals}
         aligned = {t: raw[t] * f[t] for t in originals}
-        # Measured 2026-10-16: the fitted thresholds agree across the original 15 in RAW units (p90/p10 1.4 Nerve,
-        # 1.4 Capillary, 2.0 Lymphatic) and not after the UniFORM factors (4.6, 2.8, 14): the original classifiers
-        # were one fixed raw cut on images acquired alike. So the originals' raw scale is the reference, and an
-        # addition's threshold is that raw median moved by the addition's intensity scale relative to the
-        # originals' (the ratio of UniFORM factors).
-        f_ref = float(np.median([f[t] for t in originals]))
+        # The fitted thresholds agree across the original 15 in RAW units (p90/p10 1.4 Nerve, 1.4 Capillary, 2.0
+        # Lymphatic) and not after the UniFORM factors (4.6, 2.8, 14): the original classifiers were one fixed raw
+        # cut. The raw median is also the best leave-one-out predictor of each original's threshold (docstring),
+        # so every addition takes it unscaled.
         common[cls] = float(np.median(list(raw.values())))
+        loo = {'raw_median': [abs(np.log(np.median([raw[u] for u in originals if u != t]) / raw[t]))
+                              for t in originals],
+               'uniform_ratio': [abs(np.log(np.median([aligned[u] for u in originals if u != t]) / f[t] / raw[t]))
+                                 for t in originals]}
         per_image[cls] = {'raw_by_original': raw, 'raw_spread_p90_over_p10': spread(raw.values()),
                           'aligned_by_original': aligned, 'aligned_spread_p90_over_p10': spread(aligned.values()),
-                          'originals_median_factor': f_ref,
-                          'raw_by_addition': {t: common[cls] * f_ref / f[t] for t in additions}}
+                          'leave_one_out_abs_log_error': {k: {'median': float(np.median(v)),
+                                                              'p90': float(np.percentile(v, 90))}
+                                                          for k, v in loo.items()},
+                          'raw_by_addition': {t: common[cls] for t in additions}}
     made = {}
     with ProcessPoolExecutor(a.workers) as pool:
         futs = {t: pool.submit(make_one, a.out, t, {c: per_image[c]['raw_by_addition'][t] for c in CLASSES},

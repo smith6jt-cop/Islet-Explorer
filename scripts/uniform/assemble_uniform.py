@@ -186,8 +186,9 @@ def build_image(run: Path, out: Path, tag: str, case: str, donors: pd.DataFrame,
     index = {n: i for i, n in enumerate(names)}
     core_owner = np.array([index.get(k, -1) if isinstance(k, str) else -1 for k in in_obj])
     ptree = STRtree(pts)
-    hormone_level = audit['levels']['hormone']
-    hi = [MARKERS.index(h) for h in ('INS', 'GCG', 'SST')]
+    hormones = ('INS', 'GCG', 'SST')
+    hormone_level = np.array([audit['levels']['hormone_scaled'][h] for h in hormones])
+    hi = [MARKERS.index(h) for h in hormones]
 
     # signed distance to the nearest object boundary (negative inside one)
     bounds = shapely.boundary(geoms)
@@ -215,17 +216,18 @@ def build_image(run: Path, out: Path, tag: str, case: str, donors: pd.DataFrame,
         gfeatures.append({'type': 'Feature', 'geometry': mapping(core.union(band)),
                           'properties': {'name': name + '_exp20um', 'object_class': ocls,
                                          'classification': {'name': 'IsletExpanded'}}})
-        # hormone positivity (D4): the scaled hormone at or above the image's hormone level
+        # hormone positivity (D4): each scaled hormone at or above the image's hormone level on that hormone
+        # (classify.hormone_scaled_levels: the level times the hormone's own tissue p99, on the cohort scale)
         h = X[c][:, hi]
         hv = np.isfinite(h).all(axis=1)
-        pos = h >= hormone_level
+        pos = h >= hormone_level[None, :]
         npos = pos.sum(axis=1)
         rec = dict(meta, source_file='uniform_20donor', islet_id=name, name=name, object_class=ocls,
                    cells_total=len(c), Multi_Pos=int(np.sum(hv & (npos > 1))), Triple_Neg=int(np.sum(hv & (npos == 0))))
         for j, pre in enumerate(['Ins', 'Glu', 'Stt']):
             rec[pre + '_single'] = int(np.sum(hv & pos[:, j] & (npos == 1)))
             rec[pre + '_any'] = int(np.sum(hv & pos[:, j]))
-            rec[pre + '_thr'] = hormone_level
+            rec[pre + '_thr'] = float(hormone_level[j])
         comp.append(rec)
         for rtype, g, ids in [('islet_core', core, c), ('islet_band', band, p),
                               ('islet_union', core.union(band), np.union1d(c, p))]:
