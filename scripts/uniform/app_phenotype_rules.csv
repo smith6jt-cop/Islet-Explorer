@@ -1,13 +1,13 @@
 parent,label,all_positive,any_positive,all_negative,note
-all,Beta cell,INS,,,"Inside an endocrine object; the highest scaled hormone clears the image's hormone level (p99 of ordinary tissue) and insulin is the unique highest (Islet-Explorer-Senior typing). A Single's cell is named by its unique highest hormone."
+all,Beta cell,INS,,,"Inside an endocrine object. A cell is endocrine when a hormone, read over its own background in the image, clears the image's hormone level (the ordinary-tissue p99, lowered inside the objects to a 10% local false-discovery rate); it is named by its unique highest hormone on the cohort scale, here insulin. A Single's one cell is named by its unique highest hormone."
 all,Alpha cell,GCG,,,"As Beta cell, with glucagon the unique highest hormone."
 all,Delta cell,SST,,,"As Beta cell, with somatostatin the unique highest hormone."
-all,Endocrine,,INS|GCG|SST,,"Admitted endocrine inside an object without a unique subtype: hormones tied or not all measured."
+all,Endocrine,,INS|GCG|SST,,"Endocrine cell without a unique highest hormone (tied, or not every hormone measured). Counted in every total; not listed as a phenotype beside Beta, Alpha and Delta."
 all,CD8a Tcell,CD3e|CD8a,,CD4|ECAD|panCK,"Immune T cell (CD3e >= 0.10 scaled, no epithelial marker) with Senior's T-CD8 subtype."
-all,CD4 Tcell,CD3e|CD4,,CD8a|ECAD|panCK,"Immune T cell with Senior's T-CD4-helper subtype."
-all,T cell,CD3e,,ECAD|panCK,"Immune T cell without a CD4 or CD8 subtype."
-all,Macrophage,CD68,,CD3e|ECAD|panCK,"Senior's Imm-macrophage (includes its Mac-M2-like subtype: CD163 with LGALS3)."
-all,Immune,CD45,,ECAD|panCK,"CD45-positive leukocyte no Senior rule names on this panel (owner rule, 2026-10-16), or Senior's supporting tier (a bottom-tier immune marker >= 0.8715)."
+all,CD4 Tcell,CD3e|CD4,,CD8a|ECAD|panCK,Immune T cell with Senior's T-CD4-helper subtype.
+all,T cell,CD3e,,ECAD|panCK,"T cell (CD3e >= 0.10 on the cohort scale, no epithelial marker) without a CD4 or CD8 subtype. Counted in every total; not listed beside CD8a and CD4 T cells."
+all,Macrophage,CD68,,CD3e|ECAD|panCK,Senior's Imm-macrophage (includes its Mac-M2-like subtype: CD163 with LGALS3).
+all,Immune,CD45,,ECAD|panCK,"CD45-positive leukocyte that no rule names further on this panel (owner rule, 2026-10-16), or Senior's supporting tier (a bottom-tier immune marker >= 0.8715 on the cohort scale). Counted in every total; not listed as a phenotype."
 all,Blood Vessel,CD31,,,"Only inside a Capillary object: centroid inside, more than half the cell inside, CD31 clears the image's level and is the cell's top expressed marker."
 all,Neural,B3TUBB,,,"Only inside a Nerve object, by the same rule on B3TUBB."
 all,Lymphatic,PDPN,,,"Only inside a Lymphatic object, by the same rule on PDPN."

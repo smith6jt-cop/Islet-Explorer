@@ -1250,8 +1250,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
                     downloadButton("dl_islet_drilldown_summary", "Download PNG",
                                    class = "btn-sm btn-outline-primary")),
                   hr(),
-                  tableOutput("islet_drilldown_table"),
-                  uiOutput("islet_drilldown_rules")
+                  tableOutput("islet_drilldown_table")
                 )
               )
             }

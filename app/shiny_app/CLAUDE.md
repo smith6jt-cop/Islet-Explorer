@@ -442,14 +442,19 @@ Per-tab integration:
 - **Plot tab** — no inline hints since Oct 2026; the Plot help popover carries
   the explanation. `phenotype_hint_ui()` is now unused by any tab.
 - **Spatial tab** — no inline hints (removed Oct 2026, at the owner's request).
-  The help popover lists every retained phenotype's markers via
-  `phenotype_marker_definitions_ui()`, which composes `protein_phenotype_rules.csv`
-  parent chains when the data root ships it and otherwise uses the Rules1 reference.
-- **Drill-down composition panel** — root-level `output$islet_drilldown_rules`
-  in `app.R` renders an expandable `<details>` element listing colour-coded
-  swatches + rules for every phenotype present in the clicked islet. Embedded
-  via `uiOutput("islet_drilldown_rules")` inside both the Plot and Trajectory
-  `segmentation_viewer_panel` renderUIs.
+  The help popover lists every retained phenotype via `phenotype_marker_definitions_ui()`: on the uniform root,
+  `UNIFORM_PHENOTYPE_DEFINITIONS` in words; otherwise it composes `protein_phenotype_rules.csv` parent chains, or
+  falls back to the Rules1 reference.
+- **Drill-down composition panel** — the per-islet `<details>` rules list (`output$islet_drilldown_rules`) was
+  removed 2026-10-17: all help sits behind the "?" icon. The composition bars drop retired (general) labels.
+
+**All help text lives in the "?" popover (owner, 2026-10-17):** "All help text should be in the hidden window
+behind the question mark icon in all tabs." Nothing explanatory goes inline under a control or above a plot; status
+and error messages (no data, range not applied, outlier tables) stay where they are. Shared paragraphs:
+`object_classes_help()` and `cell_typing_help()` in `00_globals.R`, which describe the uniform root when
+`is_uniform_root()`. A help output that must stay live (Spatial `embedding_method`, read by the browser check) is
+rendered inside the popover with `suspendWhenHidden = FALSE`. The hidden Statistics and Inflammation tabs still
+carry inline notes and were not revised for the uniform root.
 
 When adding a new phenotype-selecting input anywhere in the app, route its
 choices through `phenotype_keep()` / `phenotype_is_kept()` and put any marker

@@ -23,6 +23,8 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       }
       paste0("Protein PCA: UMAP and Leiden use the same marker graph.", correction)
     })
+    # Rendered inside the closed help popover, so keep it current while hidden.
+    outputOptions(output, "embedding_method", suspendWhenHidden = FALSE)
     ns <- session$ns
 
     # ---- Outlier-table reactiveVals (parity with Plot/Trajectory) ----

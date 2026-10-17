@@ -264,6 +264,10 @@ render_drilldown_summary <- function(cells, palette = PHENOTYPE_COLORS) {
     return(NULL)
   }
 
+  # General classes are not listed beside their subtypes (PHENOTYPE_RETIRED).
+  cells <- cells[phenotype_is_kept(cells$phenotype), , drop = FALSE]
+  if (nrow(cells) == 0) return(NULL)
+
   # Count phenotypes, split by region
   if ("cell_region" %in% colnames(cells)) {
     counts <- as.data.frame(table(cells$phenotype, cells$cell_region),

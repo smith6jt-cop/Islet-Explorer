@@ -1021,8 +1021,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
                   div(style = "text-align: right; margin-top: 6px;",
                     downloadButton("dl_islet_drilldown_summary", "Download PNG",
                                    class = "btn-sm btn-outline-primary")),
-                  tableOutput("islet_drilldown_table"),
-                  uiOutput("islet_drilldown_rules")
+                  tableOutput("islet_drilldown_table")
                 )
               )
             }
@@ -1641,9 +1640,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         sprintf("%s islets, %d Leiden clusters (resolution 1), cosine 15-NN, %s layout. ",
                 format(nrow(d), big.mark = ","), attr(d, "n_clusters") %||% NA_integer_,
                 if (identical(attr(d, "layout_key"), "X_draw_graph_fa"))
-                  "ForceAtlas2" else sub("^X_draw_graph_", "", attr(d, "layout_key") %||% "")),
-        "Axes are layout coordinates with no units — only relative position means ",
-        "anything. Rebuilt when the cell-count range changes.")
+                  "ForceAtlas2" else sub("^X_draw_graph_", "", attr(d, "layout_key") %||% "")))
     })
 
     output$paga_layout <- renderPlotly({

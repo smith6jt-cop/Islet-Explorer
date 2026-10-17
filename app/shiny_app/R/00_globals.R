@@ -831,7 +831,9 @@ phenotype_rules_modal_ui <- function() {
         shiny::tags$p("Endocrine cells are called only inside an endocrine object (Islet, Cluster or Single); ",
           "nerve, blood-vessel and lymphatic cells only inside the matching structure object. Immune rules count a ",
           "marker at 0.10 or above on the cohort scale. Every other cell is Exocrine; exocrine cells inside an ",
-          "endocrine object and cells without a nucleus are left out of the analysis.")
+          "endocrine object and cells without a nucleus are left out of the analysis."),
+        shiny::tags$p("Endocrine, T cell and Immune hold the cells left without a subtype. They count in every total ",
+          "but are not offered as phenotypes beside their subtypes.")
       ) else shiny::tagList(
         shiny::tags$p("The original 15 donors retain their saved phenotype labels. ",
           "The rules below were accepted for the added donors 6090, 6232, 6520, 6539 and 6558."),
@@ -983,6 +985,33 @@ phenotype_rules_button <- function(input_id,
   )
 }
 
+#' TRUE when the served root is the uniform 20-donor build (one typing workflow for every donor).
+is_uniform_root <- function() file.exists(data_path("uniform_release.json"))
+
+#' Help paragraph for the app-wide "Endocrine objects" selector, shared by every tab's help popover.
+object_classes_help <- function() {
+  if (!is_uniform_root()) return(NULL)
+  shiny::tags$p(shiny::tags$strong("Endocrine objects."),
+    " The selector above the tabs applies to every tab. An Islet has two or more whole cells and is at least ",
+    "35 µm across (the mean of its largest and smallest caliper diameter); a Cluster has two or more cells ",
+    "and is smaller; a Single is one endocrine cell. Rows, plots and the trajectory use only the selected classes.")
+}
+
+#' Help paragraph on how cells are typed, shared by every tab's help popover.
+cell_typing_help <- function() {
+  if (!is_uniform_root()) {
+    return(shiny::tags$p(shiny::tags$strong("Cell labels."),
+      " The original 15 donors retain their saved cell labels; the five additions use reviewed reconstructed ",
+      "phenotype rules. Phenotype comparisons span both methods."))
+  }
+  shiny::tags$p(shiny::tags$strong("Cell labels."),
+    " Every cell of all 20 donors is typed by one workflow. The phenotypes listed are Beta, Alpha and Delta cell, ",
+    "CD8a and CD4 T cell, Macrophage, Blood Vessel, Neural, Lymphatic and Exocrine. Cells left without a subtype ",
+    "(endocrine cells without a unique top hormone, T cells without CD4 or CD8, other leukocytes) count in every ",
+    "total but are not listed. Exocrine cells inside an endocrine object and cells without a nucleus are left out. ",
+    "Endocrine cells are called only inside endocrine objects, so peri-islet endocrine values are zero.")
+}
+
 tab_help <- function(title, rules_input_id, ...) {
   shiny::tags$div(
     style = "display: flex; justify-content: flex-end; margin-bottom: 6px;",
@@ -1118,7 +1147,32 @@ phenotype_marker_definitions <- function(path = data_path("protein_phenotype_rul
 }
 
 #' Help-popover block listing the retained phenotypes' marker definitions.
+# The listed phenotypes of the uniform root, in words (the full rule table is in the rules modal).
+UNIFORM_PHENOTYPE_DEFINITIONS <- c(
+  "Beta cell" = paste("inside an endocrine object, a cell admitted as endocrine whose unique highest hormone is",
+                      "insulin (a Single's one cell: its unique highest hormone)"),
+  "Alpha cell" = "as Beta cell, with glucagon the unique highest hormone",
+  "Delta cell" = "as Beta cell, with somatostatin the unique highest hormone",
+  "CD8a Tcell" = "CD3e+ and CD8a+, CD4\u2212, no epithelial marker (E-cadherin, panCK)",
+  "CD4 Tcell" = "CD3e+ and CD4+, CD8a\u2212, no epithelial marker",
+  "Macrophage" = "CD68+, CD3e\u2212, no epithelial marker",
+  "Blood Vessel" = paste("inside a Capillary object (centre and more than half the cell), CD31 above the image's",
+                         "level and the cell's top marker"),
+  "Neural" = "as Blood Vessel, inside a Nerve object on B3TUBB",
+  "Lymphatic" = "as Blood Vessel, inside a Lymphatic object on PDPN",
+  "Exocrine" = "every other cell outside the endocrine objects (acinar, ductal and stromal cells together)")
+
 phenotype_marker_definitions_ui <- function() {
+  if (is_uniform_root()) {
+    defs <- UNIFORM_PHENOTYPE_DEFINITIONS
+    return(shiny::tagList(
+      shiny::tags$h6(style = "margin-top: 12px; font-weight: 700;", "Phenotype definitions"),
+      shiny::tags$p(style = "color: #555;",
+        "For the immune and epithelial markers, + means 0.10 or above on the cohort scale (0 = background, ",
+        "1 = the cohort's 99.9th percentile). Hormones and structure markers use each image's own levels."),
+      shiny::tags$ul(style = "padding-left: 18px; margin-bottom: 6px;",
+        lapply(names(defs), function(n) shiny::tags$li(shiny::tags$strong(n), ": ", defs[[n]])))))
+  }
   defs <- phenotype_marker_definitions()
   if (!length(defs)) return(NULL)
   protein <- file.exists(data_path("protein_phenotype_rules.csv"))

@@ -224,10 +224,6 @@ viewer_server <- function(id, forced_image, current_tab) {
       tags$div(
         id = wrap_id,
         style = "position: relative;",
-        tags$div(
-          style = "padding: 6px 10px; background-color: #f6f8fa; color: #666; font-size: 90%; margin-bottom: 6px; border: 1px solid #e1e4e8; border-radius: 3px;",
-          "Click inside the viewer to enable pan/zoom and wheel zoom."
-        ),
         tags$iframe(
           id = iframe_id, src = src0, `data-relsrc` = src0,
           title = "Interactive pancreatic tissue image viewer",

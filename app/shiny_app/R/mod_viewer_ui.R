@@ -1,7 +1,13 @@
 viewer_ui <- function(id) {
   ns <- NS(id)
   div(style = "width: 100%;",
-    tab_help("Viewer help", "show_phenotype_rules_viewer"),
+    tab_help("Viewer help", "show_phenotype_rules_viewer",
+      tags$p(tags$strong("Images."),
+             " One whole-slide CODEX image per donor, shown in the Avivator viewer at full resolution. Choose a donor",
+             " from Select Image; the file name gives donor status and case number."),
+      tags$p(tags$strong("Navigating."),
+             " Click inside the viewer first to enable pan, zoom and mouse-wheel zoom. Avivator's own panel sets the",
+             " channels, their colours and contrast.")),
     # In-place iframe src updater. The server pushes the new Avivator URL here
     # instead of letting renderUI recreate the <iframe>. Recreating the iframe
     # (a WebGL canvas) on every reactive tick causes heavy flicker under

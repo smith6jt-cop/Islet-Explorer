@@ -24,9 +24,38 @@ trajectory_ui <- function(id) {
       ".trajectory-control-panel .form-group:last-child { margin-bottom: 8px; }"
     ))),
     tab_help("Trajectory help", "show_phenotype_rules_traj",
-      "Hover over an islet in either UMAP or the pseudotime scatter to highlight it across all three plots. Click to select it and view its segmentation map."),
+      object_classes_help(),
+      tags$p(tags$strong("Linked plots."),
+             " Hover over an object in either UMAP or the pseudotime scatter to highlight it in all three. Click to",
+             " select it and open its segmentation map; Clear selection releases it."),
+      tags$p(tags$strong("Pseudotime."),
+             " Diffusion pseudotime (scanpy DPT) on each object's cell make-up, after Barlow et al. 2024: for each",
+             " listed phenotype, log(1 + cells / endocrine cells) in the core and in the 20 \u00b5m peri-islet band.",
+             " Features that do not vary are dropped (peri-islet endocrine values are always zero). Objects are",
+             " linked to their 15 nearest neighbours by cosine distance. The root is the ND object nearest the centre",
+             " of the ND objects in diffusion components 1-3, and the direction is set so the beta-cell ratio falls",
+             " along pseudotime. It is refitted for the selected endocrine-object classes and for the Cells per islet",
+             " range once you press Recalculate trajectory; objects outside the range get no pseudotime."),
+      tags$p(tags$strong("Reading it."),
+             " The orientation is a modelling choice, and an ordering of objects along it does not show disease",
+             " progression; donor differences can shape it. Rank-normalized spreads objects evenly from 0 to 1; Raw",
+             " DPT keeps the diffusion distances."),
+      tags$p(tags$strong("Y axis."),
+             " Marker expression is the mean of the object's core cells on the cohort marker scale (0-1). Cell-type",
+             " ratio is log(1 + cells / endocrine cells) for the chosen phenotype in the chosen region. Trend lines",
+             " are LOESS fits, overall or per donor status, with an optional 95% confidence band."),
+      tags$p(tags$strong("UMAPs and Leiden clusters."),
+             " Built from each object's mean marker values: protein PCA with Harmony donor correction, then one",
+             " neighbour graph for UMAP and Leiden. Donor and biological effects may overlap."),
+      tags$p(tags$strong("Multi-Feature Heatmap."),
+             " Pseudotime is cut into equal bins; each row is a feature's bin means, standardised across bins and",
+             " clipped at \u00b12.5."),
+      tags$p(tags$strong("PAGA layout."),
+             " Barlow et al.'s PAGA-initialised force-directed layout of the same graph (cosine, 15 neighbours,",
+             " Leiden resolution 1). Each point is an object; the axes are layout coordinates with no units, so only",
+             " relative position means anything. It is built on request and rebuilt when the range changes."),
+      cell_typing_help()),
     div(style = "display: flex; align-items: center; gap: 12px; margin-bottom: 12px;",
-      span("Hover to highlight across plots; click to select and view details."),
       actionButton(ns("clear_link_selection"), "Clear selection", class = "btn-sm btn-outline-secondary")),
     fluidRow(
       # Left card: Scatterplot and heatmaps (narrowed from col-8)
@@ -36,10 +65,6 @@ trajectory_ui <- function(id) {
             tags$summary("Data controls"),
           fluidRow(
             column(8,
-              tags$p(class = "text-muted",
-                "Phenotype counts preserve the original 15 donors' saved labels; the five additions use reviewed reconstructed rules."),
-              tags$p(class = "text-muted",
-                "Trajectory uses the 12 retained phenotypes in core and peri regions. Retired categories are excluded from the calculation."),
               sliderInput(ns("cell_range"), "Cells per islet:",
                           min = 1, max = traj_max_islet_cells(),
                           value = c(TRAJ_DEFAULT_MIN_CELLS, traj_max_islet_cells()),
@@ -54,9 +79,8 @@ trajectory_ui <- function(id) {
           ),
           fluidRow(
             column(4,
-              # Y-axis measure. Marker expression is a protein mean from .X
-              # (the rescaling provenance differs between original and added donors);
-              # the cell-type ratio is Barlow et al.'s Fig 2F y-axis,
+              # Y-axis measure. Marker expression is the core-cell protein mean from .X
+              # on the cohort marker scale; the cell-type ratio is Barlow et al.'s Fig 2F y-axis,
               # log(# cells / # endocrine cells), which removes the islet-size
               # confound that a raw count or proportion carries.
               selectInput(ns("traj_y_mode"), "Y axis:",
