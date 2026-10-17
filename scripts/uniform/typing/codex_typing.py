@@ -232,11 +232,28 @@ def codex_rule(rule: tuple) -> tuple[tuple, dict]:
     return out, removed
 
 
-# Rules kept in a reduced form although a required positive is not on the panel, each with its reason. None:
-# Imm-B-cell reduced to CD20 alone (CD79a is not on this panel) called 4,000-14,000 B cells per image on
-# 2026-10-16, against 33-1,182 in the frozen typing of the original 15 -- CD20 at scaled 0.10 is not specific
-# here (its background modes stay 11-fold apart after UniFORM) -- so Senior's rule stands: unavailable.
+# Rules kept in a reduced form although a required positive is not on the panel, each with its reason. None.
 ACCEPTED_REDUCTIONS: dict[str, str] = {}
+
+# Rules asked in a substituted form on this panel, each with its reason (owner, 2026-10-17: "B cell should be" a
+# cell type). Senior's Imm-B-cell needs CD20 and CD79a; CD79a is not on this panel. CD20 alone at scaled 0.10
+# called 1,392-34,773 B cells per image -- CD20's background stays 11-fold apart between images after UniFORM --
+# against 0-1,182 in the earlier typing. CD45 takes CD79a's place as the second required positive, and T-cell,
+# macrophage and epithelial markers must be absent: 2-815 per image, the T1D donors highest (T1D_6533 785,
+# T1D_6534 815, T1D_6520 394), close to the earlier typing's 0-1,182 (651, 1,182, 357). Reading CD20 over each
+# image's own epithelial background (p99) instead left 0-10 on 11 of the original 15.
+SUBSTITUTED_RULES: dict[str, tuple] = {
+    'Imm-B-cell': ((['CD20', 'CD45'], [], ['CD3e', 'CD68', 'ECAD', 'panCK']),
+                   'CD79a is not on this panel; CD45 is the second required positive, CD3e and CD68 must be '
+                   'absent (owner, 2026-10-17)'),
+}
+
+# Structure cell calls (owner, 2026-10-17: "Blood vessel, lymphatic, and nerve should not be cell types"). The
+# Nerve, Capillary and Lymphatic objects stay -- the Microenvironment layer and each cell's in_<structure> /
+# crossed fraction -- but no cell is typed from them: a cell inside one keeps its own identity through the
+# endocrine, immune and Exocrine questions, as Senior's correction C already did for cells whose top marker was
+# not the object's. False reverses that.
+STRUCTURE_CELL_CALLS = False
 
 
 def codex_rules() -> tuple[dict, dict]:
@@ -249,6 +266,11 @@ def codex_rules() -> tuple[dict, dict]:
     """
     rules, record = {}, {}
     for name, rule in SENIOR_IMMUNE_RULES.items():
+        if name in SUBSTITUTED_RULES:
+            rules[name], why = SUBSTITUTED_RULES[name]
+            record[name] = {'substituted': True, 'rule_on_this_panel': rules[name], 'reason': why,
+                            'senior_rule': rule, 'unavailable': False}
+            continue
         r, removed = codex_rule(rule)
         if removed['unavailable'] and name in ACCEPTED_REDUCTIONS and (r[0] or r[1]):
             removed['unavailable'] = False

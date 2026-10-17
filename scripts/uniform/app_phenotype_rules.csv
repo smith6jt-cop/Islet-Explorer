@@ -6,9 +6,7 @@ all,Endocrine,,INS|GCG|SST,,"Endocrine cell without a unique highest hormone (ti
 all,CD8a Tcell,CD3e|CD8a,,CD4|ECAD|panCK,"Immune T cell (CD3e >= 0.10 scaled, no epithelial marker) with Senior's T-CD8 subtype."
 all,CD4 Tcell,CD3e|CD4,,CD8a|ECAD|panCK,Immune T cell with Senior's T-CD4-helper subtype.
 all,T cell,CD3e,,ECAD|panCK,"T cell (CD3e >= 0.10 on the cohort scale, no epithelial marker) without a CD4 or CD8 subtype. Counted in every total; not listed beside CD8a and CD4 T cells."
+all,B cell,CD20|CD45,,CD3e|CD68|ECAD|panCK,"Senior's Imm-B-cell with CD45 in place of CD79a, which this panel lacks (owner, 2026-10-17): CD20 and CD45 >= 0.10 on the cohort scale, no T-cell, macrophage or epithelial marker."
 all,Macrophage,CD68,,CD3e|ECAD|panCK,Senior's Imm-macrophage (includes its Mac-M2-like subtype: CD163 with LGALS3).
 all,Immune,CD45,,ECAD|panCK,"CD45-positive leukocyte that no rule names further on this panel (owner rule, 2026-10-16), or Senior's supporting tier (a bottom-tier immune marker >= 0.8715 on the cohort scale). Counted in every total; not listed as a phenotype."
-all,Blood Vessel,CD31,,,"Only inside a Capillary object: centroid inside, more than half the cell inside, CD31 clears the image's level and is the cell's top expressed marker."
-all,Neural,B3TUBB,,,"Only inside a Nerve object, by the same rule on B3TUBB."
-all,Lymphatic,PDPN,,,"Only inside a Lymphatic object, by the same rule on PDPN."
-all,Exocrine,,,,"Every other cell outside the endocrine objects: Senior's residual class (acinar, ductal and stromal cells are not separated). Exocrine inside an endocrine object is Excluded from analysis."
+all,Exocrine,,,,"The residual class: every other cell outside the endocrine objects (acinar, ductal, stromal, endothelial and neural cells are not separated; nerve, capillary and lymphatic structures are areas, not cell types). A residual cell inside an endocrine object is Excluded from analysis."

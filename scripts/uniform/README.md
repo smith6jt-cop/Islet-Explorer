@@ -147,10 +147,13 @@ $PY typing/summary.py --out $OUT
 
 What Senior's method means here:
 
-- **Neural, blood-vessel and lymphatic cells come only from structure objects** (A6). A cell is Nerve, Blood vessel
-  or Lymphatic only when its centroid is in such an object, more than half its area is inside, its own marker
-  clears the image's level and the object's marker is its top expressed identity marker. Every other cell keeps
-  its own identity. The objects are each image's Nerve, Capillary and Lymphatic annotations from the original
+- **Nerve, capillary and lymphatic structures are objects, not cell types** (A6; owner 2026-10-17: "Blood
+  vessel, lymphatic, and nerve should not be cell types"). Senior's structure call is switched off
+  (`codex_typing.STRUCTURE_CELL_CALLS = False`): a cell inside a structure object keeps its own identity through
+  the endocrine, immune and Exocrine questions, and its centroid membership and covered fraction are still
+  recorded (`context/`, `passed_through_*`). The structures enter the app as areas (the Microenvironment layer).
+  Endothelial and nerve cells therefore fall to the residual Exocrine class, and inside an endocrine object to
+  Excluded: Excluded rose 0.7-6 % per image (Aab_6505 2,000 -> 2,121). The objects are each image's Nerve, Capillary and Lymphatic annotations from the original
   project's pixel classifiers, copied to `$OUT/structures/` with their source and the 2026-09-21 audit verdict
   (`structures/provenance.json`). That audit rejected Nerve on Aab_6505 and T1D_6520 and reviewed few Capillary
   and Lymphatic sets.
@@ -164,8 +167,8 @@ What Senior's method means here:
   objects to a local FDR of 10 % (below); immune rules use scaled >= 0.10.
 - **Positivity (D4)**: hormone positivity is endocrine admission; immune positivity is a marker at scaled >= 0.10.
 - **Labels (D3)**: Beta, Alpha, Delta, Endocrine (unresolved / ambiguous subtype), Immune (with its definition,
-  class and subtype), Blood vessel, Nerve, Lymphatic, Exocrine (one label, the residual: Senior never calls
-  acinar or ductal), Excluded, and after refinement "Unresolved (no lineage evidence)".
+  class and subtype), Exocrine (one label, the residual: Senior never calls acinar or ductal; endothelial and
+  neural cells fall here too), Excluded, and after refinement "Unresolved (no lineage evidence)".
 
 Departures, all for this panel (`typing/codex_typing.py`):
 
@@ -176,10 +179,14 @@ Departures, all for this panel (`typing/codex_typing.py`):
   rule test reads an unmeasured negative as unknown, so no immune rule could fire on those seven donors.
 - Rule terms on markers this panel never acquired are removed and recorded
   (`typing/immune_rules_on_this_panel.json`); a rule that loses a required positive is unavailable. Available:
-  Imm-T-cell, Imm-macrophage; T-CD4-helper, T-CD8, Mac-M2-like (LGALS3 is Senior's M2Gal3). Unavailable: B, NK,
+  Imm-T-cell, Imm-macrophage; T-CD4-helper, T-CD8, Mac-M2-like (LGALS3 is Senior's M2Gal3). Unavailable: NK,
   plasma, dendritic, neutrophil; regulatory, exhausted, cytotoxic, progenitor-memory T; M1-like macrophage.
-  Reducing Imm-B-cell to CD20 alone was tried and withdrawn: it called 4,000-14,000 B cells per image against
-  33-1,182 in the frozen typing.
+- **B cell (owner, 2026-10-17: "B cell should be" a cell type).** Senior's Imm-B-cell needs CD20 and CD79a, and
+  CD79a is not on this panel. CD20 alone at scaled 0.10 called 1,392-34,773 per image (CD20's background stays
+  11-fold apart between images after UniFORM). The rule asked here (`codex_typing.SUBSTITUTED_RULES`) takes CD45
+  as the second required positive and requires CD3e, CD68, E-cadherin and panCK absent: 2-795 B cells per image,
+  the T1D donors highest (T1D_6534 795, T1D_6533 716, T1D_6520 393), against 0-1,182 in the earlier typing
+  (1,182, 651, 357). Reading CD20 over each image's epithelial background instead left 0-10 on 11 of the 15.
 - **The hormone level (2026-10-17, for the Aab_6558 open item).** Senior admits a cell inside an object when
   max(scaled INS, GCG, SST) clears the tissue p99 of that max. Here each hormone is first divided by its own
   ordinary-tissue p99 in the image (so the cohort scale no longer pits INS against GCG's background), and inside
@@ -258,8 +265,8 @@ $PY scripts/uniform/assemble_uniform.py --run $OUT --donor-source data/developme
 Every endocrine object (Islet_N, Cluster_N, Single_N) is a row with `object_class`. Its core is the cells whose
 centroid it contains. Its peri band is the 20 um ring inside Tissue, minus every endocrine object. Cells are
 shown under the app's labels: Beta / Alpha / Delta cell; Endocrine; CD8a Tcell and CD4 Tcell (Senior's
-T-CD8 / T-CD4-helper); T cell; Macrophage; Immune (CD45-only or supporting tier); Blood Vessel; Neural;
-Lymphatic; and the new Exocrine. Endocrine, T cell and Immune hold the cells left without a subtype; the app
+T-CD8 / T-CD4-helper); T cell; B cell; Macrophage; Immune (CD45-only or supporting tier); and the new
+Exocrine (the residual). Since 2026-10-17 there are no Blood Vessel, Neural or Lymphatic cells. Endocrine, T cell and Immune hold the cells left without a subtype; the app
 does not offer them beside their subtypes (`PHENOTYPE_RETIRED`, owner 2026-10-17), though their cells stay in every
 denominator. Excluded cells and cells without a nucleus are counted in `census.csv` and
 kept out of every table. Hormone positivity is the image's hormone level on each scaled hormone (D4; the level

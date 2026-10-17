@@ -45,8 +45,7 @@ def main() -> int:
             'Excluded_no_endocrine_evidence': ex.get('no_endocrine_evidence', 0),
             'Immune': cls.get('Immune', 0), 'T_cell': imm.get('Imm-T-cell', 0),
             'macrophage': imm.get('Imm-macrophage', 0), 'CD45_only': imm.get('Imm-CD45-leukocyte', 0),
-            'Blood_vessel': cls.get('Blood vessel', 0), 'Nerve': cls.get('Nerve', 0),
-            'Lymphatic': cls.get('Lymphatic', 0), 'Exocrine': cls.get('Exocrine', 0),
+            'B_cell': imm.get('Imm-B-cell', 0), 'Exocrine': cls.get('Exocrine', 0),
             'refined_Unresolved': int((refined == 'Unresolved (no lineage evidence)').sum()),
             'hormone_level_tissue_p99': round(level['tissue_p99'], 4), 'hormone_level': round(level['level'], 4)})
     pd.DataFrame(rows).to_csv(typ / 'summary.csv', index=False)

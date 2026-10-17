@@ -9,7 +9,7 @@ per-donor levels. One image per donor here, so "per donor" is "per image".
               islet object and no structure object) -- for CHGA (Senior's CD99) and for each structure. The
               hormone level is the same p99 of max over INS, GCG, SST of (aligned value / that hormone's own
               tissue p99) -- a departure (codex_typing.HORMONE_LEVEL_DEPARTURE).
-  1 STRUCTURE asked of every cell, islet included, weakest class first so Blood vessel > Nerve > Lymphatic:
+  1 STRUCTURE (off since 2026-10-17, codex_typing.STRUCTURE_CELL_CALLS) asked of every cell, islet included, weakest class first so Blood vessel > Nerve > Lymphatic:
               centroid inside an object of the class, MORE THAN HALF the cell's area inside the class's objects,
               the class's subpanel clearing the donor's level, and the marker that drew the objects being the
               cell's top expressed identity marker (correction C, on the aligned values before scaling).
@@ -408,6 +408,12 @@ def classify(tag: str, ctx: pd.DataFrame, aligned: pd.DataFrame, scale: pd.DataF
 
     structure_class, structure_resolved, passed_through, A['structures'] = structure_calls(ctx, values, levels,
                                                                                           top_marker)
+    if not CT.STRUCTURE_CELL_CALLS:      # owner, 2026-10-17: structures are objects, not cell types
+        A['structure_cell_calls'] = 'off (codex_typing.STRUCTURE_CELL_CALLS)'
+        structure_class = np.full(n, None, dtype=object)
+        structure_resolved = np.full(n, '', dtype=object)
+        passed_through = {k: np.where(ctx[f'in_{k}'].to_numpy(), ctx[CROSSED[k]].to_numpy(dtype=float), np.nan)
+                          for k in STRUCTURES}
     structural = structure_class != None  # noqa: E711
 
     horm = hormone_evidence(values)

@@ -23,7 +23,7 @@ Donor demographics and autoantibodies, and the viewer image links, are carried f
 
     python scripts/uniform/assemble_uniform.py --run data/development/uniform-20donor-20261015 \\
         --donor-source data/development/protein-expanded-20261015-v3 \\
-        --output data/development/uniform-20donor-20261017-v2 --report-root tmp/uniform-20donor-20261017-v2
+        --output data/development/uniform-20donor-20261017-v3 --report-root tmp/uniform-20donor-20261017-v3
 """
 from __future__ import annotations
 
@@ -57,10 +57,11 @@ PERI_UM = 20.0
 MARKERS = ['CD31', 'CD8a', 'CD3e', 'SMA', 'CD4', 'CD34', 'HLADR', 'PDPN', 'panCK', 'ECAD', 'CD163', 'SST', 'ColIV',
            'VIM', 'CD20', 'LGALS3', 'B3TUBB', 'GCG', 'KRT14', 'GAP43', 'CD35', 'CHGA', 'PGP9.5', 'INS', 'CD44',
            'CD45', 'NaKATPase', 'BCatenin', 'CD68', 'BActin', 'CK19']          # the 31-marker panel, app order
-LABELS = ['Beta cell', 'Alpha cell', 'Delta cell', 'Endocrine', 'CD8a Tcell', 'CD4 Tcell', 'T cell', 'Macrophage',
-          'Immune', 'Blood Vessel', 'Neural', 'Lymphatic', 'Exocrine']
+# No structure cell types since 2026-10-17 (codex_typing.STRUCTURE_CELL_CALLS); B cell since the same day.
+LABELS = ['Beta cell', 'Alpha cell', 'Delta cell', 'Endocrine', 'CD8a Tcell', 'CD4 Tcell', 'T cell', 'B cell',
+          'Macrophage', 'Immune', 'Exocrine']
 ENDOCRINE = ('Beta cell', 'Alpha cell', 'Delta cell', 'Endocrine')
-IMMUNE = ('CD8a Tcell', 'CD4 Tcell', 'T cell', 'Macrophage', 'Immune')
+IMMUNE = ('CD8a Tcell', 'CD4 Tcell', 'T cell', 'B cell', 'Macrophage', 'Immune')
 POS_MARKERS = ['INS', 'GCG', 'SST', 'CD3e', 'CD8a', 'CD4', 'CD20', 'CD68', 'CD163', 'HLADR', 'CD31', 'CD34', 'SMA',
                'PDPN', 'ECAD', 'panCK', 'CD45', 'CHGA']
 REGION_MARKERS = ['CD3e', 'CD163', 'CD68', 'LGALS3']
@@ -119,6 +120,7 @@ def app_labels(calls: pd.DataFrame, immune: pd.DataFrame) -> np.ndarray:
     lab[(use == 'Imm-T-cell') & (st == 'T-CD8')] = 'CD8a Tcell'
     lab[(use == 'Imm-T-cell') & (st == 'T-CD4-helper')] = 'CD4 Tcell'
     lab[use == 'Imm-macrophage'] = 'Macrophage'
+    lab[use == 'Imm-B-cell'] = 'B cell'
     out[imm] = lab[imm]
     if (out == '').any():
         raise ValueError(f'unmapped classes: {sorted(set(cls[out == ""]))}')

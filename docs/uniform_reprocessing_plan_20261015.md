@@ -31,12 +31,13 @@ all 20 images is in `$OUT/typing/`; see [the README](../scripts/uniform/README.m
 
 **App root, 2026-10-16 (P4 built, awaiting review).** `scripts/uniform/assemble_uniform.py` builds the whole
 cohort from the uniform run, with nothing appended to the frozen release. The current build is
-`data/development/uniform-20donor-20261017-v2/` (v1 of 2026-10-16 is superseded by the two fixes below). It holds
-20 donors and 10,113 endocrine objects (1,491 islets, 3,415 clusters and 5,207 singles), of which 9,504 have
-analysed cells in both core and 20 um band. That is 3.08 million analysed cells, with 24,018 Excluded and 320,737
-without a nucleus. The app serves all three object classes behind an app-wide selector (A5). Local checks on v2:
-233 R tests pass and the app's loader reads the root. On v1 the browser harness passed 37 of 45 checks, including
-the 20-donor census, no donor 78 and the Harmony method; it was not rerun on v2. The four Viewer checks need the
+`data/development/uniform-20donor-20261017-v3/` (v1 and v2 are superseded by the fixes below). It holds 20 donors
+and 10,113 endocrine objects (1,491 islets, 3,415 clusters and 5,207 singles), of which 9,496 have analysed cells
+in both core and 20 um band. That is 3.08 million analysed cells, with 24,692 Excluded and 320,737 without a
+nucleus. The app serves all three object classes behind an app-wide selector (A5), which since 2026-10-17 also
+replaces every minimum-cells control (the Trajectory refits on the selected classes). Local checks on v3: 232 R
+tests pass. The browser harness passed 37 of 45 checks on v1 and v2, including the 20-donor census, no donor 78
+and the Harmony method. The four Viewer checks need the
 Range-capable image route that only the nginx deployment provides. The other four (PAGA render and download,
 Plot vocabulary, Trajectory contrast) also failed on v3, because the harness predates the 2026-10-14 app change.
 The service stays stopped until the owner accepts the root (P6); the build report is
@@ -51,6 +52,12 @@ gain 0.2-3 %). (2) T1D_6520's lymphatics at 2.6x the earlier area: the additions
 moved by UniFORM factor ratios, the worst transfer in leave-one-out on the 15. Nerve and Capillary now use the
 15's raw median unscaled; Lymphatic keeps the original random-forest classifier's objects (T1D_6520 back to its
 audited 43,000 um2). Details in [the README](../scripts/uniform/README.md).
+
+**Owner rulings, 2026-10-17 (v3).** "Blood vessel, lymphatic, and nerve should not be cell types, but B cell should
+be": structure cell calls are off (the structures stay as objects and areas), and B cells are called on CD20 with
+CD45 in place of CD79a (2-795 per image). "Remove the minimum cells control sliders and wire all functions to the
+new classifications": the Plot, Spatial and Trajectory minimum-cells controls are gone; the Islet / Cluster /
+Single selection decides which objects every tab uses.
 
 ## Cohort
 
