@@ -40,7 +40,8 @@ N_DIFFMAP_COMPS = 10
 # and added donors. In particular, Acinar/ECAD+/Structural are absent by
 # construction in the additions, while Unknown absorbs unresolved cells.
 RETIRED_PHENOTYPES = frozenset({
-    "Acinar", "Endothelial", "Unknown", "ECAD+", "Structural", "APCs",
+    "Endocrine", "Acinar", "Endothelial", "T cell", "Immune", "Unknown",
+    "ECAD+", "Structural", "APCs",
 })
 
 _FEATURES_CSV = None

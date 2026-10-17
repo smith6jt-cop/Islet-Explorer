@@ -1046,11 +1046,13 @@ phenotype_hint_ui <- function(name, prefix = "Markers:",
 #
 # `phenotype_keep()` is the single gate. Anything enumerating phenotypes for a
 # selector, a legend, a family or a test goes through it.
-# Since the uniform 20-donor root (2026-10-16) "Endocrine", "T cell" and "Immune" are real classes of the
-# Islet-Explorer-Senior typing -- an endocrine cell without a unique hormone, a T cell without a CD4/CD8 subtype,
-# a CD45+ leukocyte the panel cannot name further -- and are no longer retired. The rest are labels of the frozen
+# "Endocrine", "T cell" and "Immune" are general classes whose subtypes are listed (Beta / Alpha / Delta cell;
+# CD8a / CD4 Tcell; T cell and Macrophage), so they are not offered beside them (owner, 2026-10-17: "There should
+# not be a phenotype listed that is a general class when there are subtypes"). In the uniform root they hold the
+# cells left without a subtype; those cells still count in every denominator. The rest are labels of the frozen
 # typing that the uniform root does not produce. Keep python/paga_pseudotime.py RETIRED_PHENOTYPES in step.
-PHENOTYPE_RETIRED <- c("Acinar", "Endothelial", "Unknown", "ECAD+", "Structural", "APCs")
+PHENOTYPE_RETIRED <- c("Endocrine", "Acinar", "Endothelial", "T cell",
+                       "Immune", "Unknown", "ECAD+", "Structural", "APCs")
 
 # Endocrine object classes of the uniform workflow (owner A5, 2026-10-16: all three, with a filter).
 OBJECT_CLASSES <- c("Islet" = "Islet", "Cluster" = "EndocrineCluster", "Single" = "EndocrineSingle")

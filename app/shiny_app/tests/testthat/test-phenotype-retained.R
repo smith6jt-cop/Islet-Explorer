@@ -24,9 +24,7 @@ test_that("observed retired labels do not re-enter the canonical order", {
   env <- .retained_env()
   out <- env$canonical_phenotype_order(c("Acinar", "Unknown", "Beta cell", "Novel label"))
   expect_false(any(out %in% env$PHENOTYPE_RETIRED))
-  # Endocrine, T cell and Immune are classes of the uniform root's typing, not retired (2026-10-16).
-  expect_equal(out, c("Beta cell", "Endocrine", "Ductal", "Macrophage", "CD8a Tcell", "T cell", "Immune",
-                      "Novel label"))
+  expect_equal(out, c("Beta cell", "Ductal", "Macrophage", "CD8a Tcell", "Novel label"))
 })
 
 test_that("protein rules compose parent constraints for retained labels only", {
@@ -42,7 +40,7 @@ test_that("protein rules compose parent constraints for retained labels only", {
     "T cell,CD8a Tcell,CD8a,,CD4,x",
     "all,Ductal,,CK19|panCK,INS,x"), rules)
   defs <- env$phenotype_marker_definitions(rules)
-  expect_equal(names(defs), c("Beta cell", "Endocrine", "Ductal", "Macrophage", "CD8a Tcell", "T cell", "Immune"))
+  expect_equal(names(defs), c("Beta cell", "Ductal", "Macrophage", "CD8a Tcell"))
   expect_equal(defs[["Beta cell"]], "INS+  —  GCG−, SST−")
   expect_equal(defs[["Macrophage"]],
                "any of CD68+ / CD163+  —  CD20−, CD3e−, INS−, GCG−, SST−")

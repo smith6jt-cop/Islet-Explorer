@@ -9,7 +9,8 @@
 > checkbox group `object_classes` (app.R) filters `prepared()` via `filter_prepared_by_object_class()`; the
 > Trajectory tab passes it to `compute_scanpy_pseudotime` / `compute_barlow_pseudotime` / `paga_result`.
 > `add_islet_key` and `trajectory_link_key` accept all three prefixes (`ISLET_KEY_PATTERN`). Endocrine, T cell
-> and Immune are real classes there and no longer retired; `Exocrine` is new. A root without `object_class` is
+> and Immune hold the cells left without a subtype there, but stay retired from every selector and legend, as
+> general classes beside their subtypes (owner, 2026-10-17); `Exocrine` is new. A root without `object_class` is
 > treated as islets only.
 
 > **2026-10-03 implementation:** the expanded cohort preserves the original source data and uses Harmony on protein PCA for spatial UMAP and Leiden. The live trajectory uses endocrine-normalized composition features; marker expression is the mean gate-rescaled protein signal. Earlier scVI descriptions below are historical. See the [current implementation record](../../docs/protein_expansion_20261003.md).

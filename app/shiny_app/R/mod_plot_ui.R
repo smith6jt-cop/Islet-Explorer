@@ -14,7 +14,10 @@ plot_sidebar_ui <- function(id) {
     uiOutput(ns("dynamic_selector")),
     conditionalPanel(condition = "input.mode == 'Cell Populations'", ns = ns,
       tags$small(class = "text-muted",
-        "Expanded cohort: 20 donors (7 ND, 7 Aab+, 6 T1D). The original 15 retain their saved cell labels; the five additions use reviewed reconstructed phenotype rules. Phenotype-based comparisons span both methods.")),
+        if (file.exists(data_path("uniform_release.json")))
+          "20 donors (7 ND, 7 Aab+, 6 T1D), every cell typed by one workflow. Proportions are of all analysed cells in the region; cells without a subtype (endocrine without a unique hormone, T cells without CD4/CD8, other leukocytes) count in the denominator but are not listed."
+        else
+          "Expanded cohort: 20 donors (7 ND, 7 Aab+, 6 T1D). The original 15 retain their saved cell labels; the five additions use reviewed reconstructed phenotype rules. Phenotype-based comparisons span both methods.")),
     uiOutput(ns("metric_selector")),
     hr(),
     h5("Autoantibody filter (Aab+ donors only)"),

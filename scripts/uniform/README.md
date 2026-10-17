@@ -259,7 +259,9 @@ Every endocrine object (Islet_N, Cluster_N, Single_N) is a row with `object_clas
 centroid it contains. Its peri band is the 20 um ring inside Tissue, minus every endocrine object. Cells are
 shown under the app's labels: Beta / Alpha / Delta cell; Endocrine; CD8a Tcell and CD4 Tcell (Senior's
 T-CD8 / T-CD4-helper); T cell; Macrophage; Immune (CD45-only or supporting tier); Blood Vessel; Neural;
-Lymphatic; and the new Exocrine. Excluded cells and cells without a nucleus are counted in `census.csv` and
+Lymphatic; and the new Exocrine. Endocrine, T cell and Immune hold the cells left without a subtype; the app
+does not offer them beside their subtypes (`PHENOTYPE_RETIRED`, owner 2026-10-17), though their cells stay in every
+denominator. Excluded cells and cells without a nucleus are counted in `census.csv` and
 kept out of every table. Hormone positivity is the image's hormone level on each scaled hormone (D4; the level
 times that hormone's own tissue p99, `levels.hormone_scaled` in the calls audit), and the
 regional and per-cell `_pos` flags are scaled >= 0.10.
