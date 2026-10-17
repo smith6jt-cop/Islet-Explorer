@@ -450,6 +450,12 @@ Aab+ at several thresholds, which anchors the axis in the wrong stage.
 
 ### Cells-per-islet is a RANGE, and it defines the axis
 
+> **Superseded 2026-10-17.** The `cell_range` slider and Recalculate button were removed at the owner's
+> direction; the endocrine-object classes chosen above the tabs (Islet / Cluster / Single) now define the
+> fitted cohort, and the trajectory refits when they change. On the uniform root 84% of Islets have ten or more
+> analysed cells and under 1% of Clusters do, so Islets alone is the nearest match to Barlow's threshold. The
+> section below is the historical record.
+
 The old `min_cells` numericInput is replaced by a two-ended slider, `cell_range`, defaulting to
 **10 - <largest islet>** (1,902 cells; read from the data by `traj_max_islet_cells()`, with a
 literal fallback). 10 is Barlow's own exclusion threshold, and below it an islet's composition

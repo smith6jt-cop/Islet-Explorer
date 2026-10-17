@@ -2,8 +2,8 @@
 
 > **2026-10-15:** donor 78 (HDL078 / HPAP-078) is removed from the app. `ISLET_EXCLUDED_DONORS` in `00_globals.R` (kept in step with `scripts/excluded_donors.csv` by a pipeline test) makes `load_shared_prepared_data()` refuse a data root that contains it, and the Viewer never lists its image. The local app is offline at the owner's direction until the reprocessed root is accepted; the last served root was `data/development/protein-expanded-20261015-v3/`.
 
-> **2026-10-16 uniform root (awaiting owner review):** `data/development/uniform-20donor-20261017-v2/` (2026-10-17;
-> v1 of 2026-10-16 is superseded: hormone level and the additions' structure objects), built
+> **2026-10-16 uniform root (awaiting owner review):** `data/development/uniform-20donor-20261017-v3/` (2026-10-17;
+> v1 and v2 are superseded: hormone level, the additions' structure objects, no structure cell types, B cells), built
 > by `scripts/uniform/assemble_uniform.py`. All 20 donors are retyped with the Islet-Explorer-Senior method. Rows
 > are endocrine objects of three classes (`Islet_N`, `Cluster_N`, `Single_N`; `object_class`). An app-wide
 > checkbox group `object_classes` (app.R) filters `prepared()` via `filter_prepared_by_object_class()`; the
@@ -111,8 +111,9 @@ See [`docs/statistics.md`](docs/statistics.md) for full details — the Jul 2026
 
 ### Reviewer Trajectory (Aug 2026)
 
-There is one trajectory, recomputed on the cohort selected by the two-ended
-`cell_range` slider. `traj_pseudotime_column()` uses scanpy DPT when available and
+There is one trajectory, recomputed on the endocrine-object classes selected above the tabs (Islet /
+Cluster / Single; since 2026-10-17 — the two-ended `cell_range` slider and Recalculate button are gone, owner:
+"remove the minimum cells control sliders and wire all functions to the new classifications"). `traj_pseudotime_column()` uses scanpy DPT when available and
 falls back explicitly to destiny; `traj_with_pseudotime()` carries the actual engine
 and fitted-islet count into the UI and CSV provenance. PAGA/ForceAtlas2 is the separate
 two-dimensional graph card, not the name of the one-dimensional axis. The Y axis switches

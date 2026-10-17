@@ -687,7 +687,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         write_islet_csv(file, out, islet_csv_header(
           "Spatial Neighborhood — per-islet metrics",
           paste("Donor groups:", paste(input$groups %||% "(all)", collapse = ", ")),
-          paste("Min cells per islet (core+peri):", input$nbr_min_cells %||% 1),
+          paste("Endocrine objects:", paste(sort(unique(as.character(prepared()$comp$object_class %||% "Islet"))), collapse = ", ")),
           paste("Phenotypes:", if (is.null(sel_phenos) || length(sel_phenos) == 0)
                                  "(none selected — no per-phenotype columns)"
                                else paste(sel_phenos, collapse = ", ")),
@@ -708,14 +708,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       comp <- pd$comp
       if (!is.null(input$groups) && "Donor Status" %in% colnames(comp))
         comp <- comp[comp$`Donor Status` %in% input$groups, , drop = FALSE]
-      # Global min cells filter
-      min_cells <- input$nbr_min_cells %||% 1
-      if (min_cells > 1) {
-        tc_core <- if ("total_cells_core" %in% colnames(comp)) comp$total_cells_core else NA
-        tc_peri <- if ("total_cells_peri" %in% colnames(comp)) comp$total_cells_peri else NA
-        tc <- ifelse(is.finite(tc_core), tc_core, 0) + ifelse(is.finite(tc_peri), tc_peri, 0)
-        comp <- comp[is.finite(tc) & tc >= min_cells, , drop = FALSE]
-      }
+      # No min-cells filter since 2026-10-17: the endocrine-object classes (prepared()) select the objects.
       comp
     })
 
@@ -888,7 +881,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                                   core = "core proportion", "peri-islet proportion")),
           paste("Statistic:", stat_mode, "of per-donor means"),
           paste("Donor groups:", paste(input$groups %||% "(all)", collapse = ", ")),
-          paste("Min cells per islet (core+peri):", input$nbr_min_cells %||% 1),
+          paste("Endocrine objects:", paste(sort(unique(as.character(prepared()$comp$object_class %||% "Islet"))), collapse = ", ")),
           paste("Phenotypes shown:", paste(input$enrich_phenos %||% "(none)", collapse = ", ")),
           paste("Display clip to z in [-5, 5]:", if (isTRUE(input$enrich_clip)) "ON" else "OFF"),
           "Values are aggregated to per-donor means FIRST, then summarised across donors (avoids pseudoreplication)."
@@ -964,10 +957,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           h4("Neighborhood Analysis", style = "margin: 18px 0 10px; font-weight: 600;"),
           control_panel("Data controls", open = TRUE,
             fluidRow(
-              column(3,
-                numericInput(ns("nbr_min_cells"), "Min cells/islet", value = 1, min = 1, max = 100, step = 1),
-                uiOutput(ns("nbr_islet_count"))
-              ),
+              column(3, uiOutput(ns("nbr_islet_count"))),
               column(3,
                 tags$div(title = GLOBAL_OUTLIER_TOOLTIP,
                   checkboxInput("spatial_remove_outliers", "Exclude outliers", value = FALSE))
@@ -1151,7 +1141,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       n <- if (is.null(comp)) 0 else if ("total_cells_peri" %in% colnames(comp))
              sum(is.finite(comp$total_cells_peri)) else nrow(comp)
       span(style = "color: #555; font-size: 13px; white-space: nowrap;",
-           paste0(formatC(n, big.mark = ","), " islets"))
+           paste0(formatC(n, big.mark = ","), " objects"))
     })
 
     # ---- Card A: excluded-outlier table ----
@@ -1524,7 +1514,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           "Spatial — peri enrichment by donor status",
           paste("Phenotype:", if (is.null(d)) "(none)" else d$itm$label),
           paste("Donor groups:", paste(input$groups %||% "(all)", collapse = ", ")),
-          paste("Min cells per islet (core+peri):", input$nbr_min_cells %||% 1),
+          paste("Endocrine objects:", paste(sort(unique(as.character(prepared()$comp$object_class %||% "Islet"))), collapse = ", ")),
           paste("Outlier rule:", if (is.null(fs)) "n/a"
                                  else if (isTRUE(fs$enabled))
                                    paste0(fs$label, "; ", fs$n_excluded, " of ", fs$n_total, " excluded")
@@ -1969,7 +1959,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           "Spatial — distance to nearest cell of type, per islet",
           paste("Metric:", if (is.null(d)) "(none)" else d$label),
           paste("Donor groups:", paste(input$groups %||% "(all)", collapse = ", ")),
-          paste("Min cells per islet (core+peri):", input$nbr_min_cells %||% 1),
+          paste("Endocrine objects:", paste(sort(unique(as.character(prepared()$comp$object_class %||% "Islet"))), collapse = ", ")),
           paste("Outlier rule:", if (is.null(fs)) "n/a"
                                  else if (isTRUE(fs$enabled))
                                    paste0(fs$label, "; ", fs$n_excluded, " of ", fs$n_total, " excluded")

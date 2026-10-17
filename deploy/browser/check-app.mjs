@@ -326,43 +326,27 @@ try {
 
   if (options.expanded === 'true') {
     await page.click('#tabs a[data-value="Trajectory"]');
-    await check('trajectory_range_requires_recalculate', async () => {
+    // The cells-per-islet range is gone (owner, 2026-10-17); the endocrine-object classes select the fitted
+    // cohort. Unticking Cluster and Single must refit on Islets alone, and ticking them restores the full cohort.
+    await check('trajectory_refits_on_object_classes', async () => {
       await rendered(page, '#traj-traj_scatter', 'plotly');
-      const before = await page.$eval('#traj-traj_scatter', element => JSON.stringify(element.data));
-      await page.evaluate(() => {
-        const slider = window.jQuery('#traj-cell_range').data('ionRangeSlider');
-        slider.update({ from: 20, to: 200 });
-        window.jQuery('#traj-cell_range').trigger('change');
-      });
-      await page.waitForFunction(() => document.querySelector('#traj-traj_range_pending')?.textContent.includes('Range not applied'));
-      return page.$eval('#traj-traj_scatter', (element, old) => JSON.stringify(element.data) === old, before);
-    });
-    await check('trajectory_range_recalculated', async () => {
-      await page.click('#traj-recalculate_trajectory');
-      await page.waitForFunction(() => !document.querySelector('#traj-traj_range_pending')?.textContent.includes('Range not applied'));
-      await rendered(page, '#traj-traj_scatter', 'plotly');
-      return page.$eval('#traj-dl_umap_csv', async link => {
-        const response = await fetch(link.href); const text = await response.text();
-        const lines = text.trim().split('\n');
-        const split = line => {
-          const fields = []; let field = ''; let quoted = false;
-          for (let i = 0; i < line.length; i += 1) {
-            const char = line[i];
-            if (char === '"' && quoted && line[i + 1] === '"') { field += '"'; i += 1; }
-            else if (char === '"') quoted = !quoted;
-            else if (char === ',' && !quoted) { fields.push(field); field = ''; }
-            else field += char;
-          }
-          fields.push(field); return fields;
-        };
-        const headerIndex = lines.findIndex(line => split(line).includes('total_cells'));
-        const count = headerIndex < 0 ? -1 : split(lines[headerIndex]).indexOf('total_cells');
-        const values = count < 0 ? [] : lines.slice(headerIndex + 1)
-          .filter(line => line && !line.startsWith('#')).map(line => Number(split(line)[count]));
-        const invalid = values.filter(value => !Number.isFinite(value) || value < 20 || value > 200).length;
-        return { passed: response.ok && count >= 0 && values.length > 0 && invalid === 0,
-          rows: values.length, invalidRows: invalid };
-      });
+      const fitted = () => page.$eval('#traj-traj_status', el => {
+        const m = el.textContent.replace(/,/g, '').match(/(\d+) fitted/); return m ? Number(m[1]) : -1; });
+      const before = await fitted();
+      const toggle = values => page.evaluate(vals => vals.forEach(v => {
+        document.querySelector(`#object_classes input[value="${v}"]`)?.click(); }), values);
+      await toggle(['EndocrineCluster', 'EndocrineSingle']);
+      await page.waitForFunction(old => {
+        const m = document.querySelector('#traj-traj_status')?.textContent.replace(/,/g, '').match(/(\d+) fitted/);
+        return m && Number(m[1]) !== old && Number(m[1]) > 0;
+      }, { timeout: 180000 }, before);
+      const islets = await fitted();
+      await toggle(['EndocrineCluster', 'EndocrineSingle']);
+      await page.waitForFunction(old => {
+        const m = document.querySelector('#traj-traj_status')?.textContent.replace(/,/g, '').match(/(\d+) fitted/);
+        return m && Number(m[1]) === old;
+      }, { timeout: 180000 }, before);
+      return { passed: islets > 0 && islets < before, before, islets };
     });
   }
 

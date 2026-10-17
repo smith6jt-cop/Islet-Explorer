@@ -115,16 +115,15 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
     # ---------- Reactive state ----------
     traj <- reactiveVal(NULL)
     traj_load_attempted <- reactiveVal(FALSE)
-    applied_cell_range <- reactiveVal(c(TRAJ_DEFAULT_MIN_CELLS, traj_max_islet_cells()))
-
-    observeEvent(input$recalculate_trajectory, {
-      applied_cell_range(traj_cell_range(input$cell_range, traj_max_islet_cells()))
-    })
-
-    output$traj_range_pending <- renderUI({
-      pending <- traj_cell_range(input$cell_range, traj_max_islet_cells())
-      if (all(pending == applied_cell_range())) return(NULL)
-      tags$small("Range not applied. Press Recalculate trajectory.")
+    # The fitted cohort is every object of the selected endocrine-object classes (owner, 2026-10-17: the
+    # Islet / Cluster / Single designations replace the cells-per-islet range). The range plumbing below stays
+    # as an always-full range so the cohort filters remain explicit no-ops.
+    applied_cell_range <- function() c(1, Inf)
+    object_class_label <- reactive({
+      cl <- object_classes()
+      if (is.null(cl)) return("all endocrine objects")
+      lab <- names(OBJECT_CLASSES)[match(cl, OBJECT_CLASSES)]
+      if (!length(lab)) "no endocrine objects" else paste(lab, collapse = " + ")
     })
 
     # ---------- Lazy H5AD loader ----------
@@ -237,8 +236,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         # Seconds to tens of seconds depending on how many islets are in range.
         # Without a progress bar the tab simply freezes and reads as a hang.
         message = "Computing pseudotime",
-        detail = sprintf("islet-composition diffusion map, %g-%g cells/islet",
-                         rng[1], rng[2]),
+        detail = sprintf("object-composition diffusion map, %s", object_class_label()),
         value = 0.4,
         traj_pseudotime_column(obs, rng, object_classes()))
       pseudotime_engine <- attr(pt, "engine") %||% "unavailable"
@@ -291,14 +289,13 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       n <- if (is.null(tr) || !is.null(tr$error)) 0L else tr$pseudotime_n %||% 0L
       list(
         method = sprintf("Pseudotime method: %s", engine),
-        features = paste("Trajectory features: retained core/peri phenotype ratios;",
-                         "nine retired categories excluded; stored endocrine denominator preserved"),
+        features = paste("Trajectory features: listed core/peri phenotype ratios;",
+                         "general classes excluded; stored endocrine denominator preserved"),
         scale = sprintf("Pseudotime scale: %s",
                         if (identical(input$pt_scale %||% "rank", "raw"))
                           "raw diffusion pseudotime" else "rank-normalized within fitted cohort"),
-        range = sprintf(paste0("Cells per islet range: %g-%g ",
-                              "(defines the %s-islet cohort used to fit pseudotime)"),
-                        rng[1], rng[2], format(n, big.mark = ",")),
+        range = sprintf("Endocrine objects: %s (the %s-object cohort used to fit pseudotime)",
+                        object_class_label(), format(n, big.mark = ",")),
         measure = paste("Selected measure:", selected_measure_label())
       )
     })
@@ -1614,7 +1611,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       if (!paga_available()) return(NULL)
       withProgress(
         message = "Computing PAGA layout",
-        detail = sprintf("Leiden + ForceAtlas2, %g-%g cells/islet", cr[1], cr[2]),
+        detail = sprintf("Leiden + ForceAtlas2, %s", object_class_label()),
         value = 0.4,
         paga_result(cr[1], cr[2], object_classes()))
     })
@@ -1692,9 +1689,8 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       }
       g <- g +
         labs(x = "Layout dim 1", y = "Layout dim 2",
-             title = {cr <- applied_cell_range()
-                      sprintf("PAGA force-directed layout — %s islets (%g–%g cells)",
-                              format(nrow(d), big.mark = ","), cr[1], cr[2])}) +
+             title = sprintf("PAGA force-directed layout — %s objects (%s)",
+                             format(nrow(d), big.mark = ","), object_class_label())) +
         theme_islet() +
         # Layout coordinates are unitless and isotropic: 1 unit across must equal
         # 1 unit up, or the graph structure is visually sheared.
@@ -1716,9 +1712,8 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
 
     output$dl_paga_csv <- downloadHandler(
       filename = function() sprintf(
-        "paga_layout_%g-%g_%s.csv",
-        applied_cell_range()[1],
-        applied_cell_range()[2],
+        "paga_layout_%s_%s.csv",
+        gsub("[^A-Za-z]+", "-", object_class_label()),
         format(Sys.time(), "%Y%m%d_%H%M%S")),
       content = function(file) {
         d <- paga_data()
@@ -1731,9 +1726,8 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
           sprintf("Neighbors: cosine, %d NN | Leiden resolution %g | layout %s",
                   15L, 1.0, attr(d, "layout_key") %||% "(n/a)"),
           "Root: ND islet nearest the ND centroid in diffusion space",
-          {cr <- applied_cell_range()
-           sprintf("Cells per islet range: %g-%g (rebuilds the embedding, not a display filter)",
-                   cr[1], cr[2])},
+          sprintf("Endocrine objects: %s (rebuilds the embedding, not a display filter)",
+                  object_class_label()),
           "fa_1 / fa_2 are unitless layout coordinates; only relative position is meaningful",
           paste("Rows:", nrow(out), "islets")
         ))

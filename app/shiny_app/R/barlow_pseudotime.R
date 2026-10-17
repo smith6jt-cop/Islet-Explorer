@@ -65,6 +65,8 @@ barlow_features <- function() {
 #'
 #' Returns a data.frame(islet_id, case_id, donor_status, pseudotime) covering
 #' ONLY the islets in range, or NULL when unavailable. Cached per range.
+BARLOW_FALLBACK_MAX_PROFILES <- 2000L
+
 compute_barlow_pseudotime <- function(min_cells = 1, max_cells = NA, object_classes = NULL) {
   mc <- suppressWarnings(as.numeric(min_cells))
   if (!is.finite(mc) || mc < 1) mc <- 1
@@ -100,6 +102,13 @@ compute_barlow_pseudotime <- function(min_cells = 1, max_cells = NA, object_clas
   uniq <- !duplicated(dup_key)
   Mu <- M[uniq, , drop = FALSE]
   back <- match(dup_key, dup_key[uniq])
+  # destiny's DPT is dense in the number of profiles: on all 3,773 profiles of the uniform root's 9,496 objects
+  # it ran past ten minutes and, in the app, overflowed R's C stack (2026-10-17). The scanpy path handles any
+  # selection in seconds; this fallback declines a large one rather than hang or crash the session.
+  if (nrow(Mu) > BARLOW_FALLBACK_MAX_PROFILES) {
+    islet_log_event("barlow_fallback_too_large")
+    return(NULL)
+  }
 
   res <- tryCatch({
     set.seed(1)  # destiny's eigendecomposition is randomised; pin it so the

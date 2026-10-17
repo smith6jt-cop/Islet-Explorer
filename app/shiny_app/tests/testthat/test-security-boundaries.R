@@ -162,6 +162,6 @@ test_that("Plot consumers use only centralized validated selection state", {
   expect_match(plot_server, "selection_vocabularies <- reactive", fixed = TRUE)
   expect_match(plot_server, "validated_selection <- reactive", fixed = TRUE)
   expect_match(plot_server, "validated_metric <- reactive", fixed = TRUE)
-  expect_match(plot_server, "validated_min_cells <- reactive", fixed = TRUE)
+  # No min-cells control since 2026-10-17 (the endocrine-object classes select the objects).
   expect_false(grepl("input\\$(mode|which|metric|min_cells|groups)", consumers))
 })

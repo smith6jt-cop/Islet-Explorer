@@ -113,13 +113,6 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       value
     })
 
-    validated_min_cells <- reactive({
-      value <- input$min_cells %||% 1
-      if (!islet_valid_bounded_number(value, 1, 200,
-                                      "plot_min_cells_invalid")) return(1)
-      as.numeric(value)
-    })
-
     # ---- Donor palette helper (consistent colors across scatter & distribution) ----
     get_donor_palette <- function(ids) {
       if (is.null(ids)) return(character(0))
@@ -396,17 +389,8 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         dplyr::mutate(donor_status = `Donor Status`) %>%
         dplyr::filter(!is.na(value))
 
-      # Apply min cells/islet filter
-      min_cells <- validated_min_cells()
-      if (min_cells > 1 &&
-          "total_cells_core" %in% colnames(out) &&
-          "total_cells_peri" %in% colnames(out)) {
-        tc_core <- suppressWarnings(as.numeric(out$total_cells_core))
-        tc_peri <- suppressWarnings(as.numeric(out$total_cells_peri))
-        tc_core <- ifelse(is.finite(tc_core), tc_core, 0)
-        tc_peri <- ifelse(is.finite(tc_peri), tc_peri, 0)
-        out <- out[is.finite(tc_core + tc_peri) & (tc_core + tc_peri) >= min_cells, , drop = FALSE]
-      }
+      # No min-cells filter since 2026-10-17: the endocrine-object classes chosen above the tabs (Islet /
+      # Cluster / Single) select the objects, through prepared().
 
       # Apply diameter range filter
       if (!is.null(input$diam_range) && length(input$diam_range) == 2) {
@@ -1320,7 +1304,9 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       # Demographic + size filters. These CHANGE WHICH ISLETS ARE IN THE FILE,
       # so omitting them made two CSVs with different row sets look identical in
       # provenance. `min_cells`, age, and sex were all silently absent.
-      desc <- c(desc, paste("Min cells per islet (core+peri):", validated_min_cells()))
+      oc <- prepared()$comp$object_class
+      desc <- c(desc, paste("Endocrine objects:",
+                            if (is.null(oc)) "Islet" else paste(sort(unique(as.character(oc))), collapse = ", ")))
       if (!is.null(input$age_range) && length(input$age_range) == 2) {
         desc <- c(desc, paste("Donor Age Range:",
                               input$age_range[1], "-", input$age_range[2], "years"))

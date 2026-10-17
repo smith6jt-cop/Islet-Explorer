@@ -138,13 +138,26 @@ def _context(min_cells, max_cells, object_classes=None):
     if X.shape[1] < 3:
         return {"error": "fewer than 3 informative composition features"}
 
-    obs = sub[["islet_id", "case_id", "donor_status"]].astype(str).copy()
-    # AnnData requires string observation names. Supplying them explicitly
-    # avoids its ImplicitModificationWarning without changing row identity.
-    obs.index = pd.Index(sub.index.astype(str), name="obs_id")
-    A = ad.AnnData(X=X, obs=obs)
-    sc.pp.neighbors(A, n_neighbors=N_NEIGHBORS, metric=METRIC, use_rep="X")
-    ctx = {"sc": sc, "A": A, "sub": sub, "mc": mc, "xc": xc,
+    # The graph is built on the DISTINCT composition profiles and mapped back to every object (`inv`).
+    # Since 2026-10-17 the endocrine-object classes, not a cells-per-islet range, choose the cohort, and Singles
+    # and Clusters share few profiles (all 9,496 objects of the uniform root have 3,773): identical points form
+    # disconnected k-NN cliques, the diffusion map's eigensolver does not converge (ARPACK, 3.4 min), and the
+    # app fell back to destiny, which overflowed R's C stack. Identical profiles get identical pseudotime anyway.
+    U, inv = np.unique(np.round(X, 9), axis=0, return_inverse=True)
+    inv = np.asarray(inv).reshape(-1)
+    status = sub["donor_status"].astype(str).to_numpy()
+    has_nd = np.zeros(len(U), bool)
+    has_nd[inv[status == "ND"]] = True
+    first = np.full(len(U), -1)
+    for i in range(len(inv) - 1, -1, -1):
+        first[inv[i]] = i
+    obs = pd.DataFrame({"has_nd": has_nd,
+                        "case_id": sub["case_id"].astype(str).to_numpy()[first],
+                        "n_objects": np.bincount(inv, minlength=len(U))},
+                       index=pd.Index([str(i) for i in range(len(U))], name="profile_id"))
+    A = ad.AnnData(X=U, obs=obs)
+    sc.pp.neighbors(A, n_neighbors=min(N_NEIGHBORS, len(U) - 1), metric=METRIC, use_rep="X")
+    ctx = {"sc": sc, "A": A, "sub": sub, "inv": inv, "mc": mc, "xc": xc,
            "features": [c for c, used in zip(feat, keep) if used],
            "root": None, "pt": None, "layout": None}
     _FIT_CACHE[key] = ctx
@@ -157,16 +170,16 @@ def _ensure_dpt(ctx):
     if ctx.get("pt") is not None:
         return ctx["pt"]
     sc, A, sub = ctx["sc"], ctx["A"], ctx["sub"]
-    sc.tl.diffmap(A, n_comps=N_DIFFMAP_COMPS)
+    sc.tl.diffmap(A, n_comps=min(N_DIFFMAP_COMPS, A.n_obs - 2))
     dm = np.asarray(A.obsm["X_diffmap"])[:, 1:4]
-    nd = np.where(A.obs["donor_status"].to_numpy() == "ND")[0]
+    nd = np.where(A.obs["has_nd"].to_numpy())[0]
     if nd.size == 0:
-        return {"error": "no ND islets above this threshold; no root available"}
+        return {"error": "no ND objects in this selection; no root available"}
     cen = dm[nd].mean(axis=0)
     root = int(nd[np.argmin(np.linalg.norm(dm[nd] - cen, axis=1))])
     A.uns["iroot"] = root
     sc.tl.dpt(A)
-    pt = A.obs["dpt_pseudotime"].to_numpy(dtype=float)
+    pt = A.obs["dpt_pseudotime"].to_numpy(dtype=float)[ctx["inv"]]
     beta = sub["core_Beta cell"].to_numpy(dtype=float)
     fin = np.isfinite(pt) & np.isfinite(beta)
     flipped = False
@@ -213,7 +226,7 @@ def compute(min_cells=1, max_cells=None, object_classes=None):
         sc.pl.paga(A, plot=False)
         sc.tl.draw_graph(A, init_pos="paga", random_state=0)
         lay_key = next(k for k in A.obsm if k.startswith("X_draw_graph"))
-        xy = np.asarray(A.obsm[lay_key])
+        xy = np.asarray(A.obsm[lay_key])[ctx["inv"]]
         ctx["layout"] = (lay_key, xy)
     else:
         lay_key, xy = ctx["layout"]
@@ -228,11 +241,12 @@ def compute(min_cells=1, max_cells=None, object_classes=None):
         "islet_id": sub["islet_id"].astype(str).tolist(),
         "case_id": sub["case_id"].astype(str).tolist(),
         "donor_status": sub["donor_status"].astype(str).tolist(),
-        "leiden": A.obs["leiden"].astype(str).tolist(),
+        "leiden": A.obs["leiden"].astype(str).to_numpy()[ctx["inv"]].tolist(),
         "fa_1": xy[:, 0].astype(float).tolist(),
         "fa_2": xy[:, 1].astype(float).tolist(),
         "pseudotime": pt.astype(float).tolist(),
-        "n_islets": int(A.n_obs),
+        "n_islets": int(len(sub)),
+        "n_profiles": int(A.n_obs),
         "n_clusters": int(A.obs["leiden"].nunique()),
         "layout_key": str(lay_key),
         "min_cells": mc,

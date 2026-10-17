@@ -28,8 +28,7 @@ plot_main_ui <- function(id, extra_panel = NULL) {
                " summary statistic."),
         tags$p(tags$strong("Filters."),
                " Unchecking an autoantibody removes the Aab+ donors positive for it (ND and T1D donors are not",
-               " affected). Min cells/islet counts core",
-               " and peri cells together. Exclude outliers drops objects whose robust z-score (median and MAD within",
+               " affected). Exclude outliers drops objects whose robust z-score (median and MAD within",
                " each donor status) passes the threshold; the setting is shared with the Spatial tab."),
         tags$p(tags$strong("Selecting an object."),
                " Turn on \"Show individual points\", then click a point on the Islet Size Distribution scatter to open",
@@ -65,9 +64,7 @@ plot_main_ui <- function(id, extra_panel = NULL) {
           ),
           column(3,
             uiOutput(ns("age_filter_ui")),
-            uiOutput(ns("gender_filter_ui")),
-            numericInput(ns("min_cells"), "Min cells/islet",
-                         value = 1, min = 1, max = 200, step = 1)
+            uiOutput(ns("gender_filter_ui"))
           ),
           column(3,
             sliderInput(ns("diam_range"), "Islet diameter range (\u00b5m)",

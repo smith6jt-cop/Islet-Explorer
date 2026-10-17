@@ -209,7 +209,7 @@ The Plot tab is the primary exploration interface. It has a **sidebar** (left) a
 - **AAb Filter**: Filter by autoantibody positivity (when available)
 - **Age Range**: Slider to restrict donor age (H5AD only)
 - **Sex**: Checkbox filter (H5AD only)
-- **Min cells/islet**: Filter out islets with fewer than N total cells (core + peri). Default: 1 (no filter). Increase to reduce noise from poorly-measured small islets.
+- **Endocrine objects** (above the tabs): choose Islets, Clusters and/or Singles. This replaced the Min cells/islet filter on 2026-10-17; every tab uses the selected classes.
 - **Diameter Range**: Restrict islet diameter in μm
 
 ### Main Panel
@@ -443,7 +443,7 @@ path.
 Below the tissue scatter and Leiden panel, three interactive analysis sections visualize per-phenotype peri-islet neighborhood metrics. The cards expose the 12 retained reviewer-facing phenotypes through dynamic choices rather than the previous hand-curated immune-only lists. Cards only appear when neighborhood data is available in the H5AD (not in Excel fallback mode).
 
 **Global Controls** (toolbar above the cards):
-- **Min cells/islet**: Filter out small islets with few cells (default: 1, i.e., no filter). Higher values (e.g., 50) reduce noise from poorly-measured islets and decrease NA rates in distance metrics.
+- **Endocrine objects** (above the tabs): the neighborhood cards use the selected classes. Selecting Islets alone reduces noise from one- and few-cell objects and lowers NA rates in distance metrics.
 - **Point size** and **Opacity**: Adjust scatter plot visualization across all cards.
 - **Islet count**: Shows how many islets pass the current filters.
 
@@ -464,7 +464,7 @@ Below the tissue scatter and Leiden panel, three interactive analysis sections v
 **Card C: Phenotype Proximity to Islet**
 - **Left** (`Distance to nearest` dropdown): Box plot of minimum distance (μm) from islet core centroid to nearest peri-zone cells of the selected phenotype. Includes "Immune (all)" aggregate plus every individual phenotype with `min_dist_*` data. Shows non-NA counts per group. Outlier exclusion follows the global toggle (z > 3 per donor status applied to `log(1 + distance)`); excluded points still render as faint × markers. A **"Show excluded-outlier table"** checkbox next to the metric selector lists the excluded islets (Case ID, distance, z-score) below the box plot. See [Outlier Handling](#outlier-handling).
 - **Right** (`Phenotype` dropdown): KDE of signed distance from islet boundary for individual cells of the selected phenotype. Negative = inside islet (core), positive = outside (peri-islet). Dashed line at zero marks the boundary.
-- *Interpretation*: NA values in the box plot indicate islets with zero cells of that phenotype in the peri-islet zone (biological, not a data error — common for rare phenotypes like CD4 Tcell, B cell). Increase the min cells/islet filter to reduce NAs.
+- *Interpretation*: NA values in the box plot indicate islets with zero cells of that phenotype in the peri-islet zone (biological, not a data error — common for rare phenotypes like CD4 Tcell, B cell). Selecting Islets alone reduces NAs.
 
 ### Data Coverage
 

@@ -257,49 +257,11 @@ SHOW_STATISTICS_TAB <- identical(Sys.getenv("SHOW_STATISTICS_TAB", "0"), "1")
 # (rho -0.70 to -0.73 above 25 cells/islet, against -0.57 for the scVI variants)
 # and the least compressed axis. See app/shiny_app/docs/trajectory.md.
 #
-# The pseudotime is computed on the CURRENT cell-count range, not on a fixed
-# islet set: the range is part of the definition, so moving it refits the
-# diffusion map rather than filtering a frozen axis.
-
-# Largest islet in the cohort, used as the upper bound of the range slider.
-# Read from the composition features so it tracks the data; the literal is a
-# fallback for when that file is absent.
-TRAJ_MAX_ISLET_CELLS_FALLBACK <- 1902L
-
-traj_max_islet_cells <- function() {
-  f <- data_path("barlow_islet_features.csv")
-  if (!file.exists(f) || !requireNamespace("data.table", quietly = TRUE)) {
-    return(TRAJ_MAX_ISLET_CELLS_FALLBACK)
-  }
-  v <- tryCatch({
-    d <- data.table::fread(f, select = "total_cells_core")
-    as.integer(max(suppressWarnings(as.numeric(d$total_cells_core)), na.rm = TRUE))
-  }, error = function(e) NA_integer_)
-  if (is.finite(v) && v > 1) v else TRAJ_MAX_ISLET_CELLS_FALLBACK
-}
-
-# Default lower bound. Barlow et al. exclude islets with fewer than ten cells
-# before computing their embedding; below that an islet's composition vector is
-# mostly sampling noise (60.8% of our islets are <= 10 cells).
-TRAJ_DEFAULT_MIN_CELLS <- 10L
-
-#' Normalise the cell-range slider to c(lo, hi). Guards the same NA hole the old
-#' numericInput had: a cleared input sends NA, and `if (NA > 1)` aborts the whole
-#' reactive with "missing value where TRUE/FALSE needed".
-traj_cell_range <- function(x, max_default = NULL) {
-  hi_default <- suppressWarnings(as.numeric(max_default %||% TRAJ_MAX_ISLET_CELLS_FALLBACK))[1]
-  if (!is.finite(hi_default) || hi_default < 1) {
-    hi_default <- TRAJ_MAX_ISLET_CELLS_FALLBACK
-  }
-  hi_default <- floor(hi_default)
-  default_lo <- min(TRAJ_DEFAULT_MIN_CELLS, hi_default)
-  v <- suppressWarnings(as.numeric(x))
-  v <- v[is.finite(v)]
-  if (length(v) < 2) return(c(default_lo, hi_default))
-  lo <- min(max(1, floor(min(v[1:2]))), hi_default)
-  hi <- min(max(lo, ceiling(max(v[1:2]))), hi_default)
-  c(lo, hi)
-}
+# The pseudotime is computed on the CURRENT endocrine-object selection (Islet / Cluster / Single, chosen above
+# the tabs), not on a fixed set: the selection is part of the definition, so changing it refits the diffusion
+# map rather than filtering a frozen axis. The cells-per-islet range slider it replaced was removed on
+# 2026-10-17 (owner: "Now that there are designations for islet, clusters, and single cells, remove the minimum
+# cells control sliders and wire all functions to the new classifications").
 
 
 # AI chat card: OFF, so it is both disabled and hidden. Gating rather than
@@ -828,9 +790,10 @@ phenotype_rules_modal_ui <- function() {
         shiny::tags$p("All 20 donors are typed by one workflow: the Islet-Explorer-Senior cell typing, ported to ",
           "this CODEX panel. Marker values are spillover-corrected (REDSEA), aligned between images (UniFORM) and ",
           "put on one cohort scale from background to the 99.9th percentile."),
-        shiny::tags$p("Endocrine cells are called only inside an endocrine object (Islet, Cluster or Single); ",
-          "nerve, blood-vessel and lymphatic cells only inside the matching structure object. Immune rules count a ",
-          "marker at 0.10 or above on the cohort scale. Every other cell is Exocrine; exocrine cells inside an ",
+        shiny::tags$p("Endocrine cells are called only inside an endocrine object (Islet, Cluster or Single). Nerve, ",
+          "capillary and lymphatic structures are areas (the Plot tab's Microenvironment layer), not cell types. ",
+          "Immune rules count a marker at 0.10 or above on the cohort scale. Every other cell is Exocrine, the ",
+          "residual class (acinar, ductal, stromal, endothelial and neural cells together); residual cells inside an ",
           "endocrine object and cells without a nucleus are left out of the analysis."),
         shiny::tags$p("Endocrine, T cell and Immune hold the cells left without a subtype. They count in every total ",
           "but are not offered as phenotypes beside their subtypes.")
@@ -1042,9 +1005,10 @@ cell_typing_help <- function() {
   }
   shiny::tags$p(shiny::tags$strong("Cell labels."),
     " Every cell of all 20 donors is typed by one workflow. The phenotypes listed are Beta, Alpha and Delta cell, ",
-    "CD8a and CD4 T cell, Macrophage, Blood Vessel, Neural, Lymphatic and Exocrine. Cells left without a subtype ",
-    "(endocrine cells without a unique top hormone, T cells without CD4 or CD8, other leukocytes) count in every ",
-    "total but are not listed. Exocrine cells inside an endocrine object and cells without a nucleus are left out. ",
+    "CD8a and CD4 T cell, B cell, Macrophage and Exocrine (the residual class). Nerve, capillary and lymphatic ",
+    "structures are areas, not cell types. Cells left without a subtype (endocrine cells without a unique top ",
+    "hormone, T cells without CD4 or CD8, other leukocytes) count in every total but are not listed. Residual cells ",
+    "inside an endocrine object and cells without a nucleus are left out. ",
     "Endocrine cells are called only inside endocrine objects, so peri-islet endocrine values are zero.")
 }
 
@@ -1191,12 +1155,10 @@ UNIFORM_PHENOTYPE_DEFINITIONS <- c(
   "Delta cell" = "as Beta cell, with somatostatin the unique highest hormone",
   "CD8a Tcell" = "CD3e+ and CD8a+, CD4\u2212, no epithelial marker (E-cadherin, panCK)",
   "CD4 Tcell" = "CD3e+ and CD4+, CD8a\u2212, no epithelial marker",
+  "B cell" = "CD20+ and CD45+, CD3e\u2212, CD68\u2212, no epithelial marker",
   "Macrophage" = "CD68+, CD3e\u2212, no epithelial marker",
-  "Blood Vessel" = paste("inside a Capillary object (centre and more than half the cell), CD31 above the image's",
-                         "level and the cell's top marker"),
-  "Neural" = "as Blood Vessel, inside a Nerve object on B3TUBB",
-  "Lymphatic" = "as Blood Vessel, inside a Lymphatic object on PDPN",
-  "Exocrine" = "every other cell outside the endocrine objects (acinar, ductal and stromal cells together)")
+  "Exocrine" = paste("the residual class: every other cell outside the endocrine objects (acinar, ductal, stromal,",
+                     "endothelial and neural cells together)"))
 
 phenotype_marker_definitions_ui <- function() {
   if (is_uniform_root()) {

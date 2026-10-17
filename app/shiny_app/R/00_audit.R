@@ -23,6 +23,8 @@
   phenotype_rules_unavailable = "WARN",
   viewer_channels_unavailable = "WARN",
   paga_unavailable = "WARN",
+  scanpy_dpt_failed = "WARN",
+  barlow_fallback_too_large = "WARN",
   segmentation_asset_missing = "WARN",
   segmentation_annotations_missing = "WARN",
   segmentation_annotations_schema_invalid = "WARN",

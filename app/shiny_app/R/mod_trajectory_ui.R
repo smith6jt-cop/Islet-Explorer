@@ -17,8 +17,11 @@ trajectory_ui <- function(id) {
              " Features that do not vary are dropped (peri-islet endocrine values are always zero). Objects are",
              " linked to their 15 nearest neighbours by cosine distance. The root is the ND object nearest the centre",
              " of the ND objects in diffusion components 1-3, and the direction is set so the beta-cell ratio falls",
-             " along pseudotime. It is refitted for the selected endocrine-object classes and for the Cells per islet",
-             " range once you press Recalculate trajectory; objects outside the range get no pseudotime."),
+             " along pseudotime. It is refitted whenever the endocrine-object selection changes; objects of the",
+             " classes not selected get no pseudotime. Barlow et al. fitted islets of ten or more cells; selecting",
+             " Islets alone comes closest (84% of Islets have ten or more analysed cells, under 1% of Clusters).",
+             " Objects with the same make-up (common among Singles and Clusters) are fitted once and share a",
+             " pseudotime."),
       tags$p(tags$strong("Reading it."),
              " The orientation is a modelling choice, and an ordering of objects along it does not show disease",
              " progression; donor differences can shape it. Rank-normalized spreads objects evenly from 0 to 1; Raw",
@@ -36,24 +39,13 @@ trajectory_ui <- function(id) {
       tags$p(tags$strong("PAGA layout."),
              " Barlow et al.'s PAGA-initialised force-directed layout of the same graph (cosine, 15 neighbours,",
              " Leiden resolution 1). Each point is an object; the axes are layout coordinates with no units, so only",
-             " relative position means anything. It is built on request and rebuilt when the range changes."),
+             " relative position means anything. It is built on request and rebuilt when the object selection changes."),
       cell_typing_help()),
     fluidRow(column(12,
       control_panel("Data controls", open = TRUE,
-      fluidRow(
-        column(8,
-          sliderInput(ns("cell_range"), "Cells per islet:",
-                      min = 1, max = traj_max_islet_cells(),
-                      value = c(TRAJ_DEFAULT_MIN_CELLS, traj_max_islet_cells()),
-                      step = 5),
-          uiOutput(ns("traj_status"))
-        ),
-        column(4,
-          actionButton(ns("recalculate_trajectory"), "Recalculate trajectory",
-                       class = "btn-primary", style = "margin-top: 25px;"),
-          uiOutput(ns("traj_range_pending"))
-        )
-      ),
+      # The fitted cohort is the endocrine-object classes chosen above the tabs (no cells-per-islet range
+      # since 2026-10-17); the status line reports how many objects were fitted.
+      uiOutput(ns("traj_status")),
       fluidRow(
         column(4,
           # Y-axis measure. Marker expression is the core-cell protein mean from .X
