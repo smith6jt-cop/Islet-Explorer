@@ -30,15 +30,27 @@ immune subtypes. Nerve, blood-vessel and lymphatic cells come only from the stru
 all 20 images is in `$OUT/typing/`; see [the README](../scripts/uniform/README.md#cell-typing-islet-explorer-seniors-method-owner-2026-10-16).
 
 **App root, 2026-10-16 (P4 built, awaiting review).** `scripts/uniform/assemble_uniform.py` builds the whole
-cohort from the uniform run, with nothing appended to the frozen release:
-`data/development/uniform-20donor-20261016-v1/`. It holds 20 donors and 10,113 endocrine objects (1,491 islets,
-3,415 clusters and 5,207 singles), of which 9,437 have analysed cells in both core and 20 um band. That is 3.08
-million analysed cells, with 28,247 Excluded and 320,737 without a nucleus. The app serves all three object
-classes behind an app-wide selector (A5). Local checks: R tests pass. The browser harness passes 37 of 45 checks,
-including the 20-donor census, no donor 78 and the Harmony method. The four Viewer checks need the Range-capable
-image route that only the nginx deployment provides. The other four (PAGA render and download, Plot vocabulary,
-Trajectory contrast) also failed on v3, because the harness predates the 2026-10-14 app change. The service
-stays stopped until the owner accepts the root (P6); the build report is `tmp/uniform-20donor-20261016-v1/`.
+cohort from the uniform run, with nothing appended to the frozen release. The current build is
+`data/development/uniform-20donor-20261017-v2/` (v1 of 2026-10-16 is superseded by the two fixes below). It holds
+20 donors and 10,113 endocrine objects (1,491 islets, 3,415 clusters and 5,207 singles), of which 9,504 have
+analysed cells in both core and 20 um band. That is 3.08 million analysed cells, with 24,018 Excluded and 320,737
+without a nucleus. The app serves all three object classes behind an app-wide selector (A5). Local checks on v2:
+233 R tests pass and the app's loader reads the root. On v1 the browser harness passed 37 of 45 checks, including
+the 20-donor census, no donor 78 and the Harmony method; it was not rerun on v2. The four Viewer checks need the
+Range-capable image route that only the nginx deployment provides. The other four (PAGA render and download,
+Plot vocabulary, Trajectory contrast) also failed on v3, because the harness predates the 2026-10-14 app change.
+The service stays stopped until the owner accepts the root (P6); the build report is
+`tmp/uniform-20donor-20261017-v2/`.
+
+**The two open items, 2026-10-17** (owner: "use common sense and available tools to resolve the scaling and
+threshold"). (1) Aab_6558's Excluded cells inside objects: its INS stain is weak (2.4x its tissue p99 in the
+objects against 15-86x on the other ND and Aab+ images; C-peptide 8 ng/mL), and the tissue-p99 hormone level cut
+through its beta cells. Each hormone is now read over its own tissue background, and inside the objects the level
+is lowered to a local FDR of 10 % (Beta 722 -> 1,769; Excluded 35 % -> 21 % of object cells; well-stained images
+gain 0.2-3 %). (2) T1D_6520's lymphatics at 2.6x the earlier area: the additions' structure thresholds had been
+moved by UniFORM factor ratios, the worst transfer in leave-one-out on the 15. Nerve and Capillary now use the
+15's raw median unscaled; Lymphatic keeps the original random-forest classifier's objects (T1D_6520 back to its
+audited 43,000 um2). Details in [the README](../scripts/uniform/README.md).
 
 ## Cohort
 

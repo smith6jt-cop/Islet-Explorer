@@ -2,7 +2,8 @@
 
 > **2026-10-15:** donor 78 (HDL078 / HPAP-078) is removed from the app. `ISLET_EXCLUDED_DONORS` in `00_globals.R` (kept in step with `scripts/excluded_donors.csv` by a pipeline test) makes `load_shared_prepared_data()` refuse a data root that contains it, and the Viewer never lists its image. The local app is offline at the owner's direction until the reprocessed root is accepted; the last served root was `data/development/protein-expanded-20261015-v3/`.
 
-> **2026-10-16 uniform root (awaiting owner review):** `data/development/uniform-20donor-20261016-v1/`, built
+> **2026-10-16 uniform root (awaiting owner review):** `data/development/uniform-20donor-20261017-v2/` (2026-10-17;
+> v1 of 2026-10-16 is superseded: hormone level and the additions' structure objects), built
 > by `scripts/uniform/assemble_uniform.py`. All 20 donors are retyped with the Islet-Explorer-Senior method. Rows
 > are endocrine objects of three classes (`Islet_N`, `Cluster_N`, `Single_N`; `object_class`). An app-wide
 > checkbox group `object_classes` (app.R) filters `prepared()` via `filter_prepared_by_object_class()`; the
