@@ -189,8 +189,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         n <- suppressWarnings(as.integer(counts[p]))
         if (!is.finite(n)) n <- 0L
         if (n == 0) {
-          tags$span(p, tags$span(" (0)", style = "color: #999;"),
-                    style = "color: #999;")
+          tags$span(p, tags$span(" (0)"), style = "color: #595959;")
         } else {
           tags$span(p)
         }
@@ -207,9 +206,9 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       tagList(
         div(style = "display: flex; align-items: center; gap: 6px; margin-bottom: 4px;",
           tags$label("Phenotypes", style = "font-weight: 600; font-size: 13px; margin: 0;"),
-          actionLink(ns("pheno_all"), "All", style = "font-size: 11px;"),
-          span("|", style = "color: #ccc;"),
-          actionLink(ns("pheno_none"), "None", style = "font-size: 11px;")
+          actionLink(ns("pheno_all"), "All", style = "font-size: 12px; color: #1f4e79;"),
+          span("|", style = "color: #595959;"),
+          actionLink(ns("pheno_none"), "None", style = "font-size: 12px; color: #1f4e79;")
         ),
         div(style = "column-count: 2; column-gap: 8px;",
           checkboxGroupInput(ns("pheno_filter"), NULL,
@@ -911,9 +910,9 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       tagList(
         div(style = "display: flex; align-items: center; gap: 6px; margin-bottom: 4px;",
           tags$label("Phenotypes shown", style = "font-weight: 600; font-size: 13px; margin: 0;"),
-          actionLink(ns("enrich_pheno_all"), "All", style = "font-size: 11px;"),
-          span("|", style = "color: #ccc;"),
-          actionLink(ns("enrich_pheno_none"), "None", style = "font-size: 11px;")
+          actionLink(ns("enrich_pheno_all"), "All", style = "font-size: 12px; color: #1f4e79;"),
+          span("|", style = "color: #595959;"),
+          actionLink(ns("enrich_pheno_none"), "None", style = "font-size: 12px; color: #1f4e79;")
         ),
         # Flow the checkboxes across the full-width card (same pattern as
         # .cd-comp-cols for the distance-profile composition picker).
@@ -956,22 +955,39 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         downloadButton(ns(id), "Download CSV", style = "font-size: 12px; padding: 3px 10px;"))
 
       tagList(
-        # ==== Control bar ====
+        # ==== Section controls ====
         # The "Exclude outliers" checkbox and z slider are the non-namespaced
         # mirrors of the Plot/Trajectory controls — app.R synchronisation
         # observers keep all three tabs in step.
+        # The section's controls use the same Data / View panels as every tab (control_panel()).
         fluidRow(column(12,
-          div(class = "card", style = "padding: 12px 15px; margin-bottom: 10px; margin-top: 10px; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 20px; overflow: visible;",
-            span(style = "font-weight: 600; font-size: 15px; white-space: nowrap;", "Neighborhood Analysis"),
-            numericInput(ns("nbr_min_cells"), "Min cells/islet", value = 1, min = 1, max = 100, step = 1, width = "130px"),
-            sliderInput(ns("nbr_pt_size"), "Point size", min = 2, max = 12, value = 5, step = 1, width = "150px"),
-            sliderInput(ns("nbr_pt_alpha"), "Point transparency", min = 0, max = 0.95, value = 0.6, step = 0.05, width = "150px"),
-            tags$div(title = GLOBAL_OUTLIER_TOOLTIP, style = "min-width: 160px;",
-              checkboxInput("spatial_remove_outliers", "Exclude outliers", value = FALSE)
-            ),
-            sliderInput("spatial_outlier_z", "Outlier z-threshold",
-                        min = 0.5, max = 10, value = 3, step = 0.5, width = "200px"),
-            uiOutput(ns("nbr_islet_count"))
+          h4("Neighborhood Analysis", style = "margin: 18px 0 10px; font-weight: 600;"),
+          control_panel("Data controls", open = TRUE,
+            fluidRow(
+              column(3,
+                numericInput(ns("nbr_min_cells"), "Min cells/islet", value = 1, min = 1, max = 100, step = 1),
+                uiOutput(ns("nbr_islet_count"))
+              ),
+              column(3,
+                tags$div(title = GLOBAL_OUTLIER_TOOLTIP,
+                  checkboxInput("spatial_remove_outliers", "Exclude outliers", value = FALSE))
+              ),
+              column(3,
+                sliderInput("spatial_outlier_z", "Outlier z-threshold",
+                            min = 0.5, max = 10, value = 3, step = 0.5)
+              )
+            )
+          ),
+          control_panel("View controls",
+            fluidRow(
+              column(3,
+                sliderInput(ns("nbr_pt_size"), "Point size", min = 2, max = 12, value = 5, step = 1)
+              ),
+              column(3,
+                sliderInput(ns("nbr_pt_alpha"), "Point transparency", min = 0, max = 0.95, value = 0.6,
+                            step = 0.05)
+              )
+            )
           )
         )),
 

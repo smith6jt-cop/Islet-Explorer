@@ -24,7 +24,8 @@ Shiny.addCustomMessageHandler('islet_update_viewer_src', function(msg){
   f.src = msg.src;
 });
 ")),
-    uiOutput(ns("image_selector")),
+    control_panel("Data controls", open = TRUE,
+      uiOutput(ns("image_selector"))),
     uiOutput(ns("viewer_frame"))
   )
 }

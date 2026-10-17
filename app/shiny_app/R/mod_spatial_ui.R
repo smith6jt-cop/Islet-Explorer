@@ -1,7 +1,7 @@
 # ---------- Spatial Tab module UI ----------
 # Exports: spatial_ui(id)
-# Layout: Controls sidebar (col-2) + Tissue Scatter (col-6) + Leiden Panel (col-4)
-# + Neighborhood Analysis control bar and card rows below (rendered server-side in
+# Layout: Data / View control panels (control_panel()), then Tissue Scatter (col-7) + Leiden Panel (col-5)
+# + Neighborhood Analysis Data / View panels and card rows below (rendered server-side in
 #   output$neighborhood_cards): enrichment/scatter/distance row, composition card,
 #   distance-to-islet profile card. Card prose lives in the tab_help() popover.
 
@@ -24,9 +24,11 @@ spatial_ui <- function(id) {
       phenotype_marker_definitions_ui(),
       # Explanatory prose for the neighborhood cards lives here, not inline
       # under the plots (Oct 2026 streamlining).
-      tags$h6(style = "margin-top: 12px; font-weight: 700;", "Neighborhood Analysis controls"),
+      tags$h6(style = "margin-top: 12px; font-weight: 700;", "Controls"),
+      tags$p("Data controls choose what is plotted; View controls change how it is drawn. Click a panel's title",
+             " to open or close it. The Neighborhood Analysis section has its own pair."),
       tags$p(tags$strong("Point size / transparency"),
-             " apply to Peri vs core proportion and Distance to nearest cell."),
+             " (Neighborhood View controls) apply to Peri vs core proportion and Distance to nearest cell."),
       tags$p(tags$strong("Exclude outliers / z-threshold"),
              " apply to Peri enrichment by status and Distance to nearest cell. The checkbox and slider are synced with the Plot tab."),
       tags$p(tags$strong("Min cells/islet"),
@@ -45,47 +47,48 @@ spatial_ui <- function(id) {
       tags$p("Outlier exclusion follows the Neighborhood Analysis toggle (robust |z| from median/MAD on log(1+distance), per donor status \u2014 two-sided; threshold from the slider). Excluded points still appear as faint \u00d7 markers."),
       tags$p(tags$strong("Distance-to-islet profile:"),
              " per-cell signed distance-to-islet on a symlog axis \u2014 a density split by disease status (per phenotype or all cells) or a phenotype composition (stacked bars, one facet per status, zero-anchored at the islet border), spanning islet interior to bulk tissue. Negative = inside islet, positive = outside; the dashed line marks the border. Pooled per cell (descriptive) \u2014 for donor-fair group comparison see Peri enrichment by status.")),
-    # ==== ROW 1 (existing): Controls + Scatter + Leiden ====
-    fluidRow(style = "display: flex; flex-wrap: wrap;",
-      # ---- Left sidebar: Controls ----
-      column(2,
-        div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible; height: 100%;",
-          h5("Spatial Tissue Map", style = "margin-top: 0;"),
-          uiOutput(ns("donor_selector")),
-          hr(style = "margin: 8px 0;"),
-          selectInput(ns("color_by"), "Color by",
-                      choices = c("Phenotype" = "phenotype",
-                                  "Leiden Cluster" = "leiden"),
-                      selected = "phenotype"),
-          uiOutput(ns("leiden_res_selector")),
-          hr(style = "margin: 8px 0;"),
-          radioButtons(ns("region_filter"), "Show Cells",
-                       choices = c("All" = "all",
-                                   "Core + Peri" = "core_peri",
-                                   "Core Only" = "core"),
-                       selected = "all", inline = FALSE),
-          checkboxInput(ns("color_background"), "Color background cells", value = FALSE),
-          hr(style = "margin: 8px 0;"),
-          uiOutput(ns("phenotype_filter")),
-          hr(style = "margin: 8px 0;"),
-          checkboxGroupInput(ns("groups"), "Donor Status",
-                             choices = c("ND", "Aab+", "T1D"),
-                             selected = c("ND", "Aab+", "T1D"), inline = FALSE),
-          hr(style = "margin: 8px 0;"),
-          h5("Palettes", style = "font-size: 14px; margin-bottom: 8px;"),
-          selectInput("spatial_palette", "Phenotype",
-                      choices = c("Original", "High Contrast", "Colorblind Safe", "Maximum Distinction"),
-                      selected = "High Contrast"),
-          selectInput("spatial_donor_palette", "Donor Status",
-                      choices = names(DONOR_PALETTES),
-                      selected = "Bright"),
-          hr(style = "margin: 8px 0;"),
-          downloadButton(ns("download_spatial"), "Download CSV", style = "width: 100%; font-size: 13px;")
+    # ==== Data / View control panels (control_panel(), the same on every tab) ====
+    fluidRow(column(12,
+      control_panel("Data controls", open = TRUE,
+        fluidRow(
+          column(3, uiOutput(ns("donor_selector"))),
+          column(3,
+            radioButtons(ns("region_filter"), "Show cells",
+                         choices = c("All" = "all", "Core + Peri" = "core_peri", "Core Only" = "core"),
+                         selected = "all", inline = TRUE),
+            checkboxGroupInput(ns("groups"), "Donor status",
+                               choices = c("ND", "Aab+", "T1D"),
+                               selected = c("ND", "Aab+", "T1D"), inline = TRUE)
+          ),
+          column(4, uiOutput(ns("phenotype_filter"))),
+          column(2, uiOutput(ns("leiden_res_selector")))
         )
       ),
-
-      # ---- Center: Tissue Scatter ----
-      column(6,
+      control_panel("View controls",
+        fluidRow(
+          column(3,
+            selectInput(ns("color_by"), "Color tissue cells by",
+                        choices = c("Phenotype" = "phenotype", "Leiden Cluster" = "leiden"),
+                        selected = "phenotype"),
+            checkboxInput(ns("color_background"), "Color background cells", value = FALSE)
+          ),
+          column(3,
+            selectInput("spatial_palette", "Phenotype colors",
+                        choices = c("Original", "High Contrast", "Colorblind Safe", "Maximum Distinction"),
+                        selected = "High Contrast")
+          ),
+          column(3,
+            # Non-namespaced: global donor palette, synced with Plot and Trajectory (app.R).
+            selectInput("spatial_donor_palette", "Donor status colors",
+                        choices = names(DONOR_PALETTES), selected = "Bright")
+          )
+        )
+      )
+    )),
+    # ==== ROW 1: Tissue Scatter + Leiden ====
+    fluidRow(style = "display: flex; flex-wrap: wrap;",
+      # ---- Left: Tissue Scatter ----
+      column(7,
         div(class = "card", style = "padding: 15px; margin-bottom: 15px; height: 100%;",
           div(style = "display: flex; align-items: center; gap: 10px; margin-bottom: 8px;",
             h5("Tissue Scatter Plot", style = "margin: 0;"),
@@ -97,13 +100,15 @@ spatial_ui <- function(id) {
                      dblclick = ns("scatter_dblclick"),
                      brush = brushOpts(id = ns("scatter_brush"), resetOnNew = TRUE)),
           div(style = "text-align: right; margin-top: 8px;",
+            downloadButton(ns("download_spatial"), "Download CSV",
+                           class = "btn-sm btn-outline-secondary"),
             downloadButton(ns("dl_tissue_scatter"), "Download PNG",
                            class = "btn-sm btn-outline-primary"))
         )
       ),
 
       # ---- Right: Leiden Panel ----
-      column(4,
+      column(5,
         div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible; height: 100%;",
           h5("Islet-Level UMAPs"),
           uiOutput(ns("leiden_not_available")),

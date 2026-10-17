@@ -77,10 +77,9 @@ Cell centroids (`X_centroid`, `Y_centroid`) are in micrometers. GeoJSON polygons
 > (`00_globals.R`), default `0`; both the `tabPanel` and the `statistics_server()` call in `app.R`
 > check it, so nothing is wired up while it is off. The module, its data and this documentation are
 > unchanged. To bring it back, set `SHOW_STATISTICS_TAB=1` in `app/shiny_app/.Renviron` and
-> `touch restart.txt` — no code edit. The Plot sidebar's visibility condition still names
-> `'Statistics'` in both the layout JS and the `conditionalPanel`: with no such tab mounted
-> `input.tabs` can never take that value, so those branches are inert and re-enabling needs no
-> second edit. (`show_phenotype_rules_stats` is likewise left registered — an `observeEvent` on an
+> `touch restart.txt` — no code edit. Since 2026-10-17 there is no Plot sidebar: the controls the
+> Statistics tab reads (donor status, autoantibodies, age, sex) live in the Plot tab's Data controls
+> panel, so a re-enabled Statistics tab would need its own copy of them on screen. (`show_phenotype_rules_stats` is likewise left registered — an `observeEvent` on an
 > input that never exists never fires.) Same pattern as the Inflammation tab.
 
 See [`docs/statistics.md`](docs/statistics.md) for full details — the Jul 2026 streamlined redesign (fixed α, auto-selected test type, fixed 50 µm bins, Advanced/sensitivity + Sensitivity-check collapsibles, single primary result, consolidated exploratory section), pseudoreplication fix (Phase 16), `utils_stats.R` reference, unified outlier handling, zero-value exclusion, sex-stratified BH correction, 5-section narrative layout, multiple-testing correction.
@@ -455,6 +454,16 @@ and error messages (no data, range not applied, outlier tables) stay where they 
 `is_uniform_root()`. A help output that must stay live (Spatial `embedding_method`, read by the browser check) is
 rendered inside the popover with `suspendWhenHidden = FALSE`. The hidden Statistics and Inflammation tabs still
 carry inline notes and were not revised for the uniform root.
+
+**One control layout in every tab (owner, 2026-10-17):** "The Trajectory tab has controls separated by data
+and visual. Make the layout and separation consistent throughout the app." Each tab (and the Spatial
+Neighborhood Analysis section) opens with `control_panel("Data controls", open = TRUE, ...)` — what is selected,
+filtered or computed — and `control_panel("View controls", ...)` — how it is drawn — full width under the help
+icon (`control_panel()` and `CONTROL_PANEL_CSS` in `00_globals.R`). A selector that only chooses what one card
+plots stays on that card (Trajectory heatmap and PAGA, Spatial neighbourhood cards); downloads sit with their
+plot. The Plot tab's old left sidebar column and its layout JS are gone; the synced inputs keep their ids
+(`sidebar_remove_outliers`, `sidebar_outlier_z`, `sidebar_donor_palette`). Spatial's phenotype list now uses the
+root's own label set (`root_phenotype_labels()`), not the palette, which still carries the frozen typing's labels.
 
 When adding a new phenotype-selecting input anywhere in the app, route its
 choices through `phenotype_keep()` / `phenotype_is_kept()` and put any marker

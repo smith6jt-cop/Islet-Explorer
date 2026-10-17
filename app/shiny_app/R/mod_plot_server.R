@@ -545,7 +545,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
     })
 
     # ===========================================================================
-    # Outputs: scatter plot (plt), distribution (dist), dist_ui, outlier info
+    # Outputs: scatter plot (plt), distribution (dist), outlier info
     # ===========================================================================
 
     # ---- Main scatter plot ----
@@ -825,33 +825,6 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
     })
 
     # ---- Distribution controls ----
-    output$dist_ui <- renderUI({
-      tagList(
-        fluidRow(
-          column(4,
-            sliderInput(ns("dist_pt_size"), "Point size",
-                        min = 0.3, max = 4.0, value = 3.0, step = 0.1),
-            sliderInput(ns("dist_pt_alpha"), "Point transparency",
-                        min = 0, max = 0.95, value = 0.4, step = 0.05)
-          ),
-          column(4,
-            selectInput(ns("dist_color_by"), "Color points by:",
-                        choices = c("Donor Status" = "donor_status",
-                                    "Donor ID" = "donor_id"),
-                        selected = "donor_status"),
-            radioButtons(ns("dist_type"), "Plot type",
-                         choices = c("Violin", "Box"),
-                         selected = "Violin", inline = TRUE)
-          ),
-          column(4,
-            checkboxInput(ns("exclude_zero_dist"), "Exclude zero values", value = FALSE),
-            checkboxInput(ns("dist_show_points"), "Show individual points", value = TRUE),
-            checkboxInput(ns("dist_log_scale"), "Log scale y-axis", value = FALSE)
-          )
-        )
-      )
-    })
-
     # ---- Distribution violin/box plot ----
     # Note: the right panel reads `raw_df_base()` (not `raw_df()`) so its
     # "Exclude zero values" checkbox is fully independent of the left panel's

@@ -9,6 +9,7 @@ ui <- fluidPage(
   lang = "en",
   useShinyjs(),
   tags$head(
+    tags$style(HTML(CONTROL_PANEL_CSS)),
     # Favicons for browser tab, bookmarks, and mobile pinning. Browsers pick
     # the most appropriate sized PNG based on context; the ICO is the legacy
     # default location for tools that hard-fetch /favicon.ico. Apple touch
@@ -403,27 +404,10 @@ ui <- fluidPage(
       // semantics and a single Tab stop synchronized after activation.
       updateTabAccessibility();
 
+      // Every tab's controls now sit in its own Data / View panels (2026-10-17), so the
+      // main panel always takes the full width.
       function adjustLayout() {
-        var activeTab = $('#tabs li.active a').text().trim();
-        var sidebar = $('.equal-height-panel').first();
-        var mainPanel = $('.main-content-panel');
-
-        // Show sidebar on Plot and Statistics tabs, hide on others
-        if (activeTab === 'Plot' || activeTab === 'Statistics') {
-          sidebar.show();
-          mainPanel.css({
-            'width': '88.33333333%',
-            'max-width': '88.33333333%',
-            'flex': '0 0 88.33333333%'
-          });
-        } else {
-          sidebar.hide();
-          mainPanel.css({
-            'width': '100%',
-            'max-width': '100%',
-            'flex': '0 0 100%'
-          });
-        }
+        $('.main-content-panel').css({'width': '100%', 'max-width': '100%', 'flex': '0 0 100%'});
       }
 
       // Adjust on initial load
@@ -439,19 +423,9 @@ ui <- fluidPage(
   tags$a(class = "skip-link", href = "#main-content", "Skip to main content"),
   tags$h1(class = "sr-only", "Islet Explorer"),
   fluidRow(class = "equal-height-row",
-    # Left Sidebar Panel (Plot controls, hidden on other tabs via JS)
-    column(width = 1.4, class = "equal-height-panel",
-      role = "complementary", `aria-label` = "Plot controls",
-      # 'Statistics' stays in this condition while that tab is hidden: with no
-      # such tab mounted `input.tabs` can never take that value, so the branch is
-      # inert, and keeping it means SHOW_STATISTICS_TAB=1 needs no second edit.
-      conditionalPanel(
-        condition = "input.tabs == 'Plot' || input.tabs == 'Statistics'",
-        plot_sidebar_ui("plot")
-      )
-    ),
-    # Main Panel
-    column(width = 10.6, class = "equal-height-panel main-content-panel",
+    # Main Panel. The Plot tab's controls moved from a left sidebar into its own Data / View panels
+    # (2026-10-17); the hidden Statistics tab reads them from there.
+    column(width = 12, class = "equal-height-panel main-content-panel",
       id = "main-content", role = "main", tabindex = "-1",
       div(class = "object-class-filter", style = "margin: 4px 0 6px; font-size: 15px;",
         checkboxGroupInput("object_classes", "Endocrine objects",

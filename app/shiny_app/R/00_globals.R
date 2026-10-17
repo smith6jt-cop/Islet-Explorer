@@ -985,8 +985,44 @@ phenotype_rules_button <- function(input_id,
   )
 }
 
+# ---- Control panels (owner, 2026-10-17: one layout and separation in every tab) ----
+# Every tab puts its tab-wide controls in two collapsible panels at the top of the tab: "Data controls" (what is
+# selected, filtered or computed; open) and "View controls" (how it is drawn; closed). A selector that only
+# chooses what one card plots stays on that card. Downloads sit under the plot they export.
+CONTROL_PANEL_CSS <- paste0(
+  ".control-panel { border: 1px solid #cbd5df; border-radius: 6px; padding: 0 12px; margin-bottom: 12px; ",
+  "background: #f8fafc; } ",
+  ".control-panel > summary { cursor: pointer; list-style: none; font-weight: 600; color: #24465c; ",
+  "padding: 10px 0; display: flex; align-items: center; gap: 8px; } ",
+  ".control-panel > summary::-webkit-details-marker { display: none; } ",
+  ".control-panel > summary::marker { content: ''; } ",
+  ".control-panel > summary:before { content: '▸'; color: #4477aa; font-size: 14px; } ",
+  ".control-panel[open] > summary:before { content: '▾'; } ",
+  ".control-panel > summary:after { content: 'Click to show'; margin-left: auto; font-size: 12px; ",
+  "font-weight: 400; color: #64748b; } ",
+  ".control-panel[open] > summary:after { content: 'Click to hide'; } ",
+  ".control-panel[open] > summary { border-bottom: 1px solid #dbe3ea; margin-bottom: 10px; } ",
+  ".control-panel .form-group { margin-bottom: 6px; } ",
+  ".control-panel h5 { margin: 4px 0 6px; font-size: 14px; font-weight: 600; color: #333; } ",
+  ".control-panel .form-group:last-child { margin-bottom: 8px; }")
+
+#' A collapsible control group. Use control_panel("Data controls", open = TRUE, ...) and
+#' control_panel("View controls", ...) at the top of a tab or section.
+control_panel <- function(title, ..., open = FALSE) {
+  shiny::tags$details(class = "control-panel", open = if (isTRUE(open)) NA else NULL,
+                      shiny::tags$summary(title), ...)
+}
+
 #' TRUE when the served root is the uniform 20-donor build (one typing workflow for every donor).
 is_uniform_root <- function() file.exists(data_path("uniform_release.json"))
+
+#' The cell labels a uniform root assigns (uniform_release.json "labels"); NULL for other roots.
+root_phenotype_labels <- function() {
+  path <- data_path("uniform_release.json")
+  if (!file.exists(path)) return(NULL)
+  labels <- tryCatch(jsonlite::fromJSON(path)$labels, error = function(e) NULL)
+  if (is.null(labels)) NULL else as.character(labels)
+}
 
 #' Help paragraph for the app-wide "Endocrine objects" selector, shared by every tab's help popover.
 object_classes_help <- function() {

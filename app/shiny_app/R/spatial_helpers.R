@@ -57,6 +57,10 @@ get_available_donors <- function() {
 #' @return Canonical names first (PHENOTYPE_COLORS order), then any extras.
 canonical_phenotype_order <- function(extra = character(0)) {
   canon <- phenotype_keep(names(PHENOTYPE_COLORS))
+  # A uniform root names its own label set (uniform_release.json); the palette also carries the frozen
+  # typing's labels (Ductal, SMA+, B cell, ...), which that root never assigns.
+  root_labels <- if (exists("root_phenotype_labels", mode = "function")) root_phenotype_labels() else NULL
+  if (length(root_labels)) canon <- c(intersect(canon, root_labels), setdiff(phenotype_keep(root_labels), canon))
   # Extras pass the same retired-label gate; otherwise a retired label observed
   # in the data (absent from `canon` because it was gated out) came back here.
   extra <- phenotype_keep(unique(as.character(extra[!is.na(extra) & nzchar(extra)])))

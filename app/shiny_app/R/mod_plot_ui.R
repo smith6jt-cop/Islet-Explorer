@@ -1,84 +1,11 @@
 # ---------- Plot module UI ----------
-# Exports: plot_sidebar_ui(id), plot_main_ui(id)
-# All Plot-related inputs are namespaced by this module.
+# Exports: plot_main_ui(id)
+# All Plot-related inputs are namespaced by this module, except the app-wide synced controls
+# (sidebar_remove_outliers, sidebar_outlier_z, sidebar_donor_palette), whose ids keep their old names.
+# Controls sit in the tab's Data / View panels (control_panel(), 2026-10-17), as on every tab; the left
+# sidebar they used to occupy is gone. The hidden Statistics tab reads the same inputs.
 
-#' Sidebar UI for the Plot tab
-#' Contains data filters, autoantibody filters, statistic selector, and export controls.
-plot_sidebar_ui <- function(id) {
-  ns <- NS(id)
-  div(class = "sidebar", style = "height: 100%;",
-    h4("Data & Filters"),
-    selectInput(ns("mode"), "Data Layer",
-                choices = c("Microenvironment", "Cell Populations"),
-                selected = "Cell Populations"),
-    uiOutput(ns("dynamic_selector")),
-    uiOutput(ns("metric_selector")),
-    hr(),
-    h5("Autoantibody filter (Aab+ donors only)"),
-    uiOutput(ns("aab_warning")),
-    checkboxGroupInput(ns("aab_flags"), NULL,
-                       choices = c("GADA" = "AAb_GADA",
-                                   "IA2A" = "AAb_IA2A",
-                                   "ZnT8A" = "AAb_ZnT8A",
-                                   "IAA" = "AAb_IAA",
-                                   "mIAA" = "AAb_mIAA"),
-                       selected = c("AAb_GADA", "AAb_IA2A", "AAb_ZnT8A", "AAb_IAA", "AAb_mIAA")),
-    checkboxGroupInput(ns("groups"), "Donor Status",
-                       choices = c("ND", "Aab+", "T1D"),
-                       selected = c("ND", "Aab+", "T1D"),
-                       inline = TRUE),
-    conditionalPanel(
-      condition = "input.tabs != 'Statistics'", ns = NS(NULL),
-      numericInput(ns("min_cells"), "Min cells/islet",
-                   value = 1, min = 1, max = 200, step = 1)
-    ),
-    uiOutput(ns("age_filter_ui")),
-    uiOutput(ns("gender_filter_ui")),
-    conditionalPanel(
-      condition = "input.tabs != 'Statistics'", ns = NS(NULL),
-      radioButtons(ns("stat"), "Statistic",
-                   choices = c("Mean\u00b1SE" = "mean_se",
-                               "Mean\u00b1SD" = "mean_sd",
-                               "Median + IQR" = "median_iqr"),
-                   selected = "mean_se"),
-      # Global outlier toggle + z-threshold slider (non-namespaced so they
-      # can be synced with the mirrored controls on the Trajectory and Spatial
-      # tabs). Defaults to OFF; the threshold slider value (default 3, range
-      # 0.5–10, step 0.5) feeds the z-score `flag_outliers()` calls across all
-      # three tabs. Title attribute carries the global tooltip.
-      tags$div(
-        title = GLOBAL_OUTLIER_TOOLTIP,
-        checkboxInput("sidebar_remove_outliers",
-                      "Exclude outliers",
-                      value = FALSE),
-        sliderInput("sidebar_outlier_z", "Outlier z-threshold",
-                    min = 0.5, max = 10, value = 3, step = 0.5)
-      ),
-      checkboxInput(ns("show_outlier_table"),
-                    "Show excluded-outlier table",
-                    value = FALSE),
-      uiOutput(ns("plot_outlier_info"))
-    ),
-    conditionalPanel(
-      condition = "input.tabs != 'Statistics'", ns = NS(NULL),
-      hr(),
-      h5("Color Palettes"),
-      # Non-namespaced: global donor palette choice synced via app.R observers
-      selectInput("sidebar_donor_palette", "Donor Status Colors",
-                  choices = names(DONOR_PALETTES),
-                  selected = "Bright")
-    ),
-    conditionalPanel(
-      condition = "input.tabs != 'Statistics'", ns = NS(NULL),
-      hr(),
-      h5("Export"),
-      downloadButton(ns("dl_summary"), "Download summary CSV")
-    )
-  )
-}
-
-#' Main content UI for the Plot tab
-#' Left card: scatter plot with controls. Right card: distribution comparison.
+#' Plot tab: help, Data / View control panels, the two plot cards and the drill-down panel.
 plot_main_ui <- function(id, extra_panel = NULL) {
   ns <- NS(id)
   tagList(
@@ -103,61 +30,146 @@ plot_main_ui <- function(id, extra_panel = NULL) {
                " Unchecking an autoantibody removes the Aab+ donors positive for it (ND and T1D donors are not",
                " affected). Min cells/islet counts core",
                " and peri cells together. Exclude outliers drops objects whose robust z-score (median and MAD within",
-               " each donor status) passes the threshold; the setting is shared with the Trajectory and Spatial tabs."),
+               " each donor status) passes the threshold; the setting is shared with the Spatial tab."),
         tags$p(tags$strong("Selecting an object."),
                " Turn on \"Show individual points\", then click a point on the Islet Size Distribution scatter to open",
                " its segmentation map and single cells below. With \"Color points by\" set to Donor ID, click a donor",
                " in the legend to show or hide it."),
-        tags$p("Use browser zoom (Ctrl +/\u2212) to resize cards. Scroll within cards to reveal hidden controls."))
-    ),
-    # Left card: Main scatter plot
-    column(6,
-      div(class = "card",
-          style = "margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; height: clamp(715px, 84.5vh - 97px, 1560px); display: flex; flex-direction: column; gap: 12px;",
-        h5("Islet Size Distribution", style = "margin-top: 0; color: #333;"),
-        div(style = "flex: 1; min-height: 0; display: flex;",
-          plotlyOutput(ns("plt"), height = "100%")
+        tags$p(tags$strong("Controls."),
+               " Data controls choose what is plotted; View controls change how it is drawn. Click a panel's title to",
+               " open or close it. Use browser zoom (Ctrl +/\u2212) to resize cards.")),
+      control_panel("Data controls", open = TRUE,
+        fluidRow(
+          column(3,
+            selectInput(ns("mode"), "Data layer",
+                        choices = c("Microenvironment", "Cell Populations"),
+                        selected = "Cell Populations"),
+            uiOutput(ns("dynamic_selector")),
+            uiOutput(ns("metric_selector"))
+          ),
+          column(3,
+            checkboxGroupInput(ns("groups"), "Donor status",
+                               choices = c("ND", "Aab+", "T1D"),
+                               selected = c("ND", "Aab+", "T1D"),
+                               inline = TRUE),
+            tags$label("Autoantibodies (Aab+ donors)", class = "control-label"),
+            uiOutput(ns("aab_warning")),
+            checkboxGroupInput(ns("aab_flags"), NULL,
+                               choices = c("GADA" = "AAb_GADA",
+                                           "IA2A" = "AAb_IA2A",
+                                           "ZnT8A" = "AAb_ZnT8A",
+                                           "IAA" = "AAb_IAA",
+                                           "mIAA" = "AAb_mIAA"),
+                               selected = c("AAb_GADA", "AAb_IA2A", "AAb_ZnT8A", "AAb_IAA", "AAb_mIAA"),
+                               inline = TRUE)
+          ),
+          column(3,
+            uiOutput(ns("age_filter_ui")),
+            uiOutput(ns("gender_filter_ui")),
+            numericInput(ns("min_cells"), "Min cells/islet",
+                         value = 1, min = 1, max = 200, step = 1)
+          ),
+          column(3,
+            sliderInput(ns("diam_range"), "Islet diameter range (\u00b5m)",
+                        min = 0, max = 500, value = c(0, 350), step = 10),
+            sliderInput(ns("binwidth"), "Diameter bin width (\u00b5m)",
+                        min = 1, max = 75, value = 50, step = 1),
+            checkboxInput(ns("exclude_zero_top"), "Exclude zero values (size distribution)", value = FALSE),
+            checkboxInput(ns("exclude_zero_dist"), "Exclude zero values (distribution comparison)",
+                          value = FALSE)
+          )
         ),
-        div(style = "flex: 0 0 auto; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; max-height: 35%; border-top: 1px solid #eee; padding-top: 10px;",
-          div(style = "display: flex; gap: 18px; align-items: stretch;",
-            # Slider column 1
-            div(style = "flex: 1; min-width: 0; display: flex; flex-direction: column;",
-              sliderInput(ns("binwidth"), "Diameter bin width (\u00b5m)",
-                          min = 1, max = 75, value = 50, step = 1),
-              sliderInput(ns("diam_range"), "Islet diameter range (\u00b5m)",
-                          min = 0, max = 500, value = c(0, 350), step = 10),
-              selectInput(ns("plot_color_by"), "Color points by:",
-                          choices = c("Donor Status" = "donor_status",
-                                      "Donor ID" = "donor_id"),
-                          selected = "donor_status")
-            ),
-            # Slider column 2
-            div(style = "flex: 1; min-width: 0; display: flex; flex-direction: column;",
-              sliderInput(ns("pt_size"), "Point size",
-                          min = 0.3, max = 4.0, value = 3.0, step = 0.1),
-              sliderInput(ns("pt_alpha"), "Point transparency",
-                          min = 0, max = 0.95, value = 0.4, step = 0.05),
-              radioButtons(ns("add_smooth"), "Trend line",
-                           choices = c("None", "LOESS"),
-                           selected = "None", inline = TRUE)
-            ),
-            # Checkbox column 3 \u2014 vertical stack spanning the full height of the sliders
-            div(style = "flex: 0 0 auto; min-width: 165px; display: flex; flex-direction: column; justify-content: space-between; border-left: 1px solid #eee; padding-left: 16px;",
-              checkboxInput(ns("exclude_zero_top"), "Exclude zero values", value = FALSE),
-              checkboxInput(ns("show_points"), "Show individual points", value = FALSE),
-              checkboxInput(ns("log_scale"), "Log scale y-axis", value = FALSE),
-              checkboxInput(ns("log_scale_x"), "Log2 scale x-axis", value = FALSE)
+        fluidRow(
+          column(3,
+            # Non-namespaced: synced with the Trajectory and Spatial outlier controls (app.R).
+            tags$div(
+              title = GLOBAL_OUTLIER_TOOLTIP,
+              checkboxInput("sidebar_remove_outliers", "Exclude outliers", value = FALSE)
+            )
+          ),
+          column(3,
+            sliderInput("sidebar_outlier_z", "Outlier z-threshold",
+                        min = 0.5, max = 10, value = 3, step = 0.5)
+          ),
+          column(6,
+            checkboxInput(ns("show_outlier_table"), "Show excluded-outlier table", value = FALSE),
+            uiOutput(ns("plot_outlier_info"))
+          )
+        )
+      ),
+      control_panel("View controls",
+        fluidRow(
+          column(3,
+            radioButtons(ns("stat"), "Summary statistic",
+                         choices = c("Mean\u00b1SE" = "mean_se",
+                                     "Mean\u00b1SD" = "mean_sd",
+                                     "Median + IQR" = "median_iqr"),
+                         selected = "mean_se"),
+            # Non-namespaced: global donor palette, synced with Trajectory and Spatial (app.R).
+            selectInput("sidebar_donor_palette", "Donor status colors",
+                        choices = names(DONOR_PALETTES), selected = "Bright")
+          ),
+          column(5,
+            h5("Islet Size Distribution"),
+            fluidRow(
+              column(6,
+                selectInput(ns("plot_color_by"), "Color points by:",
+                            choices = c("Donor Status" = "donor_status", "Donor ID" = "donor_id"),
+                            selected = "donor_status"),
+                sliderInput(ns("pt_size"), "Point size", min = 0.3, max = 4.0, value = 3.0, step = 0.1),
+                sliderInput(ns("pt_alpha"), "Point transparency", min = 0, max = 0.95, value = 0.4, step = 0.05)
+              ),
+              column(6,
+                radioButtons(ns("add_smooth"), "Trend line", choices = c("None", "LOESS"),
+                             selected = "None", inline = TRUE),
+                checkboxInput(ns("show_points"), "Show individual points", value = FALSE),
+                checkboxInput(ns("log_scale"), "Log scale y-axis", value = FALSE),
+                checkboxInput(ns("log_scale_x"), "Log2 scale x-axis", value = FALSE)
+              )
+            )
+          ),
+          column(4,
+            h5("Distribution Comparison"),
+            fluidRow(
+              column(6,
+                selectInput(ns("dist_color_by"), "Color points by:",
+                            choices = c("Donor Status" = "donor_status", "Donor ID" = "donor_id"),
+                            selected = "donor_status"),
+                sliderInput(ns("dist_pt_size"), "Point size", min = 0.3, max = 4.0, value = 3.0, step = 0.1),
+                sliderInput(ns("dist_pt_alpha"), "Point transparency", min = 0, max = 0.95, value = 0.4,
+                            step = 0.05)
+              ),
+              column(6,
+                radioButtons(ns("dist_type"), "Plot type", choices = c("Violin", "Box"),
+                             selected = "Violin", inline = TRUE),
+                checkboxInput(ns("dist_show_points"), "Show individual points", value = TRUE),
+                checkboxInput(ns("dist_log_scale"), "Log scale y-axis", value = FALSE)
+              )
             )
           )
         )
       )
     ),
-    # Right card: Distribution comparison.
-    # Widen to fill the row when no extra panel (e.g. the AI chat card) is
-    # present, otherwise its two columns are left as dead space.
+    # Left card: islet size distribution
+    column(6,
+      div(class = "card",
+          style = "margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; height: clamp(600px, 75vh, 1400px); display: flex; flex-direction: column; gap: 12px;",
+        div(style = "display: flex; align-items: center; justify-content: space-between; margin-top: 0;",
+          h5("Islet Size Distribution", style = "margin: 0; color: #333;"),
+          downloadButton(ns("dl_summary"), "Summary CSV",
+                         class = "btn-sm btn-outline-secondary",
+                         style = "font-size: 11px; padding: 2px 8px;")
+        ),
+        div(style = "flex: 1; min-height: 0; display: flex;",
+          plotlyOutput(ns("plt"), height = "100%")
+        )
+      )
+    ),
+    # Right card: distribution comparison. Widen to fill the row when no extra panel (e.g. the AI chat
+    # card) is present, otherwise its two columns are left as dead space.
     column(if (is.null(extra_panel)) 6 else 4,
       div(class = "card",
-          style = "margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; height: clamp(715px, 84.5vh - 97px, 1560px); display: flex; flex-direction: column; gap: 12px;",
+          style = "margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; height: clamp(600px, 75vh, 1400px); display: flex; flex-direction: column; gap: 12px;",
         div(style = "display: flex; align-items: center; justify-content: space-between; margin-top: 0;",
           h5("Distribution Comparison", style = "margin: 0; color: #333;"),
           downloadButton(ns("dl_distribution_csv"), "CSV",
@@ -166,9 +178,6 @@ plot_main_ui <- function(id, extra_panel = NULL) {
         ),
         div(style = "flex: 1; min-height: 0; display: flex;",
           plotlyOutput(ns("dist"), height = "100%")
-        ),
-        div(style = "flex: 0 0 auto; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; max-height: 35%; border-top: 1px solid #eee; padding-top: 10px;",
-          uiOutput(ns("dist_ui"))
         )
       )
     ),

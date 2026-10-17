@@ -136,7 +136,7 @@ Total startup: **~22s → ~3.5s**.
 - `selected_islet` - reactiveVal with `case_id`, `islet_key`, `centroid_x/y`, `donor_status`, `donor_age`, `donor_gender`
 - `forced_image` - reactiveVal, written by Trajectory, read by Viewer
 - `active_tab` - `reactive(input$tabs)`, passed to Plot and Trajectory to prevent duplicate output IDs
-- `active_donor_colors` - reactive from `donor_palette_name()`, synced across 3 non-namespaced inputs: `sidebar_donor_palette` (Plot sidebar), `traj_donor_palette` (Trajectory), `spatial_donor_palette` (Spatial)
+- `active_donor_colors` - reactive from `donor_palette_name()`, synced across 3 non-namespaced inputs: `sidebar_donor_palette` (Plot View controls), `traj_donor_palette` (Trajectory), `spatial_donor_palette` (Spatial)
 
 ### Critical: Root-Level Outputs + Active Tab Guard
 
