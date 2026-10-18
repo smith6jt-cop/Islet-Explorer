@@ -5,8 +5,11 @@ Every value is regenerated from the uniform workflow (`$OUT`, see README.md): th
 (`$OUT/islets/`), the structure objects (`$OUT/structures/`), the cells and their Islet-Explorer-Senior typing
 (`$OUT/typing/`). Nothing is appended to the frozen 15-donor release. Owner decisions applied:
 
-  A5  every endocrine object is an analysis row -- Islet_N, Cluster_N and Single_N -- with `object_class`
-      (Islet / EndocrineCluster / EndocrineSingle) so the app can filter them.
+  A5  Islets and Clusters are analysis rows -- Islet_N, Cluster_N -- with `object_class` (Islet /
+      EndocrineCluster) so the app can filter them. Singles (Single_N, one endocrine cell) are counted and drawn
+      but are not analysis objects (owner, 2026-10-18: "Singles should not be included in any islet-level
+      analysis except for quantifying or showing how many there are"): no row, no core or band, no signed
+      distance to them, and their cell is an ordinary tissue cell, which may lie in an islet's or cluster's band.
   A6  nerve, blood-vessel and lymphatic cells come only from the structure objects (the typing).
   D3  cell types are Senior's classes, shown under the app's labels (APP_LABEL below).
   D4  hormone positivity is the image's hormone level on the scaled hormone (Senior's endocrine admission);
@@ -73,6 +76,8 @@ MORPHOLOGY = {'Nucleus Area': 'Nucleus: Area µm^2', 'Nucleus Length': 'Nucleus:
               'Cell Solidity': 'Cell: Solidity', 'Cell: Max diameter µm': 'Cell: Max diameter µm',
               'Cell: Min diameter µm': 'Cell: Min diameter µm'}
 STRUCTURE_CLASSES = ('Nerve', 'Capillary', 'Lymphatic')
+ANALYSIS_OBJECTS = ('Islet', 'EndocrineCluster')
+SINGLE = 'EndocrineSingle'
 
 
 def safe(label: str) -> str:
@@ -153,6 +158,8 @@ def build_image(run: Path, out: Path, tag: str, case: str, donors: pd.DataFrame,
     cells = calls.merge(refined, on='object_id', how='left', validate='one_to_one')
     cells['phenotype'] = app_labels(cells, immune)
     census['excluded'] = int((cells['phenotype'] == 'Excluded').sum())
+    # Singles are counted from the typed cells before Excluded cells are dropped (one cell per Single).
+    single_labels = cells.loc[cells['islet_num'].astype(str).str.startswith('Single_'), 'phenotype'].value_counts()
     excluded_in = cells.loc[cells['phenotype'] == 'Excluded', 'islet_num'].value_counts()
     census['excluded_reasons'] = {str(k): int(v) for k, v in
                                   cells.loc[cells.phenotype == 'Excluded', 'excluded_reason'].value_counts().items()}
@@ -166,12 +173,14 @@ def build_image(run: Path, out: Path, tag: str, case: str, donors: pd.DataFrame,
     census['analysed'] = int(len(cells))
 
     # objects, tissue, structures (pixel coordinates)
-    objs = []
+    objs, singles = [], []
     for f in features(run / 'islets' / f'{tag}.geojson'):
         p = f.get('properties') or {}
         c = (p.get('classification') or {}).get('name')
-        if c in CT.ENDOCRINE_OBJECTS and f.get('geometry'):
+        if c in ANALYSIS_OBJECTS and f.get('geometry'):
             objs.append((p['name'], c, valid(shape(f['geometry']))))
+        elif c == SINGLE and f.get('geometry'):
+            singles.append((p['name'], valid(shape(f['geometry']))))
     tissue = shapely.union_all([valid(shape(f['geometry'])) for f in features(run / 'inputs' / 'tissue' / f'{tag}.geojson')
                                 if ((f.get('properties') or {}).get('classification') or {}).get('name') == 'Tissue'])
     shapely.prepare(tissue)
@@ -321,6 +330,9 @@ def build_image(run: Path, out: Path, tag: str, case: str, donors: pd.DataFrame,
         for f in features(run / 'structures' / cls / f'{cls}__{tag}.geojson'):
             if f.get('geometry'):
                 gfeatures.append({'type': 'Feature', 'geometry': f['geometry'], 'properties': {'classification': {'name': cls}}})
+    for name, g in singles:
+        gfeatures.append({'type': 'Feature', 'geometry': mapping(g),
+                          'properties': {'name': name, 'object_class': SINGLE, 'classification': {'name': SINGLE}}})
     gfeatures.append({'type': 'Feature', 'geometry': mapping(tissue), 'properties': {'classification': {'name': 'Tissue'}}})
     with gzip.open(out / 'gson' / f'{int(cid):04d}.geojson.gz', 'wt') as fh:
         json.dump({'type': 'FeatureCollection', 'features': gfeatures}, fh)
@@ -341,7 +353,14 @@ def build_image(run: Path, out: Path, tag: str, case: str, donors: pd.DataFrame,
                                'immune_definition': cells['immune_definition'], 'cell_region': display_region,
                                'islet_name': display_name, 'x_um': xy_um[:, 0], 'y_um': xy_um[:, 1]})
     membership.to_parquet(out / 'cell_types' / f'{cid}.parquet', index=False)
-    census.update(objects=len(objs), objects_paired=len(obs), seconds=round(time.time() - t0))
+    in_single = cells['islet_num'].astype(str).str.startswith('Single_').to_numpy()
+    census.update(objects=len(objs), objects_paired=len(obs), tissue_area_mm2=tissue.area * PX ** 2 / 1e6,
+                  islets=sum(o[1] == 'Islet' for o in objs), clusters=sum(o[1] == 'EndocrineCluster' for o in objs),
+                  singles=len(singles), singles_analysed=int(in_single.sum()),
+                  singles_excluded=int(single_labels.get('Excluded', 0)),
+                  singles_in_peri_bands=int((in_single & (display_region == 'peri')).sum()),
+                  **{'singles_' + safe(l): int(single_labels.get(l, 0)) for l in ENDOCRINE},
+                  seconds=round(time.time() - t0))
     a = ad.AnnData(np.vstack(means).astype(np.float32), obs=pd.DataFrame(obs).set_index('islet_id', drop=False),
                    var=pd.DataFrame(index=MARKERS))
     a.obsm['phenotype_counts'] = np.asarray(counts, dtype=np.float32)
@@ -466,6 +485,13 @@ def main() -> int:
     pd.DataFrame([r for t in order for r in results[t]['unpaired']]).to_csv(reports / 'unpaired_objects.csv', index=False)
     census = pd.DataFrame([results[t]['census'] for t in order])
     census.to_csv(out / 'census.csv', index=False)
+    # Per-donor counts of every endocrine object class: the only place Singles enter the app.
+    by_donor = census[['case_id', 'tissue_area_mm2', 'islets', 'clusters', 'singles', 'singles_excluded']
+                      + ['singles_' + safe(l) for l in ENDOCRINE]].copy()
+    by_donor.insert(1, 'donor_status', [donor_fields(donors, r['case_id'])['Donor Status'] for r in rows])
+    for k in ('islets', 'clusters', 'singles'):
+        by_donor[k + '_per_mm2'] = by_donor[k] / by_donor['tissue_area_mm2']
+    by_donor.to_csv(out / 'endocrine_objects_by_donor.csv', index=False)
     md = pd.read_csv(a.donor_source / 'donor_metadata.csv', dtype={'case_id': str})
     assert_no_excluded(md.case_id, 'donor metadata')
     md.to_csv(out / 'donor_metadata.csv', index=False)
@@ -478,6 +504,7 @@ def main() -> int:
     (out / 'protein_phenotype_rules.csv').write_text((HERE / 'app_phenotype_rules.csv').read_text())
     rel = {'status': 'assembled_pending_owner_review', 'donors': len(rows), 'objects': int(combined.n_obs),
            'by_object_class': {str(k): int(v) for k, v in combined.obs.object_class.value_counts().items()},
+           'singles_counted_not_analysed': int(census.singles.sum()),
            'labels': LABELS, 'donor_correction': 'harmony', 'scvi_required': False, 'git_commit': head,
            'run': str(a.run.resolve()), 'scale_sha256': sha256(CT.typing_dir(a.run) / 'scale.parquet'),
            'shifts_sha256': sha256(CT.typing_dir(a.run) / 'shifts.json'),

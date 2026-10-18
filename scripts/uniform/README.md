@@ -262,8 +262,13 @@ $PY scripts/uniform/assemble_uniform.py --run $OUT --donor-source data/developme
     --output data/development/uniform-20donor-<date>-v<N> --report-root tmp/uniform-20donor-<date>-v<N>
 ```
 
-Every endocrine object (Islet_N, Cluster_N, Single_N) is a row with `object_class`. Its core is the cells whose
-centroid it contains. Its peri band is the 20 um ring inside Tissue, minus every endocrine object. Cells are
+Every Islet and Cluster (Islet_N, Cluster_N) is a row with `object_class`. Its core is the cells whose
+centroid it contains. Its peri band is the 20 um ring inside Tissue, minus every Islet and Cluster. Singles
+(Single_N) are not rows (owner, 2026-10-18: "Singles should not be included in any islet-level analysis except
+for quantifying or showing how many there are"): they have no core or band, signed distances ignore them, and
+their typed cell is an ordinary tissue cell, so it counts in a neighbouring object's band when it lies there.
+They are counted in `census.csv` and `endocrine_objects_by_donor.csv` (per donor: tissue area, Islets, Clusters,
+Singles, Singles by cell type, each class per mm2 of tissue) and drawn in `gson/` as `EndocrineSingle`. Cells are
 shown under the app's labels: Beta / Alpha / Delta cell; Endocrine; CD8a Tcell and CD4 Tcell (Senior's
 T-CD8 / T-CD4-helper); T cell; B cell; Macrophage; Immune (CD45-only or supporting tier); and the new
 Exocrine (the residual). Since 2026-10-17 there are no Blood Vessel, Neural or Lymphatic cells. Endocrine, T cell and Immune hold the cells left without a subtype; the app
@@ -279,7 +284,7 @@ autoantibodies, and the viewer image links. The embedding is Harmony protein PCA
 no cytoplasmic mean; X keeps the NaN, and the embedding is fitted with the marker's cohort mean in its place
 (`embedding_imputation.json`).
 
-The app reads `object_class` through an app-wide "Endocrine objects" selector (Islet / Cluster / Single). The
+The app reads `object_class` through an app-wide "Endocrine objects" selector (Islet / Cluster). The
 Trajectory tab does not use it: it fits every object with ten or more core cells (`total_cells_core` in
 `barlow_islet_features.csv`), whatever its class.
 
