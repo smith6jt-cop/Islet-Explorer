@@ -195,7 +195,13 @@ Departures, all for this panel (`typing/codex_typing.py`):
   tissue p99, because the level sits about 1.3x tissue background while islet hormone runs 15-86x it). The second
   hormone is a touching neighbour's: a cell's runner-up / top ratio is 4-7x larger when at least half its
   neighbours within 15 um have that runner-up as their top hormone (ND_6548 0.21 against 0.05), which is the boundary bleed
-  Senior's `typing/validate.py` records for tightly packed, cytoplasm-poor islet cells. No compartment removes it
+  Senior's `typing/validate.py` records for tightly packed, cytoplasm-poor islet cells. REDSEA, run with Senior's
+  parameters (`codex_typing.REDSEA`, identical to Senior's `config.py`), removes part of it: on ND_6548 the share of
+  typed endocrine cells with two hormones above their tissue p99 falls from 65 % (QuPath's uncorrected cytoplasm
+  means) to 41 %, the median runner-up / top ratio from 0.13 to 0.07, and the share under a 2x margin from 15 % to
+  11 % (Aab_6505 60 -> 35 %, 16 -> 12 %; T1D_6533 45 -> 30 %, 31 -> 23 %); UniFORM leaves all three unchanged.
+  Senior's RESTORE intensity step, which tested exactly this mutual-exclusivity premise, is retired in Senior
+  (2026-08-14, never-revive) and is not ported. No compartment removes it
   (raw nucleus, cytoplasm, cell and membrane means leave 13-37 % under a 2x margin; the REDSEA-corrected
   cytoplasm used here 11 %). So the approved method's resolution -- the strongest hormone names the cell -- now
   requires that hormone to be at least `HORMONE_MARGIN` = 2x the runner-up (Senior's confirmation margin,
