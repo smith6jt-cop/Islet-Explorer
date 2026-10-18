@@ -1,8 +1,9 @@
 parent,label,all_positive,any_positive,all_negative,note
-all,Beta cell,INS,,,"Inside an endocrine object. A cell is endocrine when a hormone, read over its own background in the image, clears the image's hormone level (the ordinary-tissue p99, lowered inside the objects to a 10% local false-discovery rate); it is named by its unique highest hormone on the cohort scale, here insulin. A Single's one cell is named by its unique highest hormone."
-all,Alpha cell,GCG,,,"As Beta cell, with glucagon the unique highest hormone."
-all,Delta cell,SST,,,"As Beta cell, with somatostatin the unique highest hormone."
-all,Endocrine,,INS|GCG|SST,,"Endocrine cell without a unique highest hormone (tied, or not every hormone measured). Counted in every total; not listed as a phenotype beside Beta, Alpha and Delta."
+all,Beta cell,INS,,GCG|SST,"Inside an Islet or Cluster. A cell is endocrine when a hormone, read over its own background in the image, clears the image's hormone level (the ordinary-tissue p99, lowered inside the objects to a 10% local false-discovery rate). The hormones are mutually exclusive (owner, 2026-10-18): it is named by its highest hormone on the cohort scale, here insulin, only when that hormone is at least twice the runner-up (Senior's confirmation margin); under the margin the cell is Excluded. A Single's one cell takes the same rule."
+all,Alpha cell,GCG,,INS|SST,"As Beta cell, with glucagon the highest hormone."
+all,Delta cell,SST,,INS|GCG,"As Beta cell, with somatostatin the highest hormone."
+all,CHGA+ hormone-negative,CHGA,,INS|GCG|SST,"Inside an Islet or Cluster: CHGA at or above the image's ordinary-tissue CHGA level (Senior's CD99 reference), and insulin, glucagon and somatostatin all measured and below the image's hormone level. Senior's Endo-hormone-negative (owner, 2026-10-18), called ahead of the immune rules."
+all,Endocrine,,INS|GCG|SST,,"Endocrine cell whose hormones were not all measured. Counted in every total; not listed as a phenotype beside Beta, Alpha and Delta."
 all,CD8a Tcell,CD3e|CD8a,,CD4|ECAD|panCK,"Immune T cell (CD3e >= 0.10 scaled, no epithelial marker) with Senior's T-CD8 subtype."
 all,CD4 Tcell,CD3e|CD4,,CD8a|ECAD|panCK,Immune T cell with Senior's T-CD4-helper subtype.
 all,T cell,CD3e,,ECAD|panCK,"T cell (CD3e >= 0.10 on the cohort scale, no epithelial marker) without a CD4 or CD8 subtype. Counted in every total; not listed beside CD8a and CD4 T cells."

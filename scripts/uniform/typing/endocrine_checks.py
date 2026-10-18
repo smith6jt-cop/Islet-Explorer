@@ -36,7 +36,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import codex_typing as CT  # noqa: E402
 import classify as CL  # noqa: E402
 
-ENDOCRINE = ('Beta', 'Alpha', 'Delta', 'Endocrine (unresolved subtype)', 'Endocrine (ambiguous subtype)')
+ENDOCRINE = ('Beta', 'Alpha', 'Delta', CT.HORMONE_NEGATIVE, 'Endocrine (unresolved subtype)',
+             'Endocrine (ambiguous subtype)')
 
 
 def main() -> int:

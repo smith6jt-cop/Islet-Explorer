@@ -22,6 +22,11 @@ per-donor levels. One image per donor here, so "per donor" is "per image".
               level can be fitted the hormone question of the first pass stands. A complete, unique positive
               hormone winner names Beta / Alpha / Delta; incomplete or zero comparisons are
               "Endocrine (unresolved subtype)", positive ties "Endocrine (ambiguous subtype)".
+  2b MUTUAL EXCLUSION (owner, 2026-10-18) inside the Islets and Clusters: a hormone-named cell (ties included)
+              whose strongest scaled hormone is under codex_typing.HORMONE_MARGIN x the runner-up is Excluded
+              (hormone_unresolved_margin); a cell with CHGA at the tissue CHGA level and all three hormones measured
+              and under the hormone level is "CHGA+ hormone-negative", ahead of the ordinary chain (Senior's
+              Endo-hormone-negative). Singles take the same margin.
   3 ORDINARY  every cell left: the immune definitions in name order (first firing wins; scaled >= 0.10, an
               unmeasured term is unknown, never negative), then the supporting tier (bottom-tier immune >= 0.8715
               while the exocrine markers stay below it), then Exocrine as the residual.
@@ -365,11 +370,14 @@ def direct_single_identity(values):
     top = safe.max(axis=1)
     usable = finite.any(axis=1) & (top > 0)
     tied = ((safe == top[:, None]) & finite).sum(axis=1) > 1
-    unique = usable & ~tied
+    runner_up = np.sort(np.where(finite, x, 0.0), axis=1)[:, -2] if len(markers) > 1 else np.zeros(len(x))
+    clear = top >= CT.HORMONE_MARGIN * np.maximum(runner_up, 0.0)          # owner 2026-10-18: resolve or exclude
+    unique = usable & ~tied & clear
     winner = safe.argmax(axis=1)
     names[unique] = np.asarray([CT.HORMONE_NAMES[m] for m in markers], dtype=object)[winner[unique]]
     status[unique] = 'unique_highest_hormone'
     status[usable & tied] = 'tied_highest_hormones'
+    status[usable & ~tied & ~clear] = 'hormone_margin_below_' + f'{CT.HORMONE_MARGIN:g}x'
     return names, status
 
 
@@ -462,6 +470,30 @@ def classify(tag: str, ctx: pd.DataFrame, aligned: pd.DataFrame, scale: pd.DataF
         exo_measured, rule_audit, unavailable_count)
     A['immune_rule_evidence'] = rule_audit
 
+    # Owner, 2026-10-18 (codex_typing.HORMONE_MARGIN / HORMONE_NEGATIVE). Within the Islets and Clusters:
+    # (1) a hormone-named cell whose strongest scaled hormone is under HORMONE_MARGIN x the runner-up is Excluded;
+    # (2) a cell with CHGA at the image's tissue CHGA level and every hormone measured and under the hormone level
+    #     is CHGA+ hormone-negative, whatever the ordinary chain called it (Senior: hormone, then CD99, then the rest).
+    objects = in_islet & ~structural & ~ctx['endocrine_object_class'].eq('EndocrineSingle').to_numpy()
+    named = objects & np.isin(cell_class, list(set(CT.HORMONE_NAMES.values()) | {ORDINARY_ENDOCRINE_NAMES[1]}))
+    unresolved = named & ~(horm['top'] >= CT.HORMONE_MARGIN * horm['runner_up'])
+    A['hormone_unresolved'] = {str(k): int(v) for k, v in pd.Series(cell_class[unresolved]).value_counts().items()}
+    cell_class[unresolved] = 'Excluded'
+    reason[unresolved] = CT.HORMONE_UNRESOLVED_REASON
+    resolved_by[unresolved] = 'excluded_hormone_margin'
+    endocrine[unresolved] = False
+    folds = np.column_stack([values.attrs['expressed'][m].to_numpy(dtype=float) / levels['hormone_reference'][m]
+                             for m in CT.HORMONES])
+    negative = (objects & horm['complete'] & (folds < levels['hormone']).all(axis=1)
+                & (chga >= levels[CT.LEVEL_MARKER]))
+    A['hormone_negative_from'] = {str(k): int(v) for k, v in pd.Series(cell_class[negative]).value_counts().items()}
+    cell_class[negative] = CT.HORMONE_NEGATIVE
+    reason[negative] = ''
+    definition[negative] = ''
+    resolved_by[negative] = 'chga_hormone_negative'
+    route[negative] = 'chga_hormone_negative'
+    endocrine[negative] = True
+
     single = ctx['endocrine_object_class'].eq('EndocrineSingle').to_numpy()
     single_name, single_status = direct_single_identity(values)
     cell_class[single] = single_name[single]
@@ -478,9 +510,11 @@ def classify(tag: str, ctx: pd.DataFrame, aligned: pd.DataFrame, scale: pd.DataF
     reason[single_excluded] = np.asarray(['endocrine_single_' + str(s) for s in single_status[single_excluded]],
                                          dtype=object)
     A['direct_endocrine_singles'] = {str(k): int(v) for k, v in pd.Series(single_status[single]).value_counts().items()}
+    endocrine_names.add(CT.HORMONE_NEGATIVE)
     ordinary = ~single & np.isin(cell_class, list(endocrine_names))
     subtype_status = np.where(ordinary, endocrine_status, '')
     subtype_status[single] = single_status[single]
+    subtype_status[negative] = 'chga_hormone_negative'
 
     A['n_endocrine_base'] = int((base_endocrine & open_islet).sum())
     A['n_endocrine'] = int(endocrine.sum())

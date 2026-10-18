@@ -61,9 +61,10 @@ MARKERS = ['CD31', 'CD8a', 'CD3e', 'SMA', 'CD4', 'CD34', 'HLADR', 'PDPN', 'panCK
            'VIM', 'CD20', 'LGALS3', 'B3TUBB', 'GCG', 'KRT14', 'GAP43', 'CD35', 'CHGA', 'PGP9.5', 'INS', 'CD44',
            'CD45', 'NaKATPase', 'BCatenin', 'CD68', 'BActin', 'CK19']          # the 31-marker panel, app order
 # No structure cell types since 2026-10-17 (codex_typing.STRUCTURE_CELL_CALLS); B cell since the same day.
-LABELS = ['Beta cell', 'Alpha cell', 'Delta cell', 'Endocrine', 'CD8a Tcell', 'CD4 Tcell', 'T cell', 'B cell',
-          'Macrophage', 'Immune', 'Exocrine']
-ENDOCRINE = ('Beta cell', 'Alpha cell', 'Delta cell', 'Endocrine')
+# CHGA+ hormone-negative since 2026-10-18 (codex_typing.HORMONE_NEGATIVE): an endocrine cell, in every endocrine total.
+LABELS = ['Beta cell', 'Alpha cell', 'Delta cell', 'CHGA+ hormone-negative', 'Endocrine', 'CD8a Tcell', 'CD4 Tcell',
+          'T cell', 'B cell', 'Macrophage', 'Immune', 'Exocrine']
+ENDOCRINE = ('Beta cell', 'Alpha cell', 'Delta cell', 'CHGA+ hormone-negative', 'Endocrine')
 IMMUNE = ('CD8a Tcell', 'CD4 Tcell', 'T cell', 'B cell', 'Macrophage', 'Immune')
 POS_MARKERS = ['INS', 'GCG', 'SST', 'CD3e', 'CD8a', 'CD4', 'CD20', 'CD68', 'CD163', 'HLADR', 'CD31', 'CD34', 'SMA',
                'PDPN', 'ECAD', 'panCK', 'CD45', 'CHGA']
@@ -109,6 +110,7 @@ def app_labels(calls: pd.DataFrame, immune: pd.DataFrame) -> np.ndarray:
     cls = calls['cell_class'].to_numpy(dtype=object)
     out = np.full(len(cls), '', dtype=object)
     direct = {'Beta': 'Beta cell', 'Alpha': 'Alpha cell', 'Delta': 'Delta cell',
+              CT.HORMONE_NEGATIVE: 'CHGA+ hormone-negative',
               'Endocrine (unresolved subtype)': 'Endocrine', 'Endocrine (ambiguous subtype)': 'Endocrine',
               'Blood vessel': 'Blood Vessel', 'Nerve': 'Neural', 'Lymphatic': 'Lymphatic', 'Exocrine': 'Exocrine',
               'Excluded': 'Excluded'}

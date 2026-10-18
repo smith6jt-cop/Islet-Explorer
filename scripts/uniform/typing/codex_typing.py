@@ -97,6 +97,18 @@ QC_EXCLUDES = ('missing_nucleus_geometry', 'nucleus_raster_empty', 'raster_empty
 HORMONES = ('INS', 'GCG', 'SST')
 HORMONE_NAMES = {'INS': 'Beta', 'GCG': 'Alpha', 'SST': 'Delta'}
 LEVEL_MARKER = 'CHGA'          # Senior's CD99
+# Owner, 2026-10-18: "These hormones are mutually exclusive so there needs to be resolution or exclusion based on the
+# approved islet cell typing methods ... We need to add a CHGA+INS-GCG-SST- cell type."
+# Resolution: the strongest scaled hormone names the cell only when it is at least HORMONE_MARGIN times the
+# runner-up (Senior's confirmation margin, islet_identity.REFERENCE_MARGIN). Below it the hormones cannot be told
+# apart -- on this segmentation the runner-up is mostly a touching neighbour's hormone (it is 4-7x larger when that
+# neighbour type surrounds the cell) -- and the cell is Excluded (HORMONE_UNRESOLVED_REASON).
+HORMONE_MARGIN = 2.0
+HORMONE_UNRESOLVED_REASON = 'hormone_unresolved_margin'
+# Senior's Endo-hormone-negative (celltype/run_islet.py, run_sameslide_protein.py: inside an islet, hormone, then
+# CD99, then everything else): inside an Islet or Cluster, CHGA at or above the image's ordinary-tissue CHGA level
+# and every hormone measured and below the image's hormone level.
+HORMONE_NEGATIVE = 'CHGA+ hormone-negative'
 # Senior's structure classes, strongest first. The objects here are the original project's pixel-classifier
 # annotations (Capillary on CD31, Nerve on B3TUBB and INS, Lymphatics on PDPN); Capillary is Senior's
 # "Blood vessel".
@@ -195,7 +207,7 @@ IMMUNE_LEVEL3 = {'Imm-T-cell': ('T-regulatory', 'T-exhausted', 'T-progenitor-mem
 # Refinement (typing/refine.py) defining markers, in this panel's names.
 OWN_MARKERS = {
     'Nerve': ('B3TUBB',), 'Lymphatic': ('PDPN',), 'Blood vessel': ('CD31', 'CD34'),
-    'Beta': ('INS',), 'Alpha': ('GCG',), 'Delta': ('SST',),
+    'Beta': ('INS',), 'Alpha': ('GCG',), 'Delta': ('SST',), HORMONE_NEGATIVE: ('CHGA',),
     'Immune': ('CD3e', 'CD68', 'CD20', 'CD45'), 'Exocrine': ('ECAD', 'panCK'),
 }
 

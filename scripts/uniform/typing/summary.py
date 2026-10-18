@@ -37,6 +37,8 @@ def main() -> int:
             'cells': audit['n_cells'] + audit['n_not_analysis_eligible'], 'analysis_eligible': audit['n_cells'],
             'in_endocrine_objects': checks[t]['cells_in_objects'],
             'Beta': cls.get('Beta', 0), 'Alpha': cls.get('Alpha', 0), 'Delta': cls.get('Delta', 0),
+            'CHGA_hormone_negative': cls.get(CT.HORMONE_NEGATIVE, 0),
+            'Excluded_hormone_unresolved': sum(audit.get('hormone_unresolved', {}).values()),
             'Endocrine_unresolved': cls.get('Endocrine (unresolved subtype)', 0)
             + cls.get('Endocrine (ambiguous subtype)', 0),
             'Excluded': cls.get('Excluded', 0), 'Excluded_chga': ex.get('chga', 0),

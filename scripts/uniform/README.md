@@ -187,6 +187,27 @@ Departures, all for this panel (`typing/codex_typing.py`):
   as the second required positive and requires CD3e, CD68, E-cadherin and panCK absent: 2-795 B cells per image,
   the T1D donors highest (T1D_6534 795, T1D_6533 716, T1D_6520 393), against 0-1,182 in the earlier typing
   (1,182, 651, 357). Reading CD20 over each image's epithelial background instead left 0-10 on 11 of the 15.
+- **Mutually exclusive hormones and CHGA+ hormone-negative cells (owner, 2026-10-18).** "These hormones are
+  mutually exclusive so there needs to be resolution or exclusion based on the approved islet cell typing methods.
+  The 'only' and 'at all' designations are not biology, they are indicators of technical problems that need to be
+  solved. We need to add a CHGA+INS-GCG-SST- cell type." Measured first: at the hormone level, 18-38 % of the
+  typed endocrine cells in the objects cleared it for two or more hormones (37 % on ND_6548 even at the unlowered
+  tissue p99, because the level sits about 1.3x tissue background while islet hormone runs 15-86x it). The second
+  hormone is a touching neighbour's: a cell's runner-up / top ratio is 4-7x larger when at least half its
+  neighbours within 15 um have that runner-up as their top hormone (ND_6548 0.21 against 0.05), which is the boundary bleed
+  Senior's `typing/validate.py` records for tightly packed, cytoplasm-poor islet cells. No compartment removes it
+  (raw nucleus, cytoplasm, cell and membrane means leave 13-37 % under a 2x margin; the REDSEA-corrected
+  cytoplasm used here 11 %). So the approved method's resolution -- the strongest hormone names the cell -- now
+  requires that hormone to be at least `HORMONE_MARGIN` = 2x the runner-up (Senior's confirmation margin,
+  `islet_identity.REFERENCE_MARGIN`); under it the cell is Excluded (`hormone_unresolved_margin`), Singles
+  included. That excluded 11,095 cells in the objects (4,288 Alpha, 3,546 Beta, 3,182 Delta, 79 ties; 5 % in 1-3
+  cell objects to 12 % in islets of 30-100 cells) and moves the Beta share of endocrine cells by at most 2 points
+  per status. Senior's Endo-hormone-negative is added as **CHGA+ hormone-negative**: inside an Islet or Cluster,
+  CHGA at or above the image's tissue CHGA level and all three hormones measured and below the hormone level,
+  called ahead of the immune rules as Senior's islet cascade orders it (hormone, then CD99, then the rest): 2,350
+  cells, 6-433 per image (2,235 formerly Excluded, 115 formerly Immune). It counts as an endocrine cell. The
+  composition table's per-hormone positivity fields (`Ins_any`, `Ins_single`, `Multi_Pos`, ...) are kept only as
+  that technical indicator; the app does not show them.
 - **The hormone level (2026-10-17, for the Aab_6558 open item).** Senior admits a cell inside an object when
   max(scaled INS, GCG, SST) clears the tissue p99 of that max. Here each hormone is first divided by its own
   ordinary-tissue p99 in the image (so the cohort scale no longer pits INS against GCG's background), and inside
