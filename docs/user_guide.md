@@ -209,7 +209,7 @@ The Plot tab is the primary exploration interface. It has a **sidebar** (left) a
 - **AAb Filter**: Filter by autoantibody positivity (when available)
 - **Age Range**: Slider to restrict donor age (H5AD only)
 - **Sex**: Checkbox filter (H5AD only)
-- **Endocrine objects** (above the tabs): choose Islets, Clusters and/or Singles. This replaced the Min cells/islet filter on 2026-10-17; every tab uses the selected classes.
+- **Endocrine objects** (above the tabs): choose Islets, Clusters and/or Singles. This replaced the Min cells/islet filter on 2026-10-17; every tab except Trajectory uses the selected classes (Trajectory fits every object with 10 or more core cells).
 - **Diameter Range**: Restrict islet diameter in μm
 
 ### Main Panel
@@ -292,9 +292,9 @@ The Trajectory tab uses a full-width layout (no sidebar). All controls are inlin
   - *Cell Count* sizes points by `sqrt(total_cells)` — small islets (3-10 cells) appear as tiny dots, large islets (100+ cells) as large dots. This honestly represents measurement quality.
 - **Point transparency**: 0 (fully opaque) to 0.95 (highly transparent). Default 0.4. Moving the slider right increases transparency.
 - **Point size**: Base point size slider (0.5-5.0)
-- **Cells per islet range**: Two-ended range with a default lower bound of 10 and a
-  data-derived upper bound. This is not a display-only filter: changing either bound
-  refits pseudotime and the PAGA layout on that cohort.
+- **Fitted objects** (fixed, no control): every endocrine object with 10 or more core
+  cells, whatever its class (Islet, Cluster or Single), following Barlow et al.'s
+  threshold. The Endocrine objects selector of the other tabs is hidden here.
 
 ### Cell-Count-Weighted Trends
 

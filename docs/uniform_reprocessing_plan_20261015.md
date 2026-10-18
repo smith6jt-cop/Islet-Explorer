@@ -35,7 +35,8 @@ cohort from the uniform run, with nothing appended to the frozen release. The cu
 and 10,113 endocrine objects (1,491 islets, 3,415 clusters and 5,207 singles), of which 9,496 have analysed cells
 in both core and 20 um band. That is 3.08 million analysed cells, with 24,692 Excluded and 320,737 without a
 nucleus. The app serves all three object classes behind an app-wide selector (A5), which since 2026-10-17 also
-replaces every minimum-cells control (the Trajectory refits on the selected classes). Local checks on v3: 232 R
+replaces every minimum-cells control. The Trajectory instead fits every object with ten or more core cells,
+whatever its class (owner, 2026-10-18). Local checks on v3: 232 R
 tests pass. The browser harness passed 37 of 45 checks on v1 and v2, including the 20-donor census, no donor 78
 and the Harmony method. The four Viewer checks need the
 Range-capable image route that only the nginx deployment provides. The other four (PAGA render and download,
@@ -57,7 +58,10 @@ audited 43,000 um2). Details in [the README](../scripts/uniform/README.md).
 be": structure cell calls are off (the structures stay as objects and areas), and B cells are called on CD20 with
 CD45 in place of CD79a (2-795 per image). "Remove the minimum cells control sliders and wire all functions to the
 new classifications": the Plot, Spatial and Trajectory minimum-cells controls are gone; the Islet / Cluster /
-Single selection decides which objects every tab uses.
+Single selection decides which objects every tab uses. Follow-up 2026-10-18, "Use 10 or more cells as the
+cutoff instead of a category": the Trajectory fits every object with ten or more core cells (1,265 objects:
+1,242 Islets and 23 Clusters; ρ with the beta-cell ratio −0.70, against −0.20 on all objects), and the class
+selector is hidden on that tab.
 
 ## Cohort
 

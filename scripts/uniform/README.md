@@ -279,7 +279,9 @@ autoantibodies, and the viewer image links. The embedding is Harmony protein PCA
 no cytoplasmic mean; X keeps the NaN, and the embedding is fitted with the marker's cohort mean in its place
 (`embedding_imputation.json`).
 
-The app reads `object_class` through an app-wide "Endocrine objects" selector (Islet / Cluster / Single).
+The app reads `object_class` through an app-wide "Endocrine objects" selector (Islet / Cluster / Single). The
+Trajectory tab does not use it: it fits every object with ten or more core cells (`total_cells_core` in
+`barlow_islet_features.csv`), whatever its class.
 
 ## Canary, 2026-10-15
 

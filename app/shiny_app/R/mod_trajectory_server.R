@@ -42,16 +42,16 @@ traj_pt_extent <- function(pt, jitter_frac = 0.012) {
 # reintroduce the axis-instability defect (docs/trajectory.md), which was the
 # axis moving as a side effect of changing the Y-axis FEATURE -- that still
 # cannot happen, and is regression-tested.
-traj_pseudotime_column <- function(obs, cell_range = c(1, Inf), object_classes = NULL) {
+traj_pseudotime_column <- function(obs, cell_range = c(TRAJ_MIN_CELLS, Inf)) {
   lo <- cell_range[1]; hi <- cell_range[2]
-  # Only the selected endocrine-object classes are fitted; the others get no pseudotime.
-  # scanpy DPT is primary. The destiny implementation is the fallback if scanpy
+  # Every object with at least TRAJ_MIN_CELLS core cells is fitted, whatever its class; the rest get no
+  # pseudotime. scanpy DPT is primary. The destiny implementation is the fallback if scanpy
   # is unreachable from reticulate. PAGA/ForceAtlas2 is the two-dimensional graph
   # card; it is not the pseudotime algorithm itself.
-  bp <- compute_scanpy_pseudotime(lo, hi, object_classes)
+  bp <- compute_scanpy_pseudotime(lo, hi)
   engine <- "scanpy diffusion pseudotime"
   if (is.null(bp)) {
-    bp <- compute_barlow_pseudotime(lo, hi, object_classes)
+    bp <- compute_barlow_pseudotime(lo, hi)
     engine <- "destiny diffusion-pseudotime fallback"
   }
   if (is.null(bp)) {
@@ -87,9 +87,7 @@ apply_pt_scale <- function(df, pt_scale) {
 trajectory_server <- function(id, prepared, selected_islet, forced_image, active_tab = reactive("Trajectory"),
                               donor_colors_reactive = reactive(DONOR_COLORS_BRIGHT),
                               remove_outliers = reactive(FALSE),
-                              outlier_threshold = reactive(3.0),
-                              object_classes = reactive(NULL)) {
-  # `object_classes` is the app-wide endocrine-object selection (NULL = all; see OBJECT_CLASSES).
+                              outlier_threshold = reactive(3.0)) {
   # `remove_outliers` / `outlier_threshold` are accepted but UNUSED: app.R still
   # passes them to every analysis module, and changing that signature is a wider
   # edit than this tab. The Trajectory tab no longer exposes or applies them.
@@ -115,16 +113,11 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
     # ---------- Reactive state ----------
     traj <- reactiveVal(NULL)
     traj_load_attempted <- reactiveVal(FALSE)
-    # The fitted cohort is every object of the selected endocrine-object classes (owner, 2026-10-17: the
-    # Islet / Cluster / Single designations replace the cells-per-islet range). The range plumbing below stays
-    # as an always-full range so the cohort filters remain explicit no-ops.
-    applied_cell_range <- function() c(1, Inf)
-    object_class_label <- reactive({
-      cl <- object_classes()
-      if (is.null(cl)) return("all endocrine objects")
-      lab <- names(OBJECT_CLASSES)[match(cl, OBJECT_CLASSES)]
-      if (!length(lab)) "no endocrine objects" else paste(lab, collapse = " + ")
-    })
+    # The fitted cohort is every endocrine object with at least TRAJ_MIN_CELLS core cells, of any class
+    # (owner, 2026-10-18: "Use 10 or more cells as the cutoff instead of a category"). The app-wide
+    # Islet / Cluster / Single selection does not apply here, and is hidden on this tab.
+    applied_cell_range <- function() c(TRAJ_MIN_CELLS, Inf)
+    cohort_label <- function() sprintf("objects with %d or more core cells", TRAJ_MIN_CELLS)
 
     # ---------- Lazy H5AD loader ----------
     observe({
@@ -186,7 +179,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       # the live axis is recomputed from the composition feature table.
       cols <- intersect(
         c("combined_islet_id", "base_islet_id", "donor_status", "Case ID",
-          "case_id", "imageid", "age", "gender", "total_cells"),
+          "case_id", "imageid", "age", "gender", "total_cells", "total_cells_core"),
         colnames(obs)
       )
       obs2 <- as.data.frame(obs[, cols, drop = FALSE])
@@ -236,9 +229,9 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         # Seconds to tens of seconds depending on how many islets are in range.
         # Without a progress bar the tab simply freezes and reads as a hang.
         message = "Computing pseudotime",
-        detail = sprintf("object-composition diffusion map, %s", object_class_label()),
+        detail = sprintf("object-composition diffusion map, %s", cohort_label()),
         value = 0.4,
-        traj_pseudotime_column(obs, rng, object_classes()))
+        traj_pseudotime_column(obs, rng))
       pseudotime_engine <- attr(pt, "engine") %||% "unavailable"
       pseudotime_n <- as.integer(attr(pt, "n_islets") %||% 0L)
       obs$pseudotime <- as.numeric(pt)
@@ -294,8 +287,8 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         scale = sprintf("Pseudotime scale: %s",
                         if (identical(input$pt_scale %||% "rank", "raw"))
                           "raw diffusion pseudotime" else "rank-normalized within fitted cohort"),
-        range = sprintf("Endocrine objects: %s (the %s-object cohort used to fit pseudotime)",
-                        object_class_label(), format(n, big.mark = ",")),
+        range = sprintf("Fitted cohort: %s (%s objects)",
+                        cohort_label(), format(n, big.mark = ",")),
         measure = paste("Selected measure:", selected_measure_label())
       )
     })
@@ -482,6 +475,8 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         value = as.numeric(expression_vals),
         feature_name = selected_feature,
         total_cells = as.integer(obs_df$total_cells),
+        # The fit's cutoff counts core cells; `total_cells` (core + peri) only sizes and weights points.
+        cells_core = as.integer(obs_df$total_cells_core %||% obs_df$total_cells),
         stringsAsFactors = FALSE
       )
 
@@ -554,8 +549,8 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       # intentionally redundant with the NA pseudotime mask and prevents a key
       # mismatch from leaking an out-of-range islet into the plot.
       cr <- applied_cell_range()
-      if ("total_cells" %in% colnames(result_df)) {
-        tc <- suppressWarnings(as.integer(result_df$total_cells))
+      if ("cells_core" %in% colnames(result_df)) {
+        tc <- suppressWarnings(as.integer(result_df$cells_core))
         result_df <- result_df[is.finite(tc) & tc >= cr[1] & tc <= cr[2], , drop = FALSE]
         if (nrow(result_df) == 0) return(NULL)
       }
@@ -608,8 +603,8 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
 
       tags$div(style = "color: #555; font-size: 12px; margin-bottom: 10px;",
         title = paste("Source:", basename(src)),
-        sprintf("Islets: %s total | %s fitted",
-          format(nrow(tr$obs), big.mark = ","), format(nfit, big.mark = ","))
+        sprintf("Endocrine objects: %s total | %s fitted (%d or more core cells, any class)",
+          format(nrow(tr$obs), big.mark = ","), format(nfit, big.mark = ","), TRAJ_MIN_CELLS)
       )
     })
 
@@ -1403,7 +1398,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       result <- data.frame(
         pt_raw = as.numeric(tr$obs$pseudotime),
         pt_rank = if (!is.null(tr$obs$pt_rank)) as.numeric(tr$obs$pt_rank) else NA_real_,
-        total_cells = as.integer(tr$obs$total_cells),
+        cells_core = as.integer(tr$obs$total_cells_core %||% tr$obs$total_cells),
         stringsAsFactors = FALSE)
       result <- cbind(result, as.data.frame(expr))
       result <- result[is.finite(result$pt_raw), , drop = FALSE]
@@ -1411,9 +1406,9 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       # Enforce the fitted cell-count cohort (matches traj_data_clean).
       cr <- applied_cell_range()
       {
-        result <- result[is.finite(result$total_cells) &
-                         result$total_cells >= cr[1] &
-                         result$total_cells <= cr[2], , drop = FALSE]
+        result <- result[is.finite(result$cells_core) &
+                         result$cells_core >= cr[1] &
+                         result$cells_core <= cr[2], , drop = FALSE]
         if (nrow(result) == 0) return(NULL)
       }
 
@@ -1423,7 +1418,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       # that traj_data_clean applies).
       result$pt <- result$pt_raw
       result <- apply_pt_scale(result, input$pt_scale %||% "rank")
-      result$total_cells <- NULL
+      result$cells_core <- NULL
       result$pt_raw <- NULL
       result$pt_rank <- NULL
 
@@ -1611,9 +1606,9 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       if (!paga_available()) return(NULL)
       withProgress(
         message = "Computing PAGA layout",
-        detail = sprintf("Leiden + ForceAtlas2, %s", object_class_label()),
+        detail = sprintf("Leiden + ForceAtlas2, %s", cohort_label()),
         value = 0.4,
-        paga_result(cr[1], cr[2], object_classes()))
+        paga_result(cr[1], cr[2]))
     })
 
     output$paga_note <- renderUI({
@@ -1690,7 +1685,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       g <- g +
         labs(x = "Layout dim 1", y = "Layout dim 2",
              title = sprintf("PAGA force-directed layout — %s objects (%s)",
-                             format(nrow(d), big.mark = ","), object_class_label())) +
+                             format(nrow(d), big.mark = ","), cohort_label())) +
         theme_islet() +
         # Layout coordinates are unitless and isotropic: 1 unit across must equal
         # 1 unit up, or the graph structure is visually sheared.
@@ -1713,7 +1708,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
     output$dl_paga_csv <- downloadHandler(
       filename = function() sprintf(
         "paga_layout_%s_%s.csv",
-        gsub("[^A-Za-z]+", "-", object_class_label()),
+        sprintf("min%dcells", TRAJ_MIN_CELLS),
         format(Sys.time(), "%Y%m%d_%H%M%S")),
       content = function(file) {
         d <- paga_data()
@@ -1726,8 +1721,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
           sprintf("Neighbors: cosine, %d NN | Leiden resolution %g | layout %s",
                   15L, 1.0, attr(d, "layout_key") %||% "(n/a)"),
           "Root: ND islet nearest the ND centroid in diffusion space",
-          sprintf("Endocrine objects: %s (rebuilds the embedding, not a display filter)",
-                  object_class_label()),
+          sprintf("Fitted cohort: %s, any object class", cohort_label()),
           "fa_1 / fa_2 are unitless layout coordinates; only relative position is meaningful",
           paste("Rows:", nrow(out), "islets")
         ))

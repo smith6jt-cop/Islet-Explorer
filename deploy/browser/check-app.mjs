@@ -328,25 +328,18 @@ try {
     await page.click('#tabs a[data-value="Trajectory"]');
     // The cells-per-islet range is gone (owner, 2026-10-17); the endocrine-object classes select the fitted
     // cohort. Unticking Cluster and Single must refit on Islets alone, and ticking them restores the full cohort.
-    await check('trajectory_refits_on_object_classes', async () => {
+    // The trajectory fits every object with ten or more core cells, of any class: the class selector is hidden
+    // on this tab and the status line names the cutoff.
+    await check('trajectory_fits_ten_cell_objects', async () => {
       await rendered(page, '#traj-traj_scatter', 'plotly');
-      const fitted = () => page.$eval('#traj-traj_status', el => {
-        const m = el.textContent.replace(/,/g, '').match(/(\d+) fitted/); return m ? Number(m[1]) : -1; });
-      const before = await fitted();
-      const toggle = values => page.evaluate(vals => vals.forEach(v => {
-        document.querySelector(`#object_classes input[value="${v}"]`)?.click(); }), values);
-      await toggle(['EndocrineCluster', 'EndocrineSingle']);
-      await page.waitForFunction(old => {
-        const m = document.querySelector('#traj-traj_status')?.textContent.replace(/,/g, '').match(/(\d+) fitted/);
-        return m && Number(m[1]) !== old && Number(m[1]) > 0;
-      }, { timeout: 180000 }, before);
-      const islets = await fitted();
-      await toggle(['EndocrineCluster', 'EndocrineSingle']);
-      await page.waitForFunction(old => {
-        const m = document.querySelector('#traj-traj_status')?.textContent.replace(/,/g, '').match(/(\d+) fitted/);
-        return m && Number(m[1]) === old;
-      }, { timeout: 180000 }, before);
-      return { passed: islets > 0 && islets < before, before, islets };
+      return page.evaluate(() => {
+        const status = document.querySelector('#traj-traj_status')?.textContent.replace(/,/g, '') || '';
+        const m = status.match(/(\d+) total \| (\d+) fitted \(10 or more core cells/);
+        const selector = document.querySelector('#object_classes');
+        const hidden = !selector || selector.offsetParent === null;
+        return { passed: Boolean(m) && Number(m[2]) > 0 && Number(m[2]) < Number(m[1]) && hidden,
+                 total: m ? Number(m[1]) : null, fitted: m ? Number(m[2]) : null, selector_hidden: hidden };
+      });
     });
   }
 

@@ -257,11 +257,14 @@ SHOW_STATISTICS_TAB <- identical(Sys.getenv("SHOW_STATISTICS_TAB", "0"), "1")
 # (rho -0.70 to -0.73 above 25 cells/islet, against -0.57 for the scVI variants)
 # and the least compressed axis. See app/shiny_app/docs/trajectory.md.
 #
-# The pseudotime is computed on the CURRENT endocrine-object selection (Islet / Cluster / Single, chosen above
-# the tabs), not on a fixed set: the selection is part of the definition, so changing it refits the diffusion
-# map rather than filtering a frozen axis. The cells-per-islet range slider it replaced was removed on
-# 2026-10-17 (owner: "Now that there are designations for islet, clusters, and single cells, remove the minimum
-# cells control sliders and wire all functions to the new classifications").
+# The pseudotime is fitted on every endocrine object with at least TRAJ_MIN_CELLS core cells, whatever its
+# class (Islet / Cluster / Single); the app-wide class selection does not apply to it. Barlow et al. 2024 fitted
+# islets of ten or more cells. On the uniform root that is 1,265 objects (1,242 Islets, 23 Clusters), with
+# rho(pseudotime, beta-cell ratio) -0.70; fitted on every object it was -0.20, because one- to few-cell objects
+# carry almost no composition to order. The user-set cells-per-islet range slider was removed on 2026-10-17;
+# the fixed cutoff replaced the class selection on 2026-10-18 (owner: "Use 10 or more cells as the cutoff
+# instead of a category").
+TRAJ_MIN_CELLS <- 10L
 
 
 # AI chat card: OFF, so it is both disabled and hidden. Gating rather than
@@ -993,7 +996,8 @@ object_classes_help <- function() {
   shiny::tags$p(shiny::tags$strong("Endocrine objects."),
     " The selector above the tabs applies to every tab. An Islet has two or more whole cells and is at least ",
     "35 µm across (the mean of its largest and smallest caliper diameter); a Cluster has two or more cells ",
-    "and is smaller; a Single is one endocrine cell. Rows, plots and the trajectory use only the selected classes.")
+    "and is smaller; a Single is one endocrine cell. Rows and plots use only the selected classes. The ",
+    "Trajectory tab instead fits every object with ten or more core cells, whatever its class.")
 }
 
 #' Help paragraph on how cells are typed, shared by every tab's help popover.

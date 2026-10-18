@@ -6,8 +6,9 @@
 > v1 and v2 are superseded: hormone level, the additions' structure objects, no structure cell types, B cells), built
 > by `scripts/uniform/assemble_uniform.py`. All 20 donors are retyped with the Islet-Explorer-Senior method. Rows
 > are endocrine objects of three classes (`Islet_N`, `Cluster_N`, `Single_N`; `object_class`). An app-wide
-> checkbox group `object_classes` (app.R) filters `prepared()` via `filter_prepared_by_object_class()`; the
-> Trajectory tab passes it to `compute_scanpy_pseudotime` / `compute_barlow_pseudotime` / `paga_result`.
+> checkbox group `object_classes` (app.R) filters `prepared()` via `filter_prepared_by_object_class()`. The
+> Trajectory tab ignores it (and app.R hides it there): it fits every object with `TRAJ_MIN_CELLS` = 10 or more
+> core cells, of any class (owner, 2026-10-18).
 > `add_islet_key` and `trajectory_link_key` accept all three prefixes (`ISLET_KEY_PATTERN`). Endocrine, T cell
 > and Immune hold the cells left without a subtype there, but stay retired from every selector and legend, as
 > general classes beside their subtypes (owner, 2026-10-17); `Exocrine` is new. A root without `object_class` is
@@ -111,9 +112,11 @@ See [`docs/statistics.md`](docs/statistics.md) for full details — the Jul 2026
 
 ### Reviewer Trajectory (Aug 2026)
 
-There is one trajectory, recomputed on the endocrine-object classes selected above the tabs (Islet /
-Cluster / Single; since 2026-10-17 — the two-ended `cell_range` slider and Recalculate button are gone, owner:
-"remove the minimum cells control sliders and wire all functions to the new classifications"). `traj_pseudotime_column()` uses scanpy DPT when available and
+There is one trajectory, fitted on every endocrine object with `TRAJ_MIN_CELLS` = 10 or more core cells,
+whatever its class (owner, 2026-10-18: "Use 10 or more cells as the cutoff instead of a category"). The
+user-set `cell_range` slider and Recalculate button were removed 2026-10-17; the app-wide Islet / Cluster /
+Single selector does not apply to this tab and is hidden on it. Fitted on all classes the axis barely tracked
+the beta-cell ratio (ρ −0.20 vs −0.70 at the cutoff). `traj_pseudotime_column()` uses scanpy DPT when available and
 falls back explicitly to destiny; `traj_with_pseudotime()` carries the actual engine
 and fitted-islet count into the UI and CSV provenance. PAGA/ForceAtlas2 is the separate
 two-dimensional graph card, not the name of the one-dimensional axis. The Y axis switches

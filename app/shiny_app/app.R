@@ -427,9 +427,12 @@ ui <- fluidPage(
     # (2026-10-17); the hidden Statistics tab reads them from there.
     column(width = 12, class = "equal-height-panel main-content-panel",
       id = "main-content", role = "main", tabindex = "-1",
-      div(class = "object-class-filter", style = "margin: 4px 0 6px; font-size: 15px;",
-        checkboxGroupInput("object_classes", "Endocrine objects",
-                           choices = OBJECT_CLASSES, selected = unname(OBJECT_CLASSES), inline = TRUE)),
+      # The Trajectory tab fits objects of ten or more core cells whatever their class, so the class
+      # selector is hidden there (owner, 2026-10-18).
+      conditionalPanel("input.tabs !== 'Trajectory'",
+        div(class = "object-class-filter", style = "margin: 4px 0 6px; font-size: 15px;",
+          checkboxGroupInput("object_classes", "Endocrine objects",
+                             choices = OBJECT_CLASSES, selected = unname(OBJECT_CLASSES), inline = TRUE))),
       tabsetPanel(id = "tabs",
         tabPanel("Plot",
           fluidRow(
@@ -632,8 +635,7 @@ server <- function(input, output, session) {
   # Trajectory module
   trajectory_server("traj", prepared, selected_islet, forced_image, active_tab, active_donor_colors,
                     remove_outliers = remove_outliers_global,
-                    outlier_threshold = outlier_z_global,
-                    object_classes = object_classes)
+                    outlier_threshold = outlier_z_global)
 
   # Viewer module
   viewer_server("viewer", forced_image, reactive(input$tabs))

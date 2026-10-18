@@ -450,11 +450,15 @@ Aab+ at several thresholds, which anchors the axis in the wrong stage.
 
 ### Cells-per-islet is a RANGE, and it defines the axis
 
-> **Superseded 2026-10-17.** The `cell_range` slider and Recalculate button were removed at the owner's
-> direction; the endocrine-object classes chosen above the tabs (Islet / Cluster / Single) now define the
-> fitted cohort, and the trajectory refits when they change. On the uniform root 84% of Islets have ten or more
-> analysed cells and under 1% of Clusters do, so Islets alone is the nearest match to Barlow's threshold. The
-> section below is the historical record.
+> **Superseded 2026-10-17 / 2026-10-18.** The `cell_range` slider and Recalculate button were removed at the
+> owner's direction (2026-10-17). For one day the endocrine-object classes chosen above the tabs (Islet /
+> Cluster / Single) defined the fitted cohort; fitted on all three, ρ(pseudotime, core beta-cell ratio) was only
+> −0.20 with the status medians barely separated, because one- to few-cell objects carry almost no composition.
+> Since 2026-10-18 (owner: "Use 10 or more cells as the cutoff instead of a category") the trajectory fits every
+> object with at least `TRAJ_MIN_CELLS` = 10 core cells, whatever its class, and the class selector is hidden on
+> the Trajectory tab. On the uniform v3 root that is 1,265 of 9,496 objects (1,242 Islets, 23 Clusters):
+> ρ = −0.70, median pseudotime ND 0.31 < Aab+ 0.39 < T1D 0.75; PAGA takes 10 s. The section below is the
+> historical record.
 
 The old `min_cells` numericInput is replaced by a two-ended slider, `cell_range`, defaulting to
 **10 - <largest islet>** (1,902 cells; read from the data by `traj_max_islet_cells()`, with a

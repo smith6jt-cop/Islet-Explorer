@@ -4,7 +4,11 @@ trajectory_ui <- function(id) {
     singleton(tags$script(src = "trajectory-links.js")),
     tags$style(HTML(".trajectory-linked-plot.html-widget.plotly { padding-top: 0; margin-top: 28px; }")),
     tab_help("Trajectory help", "show_phenotype_rules_traj",
-      object_classes_help(),
+      tags$p(tags$strong("Fitted objects."),
+             " Every endocrine object with ten or more core cells, whatever its class, as in Barlow et al. 2024,",
+             " who fitted islets of ten or more cells. The Endocrine objects selector of the other tabs does not",
+             " apply here and is hidden. Objects with fewer cells carry too little make-up to order: fitted on",
+             " every object, the pseudotime barely tracked the beta-cell ratio."),
       tags$p(tags$strong("Controls."),
              " Data controls choose what is fitted and plotted; View controls change how it is drawn. Click a",
              " panel's title to open or close it. The heatmap and PAGA cards keep their own selectors."),
@@ -17,11 +21,8 @@ trajectory_ui <- function(id) {
              " Features that do not vary are dropped (peri-islet endocrine values are always zero). Objects are",
              " linked to their 15 nearest neighbours by cosine distance. The root is the ND object nearest the centre",
              " of the ND objects in diffusion components 1-3, and the direction is set so the beta-cell ratio falls",
-             " along pseudotime. It is refitted whenever the endocrine-object selection changes; objects of the",
-             " classes not selected get no pseudotime. Barlow et al. fitted islets of ten or more cells; selecting",
-             " Islets alone comes closest (84% of Islets have ten or more analysed cells, under 1% of Clusters).",
-             " Objects with the same make-up (common among Singles and Clusters) are fitted once and share a",
-             " pseudotime."),
+             " along pseudotime. Objects with fewer than ten core cells get no pseudotime. Objects with the same",
+             " make-up are fitted once and share a pseudotime."),
       tags$p(tags$strong("Reading it."),
              " The orientation is a modelling choice, and an ordering of objects along it does not show disease",
              " progression; donor differences can shape it. Rank-normalized spreads objects evenly from 0 to 1; Raw",
@@ -39,12 +40,12 @@ trajectory_ui <- function(id) {
       tags$p(tags$strong("PAGA layout."),
              " Barlow et al.'s PAGA-initialised force-directed layout of the same graph (cosine, 15 neighbours,",
              " Leiden resolution 1). Each point is an object; the axes are layout coordinates with no units, so only",
-             " relative position means anything. It is built on request and rebuilt when the object selection changes."),
+             " relative position means anything. It is built on request, on the same objects as the pseudotime."),
       cell_typing_help()),
     fluidRow(column(12,
       control_panel("Data controls", open = TRUE,
-      # The fitted cohort is the endocrine-object classes chosen above the tabs (no cells-per-islet range
-      # since 2026-10-17); the status line reports how many objects were fitted.
+      # The fitted cohort is every object with TRAJ_MIN_CELLS or more core cells (since 2026-10-18); the
+      # status line reports how many objects were fitted.
       uiOutput(ns("traj_status")),
       fluidRow(
         column(4,
