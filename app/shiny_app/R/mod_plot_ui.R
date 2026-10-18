@@ -30,6 +30,10 @@ plot_main_ui <- function(id, extra_panel = NULL) {
                " Unchecking an autoantibody removes the Aab+ donors positive for it (ND and T1D donors are not",
                " affected). Exclude outliers drops objects whose robust z-score (median and MAD within",
                " each donor status) passes the threshold; the setting is shared with the Spatial tab."),
+        if (!is.null(load_object_counts())) tags$p(tags$strong("Endocrine objects per donor."),
+               " The card at the bottom counts Islets, Clusters and Singles in each donor's section, as a count or",
+               " per mm\u00b2 of tissue, with the donor median per status; Singles by cell type splits each donor's",
+               " Singles by the type of their one cell. It follows the Donor status filter, not the object selector."),
         tags$p(tags$strong("Selecting an object."),
                " Turn on \"Show individual points\", then click a point on the Islet Size Distribution scatter to open",
                " its segmentation map and single cells below. With \"Color points by\" set to Donor ID, click a donor",
@@ -183,6 +187,8 @@ plot_main_ui <- function(id, extra_panel = NULL) {
     # Full-width card below both plot cards: segmentation/drill-down viewer
     column(12,
       uiOutput(ns("segmentation_viewer_panel"))
-    )
+    ),
+    # Per-donor counts of each endocrine object class (uniform root only): the one place Singles are shown.
+    if (!is.null(load_object_counts())) column(12, object_counts_card_ui(ns))
   )
 }

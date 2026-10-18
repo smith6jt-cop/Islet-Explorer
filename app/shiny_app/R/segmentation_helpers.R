@@ -164,7 +164,7 @@ get_classification_name <- function(geojson) {
 # GeoJSON polygons are in pixel coordinates, so we convert um -> pixels
 get_islet_region_polygons <- function(geojson, centroid_x_um, centroid_y_um, buffer_um = 200) {
   if (!SF_AVAILABLE || is.null(geojson) || nrow(geojson) == 0) {
-    return(list(Islet = NULL, IsletExpanded = NULL, Nerve = NULL, Capillary = NULL, Lymphatic = NULL))
+    return(list(Islet = NULL, IsletExpanded = NULL, EndocrineSingle = NULL, Nerve = NULL, Capillary = NULL, Lymphatic = NULL))
   }
 
   # Convert micrometers to pixels for GeoJSON query
@@ -201,7 +201,7 @@ get_islet_region_polygons <- function(geojson, centroid_x_um, centroid_y_um, buf
   })
 
   if (is.null(bbox_polygon)) {
-    return(list(Islet = NULL, IsletExpanded = NULL, Nerve = NULL, Capillary = NULL, Lymphatic = NULL))
+    return(list(Islet = NULL, IsletExpanded = NULL, EndocrineSingle = NULL, Nerve = NULL, Capillary = NULL, Lymphatic = NULL))
   }
 
   # Find features that intersect with the bounding box
@@ -215,7 +215,7 @@ get_islet_region_polygons <- function(geojson, centroid_x_um, centroid_y_um, buf
   cropped <- geojson[intersects, ]
 
   if (nrow(cropped) == 0) {
-    return(list(Islet = NULL, IsletExpanded = NULL, Nerve = NULL, Capillary = NULL, Lymphatic = NULL))
+    return(list(Islet = NULL, IsletExpanded = NULL, EndocrineSingle = NULL, Nerve = NULL, Capillary = NULL, Lymphatic = NULL))
   }
 
   # Get classification names
@@ -223,7 +223,8 @@ get_islet_region_polygons <- function(geojson, centroid_x_um, centroid_y_um, buf
 
   # Extract by classification
   result <- list()
-  for (cls in c("Islet", "IsletExpanded", "Nerve", "Capillary", "Lymphatic")) {
+  # EndocrineSingle: a uniform root's Singles, drawn for context only (they are not analysis objects).
+  for (cls in c("Islet", "IsletExpanded", "EndocrineSingle", "Nerve", "Capillary", "Lymphatic")) {
     matches <- grepl(paste0("^", cls, "$"), cls_names, ignore.case = TRUE)
     if (any(matches)) {
       result[[cls]] <- cropped[matches, ]
@@ -645,16 +646,16 @@ build_segmentation_base_plot <- function(info, buffer_um = 150,
 
   # Display names for legend
   display_names <- c(
-    "Islet" = "Islet", "IsletExpanded" = "Peri Boundary",
+    "Islet" = "Islet", "IsletExpanded" = "Peri Boundary", "EndocrineSingle" = "Single endocrine cell",
     "Nerve" = "Nerve", "Capillary" = "Capillary", "Lymphatic" = "Lymphatic"
   )
   display_colors <- c(
-    "Islet" = "#0066CC", "Peri Boundary" = "#00CCCC",
+    "Islet" = "#0066CC", "Peri Boundary" = "#00CCCC", "Single endocrine cell" = "#E69F00",
     "Nerve" = "#CC00CC", "Capillary" = "#CC0000", "Lymphatic" = "#00AA00"
   )
 
   # Combine all visible polygons into one sf with a structure_type column
-  layer_order <- c("IsletExpanded", "Islet", "Lymphatic", "Capillary", "Nerve")
+  layer_order <- c("IsletExpanded", "Islet", "EndocrineSingle", "Lymphatic", "Capillary", "Nerve")
   poly_list <- list()
   for (cls in layer_order) {
     if (cls %in% skip_classes) next

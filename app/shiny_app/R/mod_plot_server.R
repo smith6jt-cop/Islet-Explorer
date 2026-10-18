@@ -390,7 +390,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         dplyr::filter(!is.na(value))
 
       # No min-cells filter since 2026-10-17: the endocrine-object classes chosen above the tabs (Islet /
-      # Cluster / Single) select the objects, through prepared().
+      # Cluster) select the objects, through prepared().
 
       # Apply diameter range filter
       if (!is.null(input$diam_range) && length(input$diam_range) == 2) {
@@ -1244,6 +1244,34 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
     # its OWN zero-exclusion checkbox (`exclude_zero_dist`), independent of the
     # main scatter's, so its export must come from `dist_data()` and not from
     # the summary chain above.
+    # ---------- Endocrine objects per donor (object_counts.R) ----------
+    object_counts_data <- reactive({
+      d <- load_object_counts()
+      if (is.null(d)) return(NULL)
+      d[d$donor_status %in% validated_groups(), , drop = FALSE]
+    })
+
+    output$object_counts_plot <- renderPlotly({
+      d <- object_counts_data()
+      if (is.null(d) || nrow(d) == 0) return(plotly_islet_empty("No donors selected"))
+      object_counts_plot(d, input$object_count_measure %||% "singles_per_mm2", donor_colors_reactive())
+    })
+
+    output$dl_object_counts <- downloadHandler(
+      filename = function() paste0("endocrine_objects_per_donor_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".csv"),
+      content = function(file) {
+        d <- object_counts_data()
+        write_islet_csv(file, d, islet_csv_header(
+          "Plot — endocrine objects per donor",
+          paste("Donor status:", paste(validated_groups(), collapse = ", ")),
+          "Islet: >= 2 whole cells and >= 35 um; Cluster: >= 2 cells, smaller; Single: one endocrine cell",
+          "Singles are counted only; they are not analysis objects",
+          "singles_excluded: the Single's cell has no unique highest hormone; singles_not_analysed: it has no nucleus",
+          "*_per_mm2: objects per mm2 of the section's tissue outline",
+          paste("Rows:", if (is.null(d)) 0 else nrow(d), "donors")))
+      }
+    )
+
     output$dl_distribution_csv <- downloadHandler(
       filename = function() {
         paste0("distribution_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".csv")

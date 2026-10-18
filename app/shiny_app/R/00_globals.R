@@ -258,7 +258,7 @@ SHOW_STATISTICS_TAB <- identical(Sys.getenv("SHOW_STATISTICS_TAB", "0"), "1")
 # and the least compressed axis. See app/shiny_app/docs/trajectory.md.
 #
 # The pseudotime is fitted on every endocrine object with at least TRAJ_MIN_CELLS core cells, whatever its
-# class (Islet / Cluster / Single); the app-wide class selection does not apply to it. Barlow et al. 2024 fitted
+# class (Islet / Cluster); the app-wide class selection does not apply to it. Barlow et al. 2024 fitted
 # islets of ten or more cells. On the uniform root that is 1,265 objects (1,242 Islets, 23 Clusters), with
 # rho(pseudotime, beta-cell ratio) -0.70; fitted on every object it was -0.20, because one- to few-cell objects
 # carry almost no composition to order. The user-set cells-per-islet range slider was removed on 2026-10-17;
@@ -793,7 +793,8 @@ phenotype_rules_modal_ui <- function() {
         shiny::tags$p("All 20 donors are typed by one workflow: the Islet-Explorer-Senior cell typing, ported to ",
           "this CODEX panel. Marker values are spillover-corrected (REDSEA), aligned between images (UniFORM) and ",
           "put on one cohort scale from background to the 99.9th percentile."),
-        shiny::tags$p("Endocrine cells are called only inside an endocrine object (Islet, Cluster or Single). Nerve, ",
+        shiny::tags$p("Endocrine cells are called only inside an endocrine object (Islet, Cluster or Single; a ",
+          "Single is then counted, not analysed, and its cell treated as a tissue cell). Nerve, ",
           "capillary and lymphatic structures are areas (the Plot tab's Microenvironment layer), not cell types. ",
           "Immune rules count a marker at 0.10 or above on the cohort scale. Every other cell is Exocrine, the ",
           "residual class (acinar, ductal, stromal, endothelial and neural cells together); residual cells inside an ",
@@ -996,8 +997,11 @@ object_classes_help <- function() {
   shiny::tags$p(shiny::tags$strong("Endocrine objects."),
     " The selector above the tabs applies to every tab. An Islet has two or more whole cells and is at least ",
     "35 µm across (the mean of its largest and smallest caliper diameter); a Cluster has two or more cells ",
-    "and is smaller; a Single is one endocrine cell. Rows and plots use only the selected classes. The ",
-    "Trajectory tab instead fits every object with ten or more core cells, whatever its class.")
+    "and is smaller. Rows and plots use only the selected classes. The Trajectory tab instead fits every object ",
+    "with ten or more core cells, whatever its class. A Single (one endocrine cell outside any islet or cluster) ",
+    "is not an analysis object: it has no core or peri-islet band, and its cell is an ordinary tissue cell, which ",
+    "may fall in a neighbouring object's band. Singles are only counted (the Plot tab's Endocrine objects per ",
+    "donor card) and drawn on the segmentation map.")
 }
 
 #' Help paragraph on how cells are typed, shared by every tab's help popover.
@@ -1087,8 +1091,11 @@ phenotype_hint_ui <- function(name, prefix = "Markers:",
 PHENOTYPE_RETIRED <- c("Endocrine", "Acinar", "Endothelial", "T cell",
                        "Immune", "Unknown", "ECAD+", "Structural", "APCs")
 
-# Endocrine object classes of the uniform workflow (owner A5, 2026-10-16: all three, with a filter).
-OBJECT_CLASSES <- c("Islet" = "Islet", "Cluster" = "EndocrineCluster", "Single" = "EndocrineSingle")
+# Endocrine object classes analysed by the app (owner A5, 2026-10-16, with a filter). Singles (one endocrine cell)
+# are not analysis objects (owner, 2026-10-18: "Singles should not be included in any islet-level analysis except
+# for quantifying or showing how many there are"); a uniform root counts them in endocrine_objects_by_donor.csv
+# and draws them on the segmentation map.
+OBJECT_CLASSES <- c("Islet" = "Islet", "Cluster" = "EndocrineCluster")
 
 #' Cache-key suffix for an object-class selection (NULL = all classes).
 object_class_key <- function(object_classes) {

@@ -31,10 +31,11 @@ all 20 images is in `$OUT/typing/`; see [the README](../scripts/uniform/README.m
 
 **App root, 2026-10-16 (P4 built, awaiting review).** `scripts/uniform/assemble_uniform.py` builds the whole
 cohort from the uniform run, with nothing appended to the frozen release. The current build is
-`data/development/uniform-20donor-20261017-v3/` (v1 and v2 are superseded by the fixes below). It holds 20 donors
-and 10,113 endocrine objects (1,491 islets, 3,415 clusters and 5,207 singles), of which 9,496 have analysed cells
-in both core and 20 um band. That is 3.08 million analysed cells, with 24,692 Excluded and 320,737 without a
-nucleus. The app serves all three object classes behind an app-wide selector (A5), which since 2026-10-17 also
+`data/development/uniform-20donor-20261018-v4/` (v1-v3 are superseded by the fixes below). It holds 20 donors
+and 10,113 endocrine objects (1,491 islets, 3,415 clusters and 5,207 singles). Islets and clusters with analysed
+cells in both core and 20 um band are the 4,791 analysis rows (1,488 islets, 3,303 clusters). Singles are only
+counted (v4, below). That is 3.08 million analysed cells, with 24,692 Excluded and 320,737 without a
+nucleus. The app serves Islets and Clusters behind an app-wide selector (A5), which since 2026-10-17 also
 replaces every minimum-cells control. The Trajectory instead fits every object with ten or more core cells,
 whatever its class (owner, 2026-10-18). Local checks on v3: 232 R
 tests pass. The browser harness passed 37 of 45 checks on v1 and v2, including the 20-donor census, no donor 78
@@ -58,10 +59,20 @@ audited 43,000 um2). Details in [the README](../scripts/uniform/README.md).
 be": structure cell calls are off (the structures stay as objects and areas), and B cells are called on CD20 with
 CD45 in place of CD79a (2-795 per image). "Remove the minimum cells control sliders and wire all functions to the
 new classifications": the Plot, Spatial and Trajectory minimum-cells controls are gone; the Islet / Cluster /
-Single selection decides which objects every tab uses. Follow-up 2026-10-18, "Use 10 or more cells as the
+Cluster selection decides which objects every tab uses. Follow-up 2026-10-18, "Use 10 or more cells as the
 cutoff instead of a category": the Trajectory fits every object with ten or more core cells (1,265 objects:
 1,242 Islets and 23 Clusters; ρ with the beta-cell ratio −0.70, against −0.20 on all objects), and the class
 selector is hidden on that tab.
+
+**Owner ruling, 2026-10-18 (v4).** "There should not be any singles in the core. Singles should not be included
+in any islet-level analysis except for quantifying or showing how many there are since a single cell cannot also
+include immune cells or vessels/nerves/lymphatics." Singles are no longer rows, cores, bands or signed-distance
+targets; their typed cell is an ordinary tissue cell (1,264 of them lie in an islet's or cluster's 20 um band and
+count there). `endocrine_objects_by_donor.csv` counts every class per donor and per mm2 of tissue (median Singles
+per mm2: ND 10.0, Aab+ 19.0, T1D 32.7), shown in the Plot tab's "Endocrine objects per donor" card; the
+segmentation map draws them. Of the 5,207 Singles, 4,720 cells are typed (1,081 Beta, 2,533 Alpha, 1,106 Delta),
+472 are Excluded and 15 have no nucleus. The trajectory still fits 1,265 objects (rho -0.69, ND 0.30 < Aab+ 0.38
+< T1D 0.74).
 
 ## Cohort
 

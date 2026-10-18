@@ -326,8 +326,6 @@ try {
 
   if (options.expanded === 'true') {
     await page.click('#tabs a[data-value="Trajectory"]');
-    // The cells-per-islet range is gone (owner, 2026-10-17); the endocrine-object classes select the fitted
-    // cohort. Unticking Cluster and Single must refit on Islets alone, and ticking them restores the full cohort.
     // The trajectory fits every object with ten or more core cells, of any class: the class selector is hidden
     // on this tab and the status line names the cutoff.
     await check('trajectory_fits_ten_cell_objects', async () => {
@@ -339,6 +337,17 @@ try {
         const hidden = !selector || selector.offsetParent === null;
         return { passed: Boolean(m) && Number(m[2]) > 0 && Number(m[2]) < Number(m[1]) && hidden,
                  total: m ? Number(m[1]) : null, fitted: m ? Number(m[2]) : null, selector_hidden: hidden };
+      });
+    });
+    // Singles are counted, not analysed (owner, 2026-10-18): no Single choice in the object selector, and the
+    // Plot tab's per-donor card shows them.
+    await page.click('#tabs a[data-value="Plot"]');
+    await check('singles_counted_not_analysed', async () => {
+      await rendered(page, '#plot-object_counts_plot', 'plotly');
+      return page.evaluate(() => {
+        const choices = [...document.querySelectorAll('#object_classes input')].map(el => el.value);
+        const traces = document.querySelector('#plot-object_counts_plot')?.data?.length || 0;
+        return { passed: !choices.includes('EndocrineSingle') && choices.length === 2 && traces > 0, choices, traces };
       });
     });
   }

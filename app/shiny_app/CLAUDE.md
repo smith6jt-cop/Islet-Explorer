@@ -2,10 +2,15 @@
 
 > **2026-10-15:** donor 78 (HDL078 / HPAP-078) is removed from the app. `ISLET_EXCLUDED_DONORS` in `00_globals.R` (kept in step with `scripts/excluded_donors.csv` by a pipeline test) makes `load_shared_prepared_data()` refuse a data root that contains it, and the Viewer never lists its image. The local app is offline at the owner's direction until the reprocessed root is accepted; the last served root was `data/development/protein-expanded-20261015-v3/`.
 
-> **2026-10-16 uniform root (awaiting owner review):** `data/development/uniform-20donor-20261017-v3/` (2026-10-17;
-> v1 and v2 are superseded: hormone level, the additions' structure objects, no structure cell types, B cells), built
+> **2026-10-16 uniform root (awaiting owner review):** `data/development/uniform-20donor-20261018-v4/` (2026-10-18;
+> v1-v3 are superseded: hormone level, the additions' structure objects, no structure cell types, B cells, Singles
+> counted only), built
 > by `scripts/uniform/assemble_uniform.py`. All 20 donors are retyped with the Islet-Explorer-Senior method. Rows
-> are endocrine objects of three classes (`Islet_N`, `Cluster_N`, `Single_N`; `object_class`). An app-wide
+> are endocrine objects of two classes (`Islet_N`, `Cluster_N`; `object_class`). Since v4 (2026-10-18) Singles
+> are not rows, regions or distance targets (owner: "Singles should not be included in any islet-level analysis
+> except for quantifying or showing how many there are"): they are counted in `endocrine_objects_by_donor.csv`
+> (the Plot tab's "Endocrine objects per donor" card, `R/object_counts.R`) and drawn as `EndocrineSingle` outlines
+> on the segmentation map. An app-wide
 > checkbox group `object_classes` (app.R) filters `prepared()` via `filter_prepared_by_object_class()`. The
 > Trajectory tab ignores it (and app.R hides it there): it fits every object with `TRAJ_MIN_CELLS` = 10 or more
 > core cells, of any class (owner, 2026-10-18).

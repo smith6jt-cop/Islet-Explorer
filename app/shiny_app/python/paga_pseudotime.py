@@ -87,7 +87,7 @@ def _range_values(min_cells, max_cells):
 
 
 def _classes(object_classes):
-    """The endocrine-object classes to fit on (Islet / EndocrineCluster / EndocrineSingle); None = all."""
+    """The endocrine-object classes to fit on (Islet / EndocrineCluster); None = all."""
     if object_classes is None:
         return None
     if isinstance(object_classes, str):

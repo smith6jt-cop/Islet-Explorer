@@ -23,7 +23,7 @@ safe_left_join <- function(x, y, by, context = "join") {
   )
 }
 
-# Endocrine object names: Islet_N, Cluster_N, Single_N (the uniform workflow's three object classes).
+# Endocrine object names: Islet_N, Cluster_N (and Single_N, which a v3 or earlier uniform root still holds as rows).
 ISLET_KEY_PATTERN <- "(Islet|Cluster|Single)_\\d+"
 
 add_islet_key <- function(df) {

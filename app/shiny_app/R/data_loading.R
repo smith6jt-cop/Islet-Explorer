@@ -225,7 +225,8 @@ prep_data <- function(master) {
   comp <- master$comp %>% add_islet_key() %>% dplyr::filter(!is.na(islet_key))
   comp <- comp %>% dplyr::select(dplyr::all_of(c("Case ID", "Donor Status")), dplyr::all_of(aab_cols_comp), islet_key, cells_total, Ins_single, Glu_single, Stt_single,
                           Multi_Pos, Triple_Neg, Ins_any, Glu_any, Stt_any, dplyr::any_of("object_class"))
-  # Endocrine object class (uniform root: Islet / EndocrineCluster / EndocrineSingle). A root without it holds
+  # Endocrine object class (uniform root: Islet / EndocrineCluster; Singles are not rows since 2026-10-18). A
+  # root without it holds
   # islets only. Carried onto the region tables so one app-wide selection filters every table.
   if (!"object_class" %in% names(comp)) comp$object_class <- "Islet"
   object_class_of <- dplyr::distinct(comp[, c("Case ID", "islet_key", "object_class")])

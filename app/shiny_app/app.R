@@ -492,9 +492,9 @@ server <- function(input, output, session) {
 
   # Immutable process-wide object; reactive() preserves the existing module
   # interface without repeating I/O or prep_data() for each reviewer.
-  # The app-wide endocrine-object selection (owner A5): Islet, EndocrineCluster, EndocrineSingle. Every tab reads
-  # prepared(), so filtering it here is the one place the selection applies; the Trajectory tab's own feature
-  # table takes it through `object_classes`.
+  # The app-wide endocrine-object selection (owner A5): Islet, EndocrineCluster (Singles are counted, not analysed,
+  # since 2026-10-18). Every tab but Trajectory reads prepared(), so filtering it here is the one place the
+  # selection applies; the Trajectory tab fits objects of ten or more core cells instead.
   object_classes <- reactive(as.character(input$object_classes %||% character(0)))
   prepared <- reactive(filter_prepared_by_object_class(.shared_prepared_data, object_classes()))
 
