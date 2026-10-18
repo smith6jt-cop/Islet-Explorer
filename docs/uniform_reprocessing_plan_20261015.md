@@ -31,11 +31,11 @@ all 20 images is in `$OUT/typing/`; see [the README](../scripts/uniform/README.m
 
 **App root, 2026-10-16 (P4 built, awaiting review).** `scripts/uniform/assemble_uniform.py` builds the whole
 cohort from the uniform run, with nothing appended to the frozen release. The current build is
-`data/development/uniform-20donor-20261018-v4/` (v1-v3 are superseded by the fixes below). It holds 20 donors
+`data/development/uniform-20donor-20261018-v5/` (v1-v4 are superseded by the fixes below). It holds 20 donors
 and 10,113 endocrine objects (1,491 islets, 3,415 clusters and 5,207 singles). Islets and clusters with analysed
-cells in both core and 20 um band are the 4,791 analysis rows (1,488 islets, 3,303 clusters). Singles are only
-counted (v4, below). That is 3.08 million analysed cells, with 24,692 Excluded and 320,737 without a
-nucleus. The app serves Islets and Clusters behind an app-wide selector (A5), which since 2026-10-17 also
+cells in both core and 20 um band are the 4,763 analysis rows on v5 (1,487 islets, 3,276 clusters). Singles are only
+counted (v4, below). That is 3.07 million analysed cells, with 33,843 Excluded (11,095 for an unresolved hormone, v5) and
+320,737 without a nucleus. The app serves Islets and Clusters behind an app-wide selector (A5), which since 2026-10-17 also
 replaces every minimum-cells control. The Trajectory instead fits every object with ten or more core cells,
 whatever its class (owner, 2026-10-18). Local checks on v4 (2026-10-18): 232 R tests pass, and the browser
 harness passes all 45 checks against a shiny-server instance with the local service's configuration
@@ -43,7 +43,7 @@ harness passes all 45 checks against a shiny-server instance with the local serv
 cannot, so the four Viewer checks fail there. The PAGA and Plot vocabulary checks were brought up to the
 2026-10-14 app (PAGA built on request; hormone-positivity fractions withdrawn). The local env file now sets
 `RETICULATE_PYTHON` to the app venv, which has `fa2-modified` (the scvi-env interpreter in the service unit does
-not, so PAGA silently fell back to Fruchterman-Reingold). The build report is `tmp/uniform-20donor-20261018-v4/`.
+not, so PAGA silently fell back to Fruchterman-Reingold). The build report is `tmp/uniform-20donor-20261018-v5/`; on v5 the harness again passes 45 of 45.
 
 **The two open items, 2026-10-17** (owner: "use common sense and available tools to resolve the scaling and
 threshold"). (1) Aab_6558's Excluded cells inside objects: its INS stain is weak (2.4x its tissue p99 in the
@@ -73,6 +73,14 @@ per mm2: ND 10.0, Aab+ 19.0, T1D 32.7), shown in the Plot tab's "Endocrine objec
 segmentation map draws them. Of the 5,207 Singles, 4,720 cells are typed (1,081 Beta, 2,533 Alpha, 1,106 Delta),
 472 are Excluded and 15 have no nucleus. The trajectory still fits 1,265 objects (rho -0.69, ND 0.30 < Aab+ 0.38
 < T1D 0.74).
+
+**Owner ruling, 2026-10-18 (v5).** "These hormones are mutually exclusive so there needs to be resolution or
+exclusion based on the approved islet cell typing methods. The 'only' and 'at all' designations are not biology,
+they are indicators of technical problems that need to be solved. We need to add a CHGA+INS-GCG-SST- cell type."
+The second hormone is neighbour bleed (see [the README](../scripts/uniform/README.md)); a hormone now names a cell
+only at 2x the runner-up (Senior's confirmation margin), else the cell is Excluded (11,095), and CHGA+
+hormone-negative is a cell type (2,350; mean share of Islet endocrine cells ND 2.3 %, Aab+ 2.8 %, T1D 4.7 %). The
+trajectory fits 1,215 objects (rho -0.67; ND 0.29 < Aab+ 0.36 < T1D 0.73).
 
 ## Cohort
 

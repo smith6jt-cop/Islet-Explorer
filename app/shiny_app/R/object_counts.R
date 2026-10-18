@@ -13,10 +13,10 @@ OBJECT_COUNT_MEASURES <- c(
   "Singles (count)" = "singles",
   "Singles by cell type (count)" = "singles_by_type")
 
-# The Single's one cell: its typed label, Excluded (no unique highest hormone), or not analysed (no nucleus;
+# The Single's one cell: its typed label, Excluded (strongest hormone under 2x the next), or not analysed (no nucleus;
 # computed in load_object_counts()). A Single's cell is never left as Endocrine without a subtype.
 SINGLE_TYPE_COLUMNS <- c("Beta cell" = "singles_Beta_cell", "Alpha cell" = "singles_Alpha_cell",
-                         "Delta cell" = "singles_Delta_cell", "Excluded (no unique top hormone)" = "singles_excluded",
+                         "Delta cell" = "singles_Delta_cell", "Excluded (hormone unresolved)" = "singles_excluded",
                          "Not analysed (no nucleus)" = "singles_not_analysed")
 
 load_object_counts <- local({

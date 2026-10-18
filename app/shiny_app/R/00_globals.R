@@ -727,7 +727,7 @@ format_phenotype_rule <- function(name, style = c("inline", "html", "plain")) {
 # Order in which phenotypes are shown in the reference modal — endocrine first,
 # then immune (T cell subtypes grouped), then structural/endothelial, residuals last.
 PHENOTYPE_DISPLAY_ORDER <- c(
-  "Beta cell", "Alpha cell", "Delta cell", "Endocrine",
+  "Beta cell", "Alpha cell", "Delta cell", "CHGA+ hormone-negative", "Endocrine",
   "Acinar", "Ductal", "Exocrine",
   "T cell", "CD8 T cell", "CD4 T cell", "B cell",
   "Macrophage", "Dendritic cell", "Immune", "APCs",
@@ -794,7 +794,10 @@ phenotype_rules_modal_ui <- function() {
           "this CODEX panel. Marker values are spillover-corrected (REDSEA), aligned between images (UniFORM) and ",
           "put on one cohort scale from background to the 99.9th percentile."),
         shiny::tags$p("Endocrine cells are called only inside an endocrine object (Islet, Cluster or Single; a ",
-          "Single is then counted, not analysed, and its cell treated as a tissue cell). Nerve, ",
+          "Single is then counted, not analysed, and its cell treated as a tissue cell). Insulin, glucagon and ",
+          "somatostatin are mutually exclusive: the strongest names the cell only when it is at least twice the ",
+          "next, otherwise the cell is excluded. A CHGA+ cell with no hormone above the image's level is CHGA+ ",
+          "hormone-negative. Nerve, ",
           "capillary and lymphatic structures are areas (the Plot tab's Microenvironment layer), not cell types. ",
           "Immune rules count a marker at 0.10 or above on the cohort scale. Every other cell is Exocrine, the ",
           "residual class (acinar, ductal, stromal, endothelial and neural cells together); residual cells inside an ",
@@ -1013,11 +1016,13 @@ cell_typing_help <- function() {
   }
   shiny::tags$p(shiny::tags$strong("Cell labels."),
     " Every cell of all 20 donors is typed by one workflow. The phenotypes listed are Beta, Alpha and Delta cell, ",
-    "CD8a and CD4 T cell, B cell, Macrophage and Exocrine (the residual class). Nerve, capillary and lymphatic ",
-    "structures are areas, not cell types. Cells left without a subtype (endocrine cells without a unique top ",
-    "hormone, T cells without CD4 or CD8, other leukocytes) count in every total but are not listed. Residual cells ",
-    "inside an endocrine object and cells without a nucleus are left out. ",
-    "Endocrine cells are called only inside endocrine objects, so peri-islet endocrine values are zero.")
+    "CHGA+ hormone-negative (an endocrine cell with no hormone), CD8a and CD4 T cell, B cell, Macrophage and ",
+    "Exocrine (the residual class). Nerve, capillary and lymphatic structures are areas, not cell types. The ",
+    "hormones are mutually exclusive: a cell whose strongest hormone is under twice the next one is excluded. Cells ",
+    "left without a subtype (T cells without CD4 or CD8, other leukocytes) count in every total but are not listed. ",
+    "Residual cells inside an endocrine object and cells without a nucleus are left out. Endocrine cells are called ",
+    "inside Islets and Clusters, and Singles' cells keep their hormone type, so a peri-islet band holds endocrine ",
+    "cells only where a Single lies in it.")
 }
 
 tab_help <- function(title, rules_input_id, ...) {
@@ -1160,10 +1165,13 @@ phenotype_marker_definitions <- function(path = data_path("protein_phenotype_rul
 #' Help-popover block listing the retained phenotypes' marker definitions.
 # The listed phenotypes of the uniform root, in words (the full rule table is in the rules modal).
 UNIFORM_PHENOTYPE_DEFINITIONS <- c(
-  "Beta cell" = paste("inside an endocrine object, a cell admitted as endocrine whose unique highest hormone is",
-                      "insulin (a Single's one cell: its unique highest hormone)"),
-  "Alpha cell" = "as Beta cell, with glucagon the unique highest hormone",
-  "Delta cell" = "as Beta cell, with somatostatin the unique highest hormone",
+  "Beta cell" = paste("inside an Islet or Cluster, a cell admitted as endocrine whose highest hormone is insulin, at",
+                      "least twice the next hormone (a cell under that margin is excluded: the hormones are mutually",
+                      "exclusive, and the runner-up is mostly a touching neighbour's hormone)"),
+  "Alpha cell" = "as Beta cell, with glucagon the highest hormone",
+  "Delta cell" = "as Beta cell, with somatostatin the highest hormone",
+  "CHGA+ hormone-negative" = paste("inside an Islet or Cluster, CHGA at or above the image's tissue CHGA level",
+                                   "and insulin, glucagon and somatostatin all below the image's hormone level"),
   "CD8a Tcell" = "CD3e+ and CD8a+, CD4\u2212, no epithelial marker (E-cadherin, panCK)",
   "CD4 Tcell" = "CD3e+ and CD4+, CD8a\u2212, no epithelial marker",
   "B cell" = "CD20+ and CD45+, CD3e\u2212, CD68\u2212, no epithelial marker",

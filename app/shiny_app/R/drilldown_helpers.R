@@ -9,6 +9,7 @@ PHENOTYPE_COLORS <- c(
   "Beta cell"     = "#E63946",  # red
   "Alpha cell"    = "#F4A261",  # orange
   "Delta cell"    = "#E9C46A",  # gold
+  "CHGA+ hormone-negative" = "#6D597A",  # muted plum
   "Endocrine"     = "#D4A373",  # tan
   "Acinar"        = "#A8DADC",  # light teal
   "Exocrine"     = "#A8DADC",  # Senior's residual class: the Acinar colour
@@ -35,6 +36,7 @@ PHENOTYPE_COLORS_HIGH_CONTRAST <- c(
   "Beta cell"     = "#D32F2F",  # deep red
   "Alpha cell"    = "#FF8F00",  # amber
   "Delta cell"    = "#FDD835",  # bright yellow
+  "CHGA+ hormone-negative" = "#5E35B1",  # deep purple
   "Endocrine"     = "#8D6E63",  # brown
   "Acinar"        = "#00ACC1",  # cyan
   "Exocrine"     = "#00ACC1",  # Senior's residual class: the Acinar colour
@@ -61,6 +63,7 @@ PHENOTYPE_COLORS_COLORBLIND <- c(
   "Beta cell"     = "#CC6677",  # rose
   "Alpha cell"    = "#DDCC77",  # sand
   "Delta cell"    = "#999933",  # olive
+  "CHGA+ hormone-negative" = "#661100",  # dark red
   "Endocrine"     = "#AA4499",  # purple
   "Acinar"        = "#44AA99",  # teal
   "Exocrine"     = "#44AA99",  # Senior's residual class: the Acinar colour
@@ -87,6 +90,7 @@ PHENOTYPE_COLORS_MAX_DISTINCT <- c(
   "Beta cell"     = "#BE0032",  # vivid red
   "Alpha cell"    = "#F3C300",  # vivid yellow
   "Delta cell"    = "#875692",  # strong purple
+  "CHGA+ hormone-negative" = "#882D17",  # reddish brown
   "Endocrine"     = "#F38400",  # vivid orange
   "Acinar"        = "#A1CAF1",  # very light blue
   "Exocrine"     = "#A1CAF1",  # Senior's residual class: the Acinar colour

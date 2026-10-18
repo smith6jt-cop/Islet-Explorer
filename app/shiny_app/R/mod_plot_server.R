@@ -584,12 +584,14 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         paste0(class_name, " vs Islet Size")
       } else {
         wsel <- selection
+        # extract_phenotype_from_column() turns the sanitised peri / combined stems ("Beta_cell",
+        # "CHGAplus_hormone-negative") back into the phenotype's label.
         if (startsWith(wsel, "combined_prop_")) {
-          nm <- paste0(gsub("^combined_prop_", "", wsel), " core+peri proportion")
+          nm <- paste0(extract_phenotype_from_column(wsel), " core+peri proportion")
         } else if (startsWith(wsel, "peri_prop_")) {
-          nm <- paste0(gsub("^peri_prop_", "", wsel), " peri-islet proportion")
+          nm <- paste0(extract_phenotype_from_column(wsel), " peri-islet proportion")
         } else if (startsWith(wsel, "prop_")) {
-          nm <- paste0(gsub("^prop_", "", wsel), " proportion")
+          nm <- paste0(extract_phenotype_from_column(wsel), " proportion")
         } else {
           nm <- wsel
         }
@@ -1266,7 +1268,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
           paste("Donor status:", paste(validated_groups(), collapse = ", ")),
           "Islet: >= 2 whole cells and >= 35 um; Cluster: >= 2 cells, smaller; Single: one endocrine cell",
           "Singles are counted only; they are not analysis objects",
-          "singles_excluded: the Single's cell has no unique highest hormone; singles_not_analysed: it has no nucleus",
+          "singles_excluded: the Single's strongest hormone is under twice the next; singles_not_analysed: it has no nucleus",
           "*_per_mm2: objects per mm2 of the section's tissue outline",
           paste("Rows:", if (is.null(d)) 0 else nrow(d), "donors")))
       }

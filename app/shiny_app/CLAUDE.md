@@ -2,9 +2,9 @@
 
 > **2026-10-15:** donor 78 (HDL078 / HPAP-078) is removed from the app. `ISLET_EXCLUDED_DONORS` in `00_globals.R` (kept in step with `scripts/excluded_donors.csv` by a pipeline test) makes `load_shared_prepared_data()` refuse a data root that contains it, and the Viewer never lists its image. The local app is offline at the owner's direction until the reprocessed root is accepted; the last served root was `data/development/protein-expanded-20261015-v3/`.
 
-> **2026-10-16 uniform root (awaiting owner review):** `data/development/uniform-20donor-20261018-v4/` (2026-10-18;
-> v1-v3 are superseded: hormone level, the additions' structure objects, no structure cell types, B cells, Singles
-> counted only), built
+> **2026-10-16 uniform root (awaiting owner review):** `data/development/uniform-20donor-20261018-v5/` (2026-10-18;
+> v1-v4 are superseded: hormone level, the additions' structure objects, no structure cell types, B cells, Singles
+> counted only, mutually exclusive hormones and the CHGA+ hormone-negative type), built
 > by `scripts/uniform/assemble_uniform.py`. All 20 donors are retyped with the Islet-Explorer-Senior method. Rows
 > are endocrine objects of two classes (`Islet_N`, `Cluster_N`; `object_class`). Since v4 (2026-10-18) Singles
 > are not rows, regions or distance targets (owner: "Singles should not be included in any islet-level analysis
