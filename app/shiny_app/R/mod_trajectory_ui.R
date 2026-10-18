@@ -116,8 +116,8 @@ trajectory_ui <- function(id) {
           column(4,
             sliderInput(ns("traj_alpha"), "Point transparency:",
                         min = 0, max = 0.95, value = 0.4, step = 0.05),
-            div(style = "border: 1px solid #ddd; padding: 10px; border-radius: 5px; background-color: #f9f9f9; min-height: 100px;",
-              h5("Legend", style = "margin-top: 0; margin-bottom: 10px; font-weight: bold; color: #333; font-size: 15px;"),
+            div(style = "border: 1px solid var(--islet-border-strong); padding: 10px; border-radius: 5px; background-color: var(--islet-surface-2); min-height: 100px;",
+              h5("Legend", style = "margin-top: 0; margin-bottom: 10px; font-weight: bold; color: var(--islet-fg); font-size: 15px;"),
               uiOutput(ns("traj_legend"))
             )
           )
@@ -164,7 +164,7 @@ trajectory_ui <- function(id) {
     fluidRow(
       column(12,
         div(class = "card", style = "padding: 15px; margin-bottom: 20px;",
-          h5("Multi-Feature Heatmap", style = "color: #2c5aa0; margin-top: 0;"),
+          h5("Multi-Feature Heatmap", style = "color: var(--islet-heading); margin-top: 0;"),
           fluidRow(
             column(8, uiOutput(ns("multi_heatmap_marker_selector"))),
             column(4, sliderInput(ns("multi_heatmap_nbins"), "Number of bins:", min = 10, max = 40, value = 20, step = 5))
@@ -187,7 +187,7 @@ trajectory_ui <- function(id) {
       column(12,
         div(class = "card", style = "padding: 15px; margin-bottom: 20px;",
           h5("PAGA force-directed layout (Barlow et al. 2024)",
-             style = "color: #2c5aa0; margin-top: 0;"),
+             style = "color: var(--islet-heading); margin-top: 0;"),
           checkboxInput(ns("paga_show_layout"), "Build and show PAGA layout",
                         value = FALSE),
           conditionalPanel(

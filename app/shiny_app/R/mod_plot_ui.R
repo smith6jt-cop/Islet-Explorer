@@ -154,9 +154,9 @@ plot_main_ui <- function(id, extra_panel = NULL) {
     # Left card: islet size distribution
     column(6,
       div(class = "card",
-          style = "margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; height: clamp(600px, 75vh, 1400px); display: flex; flex-direction: column; gap: 12px;",
+          style = "margin-bottom: 20px; padding: 15px; border: 1px solid var(--islet-border-strong); border-radius: 8px; height: clamp(600px, 75vh, 1400px); display: flex; flex-direction: column; gap: 12px;",
         div(style = "display: flex; align-items: center; justify-content: space-between; margin-top: 0;",
-          h5("Islet Size Distribution", style = "margin: 0; color: #333;"),
+          h5("Islet Size Distribution", style = "margin: 0; color: var(--islet-fg);"),
           downloadButton(ns("dl_summary"), "Summary CSV",
                          class = "btn-sm btn-outline-secondary",
                          style = "font-size: 11px; padding: 2px 8px;")
@@ -170,9 +170,9 @@ plot_main_ui <- function(id, extra_panel = NULL) {
     # card) is present, otherwise its two columns are left as dead space.
     column(if (is.null(extra_panel)) 6 else 4,
       div(class = "card",
-          style = "margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; height: clamp(600px, 75vh, 1400px); display: flex; flex-direction: column; gap: 12px;",
+          style = "margin-bottom: 20px; padding: 15px; border: 1px solid var(--islet-border-strong); border-radius: 8px; height: clamp(600px, 75vh, 1400px); display: flex; flex-direction: column; gap: 12px;",
         div(style = "display: flex; align-items: center; justify-content: space-between; margin-top: 0;",
-          h5("Distribution Comparison", style = "margin: 0; color: #333;"),
+          h5("Distribution Comparison", style = "margin: 0; color: var(--islet-fg);"),
           downloadButton(ns("dl_distribution_csv"), "CSV",
                          class = "btn-sm btn-outline-secondary",
                          style = "font-size: 11px; padding: 2px 8px;")

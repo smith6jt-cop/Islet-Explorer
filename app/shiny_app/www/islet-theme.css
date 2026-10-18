@@ -1,0 +1,213 @@
+/* Islet Explorer colour themes (2026-10-18).
+ *
+ * Dark is the default, modelled on VS Code's "Dark Modern" theme; Light keeps the app's earlier look. The theme is
+ * the `data-theme` attribute on <html>, set before first paint by the script in app.R's <head> from localStorage
+ * ("islet-theme"), and switched by the button at the top right. Plots follow it on the server (theme_islet(),
+ * plotly_islet_config() read input$app_theme); PNG downloads stay white for publication.
+ *
+ * Inline styles in the R UI code use the variables below rather than literal colours, so one switch recolours them.
+ */
+
+:root,
+html[data-theme="light"] {
+  color-scheme: light;
+  --islet-bg: #f8f9fa;
+  --islet-surface: #ffffff;
+  --islet-surface-2: #f8f9fa;
+  --islet-input: #ffffff;
+  --islet-border: #e3f2fd;
+  --islet-border-strong: #b3d9ff;
+  --islet-fg: #333333;
+  --islet-fg-strong: #111111;
+  --islet-fg-muted: #595959;
+  --islet-fg-subtle: #6b6b6b;
+  --islet-heading: #2c5aa0;
+  --islet-link: #1f4e79;
+  --islet-accent: #2c5aa0;
+  --islet-accent-strong: #1e3a72;
+  --islet-accent-fg: #ffffff;
+  --islet-hover: #e3f2fd;
+  --islet-info-bg: #e8f4fd;
+  --islet-info-border: #b8daff;
+  --islet-info-fg: #004085;
+  --islet-warn-bg: #fff3cd;
+  --islet-warn-border: #ffc107;
+  --islet-warn-fg: #000000;
+  --islet-danger-bg: #fdecea;
+  --islet-danger-fg: #a40000;
+  --islet-panel-bg: #f8fafc;
+  --islet-panel-fg: #24465c;
+  --islet-panel-hint: #64748b;
+  --islet-shadow: rgba(44, 90, 160, 0.08);
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --islet-bg: #181818;
+  --islet-surface: #1f1f1f;
+  --islet-surface-2: #252526;
+  --islet-input: #313131;
+  --islet-border: #2b2b2b;
+  --islet-border-strong: #3c3c3c;
+  --islet-fg: #cccccc;
+  --islet-fg-strong: #e8e8e8;
+  --islet-fg-muted: #9d9d9d;
+  --islet-fg-subtle: #8f8f8f;
+  --islet-heading: #e8e8e8;
+  --islet-link: #4daafc;
+  --islet-accent: #0078d4;
+  --islet-accent-strong: #026ec1;
+  --islet-accent-fg: #ffffff;
+  --islet-hover: #2a2d2e;
+  --islet-info-bg: #1b2a3a;
+  --islet-info-border: #264f78;
+  --islet-info-fg: #9cdcfe;
+  --islet-warn-bg: #352f14;
+  --islet-warn-border: #cca700;
+  --islet-warn-fg: #e8e8e8;
+  --islet-danger-bg: #3a1d1d;
+  --islet-danger-fg: #f48771;
+  --islet-panel-bg: #181818;
+  --islet-panel-fg: #e8e8e8;
+  --islet-panel-hint: #9d9d9d;
+  --islet-shadow: rgba(0, 0, 0, 0.35);
+}
+
+/* ---- Theme switch ---------------------------------------------------------------------------------------------- */
+.theme-toggle {
+  float: right;
+  margin: 2px 0 0 12px;
+  padding: 4px 12px;
+  font-size: 13px;
+  border-radius: 4px;
+  border: 1px solid var(--islet-border-strong);
+  background: var(--islet-surface-2);
+  color: var(--islet-fg);
+  cursor: pointer;
+}
+.theme-toggle:hover { background: var(--islet-hover); }
+
+/* ---- Dark overrides of the app stylesheet and Bootstrap 3 ------------------------------------------------------ */
+html[data-theme="dark"] body { background-color: var(--islet-bg); color: var(--islet-fg); }
+html[data-theme="dark"] .container-fluid { background-color: var(--islet-surface); box-shadow: 0 4px 12px var(--islet-shadow); }
+html[data-theme="dark"] h1, html[data-theme="dark"] h2, html[data-theme="dark"] h3,
+html[data-theme="dark"] h4, html[data-theme="dark"] h5, html[data-theme="dark"] h6 { color: var(--islet-fg-strong); }
+html[data-theme="dark"] a { color: var(--islet-link); }
+html[data-theme="dark"] a:hover, html[data-theme="dark"] a:focus { color: #7cc0ff; }
+html[data-theme="dark"] hr { border-top-color: var(--islet-border-strong); }
+html[data-theme="dark"] label, html[data-theme="dark"] .control-label { color: var(--islet-fg); }
+html[data-theme="dark"] .help-block { color: var(--islet-fg-muted); }
+html[data-theme="dark"] code, html[data-theme="dark"] pre {
+  background: var(--islet-surface-2); color: #d7ba7d; border-color: var(--islet-border-strong);
+}
+html[data-theme="dark"] .skip-link { background: var(--islet-surface); color: var(--islet-fg-strong); border-color: var(--islet-accent); }
+
+html[data-theme="dark"] .logo-header { background: var(--islet-surface); border-bottom-color: var(--islet-border); }
+html[data-theme="dark"] .card {
+  background: var(--islet-surface-2) !important; border-color: var(--islet-border-strong) !important;
+  box-shadow: 0 2px 8px var(--islet-shadow);
+}
+html[data-theme="dark"] .card:hover { box-shadow: 0 4px 14px var(--islet-shadow); }
+html[data-theme="dark"] .card h5 { color: var(--islet-fg-strong); border-bottom-color: var(--islet-border-strong); }
+html[data-theme="dark"] .well { background: var(--islet-surface-2); border-color: var(--islet-border-strong); color: var(--islet-fg); }
+
+/* tabs: VS Code editor tabs */
+html[data-theme="dark"] .nav-tabs { border-bottom: 1px solid var(--islet-border-strong); }
+html[data-theme="dark"] .nav-tabs > li > a {
+  color: var(--islet-fg-muted); background-color: var(--islet-bg); border: 1px solid transparent; border-radius: 0;
+}
+html[data-theme="dark"] .nav-tabs > li > a:hover { background-color: var(--islet-hover); color: var(--islet-fg); border-color: transparent; }
+html[data-theme="dark"] .nav-tabs > li.active > a,
+html[data-theme="dark"] .nav-tabs > li.active > a:hover,
+html[data-theme="dark"] .nav-tabs > li.active > a:focus {
+  color: #ffffff; background-color: var(--islet-surface); border: 1px solid var(--islet-border-strong);
+  border-top: 2px solid var(--islet-accent); border-bottom-color: var(--islet-surface);
+}
+
+/* form controls */
+html[data-theme="dark"] .form-control,
+html[data-theme="dark"] select,
+html[data-theme="dark"] textarea,
+html[data-theme="dark"] input[type="text"],
+html[data-theme="dark"] input[type="number"],
+html[data-theme="dark"] input[type="search"] {
+  background-color: var(--islet-input); color: var(--islet-fg); border: 1px solid var(--islet-border-strong);
+}
+html[data-theme="dark"] .form-control:focus { border-color: var(--islet-accent); box-shadow: 0 0 0 1px var(--islet-accent); }
+html[data-theme="dark"] .form-control[disabled], html[data-theme="dark"] .form-control[readonly] { background-color: var(--islet-surface-2); }
+html[data-theme="dark"] input[type="checkbox"], html[data-theme="dark"] input[type="radio"] { accent-color: var(--islet-accent); }
+
+/* selectize */
+html[data-theme="dark"] .selectize-input,
+html[data-theme="dark"] .selectize-input.full,
+html[data-theme="dark"] .selectize-control.single .selectize-input.input-active {
+  background: var(--islet-input) !important; color: var(--islet-fg); border: 1px solid var(--islet-border-strong);
+  box-shadow: none;
+}
+html[data-theme="dark"] .selectize-input.focus { border-color: var(--islet-accent); }
+html[data-theme="dark"] .selectize-input input { color: var(--islet-fg) !important; }
+html[data-theme="dark"] .selectize-control.single .selectize-input:after { border-top-color: var(--islet-fg-muted); }
+html[data-theme="dark"] .selectize-dropdown {
+  background: #252526; color: var(--islet-fg); border: 1px solid var(--islet-border-strong);
+}
+html[data-theme="dark"] .selectize-dropdown .option { color: var(--islet-fg); }
+html[data-theme="dark"] .selectize-dropdown .active { background-color: #04395e; color: #ffffff; }
+html[data-theme="dark"] .selectize-dropdown .optgroup-header { background: #252526; color: var(--islet-fg-muted); }
+html[data-theme="dark"] .selectize-control.multi .selectize-input > div {
+  background: #3c3c3c; color: var(--islet-fg); border-color: #4a4a4a;
+}
+
+/* sliders (ion.rangeSlider, shiny skin) */
+html[data-theme="dark"] .irs--shiny .irs-line { background: #3c3c3c; border-color: #3c3c3c; }
+html[data-theme="dark"] .irs--shiny .irs-bar { background: var(--islet-accent); border-color: var(--islet-accent); }
+html[data-theme="dark"] .irs--shiny .irs-handle { background: var(--islet-accent); border-color: var(--islet-surface); }
+html[data-theme="dark"] .irs--shiny .irs-from, html[data-theme="dark"] .irs--shiny .irs-to,
+html[data-theme="dark"] .irs--shiny .irs-single { background: var(--islet-accent); color: #ffffff; }
+html[data-theme="dark"] .irs--shiny .irs-from:before, html[data-theme="dark"] .irs--shiny .irs-to:before,
+html[data-theme="dark"] .irs--shiny .irs-single:before { border-top-color: var(--islet-accent); }
+html[data-theme="dark"] .irs--shiny .irs-min, html[data-theme="dark"] .irs--shiny .irs-max {
+  background: #3c3c3c; color: var(--islet-fg);
+}
+html[data-theme="dark"] .irs--shiny .irs-grid-text { color: var(--islet-fg-muted); }
+html[data-theme="dark"] .irs--shiny .irs-grid-pol { background: #5a5a5a; }
+
+/* buttons */
+html[data-theme="dark"] .btn-default {
+  background: #313131; color: var(--islet-fg); border-color: var(--islet-border-strong);
+}
+html[data-theme="dark"] .btn-default:hover, html[data-theme="dark"] .btn-default:focus { background: #3c3c3c; color: #ffffff; }
+html[data-theme="dark"] .btn-outline-secondary { color: var(--islet-fg); border-color: var(--islet-border-strong); background: #313131; }
+html[data-theme="dark"] .btn-outline-secondary:hover { background: #3c3c3c; color: #ffffff; }
+html[data-theme="dark"] .btn-primary { background: var(--islet-accent); border-color: var(--islet-accent); color: #ffffff; }
+html[data-theme="dark"] .btn-primary:hover { background: var(--islet-accent-strong); box-shadow: none; }
+
+/* tables, modals, notifications, tooltips */
+html[data-theme="dark"] .table, html[data-theme="dark"] table { color: var(--islet-fg); }
+html[data-theme="dark"] .table > thead > tr > th, html[data-theme="dark"] .table > tbody > tr > td,
+html[data-theme="dark"] .table > tbody > tr > th { border-color: var(--islet-border-strong); }
+html[data-theme="dark"] .table-striped > tbody > tr:nth-of-type(odd) { background-color: #252526; }
+html[data-theme="dark"] .table-hover > tbody > tr:hover { background-color: var(--islet-hover); }
+html[data-theme="dark"] .modal-content { background-color: var(--islet-surface); color: var(--islet-fg); border-color: var(--islet-border-strong); }
+html[data-theme="dark"] .modal-header, html[data-theme="dark"] .modal-footer { border-color: var(--islet-border-strong); }
+html[data-theme="dark"] .close { color: var(--islet-fg); text-shadow: none; opacity: 0.8; }
+html[data-theme="dark"] .shiny-notification { background: #252526; color: var(--islet-fg); border-color: var(--islet-border-strong); }
+html[data-theme="dark"] .shiny-notification-error { background: var(--islet-danger-bg); color: var(--islet-danger-fg); }
+html[data-theme="dark"] .shiny-notification-warning { background: var(--islet-warn-bg); color: var(--islet-warn-fg); }
+html[data-theme="dark"] .shiny-progress .progress-text { background: #252526; color: var(--islet-fg); }
+html[data-theme="dark"] .tooltip-inner { background: #252526; color: var(--islet-fg); border: 1px solid var(--islet-border-strong); }
+html[data-theme="dark"] .popover { background: #252526; color: var(--islet-fg); border-color: var(--islet-border-strong); }
+html[data-theme="dark"] .shiny-output-error { color: var(--islet-danger-fg); }
+html[data-theme="dark"] .shiny-output-error-validation { color: var(--islet-fg-muted); }
+html[data-theme="dark"] #shiny-disconnected-overlay { background-color: #000000; }
+
+/* plotly modebar on dark */
+html[data-theme="dark"] .js-plotly-plot .plotly .modebar-btn path { fill: #9d9d9d; }
+html[data-theme="dark"] .js-plotly-plot .plotly .modebar-btn:hover path,
+html[data-theme="dark"] .js-plotly-plot .plotly .modebar-btn.active path { fill: #e8e8e8; }
+html[data-theme="dark"] .js-plotly-plot .plotly .modebar { background: transparent !important; }
+
+/* scrollbars, as VS Code's */
+html[data-theme="dark"] ::-webkit-scrollbar { width: 12px; height: 12px; background: var(--islet-surface); }
+html[data-theme="dark"] ::-webkit-scrollbar-thumb { background: rgba(121, 121, 121, 0.4); }
+html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: rgba(100, 100, 100, 0.7); }
+html[data-theme="dark"] * { scrollbar-color: rgba(121, 121, 121, 0.4) var(--islet-surface); }

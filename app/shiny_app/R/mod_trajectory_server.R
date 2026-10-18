@@ -581,27 +581,27 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       cur <- traj_path
       if (is.null(cur) || !file.exists(cur)) cur <- resolve_traj_path()
       if (is.null(cur) || !file.exists(cur)) {
-        return(tags$div(style = "color:#b00;",
+        return(tags$div(style = "color:var(--islet-danger-fg);",
           "AnnData not found. Place 'adata_ins_root.h5ad' under data/ or scripts/, or set ADATA_PATH."))
       }
       if (!requireNamespace("anndata", quietly = TRUE)) {
-        return(tags$div(style = "color:#b00;",
+        return(tags$div(style = "color:var(--islet-danger-fg);",
           "R package 'anndata' not installed. Install with BiocManager::install('anndata')."))
       }
       tr <- traj_with_pseudotime()
       if (is.null(tr)) {
-        return(tags$div(style = "color:#b00;",
+        return(tags$div(style = "color:var(--islet-danger-fg);",
           "AnnData object not available or H5AD failed to load."))
       }
       if (!is.null(tr$error)) {
         install_hint <- if (grepl("anndata", tr$error, ignore.case = TRUE)) " Install with: BiocManager::install('anndata')" else ""
-        return(tags$div(style = "color:#b00;",
+        return(tags$div(style = "color:var(--islet-danger-fg);",
           sprintf("Trajectory load error: %s%s", tr$error, install_hint)))
       }
       nfit <- tr$pseudotime_n %||% 0L
       src <- if (!is.null(traj_path) && file.exists(traj_path)) traj_path else cur
 
-      tags$div(style = "color: #555; font-size: 12px; margin-bottom: 10px;",
+      tags$div(style = "color: var(--islet-fg-muted); font-size: 12px; margin-bottom: 10px;",
         title = paste("Source:", basename(src)),
         sprintf("Endocrine objects: %s total | %s fitted (%d or more core cells, any class)",
           format(nrow(tr$obs), big.mark = ","), format(nfit, big.mark = ","), TRAJ_MIN_CELLS)
@@ -771,7 +771,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       pt_range <- range(df$pt, na.rm = TRUE)
 
       if (trend_type == "overall") {
-        g <- g + geom_smooth(data = trend_df, method = "loess", se = show_ci, color = "black",
+        g <- g + geom_smooth(data = trend_df, method = "loess", se = show_ci, color = islet_ink(),
                              linewidth = 1, fullrange = FALSE, span = 0.75,
                              inherit.aes = FALSE,
                              aes(x = pt, y = value, weight = loess_weight))
@@ -913,7 +913,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       if (active_tab() != "Trajectory") return(NULL)
       info <- selected_islet()
       if (is.null(info)) {
-        return(div(style = "min-height: 275px; display: flex; align-items: center; justify-content: center; color: #666;",
+        return(div(style = "min-height: 275px; display: flex; align-items: center; justify-content: center; color: var(--islet-fg-muted);",
                    "No islet selected"))
       }
 
@@ -943,7 +943,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         # Header: title + close button
         div(style = "display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;",
           h4(paste0(info$islet_key, " (", title_detail, ")"),
-             style = "margin: 0; color: #0066CC; font-size: 20px;"),
+             style = "margin: 0; color: var(--islet-heading); font-size: 20px;"),
           actionButton(ns("clear_segmentation"), "Close", class = "btn btn-sm btn-outline-secondary")
         ),
         # Map uses the full card width; controls and composition sit beneath it.
@@ -955,7 +955,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
                              class = "btn-sm btn-outline-primary"))
           ),
           column(5,
-            div(style = "padding: 10px; background-color: #f8f9fa; border-radius: 5px;",
+            div(style = "padding: 10px; background-color: var(--islet-surface-2); border-radius: 5px;",
               if (has_cells) {
                 tagList(
                   h5("Layers", style = "margin-top: 0; font-size: 15px;"),
@@ -1000,14 +1000,14 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
               },
               hr(style = "margin: 8px 0;"),
               span(paste("Centroid:", round(info$centroid_x, 0), "/", round(info$centroid_y, 0), "\u00b5m"),
-                   style = "color: #666; font-size: 13px;")
+                   style = "color: var(--islet-fg-muted); font-size: 13px;")
             )
           ),
           column(7,
             if (has_cells) {
               conditionalPanel(
                 condition = "input.drilldown_show_cells",
-                div(style = "padding: 12px; background-color: #f8f9fa; border-radius: 5px;",
+                div(style = "padding: 12px; background-color: var(--islet-surface-2); border-radius: 5px;",
                   h5("Cell Composition", style = "margin-top: 0; font-size: 16px;"),
                   plotOutput("islet_drilldown_summary", height = "300px"),
                   div(style = "text-align: right; margin-top: 6px;",
@@ -1098,13 +1098,13 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
             )
           )
         } else {
-          p("No data available", style = "font-size: 12px; color: #999;")
+          p("No data available", style = "font-size: 12px; color: var(--islet-fg-subtle);")
         }
       } else if (startsWith(color_by, "leiden_")) {
         df <- traj_data_clean()
         if (is.null(df) || !(color_by %in% colnames(df))) {
           return(p("Leiden clusters unavailable (rebuild islet_explorer.h5ad).",
-                   style = "font-size: 12px; color: #999;"))
+                   style = "font-size: 12px; color: var(--islet-fg-subtle);"))
         }
         lvl_vals <- unique(stats::na.omit(df[[color_by]]))
         num_vals <- suppressWarnings(as.numeric(lvl_vals))
@@ -1195,7 +1195,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       filename = function() islet_png_filename("trajectory_umap_donor"),
       content = function(file) {
         p <- traj_umap_donor_plot(); if (is.null(p)) return()
-        ggplot2::ggsave(file, plot = p,
+        islet_ggsave(file, plot = p,
                         width = ISLET_PNG_DIMS$width, height = ISLET_PNG_DIMS$height,
                         dpi = ISLET_PNG_DIMS$dpi, units = ISLET_PNG_DIMS$units)
       }
@@ -1245,7 +1245,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       filename = function() islet_png_filename("trajectory_umap_feature"),
       content = function(file) {
         p <- traj_umap_feature_plot(); if (is.null(p)) return()
-        ggplot2::ggsave(file, plot = p,
+        islet_ggsave(file, plot = p,
                         width = ISLET_PNG_DIMS$width, height = ISLET_PNG_DIMS$height,
                         dpi = ISLET_PNG_DIMS$dpi, units = ISLET_PNG_DIMS$units)
       }
@@ -1512,7 +1512,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
           axis.text.y = element_text(size = ISLET_FONT_SIZES$dense_min)
         )
     })
-    output$traj_multi_heatmap <- renderPlot({ traj_multi_heatmap_plot() },
+    output$traj_multi_heatmap <- renderPlot({ traj_multi_heatmap_plot() }, bg = "transparent",
       height = function() {
         n <- length(input$multi_heatmap_markers %||% character(0))
         # 44 px/row (was 36) so the dense-floor row labels have vertical room.
@@ -1524,7 +1524,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         p <- traj_multi_heatmap_plot(); if (is.null(p)) return()
         n <- length(input$multi_heatmap_markers %||% character(0))
         h <- max(6, 1 + n * 0.4)
-        ggplot2::ggsave(file, plot = p,
+        islet_ggsave(file, plot = p,
                         width = ISLET_HEATMAP_PNG_DIMS$width, height = h,
                         dpi = ISLET_HEATMAP_PNG_DIMS$dpi, units = ISLET_HEATMAP_PNG_DIMS$units)
       }
@@ -1615,7 +1615,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       req(isTRUE(input$paga_show_layout))
       if (!paga_available()) {
         return(div(style = paste0("padding: 7px 9px; border-radius: 4px; font-size: 11px;",
-                                  " line-height: 1.45; color: #8a1c12; background: #fdecea;",
+                                  " line-height: 1.45; color: var(--islet-danger-fg); background: var(--islet-danger-bg);",
                                   " border-left: 3px solid #d9534f;"),
           tags$strong("PAGA unavailable. "),
           "reticulate's interpreter has no scanpy. Install it into the app venv ",
@@ -1623,11 +1623,11 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       }
       d <- paga_data()
       if (is.null(d)) {
-        return(div(style = "font-size: 11px; color: #999; padding-top: 6px;",
+        return(div(style = "font-size: 11px; color: var(--islet-fg-subtle); padding-top: 6px;",
           "No layout for this cell-count range."))
       }
       div(style = paste0("padding: 7px 9px; border-radius: 4px; font-size: 11px;",
-                         " line-height: 1.45; color: #31556e; background: #eaf3f8;",
+                         " line-height: 1.45; color: var(--islet-info-fg); background: var(--islet-info-bg);",
                          " border-left: 3px solid #4477AA;"),
         sprintf("%s islets, %d Leiden clusters (resolution 1), cosine 15-NN, %s layout. ",
                 format(nrow(d), big.mark = ","), attr(d, "n_clusters") %||% NA_integer_,

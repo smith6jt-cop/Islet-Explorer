@@ -77,7 +77,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
     output$donor_selector <- renderUI({
       donors <- get_available_donors()
       if (length(donors) == 0) {
-        return(div(style = "color: #888; font-style: italic; padding-top: 8px;",
+        return(div(style = "color: var(--islet-fg-subtle); font-style: italic; padding-top: 8px;",
                    "No per-donor tissue data available."))
       }
       pd <- prepared()
@@ -189,7 +189,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         n <- suppressWarnings(as.integer(counts[p]))
         if (!is.finite(n)) n <- 0L
         if (n == 0) {
-          tags$span(p, tags$span(" (0)"), style = "color: #595959;")
+          tags$span(p, tags$span(" (0)"), style = "color: var(--islet-fg-muted);")
         } else {
           tags$span(p)
         }
@@ -206,9 +206,9 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       tagList(
         div(style = "display: flex; align-items: center; gap: 6px; margin-bottom: 4px;",
           tags$label("Phenotypes", style = "font-weight: 600; font-size: 13px; margin: 0;"),
-          actionLink(ns("pheno_all"), "All", style = "font-size: 12px; color: #1f4e79;"),
-          span("|", style = "color: #595959;"),
-          actionLink(ns("pheno_none"), "None", style = "font-size: 12px; color: #1f4e79;")
+          actionLink(ns("pheno_all"), "All", style = "font-size: 12px; color: var(--islet-link);"),
+          span("|", style = "color: var(--islet-fg-muted);"),
+          actionLink(ns("pheno_none"), "None", style = "font-size: 12px; color: var(--islet-link);")
         ),
         div(style = "column-count: 2; column-gap: 8px;",
           checkboxGroupInput(ns("pheno_filter"), NULL,
@@ -416,7 +416,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         )
     })
 
-    output$tissue_scatter <- shiny::renderPlot({ spatial_tissue_scatter_plot() }, height = 800)
+    output$tissue_scatter <- shiny::renderPlot({ spatial_tissue_scatter_plot() }, height = 800, bg = "transparent")
     output$dl_tissue_scatter <- shiny::downloadHandler(
       filename = function() {
         donor_id <- selected_donor()
@@ -424,7 +424,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       },
       content = function(file) {
         p <- spatial_tissue_scatter_plot(); if (is.null(p)) return()
-        ggplot2::ggsave(file, plot = p,
+        islet_ggsave(file, plot = p,
                         width = 12, height = 10,
                         dpi = ISLET_PNG_DIMS$dpi, units = ISLET_PNG_DIMS$units)
       }
@@ -433,7 +433,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
     # ==== Card 3: Leiden UMAP (plotly, 1015 islets) ====
     output$leiden_not_available <- renderUI({
       if (!has_leiden()) {
-        return(div(style = "color: #888; font-style: italic; margin-bottom: 10px;",
+        return(div(style = "color: var(--islet-fg-subtle); font-style: italic; margin-bottom: 10px;",
           "Leiden clustering not available in current H5AD. ",
           "Rebuild with build_h5ad_for_app.py after running Leiden clustering."))
       }
@@ -542,12 +542,12 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         theme(axis.text = element_blank(), axis.ticks = element_blank(),
               panel.grid = element_blank(), axis.line = element_blank())
     })
-    output$spatial_umap_donor <- renderPlot({ spatial_umap_donor_plot() })
+    output$spatial_umap_donor <- renderPlot({ spatial_umap_donor_plot() }, bg = "transparent")
     output$dl_spatial_umap_donor <- downloadHandler(
       filename = function() islet_png_filename("spatial_umap_donor"),
       content = function(file) {
         p <- spatial_umap_donor_plot(); if (is.null(p)) return()
-        ggplot2::ggsave(file, plot = p,
+        islet_ggsave(file, plot = p,
                         width = ISLET_PNG_DIMS$width, height = ISLET_PNG_DIMS$height,
                         dpi = ISLET_PNG_DIMS$dpi, units = ISLET_PNG_DIMS$units)
       }
@@ -903,9 +903,9 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       tagList(
         div(style = "display: flex; align-items: center; gap: 6px; margin-bottom: 4px;",
           tags$label("Phenotypes shown", style = "font-weight: 600; font-size: 13px; margin: 0;"),
-          actionLink(ns("enrich_pheno_all"), "All", style = "font-size: 12px; color: #1f4e79;"),
-          span("|", style = "color: #595959;"),
-          actionLink(ns("enrich_pheno_none"), "None", style = "font-size: 12px; color: #1f4e79;")
+          actionLink(ns("enrich_pheno_all"), "All", style = "font-size: 12px; color: var(--islet-link);"),
+          span("|", style = "color: var(--islet-fg-muted);"),
+          actionLink(ns("enrich_pheno_none"), "None", style = "font-size: 12px; color: var(--islet-link);")
         ),
         # Flow the checkboxes across the full-width card (same pattern as
         # .cd-comp-cols for the distance-profile composition picker).
@@ -1140,7 +1140,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       # which no neighborhood card can plot.
       n <- if (is.null(comp)) 0 else if ("total_cells_peri" %in% colnames(comp))
              sum(is.finite(comp$total_cells_peri)) else nrow(comp)
-      span(style = "color: #555; font-size: 13px; white-space: nowrap;",
+      span(style = "color: var(--islet-fg-muted); font-size: 13px; white-space: nowrap;",
            paste0(formatC(n, big.mark = ","), " objects"))
     })
 
@@ -1155,7 +1155,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
 
       if (is.null(tbl) || nrow(tbl) == 0) {
         return(tags$div(
-          style = "margin-top: 10px; padding: 8px 10px; background-color: #e8f4fd; border: 1px solid #b8daff; border-radius: 5px; color: #004085; font-size: 12px;",
+          style = "margin-top: 10px; padding: 8px 10px; background-color: var(--islet-info-bg); border: 1px solid var(--islet-info-border); border-radius: 5px; color: var(--islet-info-fg); font-size: 12px;",
           "No outliers detected for the current phenotype."
         ))
       }
@@ -1174,9 +1174,9 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       }
 
       tags$div(
-        style = "margin-top: 10px; padding: 10px; background-color: #fff3cd; border: 1px solid #ffc107; border-radius: 5px; color: #000000;",
-        tags$h6(style = "margin-top: 0; color: #000000;", header),
-        tags$p(style = "color: #000000; font-size: 12px; margin-bottom: 10px;", body_text),
+        style = "margin-top: 10px; padding: 10px; background-color: var(--islet-warn-bg); border: 1px solid var(--islet-warn-border); border-radius: 5px; color: var(--islet-warn-fg);",
+        tags$h6(style = "margin-top: 0; color: var(--islet-warn-fg);", header),
+        tags$p(style = "color: var(--islet-warn-fg); font-size: 12px; margin-bottom: 10px;", body_text),
         tags$div(style = "max-height: 220px; overflow-y: auto;",
           renderTable(tbl, striped = TRUE, hover = TRUE, bordered = TRUE,
                       spacing = "xs", width = "100%")
@@ -1192,7 +1192,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
 
       if (is.null(tbl) || nrow(tbl) == 0) {
         return(tags$div(
-          style = "margin-top: 10px; padding: 8px 10px; background-color: #e8f4fd; border: 1px solid #b8daff; border-radius: 5px; color: #004085; font-size: 12px;",
+          style = "margin-top: 10px; padding: 8px 10px; background-color: var(--islet-info-bg); border: 1px solid var(--islet-info-border); border-radius: 5px; color: var(--islet-info-fg); font-size: 12px;",
           "No outliers detected for the current distance metric."
         ))
       }
@@ -1213,9 +1213,9 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       }
 
       tags$div(
-        style = "margin-top: 10px; padding: 10px; background-color: #fff3cd; border: 1px solid #ffc107; border-radius: 5px; color: #000000;",
-        tags$h6(style = "margin-top: 0; color: #000000;", header),
-        tags$p(style = "color: #000000; font-size: 12px; margin-bottom: 10px;", body_text),
+        style = "margin-top: 10px; padding: 10px; background-color: var(--islet-warn-bg); border: 1px solid var(--islet-warn-border); border-radius: 5px; color: var(--islet-warn-fg);",
+        tags$h6(style = "margin-top: 0; color: var(--islet-warn-fg);", header),
+        tags$p(style = "color: var(--islet-warn-fg); font-size: 12px; margin-bottom: 10px;", body_text),
         tags$div(style = "max-height: 220px; overflow-y: auto;",
           renderTable(tbl, striped = TRUE, hover = TRUE, bordered = TRUE,
                       spacing = "xs", width = "100%")
@@ -2065,7 +2065,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         }
         p <- p %>% add_trace(x = c(0, 0), y = c(0, y_max * 1.05),
           type = "scatter", mode = "lines",
-          line = list(color = "#333", width = 1.5, dash = "dash"),
+          line = list(color = islet_ink(), width = 1.5, dash = "dash"),
           showlegend = FALSE, hoverinfo = "none")
         p %>% layout(
           font = fonts$global, margin = list(t = 96),
@@ -2124,7 +2124,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
             ymax <- if (nrow(tot)) max(tot$val) else 1
             pp <- pp %>% add_trace(x = c(0, 0), y = c(0, ymax * 1.02),
               type = "scatter", mode = "lines",
-              line = list(color = "#333", width = 1.4, dash = "dash"),
+              line = list(color = islet_ink(), width = 1.4, dash = "dash"),
               showlegend = FALSE, hoverinfo = "none")
             pp %>% layout(barmode = "stack",
               xaxis = list(title = "", tickfont = fonts$axis_tick, zeroline = FALSE),
@@ -2176,7 +2176,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           }
           p <- p %>% add_trace(x = c(0, 0), y = c(0, y_max * 1.05),
             type = "scatter", mode = "lines",
-            line = list(color = "#333", width = 1.5, dash = "dash"),
+            line = list(color = islet_ink(), width = 1.5, dash = "dash"),
             showlegend = FALSE, hoverinfo = "none")
           ticks <- cd_symlog_ticks(res$lo, res$hi)
           p %>% layout(

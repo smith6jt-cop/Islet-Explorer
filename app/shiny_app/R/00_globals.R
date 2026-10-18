@@ -305,11 +305,40 @@ ISLET_ANNOTATE_SIZE <- ISLET_FONT_SIZES$base / ggplot2::.pt
 
 # Standard ggplot theme. Use directly: `theme_islet()` or extend with
 # additional `theme(...)` calls for plot-specific overrides.
-theme_islet <- function(base_size = ISLET_FONT_SIZES$base) {
-  ggplot2::theme_minimal(base_size = base_size) +
+# ---- Colour theme (2026-10-18: dark by default, after VS Code's Dark Modern) ----
+# The page theme is the <html data-theme> attribute (www/islet-theme.css / islet-theme.js), mirrored to the server
+# as input$app_theme. theme_islet() and plotly_islet_config() read it, so every plot drawn inside a render
+# depends on it and redraws when the reviewer switches theme. Downloads stay white (islet_ggsave(), and the
+# plotly camera button re-draws the figure in light colours).
+ISLET_THEME_PALETTE <- list(
+  dark  = list(paper = "#1f1f1f", ink = "#cccccc", muted = "#9d9d9d", grid = "#333333", zero = "#555555",
+               line = "#6b6b6b"),
+  light = list(paper = "#ffffff", ink = "#000000", muted = "#555555", grid = "#ebebeb", zero = "#bdbdbd",
+               line = "#444444"))
+
+#' The theme's foreground colour, for lines and text a plot draws in a fixed colour (medians, reference lines).
+islet_ink <- function() ISLET_THEME_PALETTE[[islet_theme_mode()]]$ink
+
+#' "dark" or "light": the reviewer's theme for the current session (dark when there is no session or input).
+islet_theme_mode <- function() {
+  forced <- getOption("islet.theme")
+  if (!is.null(forced)) return(if (identical(forced, "light")) "light" else "dark")
+  session <- shiny::getDefaultReactiveDomain()
+  # Inside a module the domain is the module's proxy, whose input is namespaced; the theme is an app-level input.
+  if (!is.null(session) && is.function(session$rootScope)) session <- session$rootScope()
+  mode <- if (is.null(session)) NULL else tryCatch(session$input$app_theme, error = function(e) NULL)
+  if (identical(mode, "light")) "light" else "dark"
+}
+
+theme_islet <- function(base_size = ISLET_FONT_SIZES$base, mode = islet_theme_mode()) {
+  pal <- ISLET_THEME_PALETTE[[mode]]
+  # ggplot2 4: ink / paper also set the default colours of geoms, so text and lines drawn without an explicit
+  # colour follow the theme.
+  ggplot2::theme_minimal(base_size = base_size, ink = pal$ink, paper = pal$paper) +
     ggplot2::theme(
+      plot.background = ggplot2::element_rect(fill = pal$paper, colour = NA),
       plot.title    = ggplot2::element_text(size = ISLET_FONT_SIZES$title, face = "bold"),
-      plot.subtitle = ggplot2::element_text(size = ISLET_FONT_SIZES$subtitle, color = "#555"),
+      plot.subtitle = ggplot2::element_text(size = ISLET_FONT_SIZES$subtitle, color = pal$muted),
       axis.title    = ggplot2::element_text(size = ISLET_FONT_SIZES$axis_title),
       axis.text     = ggplot2::element_text(size = ISLET_FONT_SIZES$axis_text),
       legend.title  = ggplot2::element_text(size = ISLET_FONT_SIZES$legend_title, face = "bold"),
@@ -361,6 +390,11 @@ plotly_islet_config <- function(p, filename_root = "islet_explorer_plot",
     uniformtext = list(minsize = ISLET_FONT_SIZES$dense_min,
                        mode    = uniform_text_mode)
   )
+  if (identical(islet_theme_mode(), "dark")) p <- plotly_islet_dark(p)
+  # The camera button is replaced by one that exports on a white background whatever the screen theme
+  # (www/islet-theme.js isletDownloadLightPng); same file name, size and scale as before.
+  opts <- jsonlite::toJSON(list(format = "png", filename = filename_root, width = width, height = height,
+                                scale = scale), auto_unbox = TRUE)
   plotly::config(p,
     toImageButtonOptions = list(
       format   = "png",
@@ -369,8 +403,65 @@ plotly_islet_config <- function(p, filename_root = "islet_explorer_plot",
       height   = height,
       scale    = scale
     ),
+    modeBarButtonsToRemove = list("toImage"),
+    modeBarButtonsToAdd = list(list(
+      name  = "Download plot as a PNG (white background)",
+      icon  = htmlwidgets::JS("Plotly.Icons.camera"),
+      click = htmlwidgets::JS(sprintf("function(gd) { window.isletDownloadLightPng(gd, %s); }", opts)))),
     displaylogo = FALSE
   )
+}
+
+#' Recolour a built plotly figure for the dark theme: backgrounds, text, every axis, legend, annotations and
+#' colour bars. Trace colours are left alone.
+plotly_islet_dark <- function(p) {
+  pal <- ISLET_THEME_PALETTE$dark
+  p <- plotly::plotly_build(p)
+  L <- p$x$layout
+  L$paper_bgcolor <- pal$paper
+  L$plot_bgcolor <- pal$paper
+  L$font$color <- pal$ink
+  if (is.list(L$title)) L$title$font$color <- pal$ink
+  for (k in grep("^[xy]axis[0-9]*$", names(L), value = TRUE)) {
+    ax <- L[[k]]
+    ax$gridcolor <- pal$grid; ax$zerolinecolor <- pal$zero; ax$linecolor <- pal$line; ax$tickcolor <- pal$line
+    ax$tickfont$color <- pal$ink
+    if (is.list(ax$title)) ax$title$font$color <- pal$ink
+    L[[k]] <- ax
+  }
+  L$legend$bgcolor <- "rgba(0,0,0,0)"
+  L$legend$font$color <- pal$ink
+  if (is.list(L$legend$title)) L$legend$title$font$color <- pal$ink
+  if (length(L$annotations)) {
+    L$annotations <- lapply(L$annotations, function(a) { a$font$color <- pal$ink; a })
+  }
+  L$hoverlabel$bordercolor <- pal$line
+  p$x$layout <- L
+  p$x$data <- lapply(p$x$data, function(tr) {
+    recolour <- function(cb) { cb$tickfont$color <- pal$ink; if (is.list(cb$title)) cb$title$font$color <- pal$ink; cb }
+    if (!is.null(tr$colorbar)) tr$colorbar <- recolour(tr$colorbar)
+    if (!is.null(tr$marker$colorbar)) tr$marker$colorbar <- recolour(tr$marker$colorbar)
+    tr
+  })
+  p
+}
+
+#' ggsave() for downloadHandlers: publication PNGs stay on a white background whatever the screen theme, by
+#' overriding only the theme's colours (the plot's own theme tweaks are kept).
+islet_ggsave <- function(file, plot, ...) {
+  pal <- ISLET_THEME_PALETTE$light
+  light <- ggplot2::theme(
+    plot.background = ggplot2::element_rect(fill = pal$paper, colour = NA),
+    panel.background = ggplot2::element_rect(fill = pal$paper, colour = NA),
+    legend.background = ggplot2::element_rect(fill = pal$paper, colour = NA),
+    legend.key = ggplot2::element_rect(fill = pal$paper, colour = NA),
+    text = ggplot2::element_text(colour = pal$ink),
+    axis.text = ggplot2::element_text(colour = "#4d4d4d"),
+    plot.subtitle = ggplot2::element_text(colour = pal$muted),
+    panel.grid = ggplot2::element_line(colour = pal$grid),
+    strip.text = ggplot2::element_text(colour = pal$ink),
+    geom = ggplot2::element_geom(ink = pal$ink, paper = pal$paper))
+  ggplot2::ggsave(file, plot = plot + light, bg = "white", ...)
 }
 
 # ============================================================================
@@ -712,9 +803,9 @@ format_phenotype_rule <- function(name, style = c("inline", "html", "plain")) {
   if (style == "html") {
     pos_html <- if (length(pos_parts) > 0)
       paste0("<strong>", paste(htmltools::htmlEscape(pos_parts), collapse = ", "), "</strong>")
-    else "<span style='color:#888;'>(no positive requirement)</span>"
+    else "<span style='color:var(--islet-fg-subtle);'>(no positive requirement)</span>"
     neg_html <- if (length(neg_parts) > 0)
-      paste0("<span style='color:#666;'>", paste(htmltools::htmlEscape(neg_parts), collapse = ", "), "</span>")
+      paste0("<span style='color:var(--islet-fg-muted);'>", paste(htmltools::htmlEscape(neg_parts), collapse = ", "), "</span>")
     else ""
     sep <- if (nzchar(neg_html)) "  —  " else ""
     return(htmltools::HTML(paste0(pos_html, sep, neg_html)))
@@ -828,10 +919,10 @@ phenotype_rules_modal_ui <- function() {
   body_rows <- lapply(seq_len(nrow(df)), function(i) {
     shiny::tags$tr(
       shiny::tags$td(shiny::tags$strong(df$Phenotype[i]), style = "padding:6px 10px;"),
-      shiny::tags$td(df$Category[i],                       style = "padding:6px 10px; color:#555;"),
+      shiny::tags$td(df$Category[i],                       style = "padding:6px 10px; color:var(--islet-fg-muted);"),
       shiny::tags$td(df$Positive[i],                       style = "padding:6px 10px;"),
-      shiny::tags$td(df$Negative[i],                       style = "padding:6px 10px; color:#666;"),
-      shiny::tags$td(df$Notes[i],                          style = "padding:6px 10px; color:#444; font-size: 13px;")
+      shiny::tags$td(df$Negative[i],                       style = "padding:6px 10px; color:var(--islet-fg-muted);"),
+      shiny::tags$td(df$Notes[i],                          style = "padding:6px 10px; color:var(--islet-fg); font-size: 13px;")
     )
   })
   shiny::modalDialog(
@@ -854,12 +945,12 @@ phenotype_rules_modal_ui <- function() {
         shiny::tags$tbody(body_rows)
       )
     ),
-    shiny::tags$p(style = "margin-top: 10px; font-size: 12px; color: #777;",
+    shiny::tags$p(style = "margin-top: 10px; font-size: 12px; color: var(--islet-fg-subtle);",
       "Reference CSV: ",
       shiny::tags$code("data/phenotype_rules.csv"),
       " (15 markers: INS, GCG, SST, SMA, CD20, CD3e, CD68, CD163, CD8a, CD4, HLADR, PDPN, CD34, CD31, B3TUBB)."
     ),
-    shiny::tags$p(style = "margin-top: 6px; font-size: 12px; color: #777;",
+    shiny::tags$p(style = "margin-top: 6px; font-size: 12px; color: var(--islet-fg-subtle);",
       shiny::tags$strong("Data vs. rules: "),
       "the full original rule matrix has not been verified. Some rule phenotypes ",
       "have no cells in the shipped dataset because upstream labeling merged or renamed them ",
@@ -869,7 +960,7 @@ phenotype_rules_modal_ui <- function() {
       " is an HLADR+ myeloid aggregate created upstream, not itself a ",
       shiny::tags$code("phenotype_rules.csv"), " row."
     ),
-    shiny::tags$p(style = "margin-top: 6px; font-size: 12px; color: #777;",
+    shiny::tags$p(style = "margin-top: 6px; font-size: 12px; color: var(--islet-fg-subtle);",
       shiny::tags$strong("Panel note: "),
       "the original Rules1 template also listed ", shiny::tags$code("CD99"),
       " (Endocrine) and ", shiny::tags$code("CD56"),
@@ -946,10 +1037,10 @@ feature_display_label <- function(col) {
 phenotype_rules_button <- function(input_id,
                                    label = "Phenotype rules — marker definitions") {
   shiny::tags$div(
-    style = "margin-bottom: 12px; padding: 8px 14px; background-color: #eef4fb; border: 1px solid #c8d8e9; border-radius: 6px; display: inline-block;",
+    style = "margin-bottom: 12px; padding: 8px 14px; background-color: var(--islet-info-bg); border: 1px solid var(--islet-border-strong); border-radius: 6px; display: inline-block;",
     shiny::actionLink(input_id,
-      shiny::tagList(shiny::icon("dna", style = "color:#4477AA;"),
-                     shiny::tags$span(style = "margin-left:6px; color:#2a4d75; font-weight:600;",
+      shiny::tagList(shiny::icon("dna", style = "color:var(--islet-link);"),
+                     shiny::tags$span(style = "margin-left:6px; color:var(--islet-link); font-weight:600;",
                                       label)),
       style = "text-decoration: none;")
   )
@@ -960,20 +1051,20 @@ phenotype_rules_button <- function(input_id,
 # selected, filtered or computed; open) and "View controls" (how it is drawn; closed). A selector that only
 # chooses what one card plots stays on that card. Downloads sit under the plot they export.
 CONTROL_PANEL_CSS <- paste0(
-  ".control-panel { border: 1px solid #cbd5df; border-radius: 6px; padding: 0 12px; margin-bottom: 12px; ",
-  "background: #f8fafc; } ",
-  ".control-panel > summary { cursor: pointer; list-style: none; font-weight: 600; color: #24465c; ",
+  ".control-panel { border: 1px solid var(--islet-border-strong); border-radius: 6px; padding: 0 12px; margin-bottom: 12px; ",
+  "background: var(--islet-panel-bg); } ",
+  ".control-panel > summary { cursor: pointer; list-style: none; font-weight: 600; color: var(--islet-panel-fg); ",
   "padding: 10px 0; display: flex; align-items: center; gap: 8px; } ",
   ".control-panel > summary::-webkit-details-marker { display: none; } ",
   ".control-panel > summary::marker { content: ''; } ",
-  ".control-panel > summary:before { content: '▸'; color: #4477aa; font-size: 14px; } ",
+  ".control-panel > summary:before { content: '▸'; color: var(--islet-link); font-size: 14px; } ",
   ".control-panel[open] > summary:before { content: '▾'; } ",
   ".control-panel > summary:after { content: 'Click to show'; margin-left: auto; font-size: 12px; ",
-  "font-weight: 400; color: #64748b; } ",
+  "font-weight: 400; color: var(--islet-panel-hint); } ",
   ".control-panel[open] > summary:after { content: 'Click to hide'; } ",
-  ".control-panel[open] > summary { border-bottom: 1px solid #dbe3ea; margin-bottom: 10px; } ",
+  ".control-panel[open] > summary { border-bottom: 1px solid var(--islet-border-strong); margin-bottom: 10px; } ",
   ".control-panel .form-group { margin-bottom: 6px; } ",
-  ".control-panel h5 { margin: 4px 0 6px; font-size: 14px; font-weight: 600; color: #333; } ",
+  ".control-panel h5 { margin: 4px 0 6px; font-size: 14px; font-weight: 600; color: var(--islet-fg); } ",
   ".control-panel .form-group:last-child { margin-bottom: 8px; }")
 
 #' A collapsible control group. Use control_panel("Data controls", open = TRUE, ...) and
@@ -1030,14 +1121,14 @@ tab_help <- function(title, rules_input_id, ...) {
     style = "display: flex; justify-content: flex-end; margin-bottom: 6px;",
     shiny::tags$details(style = "position: relative; z-index: 20;",
       shiny::tags$summary(title = title,
-        style = "cursor: pointer; list-style: none; color: #4477AA; padding: 4px 8px;",
+        style = "cursor: pointer; list-style: none; color: var(--islet-link); padding: 4px 8px;",
         shiny::tags$span(class = "sr-only", title),
         shiny::tags$i(class = "far fa-circle-question", `aria-hidden` = "true",
                       style = "font-size: 24px;")),
       shiny::tags$div(
         style = paste0("position: absolute; right: 0; top: 100%; width: min(420px, calc(100vw - 32px));",
-                       " max-height: 70vh; overflow-y: auto; padding: 12px; background: white;",
-                       " border: 1px solid #c8d8e9; box-shadow: 0 4px 16px #0002; font-size: 13px;"),
+                       " max-height: 70vh; overflow-y: auto; padding: 12px; background: var(--islet-surface);",
+                       " border: 1px solid var(--islet-border-strong); box-shadow: 0 4px 16px #0002; font-size: 13px;"),
         phenotype_rules_button(rules_input_id), ...)
     )
   )
@@ -1053,14 +1144,14 @@ phenotype_hint_ui <- function(name, prefix = "Markers:",
   rule_html <- format_phenotype_rule(name, "html")
   link <- if (!is.null(show_modal_link)) {
     shiny::tagList(
-      shiny::tags$span(style = "color:#888;", " · "),
+      shiny::tags$span(style = "color:var(--islet-fg-subtle);", " · "),
       shiny::actionLink(show_modal_link, "see all rules →",
-                        style = "font-size: 12px; color: #4477AA;")
+                        style = "font-size: 12px; color: var(--islet-link);")
     )
   }
   shiny::tags$div(
-    style = "margin-top: -6px; margin-bottom: 8px; padding: 6px 10px; background-color: #f7f9fc; border-left: 3px solid #4477AA; border-radius: 3px; font-size: 13px; color: #333; line-height: 1.4;",
-    shiny::tags$strong(style = "color:#4477AA;", paste0(prefix, " ")),
+    style = "margin-top: -6px; margin-bottom: 8px; padding: 6px 10px; background-color: var(--islet-surface-2); border-left: 3px solid #4477AA; border-radius: 3px; font-size: 13px; color: var(--islet-fg); line-height: 1.4;",
+    shiny::tags$strong(style = "color:var(--islet-link);", paste0(prefix, " ")),
     shiny::tags$span(rule_html),
     link
   )
@@ -1184,7 +1275,7 @@ phenotype_marker_definitions_ui <- function() {
     defs <- UNIFORM_PHENOTYPE_DEFINITIONS
     return(shiny::tagList(
       shiny::tags$h6(style = "margin-top: 12px; font-weight: 700;", "Phenotype definitions"),
-      shiny::tags$p(style = "color: #555;",
+      shiny::tags$p(style = "color: var(--islet-fg-muted);",
         "For the immune and epithelial markers, + means 0.10 or above on the cohort scale (0 = background, ",
         "1 = the cohort's 99.9th percentile). Hormones and structure markers use each image's own levels."),
       shiny::tags$ul(style = "padding-left: 18px; margin-bottom: 6px;",
@@ -1195,7 +1286,7 @@ phenotype_marker_definitions_ui <- function() {
   protein <- file.exists(data_path("protein_phenotype_rules.csv"))
   shiny::tagList(
     shiny::tags$h6(style = "margin-top: 12px; font-weight: 700;", "Phenotype marker definitions"),
-    shiny::tags$p(style = "color: #555;",
+    shiny::tags$p(style = "color: var(--islet-fg-muted);",
       if (protein) paste0("Rules accepted for the five added donors (a marker is positive at a gate-rescaled ",
                           "signal of 0.5 or higher). The original 15 donors keep their saved labels.")
       else "Rules1 marker reference (a partial reference for the saved labels)."),

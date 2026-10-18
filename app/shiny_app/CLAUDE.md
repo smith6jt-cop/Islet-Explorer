@@ -368,6 +368,26 @@ The Viewer embeds a local Avivator build (`www/avivator`, Vite bundle) in an `<i
 
 **Secondary mitigation** (if macOS flicker persists after the above): rebuild Avivator with `useDevicePixels: false`. The bundle only reads `image_url` + `channel_config` query params, so this can't be toggled at runtime.
 
+## Colour Theme (2026-10-18)
+
+Dark by default, modelled on VS Code's Dark Modern theme (owner: "Make the default theme of the app dark similar to
+vscode's current theme"); a "Light theme" button at the top right switches back, remembered in localStorage
+(`islet-theme`). `<html data-theme>` is set before first paint by the inline script at the top of `app.R`'s
+`<head>`; `www/islet-theme.css` defines the colours as CSS variables (`--islet-fg`, `--islet-surface-2`,
+`--islet-info-bg`, ...) and the dark overrides of Bootstrap 3, selectize, sliders, modals and tables;
+`www/islet-theme.js` switches it and writes the hidden text input `app_theme`.
+
+- **Inline styles use the variables, never literal colours** (`style = "color: var(--islet-fg-muted);"`), so one
+  switch recolours them. Structure-legend swatches and donor colours stay literal.
+- **Plots follow the theme on the server.** `theme_islet()` (ggplot2 4 `ink` / `paper`, so geoms without an
+  explicit colour follow it) and `plotly_islet_config()` (`plotly_islet_dark()`) read `islet_theme_mode()`, which
+  reads `input$app_theme` from the ROOT session -- inside a module `getDefaultReactiveDomain()$input` is
+  namespaced and never sees it. A plot that draws a fixed reference line or text uses `islet_ink()`, not black.
+  `renderPlot()` takes `bg = "transparent"`, else the area outside a fixed-aspect plot is painted white.
+- **Downloads stay white.** ggplot downloads use `islet_ggsave()` (colour-only light overrides on top of the
+  plot's own theme); the plotly camera button is replaced by one that re-draws the figure off screen in light
+  colours (`isletDownloadLightPng`, same file name and 2800 x 1800 size).
+
 ## App-Specific Conventions
 
 - **CSS overflow for cards with dropdowns**: `selectInput` menus extend below their container. Add `overflow: visible;` to card styles or dropdowns get clipped behind cards.

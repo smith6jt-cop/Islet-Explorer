@@ -9,6 +9,10 @@ ui <- fluidPage(
   lang = "en",
   useShinyjs(),
   tags$head(
+    # Colour theme: dark by default (VS Code Dark Modern), light on request; chosen before first paint from the
+    # reviewer's last choice so the page never flashes the other theme. See www/islet-theme.css.
+    tags$script(HTML("(function(){var t='dark';try{var s=window.localStorage.getItem('islet-theme');",
+                     "if(s==='light'||s==='dark')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();")),
     tags$style(HTML(CONTROL_PANEL_CSS)),
     # Favicons for browser tab, bookmarks, and mobile pinning. Browsers pick
     # the most appropriate sized PNG based on context; the ICO is the legacy
@@ -378,7 +382,9 @@ ui <- fluidPage(
       margin-top: 20px;
     }
   "))),
-  uiOutput("theme_css"),
+  # Loaded after the app's own styles so its dark overrides win.
+  tags$head(tags$link(rel = "stylesheet", href = "islet-theme.css"),
+            tags$script(src = "islet-theme.js")),
   tags$script(HTML("
     $(document).on('shiny:connected', function() {
       function markDecorativeIcons() {
@@ -427,6 +433,13 @@ ui <- fluidPage(
     # (2026-10-17); the hidden Statistics tab reads them from there.
     column(width = 12, class = "equal-height-panel main-content-panel",
       id = "main-content", role = "main", tabindex = "-1",
+      # Theme switch (www/islet-theme.js) and the hidden text input that carries the theme to the server as
+      # input$app_theme; its value is set from the page theme before Shiny binds it, so plots draw once.
+      tags$button(id = "theme_toggle", type = "button", class = "theme-toggle", "Light theme"),
+      tags$input(id = "app_theme", type = "text", value = "dark", style = "display: none;",
+                 `aria-hidden` = "true", tabindex = "-1"),
+      tags$script(HTML("document.getElementById('app_theme').value =",
+                       " document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';")),
       # The Trajectory tab fits objects of ten or more core cells whatever their class, so the class
       # selector is hidden there (owner, 2026-10-18).
       conditionalPanel("input.tabs !== 'Trajectory'",
@@ -497,16 +510,6 @@ server <- function(input, output, session) {
   # selection applies; the Trajectory tab fits objects of ten or more core cells instead.
   object_classes <- reactive(as.character(input$object_classes %||% character(0)))
   prepared <- reactive(filter_prepared_by_object_class(.shared_prepared_data, object_classes()))
-
-  # ---- Theme CSS (light/dark toggle, if theme_bg input exists) ----
-  output$theme_css <- renderUI({
-    if (!is.null(input$theme_bg) && input$theme_bg == "Dark") {
-      tags$style(HTML("body { background-color: #000000; color: #e6e6e6; }
-                       .well { background-color: #111111; }"))
-    } else {
-      tags$style(HTML("body { background-color: #ffffff; color: #111111; }"))
-    }
-  })
 
   # ---- Module servers ----
 
@@ -725,7 +728,7 @@ server <- function(input, output, session) {
       }
     )
   })
-  output$islet_segmentation_view <- renderPlot({ islet_segmentation_view_plot() })
+  output$islet_segmentation_view <- renderPlot({ islet_segmentation_view_plot() }, bg = "transparent")
   output$dl_islet_segmentation_view <- downloadHandler(
     filename = function() {
       info <- selected_islet()
@@ -734,7 +737,7 @@ server <- function(input, output, session) {
     },
     content = function(file) {
       p <- islet_segmentation_view_plot(); if (is.null(p)) return()
-      ggplot2::ggsave(file, plot = p,
+      islet_ggsave(file, plot = p,
                       width = ISLET_PNG_DIMS$width, height = ISLET_PNG_DIMS$height,
                       dpi = ISLET_PNG_DIMS$dpi, units = ISLET_PNG_DIMS$units)
     }
@@ -751,7 +754,7 @@ server <- function(input, output, session) {
     }
     tryCatch(render_drilldown_summary(cells, palette = active_palette()), error = function(e) NULL)
   })
-  output$islet_drilldown_summary <- renderPlot({ islet_drilldown_summary_plot() })
+  output$islet_drilldown_summary <- renderPlot({ islet_drilldown_summary_plot() }, bg = "transparent")
   output$dl_islet_drilldown_summary <- downloadHandler(
     filename = function() {
       info <- selected_islet()
@@ -760,7 +763,7 @@ server <- function(input, output, session) {
     },
     content = function(file) {
       p <- islet_drilldown_summary_plot(); if (is.null(p)) return()
-      ggplot2::ggsave(file, plot = p,
+      islet_ggsave(file, plot = p,
                       width = ISLET_PNG_DIMS$width, height = ISLET_PNG_DIMS$height,
                       dpi = ISLET_PNG_DIMS$dpi, units = ISLET_PNG_DIMS$units)
     }

@@ -163,7 +163,7 @@ viewer_server <- function(id, forced_image, current_tab) {
           )
         } else {
           tags$div(
-            style = "padding: 10px; background-color: #fff3cd; border: 1px solid #ffc107; margin-bottom: 10px;",
+            style = "padding: 10px; background-color: var(--islet-warn-bg); border: 1px solid var(--islet-warn-border); margin-bottom: 10px;",
             tags$strong("No images found."),
             " Place OME-TIFF files in ", tags$code("app/shiny_app/www/local_images/"),
             " or set ", tags$code("LOCAL_IMAGE_ROOT"), " environment variable."
@@ -196,8 +196,8 @@ viewer_server <- function(id, forced_image, current_tab) {
 
       if (is.null(avivator_base)) {
         return(tagList(
-          tags$div(style = "color:#b00;", "Local Avivator static build not found under shiny/www/avivator."),
-          tags$div(style = "color:#666; font-size:90%;",
+          tags$div(style = "color:var(--islet-danger-fg);", "Local Avivator static build not found under shiny/www/avivator."),
+          tags$div(style = "color:var(--islet-fg-muted); font-size:90%;",
                    "To install: run scripts/install_avivator.sh (requires Node >= 18) or place a prebuilt bundle under shiny/www/avivator.")
         ))
       }
@@ -208,7 +208,7 @@ viewer_server <- function(id, forced_image, current_tab) {
       ready <- has_image_stable()
       if (!isTRUE(ready)) {
         return(tags$div(
-          style = "padding: 20px; text-align: center; color: #666;",
+          style = "padding: 20px; text-align: center; color: var(--islet-fg-muted);",
           "Select an image from the dropdown above to view it in AVIVATOR."
         ))
       }
@@ -216,7 +216,7 @@ viewer_server <- function(id, forced_image, current_tab) {
       src0 <- isolate(viewer_info()$iframe_src)
       if (is.null(src0) || !nzchar(src0)) {
         return(tags$div(
-          style = "padding: 20px; text-align: center; color: #666;",
+          style = "padding: 20px; text-align: center; color: var(--islet-fg-muted);",
           "Select an image from the dropdown above to view it in AVIVATOR."
         ))
       }

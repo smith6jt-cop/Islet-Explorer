@@ -242,11 +242,11 @@ strip_plotly_color_leak <- function(gg) {
   scrub <- function(s) {
     if (is.null(s) || length(s) == 0) return(s)
     s <- as.character(s)
-    # Drop any "colour: black" or "color: black" line (case-insensitive),
+    # Drop any "colour: black" or "colour: #cccccc" line (the overall trend line is drawn in the theme ink; case-insensitive),
     # collapsing the surrounding <br> separator so the tooltip stays compact.
-    s <- gsub("(?i)<br\\s*/?\\s*>\\s*colou?r:\\s*black\\s*(?=<br|$)", "", s, perl = TRUE)
-    s <- gsub("(?i)^\\s*colou?r:\\s*black\\s*<br\\s*/?\\s*>", "", s, perl = TRUE)
-    s <- gsub("(?i)^\\s*colou?r:\\s*black\\s*$", "", s, perl = TRUE)
+    s <- gsub("(?i)<br\\s*/?\\s*>\\s*colou?r:\\s*(?:black|#[0-9a-f]{3,8})\\s*(?=<br|$)", "", s, perl = TRUE)
+    s <- gsub("(?i)^\\s*colou?r:\\s*(?:black|#[0-9a-f]{3,8})\\s*<br\\s*/?\\s*>", "", s, perl = TRUE)
+    s <- gsub("(?i)^\\s*colou?r:\\s*(?:black|#[0-9a-f]{3,8})\\s*$", "", s, perl = TRUE)
     # Collapse adjacent duplicate donor_status lines (handles the ggplotly
     # case where both `fill` and `colour` aesthetics emit the same value).
     s <- gsub("(donor_status:\\s*([^<]+))(<br\\s*/?\\s*>donor_status:\\s*\\2)+",

@@ -40,9 +40,9 @@ load_object_counts <- local({
 
 object_counts_card_ui <- function(ns) {
   div(class = "card",
-      style = "margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px;",
+      style = "margin-bottom: 20px; padding: 15px; border: 1px solid var(--islet-border-strong); border-radius: 8px;",
     div(style = "display: flex; align-items: center; justify-content: space-between; margin-top: 0;",
-      h5("Endocrine objects per donor", style = "margin: 0; color: #333;"),
+      h5("Endocrine objects per donor", style = "margin: 0; color: var(--islet-fg);"),
       downloadButton(ns("dl_object_counts"), "CSV", class = "btn-sm btn-outline-secondary",
                      style = "font-size: 11px; padding: 2px 8px;")
     ),
@@ -82,7 +82,7 @@ object_counts_plot <- function(d, measure, colors) {
       if (!any(k)) next
       p <- plotly::add_markers(p, x = x[k], y = d[[measure]][k], name = s,
                                marker = list(size = 13, color = colors[[s]] %||% "#777777",
-                                             line = list(color = "white", width = 1)),
+                                             line = list(color = ISLET_THEME_PALETTE[[islet_theme_mode()]]$paper, width = 1)),
                                text = sprintf("Donor %s (%s)<br>%s: %s", d$case_id[k], s, label,
                                               format(signif(d[[measure]][k], 3), big.mark = ",")),
                                hoverinfo = "text")
@@ -90,7 +90,7 @@ object_counts_plot <- function(d, measure, colors) {
     lv <- seq_along(levels(d$donor_status))
     has <- is.finite(med)
     p <- plotly::add_segments(p, x = lv[has] - 0.3, xend = lv[has] + 0.3, y = med[has], yend = med[has],
-                              name = "Donor median", line = list(color = "#333333", width = 3),
+                              name = "Donor median", line = list(color = islet_ink(), width = 3),
                               hoverinfo = "skip", inherit = FALSE)
     p <- plotly::layout(p,
                         xaxis = list(title = list(text = "Donor status", font = fonts$axis_title),

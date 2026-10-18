@@ -228,7 +228,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       if (!is.null(df) && nrow(df) > 0) {
         aabp_donors <- df %>% dplyr::filter(donor_status == "Aab+")
         if (nrow(aabp_donors) == 0 && "Aab+" %in% validated_groups()) {
-          div(style = "color: #d9534f; font-weight: bold; margin-bottom: 10px;",
+          div(style = "color: var(--islet-danger-fg); font-weight: bold; margin-bottom: 10px;",
               "\u26a0 No matching donors.")
         } else {
           NULL
@@ -1036,7 +1036,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       if (!show_table) return(NULL)
       if (is.null(outlier_data) || nrow(outlier_data) == 0) {
         return(tags$div(
-          style = "margin-top: 12px; padding: 8px 10px; background-color: #e8f4fd; border: 1px solid #b8daff; border-radius: 5px; color: #004085; font-size: 12px;",
+          style = "margin-top: 12px; padding: 8px 10px; background-color: var(--islet-info-bg); border: 1px solid var(--islet-info-border); border-radius: 5px; color: var(--islet-info-fg); font-size: 12px;",
           "No outliers detected for the current selection."
         ))
       }
@@ -1054,8 +1054,8 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       }
 
       tags$div(
-        style = "margin-top: 15px; padding: 10px; background-color: #fff3cd; border: 1px solid #ffc107; border-radius: 5px; color: #000000;",
-        tags$h6(style = "margin-top: 0; color: #000000;", header),
+        style = "margin-top: 15px; padding: 10px; background-color: var(--islet-warn-bg); border: 1px solid var(--islet-warn-border); border-radius: 5px; color: var(--islet-warn-fg);",
+        tags$h6(style = "margin-top: 0; color: var(--islet-warn-fg);", header),
         tags$div(style = "max-height: 200px; overflow-y: auto;",
           renderTable(outlier_data))
       )
@@ -1135,14 +1135,14 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         # Header: title + close button
         div(style = "display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;",
           h3(paste0(info$islet_key, " (", title_detail, ")"),
-             style = "margin: 0; color: #0066CC; font-size: 22px;"),
+             style = "margin: 0; color: var(--islet-heading); font-size: 22px;"),
           actionButton(ns("clear_segmentation"), "Close", class = "btn btn-sm btn-outline-secondary")
         ),
         # Main content: controls sidebar (left) + plot (center) + composition (right)
         fluidRow(
           # Left sidebar: all controls
           column(2,
-            div(style = "padding: 10px; background-color: #f8f9fa; border-radius: 5px;",
+            div(style = "padding: 10px; background-color: var(--islet-surface-2); border-radius: 5px;",
               if (has_cells) {
                 tagList(
                   h5("Layers", style = "margin-top: 0; font-size: 15px;"),
@@ -1187,7 +1187,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
               },
               hr(style = "margin: 8px 0;"),
               span(paste("Centroid:", round(info$centroid_x, 0), "/", round(info$centroid_y, 0), "\u00b5m"),
-                   style = "color: #666; font-size: 13px;")
+                   style = "color: var(--islet-fg-muted); font-size: 13px;")
             )
           ),
           # Center: plot
@@ -1202,7 +1202,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
             if (has_cells) {
               conditionalPanel(
                 condition = "input.drilldown_show_cells",
-                div(style = "padding: 15px; background-color: #f8f9fa; border-radius: 5px;",
+                div(style = "padding: 15px; background-color: var(--islet-surface-2); border-radius: 5px;",
                   h5("Cell Composition", style = "margin-top: 0; font-size: 17px;"),
                   plotOutput("islet_drilldown_summary", height = "400px"),
                   div(style = "text-align: right; margin-top: 6px;",
