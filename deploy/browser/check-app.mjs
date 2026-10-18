@@ -179,13 +179,15 @@ try {
         : [...(selector?.options || [])].map(option => option.textContent.trim());
       const retired = ['Endocrine', 'Acinar', 'Endothelial', 'T cell', 'Immune',
         'Unknown', 'ECAD+', 'Structural', 'APCs'];
+      // The QuPath hormone-positivity fractions were withdrawn on 2026-10-14 (not comparable across the
+      // cohort), so Cell Populations is the default layer and carries its % / Counts / Density selector.
       const hormoneLabels = ['Insulin+ positivity fraction', 'Glucagon+ positivity fraction',
         'Somatostatin+ positivity fraction'];
+      const metrics = [...document.querySelectorAll('input[name="plot-metric"]')].map(input => input.value);
       const plotHelp = [...document.querySelectorAll('summary[title="Plot help"]')]
         .map(summary => summary.parentElement).find(details => details);
-      return labels.length > 0 && hormoneLabels.every(label => labels.includes(label)) &&
-        !labels.some(label => retired.includes(label)) &&
-        !document.querySelector('#plot-metric, input[name="plot-metric"]') &&
+      return labels.length > 0 && !labels.some(label => hormoneLabels.includes(label)) &&
+        !labels.some(label => retired.includes(label)) && metrics.length === 3 &&
         Boolean(plotHelp) && !plotHelp.open &&
         !document.querySelector('#plot-dynamic_selector .help-block, #plot-metric_selector .help-block, #plot-dynamic_selector .phenotype-hint');
     });
@@ -222,6 +224,10 @@ try {
         return true;
       });
       if (!keyboardWorked) await page.click(`#tabs a[data-value="${tab.name}"]`);
+    }
+    // The PAGA layout is built only on request (2026-10-14).
+    if (tab.name === 'Trajectory') {
+      await page.$eval('#traj-paga_show_layout', box => { if (!box.checked) box.click(); });
     }
     for (const [selector, kind] of tab.plots) {
       await check(`render_${selector.slice(1)}`, () => rendered(page, selector, kind));

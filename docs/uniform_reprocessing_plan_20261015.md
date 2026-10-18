@@ -37,13 +37,13 @@ cells in both core and 20 um band are the 4,791 analysis rows (1,488 islets, 3,3
 counted (v4, below). That is 3.08 million analysed cells, with 24,692 Excluded and 320,737 without a
 nucleus. The app serves Islets and Clusters behind an app-wide selector (A5), which since 2026-10-17 also
 replaces every minimum-cells control. The Trajectory instead fits every object with ten or more core cells,
-whatever its class (owner, 2026-10-18). Local checks on v3: 232 R
-tests pass. The browser harness passed 37 of 45 checks on v1 and v2, including the 20-donor census, no donor 78
-and the Harmony method. The four Viewer checks need the
-Range-capable image route that only the nginx deployment provides. The other four (PAGA render and download,
-Plot vocabulary, Trajectory contrast) also failed on v3, because the harness predates the 2026-10-14 app change.
-The service stays stopped until the owner accepts the root (P6); the build report is
-`tmp/uniform-20donor-20261017-v2/`.
+whatever its class (owner, 2026-10-18). Local checks on v4 (2026-10-18): 232 R tests pass, and the browser
+harness passes all 45 checks against a shiny-server instance with the local service's configuration
+(`deploy/shiny-server-local.conf` on another port), whose image route answers Range requests; `shiny::runApp()`
+cannot, so the four Viewer checks fail there. The PAGA and Plot vocabulary checks were brought up to the
+2026-10-14 app (PAGA built on request; hormone-positivity fractions withdrawn). The local env file now sets
+`RETICULATE_PYTHON` to the app venv, which has `fa2-modified` (the scvi-env interpreter in the service unit does
+not, so PAGA silently fell back to Fruchterman-Reingold). The build report is `tmp/uniform-20donor-20261018-v4/`.
 
 **The two open items, 2026-10-17** (owner: "use common sense and available tools to resolve the scaling and
 threshold"). (1) Aab_6558's Excluded cells inside objects: its INS stain is weak (2.4x its tissue p99 in the
