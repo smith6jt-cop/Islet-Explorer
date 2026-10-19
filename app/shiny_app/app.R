@@ -435,17 +435,16 @@ ui <- fluidPage(
       id = "main-content", role = "main", tabindex = "-1",
       # Theme switch (www/islet-theme.js) and the hidden text input that carries the theme to the server as
       # input$app_theme; its value is set from the page theme before Shiny binds it, so plots draw once.
-      tags$button(id = "theme_toggle", type = "button", class = "theme-toggle", "Light theme"),
+      # The Panc Floyd logo heads the page (owner, 2026-10-19); the light-text copy is shown on the dark theme
+      # (both made by scripts/app_assets/make_logo_variants.py from www/logo.png).
+      div(class = "app-header",
+        tags$img(src = "logo-header-light.png", class = "brand-logo brand-logo-light", alt = "Panc Floyd"),
+        tags$img(src = "logo-header-dark.png", class = "brand-logo brand-logo-dark", alt = "Panc Floyd"),
+        tags$button(id = "theme_toggle", type = "button", class = "theme-toggle", "Light theme")),
       tags$input(id = "app_theme", type = "text", value = "dark", style = "display: none;",
                  `aria-hidden` = "true", tabindex = "-1"),
       tags$script(HTML("document.getElementById('app_theme').value =",
                        " document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';")),
-      # The Trajectory tab fits objects of ten or more core cells whatever their class, so the class
-      # selector is hidden there (owner, 2026-10-18).
-      conditionalPanel("input.tabs !== 'Trajectory'",
-        div(class = "object-class-filter", style = "margin: 4px 0 6px; font-size: 15px;",
-          checkboxGroupInput("object_classes", "Endocrine objects",
-                             choices = OBJECT_CLASSES, selected = unname(OBJECT_CLASSES), inline = TRUE))),
       tabsetPanel(id = "tabs",
         tabPanel("Plot",
           fluidRow(
@@ -508,8 +507,24 @@ server <- function(input, output, session) {
   # The app-wide endocrine-object selection (owner A5): Islet, EndocrineCluster (Singles are counted, not analysed,
   # since 2026-10-18). Every tab but Trajectory reads prepared(), so filtering it here is the one place the
   # selection applies; the Trajectory tab fits objects of ten or more core cells instead.
-  object_classes <- reactive(as.character(input$object_classes %||% character(0)))
+  # The selector sits in the Data controls of the Plot tab (object_classes) and the Spatial tab
+  # (spatial_object_classes); either one sets the selection and the other follows it.
+  object_classes <- reactiveVal(unname(OBJECT_CLASSES))
+  sync_object_classes <- function(value, other) {
+    value <- as.character(value %||% character(0))
+    if (!setequal(value, object_classes())) {
+      object_classes(value)
+      updateCheckboxGroupInput(session, other, selected = value)
+    }
+  }
+  observeEvent(input$object_classes, sync_object_classes(input$object_classes, "spatial_object_classes"),
+               ignoreNULL = FALSE, ignoreInit = TRUE)
+  observeEvent(input$spatial_object_classes, sync_object_classes(input$spatial_object_classes, "object_classes"),
+               ignoreNULL = FALSE, ignoreInit = TRUE)
   prepared <- reactive(filter_prepared_by_object_class(.shared_prepared_data, object_classes()))
+  # The Trajectory tab fits every object with ten or more core cells whatever its class, so it reads the
+  # unfiltered data (its merge of diameters and Leiden clusters would otherwise lose the unselected class).
+  prepared_all <- reactive(.shared_prepared_data)
 
   # ---- Module servers ----
 
@@ -636,7 +651,7 @@ server <- function(input, output, session) {
                               outlier_threshold = outlier_z_global)
 
   # Trajectory module
-  trajectory_server("traj", prepared, selected_islet, forced_image, active_tab, active_donor_colors,
+  trajectory_server("traj", prepared_all, selected_islet, forced_image, active_tab, active_donor_colors,
                     remove_outliers = remove_outliers_global,
                     outlier_threshold = outlier_z_global)
 

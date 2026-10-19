@@ -832,7 +832,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         rdf <- rdf %>% dplyr::filter(value != 0)
       }
 
-      color_by <- input$dist_color_by %||% "donor_status"
+      color_by <- input$plot_color_by %||% "donor_status"
       rdf$donor_status <- factor(rdf$donor_status, levels = c("ND", "Aab+", "T1D"))
 
       if (color_by == "donor_id" && "Case ID" %in% colnames(rdf)) {
@@ -856,11 +856,8 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       selection <- validated_selection() %||% ""
       metric <- validated_metric()
 
-      # Force reactivity on distribution-specific controls
-      dist_color_by_val <- input$dist_color_by
-      dist_show_points_val <- input$dist_show_points
-
-      color_by <- input$dist_color_by %||% "donor_status"
+      # The point controls are shared with the scatter (View controls, "Both plots").
+      color_by <- input$plot_color_by %||% "donor_status"
       rdf <- dd$all
       dist_summary <- dd$summary
       rdf_ghost <- rdf[rdf$is_outlier, , drop = FALSE]
@@ -920,14 +917,14 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       # Individual points (kept = non-outliers). Jitter is seeded so the
       # visual positions are stable across reactive re-renders \u2014 toggling
       # other controls won't shuffle the cloud.
-      if (isTRUE(input$dist_show_points)) {
+      if (isTRUE(input$show_points)) {
         if (color_by == "donor_id" && "donor_id" %in% colnames(rdf)) {
           donor_colors <- get_donor_palette(levels(rdf$donor_id))
           g <- g +
             geom_jitter(aes(x = donor_status, y = value, color = donor_id),
                         position = position_jitter(width = 0.18, seed = 17),
-                        alpha = 1 - ifelse(is.null(input$dist_pt_alpha), 0.5, input$dist_pt_alpha),
-                        size  = ifelse(is.null(input$dist_pt_size), 1.5, input$dist_pt_size),
+                        alpha = 1 - (input$pt_alpha %||% 0.4),
+                        size  = input$pt_size %||% 3,
                         stroke = 0, inherit.aes = FALSE) +
             scale_color_manual(values = donor_colors,
                                breaks = levels(rdf$donor_id),
@@ -937,8 +934,8 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
           g <- g +
             geom_jitter(aes(x = donor_status, y = value, color = donor_status),
                         position = position_jitter(width = 0.18, seed = 17),
-                        alpha = 1 - ifelse(is.null(input$dist_pt_alpha), 0.75, input$dist_pt_alpha),
-                        size  = ifelse(is.null(input$dist_pt_size), 0.7, input$dist_pt_size),
+                        alpha = 1 - (input$pt_alpha %||% 0.4),
+                        size  = input$pt_size %||% 3,
                         stroke = 0, inherit.aes = FALSE) +
             scale_color_manual(values = donor_colors_reactive(),
                                guide = "none")
@@ -949,7 +946,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       # panel so users can see WHERE in the violin/box they live. Drawn last
       # so they sit on top of the violin/box body.
       if (nrow(rdf_ghost) > 0) {
-        ghost_size <- ifelse(is.null(input$dist_pt_size), 0.7, input$dist_pt_size) * 1.4
+        ghost_size <- (input$pt_size %||% 3) * 1.4
         g <- g + geom_jitter(
           data = rdf_ghost,
           aes(x = donor_status, y = value),
@@ -971,7 +968,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         theme_islet() +
         theme(legend.position = if (color_by == "donor_id") "right" else "none")
 
-      if (!is.null(input$dist_log_scale) && input$dist_log_scale) {
+      if (isTRUE(input$log_scale)) {
         g <- g + scale_y_continuous(trans = scales::pseudo_log_trans(base = 10),
                                     breaks = pseudo_log_breaks(10),
                                     labels = scales::label_comma())

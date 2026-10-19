@@ -1085,11 +1085,20 @@ root_phenotype_labels <- function() {
   if (is.null(labels)) NULL else as.character(labels)
 }
 
+#' The "Endocrine objects" class selector. It sits in the Data controls of the Plot tab (`object_classes`) and of
+#' the Spatial tab (`spatial_object_classes`), which app.R keeps in step; both filter prepared() (owner, 2026-10-19:
+#' "The selector for islets and clusters needs to go in the data controls").
+object_class_selector <- function(input_id) {
+  shiny::checkboxGroupInput(input_id, "Endocrine objects", choices = OBJECT_CLASSES,
+                            selected = unname(OBJECT_CLASSES), inline = TRUE)
+}
+
 #' Help paragraph for the app-wide "Endocrine objects" selector, shared by every tab's help popover.
 object_classes_help <- function() {
   if (!is_uniform_root()) return(NULL)
   shiny::tags$p(shiny::tags$strong("Endocrine objects."),
-    " The selector above the tabs applies to every tab. An Islet has two or more whole cells and is at least ",
+    " The selector in the Data controls of the Plot and Spatial tabs (the two are kept in step) chooses the ",
+    "classes analysed. An Islet has two or more whole cells and is at least ",
     "35 µm across (the mean of its largest and smallest caliper diameter); a Cluster has two or more cells ",
     "and is smaller. Rows and plots use only the selected classes. The Trajectory tab instead fits every object ",
     "with ten or more core cells, whatever its class. A Single (one endocrine cell outside any islet or cluster) ",

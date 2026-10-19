@@ -356,6 +356,31 @@ try {
         return { passed: !choices.includes('EndocrineSingle') && choices.length === 2 && traces > 0, choices, traces };
       });
     });
+    // Owner, 2026-10-19: the class selector sits in the Data controls (Plot and Spatial copies); one set of point
+    // controls draws points on both Plot cards; the Panc Floyd logo heads the page in the theme's copy.
+    await check('plot_controls_selector_and_logo', async () => {
+      await rendered(page, '#plot-plt', 'plotly');
+      await rendered(page, '#plot-dist', 'plotly');
+      return page.evaluate(() => {
+        const panelOf = id => document.querySelector(id)?.closest('details.control-panel')
+          ?.querySelector('summary')?.textContent.trim();
+        const points = id => (document.querySelector(id)?.data || [])
+          .some(t => String(t.mode || '').includes('markers') && (t.x?.length || 0) > 50);
+        const logos = [...document.querySelectorAll('img.brand-logo')]
+          .filter(img => img.offsetParent !== null && img.naturalWidth > 0);
+        const result = {
+          plot_selector_panel: panelOf('#object_classes'),
+          spatial_selector_panel: panelOf('#spatial_object_classes'),
+          scatter_points: points('#plot-plt'), distribution_points: points('#plot-dist'),
+          separate_dist_point_controls: Boolean(document.querySelector('#plot-dist_pt_size')),
+          visible_logos: logos.map(img => img.getAttribute('src')),
+        };
+        result.passed = result.plot_selector_panel === 'Data controls' && result.spatial_selector_panel === 'Data controls'
+          && result.scatter_points && result.distribution_points && !result.separate_dist_point_controls
+          && logos.length === 1;
+        return result;
+      });
+    });
   }
 
   const viewerPage = await browser.newPage();

@@ -52,7 +52,10 @@ spatial_ui <- function(id) {
     fluidRow(column(12,
       control_panel("Data controls", open = TRUE,
         fluidRow(
-          column(3, uiOutput(ns("donor_selector"))),
+          column(3,
+            # Non-namespaced: synced with the Plot tab's copy (app.R).
+            object_class_selector("spatial_object_classes"),
+            uiOutput(ns("donor_selector"))),
           column(3,
             radioButtons(ns("region_filter"), "Show cells",
                          choices = c("All" = "all", "Core + Peri" = "core_peri", "Core Only" = "core"),

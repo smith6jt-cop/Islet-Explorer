@@ -10,10 +10,12 @@
 > are not rows, regions or distance targets (owner: "Singles should not be included in any islet-level analysis
 > except for quantifying or showing how many there are"): they are counted in `endocrine_objects_by_donor.csv`
 > (the Plot tab's "Endocrine objects per donor" card, `R/object_counts.R`) and drawn as `EndocrineSingle` outlines
-> on the segmentation map. An app-wide
-> checkbox group `object_classes` (app.R) filters `prepared()` via `filter_prepared_by_object_class()`. The
-> Trajectory tab ignores it (and app.R hides it there): it fits every object with `TRAJ_MIN_CELLS` = 10 or more
-> core cells, of any class (owner, 2026-10-18).
+> on the segmentation map. The
+> "Endocrine objects" checkbox group (`object_class_selector()`) sits in the Data controls of the Plot tab
+> (`object_classes`) and the Spatial tab (`spatial_object_classes`) since 2026-10-19; app.R keeps the two in step
+> and filters `prepared()` via `filter_prepared_by_object_class()`. The Trajectory tab gets the unfiltered
+> `prepared_all()`: it fits every object with `TRAJ_MIN_CELLS` = 10 or more core cells, of any class (owner,
+> 2026-10-18).
 > `add_islet_key` and `trajectory_link_key` accept all three prefixes (`ISLET_KEY_PATTERN`). Endocrine, T cell
 > and Immune hold the cells left without a subtype there, but stay retired from every selector and legend, as
 > general classes beside their subtypes (owner, 2026-10-17); `Exocrine` is new. A root without `object_class` is
@@ -384,6 +386,9 @@ vscode's current theme"); a "Light theme" button at the top right switches back,
   reads `input$app_theme` from the ROOT session -- inside a module `getDefaultReactiveDomain()$input` is
   namespaced and never sees it. A plot that draws a fixed reference line or text uses `islet_ink()`, not black.
   `renderPlot()` takes `bg = "transparent"`, else the area outside a fixed-aspect plot is painted white.
+- **Header logo.** The Panc Floyd logo heads the page (owner, 2026-10-19) in two copies made by
+  `scripts/app_assets/make_logo_variants.py` from `www/logo.png`: `logo-header-light.png` (original colours) and
+  `logo-header-dark.png` (light letters); CSS shows the one for the current theme.
 - **Downloads stay white.** ggplot downloads use `islet_ggsave()` (colour-only light overrides on top of the
   plot's own theme); the plotly camera button is replaced by one that re-draws the figure off screen in light
   colours (`isletDownloadLightPng`, same file name and 2800 x 1800 size).

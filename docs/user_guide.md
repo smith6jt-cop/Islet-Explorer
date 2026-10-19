@@ -209,13 +209,14 @@ The Plot tab is the primary exploration interface. It has a **sidebar** (left) a
 - **AAb Filter**: Filter by autoantibody positivity (when available)
 - **Age Range**: Slider to restrict donor age (H5AD only)
 - **Sex**: Checkbox filter (H5AD only)
-- **Endocrine objects** (above the tabs): choose Islets and/or Clusters. Singles (one endocrine cell) are not analysed; the Endocrine objects per donor card at the bottom of the Plot tab counts them, and the segmentation map outlines them in orange. This replaced the Min cells/islet filter on 2026-10-17; every tab except Trajectory uses the selected classes (Trajectory fits every object with 10 or more core cells).
+- **Endocrine objects** (first in the Data controls; the Spatial tab has a copy that stays in step): choose Islets and/or Clusters. Singles (one endocrine cell) are not analysed; the Endocrine objects per donor card at the bottom of the Plot tab counts them, and the segmentation map outlines them in orange. This replaced the Min cells/islet filter on 2026-10-17; every tab except Trajectory uses the selected classes (Trajectory fits every object with 10 or more core cells).
 - **Diameter Range**: Restrict islet diameter in μm
 
 ### Main Panel
 
 - **Scatter (left)**: Interactive Plotly scatter, diameter vs selected feature, with binned summary lines per donor status. Excluded outliers (see [Outlier Handling](#outlier-handling)) appear as faint grey × ghost markers.
 - **Distribution (right)**: Violin or box plot of the same feature, grouped by donor status. Has its own **independent** "Exclude zero values" checkbox — toggling it no longer affects the left scatter. Outlier ghost × markers render here too.
+- **View controls**: the point controls under *Both plots* (color by, point size, transparency, show individual points, log y-axis) apply to the scatter and the distribution alike; Trend line, log2 x-axis and the summary statistic apply to the scatter, Plot type to the distribution. Individual points are shown by default (since 2026-10-19).
 - **Outlier Table**: Lists excluded outliers for the selected feature. Hover the "Show excluded-outlier table" checkbox label in the sidebar for the rule.
 - **Click Interaction**: Click any data point to open the segmentation viewer (see [Single-Cell Drill-Down](#single-cell-drill-down))
 
@@ -443,7 +444,7 @@ path.
 Below the tissue scatter and Leiden panel, three interactive analysis sections visualize per-phenotype peri-islet neighborhood metrics. The cards expose the 12 retained reviewer-facing phenotypes through dynamic choices rather than the previous hand-curated immune-only lists. Cards only appear when neighborhood data is available in the H5AD (not in Excel fallback mode).
 
 **Global Controls** (toolbar above the cards):
-- **Endocrine objects** (above the tabs): the neighborhood cards use the selected classes. Selecting Islets alone reduces noise from one- and few-cell objects and lowers NA rates in distance metrics.
+- **Endocrine objects** (Data controls; kept in step with the Plot tab's copy): the neighborhood cards use the selected classes. Selecting Islets alone reduces noise from one- and few-cell objects and lowers NA rates in distance metrics.
 - **Point size** and **Opacity**: Adjust scatter plot visualization across all cards.
 - **Islet count**: Shows how many islets pass the current filters.
 
@@ -484,7 +485,7 @@ Click any islet data point in the Plot or Trajectory tab to inspect individual c
 1. Click a point in the scatter/UMAP plot
 2. A segmentation panel appears below the plot with the title showing the islet name and donor info (case ID, disease status, age, sex)
 
-> **macOS note (fixed Jun 2026):** clicking a point previously did nothing on macOS. Drill-down now works on all platforms via a native-click handler. Tip: on the Plot tab, enable **Show individual points** so there are per-islet points to click — aggregated summary points are not clickable.
+> **macOS note (fixed Jun 2026):** clicking a point previously did nothing on macOS. Drill-down now works on all platforms via a native-click handler. Tip: on the Plot tab, keep **Show individual points** on (the default) so there are per-islet points to click — aggregated summary points are not clickable.
 
 ### Panel Layout
 

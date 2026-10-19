@@ -35,15 +35,18 @@ plot_main_ui <- function(id, extra_panel = NULL) {
                " per mm\u00b2 of tissue, with the donor median per status; Singles by cell type splits each donor's",
                " Singles by the type of their one cell. It follows the Donor status filter, not the object selector."),
         tags$p(tags$strong("Selecting an object."),
-               " Turn on \"Show individual points\", then click a point on the Islet Size Distribution scatter to open",
-               " its segmentation map and single cells below. With \"Color points by\" set to Donor ID, click a donor",
+               " With \"Show individual points\" on (the default), click a point on the Islet Size Distribution",
+               " scatter to open its segmentation map and single cells below. With \"Color points by\" set to Donor ID, click a donor",
                " in the legend to show or hide it."),
         tags$p(tags$strong("Controls."),
-               " Data controls choose what is plotted; View controls change how it is drawn. Click a panel's title to",
+               " Data controls choose what is plotted; View controls change how it is drawn. The point controls",
+               " under \"Both plots\" apply to the size scatter and the distribution comparison alike. Click a panel's title to",
                " open or close it. Use browser zoom (Ctrl +/\u2212) to resize cards.")),
       control_panel("Data controls", open = TRUE,
         fluidRow(
           column(3,
+            # Non-namespaced: synced with the Spatial tab's copy (app.R).
+            object_class_selector("object_classes"),
             selectInput(ns("mode"), "Data layer",
                         choices = c("Microenvironment", "Cell Populations"),
                         selected = "Cell Populations"),
@@ -101,7 +104,7 @@ plot_main_ui <- function(id, extra_panel = NULL) {
       control_panel("View controls",
         fluidRow(
           column(3,
-            radioButtons(ns("stat"), "Summary statistic",
+            radioButtons(ns("stat"), "Summary statistic (Islet Size Distribution)",
                          choices = c("Mean\u00b1SE" = "mean_se",
                                      "Mean\u00b1SD" = "mean_sd",
                                      "Median + IQR" = "median_iqr"),
@@ -110,8 +113,10 @@ plot_main_ui <- function(id, extra_panel = NULL) {
             selectInput("sidebar_donor_palette", "Donor status colors",
                         choices = names(DONOR_PALETTES), selected = "Bright")
           ),
+          # Point controls apply to both plots (owner, 2026-10-19: the View controls must apply to both,
+          # not only the Distribution Comparison).
           column(5,
-            h5("Islet Size Distribution"),
+            h5("Both plots"),
             fluidRow(
               column(6,
                 selectInput(ns("plot_color_by"), "Color points by:",
@@ -121,32 +126,19 @@ plot_main_ui <- function(id, extra_panel = NULL) {
                 sliderInput(ns("pt_alpha"), "Point transparency", min = 0, max = 0.95, value = 0.4, step = 0.05)
               ),
               column(6,
-                radioButtons(ns("add_smooth"), "Trend line", choices = c("None", "LOESS"),
-                             selected = "None", inline = TRUE),
-                checkboxInput(ns("show_points"), "Show individual points", value = FALSE),
-                checkboxInput(ns("log_scale"), "Log scale y-axis", value = FALSE),
-                checkboxInput(ns("log_scale_x"), "Log2 scale x-axis", value = FALSE)
+                checkboxInput(ns("show_points"), "Show individual points", value = TRUE),
+                checkboxInput(ns("log_scale"), "Log scale y-axis", value = FALSE)
               )
             )
           ),
           column(4,
+            h5("Islet Size Distribution"),
+            radioButtons(ns("add_smooth"), "Trend line", choices = c("None", "LOESS"),
+                         selected = "None", inline = TRUE),
+            checkboxInput(ns("log_scale_x"), "Log2 scale x-axis", value = FALSE),
             h5("Distribution Comparison"),
-            fluidRow(
-              column(6,
-                selectInput(ns("dist_color_by"), "Color points by:",
-                            choices = c("Donor Status" = "donor_status", "Donor ID" = "donor_id"),
-                            selected = "donor_status"),
-                sliderInput(ns("dist_pt_size"), "Point size", min = 0.3, max = 4.0, value = 3.0, step = 0.1),
-                sliderInput(ns("dist_pt_alpha"), "Point transparency", min = 0, max = 0.95, value = 0.4,
-                            step = 0.05)
-              ),
-              column(6,
-                radioButtons(ns("dist_type"), "Plot type", choices = c("Violin", "Box"),
-                             selected = "Violin", inline = TRUE),
-                checkboxInput(ns("dist_show_points"), "Show individual points", value = TRUE),
-                checkboxInput(ns("dist_log_scale"), "Log scale y-axis", value = FALSE)
-              )
-            )
+            radioButtons(ns("dist_type"), "Plot type", choices = c("Violin", "Box"),
+                         selected = "Violin", inline = TRUE)
           )
         )
       )

@@ -87,6 +87,12 @@ html[data-theme="dark"] {
 }
 .theme-toggle:hover { background: var(--islet-hover); }
 
+/* Page header: the Panc Floyd logo, in the copy that reads on the current theme, and the theme switch. */
+.app-header { display: flex; align-items: center; justify-content: space-between; margin: 0 0 8px; }
+.app-header .theme-toggle { float: none; margin: 0; }
+.brand-logo { height: 64px; width: auto; }
+html[data-theme="dark"] .brand-logo-light, html:not([data-theme="dark"]) .brand-logo-dark { display: none; }
+
 /* ---- Dark overrides of the app stylesheet and Bootstrap 3 ------------------------------------------------------ */
 html[data-theme="dark"] body { background-color: var(--islet-bg); color: var(--islet-fg); }
 html[data-theme="dark"] .container-fluid { background-color: var(--islet-surface); box-shadow: 0 4px 12px var(--islet-shadow); }
