@@ -2,7 +2,8 @@
 
 > **2026-10-15:** donor 78 (HDL078 / HPAP-078) is removed from the app. `ISLET_EXCLUDED_DONORS` in `00_globals.R` (kept in step with `scripts/excluded_donors.csv` by a pipeline test) makes `load_shared_prepared_data()` refuse a data root that contains it, and the Viewer never lists its image. The local app is offline at the owner's direction until the reprocessed root is accepted; the last served root was `data/development/protein-expanded-20261015-v3/`.
 
-> **2026-10-16 uniform root (awaiting owner review):** `data/development/uniform-20donor-20261018-v5/` (2026-10-18;
+> **2026-10-16 uniform root (awaiting owner review):** `data/development/uniform-20donor-20261019-v6/` (2026-10-19: v5 with the
+> composition UMAP and Leiden; v5 is 2026-10-18;
 > v1-v4 are superseded: hormone level, the additions' structure objects, no structure cell types, B cells, Singles
 > counted only, mutually exclusive hormones and the CHGA+ hormone-negative type), built
 > by `scripts/uniform/assemble_uniform.py`. All 20 donors are retyped with the Islet-Explorer-Senior method. Rows
@@ -20,6 +21,8 @@
 > and Immune hold the cells left without a subtype there, but stay retired from every selector and legend, as
 > general classes beside their subtypes (owner, 2026-10-17); `Exocrine` is new. A root without `object_class` is
 > treated as islets only.
+
+> **2026-10-19 owner decision:** the islet-level UMAPs and Leiden clusters (Spatial and Trajectory) are the endocrine composition of the objects with ten or more core cells, with no donor correction; see "Composition embedding" below. The 2026-10-03 note that follows describes the protein embedding it replaced for display.
 
 > **2026-10-03 implementation:** the expanded cohort preserves the original source data and uses Harmony on protein PCA for spatial UMAP and Leiden. The live trajectory uses endocrine-normalized composition features; marker expression is the mean gate-rescaled protein signal. Earlier scVI descriptions below are historical. See the [current implementation record](../../docs/protein_expansion_20261003.md).
 
@@ -399,7 +402,8 @@ vscode's current theme"); a "Light theme" button at the top right switches back,
 - **Font size minimums**: Use `h5` (not `h6`) with explicit `font-size: 15px` for panel headings. Legend items minimum 14-15px.
 - **Large scatter plots (>50K points)**: Use `ggplot2::renderPlot()` NOT `plotlyOutput()` -- plotly cannot handle 100K+ points interactively. Use small `size` (0.3-0.5) and low `alpha` (0.3-0.6).
 - **Tissue scatter coordinate convention**: `coord_fixed() + scale_y_reverse()` matches microscopy convention (y increases downward, spatial proportions preserved)
-- **Leiden cluster mapping for cells**: Islet-level Leiden assignments map to single cells via `islet_name` column lookup. Tissue background cells without an islet get `cluster = "tissue"` (grey).
+- **Leiden cluster mapping for cells**: Islet-level Leiden assignments map to single cells via `islet_name` column lookup. Tissue background cells without an islet get `cluster = "tissue"` (grey), and so do the cells of an object outside the embedding (under ten core cells on a composition root).
+- **Composition embedding (owner, 2026-10-19)**: on a uniform root from v6, `leiden_*`, `leiden_umap_1/2` and the trajectory H5AD's `X_umap` are the endocrine composition of the objects with ten or more core cells (the Beta, Alpha, Delta and CHGA+ hormone-negative shares of each core's endocrine cells; `scripts/uniform/composition_embedding.py`), NA for smaller objects. `prepared()$composition_embedding` (H5AD `uns`) drives the Spatial method text; Cluster Composition drops NA clusters; the Trajectory tab's UMAPs show the same layout for its fitted objects, which are the same ten-cell set. The Harmony protein embedding stays in the H5AD as `X_umap_protein` / `protein_leiden_<r>` but is not shown. Why: `scripts/uniform/README.md` (App root).
 - **Per-donor tissue CSVs**: `data/donors/{imageid}.csv` with 5 columns (X_centroid, Y_centroid, phenotype, cell_region, islet_name). `cell_region` = core/peri/tissue.
 - **Leiden in H5AD**: 4 resolution columns (`leiden_0.3/0.5/0.8/1.0`) + 2 UMAP coords (`leiden_umap_1/2`). Extracted via `^leiden_` regex in `data_loading.R`.
 - **Leiden UMAP uses visualization coords**: `islets_core_clustered.h5ad` X_umap is copied from trajectory's raw marker PCA UMAP, NOT computed separately from scVI (which produces a blob). Leiden clustering itself still uses scVI neighbors.

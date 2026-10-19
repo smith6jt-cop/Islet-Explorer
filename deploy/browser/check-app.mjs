@@ -242,7 +242,7 @@ try {
         const bare = values.map(value => String(Number(value)));
         return { passed: values.length === expected && additions.every(id => values.includes(id)) &&
           !excluded.some(id => bare.includes(id)) &&
-          document.querySelector('#spatial-embedding_method')?.textContent.includes('Harmony'), donors: values.length };
+          /endocrine composition|Harmony/.test(document.querySelector('#spatial-embedding_method')?.textContent || ''), donors: values.length };
       }, ADDITIONS, EXCLUDED, EXPANDED_DONORS));
       await check('render_expanded_leiden_umap', () => rendered(page, '#spatial-leiden_umap', 'plotly'));
       // Owner, 2026-10-19: the two UMAPs are one size, and the Neighborhood Analysis dropdowns offer choices (they

@@ -14,6 +14,19 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
 
   moduleServer(id, function(input, output, session) {
     output$embedding_method <- renderText({
+      # Since 2026-10-19 (owner) a uniform root serves the endocrine composition of the objects with ten or
+      # more core cells (scripts/uniform/composition_embedding.py); older roots serve the protein embedding.
+      comp_method <- prepared()$composition_embedding
+      if (!is.null(comp_method)) {
+        return(sprintf(paste0(
+          "Built from each object's endocrine composition: the Beta, Alpha, Delta and CHGA+ hormone-negative",
+          " shares of its core endocrine cells, for the %s objects with %s or more core cells. UMAP and Leiden",
+          " use one neighbour graph. No donor correction: the shares are counted within each object, so staining",
+          " differences between donors do not enter them. Smaller objects have too few cells to place, so they",
+          " have no UMAP point or cluster and are drawn grey, as tissue, when the tissue scatter is coloured by",
+          " cluster."),
+          format(as.integer(comp_method$objects), big.mark = ","), as.integer(comp_method$min_core_cells)))
+      }
       method <- prepared()$protein_embedding
       if (is.null(method)) return("")
       correction <- if (identical(as.character(method$donor_correction), "harmony")) {
@@ -21,7 +34,8 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       } else {
         " No donor correction; clusters may reflect donor differences."
       }
-      paste0("Protein PCA: UMAP and Leiden use the same marker graph.", correction)
+      paste0("Built from each object's mean marker values: protein PCA, with UMAP and Leiden on the same marker",
+             " graph.", correction)
     })
     # Rendered inside the closed help popover, so keep it current while hidden.
     outputOptions(output, "embedding_method", suspendWhenHidden = FALSE)
@@ -430,7 +444,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       }
     )
 
-    # ==== Card 3: Leiden UMAP (plotly, 1015 islets) ====
+    # ==== Card 3: Leiden UMAP (plotly; the objects in the embedding) ====
     output$leiden_not_available <- renderUI({
       if (!has_leiden()) {
         return(div(style = "color: var(--islet-fg-subtle); font-style: italic; margin-bottom: 10px;",
@@ -513,7 +527,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       res_label <- gsub("^leiden_", "", leiden_col)
 
       spatial_umap_plotly(plot_df, "cluster", pal, "Cluster",
-                          paste0("Leiden ", res_label, " (", nrow(plot_df), " islets)"),
+                          paste0("Leiden ", res_label, " (", nrow(plot_df), " objects)"),
                           paste0("leiden_umap_", res_label))
     })
 
@@ -542,7 +556,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       plot_df$donor_status <- droplevels(plot_df$donor_status)
 
       spatial_umap_plotly(plot_df, "donor_status", donor_colors_reactive(), "Status",
-                          paste0("Donor status (", nrow(plot_df), " islets)"), "spatial_umap_donor")
+                          paste0("Donor status (", nrow(plot_df), " objects)"), "spatial_umap_donor")
     })
 
     # ==== Card 3 (bottom): Cluster Composition ====
@@ -577,6 +591,9 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         }
       }
 
+      # Objects outside the embedding (under ten core cells on a composition root) have no cluster.
+      plot_comp <- plot_comp[!is.na(plot_comp[[leiden_col]]), , drop = FALSE]
+      if (nrow(plot_comp) == 0) return(plotly_islet_empty("No clustered objects"))
       cluster <- as.character(plot_comp[[leiden_col]])
 
       # Compute mean phenotype proportions per cluster

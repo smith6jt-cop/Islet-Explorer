@@ -18,7 +18,7 @@ spatial_ui <- function(id) {
              " peri-islet bands."),
       cell_typing_help(),
       tags$p(tags$strong("Islet-level UMAPs."),
-             " Built from each object's mean marker values. ", textOutput(ns("embedding_method"), inline = TRUE),
+             " ", textOutput(ns("embedding_method"), inline = TRUE),
              " Cluster Composition",
              " shows each Leiden cluster's mean core phenotype proportions, for the checked donor statuses and",
              " phenotypes."),

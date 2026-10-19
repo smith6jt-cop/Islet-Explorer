@@ -31,7 +31,7 @@ all 20 images is in `$OUT/typing/`; see [the README](../scripts/uniform/README.m
 
 **App root, 2026-10-16 (P4 built, awaiting review).** `scripts/uniform/assemble_uniform.py` builds the whole
 cohort from the uniform run, with nothing appended to the frozen release. The current build is
-`data/development/uniform-20donor-20261018-v5/` (v1-v4 are superseded by the fixes below). It holds 20 donors
+`data/development/uniform-20donor-20261019-v6/` (v1-v5 are superseded by the fixes below). It holds 20 donors
 and 10,113 endocrine objects (1,491 islets, 3,415 clusters and 5,207 singles). Islets and clusters with analysed
 cells in both core and 20 um band are the 4,763 analysis rows on v5 (1,487 islets, 3,276 clusters). Singles are only
 counted (v4, below). That is 3.07 million analysed cells, with 33,843 Excluded (11,095 for an unresolved hormone, v5) and
@@ -44,6 +44,17 @@ cannot, so the four Viewer checks fail there. The PAGA and Plot vocabulary check
 2026-10-14 app (PAGA built on request; hormone-positivity fractions withdrawn). The local env file now sets
 `RETICULATE_PYTHON` to the app venv, which has `fa2-modified` (the scvi-env interpreter in the service unit does
 not, so PAGA silently fell back to Fruchterman-Reingold). The build report is `tmp/uniform-20donor-20261018-v5/`; on v5 the harness again passes 45 of 45.
+
+**Owner ruling, 2026-10-19 (v6).** The UMAPs separated disease poorly. The investigation found the original
+15-donor UMAP's separation was donor batch (72 % same-donor neighbours; same disease among other-donor neighbours at
+chance; donor explained 86 % of HLADR variance, disease 1 %), while v5's protein + Harmony layout lost much of the
+real disease difference, T1D beta-cell loss, because Harmony on donor also removes donor-level disease shifts. On
+the owner's choice ("ten-cell cutoff", composition refit), the UMAP and Leiden are now the endocrine composition of
+the 1,215 objects with ten or more core cells, with no donor correction (`scripts/uniform/composition_embedding.py`;
+measurements in [the README](../scripts/uniform/README.md)). v6 was rebuilt by the assembler from the same run
+(report `tmp/uniform-20donor-20261019-v6/`) and is identical to v5 apart from the embedding: every other table and
+boundary file has the same content, and the protein record differs only by Harmony's run-to-run rounding (at most
+0.0001; the protein Leiden assignments are identical).
 
 **The two open items, 2026-10-17** (owner: "use common sense and available tools to resolve the scaling and
 threshold"). (1) Aab_6558's Excluded cells inside objects: its INS stain is weak (2.4x its tissue p99 in the
@@ -129,7 +140,9 @@ way for every donor:
    raw INS/GCG/SST per donor), regional CD3e/CD163/CD68/LGALS3 positivity
    (mean + 1.5 SD per region), composition, neighborhood and distance tables,
    per-islet and per-donor cell files, Harmony protein PCA (θ 2, seed 0) with
-   UMAP and Leiden, and the trajectory composition features.
+   UMAP and Leiden (kept for the record), the served UMAP and Leiden on the
+   endocrine composition of objects with ten or more core cells (2026-10-19),
+   and the trajectory composition features.
 8. **Validation.** Release validator, browser check, and a rerun to confirm
    reproducibility.
 
@@ -144,7 +157,9 @@ Every value currently shown for them is regenerated:
 - Marker values use per-donor gate rescaling instead of scimap's per-image
   scaling. Hormone and regional immune positivity are recomputed in Python
   rather than taken from the historical QuPath exports.
-- Spatial UMAP and Leiden come from Harmony protein PCA; scVI is not used.
+- Spatial and Trajectory UMAP and Leiden come from endocrine composition of the
+  objects with ten or more core cells (owner, 2026-10-19; Harmony protein PCA
+  before that); scVI is not used.
 
 The frozen 15-donor release and the protein-expanded roots stay on disk as
 comparison baselines. They are not deleted and are not served once the new root

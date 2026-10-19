@@ -265,7 +265,8 @@ The Trajectory tab uses a full-width layout (no sidebar). All controls are inlin
 
 **Y-axis scale on the scatter** — Marker values are **scVI-normalized expression** (bounded roughly `0–1`), aggregated as the **mean across the cells in each islet**. They are *not* raw fluorescence intensity and *not* z-scores. Values almost never reach zero because (1) the scVI output for an individual cell rarely sits at exactly 0, and (2) averaging the cells in an islet smooths out any remaining zeros. The **multi-feature heatmap** below the scatter, by contrast, IS z-scored per marker across pseudotime bins (intentional — it standardizes markers for cross-marker comparison).
 
-4. **UMAP Cards** — The audited H5AD UMAP is shown once by donor status and once by the
+4. **UMAP Cards** — The islet-level UMAP (on a uniform root, the endocrine-composition layout the
+   Spatial tab shows, for the same ten-cell objects) is shown once by donor status and once by the
    selected Y measure. These coordinates provide a fixed reference and are not the PAGA
    layout.
 
@@ -430,7 +431,10 @@ path.
    numeric order.
 4. **Islet-Level UMAPs** (full-width row below, since 2026-10-19): the Leiden and Donor Status UMAPs side by side at
    one size, both interactive (PNG from each camera button)
-   - UMAP shows disease-stage separation (uses raw marker PCA visualization coordinates)
+   - Built from each object's endocrine composition (the Beta, Alpha, Delta and CHGA+ hormone-negative shares of
+     its core endocrine cells) for the objects with ten or more core cells, with no donor correction (2026-10-19).
+     Smaller objects have too few cells to place and have no point or cluster. Disease separates mainly by T1D
+     beta-cell loss; ND and Aab+ objects overlap, as Aab+ donors range from ND-like to T1D-like.
    - Hidden with message when Leiden data unavailable in H5AD
 
 ### Data Sources
