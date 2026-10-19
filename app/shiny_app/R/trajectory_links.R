@@ -1,4 +1,5 @@
-# Stable islet identity shared by the trajectory scatter and both UMAPs.
+# Stable islet identity shared by linked plots: the trajectory scatter and both UMAPs, and the Plot tab's size
+# scatter and distribution plot (trajectory_link_plot() serves both tabs).
 trajectory_link_key <- function(case_id, islet_key) {
   if (length(case_id) != length(islet_key)) stop("Islet identity lengths differ")
   donor <- as.character(case_id)

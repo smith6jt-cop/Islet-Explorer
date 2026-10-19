@@ -68,7 +68,9 @@ Cell centroids (`X_centroid`, `Y_centroid`) are in micrometers. GeoJSON polygons
 
 **Structure Legend**: combines all visible polygons into one sf with a `structure_type` column, uses `aes(colour = structure_type)` + `scale_colour_manual(name = "Structures")` with `key_glyph = "path"`. Display names: Islet, Peri Boundary, Nerve, Capillary, Lymphatic. The `colour` aesthetic is reserved for structures; drilldown cell scatter uses `fill` (shape 21) to avoid scale conflict.
 
-### macOS Native-Click Bridge + Shared Resolver (Jun 2026)
+### macOS Native-Click Bridge + Shared Resolver (Jun 2026; bridge removed 2026-10-19)
+
+*History: both scatters now click through the linked plots (`trajectory_link_plot()`, `www/trajectory-links.js`), whose pointer-event commit covers macOS; `islet_click_bridge()` was removed. The resolver below is current.*
 
 **Problem**: On macOS, plotly's click/drag discrimination suppresses `plotly_click` entirely, so the server `observeEvent(event_data("plotly_click", ...))` never fires — clicking a point did nothing (no notification). Both Plot and Trajectory drill-down were affected (Trajectory's key→customdata→coord fallbacks all live *inside* the plotly_click observer, so a suppressed event bypassed them too). Works on Linux/Windows; macOS-only — no platform-conditional code, so the cause is the macOS browser event layer.
 
@@ -416,7 +418,7 @@ vscode's current theme"); a "Light theme" button at the top right switches back,
 - **Synthetic union rows need density**: `prep_data()` synthesizes `islet_union` rows by summing core+band. Must compute `area_um2`, `region_um2`, and `area_density = area_um2/region_um2` — setting these to `NA` causes Microenvironment Core+Peri to drop 12/15 donors (default metric is Density, NA filtered by `!is.na(value)`).
 - **`updateSelectInput` after `renderUI`**: Server-side updates targeting an input that lives inside a `renderUI`-mounted block must share a reactive dependency with the renderUI, or fire only after the UI has mounted on the client. Putting the update inside its own naked `observe({})` can race the UI mount and silently leave the dropdown empty. Pattern: nest the `updateSelectInput` inside the same observer that builds the choices reactive.
 - **`reactiveVal` to stabilise a `renderUI` boolean**: a `reactive()` boolean re-fires its dependents whenever its INPUTS change, even if the value is unchanged — so a `renderUI` keyed on it rebuilds (destroying child DOM, including iframes/WebGL canvases). Mirror the boolean into a `reactiveVal` via an `observe`; `reactiveVal` dedups, so the `renderUI` only re-renders when the boolean truly flips. See § "Viewer Tab (Avivator) — iframe Persistence".
-- **Robust plotly clicks**: `plotly_click` can be suppressed on macOS (clicking does nothing, no notification). Use `islet_click_bridge()` (native mousedown/mouseup → `Shiny.setInputValue`) for click-to-select, and guard `onRender` with an attach-once flag so listeners don't stack. See § "macOS Native-Click Bridge".
+- **Robust plotly clicks**: `plotly_click` can be suppressed on macOS (clicking does nothing, no notification). Click-to-select goes through `trajectory_link_plot()` (`www/trajectory-links.js`), which commits on native pointer events as well; use it for any new selectable plot. It also links hover across the tab's plots (Trajectory: scatter and UMAPs; Plot: size scatter and distribution).
 
 ## Phenotype Rules — Marker Definitions in the UI (May 2026)
 

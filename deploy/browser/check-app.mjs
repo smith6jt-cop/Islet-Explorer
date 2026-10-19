@@ -401,6 +401,34 @@ try {
         return result;
       });
     });
+    // Owner, 2026-10-19: hovering an object in either Plot card rings it in both, as on the Trajectory tab.
+    await check('plot_points_linked_on_hover', async () => {
+      const ids = ['plot-plt', 'plot-dist'];
+      const rings = () => page.evaluate(ids => ids.map(id =>
+        document.getElementById(id).querySelector('.trajectory-link-highlight')?.getAttribute('data-linked-key') || null), ids);
+      const key = await page.evaluate(ids => {
+        const sets = ids.map(id => new Set((document.getElementById(id).data || [])
+          .filter(t => t.meta?.trajectory_role === 'islet').flatMap(t => t.key)));
+        return [...sets[0]].find(k => sets[1].has(k)) || null;
+      }, ids);
+      const result = { key, hovered: {} };
+      for (const source of ids) {
+        await page.evaluate((id, key) => {
+          const gd = document.getElementById(id);
+          const curveNumber = gd.data.findIndex(t => t.meta?.trajectory_role === 'islet' && t.key.includes(key));
+          const data = gd.data[curveNumber];
+          gd.emit('plotly_hover', { points: [{ data, curveNumber, pointNumber: data.key.indexOf(key) }] });
+        }, source, key);
+        await new Promise(resolve => setTimeout(resolve, 300));
+        result.hovered[source] = await rings();
+        await page.evaluate(id => document.getElementById(id).emit('plotly_unhover', {}), source);
+      }
+      await new Promise(resolve => setTimeout(resolve, 300));
+      result.after_unhover = await rings();
+      result.passed = Boolean(key) && ids.every(source => result.hovered[source].every(k => k === key))
+        && result.after_unhover.every(k => k === null);
+      return result;
+    });
   }
 
   const viewerPage = await browser.newPage();

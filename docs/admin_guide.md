@@ -219,7 +219,7 @@ The Leiden UMAP visualization uses raw marker PCA coordinates (same as the Traje
 
 Earlier builds had two macOS-only problems: clicking a plot point did nothing (macOS suppresses plotly's `plotly_click` event), and the Viewer tab flickered/reloaded continuously (the WebGL `<iframe>` was destroyed and recreated on every reactive update — heavy flicker under Firefox's WebRender compositor on macOS, Mozilla bug #1555544). Both are fixed:
 
-- **Drill-down** uses a native-click bridge (`islet_click_bridge()` in `app/shiny_app/R/00_globals.R`) that fires on a native mouse click even when `plotly_click` is suppressed; both the Plot and Trajectory scatters route through the shared `select_islet_from_key()` resolver.
+- **Drill-down** clicks are read from native pointer events by the linked-plot script (`app/shiny_app/www/trajectory-links.js`), so they work even when `plotly_click` is suppressed; the Plot and Trajectory plots route through the shared `select_islet_from_key()` resolver.
 - **Viewer** mounts the iframe once and updates its `src` in place via `session$sendCustomMessage`, so the WebGL canvas is never recreated.
 
 If these symptoms reappear on macOS, confirm the active release manifest points to the

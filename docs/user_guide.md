@@ -486,7 +486,7 @@ Click any islet data point in the Plot or Trajectory tab to inspect individual c
 
 ### How It Works
 
-1. Click a point in the scatter/UMAP plot
+1. Click a point in the scatter or UMAP (Trajectory), or in either plot on the Plot tab. Hovering a point first rings the same object in the tab's other plots; **Clear selection** releases a selected object.
 2. A segmentation panel appears below the plot with the title showing the islet name and donor info (case ID, disease status, age, sex)
 
 > **macOS note (fixed Jun 2026):** clicking a point previously did nothing on macOS. Drill-down now works on all platforms via a native-click handler. Tip: on the Plot tab, keep **Show individual points** on (the default) so there are per-islet points to click — aggregated summary points are not clickable.

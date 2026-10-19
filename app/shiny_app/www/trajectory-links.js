@@ -1,4 +1,5 @@
-/* One browser-local hover state per trajectory module. Only clicks reach R. */
+/* One browser-local hover state per group of linked plots (the Trajectory tab's three, the Plot tab's two).
+   Only clicks reach R. */
 (function () {
   'use strict';
   if (window.IsletTrajectoryLinks) return;

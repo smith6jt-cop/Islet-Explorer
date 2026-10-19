@@ -623,12 +623,8 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         raw <- plot_df()
         raw$donor_status <- factor(raw$donor_status, levels = grp_levels)
 
-        # Click key for segmentation viewer
-        if ("Case ID" %in% names(raw) && "islet_key" %in% names(raw)) {
-          raw$islet_click_key <- paste(raw$`Case ID`, raw$islet_key, sep = "|")
-        } else {
-          raw$islet_click_key <- NA_character_
-        }
+        # Object key shared with the distribution plot: hover links the two, a click selects (plot_link_*).
+        raw$islet_click_key <- plot_link_keys(raw)
 
         # Transform y-values for pseudo-log if needed
         if (log_scale_on) {
@@ -768,7 +764,6 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         p <- p + geom_smooth(se = FALSE, method = "loess", span = 0.6, linewidth = 0.9)
       }
 
-      # Convert to plotly with click source (namespaced for module compatibility)
       gg <- ggplotly(p, source = ns("plot_scatter"))
       # Scrub the "colour: black" leak (from the shape-21 summary point's
       # color = "black" parameter) and any duplicate donor_status lines.
@@ -803,11 +798,9 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
                         font = fonts$legend_text,
                         title = list(font = fonts$legend_title)),
           margin = list(b = 100)) %>%
-        plotly_islet_config("plot_scatter") %>%
-        event_register("plotly_click") %>%
-        islet_click_bridge(ns("plot_native_click"))
+        plotly_islet_config("plot_scatter")
 
-      gg
+      trajectory_link_plot(gg, ns)
     })
 
     # ---- Distribution controls ----
@@ -859,6 +852,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       # The point controls are shared with the scatter (View controls, "Both plots").
       color_by <- input$plot_color_by %||% "donor_status"
       rdf <- dd$all
+      rdf$link_key <- plot_link_keys(rdf)
       dist_summary <- dd$summary
       rdf_ghost <- rdf[rdf$is_outlier, , drop = FALSE]
       rdf <- rdf[!rdf$is_outlier | is.na(rdf$is_outlier), , drop = FALSE]
@@ -921,7 +915,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         if (color_by == "donor_id" && "donor_id" %in% colnames(rdf)) {
           donor_colors <- get_donor_palette(levels(rdf$donor_id))
           g <- g +
-            geom_jitter(aes(x = donor_status, y = value, color = donor_id),
+            geom_jitter(aes(x = donor_status, y = value, color = donor_id, key = link_key),
                         position = position_jitter(width = 0.18, seed = 17),
                         alpha = 1 - (input$pt_alpha %||% 0.4),
                         size  = input$pt_size %||% 3,
@@ -932,7 +926,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
                                guide = guide_legend(override.aes = list(size = 3, alpha = 1)))
         } else {
           g <- g +
-            geom_jitter(aes(x = donor_status, y = value, color = donor_status),
+            geom_jitter(aes(x = donor_status, y = value, color = donor_status, key = link_key),
                         position = position_jitter(width = 0.18, seed = 17),
                         alpha = 1 - (input$pt_alpha %||% 0.4),
                         size  = input$pt_size %||% 3,
@@ -949,7 +943,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         ghost_size <- (input$pt_size %||% 3) * 1.4
         g <- g + geom_jitter(
           data = rdf_ghost,
-          aes(x = donor_status, y = value),
+          aes(x = donor_status, y = value, key = link_key),
           inherit.aes = FALSE,
           position = position_jitter(width = 0.18, seed = 31),
           shape = 4,
@@ -1021,7 +1015,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
                         title = list(font = fonts$legend_title))
         ) %>%
         plotly_islet_config("plot_distribution")
-      p
+      trajectory_link_plot(p, ns)
     })
 
     # ---- Outlier info table in sidebar ----
@@ -1059,44 +1053,51 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
     })
 
     # ===========================================================================
-    # Click handler: scatter plot -> embedded segmentation panel
+    # Linked points: the size scatter and the distribution plot (Trajectory's linking, www/trajectory-links.js).
+    # Hovering an object rings it in both plots in the browser; a click reaches R here, selects the object and
+    # opens its segmentation panel. Keys are trajectory_link_key() ("donor|Islet_N"), as on the Trajectory tab, so
+    # an object selected there stays ringed here.
     # ===========================================================================
-
-    # Parse a plotly "case_id|islet_key" key and open the drill-down via the
-    # shared resolver. `key_null_msg` (when supplied) is shown if no key is
-    # present — used by the plotly_click path to nudge users to enable points.
-    open_islet_from_key <- function(click_key, key_null_msg = NULL) {
-      if (is.null(click_key) || length(click_key) == 0 ||
-          is.na(click_key[1]) || !nzchar(as.character(click_key[1]))) {
-        if (!is.null(key_null_msg)) showNotification(key_null_msg, type = "message", duration = 3)
-        return(invisible(FALSE))
-      }
-      key_parts <- strsplit(as.character(click_key[1]), "\\|")[[1]]
-      if (length(key_parts) != 2L ||
-          !islet_safe_path_segment(key_parts[1]) ||
-          !islet_safe_path_segment(key_parts[2])) {
-        islet_log_validation_failure("islet_key_invalid")
-        showNotification("Could not parse islet identifier", type = "warning", duration = 3)
-        return(invisible(FALSE))
-      }
-      select_islet_from_key(key_parts[1], key_parts[2], prepared, selected_islet)
+    plot_link_keys <- function(df) {
+      if (!all(c("Case ID", "islet_key") %in% names(df))) return(rep(NA_character_, nrow(df)))
+      trajectory_link_key(df$`Case ID`, df$islet_key)
     }
-
-    # Legacy plotly_click path (works on Linux/Windows).
-    observeEvent(event_data("plotly_click", source = ns("plot_scatter")), {
-      click_data <- event_data("plotly_click", source = ns("plot_scatter"))
-      if (is.null(click_data)) return()
-      open_islet_from_key(click_data$key,
-                          key_null_msg = "Click on individual points to view segmentation (enable 'Show individual points')")
-    })
-
-    # macOS-proof native-click bridge: islet_click_bridge() pushes the hovered
-    # point's key here on a native click, bypassing plotly's click/drag
-    # discrimination (which can suppress plotly_click on macOS).
-    observeEvent(input$plot_native_click, {
-      nc <- input$plot_native_click
-      if (is.null(nc) || is.null(nc$key)) return()
-      open_islet_from_key(nc$key)
+    plot_link_selection_key <- function() {
+      info <- selected_islet()
+      if (is.null(info)) return(NULL)
+      key <- trajectory_link_key(info$case_id, info$islet_key)
+      if (length(key) != 1L || is.na(key)) NULL else key
+    }
+    send_plot_link_state <- function() {
+      session$sendCustomMessage(ns("linked_state"), list(
+        key = plot_link_selection_key(), active = identical(active_tab(), "Plot")))
+    }
+    observeEvent(input$linked_click, {
+      req(identical(active_tab(), "Plot"))
+      event <- input$linked_click
+      key <- event$key
+      shown <- list(plot_df(), tryCatch(dist_data()$all, error = function(e) NULL))
+      rows <- do.call(rbind, lapply(shown, function(d) {
+        if (is.null(d) || !nrow(d) || !all(c("Case ID", "islet_key") %in% names(d))) return(NULL)
+        data.frame(case_id = as.character(d$`Case ID`), islet_key = as.character(d$islet_key),
+                   key = plot_link_keys(d), stringsAsFactors = FALSE)
+      }))
+      if (!is.character(key) || length(key) != 1L || is.na(key) ||
+          !is.character(event$source) || length(event$source) != 1L ||
+          !(event$source %in% ns(c("plt", "dist"))) || is.null(rows) || !(key %in% rows$key)) {
+        islet_log_validation_failure("plot_link_invalid")
+        send_plot_link_state()
+        return()
+      }
+      row <- rows[match(key, rows$key), , drop = FALSE]
+      select_islet_from_key(row$case_id, row$islet_key, prepared, selected_islet)
+      send_plot_link_state()
+    }, ignoreInit = TRUE)
+    observeEvent(input$linked_ready, { send_plot_link_state() }, ignoreInit = TRUE)
+    observe({ send_plot_link_state() })
+    observeEvent(input$clear_link_selection, {
+      selected_islet(NULL)
+      send_plot_link_state()
     })
 
     # ---- Embedded segmentation viewer panel (below Distribution card) ----

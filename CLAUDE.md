@@ -159,12 +159,10 @@ The segmentation panel `renderUI` in both modules generates non-namespaced input
 
 These are read by the root-level `renderPlot` outputs in `app.R`.
 
-### Plotly Click Events in Modules
+### Linked Plots: Hover and Click Selection
 
-- Plot module: `source = ns("plot_scatter")` with `event_register("plotly_click")`
-- Trajectory module: `source = ns("traj_scatter")` with `event_register("plotly_click")`
-- Both use namespaced sources; `event_data()` calls must use matching `ns()` prefix
-- **macOS native-click bridge (Jun 2026)**: `plotly_click` is suppressed on macOS, so both scatters also pipe `islet_click_bridge(ns("<plot|traj>_native_click"))` (native mousedown/mouseup → `Shiny.setInputValue`) after `event_register`. The new server observers and the legacy plotly_click handler both call the shared `select_islet_from_key()` (`segmentation_helpers.R`). See `app/shiny_app/CLAUDE.md` § "macOS Native-Click Bridge + Shared Resolver".
+- The Trajectory tab's scatter and two UMAPs, and (since 2026-10-19) the Plot tab's size scatter and distribution plot, are linked plots: `trajectory_link_plot(p, ns)` (`R/trajectory_links.R`) marks the keyed marker traces (`trajectory_link_key()`, `"donor|Islet_N"`) and attaches `www/trajectory-links.js`. Hover rings the same object in every plot of the tab in the browser, with no server traffic; a click (plotly_click or native pointer events, so it works on macOS, where plotly_click is suppressed) sends `input$linked_click`, which each module validates and passes to the shared `select_islet_from_key()` (`segmentation_helpers.R`). Plotly's own Shiny events are switched off for these widgets.
+- Each module sends `linked_state` (the pinned key and whether its tab is active), so a selection rings in both tabs; "Clear selection" releases it. The `islet_click_bridge()` native-click helper that preceded this was removed on 2026-10-19 once no plot used it.
 
 ## Key Data Files
 
@@ -254,7 +252,7 @@ Per-tab implementation details — Spatial Neighborhood Analysis (Phase 7), Sing
 - **Peri-islet data guard**: Always check `total_cells_peri > 0` before using peri metrics
 - **Column name sanitization**: Phenotype names use `_` for spaces, `plus` for `+` in peri-islet columns
 - **Single-cell Parent column**: `Islet_N` = core cells, `Islet_N_exp20um` = peri-islet cells
-- **macOS plotly clicks & Viewer iframe (Jun 2026)**: `plotly_click` is suppressed on macOS — drill-down uses a native-click bridge (`islet_click_bridge()` in `00_globals.R`). The Viewer iframe is mounted once and its `src` updated in place via `session$sendCustomMessage` to avoid recreating the WebGL canvas (macOS WebRender flicker). Details + the `reactiveVal`-dedup gotcha in `app/shiny_app/CLAUDE.md`.
+- **macOS plotly clicks & Viewer iframe (Jun 2026)**: `plotly_click` is suppressed on macOS — drill-down clicks go through the linked-plot pointer events (`www/trajectory-links.js`). The Viewer iframe is mounted once and its `src` updated in place via `session$sendCustomMessage` to avoid recreating the WebGL canvas (macOS WebRender flicker). Details + the `reactiveVal`-dedup gotcha in `app/shiny_app/CLAUDE.md`.
 
 App-specific UI conventions (CSS overflow, font minimums, large-scatter rendering, palette syncing, reticulate bridge, synthetic-union rows, macOS click bridge & Viewer iframe persistence) live in `app/shiny_app/CLAUDE.md`.
 

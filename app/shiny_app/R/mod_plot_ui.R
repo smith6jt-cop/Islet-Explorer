@@ -9,6 +9,7 @@
 plot_main_ui <- function(id, extra_panel = NULL) {
   ns <- NS(id)
   tagList(
+    singleton(tags$script(src = islet_asset("trajectory-links.js"))),
     column(12,
       tab_help("Plot help", "show_phenotype_rules_plot",
         object_classes_help(),
@@ -34,10 +35,11 @@ plot_main_ui <- function(id, extra_panel = NULL) {
                " The card at the bottom counts Islets, Clusters and Singles in each donor's section, as a count or",
                " per mm\u00b2 of tissue, with the donor median per status; Singles by cell type splits each donor's",
                " Singles by the type of their one cell. It follows the Donor status filter, not the object selector."),
-        tags$p(tags$strong("Selecting an object."),
-               " With \"Show individual points\" on (the default), click a point on the Islet Size Distribution",
-               " scatter to open its segmentation map and single cells below. With \"Color points by\" set to Donor ID, click a donor",
-               " in the legend to show or hide it."),
+        tags$p(tags$strong("Linked points."),
+               " With \"Show individual points\" on (the default), hover over an object in either plot to ring it in",
+               " both. Click it in either plot to select it and open its segmentation map and single cells below;",
+               " Clear selection releases it. An object selected on the Trajectory tab is ringed here too. With",
+               " \"Color points by\" set to Donor ID, click a donor in the legend to show or hide it."),
         tags$p(tags$strong("Controls."),
                " Data controls choose what is plotted; View controls change how it is drawn. The point controls",
                " under \"Both plots\" apply to the size scatter and the distribution comparison alike. Click a panel's title to",
@@ -141,7 +143,9 @@ plot_main_ui <- function(id, extra_panel = NULL) {
                          selected = "Violin", inline = TRUE)
           )
         )
-      )
+      ),
+      div(style = "display: flex; align-items: center; gap: 12px; margin-bottom: 12px;",
+        actionButton(ns("clear_link_selection"), "Clear selection", class = "btn-sm btn-outline-secondary"))
     ),
     # Left card: islet size distribution
     column(6,
