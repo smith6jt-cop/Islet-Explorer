@@ -1,3 +1,11 @@
+# plotlyOutput() returns a tag list, and tagAppendAttributes() on a tag list adds its arguments as children, so
+# the class used to print as text under each plot and never reached the widget. Put it on the widget's div.
+trajectory_linked_plotly <- function(output_id, height) {
+  widget <- plotlyOutput(output_id, height = height)
+  widget[[1]] <- tagAppendAttributes(widget[[1]], class = "trajectory-linked-plot")
+  widget
+}
+
 trajectory_ui <- function(id) {
   ns <- NS(id)
   tagList(
@@ -131,8 +139,7 @@ trajectory_ui <- function(id) {
       # Left card: Scatterplot and heatmaps (narrowed from col-8)
       column(7,
         div(class = "card trajectory-controls", style = "padding: 15px; margin-bottom: 20px;",
-          tagAppendAttributes(plotlyOutput(ns("traj_scatter"), height = 850),
-                              class = "trajectory-linked-plot"),
+          trajectory_linked_plotly(ns("traj_scatter"), height = 850),
           plotlyOutput(ns("traj_heatmap"), height = 100)
         )
       ),
@@ -140,16 +147,14 @@ trajectory_ui <- function(id) {
       column(5,
         div(class = "card", style = "padding: 15px; margin-bottom: 20px;",
           h5("UMAP: Donor Status", style = "font-size: 13px; margin-top: 0;"),
-          tagAppendAttributes(plotlyOutput(ns("traj_umap_donor"), height = 320),
-                              class = "trajectory-linked-plot"),
+          trajectory_linked_plotly(ns("traj_umap_donor"), height = 320),
           div(style = "text-align: right; margin-top: 6px;",
             downloadButton(ns("dl_umap_donor"), "Download PNG",
                            class = "btn-sm btn-outline-primary")),
           hr(style = "margin: 12px 0;"),
           h5(textOutput(ns("traj_umap_feature_title"), inline = TRUE),
              style = "font-size: 13px; margin-top: 0;"),
-          tagAppendAttributes(plotlyOutput(ns("traj_umap_feature"), height = 320),
-                              class = "trajectory-linked-plot"),
+          trajectory_linked_plotly(ns("traj_umap_feature"), height = 320),
           div(style = "text-align: right; margin-top: 6px;",
             downloadButton(ns("dl_umap_csv"), "Download CSV",
                            class = "btn-sm btn-outline-secondary"),
