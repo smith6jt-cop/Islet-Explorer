@@ -52,7 +52,7 @@ def protein_pca(values, components=15):
                         variance_ratio=pca.explained_variance_ratio_, rank=rank)
 
 
-def cluster_graph(scores, seed=0, with_umap=True):
+def cluster_graph(scores, seed=0, with_umap=True, min_dist=0.5, spread=2.):
     import scanpy as sc
     graph = ad.AnnData(X=np.asarray(scores, dtype=np.float32))
     graph.obsm['X_protein_pca'] = np.asarray(scores, dtype=np.float64)
@@ -62,7 +62,7 @@ def cluster_graph(scores, seed=0, with_umap=True):
         sc.tl.leiden(graph, resolution=resolution, key_added=f'leiden_{resolution}',
                      random_state=seed, flavor='igraph', n_iterations=2, directed=False)
     if with_umap:
-        sc.tl.umap(graph, min_dist=0.5, spread=2, random_state=seed)
+        sc.tl.umap(graph, min_dist=min_dist, spread=spread, random_state=seed)
     return graph
 
 

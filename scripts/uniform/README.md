@@ -326,6 +326,15 @@ take only a few composition values and carried no more disease signal (+0.13 at 
 Composition Leiden is less seed-stable than the protein Leiden (adjusted Rand 0.53-0.78 against 0.81-0.99): its
 clusters cut a continuum of beta-cell share.
 
+From v7 the UMAP uses min_dist 3, spread 3 (owner, 2026-10-19), and the fit runs on one thread. At v6's 0.5 / 2,
+80 % of points lay within one 4-pixel marker of a neighbour in the app's plot (42 % at 3 / 3), and the 31 all-beta
+and 21 all-alpha objects, which have identical features, drew as islands detached from the cloud; they are real
+(small beta-only islets in ND and Aab+ donors, 31 against 0.2 expected from each donor's pooled make-up; alpha-only,
+insulin-deficient islets, 12 of the 21 in T1D donors, against 3.8 expected) but sit at the ends of the composition
+continuum, not apart from it. The neighbour graph and Leiden do not use min_dist or spread. With the BLAS and numba
+thread counts left to the machine, the same input gave a different layout and Leiden adjusted Rand 0.63 against a
+one-thread run, so v6's layout cannot be reproduced exactly; v7's can.
+
 The app reads `object_class` through an app-wide "Endocrine objects" selector (Islet / Cluster). The
 Trajectory tab does not use it: it fits every object with ten or more core cells (`total_cells_core` in
 `barlow_islet_features.csv`), whatever its class.

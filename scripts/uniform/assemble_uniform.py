@@ -29,7 +29,7 @@ Donor demographics and autoantibodies, and the viewer image links, are carried f
 
     python scripts/uniform/assemble_uniform.py --run data/development/uniform-20donor-20261015 \\
         --donor-source data/development/protein-expanded-20261015-v3 \\
-        --output data/development/uniform-20donor-20261019-v6 --report-root tmp/uniform-20donor-20261019-v6
+        --output data/development/uniform-20donor-20261019-v7 --report-root tmp/uniform-20donor-20261019-v7
 """
 from __future__ import annotations
 

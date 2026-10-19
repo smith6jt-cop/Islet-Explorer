@@ -81,3 +81,19 @@ def test_cross_donor_disease_ignores_same_donor_neighbours():
     out = cross_donor_disease(coords, status, donor, k=45)
     assert out['other_donor_same_disease'] == 0
     assert out['same_donor_neighbour_fraction'] > 0.8
+
+
+def test_layout_does_not_depend_on_the_thread_count():
+    import numba
+    a = source()
+    first, _ = fit_composition_embedding(a, stability=False)
+    before = numba.get_num_threads()
+    numba.set_num_threads(max(1, min(4, numba.config.NUMBA_NUM_THREADS)))
+    try:
+        again, _ = fit_composition_embedding(a, stability=False)
+    finally:
+        numba.set_num_threads(before)
+    np.testing.assert_array_equal(first.obsm['X_umap'], again.obsm['X_umap'])
+    assert numba.get_num_threads() == before
+    method = first.uns['composition_embedding']
+    assert (method['min_dist'], method['spread'], method['threads']) == (3., 3., 1)

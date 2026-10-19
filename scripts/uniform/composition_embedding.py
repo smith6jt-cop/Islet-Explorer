@@ -15,7 +15,13 @@ fit (the app's TRAJ_MIN_CELLS).
 Features: each endocrine label's share of the object's core endocrine cells (Beta, Alpha, Delta, CHGA+
 hormone-negative, Endocrine), standardised; a share that is zero in every fitted object is left out and recorded
 (Endocrine on v5: every endocrine cell has a subtype). One graph -- 30 nearest neighbours, Euclidean -- gives Leiden at
-0.3 / 0.5 / 0.8 / 1.0 and the UMAP (min_dist 0.5, spread 2), seed 0 (`build_protein_embedding.cluster_graph`).
+0.3 / 0.5 / 0.8 / 1.0 and the UMAP, seed 0 (`build_protein_embedding.cluster_graph`). The UMAP uses min_dist 3,
+spread 3 (owner, 2026-10-19): at 0.5 / 2 points piled on one another (80 % within one 4-pixel marker of a neighbour
+in the app's plot, against 42 %) and the 31 all-beta and 21 all-alpha objects, which have identical features, drew as
+detached islands; at 3 / 3 they are the two ends of the cloud. The layout keeps 65 % of each object's 30 graph
+neighbours among its 30 nearest on screen (72 % at 0.5 / 2), and the disease measure below barely moves (0.409
+against 0.417, chance 0.316). The fit runs on one thread: with the BLAS and numba thread counts left to the machine,
+the same input gave a different layout and Leiden ARI 0.63 against a one-thread run.
 Objects outside the fit get no coordinates and no cluster (NaN). The protein embedding is kept for the record:
 `X_protein_pca` (Harmony), `X_pca` (uncorrected), `X_umap_protein` and `protein_leiden_<r>`.
 
@@ -28,6 +34,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from contextlib import contextmanager
 from importlib.metadata import version
 from pathlib import Path
 
@@ -43,6 +50,21 @@ from build_protein_embedding import RESOLUTIONS, cluster_graph  # noqa: E402
 ENDOCRINE = ('Beta cell', 'Alpha cell', 'Delta cell', 'CHGA+ hormone-negative', 'Endocrine')
 MIN_CORE_CELLS = 10
 NEIGHBOURS = 30
+UMAP_MIN_DIST, UMAP_SPREAD = 3., 3.
+
+
+@contextmanager
+def one_thread():
+    """Run BLAS, OpenMP and numba on one thread, so the graph, Leiden and UMAP do not depend on the machine."""
+    import numba
+    from threadpoolctl import threadpool_limits
+    before = numba.get_num_threads()
+    numba.set_num_threads(1)
+    try:
+        with threadpool_limits(1):
+            yield
+    finally:
+        numba.set_num_threads(before)
 
 
 def endocrine_shares(adata) -> np.ndarray:
@@ -82,7 +104,8 @@ def fit_composition_embedding(source, min_core_cells=MIN_CORE_CELLS, seed=0, sta
     if active.sum() < 2:
         raise ValueError('fewer than two endocrine shares vary across the fitted objects')
     scaled = (values[:, active] - mean[active]) / scale[active]
-    graph = cluster_graph(scaled, seed=seed)
+    with one_thread():
+        graph = cluster_graph(scaled, seed=seed, min_dist=UMAP_MIN_DIST, spread=UMAP_SPREAD)
 
     result = source.copy()
     # The protein embedding stays for the record under its own names; its all-object graph does not describe the
@@ -114,9 +137,9 @@ def fit_composition_embedding(source, min_core_cells=MIN_CORE_CELLS, seed=0, sta
         excluded_constant_features=np.asarray([n for n, k in zip(ENDOCRINE, active) if not k], dtype=object),
         min_core_cells=min_core_cells, objects=int(fit.sum()), objects_left_out=int((~fit).sum()),
         scaling_mean=mean, scaling_std=scale, n_neighbors=NEIGHBOURS, metric='euclidean', seed=seed,
-        min_dist=0.5, spread=2., resolutions=np.array(RESOLUTIONS), leiden_flavor='igraph', leiden_iterations=2,
+        min_dist=UMAP_MIN_DIST, spread=UMAP_SPREAD, threads=1, resolutions=np.array(RESOLUTIONS), leiden_flavor='igraph', leiden_iterations=2,
         donor_correction='none', graph_shared_by_clustering_and_umap=True,
-        software={p: version(p) for p in ('scanpy', 'anndata', 'numpy', 'scikit-learn', 'igraph', 'umap-learn')})
+        software={p: version(p) for p in ('scanpy', 'anndata', 'numpy', 'scikit-learn', 'igraph', 'umap-learn', 'numba', 'threadpoolctl')})
     if 'protein_embedding' in result.uns:
         result.uns['protein_embedding']['role'] = ('record only: X_protein_pca, X_pca, X_umap_protein and '
                                                    'protein_leiden_<r>; the served UMAP and Leiden are '
@@ -138,7 +161,8 @@ def fit_composition_embedding(source, min_core_cells=MIN_CORE_CELLS, seed=0, sta
             max_cluster_donor_fraction=float(pd.crosstab(labels, donor, normalize='index').max(axis=1).max()))
     if stability:
         for s in range(1, 5):
-            trial = cluster_graph(scaled, seed=s, with_umap=False)
+            with one_thread():
+                trial = cluster_graph(scaled, seed=s, with_umap=False)
             report['seed_stability'].append(dict(seed=s, **{
                 f'leiden_{r}': float(adjusted_rand_score(graph.obs[f'leiden_{r}'], trial.obs[f'leiden_{r}']))
                 for r in RESOLUTIONS}))
