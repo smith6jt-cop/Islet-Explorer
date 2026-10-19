@@ -1147,9 +1147,10 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       }
 
       df$donor_status <- factor(df$donor_status, levels = c("ND", "Aab+", "T1D"))
+      df <- df[islet_umap_order(nrow(df)), , drop = FALSE]  # mixed draw order, as on screen
 
       ggplot(df, aes(x = umap_1, y = umap_2, color = donor_status)) +
-        geom_point(alpha = 0.6, size = 1.0) +
+        geom_point(alpha = 0.9, size = 1.0) +
         scale_color_manual(values = donor_colors_reactive()) +
         scale_x_continuous(expand = expansion(mult = 0.02)) +
         scale_y_continuous(expand = expansion(mult = 0.02)) +
@@ -1160,36 +1161,40 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         theme(axis.text = element_blank(), axis.ticks = element_blank(),
               panel.grid = element_blank(), axis.line = element_blank())
     })
-    interactive_umap <- function(g, source) {
+    # The screen UMAPs are drawn by islet_umap_plotly() (one interleaved trace, outlined points) rather than
+    # ggplotly(), which split the donor-status colours into traces drawn in turn so T1D covered the others. The
+    # ggplot reactives above remain the PNG downloads.
+    interactive_umap <- function(g, source, colour, pal = NULL, legend_title) {
       df <- traj_data_clean()
       if (is.null(g) || is.null(df) || !nrow(df)) {
         return(trajectory_link_plot(plotly_islet_empty("No trajectory data available"), ns))
       }
-      if (!any(is.finite(df$umap_1) & is.finite(df$umap_2))) {
+      df <- df[is.finite(df$umap_1) & is.finite(df$umap_2), , drop = FALSE]
+      if (!nrow(df)) {
         return(trajectory_link_plot(plotly_islet_empty("UMAP coordinates not available"), ns))
       }
-      # Add interaction metadata only to the screen version; PNGs retain the
-      # original ggplot object and never contain selection rings or tooltips.
-      g$data$link_hover <- paste0("Donor: ", df$case_id, "<br>Islet: ", df$islet_key,
+      df$link_hover <- paste0("Donor: ", df$case_id, "<br>Islet: ", df$islet_key,
         "<br>Status: ", df$donor_status, "<br>Pseudotime: ", signif(df$pt, 3),
         "<br>", selected_measure_label(), ": ", signif(df$value, 3))
-      g$mapping$key <- ggplot2::aes(key = link_key)$key
-      g$mapping$text <- ggplot2::aes(text = link_hover)$text
-      g <- g + labs(title = NULL)
+      df$donor_status <- factor(df$donor_status, levels = c("ND", "Aab+", "T1D"))
       fonts <- plotly_islet_fonts()
-      p <- ggplotly(g, tooltip = "text", source = ns(source)) %>%
+      axis <- function(title) list(title = list(text = title, font = fonts$axis_title), zeroline = FALSE,
+                                   showgrid = FALSE, showticklabels = FALSE, ticks = "", showline = FALSE)
+      p <- islet_umap_plotly(df, "umap_1", "umap_2", colour, pal, "link_hover", key = "link_key",
+                             source = ns(source), colorbar_title = legend_title,
+                             size = 3.5) %>%  # these plots are smaller than the Spatial UMAPs
         layout(margin = list(l = 40, r = 15, t = 10, b = 40),
                font = fonts$global,
-               xaxis = list(title = list(font = fonts$axis_title)),
-               yaxis = list(title = list(font = fonts$axis_title),
-                            scaleanchor = "x", scaleratio = 1),
+               xaxis = axis("UMAP 1"),
+               yaxis = c(axis("UMAP 2"), list(scaleanchor = "x", scaleratio = 1)),
                legend = list(font = fonts$legend_text,
-                             title = list(font = fonts$legend_title))) %>%
+                             title = list(text = legend_title, font = fonts$legend_title))) %>%
         plotly_islet_config(paste0("trajectory_", source))
       trajectory_link_plot(p, ns)
     }
     output$traj_umap_donor <- renderPlotly({
-      interactive_umap(traj_umap_donor_plot(), "traj_umap_donor")
+      interactive_umap(traj_umap_donor_plot(), "traj_umap_donor", "donor_status", donor_colors_reactive(),
+                       "Donor status")
     })
     output$dl_umap_donor <- downloadHandler(
       filename = function() islet_png_filename("trajectory_umap_donor"),
@@ -1219,8 +1224,9 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       color_label <- if (identical(input$traj_y_mode %||% "ratio", "ratio"))
         "Log cell ratio" else "Expression"
 
+      df <- df[islet_umap_order(nrow(df)), , drop = FALSE]
       g <- ggplot(df, aes(x = umap_1, y = umap_2, color = value)) +
-        geom_point(alpha = 0.6, size = 1.0) +
+        geom_point(alpha = 0.9, size = 1.0) +
         scale_x_continuous(expand = expansion(mult = 0.02)) +
         scale_y_continuous(expand = expansion(mult = 0.02)) +
         coord_fixed() +
@@ -1239,7 +1245,9 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       g
     })
     output$traj_umap_feature <- renderPlotly({
-      interactive_umap(traj_umap_feature_plot(), "traj_umap_feature")
+      interactive_umap(traj_umap_feature_plot(), "traj_umap_feature", "value",
+                       legend_title = if (identical(input$traj_y_mode %||% "ratio", "ratio"))
+                         "Log cell ratio" else "Expression")
     })
     output$dl_umap_feature <- downloadHandler(
       filename = function() islet_png_filename("trajectory_umap_feature"),

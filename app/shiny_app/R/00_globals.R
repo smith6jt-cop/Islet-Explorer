@@ -516,6 +516,58 @@ plotly_islet_empty <- function(msg) {
                               font = list(size = ISLET_FONT_SIZES$title)))
 }
 
+# Islet-level UMAP markers, shared by the Spatial and Trajectory UMAPs. Colouring a plotly scatter by a group makes
+# one trace per group, drawn in turn, so the last group (T1D) was painted over the others wherever they met and hid
+# where each disease state sat. Here every point is one trace in a fixed interleaved order (golden-ratio stride over
+# the rows, which come grouped by donor), and an empty trace per group carries the legend, whose clicks are turned
+# off because they could only hide the empty trace. The thin outline in the background colour keeps touching points
+# apart; the white-background PNG export swaps it to white (www/islet-theme.js).
+# Size 4 px: on the v7 layout (min_dist 3, spread 3) in a Spatial UMAP, 7 % of points lie within half a marker of a
+# neighbour (13 % at 5 px; 42 % at 4 px on v6's layout).
+ISLET_UMAP_MARKER <- list(size = 4, opacity = 0.9, outline = 0.6)
+
+#' Row order for drawing UMAP points: a fixed interleave (golden-ratio stride), the same on every render.
+islet_umap_order <- function(n) order((seq_len(n) * 0.6180339887498949) %% 1)
+
+#' `colour` names a discrete column (coloured by `pal`, a named vector) or a numeric one (inferno, scaled to its
+#' range, with a colour bar titled `colorbar_title`; NA grey).
+islet_umap_plotly <- function(df, x, y, colour, pal = NULL, text, key = NULL, source = NULL,
+                              colorbar_title = NULL, size = ISLET_UMAP_MARKER$size) {
+  numeric_colour <- is.numeric(df[[colour]])
+  levels <- if (numeric_colour) character(0) else if (is.factor(df[[colour]]))
+    levels(droplevels(df[[colour]])) else sort(unique(as.character(df[[colour]])))
+  df <- df[islet_umap_order(nrow(df)), , drop = FALSE]
+  paper <- ISLET_THEME_PALETTE[[islet_theme_mode()]]$paper
+  marker <- list(size = size, opacity = ISLET_UMAP_MARKER$opacity,
+                 line = list(color = paper, width = ISLET_UMAP_MARKER$outline))
+  if (numeric_colour) {
+    v <- df[[colour]]
+    lim <- if (any(is.finite(v))) range(v, na.rm = TRUE) else c(0, 1)
+    stops <- viridisLite::inferno(11)
+    scale <- lapply(seq_along(stops), function(i) list((i - 1) / (length(stops) - 1), stops[i]))
+    marker <- c(marker, list(color = ifelse(is.finite(v), v, NA), colorscale = scale, cmin = lim[1], cmax = lim[2],
+                             showscale = TRUE, colorbar = list(title = list(text = colorbar_title %||% colour))))
+  } else {
+    col <- unname(pal[as.character(df[[colour]])])
+    col[is.na(col)] <- "#9d9d9d"
+    marker$color <- col
+  }
+  p <- plotly::plot_ly(source = source %||% "A")
+  p <- plotly::add_trace(p, x = df[[x]], y = df[[y]], type = "scatter", mode = "markers",
+                         text = df[[text]], hoverinfo = "text", showlegend = FALSE,
+                         key = if (!is.null(key)) df[[key]] else NULL, marker = marker)
+  # The legend stubs are added after the build: plot_ly() drops an all-NA trace's name along with its data.
+  p <- plotly::plotly_build(p)
+  for (lv in levels) {
+    lc <- unname(pal[lv])
+    if (is.na(lc)) lc <- "#9d9d9d"
+    p$x$data[[length(p$x$data) + 1L]] <- list(type = "scatter", mode = "markers", x = list(NA), y = list(NA),
+                                              name = lv, showlegend = TRUE, hoverinfo = "skip",
+                                              marker = list(color = lc, size = 10))
+  }
+  plotly::layout(p, legend = list(itemclick = FALSE, itemdoubleclick = FALSE))
+}
+
 # ggplotly() silently DROPS `labs(subtitle = ...)`. Several plots put their
 # p-value / correction annotations there, so those lines simply never rendered.
 # Build a plotly title string that carries the subtitle as a `<sup>` second line

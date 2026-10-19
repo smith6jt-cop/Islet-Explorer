@@ -454,29 +454,25 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       NULL
     })
 
-    # One islet-level UMAP: the Leiden and Donor Status UMAPs share this layout so they draw at one size --
+    # One islet-level UMAP (points from islet_umap_plotly(), interleaved so no group hides another): the Leiden and
+    # Donor Status UMAPs share this layout so they draw at one size --
     # the same marker size, the plot area in the left 78% of the widget and the legend in the rest, wide enough for
     # either legend (a legend that does not fit makes plotly widen the right margin and shrink that plot alone).
     spatial_umap_plotly <- function(plot_df, colour_col, pal, legend_title, title, filename_root) {
       fonts <- plotly_islet_fonts()
-      plot_df$.colour <- plot_df[[colour_col]]
-      plot_ly(plot_df, x = ~umap1, y = ~umap2, color = ~.colour,
-              colors = pal,
-              text = ~paste0(legend_title, ": ", .colour, "<br>",
-                             if (colour_col != "donor_status") paste0("Status: ", donor_status, "<br>") else "",
-                             islet_key),
-              hoverinfo = "text",
-              type = "scatter", mode = "markers",
-              marker = list(size = 3, opacity = 0.7)) %>%
+      plot_df$.hover <- paste0(legend_title, ": ", plot_df[[colour_col]], "<br>",
+                               if (colour_col != "donor_status") paste0("Status: ", plot_df$donor_status, "<br>") else "",
+                               plot_df$islet_key)
+      islet_umap_plotly(plot_df, "umap1", "umap2", colour_col, pal, ".hover") %>%
         layout(
           font = fonts$global,
           title = list(text = title, font = fonts$title),
           margin = list(l = 30, r = 10, t = 50, b = 30),
           xaxis = list(title = list(text = "UMAP 1", font = fonts$axis_title), domain = c(0, 0.78),
-                       zeroline = FALSE, showgrid = FALSE, showticklabels = FALSE,
+                       zeroline = FALSE, showgrid = FALSE, showticklabels = FALSE, ticks = "",
                        showline = FALSE, constrain = "domain"),
           yaxis = list(title = list(text = "UMAP 2", font = fonts$axis_title),
-                       zeroline = FALSE, showgrid = FALSE, showticklabels = FALSE,
+                       zeroline = FALSE, showgrid = FALSE, showticklabels = FALSE, ticks = "",
                        showline = FALSE, scaleanchor = "x", scaleratio = 1,
                        constrain = "domain"),
           legend = list(title = list(text = legend_title, font = fonts$legend_title),

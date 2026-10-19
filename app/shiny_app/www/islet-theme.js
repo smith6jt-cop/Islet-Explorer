@@ -40,6 +40,7 @@
   // The modebar camera exports what is on screen; on the dark theme that would be a dark figure. Downloads are for
   // publication, so the replacement button (plotly_islet_config) re-draws the figure off screen in light colours.
   var INK = '#222222';
+  var DARK_PAPER = '#1f1f1f';  // ISLET_THEME_PALETTE$dark$paper
 
   function recolourAxis(axis) {
     axis.gridcolor = '#e6e6e6';
@@ -92,6 +93,10 @@
       var t = Object.assign({}, trace);
       if (t.colorbar) t.colorbar = recolourColorbar(t.colorbar);
       if (t.marker && t.marker.colorbar) t.marker = Object.assign({}, t.marker, { colorbar: recolourColorbar(t.marker.colorbar) });
+      // UMAP points are outlined in the screen background (islet_umap_plotly()); outline them in white instead.
+      if (t.marker && t.marker.line && t.marker.line.color === DARK_PAPER) {
+        t.marker = Object.assign({}, t.marker, { line: Object.assign({}, t.marker.line, { color: '#ffffff' }) });
+      }
       return t;
     });
     return window.Plotly.downloadImage({ data: data, layout: layout }, options);
