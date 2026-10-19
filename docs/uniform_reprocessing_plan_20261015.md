@@ -31,7 +31,7 @@ all 20 images is in `$OUT/typing/`; see [the README](../scripts/uniform/README.m
 
 **App root, 2026-10-16 (P4 built, awaiting review).** `scripts/uniform/assemble_uniform.py` builds the whole
 cohort from the uniform run, with nothing appended to the frozen release. The current build is
-`data/development/uniform-20donor-20261019-v6/` (v1-v5 are superseded by the fixes below). It holds 20 donors
+`data/development/uniform-20donor-20261019-v7/` (v1-v6 are superseded by the fixes below). It holds 20 donors
 and 10,113 endocrine objects (1,491 islets, 3,415 clusters and 5,207 singles). Islets and clusters with analysed
 cells in both core and 20 um band are the 4,763 analysis rows on v5 (1,487 islets, 3,276 clusters). Singles are only
 counted (v4, below). That is 3.07 million analysed cells, with 33,843 Excluded (11,095 for an unresolved hormone, v5) and
@@ -55,6 +55,19 @@ measurements in [the README](../scripts/uniform/README.md)). v6 was rebuilt by t
 (report `tmp/uniform-20donor-20261019-v6/`) and is identical to v5 apart from the embedding: every other table and
 boundary file has the same content, and the protein record differs only by Harmony's run-to-run rounding (at most
 0.0001; the protein Leiden assignments are identical).
+
+**v7, 2026-10-19.** The v6 composition UMAP was one dense blob with two detached islands. The islands are real
+objects (31 all-beta small islets, mostly ND and Aab+; 21 all-alpha insulin-deficient islets, mostly T1D; each far
+above chance from the donors' pooled make-up, spread over 10-12 donors, not fragments of one islet and not a typing
+artefact) but their detachment came from identical features: tied points pull together in a 30-neighbour graph. On
+the owner's direction (adjust min_dist and spread; points must not appear to overlap), the UMAP is refitted at
+min_dist 3, spread 3 on the same graph, so those objects are the ends of the cloud and on-screen overlap falls from 42 %
+to 7 % of points within half a marker of a neighbour. The fit now runs on one thread, because the thread count changed
+the layout and Leiden (adjusted Rand 0.63); v6's Leiden cannot be reproduced exactly, and v7's clusters agree with
+v6's at adjusted Rand 0.57-0.73. The app draws each UMAP as one interleaved trace, so no disease state is painted over
+another. v7 was rebuilt by the assembler (report `tmp/uniform-20donor-20261019-v7/`): X, every table and every
+boundary file have v6's content; only `X_umap`, `leiden_umap_1/2` and `leiden_<r>` (and the record-only protein UMAP)
+differ.
 
 **The two open items, 2026-10-17** (owner: "use common sense and available tools to resolve the scaling and
 threshold"). (1) Aab_6558's Excluded cells inside objects: its INS stain is weak (2.4x its tissue p99 in the
