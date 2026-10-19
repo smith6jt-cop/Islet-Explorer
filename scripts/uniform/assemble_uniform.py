@@ -21,12 +21,15 @@ inside Tissue, minus every endocrine object; a cell may sit in several bands. Ce
 nucleus) and Excluded cells (exocrine inside an object, or a Single without a unique hormone) are counted in
 `census.csv` and kept out of every composition, neighbourhood and display table.
 
+The UMAP and Leiden clusters are the endocrine composition of the objects with ten or more core cells
+(composition_embedding.py, owner 2026-10-19); the Harmony protein embedding stays in the H5AD for the record.
+
 Donor demographics and autoantibodies, and the viewer image links, are carried from the last served root
 (`--donor-source`, v3), which recorded them from nPOD; nothing else is read from it.
 
     python scripts/uniform/assemble_uniform.py --run data/development/uniform-20donor-20261015 \\
         --donor-source data/development/protein-expanded-20261015-v3 \\
-        --output data/development/uniform-20donor-20261017-v3 --report-root tmp/uniform-20donor-20261017-v3
+        --output data/development/uniform-20donor-20261019-v6 --report-root tmp/uniform-20donor-20261019-v6
 """
 from __future__ import annotations
 
@@ -448,6 +451,7 @@ def main() -> int:
     combined.uns['reference_frequencies'] = freqs
     sys.path.insert(0, str(REPO / 'scripts'))
     from build_protein_embedding import fit_embedding
+    from composition_embedding import fit_composition_embedding, MIN_CORE_CELLS
     # A cytoplasm-measured marker is undefined for a cell whose nucleus fills it (REDSEA writes NaN, as Senior's
     # does), so an object made only of such cells has no mean for it. X keeps the NaN; the embedding is fitted on a
     # copy in which a missing object mean is the marker's cohort mean (a zero after standardising), and the
@@ -468,6 +472,10 @@ def main() -> int:
     combined.X = measured.astype(np.float32)
     combined.uns['protein_embedding']['missing_means_filled_for_fit'] = imputation['values_filled']
     (reports / 'embedding.json').write_text(json.dumps(diag, indent=2, default=float) + '\n')
+    # The served UMAP and Leiden: endocrine composition of the objects with ten or more core cells (owner,
+    # 2026-10-19; composition_embedding.py). The protein embedding above stays in the H5AD for the record.
+    combined, cdiag = fit_composition_embedding(combined)
+    (reports / 'composition_embedding.json').write_text(json.dumps(cdiag, indent=2, default=float) + '\n')
     trajectory = combined.copy()
     for kind, cols in [('composition', COMP_COLS), ('targets', TARGET_COLS), ('markers', MARKER_COLS)]:
         groovy(combined, kind, [r for t in order for r in results[t][{'composition': 'comp'}.get(kind, kind)]], cols)
@@ -507,7 +515,9 @@ def main() -> int:
     rel = {'status': 'assembled_pending_owner_review', 'donors': len(rows), 'objects': int(combined.n_obs),
            'by_object_class': {str(k): int(v) for k, v in combined.obs.object_class.value_counts().items()},
            'singles_counted_not_analysed': int(census.singles.sum()),
-           'labels': LABELS, 'donor_correction': 'harmony', 'scvi_required': False, 'git_commit': head,
+           'labels': LABELS, 'embedding': 'endocrine_composition', 'embedding_min_core_cells': MIN_CORE_CELLS,
+           'embedding_objects': cdiag['objects'], 'donor_correction': 'none',
+           'protein_embedding_donor_correction': 'harmony', 'scvi_required': False, 'git_commit': head,
            'run': str(a.run.resolve()), 'scale_sha256': sha256(CT.typing_dir(a.run) / 'scale.parquet'),
            'shifts_sha256': sha256(CT.typing_dir(a.run) / 'shifts.json'),
            'cells_analysed': int(census.analysed.sum()), 'cells_excluded': int(census.excluded.sum()),

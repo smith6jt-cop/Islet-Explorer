@@ -306,10 +306,25 @@ times that hormone's own tissue p99, `levels.hormone_scaled` in the calls audit)
 regional and per-cell `_pos` flags are scaled >= 0.10.
 
 Two things are carried from v3 because they were never computed from cells: donor demographics and
-autoantibodies, and the viewer image links. The embedding is Harmony protein PCA, UMAP and Leiden
-(`build_protein_embedding.fit_embedding`). Seven objects made only of cells whose nucleus fills the cell have
-no cytoplasmic mean; X keeps the NaN, and the embedding is fitted with the marker's cohort mean in its place
-(`embedding_imputation.json`).
+autoantibodies, and the viewer image links. The served UMAP and Leiden clusters are the endocrine composition of the objects with ten or more core cells (the Beta, Alpha, Delta and CHGA+ hormone-negative shares of each core's endocrine cells; `scripts/uniform/composition_embedding.py`): one
+30-neighbour graph for both, no donor correction, and no point or cluster for smaller objects (owner, 2026-10-19,
+from v6). The Harmony protein PCA, UMAP and Leiden (`build_protein_embedding.fit_embedding`) are still fitted and
+kept in the H5AD for the record (`X_protein_pca`, `X_pca`, `X_umap_protein`, `protein_leiden_<r>`). Seven objects
+made only of cells whose nucleus fills the cell have no cytoplasmic mean; X keeps the NaN, and the protein
+embedding is fitted with the marker's cohort mean in its place (`embedding_imputation.json`). The composition
+diagnostics are `composition_embedding.json` in the report root.
+
+Why composition (measured on v5, 2026-10-19). Disease is a donor property, so only neighbours from *other* donors
+test whether an embedding places objects by disease. Among each object's 30 nearest neighbours from other donors,
+same disease exceeded chance by +0.098 on composition (17 % same-donor neighbours, 6.5 % by chance), +0.081 on the
+v5 protein + Harmony layout, +0.068 on protein PCA without Harmony (45 % same donor) and +0.025 on protein + Harmony
+refitted on the same objects. Harmony removes donor shifts and, with them, much of the disease difference; the
+original 15-donor UMAP's apparent disease separation was donor separation (72 % same-donor neighbours; other-donor
+same disease at chance). Trained on the other donors, endocrine composition names a held-out donor's disease for
+14 of 20 donors (T1D 6 of 6, ND 6 of 7, Aab+ 2 of 7), the 31 markers for 10 of 20. Objects under ten core cells
+take only a few composition values and carried no more disease signal (+0.13 at two cells, as discrete blobs).
+Composition Leiden is less seed-stable than the protein Leiden (adjusted Rand 0.53-0.78 against 0.81-0.99): its
+clusters cut a continuum of beta-cell share.
 
 The app reads `object_class` through an app-wide "Endocrine objects" selector (Islet / Cluster). The
 Trajectory tab does not use it: it fits every object with ten or more core cells (`total_cells_core` in
