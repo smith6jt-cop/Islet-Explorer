@@ -305,6 +305,15 @@ ISLET_ANNOTATE_SIZE <- ISLET_FONT_SIZES$base / ggplot2::.pt
 
 # Standard ggplot theme. Use directly: `theme_islet()` or extend with
 # additional `theme(...)` calls for plot-specific overrides.
+# URL of one of the app's own www/ files, versioned by its content. shiny-server sends them with Last-Modified
+# and no Cache-Control, so a browser may keep using an old copy after the file changes (2026-10-19: both header
+# logos showed because a cached islet-theme.css lacked the rule that hides one).
+islet_asset <- function(path) {
+  file <- file.path("www", path)
+  if (!file.exists(file)) return(path)
+  paste0(path, "?v=", substr(unname(tools::md5sum(file)), 1, 10))
+}
+
 # ---- Colour theme (2026-10-18: dark by default, after VS Code's Dark Modern) ----
 # The page theme is the <html data-theme> attribute (www/islet-theme.css / islet-theme.js), mirrored to the server
 # as input$app_theme. theme_islet() and plotly_islet_config() read it, so every plot drawn inside a render

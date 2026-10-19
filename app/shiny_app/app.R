@@ -349,10 +349,13 @@ ui <- fluidPage(
        The modebar (top-right hover controls) sits in the same vertical band
        as the centered chart title, overlapping it on hover. Reserve a 28px
        strip above each plotly figure so the modebar lives above the title.
-       Applies to every plot_ly + ggplotly fig in the app. */
-    .js-plotly-plot,
+       Applies to every plot_ly + ggplotly fig in the app. A margin, not padding
+       (2026-10-19): plotly draws at the widget's full height, so padding pushed
+       every figure 28px past the bottom of its box, onto whatever came next (the
+       Spatial Cluster Composition heading). A widget that fills its parent
+       takes height calc(100% - 28px). */
     .html-widget.plotly {
-      padding-top: 28px;
+      margin-top: 28px;
     }
     .js-plotly-plot .plotly .modebar {
       top: -28px !important;
@@ -383,8 +386,8 @@ ui <- fluidPage(
     }
   "))),
   # Loaded after the app's own styles so its dark overrides win.
-  tags$head(tags$link(rel = "stylesheet", href = "islet-theme.css"),
-            tags$script(src = "islet-theme.js")),
+  tags$head(tags$link(rel = "stylesheet", href = islet_asset("islet-theme.css")),
+            tags$script(src = islet_asset("islet-theme.js"))),
   tags$script(HTML("
     $(document).on('shiny:connected', function() {
       function markDecorativeIcons() {
@@ -438,8 +441,8 @@ ui <- fluidPage(
       # The Panc Floyd logo heads the page (owner, 2026-10-19); the light-text copy is shown on the dark theme
       # (both made by scripts/app_assets/make_logo_variants.py from www/logo.png).
       div(class = "app-header",
-        tags$img(src = "logo-header-light.png", class = "brand-logo brand-logo-light", alt = "Panc Floyd"),
-        tags$img(src = "logo-header-dark.png", class = "brand-logo brand-logo-dark", alt = "Panc Floyd"),
+        tags$img(src = islet_asset("logo-header-light.png"), class = "brand-logo brand-logo-light", alt = "Panc Floyd"),
+        tags$img(src = islet_asset("logo-header-dark.png"), class = "brand-logo brand-logo-dark", alt = "Panc Floyd"),
         tags$button(id = "theme_toggle", type = "button", class = "theme-toggle", "Light theme")),
       tags$input(id = "app_theme", type = "text", value = "dark", style = "display: none;",
                  `aria-hidden` = "true", tabindex = "-1"),

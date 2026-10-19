@@ -507,3 +507,10 @@ query_cell_distance_composition <- function(mode, items, statuses,
   }
   .query_cell_distance_composition_memory(mode, items, statuses, norm, n_bins)
 }
+
+
+#' Leiden cluster labels in numeric order (0, 1, 2, ..., 10), not text order (0, 1, 10, 11, ..., 2).
+leiden_levels <- function(x) {
+  lv <- unique(as.character(x[!is.na(x)]))
+  lv[order(suppressWarnings(as.numeric(lv)), lv)]
+}

@@ -245,6 +245,26 @@ try {
           document.querySelector('#spatial-embedding_method')?.textContent.includes('Harmony'), donors: values.length };
       }, ADDITIONS, EXCLUDED, EXPANDED_DONORS));
       await check('render_expanded_leiden_umap', () => rendered(page, '#spatial-leiden_umap', 'plotly'));
+      // Owner, 2026-10-19: the two UMAPs are one size, and the Neighborhood Analysis dropdowns offer choices (they
+      // opened empty while an observer filled them before the hidden tab had mounted them).
+      await check('spatial_umaps_one_size_and_dropdowns_filled', async () => {
+        await rendered(page, '#spatial-spatial_umap_donor', 'plotly');
+        await page.waitForSelector('#spatial-distance_metric', { timeout: 60000 });
+        return page.evaluate(() => {
+          const area = id => {
+            const r = document.querySelector(`${id} .nsewdrag`)?.getBoundingClientRect();
+            return r ? [Math.round(r.width), Math.round(r.height)] : null;
+          };
+          const options = id => Object.keys(document.getElementById(id)?.selectize?.options || {}).length;
+          const result = { leiden_plot_area: area('#spatial-leiden_umap'), donor_plot_area: area('#spatial-spatial_umap_donor'),
+            dropdown_options: Object.fromEntries(['infiltration_phenotype', 'scatter_phenotype', 'distance_metric',
+              'kde_immune_type'].map(id => [id, options(`spatial-${id}`)])) };
+          const [a, b] = [result.leiden_plot_area, result.donor_plot_area];
+          result.passed = Boolean(a && b) && Math.abs(a[0] - b[0]) <= 2 && Math.abs(a[1] - b[1]) <= 2
+            && Object.values(result.dropdown_options).every(n => n > 1);
+          return result;
+        });
+      });
       for (const donor of ADDITIONS) {
         await check(`expanded_donor_${donor}_tissue`, async () => {
           const previous = await page.$eval('#spatial-tissue_scatter img', image => image.src);

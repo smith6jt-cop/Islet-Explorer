@@ -174,7 +174,6 @@ A few plots are rendered statically because they would overwhelm an interactive 
 | Trajectory UMAP (donor status) | Trajectory tab | 3000 × 2100 px |
 | Trajectory UMAP (selected feature) | Trajectory tab | 3000 × 2100 px |
 | Multi-feature pseudotime heatmap | Trajectory tab | 3600 × variable px (height scales with marker count) |
-| Spatial donor-status UMAP | Spatial tab | 3000 × 2100 px |
 
 All PNGs are 300 dpi — sized to drop directly into a manuscript or fit a full-screen slide without resampling. Filenames include a timestamp so repeated downloads don't overwrite.
 
@@ -427,9 +426,10 @@ path.
    - **Zoom**: Drag to select a region, then the view zooms in. Double-click or click **Reset Zoom** to restore the full view.
    - Uses ggplot2 `renderPlot` (not plotly) for performance at >100K points
 
-3. **Leiden Panel** (right)
-   - UMAP scatter of 5,214 islets colored by selected Leiden resolution
-   - Stacked bar chart of mean phenotype composition per cluster
+3. **Cluster Composition** (right): stacked bar chart of mean phenotype composition per Leiden cluster, clusters in
+   numeric order.
+4. **Islet-Level UMAPs** (full-width row below, since 2026-10-19): the Leiden and Donor Status UMAPs side by side at
+   one size, both interactive (PNG from each camera button)
    - UMAP shows disease-stage separation (uses raw marker PCA visualization coordinates)
    - Hidden with message when Leiden data unavailable in H5AD
 

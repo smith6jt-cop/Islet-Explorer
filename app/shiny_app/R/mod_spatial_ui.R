@@ -1,6 +1,7 @@
 # ---------- Spatial Tab module UI ----------
 # Exports: spatial_ui(id)
-# Layout: Data / View control panels (control_panel()), then Tissue Scatter (col-7) + Leiden Panel (col-5)
+# Layout: Data / View control panels (control_panel()), then Tissue Scatter (col-7) + Cluster Composition (col-5),
+# then the two islet-level UMAPs side by side in a full-width row
 # + Neighborhood Analysis Data / View panels and card rows below (rendered server-side in
 #   output$neighborhood_cards): enrichment/scatter/distance row, composition card,
 #   distance-to-islet profile card. Card prose lives in the tab_help() popover.
@@ -89,7 +90,7 @@ spatial_ui <- function(id) {
         )
       )
     )),
-    # ==== ROW 1: Tissue Scatter + Leiden ====
+    # ==== ROW 1: Tissue Scatter + Leiden cluster composition ====
     fluidRow(style = "display: flex; flex-wrap: wrap;",
       # ---- Left: Tissue Scatter ----
       column(7,
@@ -111,30 +112,34 @@ spatial_ui <- function(id) {
         )
       ),
 
-      # ---- Right: Leiden Panel ----
+      # ---- Right: Leiden cluster composition ----
       column(5,
         div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible; height: 100%;",
-          h5("Islet-Level UMAPs"),
+          h5("Cluster Composition"),
           uiOutput(ns("leiden_not_available")),
-          fluidRow(
-            column(6,
-              h5("Leiden Clustering", style = "font-size: 13px; margin-top: 0;"),
-              plotlyOutput(ns("leiden_umap"), height = "400px")
-            ),
-            column(6,
-              h5("Donor Status", style = "font-size: 13px; margin-top: 0;"),
-              plotOutput(ns("spatial_umap_donor"), height = 300),
-              div(style = "text-align: right; margin-top: 6px;",
-                downloadButton(ns("dl_spatial_umap_donor"), "Download PNG",
-                               class = "btn-sm btn-outline-primary"))
-            )
-          ),
-          hr(style = "margin: 8px 0;"),
-          h5("Cluster Composition", style = "font-size: 15px;"),
-          plotlyOutput(ns("cluster_composition"), height = "450px")
+          plotlyOutput(ns("cluster_composition"), height = "650px")
         )
       )
     ),
+
+    # ==== ROW 1b: the two islet-level UMAPs, one size (owner, 2026-10-19) ====
+    # Side by side across the full width: in the old half-width card each had ~280 px, so a legend that did not
+    # fit made plotly shrink that plot alone. Both use spatial_umap_plotly(); each downloads from its camera button.
+    fluidRow(column(12,
+      div(class = "card", style = "padding: 15px; margin-bottom: 15px;",
+        h5("Islet-Level UMAPs"),
+        fluidRow(
+          column(6,
+            h5("Leiden Clustering", style = "font-size: 13px; margin-top: 0;"),
+            plotlyOutput(ns("leiden_umap"), height = "480px")
+          ),
+          column(6,
+            h5("Donor Status", style = "font-size: 13px; margin-top: 0;"),
+            plotlyOutput(ns("spatial_umap_donor"), height = "480px")
+          )
+        )
+      )
+    )),
 
     # ==== ROW 2+: Neighborhood Analysis bar + cards ====
     uiOutput(ns("neighborhood_cards"))

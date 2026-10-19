@@ -154,7 +154,7 @@ plot_main_ui <- function(id, extra_panel = NULL) {
                          style = "font-size: 11px; padding: 2px 8px;")
         ),
         div(style = "flex: 1; min-height: 0; display: flex;",
-          plotlyOutput(ns("plt"), height = "100%")
+          plotlyOutput(ns("plt"), height = "calc(100% - 28px)")
         )
       )
     ),
@@ -170,7 +170,7 @@ plot_main_ui <- function(id, extra_panel = NULL) {
                          style = "font-size: 11px; padding: 2px 8px;")
         ),
         div(style = "flex: 1; min-height: 0; display: flex;",
-          plotlyOutput(ns("dist"), height = "100%")
+          plotlyOutput(ns("dist"), height = "calc(100% - 28px)")
         )
       )
     ),

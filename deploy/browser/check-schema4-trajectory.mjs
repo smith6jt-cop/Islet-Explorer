@@ -45,7 +45,7 @@ try{
     await page.click('a[data-value="Spatial"]');
     await page.waitForFunction(expected=>document.querySelector('#spatial-leiden_summary')?.textContent.includes(expected),{timeout:60000},displayNumber(embeddedIslets));
     await page.waitForSelector('#spatial-leiden_umap.js-plotly-plot',{timeout:60000});
-    await page.waitForSelector('#spatial-spatial_umap_donor img',{timeout:60000});
+    await page.waitForSelector('#spatial-spatial_umap_donor.js-plotly-plot',{timeout:60000});
     await page.waitForSelector('#spatial-cluster_composition.js-plotly-plot',{timeout:60000});
     const spatial=await page.evaluate(()=>{
       const umap=document.querySelector('#spatial-leiden_umap');

@@ -1,7 +1,7 @@
 trajectory_ui <- function(id) {
   ns <- NS(id)
   tagList(
-    singleton(tags$script(src = "trajectory-links.js")),
+    singleton(tags$script(src = islet_asset("trajectory-links.js"))),
     tags$style(HTML(".trajectory-linked-plot.html-widget.plotly { padding-top: 0; margin-top: 28px; }")),
     tab_help("Trajectory help", "show_phenotype_rules_traj",
       tags$p(tags$strong("Fitted objects."),

@@ -342,7 +342,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       # Foreground layer: colored by phenotype or leiden
       if (nrow(fg) > 0) {
         if (use_leiden && "cluster" %in% colnames(fg)) {
-          cluster_levels <- sort(unique(fg$cluster[fg$cluster != "tissue"]))
+          cluster_levels <- leiden_levels(fg$cluster[fg$cluster != "tissue"])
           fg$cluster <- factor(fg$cluster, levels = c(cluster_levels, "tissue"))
           n_clusters <- length(cluster_levels)
           pal_colors <- rep_len(leiden_palette, n_clusters)
@@ -440,6 +440,38 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       NULL
     })
 
+    # One islet-level UMAP: the Leiden and Donor Status UMAPs share this layout so they draw at one size --
+    # the same marker size, the plot area in the left 78% of the widget and the legend in the rest, wide enough for
+    # either legend (a legend that does not fit makes plotly widen the right margin and shrink that plot alone).
+    spatial_umap_plotly <- function(plot_df, colour_col, pal, legend_title, title, filename_root) {
+      fonts <- plotly_islet_fonts()
+      plot_df$.colour <- plot_df[[colour_col]]
+      plot_ly(plot_df, x = ~umap1, y = ~umap2, color = ~.colour,
+              colors = pal,
+              text = ~paste0(legend_title, ": ", .colour, "<br>",
+                             if (colour_col != "donor_status") paste0("Status: ", donor_status, "<br>") else "",
+                             islet_key),
+              hoverinfo = "text",
+              type = "scatter", mode = "markers",
+              marker = list(size = 3, opacity = 0.7)) %>%
+        layout(
+          font = fonts$global,
+          title = list(text = title, font = fonts$title),
+          margin = list(l = 30, r = 10, t = 50, b = 30),
+          xaxis = list(title = list(text = "UMAP 1", font = fonts$axis_title), domain = c(0, 0.78),
+                       zeroline = FALSE, showgrid = FALSE, showticklabels = FALSE,
+                       showline = FALSE, constrain = "domain"),
+          yaxis = list(title = list(text = "UMAP 2", font = fonts$axis_title),
+                       zeroline = FALSE, showgrid = FALSE, showticklabels = FALSE,
+                       showline = FALSE, scaleanchor = "x", scaleratio = 1,
+                       constrain = "domain"),
+          legend = list(title = list(text = legend_title, font = fonts$legend_title),
+                        font = fonts$legend_text, x = 0.8, xanchor = "left", y = 1, yanchor = "top",
+                        itemsizing = "constant", tracegroupgap = 2)
+        ) %>%
+        plotly_islet_config(filename_root)
+    }
+
     output$leiden_umap <- renderPlotly({
       req(has_leiden())
       pd <- prepared()
@@ -472,7 +504,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       if (nrow(plot_df) == 0) return(plotly_islet_empty("No UMAP data"))
 
       # Sort cluster levels numerically
-      cluster_levels <- sort(unique(plot_df$cluster))
+      cluster_levels <- leiden_levels(plot_df$cluster)
       plot_df$cluster <- factor(plot_df$cluster, levels = cluster_levels)
       n_clusters <- length(cluster_levels)
       pal_colors <- rep_len(leiden_palette, n_clusters)
@@ -480,36 +512,13 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
 
       res_label <- gsub("^leiden_", "", leiden_col)
 
-      fonts <- plotly_islet_fonts()
-      plot_ly(plot_df, x = ~umap1, y = ~umap2, color = ~cluster,
-              colors = pal,
-              text = ~paste0("Cluster: ", cluster, "<br>",
-                             "Status: ", donor_status, "<br>",
-                             islet_key),
-              hoverinfo = "text",
-              type = "scatter", mode = "markers",
-              marker = list(size = 3, opacity = 0.7)) %>%
-        layout(
-          font = fonts$global,
-          title = list(text = paste0("Leiden ", res_label, " (", nrow(plot_df), " islets)"),
-                       font = fonts$title),
-          xaxis = list(title = list(text = "UMAP 1", font = fonts$axis_title),
-                       zeroline = FALSE, showgrid = FALSE, showticklabels = FALSE,
-                       showline = FALSE, constrain = "domain"),
-          yaxis = list(title = list(text = "UMAP 2", font = fonts$axis_title),
-                       zeroline = FALSE, showgrid = FALSE, showticklabels = FALSE,
-                       showline = FALSE, scaleanchor = "x", scaleratio = 1,
-                       constrain = "domain"),
-          legend = list(title = list(text = "Cluster", font = fonts$legend_title),
-                        font = fonts$legend_text,
-                        itemsizing = "trace",
-                        tracegroupgap = 2)
-        ) %>%
-        plotly_islet_config(paste0("leiden_umap_", res_label))
+      spatial_umap_plotly(plot_df, "cluster", pal, "Cluster",
+                          paste0("Leiden ", res_label, " (", nrow(plot_df), " islets)"),
+                          paste0("leiden_umap_", res_label))
     })
 
-    # ==== Donor Status UMAP (static ggplot, mirrors trajectory tab) ====
-    spatial_umap_donor_plot <- reactive({
+    # ==== Donor Status UMAP: the same layout as the Leiden UMAP (spatial_umap_plotly()) ====
+    output$spatial_umap_donor <- renderPlotly({
       req(has_leiden())
       pd <- prepared()
       comp <- pd$comp
@@ -520,38 +529,21 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         plot_comp <- plot_comp[plot_comp$`Donor Status` %in% input$groups, , drop = FALSE]
       }
 
-      umap1 <- suppressWarnings(as.numeric(plot_comp$leiden_umap_1))
-      umap2 <- suppressWarnings(as.numeric(plot_comp$leiden_umap_2))
-      ds <- if ("Donor Status" %in% colnames(plot_comp)) as.character(plot_comp$`Donor Status`) else rep("?", nrow(plot_comp))
-
-      plot_df <- data.frame(umap1 = umap1, umap2 = umap2, donor_status = ds, stringsAsFactors = FALSE)
+      plot_df <- data.frame(
+        umap1 = suppressWarnings(as.numeric(plot_comp$leiden_umap_1)),
+        umap2 = suppressWarnings(as.numeric(plot_comp$leiden_umap_2)),
+        donor_status = if ("Donor Status" %in% colnames(plot_comp)) as.character(plot_comp$`Donor Status`) else "?",
+        islet_key = if ("islet_key" %in% colnames(plot_comp)) as.character(plot_comp$islet_key) else "",
+        stringsAsFactors = FALSE
+      )
       plot_df <- plot_df[is.finite(plot_df$umap1) & is.finite(plot_df$umap2), , drop = FALSE]
-      if (nrow(plot_df) == 0) return(NULL)
-
+      if (nrow(plot_df) == 0) return(plotly_islet_empty("No UMAP data"))
       plot_df$donor_status <- factor(plot_df$donor_status, levels = c("ND", "Aab+", "T1D"))
+      plot_df$donor_status <- droplevels(plot_df$donor_status)
 
-      ggplot(plot_df, aes(x = umap1, y = umap2, color = donor_status)) +
-        geom_point(alpha = 0.6, size = 1.0) +
-        scale_color_manual(values = donor_colors_reactive()) +
-        scale_x_continuous(expand = expansion(mult = 0.02)) +
-        scale_y_continuous(expand = expansion(mult = 0.02)) +
-        coord_fixed() +
-        labs(x = "UMAP 1", y = "UMAP 2", color = "Status") +
-        guides(color = guide_legend(override.aes = list(size = 3))) +
-        theme_islet() +
-        theme(axis.text = element_blank(), axis.ticks = element_blank(),
-              panel.grid = element_blank(), axis.line = element_blank())
+      spatial_umap_plotly(plot_df, "donor_status", donor_colors_reactive(), "Status",
+                          paste0("Donor status (", nrow(plot_df), " islets)"), "spatial_umap_donor")
     })
-    output$spatial_umap_donor <- renderPlot({ spatial_umap_donor_plot() }, bg = "transparent")
-    output$dl_spatial_umap_donor <- downloadHandler(
-      filename = function() islet_png_filename("spatial_umap_donor"),
-      content = function(file) {
-        p <- spatial_umap_donor_plot(); if (is.null(p)) return()
-        islet_ggsave(file, plot = p,
-                        width = ISLET_PNG_DIMS$width, height = ISLET_PNG_DIMS$height,
-                        dpi = ISLET_PNG_DIMS$dpi, units = ISLET_PNG_DIMS$units)
-      }
-    )
 
     # ==== Card 3 (bottom): Cluster Composition ====
     output$cluster_composition <- renderPlotly({
@@ -588,7 +580,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       cluster <- as.character(plot_comp[[leiden_col]])
 
       # Compute mean phenotype proportions per cluster
-      cluster_levels <- sort(unique(cluster))
+      cluster_levels <- leiden_levels(cluster)
       mat <- matrix(NA_real_, nrow = length(prop_cols), ncol = length(cluster_levels),
                     dimnames = list(prop_cols, cluster_levels))
       for (cl in cluster_levels) {
@@ -626,6 +618,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       ordered_phenos <- intersect(canonical_order, keep_phenos)
       ordered_phenos <- c(ordered_phenos, setdiff(keep_phenos, canonical_order))
       bar_df$phenotype <- factor(bar_df$phenotype, levels = rev(ordered_phenos))
+      bar_df$cluster <- factor(bar_df$cluster, levels = cluster_levels)
 
       fonts <- plotly_islet_fonts()
       plot_ly(bar_df, x = ~cluster, y = ~proportion, color = ~phenotype,
@@ -988,9 +981,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
               card_title("Peri enrichment by status"),
               div(style = ctrl_row,
                 div(style = "flex: 1; min-width: 180px;",
-                  # Populated server-side from phenotype_choices().
-                  selectInput(ns("infiltration_phenotype"), "Phenotype",
-                              choices = NULL, width = "100%")
+                  nbr_select("infiltration_phenotype", "100%")
                 ),
                 checkboxInput(ns("infiltration_show_outlier_table"),
                               "Show outlier table", value = FALSE)
@@ -1005,8 +996,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
               card_title("Peri vs core proportion"),
               div(style = ctrl_row,
                 div(style = "flex: 1; min-width: 180px;",
-                  selectInput(ns("scatter_phenotype"), "Phenotype",
-                              choices = NULL, width = "100%")
+                  nbr_select("scatter_phenotype", "100%")
                 ),
                 checkboxInput(ns("scatter_sqrt"), "Sqrt scale", value = TRUE),
                 checkboxInput(ns("scatter_trend"), "Trend lines", value = FALSE)
@@ -1019,9 +1009,8 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
               card_title("Distance to nearest cell"),
               div(style = ctrl_row,
                 div(style = "flex: 1; min-width: 180px;",
-                  # Populated server-side: every retained phenotype with min_dist_*.
-                  selectInput(ns("distance_metric"), "Phenotype",
-                              choices = NULL, width = "100%")
+                  # Every retained phenotype with min_dist_*.
+                  nbr_select("distance_metric", "100%")
                 ),
                 checkboxInput(ns("distance_show_outlier_table"),
                               "Show outlier table", value = FALSE)
@@ -1079,8 +1068,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
               condition = "input.dist_view == 'kde'", ns = ns,
               div(style = ctrl_row,
                 div(style = "min-width: 240px;",
-                  selectInput(ns("kde_immune_type"), "Phenotype",
-                              choices = NULL, width = "260px")
+                  nbr_select("kde_immune_type", "260px")
                 ),
                 radioButtons(ns("kde_metric"), "Y-axis", inline = TRUE, selected = "shape",
                              choices = c("Distribution shape" = "shape",
@@ -1235,20 +1223,15 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       choices[[1]]
     }
 
-    observe({
+    # The choices are built into the selectInputs by output$neighborhood_cards itself (2026-10-19). They used to be
+    # sent by an observer through updateSelectInput, but outputs on a hidden tab are suspended while observers are
+    # not: the observer ran at startup, before the Spatial tab had mounted the inputs, its update was lost, and the
+    # four dropdowns opened empty.
+    nbr_select_choices <- reactive({
       ch <- phenotype_choices()
-      if (length(ch) == 0) return()
-      # Card A-Left: enrichment z-score per phenotype
-      cur_a <- isolate(input$infiltration_phenotype)
-      sel_a <- if (!is.null(cur_a) && cur_a %in% ch) cur_a else pick_default(ch)
-      updateSelectInput(session, "infiltration_phenotype", choices = ch, selected = sel_a)
-      # Card A-Right: peri vs core proportion (only phenotypes with both prop_ + peri_prop_)
       opts <- phenotype_options()
+      # Card A-Right: peri vs core proportion (only phenotypes with both prop_ + peri_prop_)
       paired <- vapply(opts, function(o) !is.na(o$prop_core) && !is.na(o$peri_prop), logical(1))
-      ch_b <- ch[paired]
-      cur_b <- isolate(input$scatter_phenotype)
-      sel_b <- if (!is.null(cur_b) && cur_b %in% ch_b) cur_b else pick_default(ch_b)
-      updateSelectInput(session, "scatter_phenotype", choices = ch_b, selected = sel_b)
       # Card C-Left: distance metric — min_dist_<phenotype> for retained labels.
       # The "Immune (all)" aggregate was removed: it pools the retired residual
       # labels (Immune, T cell, APCs) with the retained immune subtypes.
@@ -1256,14 +1239,9 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       dist_ch <- stats::setNames(
                    vapply(dist_opts, function(o) o$min_dist, character(1)),
                    vapply(dist_opts, function(o) o$label, character(1)))
-      cur_c <- isolate(input$distance_metric)
-      sel_c <- if (!is.null(cur_c) && cur_c %in% dist_ch) cur_c else
-                 pick_default(dist_ch, prefer = paste0("min_dist_", c("Macrophage", "CD8a_Tcell")))
-      updateSelectInput(session, "distance_metric", choices = dist_ch, selected = sel_c)
-
-      # Card C-Right "kde" view: populate kde_immune_type from phenotype_options()
-      # (same universe as Card C-left). The "cellwise" view sets its own choices
-      # at UI-build time from cell_distance_phenotypes().
+      # Card C-Right "kde" view: the same universe, limited to phenotypes in the KDE data. The "cellwise" view
+      # sets its own choices at UI-build time from cell_distance_phenotypes().
+      ch_kde <- character(0)
       kde_df <- load_immune_kde_data()
       if (!is.null(kde_df) && "phenotype" %in% colnames(kde_df)) {
         present <- unique(as.character(kde_df$phenotype))
@@ -1271,11 +1249,23 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         ch_kde <- stats::setNames(
                     vapply(kopts, function(o) o$safe,  character(1)),
                     vapply(kopts, function(o) o$label, character(1)))
-        cur_k <- isolate(input$kde_immune_type)
-        sel_k <- if (!is.null(cur_k) && cur_k %in% ch_kde) cur_k else pick_default(ch_kde)
-        updateSelectInput(session, "kde_immune_type", choices = ch_kde, selected = sel_k)
       }
+      list(infiltration_phenotype = ch, scatter_phenotype = ch[paired], distance_metric = dist_ch,
+           kde_immune_type = ch_kde)
     })
+    # Keep the current choice when it is still offered, else a sensible immune default.
+    nbr_select_selected <- function(id) {
+      choices <- nbr_select_choices()[[id]]
+      current <- isolate(input[[id]])
+      if (!is.null(current) && current %in% choices) return(current)
+      if (identical(id, "distance_metric"))
+        return(pick_default(choices, prefer = paste0("min_dist_", c("Macrophage", "CD8a_Tcell"))))
+      pick_default(choices)
+    }
+    nbr_select <- function(id, width) {
+      selectInput(ns(id), "Phenotype", choices = nbr_select_choices()[[id]],
+                  selected = nbr_select_selected(id), width = width)
+    }
 
     # Card C-Right "cellwise": repopulate the phenotype/marker pickers when the
     # group-by mode flips. Depends on input$dist_mode so it fires post-mount.
