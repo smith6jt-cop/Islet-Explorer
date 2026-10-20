@@ -1074,13 +1074,49 @@ CONTROL_PANEL_CSS <- paste0(
   ".control-panel[open] > summary { border-bottom: 1px solid var(--islet-border-strong); margin-bottom: 10px; } ",
   ".control-panel .form-group { margin-bottom: 6px; } ",
   ".control-panel h5 { margin: 4px 0 6px; font-size: 14px; font-weight: 600; color: var(--islet-fg); } ",
-  ".control-panel .form-group:last-child { margin-bottom: 8px; }")
+  ".control-panel .form-group:last-child { margin-bottom: 8px; }",
+  ".control-panel-wrap { position: relative; } ",
+  ".control-panel-wrap > .control-panel > summary { padding-right: 34px; } ",
+  ".control-panel-wrap > .card-help { position: absolute; top: 7px; right: 4px; } ",
+  ".card-help { display: inline-block; position: relative; z-index: 20; } ",
+  ".card-help > summary { cursor: pointer; list-style: none; color: var(--islet-link); padding: 0 4px; ",
+  "line-height: 1; } ",
+  ".card-help > summary::-webkit-details-marker { display: none; } ",
+  ".card-help > summary::marker { content: ''; } ",
+  ".card-help > summary i { font-size: 18px; } ",
+  ".card-help-panel { position: absolute; right: 0; top: 100%; width: min(420px, calc(100vw - 32px)); ",
+  "max-height: 70vh; overflow-y: auto; padding: 12px; background: var(--islet-surface); text-align: left; ",
+  "border: 1px solid var(--islet-border-strong); box-shadow: 0 4px 16px #0002; font-size: 13px; ",
+  "font-weight: 400; color: var(--islet-fg); z-index: 1050; } ",
+  ".card-help-panel p:last-child { margin-bottom: 0; }")
+
+#' A "?" icon whose popover holds the help for the card or control panel it sits on (owner, 2026-10-20:
+#' help is split by card, not gathered under one icon per tab). www/card-help.js keeps the popover inside the
+#' window and closes it on an outside click or Escape. Put it beside the card's title.
+card_help <- function(title, ...) {
+  shiny::tags$details(class = "card-help",
+    shiny::tags$summary(title = title, shiny::tags$span(class = "sr-only", title),
+                        shiny::tags$i(class = "far fa-circle-question", `aria-hidden` = "true")),
+    shiny::tags$div(class = "card-help-panel", ...))
+}
+
+#' A card title (h5) with its help icon beside it. `help` is a list of tags; NULL gives the bare title.
+card_title_help <- function(title, help = NULL, style = "margin: 0;") {
+  heading <- shiny::h5(title, style = style)
+  if (is.null(help)) return(heading)
+  shiny::tags$div(style = "display: flex; align-items: center; gap: 4px;",
+                  heading, do.call(card_help, c(list(paste(title, "help")), help)))
+}
 
 #' A collapsible control group. Use control_panel("Data controls", open = TRUE, ...) and
-#' control_panel("View controls", ...) at the top of a tab or section.
-control_panel <- function(title, ..., open = FALSE) {
-  shiny::tags$details(class = "control-panel", open = if (isTRUE(open)) NA else NULL,
-                      shiny::tags$summary(title), ...)
+#' control_panel("View controls", ...) at the top of a tab or section. `help`, a list of tags, puts a "?" icon at
+#' the right of the panel's title bar, outside the <summary> so opening it does not open or close the panel.
+control_panel <- function(title, ..., open = FALSE, help = NULL) {
+  panel <- shiny::tags$details(class = "control-panel", open = if (isTRUE(open)) NA else NULL,
+                               shiny::tags$summary(title), ...)
+  if (is.null(help)) return(panel)
+  shiny::tags$div(class = "control-panel-wrap", panel,
+                  do.call(card_help, c(list(paste(title, "help")), help)))
 }
 
 #' TRUE when the served root is the uniform 20-donor build (one typing workflow for every donor).
@@ -1134,6 +1170,8 @@ cell_typing_help <- function() {
     "cells only where a Single lies in it.")
 }
 
+#' One help icon for a whole tab. Since 2026-10-20 only the hidden Statistics and Inflammation tabs use it;
+#' the reviewer tabs put each card's help on that card (card_help(), control_panel(help = )).
 tab_help <- function(title, rules_input_id, ...) {
   shiny::tags$div(
     style = "display: flex; justify-content: flex-end; margin-bottom: 6px;",

@@ -37,7 +37,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       paste0("Built from each object's mean marker values: protein PCA, with UMAP and Leiden on the same marker",
              " graph.", correction)
     })
-    # Rendered inside the closed help popover, so keep it current while hidden.
+    # Rendered inside the closed Islet-Level UMAPs help popover, so keep it current while hidden.
     outputOptions(output, "embedding_method", suspendWhenHidden = FALSE)
     ns <- session$ns
 
@@ -942,13 +942,19 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
     # transparency reach the scatter and the distance box plot; the outlier
     # toggle reaches the enrichment bars and the distance box plot). The
     # composition card and the distance-profile card follow without their own
-    # section headings. All explanatory prose lives in the tab help popover
-    # (`tab_help()` in mod_spatial_ui.R), not inline.
+    # section headings. Each panel and card's explanatory prose lives in its own
+    # "?" popover (card_help()), not inline.
     output$neighborhood_cards <- renderUI({
       if (!has_neighborhood()) return(NULL)
 
       card_style <- "padding: 15px; margin-bottom: 15px; overflow: visible; height: 100%; box-sizing: border-box;"
-      card_title <- function(txt) h5(txt, style = "font-size: 15px; font-weight: 600; margin: 0 0 8px 0; align-self: center;")
+      card_title <- function(txt, ...) div(style = "display: flex; align-items: center; gap: 4px; margin: 0 0 8px 0; align-self: center;",
+        h5(txt, style = "font-size: 15px; font-weight: 600; margin: 0;"),
+        card_help(paste(txt, "help"), ...))
+      # Immune infiltration is offered in the phenotype selector of the first two cards.
+      infiltration_help <- tags$p(tags$strong("Immune infiltration"),
+        " is the share of immune cells (every T cell, B cell, macrophage and other leukocyte, subtyped or not)",
+        " among all analysed cells in the 20\u00b5m peri-islet band and in the core.")
       ctrl_row   <- "display: flex; gap: 6px 18px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 4px;"
       dl_csv <- function(id) div(style = "margin-top: 6px;",
         downloadButton(ns(id), "Download CSV", style = "font-size: 12px; padding: 3px 10px;"))
@@ -962,6 +968,15 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         fluidRow(column(12,
           h4("Neighborhood Analysis", style = "margin: 18px 0 10px; font-weight: 600;"),
           control_panel("Data controls", open = TRUE,
+            help = list(
+              tags$p("These controls reach the Neighborhood Analysis cards below. Click the panel's title to open",
+                     " or close it."),
+              tags$p(tags$strong("Objects."),
+                     " Every neighborhood card except the Distance-to-islet profile uses the endocrine objects",
+                     " selected in the Data controls at the top of the tab; the profile reads per-cell data."),
+              tags$p(tags$strong("Exclude outliers / z-threshold"),
+                     " apply to Peri enrichment by status and Distance to nearest cell. The checkbox and slider are",
+                     " synced with the Plot tab.")),
             fluidRow(
               column(3, uiOutput(ns("nbr_islet_count"))),
               column(3,
@@ -975,6 +990,8 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
             )
           ),
           control_panel("View controls",
+            help = list(tags$p(tags$strong("Point size / transparency"),
+                               " apply to Peri vs core proportion and Distance to nearest cell.")),
             fluidRow(
               column(3,
                 sliderInput(ns("nbr_pt_size"), "Point size", min = 2, max = 12, value = 5, step = 1)
@@ -991,7 +1008,12 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         fluidRow(style = "display: flex; flex-wrap: wrap;",
           column(4,
             div(class = "card", style = card_style,
-              card_title("Peri enrichment by status"),
+              card_title("Peri enrichment by status",
+                tags$p("Per-phenotype peri-zone enrichment across donor statuses, one point per donor."),
+                infiltration_help,
+                tags$p("Outlier exclusion follows the Neighborhood Analysis toggle (Tukey 1.5\u00d7IQR per donor",
+                       " status \u2014 enrichment z is already standardised, so the IQR fence is used instead of the",
+                       " modified z-score).")),
               div(style = ctrl_row,
                 div(style = "flex: 1; min-width: 180px;",
                   nbr_select("infiltration_phenotype", "100%")
@@ -1006,7 +1028,9 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           ),
           column(4,
             div(class = "card", style = card_style,
-              card_title("Peri vs core proportion"),
+              card_title("Peri vs core proportion",
+                tags$p("Each object's peri-islet proportion of the chosen phenotype against its core proportion."),
+                infiltration_help),
               div(style = ctrl_row,
                 div(style = "flex: 1; min-width: 180px;",
                   nbr_select("scatter_phenotype", "100%")
@@ -1019,7 +1043,12 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           ),
           column(4,
             div(class = "card", style = card_style,
-              card_title("Distance to nearest cell"),
+              card_title("Distance to nearest cell",
+                tags$p("Per-object distance (\u00b5m) from the centre of the object's core cells to the nearest",
+                       " peri-islet cell of each phenotype. NAs indicate no cells of that type in the peri-islet zone."),
+                tags$p("Outlier exclusion follows the Neighborhood Analysis toggle (robust |z| from median/MAD on",
+                       " log(1+distance), per donor status \u2014 two-sided; threshold from the slider). Excluded",
+                       " points still appear as faint \u00d7 markers.")),
               div(style = ctrl_row,
                 div(style = "flex: 1; min-width: 180px;",
                   # Every retained phenotype with min_dist_*.
@@ -1041,7 +1070,17 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         fluidRow(column(12,
           div(class = "card", style = card_style,
             div(style = ctrl_row,
-              card_title("Phenotype composition & enrichment"),
+              card_title("Phenotype composition & enrichment",
+                tags$p("Which phenotypes are present in islet core vs peri-islet zones, and which are enriched vs",
+                       " tissue-wide background?"),
+                tags$p("Enrichment z-scores (peri-islet mode) compare each phenotype's count in the peri-islet band",
+                       " with the count expected from its share of all analysed cells in the cohort: z = (observed",
+                       " \u2212 expected) / \u221aexpected (Poisson approximation). z > 0 = enriched; z < 0 =",
+                       " depleted. Core and peri-islet proportion modes show raw cell type fractions (0\u20131)",
+                       " within each compartment."),
+                tags$p("The phenotype checkboxes and the Region / Summary choices apply to both the bar chart and",
+                       " the heatmap. Clip extreme z > 5 only saturates the display scale; it is not an outlier",
+                       " filter.")),
               radioButtons(ns("enrich_region"), "Region",
                            c("Peri-islet (enrichment z)" = "peri",
                              "Core (proportion)" = "core",
@@ -1071,7 +1110,18 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
             # Two views: the donor-averaged KDE (default) or the Senior-ported
             # per-cell tissue-wide density/composition. CODEX phenotypes only.
             div(style = ctrl_row,
-              card_title("Distance-to-islet profile"),
+              card_title("Distance-to-islet profile",
+                tags$p(tags$strong("Donor-averaged KDE"),
+                       " (the default view): for the chosen phenotype, a density of its cells' signed distance to",
+                       " the islet border for each donor, then combined per donor status with equal weight per donor.",
+                       " Distribution shape averages densities that each integrate to 1; Cell abundance takes the",
+                       " median of densities scaled by each donor's cell count. Negative = inside the islet."),
+                tags$p(tags$strong("Per-cell distance:"),
+                       " per-cell signed distance-to-islet on a symlog axis \u2014 a density split by disease status",
+                       " (per phenotype or all cells) or a phenotype composition (stacked bars, one facet per status,",
+                       " zero-anchored at the islet border), spanning islet interior to bulk tissue. Negative = inside",
+                       " islet, positive = outside; the dashed line marks the border. Pooled per cell (descriptive)",
+                       " \u2014 for donor-fair group comparison see Peri enrichment by status.")),
               radioButtons(ns("dist_view"), "View",
                            choices = c("Donor-averaged KDE" = "kde",
                                        "Per-cell distance" = "cellwise"),
@@ -1301,7 +1351,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
     }, ignoreNULL = FALSE)
 
     # Selected safe-name or min_dist column -> display label. Marker-rule hints
-    # are not shown inline; the definitions live in the Spatial help popover.
+    # are not shown inline; the definitions live in the Data controls help popover.
     .lookup_pheno_label <- function(safe_or_metric) {
       if (is.null(safe_or_metric) || !nzchar(safe_or_metric)) return(NULL)
       opts <- phenotype_options()

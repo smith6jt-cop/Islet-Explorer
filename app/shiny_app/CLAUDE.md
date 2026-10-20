@@ -479,28 +479,36 @@ Helpers:
 
 Per-tab integration:
 
-- **Plot tab** — no inline hints since Oct 2026; the Plot help popover carries
+- **Plot tab** — no inline hints since Oct 2026; the Data controls help popover carries
   the explanation. `phenotype_hint_ui()` is now unused by any tab.
 - **Spatial tab** — no inline hints (removed Oct 2026, at the owner's request).
-  The help popover lists every retained phenotype via `phenotype_marker_definitions_ui()`: on the uniform root,
+  The Data controls help popover lists every retained phenotype via `phenotype_marker_definitions_ui()`: on the uniform root,
   `UNIFORM_PHENOTYPE_DEFINITIONS` in words; otherwise it composes `protein_phenotype_rules.csv` parent chains, or
   falls back to the Rules1 reference.
 - **Drill-down composition panel** — the per-islet `<details>` rules list (`output$islet_drilldown_rules`) was
   removed 2026-10-17: all help sits behind the "?" icon. The composition bars drop retired (general) labels.
 
-**All help text lives in the "?" popover (owner, 2026-10-17):** "All help text should be in the hidden window
-behind the question mark icon in all tabs." Nothing explanatory goes inline under a control or above a plot; status
-and error messages (no data, range not applied, outlier tables) stay where they are. Shared paragraphs:
-`object_classes_help()` and `cell_typing_help()` in `00_globals.R`, which describe the uniform root when
+**All help text lives in "?" popovers, one per card (owner, 2026-10-17; split by card 2026-10-20):** "All help
+text should be in the hidden window behind the question mark icon in all tabs", then "Instead of having all help
+under one icon per tab, distribute the help text to multiple icons according to the card the text refers to."
+Nothing explanatory goes inline under a control or above a plot; status and error messages (no data, range not
+applied, outlier tables) stay where they are. Each card puts its help beside its title with
+`card_title_help(title, help = list(...))` (or `card_help()` directly, as the Spatial neighbourhood `card_title()`
+does); a control panel takes `control_panel(..., help = list(...))`, which puts the icon at the right of its title
+bar but outside its `<summary>`, so opening the help does not open or close the panel. Text about the tab's data
+(object classes, cell typing, phenotype rules button) goes with the Data controls. `www/card-help.js` keeps one
+popover open at a time, closes it on an outside click or Escape, and while it is open moves the panel to `<body>`
+in window coordinates (a `.card:hover` transform would otherwise trap a fixed panel inside the card). Shared
+paragraphs: `object_classes_help()` and `cell_typing_help()` in `00_globals.R`, which describe the uniform root when
 `is_uniform_root()`. A help output that must stay live (Spatial `embedding_method`, read by the browser check) is
-rendered inside the popover with `suspendWhenHidden = FALSE`. The hidden Statistics and Inflammation tabs still
-carry inline notes and were not revised for the uniform root.
+rendered inside the popover with `suspendWhenHidden = FALSE`. The hidden Statistics and Inflammation tabs keep one
+tab-wide `tab_help()` and their inline notes, and were not revised for the uniform root.
 
 **One control layout in every tab (owner, 2026-10-17):** "The Trajectory tab has controls separated by data
 and visual. Make the layout and separation consistent throughout the app." Each tab (and the Spatial
 Neighborhood Analysis section) opens with `control_panel("Data controls", open = TRUE, ...)` — what is selected,
-filtered or computed — and `control_panel("View controls", ...)` — how it is drawn — full width under the help
-icon (`control_panel()` and `CONTROL_PANEL_CSS` in `00_globals.R`). A selector that only chooses what one card
+filtered or computed — and `control_panel("View controls", ...)` — how it is drawn — full width at the top of the tab
+(`control_panel()` and `CONTROL_PANEL_CSS` in `00_globals.R`). A selector that only chooses what one card
 plots stays on that card (Trajectory heatmap and PAGA, Spatial neighbourhood cards); downloads sit with their
 plot. The Plot tab's old left sidebar column and its layout JS are gone; the synced inputs keep their ids
 (`sidebar_remove_outliers`, `sidebar_outlier_z`, `sidebar_donor_palette`). Spatial's phenotype list now uses the
@@ -508,7 +516,7 @@ root's own label set (`root_phenotype_labels()`), not the palette, which still c
 
 When adding a new phenotype-selecting input anywhere in the app, route its
 choices through `phenotype_keep()` / `phenotype_is_kept()` and put any marker
-explanation in that tab's help popover, not inline under the control.
+explanation in the help popover of the panel or card that holds the control, not inline under it.
 
 ## Plot Fonts & Publication-Quality Downloads (May 2026)
 

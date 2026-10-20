@@ -184,13 +184,51 @@ try {
       const hormoneLabels = ['Insulin+ positivity fraction', 'Glucagon+ positivity fraction',
         'Somatostatin+ positivity fraction'];
       const metrics = [...document.querySelectorAll('input[name="plot-metric"]')].map(input => input.value);
-      const plotHelp = [...document.querySelectorAll('summary[title="Plot help"]')]
-        .map(summary => summary.parentElement).find(details => details);
+      // Help sits on each card and control panel (card_help(), 2026-10-20), closed until asked for.
+      const plotTab = document.querySelector('.tab-pane[data-value="Plot"]');
+      const helpTitles = [...(plotTab?.querySelectorAll('details.card-help > summary') || [])]
+        .map(summary => summary.title);
+      const wanted = ['Data controls help', 'View controls help', 'Islet Size Distribution help',
+        'Distribution Comparison help'];
       return labels.length > 0 && !labels.some(label => hormoneLabels.includes(label)) &&
         !labels.some(label => retired.includes(label)) && metrics.length === 3 &&
-        Boolean(plotHelp) && !plotHelp.open &&
+        wanted.every(title => helpTitles.includes(title)) &&
+        !plotTab.querySelector('details.card-help[open]') &&
         !document.querySelector('#plot-dynamic_selector .help-block, #plot-metric_selector .help-block, #plot-dynamic_selector .phenotype-hint');
     });
+  });
+  await check('card_help_opens_on_its_card', async () => {
+    // The Data controls "?" sits outside the panel's <summary>: opening it and clicking its text must not close the
+    // panel, the popover must stay inside the window, one popover is open at a time, and Escape closes it.
+    const panelOpen = () => page.evaluate(() =>
+      document.querySelector('.tab-pane[data-value="Plot"] .control-panel-wrap > details.control-panel').open);
+    const before = await panelOpen();
+    await page.click('.tab-pane[data-value="Plot"] summary[title="Data controls help"]');
+    // An open panel is moved to <body> (www/card-help.js) and returns to its <details> when closed.
+    // The toggle event is asynchronous: wait for the panel to arrive.
+    await page.waitForSelector('body > .card-help-panel p', { visible: true, timeout: 10000 });
+    await page.click('body > .card-help-panel p');
+    const opened = await page.evaluate(() => {
+      const help = document.querySelector('.tab-pane[data-value="Plot"] summary[title="Data controls help"]')
+        .parentElement;
+      const panel = document.querySelector('body > .card-help-panel');
+      const box = panel.getBoundingClientRect();
+      return {open: help.open, box: [box.left, box.top, box.right, box.bottom, window.innerWidth, window.innerHeight].map(Math.round),
+        inside: box.left >= 0 && box.right <= window.innerWidth && box.top >= 0 &&
+        box.bottom <= window.innerHeight + 1, rules: Boolean(panel.querySelector('#show_phenotype_rules_plot'))};
+    });
+    await page.click('.tab-pane[data-value="Plot"] summary[title="Islet Size Distribution help"]');
+    await page.waitForFunction(() => document.querySelectorAll('body > .card-help-panel').length === 1 &&
+      document.querySelector('summary[title="Islet Size Distribution help"]').parentElement.open, { timeout: 10000 });
+    const single = await page.evaluate(() =>
+      [...document.querySelectorAll('details.card-help[open] > summary')].map(summary => summary.title));
+    await page.keyboard.press('Escape');
+    const closed = await page.waitForFunction(() => !document.querySelector('details.card-help[open]') &&
+      !document.querySelector('body > .card-help-panel'), { timeout: 10000 }).then(() => true, () => false);
+    const after = await panelOpen();
+    return {...opened, panel_kept: before === after, single, closed,
+      passed: opened.open && opened.inside && opened.rules && before === after &&
+        JSON.stringify(single) === JSON.stringify(['Islet Size Distribution help']) && closed};
   });
   await check('reviewer_tabs', async () => page.evaluate(() => {
     const tabs = [...document.querySelectorAll('#tabs > li > a')].map(link => link.dataset.value);
@@ -412,15 +450,27 @@ try {
         return [...sets[0]].find(k => sets[1].has(k)) || null;
       }, ids);
       const result = { key, hovered: {} };
+      // Returning to the tab redraws its plots: wait until Shiny has been idle for a second, so an unhover is not
+      // sent to a widget that is about to be replaced.
+      await page.waitForFunction(() => {
+        const busy = document.documentElement.classList.contains('shiny-busy') ||
+          document.querySelector('#plot-plt.recalculating, #plot-dist.recalculating');
+        const now = Date.now();
+        if (busy || !window.__plotIdleSince) window.__plotIdleSince = busy ? null : now;
+        return !busy && window.__plotIdleSince && now - window.__plotIdleSince > 1000;
+      }, { polling: 200, timeout: 60000 });
       for (const source of ids) {
-        await page.evaluate((id, key) => {
-          const gd = document.getElementById(id);
-          const curveNumber = gd.data.findIndex(t => t.meta?.trajectory_role === 'islet' && t.key.includes(key));
-          const data = gd.data[curveNumber];
-          gd.emit('plotly_hover', { points: [{ data, curveNumber, pointNumber: data.key.indexOf(key) }] });
-        }, source, key);
-        await new Promise(resolve => setTimeout(resolve, 300));
-        result.hovered[source] = await rings();
+        for (let attempt = 0; attempt < 20; attempt++) {
+          await page.evaluate((id, key) => {
+            const gd = document.getElementById(id);
+            const curveNumber = gd.data.findIndex(t => t.meta?.trajectory_role === 'islet' && t.key.includes(key));
+            const data = gd.data[curveNumber];
+            gd.emit('plotly_hover', { points: [{ data, curveNumber, pointNumber: data.key.indexOf(key) }] });
+          }, source, key);
+          await new Promise(resolve => setTimeout(resolve, 300));
+          result.hovered[source] = await rings();
+          if (result.hovered[source].every(k => k === key)) break;
+        }
         await page.evaluate(id => document.getElementById(id).emit('plotly_unhover', {}), source);
       }
       await new Promise(resolve => setTimeout(resolve, 300));

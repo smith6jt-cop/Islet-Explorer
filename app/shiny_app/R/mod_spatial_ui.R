@@ -4,54 +4,25 @@
 # then the two islet-level UMAPs side by side in a full-width row
 # + Neighborhood Analysis Data / View panels and card rows below (rendered server-side in
 #   output$neighborhood_cards): enrichment/scatter/distance row, composition card,
-#   distance-to-islet profile card. Card prose lives in the tab_help() popover.
+#   distance-to-islet profile card. Each panel and card's prose lives in its own "?" popover (card_help()).
 
 spatial_ui <- function(id) {
   ns <- NS(id)
 
   tagList(
-    tab_help("Spatial help", "show_phenotype_rules_spatial",
-      object_classes_help(),
-      tags$p(tags$strong("Tissue scatter."),
-             " Every analysed cell of the chosen donor at its position. Drag to zoom; double-click or Reset Zoom to",
-             " return. Show Cells limits the plot to cells in endocrine-object cores, or cores and their 20 \u00b5m",
-             " peri-islet bands."),
-      cell_typing_help(),
-      tags$p(tags$strong("Islet-level UMAPs."),
-             " ", textOutput(ns("embedding_method"), inline = TRUE),
-             " Cluster Composition",
-             " shows each Leiden cluster's mean core phenotype proportions, for the checked donor statuses and",
-             " phenotypes."),
-      phenotype_marker_definitions_ui(),
-      # Explanatory prose for the neighborhood cards lives here, not inline
-      # under the plots (Oct 2026 streamlining).
-      tags$h6(style = "margin-top: 12px; font-weight: 700;", "Controls"),
-      tags$p("Data controls choose what is plotted; View controls change how it is drawn. Click a panel's title",
-             " to open or close it. The Neighborhood Analysis section has its own pair."),
-      tags$p(tags$strong("Point size / transparency"),
-             " (Neighborhood View controls) apply to Peri vs core proportion and Distance to nearest cell."),
-      tags$p(tags$strong("Exclude outliers / z-threshold"),
-             " apply to Peri enrichment by status and Distance to nearest cell. The checkbox and slider are synced with the Plot tab."),
-      tags$p(tags$strong("Objects."),
-             " Every neighborhood card except the Distance-to-islet profile uses the endocrine objects selected",
-             " above the tabs; the profile reads per-cell data."),
-      tags$h6(style = "margin-top: 12px; font-weight: 700;", "Peri enrichment by status & Peri vs core proportion"),
-      tags$p("Per-phenotype peri-zone enrichment across disease stages, with peri vs core proportion scatter."),
-      tags$p("Immune infiltration is the share of immune cells (every T cell, B cell, macrophage and other leukocyte, subtyped or not) among all analysed cells in the 20\u00b5m peri-islet band and in the core."),
-      tags$p("Outlier exclusion in Peri enrichment by status follows the Neighborhood Analysis toggle (Tukey 1.5\u00d7IQR per donor status \u2014 enrichment z is already standardised, so the IQR fence is used instead of the modified z-score)."),
-      tags$h6(style = "margin-top: 12px; font-weight: 700;", "Phenotype composition & enrichment"),
-      tags$p("Which phenotypes are present in islet core vs peri-islet zones, and which are enriched vs tissue-wide background?"),
-      tags$p("Enrichment z-scores (peri-islet mode) compare each phenotype's count in the peri-islet band with the count expected from its share of all analysed cells in the cohort: z = (observed \u2212 expected) / \u221aexpected (Poisson approximation). z > 0 = enriched; z < 0 = depleted. Core and peri-islet proportion modes show raw cell type fractions (0\u20131) within each compartment."),
-      tags$p("The phenotype checkboxes and the Region / Summary choices apply to both the bar chart and the heatmap. Clip extreme z > 5 only saturates the display scale; it is not an outlier filter."),
-      tags$h6(style = "margin-top: 12px; font-weight: 700;", "Distance to nearest cell & Distance-to-islet profile"),
-      tags$p(tags$strong("Distance to nearest cell:"),
-             " per-object distance (\u00b5m) from the centre of the object's core cells to the nearest peri-islet cell of each phenotype. NAs indicate no cells of that type in the peri-islet zone."),
-      tags$p("Outlier exclusion follows the Neighborhood Analysis toggle (robust |z| from median/MAD on log(1+distance), per donor status \u2014 two-sided; threshold from the slider). Excluded points still appear as faint \u00d7 markers."),
-      tags$p(tags$strong("Distance-to-islet profile:"),
-             " per-cell signed distance-to-islet on a symlog axis \u2014 a density split by disease status (per phenotype or all cells) or a phenotype composition (stacked bars, one facet per status, zero-anchored at the islet border), spanning islet interior to bulk tissue. Negative = inside islet, positive = outside; the dashed line marks the border. Pooled per cell (descriptive) \u2014 for donor-fair group comparison see Peri enrichment by status.")),
     # ==== Data / View control panels (control_panel(), the same on every tab) ====
     fluidRow(column(12,
       control_panel("Data controls", open = TRUE,
+        help = list(
+          phenotype_rules_button("show_phenotype_rules_spatial"),
+          tags$p("Data controls choose what the cards above Neighborhood Analysis plot. Click the panel's title to",
+                 " open or close it. The Neighborhood Analysis section has its own pair."),
+          object_classes_help(),
+          tags$p(tags$strong("Show cells"),
+                 " limits the tissue scatter to cells in endocrine-object cores, or cores and their 20 \u00b5m",
+                 " peri-islet bands."),
+          cell_typing_help(),
+          phenotype_marker_definitions_ui()),
         fluidRow(
           column(3,
             # Non-namespaced: synced with the Plot tab's copy (app.R).
@@ -96,7 +67,10 @@ spatial_ui <- function(id) {
       column(7,
         div(class = "card", style = "padding: 15px; margin-bottom: 15px; height: 100%;",
           div(style = "display: flex; align-items: center; gap: 10px; margin-bottom: 8px;",
-            h5("Tissue Scatter Plot", style = "margin: 0;"),
+            card_title_help("Tissue Scatter Plot", help = list(
+              tags$p("Every analysed cell of the chosen donor at its position. Drag to zoom; double-click or Reset",
+                     " Zoom to return. Show cells (Data controls) limits the plot to cells in endocrine-object cores,",
+                     " or cores and their 20 \u00b5m peri-islet bands."))),
             actionButton(ns("scatter_reset_zoom"), "Reset Zoom",
                          style = "font-size: 12px; padding: 2px 10px;",
                          class = "btn-sm btn-outline-secondary")
@@ -115,7 +89,9 @@ spatial_ui <- function(id) {
       # ---- Right: Leiden cluster composition ----
       column(5,
         div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible; height: 100%;",
-          h5("Cluster Composition"),
+          card_title_help("Cluster Composition", style = "margin: 0 0 8px;", help = list(
+            tags$p("Each Leiden cluster's mean core phenotype proportions, for the checked donor statuses and",
+                   " phenotypes. The clusters are those of the Islet-Level UMAPs below."))),
           uiOutput(ns("leiden_not_available")),
           plotlyOutput(ns("cluster_composition"), height = "650px")
         )
@@ -127,7 +103,8 @@ spatial_ui <- function(id) {
     # fit made plotly shrink that plot alone. Both use spatial_umap_plotly(); each downloads from its camera button.
     fluidRow(column(12,
       div(class = "card", style = "padding: 15px; margin-bottom: 15px;",
-        h5("Islet-Level UMAPs"),
+        card_title_help("Islet-Level UMAPs", style = "margin: 0 0 8px;", help = list(
+          tags$p(textOutput(ns("embedding_method"), inline = TRUE)))),
         fluidRow(
           column(6,
             h5("Leiden Clustering", style = "font-size: 13px; margin-top: 0;"),

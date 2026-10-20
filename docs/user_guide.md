@@ -86,9 +86,9 @@ Each phenotype is defined by which markers must be **positive** (`+`) and which 
 
 ### Where the rules appear in the app
 
-- **"Phenotype rules — marker definitions" button** at the top of each enabled tab opens a reference table with the 19 CSV rules and 4 explicitly described residual/aggregate definitions. It is a provenance reference, so it is broader than the 12 labels offered in reviewer selectors.
-- **Inline hint under every phenotype selector** — when you change the "Population Measure" (Plot tab) or any of the Spatial Card A / Card C phenotype dropdowns, a small blue box appears underneath showing the active phenotype's rule (e.g. `CD8 T cell` → `CD3e+, CD8a+  —  SMA−, CD20−, CD68−, CD163−, CD4−, …`).
-- **Drill-down composition panel** (right rail of the islet viewer on Plot + Trajectory tabs) — under the per-islet cell count table, an expandable "Marker rules for phenotypes in this islet" section lists every phenotype actually present in the selected islet, colour-coded to match the bar chart, with its full rule.
+- **"?" help icons** (since 2026-10-20, one per card or control panel): a card or Data / View controls panel with something to explain has a "?" beside its title, and its popover explains only that card or panel. Click the icon to open it; click elsewhere or press Escape to close it. Only one is open at a time.
+- **"Phenotype rules — marker definitions" button**, at the top of each tab's Data controls help, opens a reference table with the 19 CSV rules and 4 explicitly described residual/aggregate definitions. It is a provenance reference, so it is broader than the labels offered in reviewer selectors. The Spatial tab's Data controls help also lists each offered phenotype's definition in words.
+- There are no inline hints under the phenotype selectors and no rules list in the drill-down panel; both were removed on 2026-10-17, when all help text moved into the "?" popovers.
 
 ### The 15 markers used by the gating CSV
 

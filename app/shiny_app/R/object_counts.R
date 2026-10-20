@@ -42,7 +42,10 @@ object_counts_card_ui <- function(ns) {
   div(class = "card",
       style = "margin-bottom: 20px; padding: 15px; border: 1px solid var(--islet-border-strong); border-radius: 8px;",
     div(style = "display: flex; align-items: center; justify-content: space-between; margin-top: 0;",
-      h5("Endocrine objects per donor", style = "margin: 0; color: var(--islet-fg);"),
+      card_title_help("Endocrine objects per donor", style = "margin: 0; color: var(--islet-fg);", help = list(
+        tags$p("Counts the Islets, Clusters and Singles in each donor's section, as a count or per mm\u00b2 of",
+               " tissue, with the donor median per status; Singles by cell type splits each donor's Singles by the",
+               " type of their one cell. It follows the Donor status filter, not the Endocrine objects selector."))),
       downloadButton(ns("dl_object_counts"), "CSV", class = "btn-sm btn-outline-secondary",
                      style = "font-size: 11px; padding: 2px 8px;")
     ),

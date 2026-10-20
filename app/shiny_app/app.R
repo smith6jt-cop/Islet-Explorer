@@ -14,6 +14,7 @@ ui <- fluidPage(
     tags$script(HTML("(function(){var t='dark';try{var s=window.localStorage.getItem('islet-theme');",
                      "if(s==='light'||s==='dark')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();")),
     tags$style(HTML(CONTROL_PANEL_CSS)),
+    tags$script(src = islet_asset("card-help.js")),
     # Favicons for browser tab, bookmarks, and mobile pinning. Browsers pick
     # the most appropriate sized PNG based on context; the ICO is the legacy
     # default location for tools that hard-fetch /favicon.ico. Apple touch
