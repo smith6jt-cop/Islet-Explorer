@@ -335,6 +335,11 @@ continuum, not apart from it. The neighbour graph and Leiden do not use min_dist
 thread counts left to the machine, the same input gave a different layout and Leiden adjusted Rand 0.63 against a
 one-thread run, so v6's layout cannot be reproduced exactly; v7's can.
 
+v8 (2026-10-20, test version only; the live app stays on v7) differs from v7 only in `cell_distance.csv`: its
+`<marker>_pos` flags cover all 31 panel markers instead of 18 (owner: the distance profile "needs to have all markers
+that are common to all donors"; every marker is measured in every image, and `build_image` stops if one is not).
+The flag is unchanged: the marker at or above 0.10 on the cohort scale.
+
 The app reads `object_class` through an app-wide "Endocrine objects" selector (Islet / Cluster). The
 Trajectory tab does not use it: it fits every object with ten or more core cells (`total_cells_core` in
 `barlow_islet_features.csv`), whatever its class.

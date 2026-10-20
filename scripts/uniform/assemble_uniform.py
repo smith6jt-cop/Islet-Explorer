@@ -29,7 +29,7 @@ Donor demographics and autoantibodies, and the viewer image links, are carried f
 
     python scripts/uniform/assemble_uniform.py --run data/development/uniform-20donor-20261015 \\
         --donor-source data/development/protein-expanded-20261015-v3 \\
-        --output data/development/uniform-20donor-20261019-v7 --report-root tmp/uniform-20donor-20261019-v7
+        --output data/development/uniform-20donor-20261020-v8 --report-root tmp/uniform-20donor-20261020-v8
 """
 from __future__ import annotations
 
@@ -69,8 +69,10 @@ LABELS = ['Beta cell', 'Alpha cell', 'Delta cell', 'CHGA+ hormone-negative', 'En
           'T cell', 'B cell', 'Macrophage', 'Immune', 'Exocrine']
 ENDOCRINE = ('Beta cell', 'Alpha cell', 'Delta cell', 'CHGA+ hormone-negative', 'Endocrine')
 IMMUNE = ('CD8a Tcell', 'CD4 Tcell', 'T cell', 'B cell', 'Macrophage', 'Immune')
-POS_MARKERS = ['INS', 'GCG', 'SST', 'CD3e', 'CD8a', 'CD4', 'CD20', 'CD68', 'CD163', 'HLADR', 'CD31', 'CD34', 'SMA',
-               'PDPN', 'ECAD', 'panCK', 'CD45', 'CHGA']
+# The `<marker>_pos` flags of cell_distance.csv cover every panel marker (owner, 2026-10-20: the distance profile
+# "needs to have all markers that are common to all donors"; all 31 are measured in every image, and build_image
+# stops if one is not). Until v7 they covered 18.
+POS_MARKERS = list(MARKERS)
 REGION_MARKERS = ['CD3e', 'CD163', 'CD68', 'LGALS3']
 MORPHOLOGY = {'Nucleus Area': 'Nucleus: Area µm^2', 'Nucleus Length': 'Nucleus: Length µm',
               'Nucleus Circularity': 'Nucleus: Circularity', 'Nucleus Solidity': 'Nucleus: Solidity',
@@ -347,6 +349,9 @@ def build_image(run: Path, out: Path, tag: str, case: str, donors: pd.DataFrame,
     tissue_tab.to_csv(out / 'donors' / f'{cid}.csv', index=False)
     distance = pd.DataFrame({'case_id': int(cid), 'donor_status': meta['Donor Status'], 'cell_region': display_region,
                              'phenotype': labels, 'signed_dist': signed.astype(np.float32)})
+    unmeasured = [m for m in POS_MARKERS if np.isnan(X[:, MARKERS.index(m)]).all()]
+    if unmeasured:
+        raise ValueError(f'{tag}: {unmeasured} not measured, so not common to all donors; drop them from POS_MARKERS')
     for m in POS_MARKERS:
         distance[m + '_pos'] = (X[:, MARKERS.index(m)] >= CT.IMMUNE_REQUIRE_MIN).astype(np.int8)
     kde = distance.loc[display_region != 'tissue', ['case_id', 'donor_status', 'cell_region', 'phenotype',
