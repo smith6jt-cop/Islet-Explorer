@@ -486,7 +486,10 @@ or mean and SEM, of donor means); right, one row per donor grouped by status, so
 the tissue (symlog axis), as density curves or composition bars, by immune phenotype or by marker positivity (all 31
 panel markers from data root v8, each measured in every donor; positive = 0.10 or above on the cohort marker scale).
 In composition bars every status facet shares one y-axis scale. Both views stop 200 µm outside the border (composition bars 5 µm wide, density
-in 160 symlog bins), with a dotted line at the 20 µm band edge. Every cell
+in 160 symlog bins), with a dotted line at the 20 µm band edge. In composition bars the Share y-axis is each phenotype's or marker's share of all cells
+at that distance (phenotypes stack; markers sit side by side, since one cell can be positive for several). Until
+2026-10-20 the bars divided by the status's total cells, so they followed how many cells lay at each distance and
+looked nearly flat from 20 to 120 µm. Every analysed cell counts, including those without a cell subtype. Every cell
 counts once, so donors with more cells weigh more; the immune gradient is the donor-fair version. Its former
 donor-averaged KDE view was removed: its table holds only core and band cells, so it stopped at 20 µm.
 

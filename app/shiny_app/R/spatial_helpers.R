@@ -191,9 +191,9 @@ load_cell_distance <- function() {
   })
   if (!is.null(df)) {
     df <- df[is.finite(df$signed_dist), , drop = FALSE]
-    # Retired phenotypes dropped at the LOADER, so every downstream
-    # unique(df$phenotype) inherits it rather than each site re-filtering.
-    df <- phenotype_filter_rows(df)
+    # Every analysed cell is kept (2026-10-20): Marker+ counts and the composition share's denominator must include
+    # the cells under a retired label (unsubtyped "T cell" and "Immune", "Endocrine"), which dropping them at the
+    # loader left out (22% of CD3e+ cells). The phenotype choices are gated in cell_distance_phenotypes().
     .cell_distance_cache$data <- df
   }
   df
@@ -230,7 +230,7 @@ cell_distance_phenotypes <- function() {
   }
   df <- load_cell_distance()
   if (is.null(df)) return(character(0))
-  canonical_phenotype_order(unique(df$phenotype))
+  canonical_phenotype_order(phenotype_keep(unique(df$phenotype)))
 }
 
 #' Lineage markers with per-cell positivity (`{m}_pos` columns, scimap X>0.5).
@@ -319,7 +319,6 @@ CELL_DIST_MARKER_COLORS <- c(
   if (is.null(df) || length(statuses) == 0 || length(items) == 0) return(NULL)
   base <- df[df$donor_status %in% statuses, , drop = FALSE]
   if (nrow(base) == 0) return(NULL)
-  status_totals <- table(base$donor_status)
   if (identical(mode, "marker")) {
     pcs <- paste0(items, "_pos"); pcs <- pcs[pcs %in% colnames(base)]
     if (length(pcs) == 0) return(NULL)
@@ -331,8 +330,11 @@ CELL_DIST_MARKER_COLORS <- c(
   lo <- max(as.numeric(stats::quantile(sel$signed_dist, 0.005, na.rm = TRUE)), -100)
   lo <- min(lo, -30); hi <- CD_MAX_OUTSIDE_UM         # always straddle the islet border
   bw <- CD_COMP_BIN_UM
-  base <- base[base$signed_dist >= lo & base$signed_dist <= hi, , drop = FALSE]
+  base <- base[base$signed_dist >= lo & base$signed_dist < hi, , drop = FALSE]
   base$binx <- floor(base$signed_dist / bw)          # zero-anchored bin edges
+  # Every cell in each bin: the denominator of the share (owner, 2026-10-20). Dividing by the status's total cells
+  # made each bar track how many cells lie at that distance, which is nearly constant from 20 to 120 um.
+  bin_totals <- dplyr::count(base, donor_status, binx, name = "total")
   rows <- list()
   for (it in items) {
     sub <- .cd_subset(base, mode, it)
@@ -344,12 +346,9 @@ CELL_DIST_MARKER_COLORS <- c(
   if (length(rows) == 0) return(NULL)
   comp <- do.call(rbind, rows)
   comp$x <- (comp$binx + 0.5) * bw
-  if (identical(norm, "prop")) {
-    denom <- as.numeric(status_totals[as.character(comp$donor_status)])
-    comp$val <- comp$n / denom
-  } else {
-    comp$val <- comp$n
-  }
+  comp$total <- as.numeric(bin_totals$total[match(paste(comp$donor_status, comp$binx),
+                                                  paste(bin_totals$donor_status, bin_totals$binx))])
+  comp$val <- if (identical(norm, "prop")) comp$n / comp$total else comp$n
   list(comp = as.data.frame(comp), lo = lo, hi = hi, bw = bw, norm = norm)
 }
 
@@ -366,8 +365,7 @@ CELL_DIST_MARKER_COLORS <- c(
 
 .cd_base_predicate <- function(statuses, con) {
   paste0(
-    "isfinite(signed_dist) AND donor_status IN (", .cd_in_clause(statuses, con), ") AND ",
-    .cd_kept_clause(con)
+    "isfinite(signed_dist) AND donor_status IN (", .cd_in_clause(statuses, con), ")"
   )
 }
 
@@ -446,10 +444,6 @@ CELL_DIST_MARKER_COLORS <- c(
   item_predicates <- item_predicates[valid]
   if (!length(items)) return(NULL)
 
-  totals <- DBI::dbGetQuery(con, paste0(
-    "SELECT donor_status, count(*) AS n FROM ", rel,
-    " WHERE ", base_where, " GROUP BY donor_status"
-  ))
   select_where <- paste0("(", paste(item_predicates, collapse = " OR "), ")")
   q <- DBI::dbGetQuery(con, paste0(
     "SELECT quantile_cont(signed_dist, 0.005) AS q_lo, ",
@@ -463,14 +457,17 @@ CELL_DIST_MARKER_COLORS <- c(
   if (!isTRUE(is.finite(lo) && is.finite(hi) && hi > lo)) return(NULL)
   bw <- CD_COMP_BIN_UM
   bin_expr <- sprintf("CAST(FLOOR(signed_dist / %.17g) AS BIGINT)", bw)
+  range_where <- paste0(" AND signed_dist >= ", format(lo, digits = 17, scientific = FALSE),
+                        " AND signed_dist < ", format(hi, digits = 17, scientific = FALSE))
+  bin_totals <- DBI::dbGetQuery(con, paste0(
+    "SELECT donor_status, ", bin_expr, " AS binx, count(*) AS total FROM ", rel,
+    " WHERE ", base_where, range_where, " GROUP BY donor_status, binx"))
 
   rows <- vector("list", length(items))
   for (i in seq_along(items)) {
     rows[[i]] <- DBI::dbGetQuery(con, paste0(
       "SELECT donor_status, ", bin_expr, " AS binx, count(*) AS n FROM ", rel,
-      " WHERE ", base_where, " AND ", item_predicates[[i]],
-      " AND signed_dist >= ", format(lo, digits = 17, scientific = FALSE),
-      " AND signed_dist <= ", format(hi, digits = 17, scientific = FALSE),
+      " WHERE ", base_where, " AND ", item_predicates[[i]], range_where,
       " GROUP BY donor_status, binx ORDER BY donor_status, binx"
     ))
     if (nrow(rows[[i]])) rows[[i]]$item <- items[[i]]
@@ -482,12 +479,9 @@ CELL_DIST_MARKER_COLORS <- c(
   comp$binx <- as.integer(comp$binx)
   comp$n <- as.numeric(comp$n)
   comp$x <- (comp$binx + 0.5) * bw
-  if (identical(norm, "prop")) {
-    denom <- as.numeric(totals$n[match(comp$donor_status, totals$donor_status)])
-    comp$val <- comp$n / denom
-  } else {
-    comp$val <- comp$n
-  }
+  comp$total <- as.numeric(bin_totals$total[match(paste(comp$donor_status, comp$binx),
+                                                  paste(bin_totals$donor_status, as.integer(bin_totals$binx)))])
+  comp$val <- if (identical(norm, "prop")) comp$n / comp$total else comp$n
   list(comp = as.data.frame(comp), lo = lo, hi = hi, bw = bw, norm = norm)
 }
 

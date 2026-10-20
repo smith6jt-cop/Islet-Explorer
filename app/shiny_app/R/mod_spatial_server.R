@@ -1159,6 +1159,12 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                        " Marker+ lists every panel marker, all 31 being measured in every donor, a cell counting as",
                        " positive at 0.10 or above on the cohort marker scale. In composition bars every status",
                        " facet shares one y-axis scale, so their heights compare directly."),
+                tags$p(tags$strong("Y-axis Share."),
+                       " In composition bars it is the share of all cells at that distance that are of the phenotype",
+                       " or positive for the marker, so a flat profile means an even mix and a peak means the cells",
+                       " gather there. Phenotypes stack (a cell has one); markers sit side by side, as a cell can be",
+                       " positive for several. In density curves it is the share of the status's cells of that class",
+                       " per \u00b5m: where those cells lie, which also follows how much tissue lies at each distance."),
                 tags$p("Both views run to 200 \u00b5m outside the border. Composition bars are 5 \u00b5m wide;",
                        " density curves use 160 bins on the symlog axis. The dashed line is the border and the",
                        " dotted line the outer edge of the 20 \u00b5m peri-islet band."))
@@ -1169,7 +1175,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                              choices = c("Phenotype" = "phenotype", "Marker+" = "marker"),
                              selected = "phenotype", inline = TRUE),
                 radioButtons(ns("dist_norm"), "Y-axis",
-                             choices = c("Proportion of class" = "prop", "Raw count" = "count"),
+                             choices = c("Share" = "prop", "Raw count" = "count"),
                              selected = "prop", inline = TRUE),
                 radioButtons(ns("dist_ptype"), "Plot",
                              choices = c("Density curves" = "density",
@@ -1589,10 +1595,14 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           comp <- res$comp
           present <- intersect(status_order, unique(comp$donor_status))
           pcols <- item_colors[items]; pcols[is.na(pcols)] <- "#999999"; names(pcols) <- items
-          y_lab <- if (identical(norm, "prop")) "fraction of class cells" else "cells"
-          # One y range for every status facet (owner, 2026-10-20), from the tallest stacked bar of any status.
-          stack_max <- max(stats::aggregate(val ~ donor_status + binx, comp[comp$item %in% items, , drop = FALSE],
-                                            sum)$val, na.rm = TRUE)
+          y_lab <- if (identical(norm, "prop")) "share of the cells at that distance" else "cells"
+          # Phenotypes are exclusive, so they stack; one cell can be positive for several markers, so markers sit
+          # side by side (stacking them counted such a cell once per marker).
+          stacked <- !identical(mode, "marker")
+          # One y range for every status facet (owner, 2026-10-20), from the tallest bar (or stack) of any status.
+          shown <- comp[comp$item %in% items, , drop = FALSE]
+          stack_max <- if (stacked) max(stats::aggregate(val ~ donor_status + binx, shown, sum)$val, na.rm = TRUE)
+                       else max(shown$val, na.rm = TRUE)
           y_range <- c(0, stack_max * 1.05)
           panels <- lapply(present, function(s) {
             ss <- comp[comp$donor_status == s, , drop = FALSE]
@@ -1607,7 +1617,8 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                 marker = list(color = unname(pcols[m])),
                 hoverinfo = "text",
                 hovertext = paste0(s, " · ", m, "<br>dist ≈ ", round(sub$x), " µm<br>",
-                                   formatC(sub$n, big.mark = ","), " cells"))
+                                   formatC(sub$n, big.mark = ","), " of ", formatC(sub$total, big.mark = ","),
+                                   " cells (", sprintf("%.1f%%", 100 * sub$n / sub$total), ")"))
             }
             pp <- pp %>% add_trace(x = c(0, 0), y = y_range,
               type = "scatter", mode = "lines",
@@ -1617,7 +1628,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
               add_trace(x = c(CD_BAND_UM, CD_BAND_UM), y = y_range, type = "scatter", mode = "lines",
                         line = list(color = islet_ink(), width = 1.2, dash = "dot"),
                         showlegend = FALSE, hoverinfo = "text", hovertext = paste0(CD_BAND_UM, " \u00b5m: band edge"))
-            pp %>% layout(barmode = "stack",
+            pp %>% layout(barmode = if (stacked) "stack" else "group", bargap = 0.1,
               xaxis = list(title = "", tickfont = fonts$axis_tick, zeroline = FALSE,
                            range = c(res$lo, CD_MAX_OUTSIDE_UM), dtick = 20),
               yaxis = list(title = list(text = s, font = fonts$legend_title),

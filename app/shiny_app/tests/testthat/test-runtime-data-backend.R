@@ -59,7 +59,7 @@ test_that("DuckDB cell-distance queries preserve in-memory results", {
 
   env <- make_backend_env(root)
   sys.source(.find_source("R/spatial_helpers.R"), envir = env)
-  env$.cell_distance_cache$data <- env$phenotype_filter_rows(frame)
+  env$.cell_distance_cache$data <- frame
 
   memory_hist <- env$.query_cell_distance_hist_memory(
     "marker", "CD8a", c("ND", "Aab+", "T1D"), "prop", 24L
@@ -88,6 +88,21 @@ test_that("DuckDB cell-distance queries preserve in-memory results", {
   expect_equal(memory_comp$hi, 200)
   expect_equal(memory_comp$bw, 5)
   expect_true(max(memory_comp$comp$x) < 200)
+  # Share: each item's cells over every cell in that status and bin, the same in both backends.
+  memory_share <- env$.query_cell_distance_composition_memory(
+    "marker", c("INS", "CD8a"), c("ND", "Aab+", "T1D"), "prop")
+  duck_share <- env$.query_cell_distance_composition_duckdb(
+    "marker", c("INS", "CD8a"), c("ND", "Aab+", "T1D"), "prop")
+  expect_equal(
+    sort_result(duck_share$comp, c("donor_status", "binx", "item")),
+    sort_result(memory_share$comp, c("donor_status", "binx", "item")),
+    tolerance = 1e-12, ignore_attr = TRUE)
+  # The denominator is every cell, retired labels included (they are kept for marker counts).
+  inside <- frame[frame$signed_dist >= memory_share$lo & frame$signed_dist < 200, ]
+  first <- memory_share$comp[1, ]
+  in_bin <- inside[inside$donor_status == first$donor_status & floor(inside$signed_dist / 5) == first$binx, ]
+  expect_equal(first$total, nrow(in_bin))
+  expect_true(all(memory_share$comp$val <= 1))
   expect_equal(duck_comp$lo, memory_comp$lo, tolerance = 1e-12)
   expect_equal(duck_comp$hi, memory_comp$hi, tolerance = 1e-12)
   expect_equal(
