@@ -11,6 +11,9 @@
 IMMUNE_LABELS <- c("CD8a Tcell", "CD4 Tcell", "T cell", "B cell", "Macrophage", "Immune")
 # The endocrine shares of the composition embedding (scripts/uniform/composition_embedding.py).
 COMPOSITION_ENDOCRINE <- c("Beta cell", "Alpha cell", "Delta cell", "CHGA+ hormone-negative")
+# Labels the composition & enrichment card and the distance profile leave out (owner, 2026-10-20: they "do not need
+# the endocrine and exocrine classes"): both cards are about the cells around islets, which are immune cells.
+NON_IMMUNE_LABELS <- c(COMPOSITION_ENDOCRINE, "Exocrine")
 # Distance bins (um from the object's border; negative = inside) for the immune gradient.
 DISTANCE_BIN_BREAKS <- c(-Inf, 0, 20, 40, 60, 100, 200, 400, Inf)
 DISTANCE_BIN_LABELS <- c("Core", "0-20", "20-40", "40-60", "60-100", "100-200", "200-400", ">400")

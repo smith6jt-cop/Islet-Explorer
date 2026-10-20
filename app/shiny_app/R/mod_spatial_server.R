@@ -867,8 +867,8 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
 
     # ---- Card B: donor-level values behind the bar chart and the donor heatmap ----
     # One row per donor and phenotype: the mean over the donor's objects (avoids pseudoreplication; an object-level
-    # median is 0 for rare immune types because most objects have none of them). Band modes leave out the endocrine
-    # labels: endocrine cells are called only inside endocrine objects, so a band holds one only where a Single lies.
+    # median is 0 for rare immune types because most objects have none of them). Immune phenotypes only: the endocrine
+    # and exocrine classes are left out (owner, 2026-10-20).
     # The band enrichment z uses the cohort's share of each phenotype (enrich_z_*) or, with Baseline "Own tissue",
     # the donor's own tissue share (own_tissue_enrich_z(); owner review, 2026-10-20).
     enrich_donor_values <- reactive({
@@ -883,7 +883,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       rows <- list()
       for (itm in phenotype_options()) {
         if (!(itm$label %in% sel)) next
-        if (region != "core" && itm$label %in% COMPOSITION_ENDOCRINE) next
+        if (itm$label %in% NON_IMMUNE_LABELS) next
         col <- switch(region, peri = itm$enrich, core = itm$prop_core, itm$peri_prop)
         if (is.null(col) || is.na(col) || !(col %in% colnames(comp))) next
         vals <- if (own) own_tissue_enrich_z(comp, itm$safe, itm$label, profile) else comp[[col]]
@@ -961,17 +961,19 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       }
     )
 
+    # The card's phenotypes: the immune ones (NON_IMMUNE_LABELS left out; owner, 2026-10-20).
+    enrich_labels <- function() sort(setdiff(names(phenotype_options()), NON_IMMUNE_LABELS))
+
     # ---- Card B phenotype filter (checkbox group shared by bar chart + heatmap) ----
     # Mirrors the tissue-scatter output$phenotype_filter. Choices are the
     # phenotype_options() labels (so they match enrich_summary()'s itm$label).
     # Default hides the same bulk classes as the tissue scatter so the shared
     # proportion scale is not dominated by Acinar's exocrine abundance.
     output$enrich_pheno_filter <- renderUI({
-      labels <- sort(names(phenotype_options()))
+      labels <- enrich_labels()
       if (length(labels) == 0) return(NULL)
-      hide_default <- c("Acinar", "Ductal", "Endocrine", "T cell", "Unknown")
       prev <- isolate(input$enrich_phenos)
-      selected <- if (!is.null(prev)) intersect(prev, labels) else setdiff(labels, hide_default)
+      selected <- if (!is.null(prev)) intersect(prev, labels) else labels
       tagList(
         div(style = "display: flex; align-items: center; gap: 6px; margin-bottom: 4px;",
           tags$label("Phenotypes shown", style = "font-weight: 600; font-size: 13px; margin: 0;"),
@@ -995,8 +997,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
     })
 
     observeEvent(input$enrich_pheno_all, {
-      updateCheckboxGroupInput(session, "enrich_phenos",
-                               selected = sort(names(phenotype_options())))
+      updateCheckboxGroupInput(session, "enrich_phenos", selected = enrich_labels())
     })
     observeEvent(input$enrich_pheno_none, {
       updateCheckboxGroupInput(session, "enrich_phenos", selected = character(0))
@@ -1099,7 +1100,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           div(class = "card", style = card_style,
             div(style = ctrl_row,
               card_title("Phenotype composition & enrichment",
-                tags$p("Every listed phenotype at once, in the core or the 20 \u00b5m band. The left chart summarises",
+                tags$p("Every immune phenotype at once, in the core or the 20 \u00b5m band. The left chart summarises",
                        " each donor status across its donors; the heatmap shows each donor, grouped by status, so the",
                        " spread behind each bar is visible. Each donor's value is the mean over its objects."),
                 tags$p(tags$strong("Enrichment z"),
@@ -1110,8 +1111,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                        " Own tissue uses the donor's own share outside every endocrine object and its band: it",
                        " measures whether they gather at islets. Proportion modes show the raw fraction (0\u20131)",
                        " of each compartment's cells."),
-                tags$p("Band modes leave out Beta, Alpha, Delta and CHGA+ hormone-negative cells: endocrine cells are",
-                       " called only inside endocrine objects, so a band holds one only where a Single lies.",
+                tags$p("Only the immune phenotypes are listed: the endocrine and exocrine classes are left out.",
                        " Drop object z beyond \u00b15 removes those objects' values before each donor mean. The",
                        " phenotype checkboxes and the Region / Summary choices apply to both plots.")),
               radioButtons(ns("enrich_region"), "Region",
@@ -1153,7 +1153,12 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                        " zero-anchored at the islet border), spanning islet interior to bulk tissue. Negative = inside",
                        " islet, positive = outside; the dashed line marks the border. Pooled per cell (descriptive)",
                        " \u2014 every cell counts once, so donors with more cells weigh more. For a donor-fair view see",
-                       " Immune gradient around islets."))
+                       " Immune gradient around islets."),
+                tags$p(tags$strong("Group by"),
+                       " Phenotype lists the immune phenotypes (the endocrine and exocrine classes are left out);",
+                       " Marker+ lists every panel marker, all 31 being measured in every donor, a cell counting as",
+                       " positive at 0.10 or above on the cohort marker scale. In composition bars every status",
+                       " facet shares one y-axis scale, so their heights compare directly."))
             ),
             tagList(
               div(style = ctrl_row,
@@ -1215,7 +1220,10 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
     # group-by mode flips. Depends on input$dist_mode so it fires post-mount.
     observeEvent(input$dist_mode, {
       mode <- input$dist_mode %||% "phenotype"
-      items <- if (identical(mode, "marker")) cell_distance_markers() else cell_distance_phenotypes()
+      # Phenotype mode lists the immune phenotypes (owner, 2026-10-20: no endocrine or exocrine classes); marker
+      # mode every marker the data root flags (all 31 panel markers from v8).
+      items <- if (identical(mode, "marker")) cell_distance_markers()
+               else setdiff(cell_distance_phenotypes(), NON_IMMUNE_LABELS)
       ch <- c("All cells" = "__all__", stats::setNames(items, items))
       cur_g <- isolate(input$dist_group)
       sel_g <- if (!is.null(cur_g) && cur_g %in% ch) cur_g else "__all__"
@@ -1223,8 +1231,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       def <- if (identical(mode, "marker"))
                intersect(c("INS", "GCG", "CD3e", "CD8a", "CD68", "CD31"), items)
              else
-               intersect(phenotype_keep(c("Beta cell", "Alpha cell", "Ductal",
-                                         "Macrophage", "CD8a Tcell", "B cell")), items)
+               items
       cur_c <- isolate(input$dist_comp_items)
       sel_c <- if (!is.null(cur_c) && length(cur_c) > 0 && all(cur_c %in% items)) cur_c else def
       updateCheckboxGroupInput(session, "dist_comp_items", choices = items, selected = sel_c)
@@ -1580,6 +1587,10 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           present <- intersect(status_order, unique(comp$donor_status))
           pcols <- item_colors[items]; pcols[is.na(pcols)] <- "#999999"; names(pcols) <- items
           y_lab <- if (identical(norm, "prop")) "fraction of class cells" else "cells"
+          # One y range for every status facet (owner, 2026-10-20), from the tallest stacked bar of any status.
+          stack_max <- max(stats::aggregate(val ~ donor_status + binx, comp[comp$item %in% items, , drop = FALSE],
+                                            sum)$val, na.rm = TRUE)
+          y_range <- c(0, stack_max * 1.05)
           panels <- lapply(present, function(s) {
             ss <- comp[comp$donor_status == s, , drop = FALSE]
             pp <- plot_ly()
@@ -1595,16 +1606,14 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                 hovertext = paste0(s, " · ", m, "<br>dist ≈ ", round(sub$x), " µm<br>",
                                    formatC(sub$n, big.mark = ","), " cells"))
             }
-            tot <- stats::aggregate(val ~ binx, ss, sum)
-            ymax <- if (nrow(tot)) max(tot$val) else 1
-            pp <- pp %>% add_trace(x = c(0, 0), y = c(0, ymax * 1.02),
+            pp <- pp %>% add_trace(x = c(0, 0), y = y_range,
               type = "scatter", mode = "lines",
               line = list(color = islet_ink(), width = 1.4, dash = "dash"),
               showlegend = FALSE, hoverinfo = "none")
             pp %>% layout(barmode = "stack",
               xaxis = list(title = "", tickfont = fonts$axis_tick, zeroline = FALSE),
               yaxis = list(title = list(text = s, font = fonts$legend_title),
-                           tickfont = fonts$axis_tick))
+                           tickfont = fonts$axis_tick, range = y_range))
           })
           fig <- if (length(panels) == 1) panels[[1]]
                  else plotly::subplot(panels, nrows = length(panels), shareX = TRUE,

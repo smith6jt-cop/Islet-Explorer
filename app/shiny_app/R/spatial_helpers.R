@@ -244,7 +244,11 @@ CELL_DIST_MARKER_COLORS <- c(
   INS = "#E6194B", GCG = "#3CB44B", SST = "#B8A600", CD3e = "#4363D8",
   CD8a = "#F58231", CD4 = "#911EB4", CD20 = "#42D4F4", CD68 = "#F032E6",
   CD163 = "#9A9A00", HLADR = "#469990", CD31 = "#800000", CD34 = "#9A6324",
-  SMA = "#808000", PDPN = "#000075", ECAD = "#E67E22", panCK = "#666666"
+  SMA = "#808000", PDPN = "#000075", ECAD = "#E67E22", panCK = "#666666",
+  # The rest of the 31-marker panel, flagged from v8 (owner, 2026-10-20: "all markers that are common to all donors").
+  CD45 = "#1F77B4", CHGA = "#FF7F0E", ColIV = "#2CA02C", VIM = "#D62728", LGALS3 = "#9467BD",
+  B3TUBB = "#8C564B", KRT14 = "#E377C2", GAP43 = "#BCBD22", CD35 = "#17BECF", `PGP9.5` = "#AEC7E8",
+  CD44 = "#FFBB78", NaKATPase = "#98DF8A", BCatenin = "#FF9896", BActin = "#C5B0D5", CK19 = "#C49C94"
 )
 
 # Split `base` into the plotted subset. `mode` is "phenotype" (d$phenotype ==

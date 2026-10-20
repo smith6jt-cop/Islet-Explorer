@@ -472,18 +472,20 @@ per status with the IQR. Dividing by the donor's own tissue separates gathering 
 immune cells everywhere. The donor chosen in the Data controls (the tissue scatter's donor) is drawn as a dotted line over
 the medians; hover gives its cell counts, and a point resting on fewer than 20 of the chosen cells is faded.
 
-**Phenotype composition & enrichment**: every listed phenotype at once. Left, the status summary (median and IQR,
+**Phenotype composition & enrichment**: every immune phenotype at once (CD8a and CD4 T cells, B cells,
+macrophages; the endocrine and exocrine classes are left out since 2026-10-20). Left, the status summary (median and IQR,
 or mean and SEM, of donor means); right, one row per donor grouped by status, so the spread behind each bar shows.
 - *Region*: Peri-islet enrichment z (diverging colours), Core proportion, Peri-islet proportion.
 - *Baseline* (enrichment z only): **Cohort** compares each band with the phenotype's share of all analysed cells in
   the cohort, so it measures how many are near islets, and a donor with more of a cell type everywhere scores high.
   **Own tissue** compares each band with the donor's own tissue share, so it measures gathering at islets. On v7
   the cohort-baseline donor means rank-correlate 0.80–0.91 with the donors' tissue shares.
-- Band modes leave out the endocrine phenotypes: endocrine cells are called only inside endocrine objects.
 - *Drop object z beyond ±5* removes those objects' values before each donor mean.
 
 **Distance-to-islet profile**: the per-cell view of every cell's signed distance to the nearest islet border across
-the tissue (symlog axis), as density curves or composition bars, by phenotype or marker positivity. Every cell
+the tissue (symlog axis), as density curves or composition bars, by immune phenotype or by marker positivity (all 31
+panel markers from data root v8, each measured in every donor; positive = 0.10 or above on the cohort marker scale).
+In composition bars every status facet shares one y-axis scale. Every cell
 counts once, so donors with more cells weigh more; the immune gradient is the donor-fair version. Its former
 donor-averaged KDE view was removed: its table holds only core and band cells, so it stopped at 20 µm.
 
