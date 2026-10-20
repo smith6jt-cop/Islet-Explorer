@@ -38,7 +38,7 @@ plot_main_ui <- function(id, extra_panel = NULL) {
                  " Unchecking an autoantibody removes the Aab+ donors positive for it (ND and T1D donors are not",
                  " affected). The diameter range keeps objects within it; the bin width sets the diameter bins of the",
                  " Islet Size Distribution's summary. Exclude outliers drops objects whose robust z-score (median and",
-                 " MAD within each donor status) passes the threshold; the setting is shared with the Spatial tab.")),
+                 " MAD within each donor status) passes the threshold.")),
         fluidRow(
           column(3,
             # Non-namespaced: synced with the Spatial tab's copy (app.R).
@@ -81,7 +81,7 @@ plot_main_ui <- function(id, extra_panel = NULL) {
         ),
         fluidRow(
           column(3,
-            # Non-namespaced: synced with the Trajectory and Spatial outlier controls (app.R).
+            # Non-namespaced: read by app.R as the app-wide outlier setting.
             tags$div(
               title = GLOBAL_OUTLIER_TOOLTIP,
               checkboxInput("sidebar_remove_outliers", "Exclude outliers", value = FALSE)

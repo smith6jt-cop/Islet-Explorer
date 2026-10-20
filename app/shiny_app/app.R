@@ -590,58 +590,26 @@ server <- function(input, output, session) {
     get_donor_color_palette(donor_palette_name())
   })
 
-  # Global outlier filter (synced across Plot sidebar, Trajectory, Spatial).
-  # Defaults to FALSE so the raw distribution renders out of the box; users
-  # opt in via the checkbox when they want to exclude tails from trends and
-  # tests. The three non-namespaced inputs `sidebar_remove_outliers`,
-  # `spatial_remove_outliers` mirrors this reactive (the Trajectory tab no longer
-  # exposes an outlier control, so it is not in the sync set);
-  # observers keep them in sync. Modules read `remove_outliers_global()` and
-  # the threshold reactive `outlier_z_global()` directly.
+  # Global outlier filter, set by the Plot tab's Data controls. Defaults to FALSE so the raw distribution renders
+  # out of the box. The Spatial tab's copy went with the outlier box plots it drove (owner review, 2026-10-20), and
+  # the Trajectory tab exposes none. Modules read `remove_outliers_global()` and `outlier_z_global()`.
   remove_outliers_rv <- reactiveVal(FALSE)
 
   observeEvent(input$sidebar_remove_outliers, {
-    if (!identical(input$sidebar_remove_outliers, remove_outliers_rv())) {
-      remove_outliers_rv(isTRUE(input$sidebar_remove_outliers))
-      updateCheckboxInput(session, "spatial_remove_outliers", value = isTRUE(input$sidebar_remove_outliers))
-    }
-  }, ignoreInit = TRUE)
-
-
-  observeEvent(input$spatial_remove_outliers, {
-    if (!identical(input$spatial_remove_outliers, remove_outliers_rv())) {
-      remove_outliers_rv(isTRUE(input$spatial_remove_outliers))
-      updateCheckboxInput(session, "sidebar_remove_outliers", value = isTRUE(input$spatial_remove_outliers))
-    }
+    remove_outliers_rv(isTRUE(input$sidebar_remove_outliers))
   }, ignoreInit = TRUE)
 
   remove_outliers_global <- reactive({
     isTRUE(remove_outliers_rv())
   })
 
-  # Global outlier z-threshold slider (synced across Plot / Trajectory /
-  # Spatial). Default 3.0 (legacy behavior). Range 0.5–10, step 0.5. Feeds
-  # `flag_outliers(threshold = …)` for every z-score site. Spatial Card A's
-  # IQR rule (1.5×) is intentionally NOT routed through this — enrichment z is
-  # already a standardised quantity, so it uses a fixed Tukey fence on a
-  # different scale.
+  # Global outlier z-threshold (the Plot tab's slider). Default 3.0, range 0.5–10, step 0.5; feeds
+  # `flag_outliers(threshold = …)` for every z-score site.
   outlier_z_rv <- reactiveVal(3.0)
 
   observeEvent(input$sidebar_outlier_z, {
     val <- suppressWarnings(as.numeric(input$sidebar_outlier_z))
-    if (is.finite(val) && !isTRUE(all.equal(val, outlier_z_rv()))) {
-      outlier_z_rv(val)
-      updateSliderInput(session, "spatial_outlier_z", value = val)
-    }
-  }, ignoreInit = TRUE)
-
-
-  observeEvent(input$spatial_outlier_z, {
-    val <- suppressWarnings(as.numeric(input$spatial_outlier_z))
-    if (is.finite(val) && !isTRUE(all.equal(val, outlier_z_rv()))) {
-      outlier_z_rv(val)
-      updateSliderInput(session, "sidebar_outlier_z", value = val)
-    }
+    if (is.finite(val) && !isTRUE(all.equal(val, outlier_z_rv()))) outlier_z_rv(val)
   }, ignoreInit = TRUE)
 
   outlier_z_global <- reactive({
@@ -682,9 +650,7 @@ server <- function(input, output, session) {
   }
 
   # Spatial Neighborhood module
-  spatial_server("spatial", prepared, active_palette, active_donor_colors,
-                 remove_outliers = remove_outliers_global,
-                 outlier_threshold = outlier_z_global)
+  spatial_server("spatial", prepared, active_palette, active_donor_colors)
 
   # Inflammation module — cohort-level edgeR abundance + infiltration score.
   # Reads the cell-distance artifact through spatial_helpers.R (Parquet/DuckDB

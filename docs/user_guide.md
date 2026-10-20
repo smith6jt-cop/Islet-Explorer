@@ -114,30 +114,29 @@ These are described as such inside the in-app modal so users know when a label i
 
 ## Outlier Handling
 
-Outlier controls apply to Plot and Spatial. The reviewer Trajectory deliberately has no
+Outlier controls apply to the Plot tab. (The Spatial tab's copy was removed on 2026-10-20 with the two
+outlier-filtered cards it drove; every Spatial value is now donor-level.) The reviewer Trajectory deliberately has no
 outlier exclusion: its cell-count cohort defines and refits the axis, so a second hidden
 row-dropping rule would make the trajectory definition ambiguous. The dormant Statistics
 module has its own independent sensitivity control when maintainers enable it.
 
 ### The Rule
 
-**For each donor status (ND, Aab+, T1D), Plot and Spatial Card C flag an islet when its robust |z| — the Iglewicz–Hoaglin modified z-score, `0.6745·(value − median)/MAD` — exceeds the shared slider value (default 3, range 0.5–10, step 0.5).** Median and MAD make the rule robust to right skew and two-sided. When MAD = 0, the calculation falls back to classical mean/SD within that group. Spatial Card C applies it to `log(1 + distance)`.
+**For each donor status (ND, Aab+, T1D), the Plot tab flags an islet when its robust |z| — the Iglewicz–Hoaglin modified z-score, `0.6745·(value − median)/MAD` — exceeds the shared slider value (default 3, range 0.5–10, step 0.5).** Median and MAD make the rule robust to right skew and two-sided. When MAD = 0, the calculation falls back to classical mean/SD within that group.
 
-- **Spatial Card A (Peri-Islet Phenotype Enrichment)**: uses **Tukey 1.5×IQR** per donor status, computed on non-zero values only. Many phenotypes are absent from most islets, so a z-score rule would over-flag the zero mode; the IQR variant tolerates that.
-- **Dormant Statistics module**: uses its own checkbox and threshold; it never synchronizes with the reviewer-visible Plot/Spatial control.
+- **Dormant Statistics module**: uses its own checkbox and threshold; it never synchronizes with the reviewer-visible Plot control.
 
 ### The Control
 
-A checkbox **"Exclude outliers"** plus an **"Outlier z-threshold"** slider lives on the Plot sidebar and is mirrored in the Spatial toolbar. The two views stay synchronized. **Default: checkbox OFF, slider 3.0.** Trajectory has no corresponding control.
+A checkbox **"Exclude outliers"** plus an **"Outlier z-threshold"** slider lives in the Plot tab's Data controls. **Default: checkbox OFF, slider 3.0.** Trajectory has no corresponding control.
 
 If maintainers enable **Statistics**, its dedicated checkbox and slider operate independently
-of Plot/Spatial. A caption reports how many rows the most recent run excluded.
+of Plot. A caption reports how many rows the most recent run excluded.
 
 ### What you see when the filter is ON
 
-- Excluded points still render on the Plot panels and Spatial Card C as **faint grey × markers** ("ghost points") so their locations remain auditable.
-- Plot, Spatial Card A, and Spatial Card C show an exclusion count using the rule that applies to that view.
-- Plot and Spatial Cards A/C provide optional excluded-outlier tables with case, group, value, and score/fence information.
+- Excluded points still render on the Plot panels as **faint grey × markers** ("ghost points") so their locations remain auditable.
+- The Plot tab shows an exclusion count and an optional excluded-outlier table with case, group, value and score.
 - Plot ghost-marker positions are stably jittered, so toggling the control does not shuffle the cloud.
 
 ### What changes when the filter is OFF
@@ -427,10 +426,13 @@ path.
    - **Zoom**: Drag to select a region, then the view zooms in. Double-click or click **Reset Zoom** to restore the full view.
    - Uses ggplot2 `renderPlot` (not plotly) for performance at >100K points
 
-3. **Cluster Composition** (right): stacked bar chart of mean phenotype composition per Leiden cluster, clusters in
-   numeric order.
-4. **Islet-Level UMAPs** (full-width row below, since 2026-10-19): the Leiden and Donor Status UMAPs side by side at
-   one size, both interactive (PNG from each camera button)
+3. **Cluster membership** (right, since 2026-10-20): each Leiden cluster's objects split by donor status (or by
+   donor), clusters in numeric order, with each cluster's donor count above its bar. It shows which composition
+   states are disease-associated and whether a cluster belongs to a few donors. (It replaced a chart of each
+   cluster's mean composition, which plotted back the endocrine shares the clusters are built from.)
+4. **Islet-Level UMAPs** (full-width row below, since 2026-10-19): the Leiden UMAP and, since 2026-10-20, the same
+   layout coloured by each object's immune share of its 20 µm band, side by side at one size, both interactive (PNG
+   from each camera button). The layout by donor status is on the Trajectory tab.
    - Built from each object's endocrine composition (the Beta, Alpha, Delta and CHGA+ hormone-negative shares of
      its core endocrine cells) for the objects with ten or more core cells, with no donor correction (2026-10-19).
      Smaller objects have too few cells to place and have no point or cluster. Disease separates mainly by T1D
@@ -445,31 +447,48 @@ path.
 
 ### Neighborhood Analysis Cards
 
-Below the tissue scatter and Leiden panel, three interactive analysis sections visualize per-phenotype peri-islet neighborhood metrics. The cards expose the 12 retained reviewer-facing phenotypes through dynamic choices rather than the previous hand-curated immune-only lists. Cards only appear when neighborhood data is available in the H5AD (not in Excel fallback mode).
+Rebuilt on 2026-10-20 after an owner review that asked each card to answer its own question. Every value is
+donor-level: each donor counts once, whatever its number of objects. The cards use the donor statuses and endocrine
+objects selected in the tab's Data controls (the immune gradient reads per-cell data, so the object selection does
+not apply to it). The section's own control panels and outlier controls were removed; each card carries its own
+selector. Cards only appear when neighborhood data is available in the H5AD.
 
-**Global Controls** (toolbar above the cards):
-- **Endocrine objects** (Data controls; kept in step with the Plot tab's copy): the neighborhood cards use the selected classes. Selecting Islets alone reduces noise from one- and few-cell objects and lowers NA rates in distance metrics.
-- **Point size** and **Opacity**: Adjust scatter plot visualization across all cards.
-- **Islet count**: Shows how many islets pass the current filters.
+**Insulitis prevalence**: each donor's share of objects with at least the chosen number of immune cells (every
+immune label, subtyped or not) in the core and the 20 µm band; default 15, after nPOD's 15 CD45+ cells. Bars are
+donor means ± SEM with each donor as a point, and a Kruskal-Wallis p on the donor shares. Small objects rarely reach
+the threshold, so uncheck Cluster to count Islets only. On v7, Islets only: donor medians ND 0, Aab+ 0.074, T1D
+0.185 (p = 0.01).
 
-**Card A: Peri-Islet Phenotype Enrichment**
-- **Left** (`Phenotype (peri enrichment z)` dropdown): Bar chart of donor-level mean/median enrichment z-score across disease stages for the selected phenotype. Shows Kruskal-Wallis p-value. Donor points overlay with summary bars (mean ± SEM or median ± IQR). Outlier exclusion follows the global toggle (Tukey 1.5×IQR per donor status, zero-aware). A **"Show excluded-outlier table"** checkbox next to the phenotype selector reveals the list of excluded islets directly below the bar chart.
-- **Right** (`Phenotype (peri vs core)` dropdown): Scatter of peri-zone proportion vs core proportion for the selected phenotype, with dashed y=x diagonal. Sqrt-scale toggle and per-status trend-line option. Points above the line have higher core proportion than peri.
-- *Interpretation*: Pick any phenotype (Macrophage, CD8a Tcell, Beta cell, Endothelial, etc.) to see its peri-zone enrichment trajectory across ND→Aab+→T1D.
+**Immune cells and beta-cell content**: for each donor, the mean immune share of the band around its objects that
+still have beta cells and around its insulin-deficient objects (beta cells under the chosen share of the core's
+endocrine cells, default 10%), joined by a line. On v7 Islets, in every T1D donor with both kinds the band around
+islets with beta cells holds more immune cells (0.17–0.27) than around insulin-deficient islets (0.05–0.13).
 
-**Card B: Phenotype Composition & Enrichment**
-- **Left**: Grouped bar chart spanning the 12 retained reviewer-facing phenotypes × 3 disease stages. Toggle median/mean summary; `Clip extreme z > 5` is a **display saturation** that caps the visible axis so the chart isn't dominated by a few hugely enriched phenotypes — it is NOT outlier exclusion (see [Outlier Handling](#outlier-handling) for the actual rule). Error bars show IQR (median) or SEM (mean).
-- **Right**: Heatmap — phenotypes (columns) × disease stages (rows). Numeric values annotated on each cell.
-- **Region toggle**: Switch between:
-  - *Peri-islet (enrichment z)*: Poisson z-scores comparing peri-islet vs tissue-wide. Diverging colorscale (blue = depleted, red = enriched). Default.
-  - *Core (proportion)*: Raw cell type proportions in islet core. Sequential colorscale (white → red).
-  - *Peri-islet (proportion)*: Raw cell type proportions in peri-islet zone. Sequential colorscale.
-- *Interpretation*: z > 0 means that phenotype is enriched near islets relative to the tissue-wide proportion. Useful for spotting structural changes (Endothelial, Lymphatic, Neural) alongside immune infiltration.
+**Immune gradient around islets**: for each donor and distance bin from the nearest endocrine object's border
+(Core, 0–20 … 200–400, >400 µm), the chosen immune cells' share of all cells there divided by the donor's own tissue
+share (its cells outside every endocrine object and band). 1 is the donor's tissue level. Lines are the donor median
+per status with the IQR. Dividing by the donor's own tissue separates gathering at islets from a donor having more
+immune cells everywhere.
 
-**Card C: Phenotype Proximity to Islet**
-- **Left** (`Distance to nearest` dropdown): Box plot of minimum distance (μm) from islet core centroid to nearest peri-zone cells of the selected phenotype. Includes "Immune (all)" aggregate plus every individual phenotype with `min_dist_*` data. Shows non-NA counts per group. Outlier exclusion follows the global toggle (z > 3 per donor status applied to `log(1 + distance)`); excluded points still render as faint × markers. A **"Show excluded-outlier table"** checkbox next to the metric selector lists the excluded islets (Case ID, distance, z-score) below the box plot. See [Outlier Handling](#outlier-handling).
-- **Right** (`Phenotype` dropdown): KDE of signed distance from islet boundary for individual cells of the selected phenotype. Negative = inside islet (core), positive = outside (peri-islet). Dashed line at zero marks the boundary.
-- *Interpretation*: NA values in the box plot indicate islets with zero cells of that phenotype in the peri-islet zone (biological, not a data error — common for rare phenotypes like CD4 Tcell, B cell). Selecting Islets alone reduces NAs.
+**Phenotype composition & enrichment**: every listed phenotype at once. Left, the status summary (median and IQR,
+or mean and SEM, of donor means); right, one row per donor grouped by status, so the spread behind each bar shows.
+- *Region*: Peri-islet enrichment z (diverging colours), Core proportion, Peri-islet proportion.
+- *Baseline* (enrichment z only): **Cohort** compares each band with the phenotype's share of all analysed cells in
+  the cohort, so it measures how many are near islets, and a donor with more of a cell type everywhere scores high.
+  **Own tissue** compares each band with the donor's own tissue share, so it measures gathering at islets. On v7
+  the cohort-baseline donor means rank-correlate 0.80–0.91 with the donors' tissue shares.
+- Band modes leave out the endocrine phenotypes: endocrine cells are called only inside endocrine objects.
+- *Drop object z beyond ±5* removes those objects' values before each donor mean.
+
+**Distance-to-islet profile**: the per-cell view of every cell's signed distance to the nearest islet border across
+the tissue (symlog axis), as density curves or composition bars, by phenotype or marker positivity. Every cell
+counts once, so donors with more cells weigh more; the immune gradient is the donor-fair version. Its former
+donor-averaged KDE view was removed: its table holds only core and band cells, so it stopped at 20 µm.
+
+*Removed on 2026-10-20*: Peri enrichment by status (one column of the composition card), Peri vs core proportion
+(immune cells almost never lie in the core and endocrine cells almost never in the band, so the points sat on one
+axis), and Distance to nearest cell (measured from the core's centre, so it tracked object radius, rank correlation
+0.78–0.86; its T1D difference disappeared once radius was subtracted).
 
 ### Data Coverage
 

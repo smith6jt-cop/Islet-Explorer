@@ -1,10 +1,10 @@
 # ---------- Spatial Tab module UI ----------
 # Exports: spatial_ui(id)
-# Layout: Data / View control panels (control_panel()), then Tissue Scatter (col-7) + Cluster Composition (col-5),
+# Layout: Data / View control panels (control_panel()), then Tissue Scatter (col-7) + Cluster membership (col-5),
 # then the two islet-level UMAPs side by side in a full-width row
-# + Neighborhood Analysis Data / View panels and card rows below (rendered server-side in
-#   output$neighborhood_cards): enrichment/scatter/distance row, composition card,
-#   distance-to-islet profile card. Each panel and card's prose lives in its own "?" popover (card_help()).
+# + Neighborhood Analysis cards below (rendered server-side in output$neighborhood_cards): insulitis prevalence /
+#   immune cells and beta-cell content / immune gradient row, composition card, distance-to-islet profile card
+#   (owner review, 2026-10-20). Each panel and card's prose lives in its own "?" popover (card_help()).
 
 spatial_ui <- function(id) {
   ns <- NS(id)
@@ -89,10 +89,17 @@ spatial_ui <- function(id) {
       # ---- Right: Leiden cluster composition ----
       column(5,
         div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible; height: 100%;",
-          card_title_help("Cluster Composition", style = "margin: 0 0 8px;", help = list(
-            tags$p("Each Leiden cluster's mean core phenotype proportions, for the checked donor statuses and",
-                   " phenotypes. The clusters are those of the Islet-Level UMAPs below."))),
+          card_title_help("Cluster membership", style = "margin: 0 0 8px;", help = list(
+            tags$p("The share of each Leiden cluster's objects from each donor status, or from each donor. It shows",
+                   " which composition states are disease-associated and whether a cluster belongs to a few",
+                   " donors; the number above each bar is the cluster's donor count, and hover names its largest",
+                   " donor. The clusters are those of the Islet-Level UMAPs below, at the resolution chosen in the",
+                   " Data controls, for the checked donor statuses."),
+            tags$p("The clusters are built from the objects' endocrine shares, so their composition is not",
+                   " repeated here; colour the tissue scatter by Leiden cluster to see where they lie."))),
           uiOutput(ns("leiden_not_available")),
+          radioButtons(ns("cluster_member_by"), "Split by", c("Donor status" = "status", "Donor" = "donor"),
+                       selected = "status", inline = TRUE),
           plotlyOutput(ns("cluster_composition"), height = "650px")
         )
       )
@@ -104,15 +111,18 @@ spatial_ui <- function(id) {
     fluidRow(column(12,
       div(class = "card", style = "padding: 15px; margin-bottom: 15px;",
         card_title_help("Islet-Level UMAPs", style = "margin: 0 0 8px;", help = list(
-          tags$p(textOutput(ns("embedding_method"), inline = TRUE)))),
+          tags$p(textOutput(ns("embedding_method"), inline = TRUE)),
+          tags$p("The left UMAP is coloured by Leiden cluster. The right one, the same layout, is coloured by each",
+                 " object's immune share of its 20 \u00b5m band (immune cells among all its band cells), saturating",
+                 " at the 95th percentile; hover gives the value. The Trajectory tab shows the layout by donor status."))),
         fluidRow(
           column(6,
             h5("Leiden Clustering", style = "font-size: 13px; margin-top: 0;"),
             plotlyOutput(ns("leiden_umap"), height = "480px")
           ),
           column(6,
-            h5("Donor Status", style = "font-size: 13px; margin-top: 0;"),
-            plotlyOutput(ns("spatial_umap_donor"), height = "480px")
+            h5("Band immune share", style = "font-size: 13px; margin-top: 0;"),
+            plotlyOutput(ns("spatial_umap_immune"), height = "480px")
           )
         )
       )

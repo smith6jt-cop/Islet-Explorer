@@ -8,9 +8,7 @@
 #   donor_tissue_available(), get_available_donors(), load_donor_tissue() — from spatial_helpers.R
 
 spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
-                           donor_colors_reactive = reactive(DONOR_COLORS_BRIGHT),
-                           remove_outliers = reactive(FALSE),
-                           outlier_threshold = reactive(3.0)) {
+                           donor_colors_reactive = reactive(DONOR_COLORS_BRIGHT)) {
 
   moduleServer(id, function(input, output, session) {
     output$embedding_method <- renderText({
@@ -40,12 +38,6 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
     # Rendered inside the closed Islet-Level UMAPs help popover, so keep it current while hidden.
     outputOptions(output, "embedding_method", suspendWhenHidden = FALSE)
     ns <- session$ns
-
-    # ---- Outlier-table reactiveVals (parity with Plot/Trajectory) ----
-    # Populated inside the Card A and Card C renderPlotly bodies, consumed by
-    # the namespaced "Show excluded-outlier table" toggles below each card.
-    infiltration_outliers <- reactiveVal(NULL)
-    distance_outliers <- reactiveVal(NULL)
 
     # 20-color qualitative palette for Leiden clusters
     leiden_palette <- c(
@@ -458,12 +450,26 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
     # Donor Status UMAPs share this layout so they draw at one size --
     # the same marker size, the plot area in the left 78% of the widget and the legend in the rest, wide enough for
     # either legend (a legend that does not fit makes plotly widen the right margin and shrink that plot alone).
-    spatial_umap_plotly <- function(plot_df, colour_col, pal, legend_title, title, filename_root) {
+    spatial_umap_plotly <- function(plot_df, colour_col, pal, legend_title, title, filename_root,
+                                    colorbar_title = NULL) {
       fonts <- plotly_islet_fonts()
-      plot_df$.hover <- paste0(legend_title, ": ", plot_df[[colour_col]], "<br>",
+      if (is.null(plot_df$.hover)) plot_df$.hover <- paste0(legend_title, ": ", plot_df[[colour_col]], "<br>",
                                if (colour_col != "donor_status") paste0("Status: ", plot_df$donor_status, "<br>") else "",
                                plot_df$islet_key)
-      islet_umap_plotly(plot_df, "umap1", "umap2", colour_col, pal, ".hover") %>%
+      p <- islet_umap_plotly(plot_df, "umap1", "umap2", colour_col, pal, ".hover", colorbar_title = colorbar_title)
+      # A numeric colour has a colour bar instead of a legend; put it where the legend sits.
+      # Slim, so it fits the legend's strip without plotly widening the margin and shrinking this plot alone.
+      if (is.numeric(plot_df[[colour_col]])) {
+        p <- plotly::plotly_build(p)
+        p$x$data <- lapply(p$x$data, function(tr) {
+          if (!is.null(tr$marker$colorbar))
+            tr$marker$colorbar <- utils::modifyList(tr$marker$colorbar, list(
+              x = 0.8, xanchor = "left", len = 0.8, thickness = 14,
+              tickfont = list(size = ISLET_FONT_SIZES$dense_min)))
+          tr
+        })
+      }
+      p %>%
         layout(
           font = fonts$global,
           title = list(text = title, font = fonts$title),
@@ -527,130 +533,109 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                           paste0("leiden_umap_", res_label))
     })
 
-    # ==== Donor Status UMAP: the same layout as the Leiden UMAP (spatial_umap_plotly()) ====
-    output$spatial_umap_donor <- renderPlotly({
+    # ==== Band immune UMAP: the Leiden UMAP's layout, coloured by each object's 20 um band immune share ====
+    # It replaced a Donor Status UMAP identical to the Trajectory tab's (owner review, 2026-10-20), and ties the
+    # composition states to the immune surroundings this tab is about.
+    output$spatial_umap_immune <- renderPlotly({
       req(has_leiden())
-      pd <- prepared()
-      comp <- pd$comp
-      req("leiden_umap_1" %in% colnames(comp), "leiden_umap_2" %in% colnames(comp))
-
-      plot_comp <- comp
-      if (!is.null(input$groups) && "Donor Status" %in% colnames(plot_comp)) {
-        plot_comp <- plot_comp[plot_comp$`Donor Status` %in% input$groups, , drop = FALSE]
-      }
-
+      comp <- nbr_comp()
+      req("leiden_umap_1" %in% colnames(comp), "immune_frac_peri" %in% colnames(comp))
       plot_df <- data.frame(
-        umap1 = suppressWarnings(as.numeric(plot_comp$leiden_umap_1)),
-        umap2 = suppressWarnings(as.numeric(plot_comp$leiden_umap_2)),
-        donor_status = if ("Donor Status" %in% colnames(plot_comp)) as.character(plot_comp$`Donor Status`) else "?",
-        islet_key = if ("islet_key" %in% colnames(plot_comp)) as.character(plot_comp$islet_key) else "",
-        stringsAsFactors = FALSE
-      )
-      plot_df <- plot_df[is.finite(plot_df$umap1) & is.finite(plot_df$umap2), , drop = FALSE]
+        umap1 = suppressWarnings(as.numeric(comp$leiden_umap_1)),
+        umap2 = suppressWarnings(as.numeric(comp$leiden_umap_2)),
+        immune = suppressWarnings(as.numeric(comp$immune_frac_peri)),
+        donor_status = as.character(comp$`Donor Status`),
+        islet_key = as.character(comp$islet_key), stringsAsFactors = FALSE)
+      plot_df <- plot_df[is.finite(plot_df$umap1) & is.finite(plot_df$umap2) & is.finite(plot_df$immune), ,
+                         drop = FALSE]
       if (nrow(plot_df) == 0) return(plotly_islet_empty("No UMAP data"))
-      plot_df$donor_status <- factor(plot_df$donor_status, levels = c("ND", "Aab+", "T1D"))
-      plot_df$donor_status <- droplevels(plot_df$donor_status)
-
-      spatial_umap_plotly(plot_df, "donor_status", donor_colors_reactive(), "Status",
-                          paste0("Donor status (", nrow(plot_df), " objects)"), "spatial_umap_donor")
+      # The share is skewed (most bands hold no immune cell), so the colour saturates at the 95th percentile;
+      # hover shows the true value.
+      cap <- stats::quantile(plot_df$immune, 0.95, names = FALSE)
+      plot_df$colour <- pmin(plot_df$immune, if (cap > 0) cap else max(plot_df$immune))
+      plot_df$.hover <- paste0("Band immune share: ", sprintf("%.3f", plot_df$immune), "<br>Status: ",
+                               plot_df$donor_status, "<br>", plot_df$islet_key)
+      spatial_umap_plotly(plot_df, "colour", NULL, "Band immune share",
+                          paste0("Band immune share (", nrow(plot_df), " objects)"), "spatial_umap_immune",
+                          colorbar_title = "Immune<br>share")
     })
 
-    # ==== Card 3 (bottom): Cluster Composition ====
-    output$cluster_composition <- renderPlotly({
+    # ==== Cluster membership (owner review, 2026-10-20) ====
+    # Replaced a mean-composition-by-cluster chart that plotted back the endocrine shares the clusters are built
+    # from. Each cluster's objects by donor status (or by donor): which composition states are disease-associated,
+    # and whether any belongs to a single donor.
+    cluster_membership_data <- reactive({
       req(has_leiden())
-      pd <- prepared()
-      comp <- pd$comp
-
+      comp <- nbr_comp()
       leiden_col <- input$leiden_res %||% {
         nbr <- get_nbr_columns(colnames(comp))
         nbr$leiden[2] %||% nbr$leiden[1]
       }
       req(leiden_col %in% colnames(comp))
+      m <- cluster_membership(comp, leiden_col)
+      req(m)
+      m$leiden_col <- leiden_col
+      m
+    })
 
-      # Filter by donor status
-      plot_comp <- comp
-      if (!is.null(input$groups) && "Donor Status" %in% colnames(plot_comp)) {
-        plot_comp <- plot_comp[plot_comp$`Donor Status` %in% input$groups, , drop = FALSE]
-      }
-
-      # Get phenotype proportion columns (prop_*), filtered by selected phenotypes
-      prop_cols <- grep("^prop_", colnames(plot_comp), value = TRUE)
-      prop_cols <- prop_cols[phenotype_is_kept(sub("^prop_", "", prop_cols))]
-      if (length(prop_cols) == 0) {
-        return(plotly_islet_empty("No phenotype proportion data"))
-      }
-      if (!is.null(input$pheno_filter) && length(input$pheno_filter) > 0) {
-        keep_cols <- paste0("prop_", input$pheno_filter)
-        prop_cols <- intersect(prop_cols, keep_cols)
-        if (length(prop_cols) == 0) {
-          return(plotly_islet_empty("No matching phenotypes selected"))
-        }
-      }
-
-      # Objects outside the embedding (under ten core cells on a composition root) have no cluster.
-      plot_comp <- plot_comp[!is.na(plot_comp[[leiden_col]]), , drop = FALSE]
-      if (nrow(plot_comp) == 0) return(plotly_islet_empty("No clustered objects"))
-      cluster <- as.character(plot_comp[[leiden_col]])
-
-      # Compute mean phenotype proportions per cluster
-      cluster_levels <- leiden_levels(cluster)
-      mat <- matrix(NA_real_, nrow = length(prop_cols), ncol = length(cluster_levels),
-                    dimnames = list(prop_cols, cluster_levels))
-      for (cl in cluster_levels) {
-        sub <- plot_comp[cluster == cl, prop_cols, drop = FALSE]
-        if (nrow(sub) > 0) {
-          mat[, cl] <- colMeans(sub, na.rm = TRUE)
-        }
-      }
-
-      # Build stacked bar data
-      bar_rows <- list()
-      for (i in seq_along(prop_cols)) {
-        for (j in seq_along(cluster_levels)) {
-          bar_rows[[length(bar_rows) + 1]] <- data.frame(
-            phenotype = gsub("^prop_", "", prop_cols[i]),
-            cluster = cluster_levels[j],
-            proportion = mat[i, j],
-            stringsAsFactors = FALSE
-          )
-        }
-      }
-      bar_df <- do.call(rbind, bar_rows)
-
-      # Remove phenotypes with zero proportion across all clusters
-      max_per_pheno <- tapply(bar_df$proportion, bar_df$phenotype, max, na.rm = TRUE)
-      keep_phenos <- names(max_per_pheno[max_per_pheno > 0])
-      bar_df <- bar_df[bar_df$phenotype %in% keep_phenos, , drop = FALSE]
-
-      # Use active phenotype palette where available
-      pheno_present <- unique(bar_df$phenotype)
-      pal <- palette()[pheno_present]
-      pal[is.na(pal)] <- "#CCCCCC"
-
-      canonical_order <- names(palette())
-      ordered_phenos <- intersect(canonical_order, keep_phenos)
-      ordered_phenos <- c(ordered_phenos, setdiff(keep_phenos, canonical_order))
-      bar_df$phenotype <- factor(bar_df$phenotype, levels = rev(ordered_phenos))
-      bar_df$cluster <- factor(bar_df$cluster, levels = cluster_levels)
-
+    output$cluster_composition <- renderPlotly({
+      m <- cluster_membership_data()
+      by <- input$cluster_member_by %||% "status"
       fonts <- plotly_islet_fonts()
-      plot_ly(bar_df, x = ~cluster, y = ~proportion, color = ~phenotype,
-              colors = pal,
-              type = "bar") %>%
+      donors <- m$donors
+      hover_cluster <- paste0("Cluster ", donors$cluster, ": ", donors$objects, " objects, ", donors$donors,
+                              " donors; largest donor ", donors$top_donor, " holds ",
+                              sprintf("%.0f%%", 100 * donors$top_donor_share))
+      p <- plot_ly()
+      if (identical(by, "donor")) {
+        comp <- nbr_comp()
+        cl <- as.character(comp[[m$leiden_col]]); ok <- !is.na(cl)
+        d <- as.data.frame(table(cluster = cl[ok], donor = as.character(comp$`Case ID`[ok])), stringsAsFactors = FALSE)
+        d <- d[d$Freq > 0, , drop = FALSE]
+        d$share <- d$Freq / donors$objects[match(d$cluster, as.character(donors$cluster))]
+        status_of <- tapply(as.character(comp$`Donor Status`), as.character(comp$`Case ID`), `[`, 1)
+        donor_ids <- names(status_of)[order(match(status_of, STATUS_ORDER), suppressWarnings(as.numeric(names(status_of))))]
+        pal <- rep_len(leiden_palette, length(donor_ids))
+        for (i in seq_along(donor_ids)) {
+          s <- d[d$donor == donor_ids[i], , drop = FALSE]
+          if (!nrow(s)) next
+          p <- p %>% add_trace(x = s$cluster, y = s$share, type = "bar",
+                               name = paste0(donor_ids[i], " (", status_of[donor_ids[i]], ")"),
+                               marker = list(color = pal[i]),
+                               hovertemplate = paste0("Donor ", donor_ids[i], " (", status_of[donor_ids[i]], ")<br>",
+                                                      "Cluster %{x}: %{y:.0%} of its objects<extra></extra>"))
+        }
+        legend_title <- "Donor"
+      } else {
+        bs <- m$by_status
+        dcols <- donor_colors_reactive()
+        for (s in levels(bs$status)) {
+          b <- bs[bs$status == s, , drop = FALSE]
+          p <- p %>% add_trace(x = as.character(b$cluster), y = b$share, type = "bar", name = s,
+                               marker = list(color = dcols[s]),
+                               text = hover_cluster[match(as.character(b$cluster), as.character(donors$cluster))],
+                               customdata = b$objects,
+                               hovertemplate = paste0(s, ": %{customdata} objects (%{y:.0%})<br>%{text}<extra></extra>"),
+                               textposition = "none")
+        }
+        legend_title <- "Status"
+      }
+      # Each cluster's donor count above its bar.
+      p %>% add_annotations(x = as.character(donors$cluster), y = 1, text = paste0(donors$donors, " d"),
+                            showarrow = FALSE, yanchor = "bottom", font = list(size = ISLET_FONT_SIZES$dense_min)) %>%
         layout(
-          font = fonts$global,
-          barmode = "stack",
-          title = list(text = "Mean Phenotype Composition by Cluster", font = fonts$title),
-          xaxis = list(title = list(text = "Cluster", font = fonts$axis_title),
-                       tickfont = fonts$axis_tick),
-          yaxis = list(title = list(text = "Mean Proportion", font = fonts$axis_title),
-                       tickfont = fonts$axis_tick, range = c(0, 1)),
-          # Up to 12 reviewer-facing phenotype entries — use the dense floor directly rather than
-          # a max() formula that already evaluates to it.
-          legend = list(font = list(size = ISLET_FONT_SIZES$dense_min),
-                        title = list(text = "", font = fonts$legend_title))
+          font = fonts$global, barmode = "stack",
+          title = list(text = paste0("Cluster membership (Leiden ", sub("^leiden_", "", m$leiden_col), ")"),
+                       font = fonts$title),
+          margin = list(t = 70),
+          xaxis = list(title = list(text = "Cluster", font = fonts$axis_title), tickfont = fonts$axis_tick,
+                       type = "category", categoryorder = "array", categoryarray = levels(donors$cluster)),
+          yaxis = list(title = list(text = "Share of the cluster's objects", font = fonts$axis_title),
+                       tickfont = fonts$axis_tick, range = c(0, 1.08), tickformat = ".0%"),
+          legend = list(title = list(text = legend_title, font = fonts$legend_title),
+                        font = list(size = ISLET_FONT_SIZES$dense_min))
         ) %>%
-        plotly_islet_config("cluster_composition")
+        plotly_islet_config("cluster_membership")
     })
 
     # ---- Download handler ----
@@ -778,119 +763,98 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       stats::setNames(vec, vapply(opts, function(o) o$label, character(1)))
     })
 
-    # ---- Intermediate reactive for Card B: enrichment/proportion summary ----
-    enrich_summary <- reactive({
+    # ---- Card B: donor-level values behind the bar chart and the donor heatmap ----
+    # One row per donor and phenotype: the mean over the donor's objects (avoids pseudoreplication; an object-level
+    # median is 0 for rare immune types because most objects have none of them). Band modes leave out the endocrine
+    # labels: endocrine cells are called only inside endocrine objects, so a band holds one only where a Single lies.
+    # The band enrichment z uses the cohort's share of each phenotype (enrich_z_*) or, with Baseline "Own tissue",
+    # the donor's own tissue share (own_tissue_enrich_z(); owner review, 2026-10-20).
+    enrich_donor_values <- reactive({
       comp <- nbr_comp()
       req(comp, "Donor Status" %in% colnames(comp), "Case ID" %in% colnames(comp))
-
       clip <- isTRUE(input$enrich_clip)
-      stat_mode <- input$enrich_stat %||% "Median"
       region <- input$enrich_region %||% "peri"
-
-      # Card B phenotype filter — controls which phenotypes appear in BOTH the
-      # bar chart and the heatmap (both consume enrich_summary()). The default
-      # hidden set (Acinar etc.) is applied via the checkbox's initial `selected`
-      # in output$enrich_pheno_filter; here we just honor the current selection.
-      # A NULL selection ("None" clicked, or the filter not yet mounted) means
-      # "show nothing" — every phenotype is skipped below.
+      own <- identical(region, "peri") && identical(input$enrich_baseline %||% "cohort", "own")
+      profile <- if (own) donor_distance_profile() else NULL
+      if (own) req(profile)
       sel <- input$enrich_phenos
-
-      statuses <- unique(comp$`Donor Status`)
-      comp_cols <- colnames(comp)
       rows <- list()
-
       for (itm in phenotype_options()) {
         if (!(itm$label %in% sel)) next
-        # Select column based on region
-        if (region == "peri") {
-          col <- itm$enrich      # enrichment z-score (peri)
-        } else if (region == "core") {
-          col <- itm$prop_core   # core proportion
-        } else {
-          col <- itm$peri_prop   # peri proportion
-        }
-        if (is.null(col) || is.na(col) || !(col %in% comp_cols)) next
-
-        for (ds in statuses) {
-          mask <- comp$`Donor Status` == ds
-          vals <- comp[[col]][mask]
-          donors <- comp$`Case ID`[mask]
-          finite_mask <- is.finite(vals)
-          vals <- vals[finite_mask]
-          donors <- donors[finite_mask]
-          if (region == "peri" && clip) {
-            clip_mask <- vals >= -5 & vals <= 5
-            vals <- vals[clip_mask]
-            donors <- donors[clip_mask]
-          }
-          if (length(vals) == 0) next
-
-          # Aggregate to donor-level means first (avoids pseudoreplication;
-          # islet-level median is 0 for rare immune types because >50% of islets
-          # have no cells of that type)
-          donor_means <- tapply(vals, donors, mean, na.rm = TRUE)
-          donor_means <- donor_means[is.finite(donor_means)]
-          n <- length(donor_means)
-          if (n == 0) next
-
-          if (stat_mode == "Median") {
-            z_summary <- median(donor_means)
-            q <- quantile(donor_means, c(0.25, 0.75))
-            z_lo <- q[1]
-            z_hi <- q[2]
-          } else {
-            z_summary <- mean(donor_means)
-            se <- if (n > 1) sd(donor_means) / sqrt(n) else 0
-            z_lo <- z_summary - se
-            z_hi <- z_summary + se
-          }
-          rows[[length(rows) + 1]] <- data.frame(
-            col = col, cell_type = itm$label, donor_status = ds,
-            z_summary = z_summary, z_lo = z_lo, z_hi = z_hi, n = n,
-            stringsAsFactors = FALSE
-          )
-        }
+        if (region != "core" && itm$label %in% COMPOSITION_ENDOCRINE) next
+        col <- switch(region, peri = itm$enrich, core = itm$prop_core, itm$peri_prop)
+        if (is.null(col) || is.na(col) || !(col %in% colnames(comp))) next
+        vals <- if (own) own_tissue_enrich_z(comp, itm$safe, itm$label, profile) else comp[[col]]
+        keep <- is.finite(vals)
+        if (region == "peri" && clip) keep <- keep & vals >= -5 & vals <= 5
+        if (!any(keep)) next
+        m <- tapply(vals[keep], as.character(comp$`Case ID`[keep]), mean)
+        st <- tapply(as.character(comp$`Donor Status`[keep]), as.character(comp$`Case ID`[keep]), `[`, 1)
+        rows[[length(rows) + 1]] <- data.frame(
+          col = if (own) paste0("own_tissue_", col) else col, cell_type = itm$label, case_id = names(m),
+          donor_status = as.character(st[names(m)]), value = as.numeric(m), stringsAsFactors = FALSE)
       }
       if (length(rows) == 0) return(NULL)
       do.call(rbind, rows)
     })
 
-    # Card B CSV: exactly the donor-aggregated matrix both the bar chart and the
-    # heatmap render (enrich_summary()), not the pre-aggregation islet rows.
+    # ---- Card B: summary across donors (median and IQR, or mean and SEM) ----
+    enrich_summary <- reactive({
+      dv <- enrich_donor_values()
+      req(dv)
+      stat_mode <- input$enrich_stat %||% "Median"
+      groups <- split(dv, list(dv$cell_type, dv$donor_status), drop = TRUE)
+      out <- do.call(rbind, lapply(groups, function(g) {
+        v <- g$value; n <- length(v)
+        if (stat_mode == "Median") {
+          q <- stats::quantile(v, c(0.25, 0.75), names = FALSE); s <- stats::median(v); lo <- q[1]; hi <- q[2]
+        } else {
+          s <- mean(v); se <- if (n > 1) stats::sd(v) / sqrt(n) else 0; lo <- s - se; hi <- s + se
+        }
+        data.frame(col = g$col[1], cell_type = g$cell_type[1], donor_status = g$donor_status[1],
+                   z_summary = s, z_lo = lo, z_hi = hi, n = n, stringsAsFactors = FALSE)
+      }))
+      # Keep the phenotype order of phenotype_options().
+      out[order(match(out$cell_type, names(phenotype_options())), match(out$donor_status, STATUS_ORDER)), ,
+          drop = FALSE]
+    })
+
+    enrich_measure_label <- function() {
+      switch(input$enrich_region %||% "peri",
+             peri = if (identical(input$enrich_baseline %||% "cohort", "own")) "Enrichment z (own tissue)"
+                    else "Enrichment z (cohort)",
+             core = "Proportion (core)", "Proportion (peri-islet)")
+    }
+
+    # Card B CSV: the per-donor values and the summary the two plots render.
     output$dl_enrichment_csv <- downloadHandler(
       filename = function() paste0("spatial_enrichment_",
                                    format(Sys.time(), "%Y%m%d_%H%M%S"), ".csv"),
       content = function(file) {
+        dv <- tryCatch(enrich_donor_values(), error = function(e) NULL)
         es <- tryCatch(enrich_summary(), error = function(e) NULL)
-        region <- input$enrich_region %||% "peri"
         stat_mode <- input$enrich_stat %||% "Median"
         out <- NULL
-        if (!is.null(es) && nrow(es) > 0) {
-          out <- data.frame(
-            phenotype    = es$cell_type,
-            donor_status = es$donor_status,
-            source_column = es$col,
-            summary      = es$z_summary,
-            lo           = es$z_lo,
-            hi           = es$z_hi,
-            n_donors     = es$n,
-            stringsAsFactors = FALSE)
-          # Name the interval columns after the statistic that produced them.
-          names(out)[names(out) == "summary"] <-
-            if (stat_mode == "Median") "median_of_donor_means" else "mean_of_donor_means"
-          names(out)[names(out) == "lo"] <- if (stat_mode == "Median") "q25" else "mean_minus_sem"
-          names(out)[names(out) == "hi"] <- if (stat_mode == "Median") "q75" else "mean_plus_sem"
+        if (!is.null(dv) && nrow(dv) > 0) {
+          out <- rbind(
+            data.frame(level = "donor", phenotype = dv$cell_type, donor_status = dv$donor_status,
+                       case_id = dv$case_id, source_column = dv$col, value = dv$value, lo = NA_real_,
+                       hi = NA_real_, n_donors = NA_integer_, stringsAsFactors = FALSE),
+            data.frame(level = paste0(tolower(stat_mode), "_of_donor_means"), phenotype = es$cell_type,
+                       donor_status = es$donor_status, case_id = NA_character_, source_column = es$col,
+                       value = es$z_summary, lo = es$z_lo, hi = es$z_hi, n_donors = es$n,
+                       stringsAsFactors = FALSE))
         }
         write_islet_csv(file, out, islet_csv_header(
-          "Spatial — phenotype composition & enrichment by donor status",
-          paste("Region:", switch(region, peri = "peri-islet enrichment z-score",
-                                  core = "core proportion", "peri-islet proportion")),
-          paste("Statistic:", stat_mode, "of per-donor means"),
+          "Spatial — phenotype composition & enrichment",
+          paste("Measure:", enrich_measure_label()),
+          paste("Interval:", if (stat_mode == "Median") "lo/hi = 25th/75th percentile of donor means"
+                             else "lo/hi = mean -/+ SEM of donor means"),
           paste("Donor groups:", paste(input$groups %||% "(all)", collapse = ", ")),
           paste("Endocrine objects:", paste(sort(unique(as.character(prepared()$comp$object_class %||% "Islet"))), collapse = ", ")),
           paste("Phenotypes shown:", paste(input$enrich_phenos %||% "(none)", collapse = ", ")),
-          paste("Display clip to z in [-5, 5]:", if (isTRUE(input$enrich_clip)) "ON" else "OFF"),
-          "Values are aggregated to per-donor means FIRST, then summarised across donors (avoids pseudoreplication)."
+          paste("Object z outside [-5, 5] dropped before the donor mean:", if (isTRUE(input$enrich_clip)) "ON" else "OFF"),
+          "Rows: level=donor is each donor's mean over its objects; the other level summarises those donor means."
         ))
       }
     )
@@ -956,104 +920,68 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         downloadButton(ns(id), "Download CSV", style = "font-size: 12px; padding: 3px 10px;"))
 
       tagList(
-        # ==== Section controls ====
-        # The "Exclude outliers" checkbox and z slider are the non-namespaced
-        # mirrors of the Plot/Trajectory controls — app.R synchronisation
-        # observers keep all three tabs in step.
-        # The section's controls use the same Data / View panels as every tab (control_panel()).
+        # ==== Section heading ====
+        # The section's own Data / View panels were removed with the outlier box plots (owner review, 2026-10-20):
+        # every remaining control chooses what one card plots, so it sits on that card. The donor status and
+        # endocrine-object selection come from the Data controls at the top of the tab.
         fluidRow(column(12,
-          h4("Neighborhood Analysis", style = "margin: 18px 0 10px; font-weight: 600;"),
-          control_panel("Data controls", open = TRUE,
-            help = list(
-              tags$p("These controls reach the Neighborhood Analysis cards below. Click the panel's title to open",
-                     " or close it."),
-              tags$p(tags$strong("Objects."),
-                     " Every neighborhood card except the Distance-to-islet profile uses the endocrine objects",
-                     " selected in the Data controls at the top of the tab; the profile reads per-cell data."),
-              tags$p(tags$strong("Exclude outliers / z-threshold"),
-                     " apply to Peri enrichment by status and Distance to nearest cell. The checkbox and slider are",
-                     " synced with the Plot tab.")),
-            fluidRow(
-              column(3, uiOutput(ns("nbr_islet_count"))),
-              column(3,
-                tags$div(title = GLOBAL_OUTLIER_TOOLTIP,
-                  checkboxInput("spatial_remove_outliers", "Exclude outliers", value = FALSE))
-              ),
-              column(3,
-                sliderInput("spatial_outlier_z", "Outlier z-threshold",
-                            min = 0.5, max = 10, value = 3, step = 0.5)
-              )
-            )
-          ),
-          control_panel("View controls",
-            help = list(tags$p(tags$strong("Point size / transparency"),
-                               " apply to Peri vs core proportion and Distance to nearest cell.")),
-            fluidRow(
-              column(3,
-                sliderInput(ns("nbr_pt_size"), "Point size", min = 2, max = 12, value = 5, step = 1)
-              ),
-              column(3,
-                sliderInput(ns("nbr_pt_alpha"), "Point transparency", min = 0, max = 0.95, value = 0.6,
-                            step = 0.05)
-              )
-            )
-          )
+          div(style = "display: flex; align-items: baseline; gap: 12px; margin: 18px 0 10px;",
+            h4("Neighborhood Analysis", style = "margin: 0; font-weight: 600;"),
+            uiOutput(ns("nbr_islet_count"), inline = TRUE))
         )),
 
-        # ==== Row 1: the islet-level cards the control bar drives ====
+        # ==== Row 1: insulitis, insulitis by beta-cell content, immune gradient ====
         fluidRow(style = "display: flex; flex-wrap: wrap;",
           column(4,
             div(class = "card", style = card_style,
-              card_title("Peri enrichment by status",
-                tags$p("Per-phenotype peri-zone enrichment across donor statuses, one point per donor."),
-                tags$p("Outlier exclusion follows the Neighborhood Analysis toggle (Tukey 1.5\u00d7IQR per donor",
-                       " status \u2014 enrichment z is already standardised, so the IQR fence is used instead of the",
-                       " modified z-score).")),
+              card_title("Insulitis prevalence",
+                tags$p("Each donor's share of the selected endocrine objects with at least the chosen number of",
+                       " immune cells in the core and the 20 µm band. Immune cells are every T cell, B cell,",
+                       " macrophage and other leukocyte, subtyped or not. Bars are donor means ± SEM and each",
+                       " point is a donor, so every donor counts once; the p value is a Kruskal-Wallis test on the",
+                       " donor shares."),
+                tags$p("The threshold follows nPOD's criterion of 15 CD45+ cells around an islet. It is a cell",
+                       " count, so small objects rarely reach it: with Clusters selected the shares fall. Uncheck",
+                       " Cluster in the Data controls to count Islets only.")),
               div(style = ctrl_row,
-                div(style = "flex: 1; min-width: 180px;",
-                  nbr_select("infiltration_phenotype", "100%")
-                ),
-                checkboxInput(ns("infiltration_show_outlier_table"),
-                              "Show outlier table", value = FALSE)
-              ),
-              plotlyOutput(ns("infiltration_bars"), height = "420px"),
-              dl_csv("dl_infiltration_csv"),
-              uiOutput(ns("infiltration_outlier_info"))
+                sliderInput(ns("insulitis_threshold"), "Immune cells per object (at least)", min = 1, max = 50,
+                            value = 15, step = 1, width = "100%")),
+              plotlyOutput(ns("insulitis_bars"), height = "420px"),
+              dl_csv("dl_insulitis_csv")
             )
           ),
           column(4,
             div(class = "card", style = card_style,
-              card_title("Peri vs core proportion",
-                tags$p("Each object's peri-islet proportion of the chosen phenotype against its core proportion.")),
+              card_title("Immune cells and beta-cell content",
+                tags$p("For each donor, the mean immune share of the 20 µm band around its objects that still",
+                       " have beta cells and around its insulin-deficient objects, joined by a line. An object is",
+                       " insulin-deficient when beta cells are under the chosen share of its core's Beta, Alpha,",
+                       " Delta and CHGA+ hormone-negative cells. A donor with only one kind of object is a single",
+                       " point."),
+                tags$p("In T1D, insulitis is expected mostly around islets that still hold beta cells.")),
               div(style = ctrl_row,
-                div(style = "flex: 1; min-width: 180px;",
-                  nbr_select("scatter_phenotype", "100%")
-                ),
-                checkboxInput(ns("scatter_sqrt"), "Sqrt scale", value = TRUE),
-                checkboxInput(ns("scatter_trend"), "Trend lines", value = FALSE)
-              ),
-              plotlyOutput(ns("infiltration_scatter"), height = "420px")
+                sliderInput(ns("beta_cut"), "Insulin-deficient below this beta-cell share", min = 0, max = 0.5,
+                            value = 0.1, step = 0.05, width = "100%")),
+              plotlyOutput(ns("beta_immune"), height = "420px"),
+              dl_csv("dl_beta_immune_csv")
             )
           ),
           column(4,
             div(class = "card", style = card_style,
-              card_title("Distance to nearest cell",
-                tags$p("Per-object distance (\u00b5m) from the centre of the object's core cells to the nearest",
-                       " peri-islet cell of each phenotype. NAs indicate no cells of that type in the peri-islet zone."),
-                tags$p("Outlier exclusion follows the Neighborhood Analysis toggle (robust |z| from median/MAD on",
-                       " log(1+distance), per donor status \u2014 two-sided; threshold from the slider). Excluded",
-                       " points still appear as faint \u00d7 markers.")),
+              card_title("Immune gradient around islets",
+                tags$p("For each donor and each distance from the nearest endocrine object's border, the chosen",
+                       " cells' share of all cells there, divided by the same share in the donor's own tissue (its",
+                       " cells outside every endocrine object and its band). 1, the dashed line, is the donor's",
+                       " tissue level; above 1 the cells gather there. Lines are the median of donors with their",
+                       " IQR. Core holds the cells inside objects."),
+                tags$p("Dividing by each donor's own tissue separates gathering at islets from a donor having more",
+                       " immune cells everywhere. It reads per-cell data, so the Endocrine objects selector does",
+                       " not apply.")),
               div(style = ctrl_row,
-                div(style = "flex: 1; min-width: 180px;",
-                  # Every retained phenotype with min_dist_*.
-                  nbr_select("distance_metric", "100%")
-                ),
-                checkboxInput(ns("distance_show_outlier_table"),
-                              "Show outlier table", value = FALSE)
-              ),
-              plotlyOutput(ns("distance_boxplot"), height = "420px"),
-              dl_csv("dl_distance_csv"),
-              uiOutput(ns("distance_outlier_info"))
+                selectInput(ns("gradient_phenotype"), "Cells", choices = GRADIENT_CHOICES, selected = "all",
+                            width = "100%")),
+              plotlyOutput(ns("immune_gradient"), height = "420px"),
+              dl_csv("dl_gradient_csv")
             )
           )
         ),
@@ -1065,26 +993,36 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           div(class = "card", style = card_style,
             div(style = ctrl_row,
               card_title("Phenotype composition & enrichment",
-                tags$p("Which phenotypes are present in islet core vs peri-islet zones, and which are enriched vs",
-                       " tissue-wide background?"),
-                tags$p("Enrichment z-scores (peri-islet mode) compare each phenotype's count in the peri-islet band",
-                       " with the count expected from its share of all analysed cells in the cohort: z = (observed",
-                       " \u2212 expected) / \u221aexpected (Poisson approximation). z > 0 = enriched; z < 0 =",
-                       " depleted. Core and peri-islet proportion modes show raw cell type fractions (0\u20131)",
-                       " within each compartment."),
-                tags$p("The phenotype checkboxes and the Region / Summary choices apply to both the bar chart and",
-                       " the heatmap. Clip extreme z > 5 only saturates the display scale; it is not an outlier",
-                       " filter.")),
+                tags$p("Every listed phenotype at once, in the core or the 20 \u00b5m band. The left chart summarises",
+                       " each donor status across its donors; the heatmap shows each donor, grouped by status, so the",
+                       " spread behind each bar is visible. Each donor's value is the mean over its objects."),
+                tags$p(tags$strong("Enrichment z"),
+                       " (peri-islet mode) compares each phenotype's count in an object's band with the count expected",
+                       " from a reference share: z = (observed \u2212 expected) / \u221aexpected. z > 0 = more than",
+                       " expected. Baseline Cohort uses the phenotype's share of all analysed cells in the cohort, so",
+                       " a donor with more of it everywhere scores high: it measures how many there are near islets.",
+                       " Own tissue uses the donor's own share outside every endocrine object and its band: it",
+                       " measures whether they gather at islets. Proportion modes show the raw fraction (0\u20131)",
+                       " of each compartment's cells."),
+                tags$p("Band modes leave out Beta, Alpha, Delta and CHGA+ hormone-negative cells: endocrine cells are",
+                       " called only inside endocrine objects, so a band holds one only where a Single lies.",
+                       " Drop object z beyond \u00b15 removes those objects' values before each donor mean. The",
+                       " phenotype checkboxes and the Region / Summary choices apply to both plots.")),
               radioButtons(ns("enrich_region"), "Region",
                            c("Peri-islet (enrichment z)" = "peri",
                              "Core (proportion)" = "core",
                              "Peri-islet (proportion)" = "peri_prop"),
                            selected = "peri", inline = TRUE),
+              conditionalPanel(
+                condition = paste0("input['", ns("enrich_region"), "'] == 'peri'"),
+                radioButtons(ns("enrich_baseline"), "Baseline",
+                             c("Cohort" = "cohort", "Own tissue" = "own"), selected = "cohort", inline = TRUE)
+              ),
               radioButtons(ns("enrich_stat"), "Summary", c("Median", "Mean"),
                            selected = "Median", inline = TRUE),
               conditionalPanel(
                 condition = paste0("input['", ns("enrich_region"), "'] == 'peri'"),
-                checkboxInput(ns("enrich_clip"), "Clip extreme z > 5", value = TRUE)
+                checkboxInput(ns("enrich_clip"), "Drop object z beyond \u00b15", value = TRUE)
               ),
               checkboxInput(ns("enrich_show_values"), "Show heatmap values", value = TRUE)
             ),
@@ -1101,39 +1039,17 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         # ==== Row 3: tissue-wide distance profile ====
         fluidRow(column(12,
           div(class = "card", style = card_style,
-            # Two views: the donor-averaged KDE (default) or the Senior-ported
-            # per-cell tissue-wide density/composition. CODEX phenotypes only.
+            # The Senior-ported per-cell tissue-wide density / composition. CODEX phenotypes only.
             div(style = ctrl_row,
               card_title("Distance-to-islet profile",
-                tags$p(tags$strong("Donor-averaged KDE"),
-                       " (the default view): for the chosen phenotype, a density of its cells' signed distance to",
-                       " the islet border for each donor, then combined per donor status with equal weight per donor.",
-                       " Distribution shape averages densities that each integrate to 1; Cell abundance takes the",
-                       " median of densities scaled by each donor's cell count. Negative = inside the islet."),
-                tags$p(tags$strong("Per-cell distance:"),
-                       " per-cell signed distance-to-islet on a symlog axis \u2014 a density split by disease status",
+                tags$p("Per-cell signed distance-to-islet on a symlog axis \u2014 a density split by disease status",
                        " (per phenotype or all cells) or a phenotype composition (stacked bars, one facet per status,",
                        " zero-anchored at the islet border), spanning islet interior to bulk tissue. Negative = inside",
                        " islet, positive = outside; the dashed line marks the border. Pooled per cell (descriptive)",
-                       " \u2014 for donor-fair group comparison see Peri enrichment by status.")),
-              radioButtons(ns("dist_view"), "View",
-                           choices = c("Donor-averaged KDE" = "kde",
-                                       "Per-cell distance" = "cellwise"),
-                           selected = "kde", inline = TRUE)
+                       " \u2014 every cell counts once, so donors with more cells weigh more. For a donor-fair view see",
+                       " Immune gradient around islets."))
             ),
-            conditionalPanel(
-              condition = "input.dist_view == 'kde'", ns = ns,
-              div(style = ctrl_row,
-                div(style = "min-width: 240px;",
-                  nbr_select("kde_immune_type", "260px")
-                ),
-                radioButtons(ns("kde_metric"), "Y-axis", inline = TRUE, selected = "shape",
-                             choices = c("Distribution shape" = "shape",
-                                         "Cell abundance" = "abundance"))
-              )
-            ),
-            conditionalPanel(
-              condition = "input.dist_view == 'cellwise'", ns = ns,
+            tagList(
               div(style = ctrl_row,
                 radioButtons(ns("dist_mode"), "Group by",
                              choices = c("Phenotype" = "phenotype", "Marker+" = "marker"),
@@ -1189,145 +1105,9 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
            paste0(formatC(n, big.mark = ","), " objects"))
     })
 
-    # ---- Card A: excluded-outlier table ----
-    # Mirrors the Plot tab's plot_outlier_info pattern: yellow warning banner
-    # with header counts, body explanation, and a scrollable table. Three
-    # display states — table, no-outliers note, or filter-OFF flagged note.
-    output$infiltration_outlier_info <- renderUI({
-      if (!isTRUE(input$infiltration_show_outlier_table)) return(NULL)
-      tbl <- infiltration_outliers()
-      filter_on <- isTRUE(remove_outliers())
-
-      if (is.null(tbl) || nrow(tbl) == 0) {
-        return(tags$div(
-          style = "margin-top: 10px; padding: 8px 10px; background-color: var(--islet-info-bg); border: 1px solid var(--islet-info-border); border-radius: 5px; color: var(--islet-info-fg); font-size: 12px;",
-          "No outliers detected for the current phenotype."
-        ))
-      }
-
-      header <- if (filter_on) {
-        sprintf("⚠️ %d Outlier%s Excluded (Tukey 1.5×IQR per donor status, zero-aware)",
-                nrow(tbl), ifelse(nrow(tbl) > 1, "s", ""))
-      } else {
-        sprintf("ⓘ %d Outlier%s Flagged (global filter OFF — still in summary)",
-                nrow(tbl), ifelse(nrow(tbl) > 1, "s", ""))
-      }
-      body_text <- if (filter_on) {
-        "The following islets were excluded from the donor-level enrichment summary because their value fell beyond the Tukey fences (Q1 − 1.5·IQR, Q3 + 1.5·IQR) of the non-zero distribution for their donor status:"
-      } else {
-        "These points would be excluded if the global outlier filter were turned on; they currently contribute to the donor-level summary:"
-      }
-
-      tags$div(
-        style = "margin-top: 10px; padding: 10px; background-color: var(--islet-warn-bg); border: 1px solid var(--islet-warn-border); border-radius: 5px; color: var(--islet-warn-fg);",
-        tags$h6(style = "margin-top: 0; color: var(--islet-warn-fg);", header),
-        tags$p(style = "color: var(--islet-warn-fg); font-size: 12px; margin-bottom: 10px;", body_text),
-        tags$div(style = "max-height: 220px; overflow-y: auto;",
-          renderTable(tbl, striped = TRUE, hover = TRUE, bordered = TRUE,
-                      spacing = "xs", width = "100%")
-        )
-      )
-    })
-
-    # ---- Card C: excluded-outlier table ----
-    output$distance_outlier_info <- renderUI({
-      if (!isTRUE(input$distance_show_outlier_table)) return(NULL)
-      tbl <- distance_outliers()
-      filter_on <- isTRUE(remove_outliers())
-
-      if (is.null(tbl) || nrow(tbl) == 0) {
-        return(tags$div(
-          style = "margin-top: 10px; padding: 8px 10px; background-color: var(--islet-info-bg); border: 1px solid var(--islet-info-border); border-radius: 5px; color: var(--islet-info-fg); font-size: 12px;",
-          "No outliers detected for the current distance metric."
-        ))
-      }
-
-      thr <- suppressWarnings(as.numeric(outlier_threshold()))
-      if (!is.finite(thr)) thr <- 3
-      header <- if (filter_on) {
-        sprintf("⚠️ %d Outlier%s Excluded (|z| > %g per donor status on log(1+distance))",
-                nrow(tbl), ifelse(nrow(tbl) > 1, "s", ""), thr)
-      } else {
-        sprintf("ⓘ %d Outlier%s Flagged (global filter OFF — still in box plot)",
-                nrow(tbl), ifelse(nrow(tbl) > 1, "s", ""))
-      }
-      body_text <- if (filter_on) {
-        sprintf("The following islets were excluded from the box plot because their robust |z| on log(1 + distance) exceeded %g within their donor status (both high- and low-side tails). They still render on the plot as faint grey × markers:", thr)
-      } else {
-        "These points would be excluded if the global outlier filter were turned on; they currently sit in the box plot's distribution:"
-      }
-
-      tags$div(
-        style = "margin-top: 10px; padding: 10px; background-color: var(--islet-warn-bg); border: 1px solid var(--islet-warn-border); border-radius: 5px; color: var(--islet-warn-fg);",
-        tags$h6(style = "margin-top: 0; color: var(--islet-warn-fg);", header),
-        tags$p(style = "color: var(--islet-warn-fg); font-size: 12px; margin-bottom: 10px;", body_text),
-        tags$div(style = "max-height: 220px; overflow-y: auto;",
-          renderTable(tbl, striped = TRUE, hover = TRUE, bordered = TRUE,
-                      spacing = "xs", width = "100%")
-        )
-      )
-    })
-
-    # ---- Populate dynamic phenotype dropdowns once data is available ----
-    # Replaces the previous hand-curated 7-immune-type lists. Choices are
-    # built from prepared()$comp columns (enrich_z_*, prop_*, peri_prop_*,
-    # min_dist_*) so every phenotype the pipeline computed metrics for is
-    # surfaced uniformly. Defaults pick a sensible immune phenotype when
-    # available (Macrophage), else first.
-    pick_default <- function(choices, prefer = c("Macrophage", "Immune", "T_cell", "CD8a_Tcell")) {
-      if (length(choices) == 0) return(character(0))
-      for (p in prefer) if (p %in% choices) return(p)
-      choices[[1]]
-    }
-
-    # The choices are built into the selectInputs by output$neighborhood_cards itself (2026-10-19). They used to be
-    # sent by an observer through updateSelectInput, but outputs on a hidden tab are suspended while observers are
-    # not: the observer ran at startup, before the Spatial tab had mounted the inputs, its update was lost, and the
-    # four dropdowns opened empty.
-    nbr_select_choices <- reactive({
-      ch <- phenotype_choices()
-      opts <- phenotype_options()
-      # Card A-Right: peri vs core proportion (only phenotypes with both prop_ + peri_prop_)
-      paired <- vapply(opts, function(o) !is.na(o$prop_core) && !is.na(o$peri_prop), logical(1))
-      # Card C-Left: distance metric — min_dist_<phenotype> for retained labels.
-      # The "Immune (all)" aggregate was removed: it pools the retired residual
-      # labels (Immune, T cell, APCs) with the retained immune subtypes.
-      dist_opts <- Filter(function(o) !is.na(o$min_dist), opts)
-      dist_ch <- stats::setNames(
-                   vapply(dist_opts, function(o) o$min_dist, character(1)),
-                   vapply(dist_opts, function(o) o$label, character(1)))
-      # Card C-Right "kde" view: the same universe, limited to phenotypes in the KDE data. The "cellwise" view
-      # sets its own choices at UI-build time from cell_distance_phenotypes().
-      ch_kde <- character(0)
-      kde_df <- load_immune_kde_data()
-      if (!is.null(kde_df) && "phenotype" %in% colnames(kde_df)) {
-        present <- unique(as.character(kde_df$phenotype))
-        kopts <- Filter(function(o) o$safe %in% present, opts)
-        ch_kde <- stats::setNames(
-                    vapply(kopts, function(o) o$safe,  character(1)),
-                    vapply(kopts, function(o) o$label, character(1)))
-      }
-      list(infiltration_phenotype = ch, scatter_phenotype = ch[paired], distance_metric = dist_ch,
-           kde_immune_type = ch_kde)
-    })
-    # Keep the current choice when it is still offered, else a sensible immune default.
-    nbr_select_selected <- function(id) {
-      choices <- nbr_select_choices()[[id]]
-      current <- isolate(input[[id]])
-      if (!is.null(current) && current %in% choices) return(current)
-      if (identical(id, "distance_metric"))
-        return(pick_default(choices, prefer = paste0("min_dist_", c("Macrophage", "CD8a_Tcell"))))
-      pick_default(choices)
-    }
-    nbr_select <- function(id, width) {
-      selectInput(ns(id), "Phenotype", choices = nbr_select_choices()[[id]],
-                  selected = nbr_select_selected(id), width = width)
-    }
-
     # Card C-Right "cellwise": repopulate the phenotype/marker pickers when the
     # group-by mode flips. Depends on input$dist_mode so it fires post-mount.
-    observeEvent(list(input$dist_view, input$dist_mode), {
-      if (!identical(input$dist_view %||% "kde", "cellwise")) return()
+    observeEvent(input$dist_mode, {
       mode <- input$dist_mode %||% "phenotype"
       items <- if (identical(mode, "marker")) cell_distance_markers() else cell_distance_phenotypes()
       ch <- c("All cells" = "__all__", stats::setNames(items, items))
@@ -1344,341 +1124,198 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       updateCheckboxGroupInput(session, "dist_comp_items", choices = items, selected = sel_c)
     }, ignoreNULL = FALSE)
 
-    # Selected safe-name or min_dist column -> display label. Marker-rule hints
-    # are not shown inline; the definitions live in the Data controls help popover.
-    .lookup_pheno_label <- function(safe_or_metric) {
-      if (is.null(safe_or_metric) || !nzchar(safe_or_metric)) return(NULL)
-      opts <- phenotype_options()
-      for (o in opts) if (identical(o$safe, safe_or_metric)) return(o$label)
-      for (o in opts) if (identical(o$min_dist, safe_or_metric)) return(o$label)
-      safe_or_metric
+    # ==== Neighborhood row 1 (owner review, 2026-10-20): insulitis, insulitis by beta content, immune gradient ====
+    # They replaced Peri enrichment by status (one column of the composition card), Peri vs core proportion (immune
+    # cells almost never in the core, endocrine cells almost never in the band) and Distance to nearest cell (taken
+    # from the core's centre, so it tracked object radius). Helpers: R/spatial_islet_immune.R. Every value is
+    # donor-level.
+    donor_points_bars <- function(d, y_title, title, filename, fmt = "%.3f", percent = FALSE) {
+      dcols <- donor_colors_reactive()
+      fonts <- plotly_islet_fonts()
+      kw <- donor_kw_p(d$value, d$status)
+      p <- plot_ly()
+      for (s in levels(d$status)) {
+        g <- d[d$status == s, , drop = FALSE]
+        if (!nrow(g)) next
+        m <- mean(g$value); se <- if (nrow(g) > 1) stats::sd(g$value) / sqrt(nrow(g)) else 0
+        p <- p %>%
+          add_trace(x = s, y = m, type = "bar", showlegend = FALSE,
+                    marker = list(color = paste0(dcols[s], "66"), line = list(color = dcols[s], width = 1.5)),
+                    error_y = list(type = "data", array = se, color = dcols[s], thickness = 1.5, width = 6),
+                    hovertext = sprintf(paste0("%s<br>Mean: ", fmt, "<br>SEM: ", fmt, "<br>N donors: %d"),
+                                        s, m, se, nrow(g)), hoverinfo = "text") %>%
+          add_trace(x = s, y = g$value, type = "scatter", mode = "markers", showlegend = FALSE,
+                    marker = list(size = 9, opacity = 0.8, color = dcols[s]),
+                    hovertext = paste0("Donor ", g$case_id, ": ", sprintf(fmt, g$value), g$detail),
+                    hoverinfo = "text")
+      }
+      p %>% layout(
+        font = fonts$global, barmode = "overlay", showlegend = FALSE, margin = list(t = 110),
+        title = list(text = paste0(title, "<br><sup>Donor means ± SEM; points are donors",
+                                   if (is.finite(kw)) sprintf("<br>Kruskal-Wallis p = %.3g", kw) else "", "</sup>"),
+                     font = fonts$title),
+        xaxis = list(title = list(text = ""), tickfont = fonts$axis_tick, categoryorder = "array",
+                     categoryarray = STATUS_ORDER),
+        yaxis = list(title = list(text = y_title, font = fonts$axis_title), tickfont = fonts$axis_tick,
+                     tickformat = if (percent) ".0%" else NULL, rangemode = "tozero")
+      ) %>% plotly_islet_config(filename)
     }
 
-    # ==== Card A-Left: Per-phenotype peri-zone enrichment z-score (donor-level) ====
-    # Card A data, extracted from the renderer so `dl_infiltration_csv` exports
-    # exactly what is plotted (same outlier flags, same donor aggregation)
-    # rather than re-deriving a parallel version that can drift.
-    infiltration_data <- reactive({
-      comp <- nbr_comp()
-      req(comp, "Donor Status" %in% colnames(comp), "Case ID" %in% colnames(comp))
-      opts <- phenotype_options()
-      sel_safe <- input$infiltration_phenotype
-      req(sel_safe)
-      itm <- Filter(function(o) o$safe == sel_safe, opts)
-      req(length(itm) > 0)
-      itm <- itm[[1]]
-      metric <- itm$enrich
-      req(metric %in% colnames(comp))
-      metric_label <- paste0("Peri Enrichment z-score — ", itm$label)
-
-      df <- data.frame(
-        value = comp[[metric]],
-        status = comp$`Donor Status`,
-        case_id = comp$`Case ID`,
-        islet_key = if ("islet_key" %in% colnames(comp)) comp$islet_key else NA_character_,
-        stringsAsFactors = FALSE
-      )
-      df <- df[is.finite(df$value), , drop = FALSE]
-      if (nrow(df) == 0) return(list(empty = "No data", label = metric_label, itm = itm))
-
-      # Outlier handling via shared helper. Tukey IQR (not the modified z) because
-      # enrichment z is already a standardised, roughly symmetric quantity.
-      #
-      # This previously passed `exclude_zeros = TRUE` on the belief that
-      # enrichment z-scores are zero-inflated. They are not: enrich_z is a Poisson
-      # z, (observed - expected) / sqrt(expected) (compute_neighborhood_metrics.py),
-      # so a phenotype absent from an islet's peri zone yields z = -sqrt(expected),
-      # a negative continuum — never exactly 0. Measured across all 5,214 islets,
-      # every enrich_z_* column contains zero exact zeros, so the flag was a no-op.
-      # (The real zero-inflation lives in peri_prop_*, which this card doesn't plot.)
-      df <- flag_outliers(df, value_col = "value", group_col = "status",
-                          method = "iqr", threshold = 1.5,
-                          enabled = isTRUE(remove_outliers()))
-      filter_summary <- summarize_outlier_filter(df)
-      df_full <- df
-
-      flagged <- df_full[isTRUE(attr(df_full, "outlier_enabled")) & df_full$is_outlier, , drop = FALSE]
-      if (!isTRUE(attr(df_full, "outlier_enabled"))) {
-        flagged <- df_full[df_full$is_outlier, , drop = FALSE]
-      }
-
-      if (isTRUE(remove_outliers())) {
-        df <- df[!df$is_outlier | is.na(df$is_outlier), , drop = FALSE]
-      }
-      if (nrow(df) == 0) {
-        return(list(empty = "No data after outlier removal", label = metric_label,
-                    itm = itm, islets = df_full, flagged = flagged))
-      }
-
-      # Aggregate to donor-level means
-      donor_df <- df %>%
-        dplyr::group_by(case_id, status) %>%
-        dplyr::summarise(value = mean(value, na.rm = TRUE), .groups = "drop")
-
-      status_order <- c("ND", "Aab+", "T1D")
-      donor_df$status <- factor(donor_df$status, levels = intersect(status_order, unique(donor_df$status)))
-
-      # Donor-level summary: mean +/- SEM per group
-      summary_df <- donor_df %>%
-        dplyr::group_by(status) %>%
-        dplyr::summarise(
-          mean_val = mean(value, na.rm = TRUE),
-          sd_val = sd(value, na.rm = TRUE),
-          n = dplyr::n(),
-          sem = sd(value, na.rm = TRUE) / sqrt(dplyr::n()),
-          .groups = "drop"
-        )
-
-      # Kruskal-Wallis on donor-level means (N=15)
-      kw_p <- tryCatch({
-        kt <- kruskal.test(value ~ status, data = donor_df)
-        kt$p.value
-      }, error = function(e) NA_real_)
-
-      list(itm = itm, label = metric_label, islets = df_full, kept = df,
-           flagged = flagged, donor_df = donor_df, summary_df = summary_df,
-           kw_p = kw_p, filter_summary = filter_summary)
+    insulitis_data <- reactive({
+      d <- insulitis_prevalence(nbr_comp(), input$insulitis_threshold %||% 15)
+      req(d, nrow(d) > 0)
+      d$detail <- paste0(" (", d$insulitic, " of ", d$objects, " objects)")
+      d
     })
 
-    output$infiltration_bars <- renderPlotly({
-      d <- infiltration_data()
-      req(d)
-
-      # Populate the per-card outlier table reactiveVal (consumed by the
-      # `infiltration_outlier_info` renderUI below).
-      if (!is.null(d$flagged) && nrow(d$flagged) > 0) {
-        infiltration_outliers(data.frame(
-          Phenotype          = d$itm$label,
-          Case_ID            = d$flagged$case_id,
-          Donor_Status       = d$flagged$status,
-          Value              = round(d$flagged$value, 3),
-          Fence_Distance_IQR = round(d$flagged$outlier_score, 2),
-          stringsAsFactors   = FALSE
-        ))
-      } else {
-        infiltration_outliers(NULL)
-      }
-      if (!is.null(d$empty)) return(plotly_islet_empty(d$empty))
-
-      itm <- d$itm; metric_label <- d$label
-      donor_df <- d$donor_df; summary_df <- d$summary_df
-      filter_summary <- d$filter_summary
-      dcols <- donor_colors_reactive()
-      p_label <- if (is.finite(d$kw_p))
-        paste0("KW p = ", formatC(d$kw_p, format = "g", digits = 3)) else ""
-
-      p <- plot_ly()
-      for (s in levels(summary_df$status)) {
-        row <- summary_df[summary_df$status == s, , drop = FALSE]
-        if (nrow(row) == 0) next
-        # Individual donor points
-        donor_pts <- donor_df[donor_df$status == s, , drop = FALSE]
-        p <- p %>% add_trace(
-          x = s, y = donor_pts$value,
-          type = "scatter", mode = "markers",
-          marker = list(size = 8, opacity = 0.6, color = dcols[s]),
-          name = s, showlegend = FALSE,
-          hoverinfo = "text",
-          text = paste0("Donor ", donor_pts$case_id, ": ", round(donor_pts$value, 4))
-        )
-        # Bar with SEM error bars
-        p <- p %>% add_trace(
-          x = s, y = row$mean_val,
-          type = "bar",
-          marker = list(color = paste0(dcols[s], "66"),
-                        line = list(color = dcols[s], width = 1.5)),
-          error_y = list(type = "data", array = row$sem, visible = TRUE,
-                         color = dcols[s], thickness = 1.5, width = 6),
-          name = s, showlegend = FALSE,
-          hoverinfo = "text",
-          text = paste0(s, "<br>Mean: ", round(row$mean_val, 4),
-                       "<br>SEM: ", round(row$sem, 4),
-                       "<br>N donors: ", row$n)
-        )
-      }
-      excl_text <- if (filter_summary$enabled && filter_summary$n_excluded > 0) {
-        sprintf(" | %d excluded (%s)", filter_summary$n_excluded, filter_summary$label)
-      } else if (!filter_summary$enabled) {
-        " | outlier filter OFF"
-      } else {
-        ""
-      }
-      fonts <- plotly_islet_fonts()
-      p %>% layout(
-        font = fonts$global,
-        title = list(text = paste0(metric_label,
-                                   "<br><sup>Donor-level means \u00b1 SEM (N=donors)<br>",
-                                   sub("^ \\| ", "", paste0(p_label, excl_text)), "</sup>"),
-                     font = fonts$title),
-        margin = list(t = 110),
-        xaxis = list(title = list(text = "", font = fonts$axis_title),
-                     tickfont = fonts$axis_tick,
-                     categoryorder = "array",
-                     categoryarray = c("ND", "Aab+", "T1D")),
-        yaxis = list(title = list(text = metric_label, font = fonts$axis_title),
-                     tickfont = fonts$axis_tick),
-        barmode = "overlay",
-        showlegend = FALSE
-      ) %>%
-        plotly_islet_config(paste0("spatial_infiltration_", itm$safe))
+    output$insulitis_bars <- renderPlotly({
+      d <- insulitis_data()
+      thr <- input$insulitis_threshold %||% 15
+      donor_points_bars(d, paste0("Share of objects with ≥", thr, " immune cells"),
+                        "Insulitis prevalence", "spatial_insulitis_prevalence", fmt = "%.3f", percent = TRUE)
     })
 
-    # Card A CSV: the per-islet values behind the bars, carrying the outlier
-    # flags, plus the donor-level means the bars actually plot.
-    output$dl_infiltration_csv <- downloadHandler(
-      filename = function() paste0("spatial_infiltration_",
-                                   format(Sys.time(), "%Y%m%d_%H%M%S"), ".csv"),
+    output$dl_insulitis_csv <- downloadHandler(
+      filename = function() paste0("spatial_insulitis_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".csv"),
       content = function(file) {
-        d <- tryCatch(infiltration_data(), error = function(e) NULL)
-        out <- NULL
-        if (!is.null(d) && !is.null(d$islets)) {
-          isl <- d$islets
-          out <- data.frame(
-            level        = "islet",
-            phenotype    = d$itm$label,
-            case_id      = isl$case_id,
-            donor_status = isl$status,
-            islet_key    = isl$islet_key,
-            enrich_z     = isl$value,
-            is_outlier   = isl$is_outlier,
-            fence_dist_iqr = isl$outlier_score,
-            stringsAsFactors = FALSE)
-          if (!is.null(d$donor_df) && nrow(d$donor_df) > 0) {
-            out <- rbind(out, data.frame(
-              level        = "donor_mean",
-              phenotype    = d$itm$label,
-              case_id      = d$donor_df$case_id,
-              donor_status = as.character(d$donor_df$status),
-              islet_key    = NA_character_,
-              enrich_z     = d$donor_df$value,
-              is_outlier   = NA,
-              fence_dist_iqr = NA_real_,
-              stringsAsFactors = FALSE))
-          }
-        }
-        fs <- if (is.null(d)) NULL else d$filter_summary
+        d <- tryCatch(insulitis_data(), error = function(e) NULL)
+        out <- if (is.null(d)) NULL else
+          data.frame(case_id = d$case_id, donor_status = as.character(d$status), objects = d$objects,
+                     insulitic_objects = d$insulitic, share = d$value, stringsAsFactors = FALSE)
         write_islet_csv(file, out, islet_csv_header(
-          "Spatial — peri enrichment by donor status",
-          paste("Phenotype:", if (is.null(d)) "(none)" else d$itm$label),
+          "Spatial — insulitis prevalence per donor",
+          paste("Insulitic object: at least", input$insulitis_threshold %||% 15,
+                "immune cells (every immune label) in the core and the 20 um band"),
           paste("Donor groups:", paste(input$groups %||% "(all)", collapse = ", ")),
           paste("Endocrine objects:", paste(sort(unique(as.character(prepared()$comp$object_class %||% "Islet"))), collapse = ", ")),
-          paste("Outlier rule:", if (is.null(fs)) "n/a"
-                                 else if (isTRUE(fs$enabled))
-                                   paste0(fs$label, "; ", fs$n_excluded, " of ", fs$n_total, " excluded")
-                                 else "OFF"),
-          paste("Kruskal-Wallis p (donor-level means):",
-                if (is.null(d) || !is.finite(d$kw_p)) "N/A"
-                else formatC(d$kw_p, format = "g", digits = 4)),
-          "Rows: level=islet are the per-islet values (is_outlier marks the ghost x markers); level=donor_mean are the values the bars aggregate."
-        ))
+          paste("Kruskal-Wallis p (donor shares):",
+                if (is.null(d)) "N/A" else formatC(donor_kw_p(d$value, d$status), format = "g", digits = 4))))
       }
     )
 
-    # ==== Card A-Right: Peri vs Core Proportion Scatter ====
-    output$infiltration_scatter <- renderPlotly({
-      comp <- nbr_comp()
-      req(comp, "Donor Status" %in% colnames(comp))
-
-      opts <- phenotype_options()
-      sel_safe <- input$scatter_phenotype
-      req(sel_safe)
-      itm <- Filter(function(o) o$safe == sel_safe, opts)
-      req(length(itm) > 0)
-      itm <- itm[[1]]
-      cols <- list(peri = itm$peri_prop, core = itm$prop_core,
-                   label = paste0(itm$label, " Proportion"))
-      req(!is.na(cols$peri), !is.na(cols$core))
-      req(cols$peri %in% colnames(comp), cols$core %in% colnames(comp))
-
-      use_sqrt <- isTRUE(input$scatter_sqrt)
-
-      df <- data.frame(
-        peri = comp[[cols$peri]],
-        core = comp[[cols$core]],
-        status = comp$`Donor Status`,
-        islet_key = if ("islet_key" %in% colnames(comp)) comp$islet_key else "",
-        stringsAsFactors = FALSE
-      )
-      df <- df[is.finite(df$peri) & is.finite(df$core), , drop = FALSE]
-      if (nrow(df) == 0) return(plotly_islet_empty("No data"))
-
-      # Apply sqrt transform if requested
-      if (use_sqrt) {
-        df$peri_plot <- sqrt(df$peri)
-        df$core_plot <- sqrt(df$core)
-      } else {
-        df$peri_plot <- df$peri
-        df$core_plot <- df$core
-      }
-
-      status_order <- c("ND", "Aab+", "T1D")
-      df$status <- factor(df$status, levels = intersect(status_order, unique(df$status)))
-      dcols <- donor_colors_reactive()
-
-      max_val <- max(c(df$peri_plot, df$core_plot), na.rm = TRUE) * 1.05
-
-      pt_sz <- input$nbr_pt_size %||% 5
-      pt_al <- 1 - (input$nbr_pt_alpha %||% 0.6)
-
-      p <- plot_ly()
-      for (s in levels(df$status)) {
-        sub <- df[df$status == s, , drop = FALSE]
-        if (nrow(sub) == 0) next
-        p <- p %>% add_trace(
-          data = sub, x = ~peri_plot, y = ~core_plot,
-          text = ~paste0(islet_key, "<br>Status: ", status,
-                        "<br>Peri: ", round(peri, 4),
-                        "<br>Core: ", round(core, 4)),
-          hoverinfo = "text", name = s,
-          type = "scatter", mode = "markers",
-          marker = list(size = pt_sz, opacity = pt_al, color = dcols[s])
-        )
-      }
-
-      # Optional linear trend lines per status group
-      if (isTRUE(input$scatter_trend)) {
-        for (s in levels(df$status)) {
-          sub <- df[df$status == s, , drop = FALSE]
-          if (nrow(sub) < 3) next
-          fit <- lm(core_plot ~ peri_plot, data = sub)
-          pred_x <- seq(min(sub$peri_plot, na.rm = TRUE),
-                        max(sub$peri_plot, na.rm = TRUE), length.out = 50)
-          pred_y <- predict(fit, newdata = data.frame(peri_plot = pred_x))
-          p <- p %>% add_trace(
-            x = pred_x, y = pred_y,
-            type = "scatter", mode = "lines",
-            line = list(color = dcols[s], width = 2),
-            name = paste0(s, " trend"),
-            showlegend = FALSE,
-            hoverinfo = "none"
-          )
-        }
-      }
-
-      # Axis labels
-      scale_note <- if (use_sqrt) "\u221a" else ""
-      x_title <- paste0(scale_note, cols$label, " (Peri)")
-      y_title <- paste0(scale_note, cols$label, " (Core)")
-
-      # Diagonal y=x reference
-      fonts <- plotly_islet_fonts()
-      p %>% add_trace(
-        x = c(0, max_val), y = c(0, max_val),
-        type = "scatter", mode = "lines",
-        line = list(dash = "dash", color = "#999", width = 1),
-        showlegend = FALSE, hoverinfo = "none"
-      ) %>% layout(
-        font = fonts$global,
-        title = list(text = paste0("Peri vs Core: ", cols$label), font = fonts$title),
-        xaxis = list(title = list(text = x_title, font = fonts$axis_title),
-                     tickfont = fonts$axis_tick, range = c(0, max_val)),
-        yaxis = list(title = list(text = y_title, font = fonts$axis_title),
-                     tickfont = fonts$axis_tick, range = c(0, max_val)),
-        legend = list(title = list(text = "Status", font = fonts$legend_title),
-                      font = fonts$legend_text)
-      ) %>%
-        plotly_islet_config(paste0("spatial_infiltration_scatter_", itm$safe))
+    beta_immune_data <- reactive({
+      d <- immune_by_beta_content(nbr_comp(), input$beta_cut %||% 0.1)
+      req(d, nrow(d) > 0)
+      d
     })
+
+    # One line per donor joining its two kinds of object; donors with only one kind are a single point.
+    output$beta_immune <- renderPlotly({
+      d <- beta_immune_data()
+      dcols <- donor_colors_reactive()
+      fonts <- plotly_islet_fonts()
+      kinds <- levels(d$kind)
+      p <- plot_ly()
+      shown <- character(0)
+      for (id in unique(d$case_id)) {
+        g <- d[d$case_id == id, , drop = FALSE]
+        g <- g[order(g$kind), , drop = FALSE]
+        s <- as.character(g$status[1])
+        p <- p %>% add_trace(x = as.character(g$kind), y = g$value, type = "scatter",
+                             mode = if (nrow(g) > 1) "lines+markers" else "markers",
+                             line = list(color = dcols[s], width = 1.5),
+                             marker = list(color = dcols[s], size = 8, opacity = 0.85),
+                             name = s, legendgroup = s, showlegend = !(s %in% shown),
+                             hovertext = sprintf("Donor %s (%s)<br>%s: %.3f over %d objects", id, s,
+                                                 as.character(g$kind), g$value, g$objects),
+                             hoverinfo = "text")
+        shown <- union(shown, s)
+      }
+      both <- table(d$case_id)
+      p %>% layout(
+        font = fonts$global, margin = list(t = 110),
+        title = list(text = paste0("Immune cells and beta-cell content<br><sup>Mean band immune share per donor<br>",
+                                   sum(both == 2), " donors have both kinds of object</sup>"),
+                     font = fonts$title),
+        xaxis = list(title = list(text = ""), tickfont = fonts$axis_tick, categoryorder = "array",
+                     categoryarray = kinds),
+        yaxis = list(title = list(text = "Immune share of the 20 µm band", font = fonts$axis_title),
+                     tickfont = fonts$axis_tick, rangemode = "tozero"),
+        legend = list(title = list(text = "Status", font = fonts$legend_title), font = fonts$legend_text)
+      ) %>% plotly_islet_config("spatial_immune_by_beta_content")
+    })
+
+    output$dl_beta_immune_csv <- downloadHandler(
+      filename = function() paste0("spatial_immune_by_beta_content_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".csv"),
+      content = function(file) {
+        d <- tryCatch(beta_immune_data(), error = function(e) NULL)
+        out <- if (is.null(d)) NULL else
+          data.frame(case_id = d$case_id, donor_status = as.character(d$status), object_kind = as.character(d$kind),
+                     objects = d$objects, mean_band_immune_share = d$value, stringsAsFactors = FALSE)
+        write_islet_csv(file, out, islet_csv_header(
+          "Spatial — band immune share by beta-cell content, per donor",
+          paste0("Insulin-deficient: beta cells under ", 100 * (input$beta_cut %||% 0.1),
+                 "% of the core's Beta, Alpha, Delta and CHGA+ hormone-negative cells"),
+          paste("Donor groups:", paste(input$groups %||% "(all)", collapse = ", ")),
+          paste("Endocrine objects:", paste(sort(unique(as.character(prepared()$comp$object_class %||% "Islet"))), collapse = ", "))))
+      }
+    )
+
+    GRADIENT_CHOICES <- c("All immune cells" = "all", "CD8a T cell" = "CD8a Tcell", "CD4 T cell" = "CD4 Tcell",
+                          "B cell" = "B cell", "Macrophage" = "Macrophage")
+    gradient_data <- reactive({
+      choice <- input$gradient_phenotype %||% "all"
+      labels <- if (identical(choice, "all")) IMMUNE_LABELS else choice
+      g <- immune_gradient(donor_distance_profile(), labels)
+      req(g, nrow(g) > 0)
+      g <- g[as.character(g$status) %in% (input$groups %||% STATUS_ORDER), , drop = FALSE]
+      req(nrow(g) > 0)
+      g$status <- droplevels(g$status)
+      g
+    })
+
+    output$immune_gradient <- renderPlotly({
+      g <- gradient_data()
+      label <- names(GRADIENT_CHOICES)[match(input$gradient_phenotype %||% "all", GRADIENT_CHOICES)]
+      dcols <- donor_colors_reactive()
+      fonts <- plotly_islet_fonts()
+      p <- plot_ly()
+      for (s in levels(g$status)) {
+        d <- g[g$status == s, , drop = FALSE]
+        q <- do.call(rbind, lapply(split(d$value, d$bin, drop = TRUE), function(v)
+          data.frame(med = stats::median(v), lo = stats::quantile(v, 0.25, names = FALSE),
+                     hi = stats::quantile(v, 0.75, names = FALSE), n = length(v))))
+        q$bin <- rownames(q)
+        p <- p %>% add_trace(x = q$bin, y = q$med, type = "scatter", mode = "lines+markers", name = s,
+                             line = list(color = dcols[s], width = 2.5), marker = list(color = dcols[s], size = 8),
+                             error_y = list(type = "data", symmetric = FALSE, array = q$hi - q$med,
+                                            arrayminus = q$med - q$lo, color = dcols[s], thickness = 1),
+                             hovertext = sprintf("%s, %s µm<br>Median %.2f× own tissue (IQR %.2f-%.2f), %d donors",
+                                                 s, q$bin, q$med, q$lo, q$hi, q$n), hoverinfo = "text")
+      }
+      p %>% add_trace(x = DISTANCE_BIN_LABELS, y = rep(1, length(DISTANCE_BIN_LABELS)), type = "scatter",
+                      mode = "lines", line = list(color = islet_ink(), dash = "dash", width = 1),
+                      showlegend = FALSE, hoverinfo = "none") %>%
+        layout(
+          font = fonts$global, margin = list(t = 110),
+          title = list(text = paste0(label, " around endocrine objects<br><sup>Share at each distance ÷ the ",
+                                     "donor's own tissue share<br>Median and IQR of donors</sup>"),
+                       font = fonts$title),
+          xaxis = list(title = list(text = "Distance from the object's border (µm)", font = fonts$axis_title),
+                       tickfont = fonts$axis_tick, tickangle = -45, categoryorder = "array",
+                       categoryarray = DISTANCE_BIN_LABELS),
+          yaxis = list(title = list(text = "× own tissue share", font = fonts$axis_title),
+                       tickfont = fonts$axis_tick, rangemode = "tozero"),
+          legend = list(title = list(text = "Status", font = fonts$legend_title), font = fonts$legend_text)
+        ) %>% plotly_islet_config("spatial_immune_gradient")
+    })
+
+    output$dl_gradient_csv <- downloadHandler(
+      filename = function() paste0("spatial_immune_gradient_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".csv"),
+      content = function(file) {
+        g <- tryCatch(gradient_data(), error = function(e) NULL)
+        out <- if (is.null(g)) NULL else
+          data.frame(case_id = g$case_id, donor_status = as.character(g$status), distance_bin_um = as.character(g$bin),
+                     cells = g$cells, share = g$share, donor_tissue_share = g$tissue_share,
+                     ratio_to_own_tissue = g$value, stringsAsFactors = FALSE)
+        write_islet_csv(file, out, islet_csv_header(
+          "Spatial — immune gradient around endocrine objects, per donor",
+          paste("Cells:", names(GRADIENT_CHOICES)[match(input$gradient_phenotype %||% "all", GRADIENT_CHOICES)]),
+          "Distance: from the nearest endocrine object's border (negative = inside, binned as Core)",
+          "Own tissue: the donor's cells outside every endocrine object and its 20 um band",
+          paste("Donor groups:", paste(input$groups %||% "(all)", collapse = ", "))))
+      }
+    )
 
     # ==== Card B-Left: Enrichment/Proportion Grouped Bar Chart ====
     output$enrichment_bars <- renderPlotly({
@@ -1695,16 +1332,8 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       error_label <- if (stat_mode == "Median") "IQR" else "SEM"
 
       # Axis label and title depend on region
-      if (region == "peri") {
-        y_label <- "Enrichment z-score"
-        title_prefix <- paste0(stat_mode, " Enrichment z-score")
-      } else if (region == "core") {
-        y_label <- "Proportion (core)"
-        title_prefix <- paste0(stat_mode, " Core Proportion")
-      } else {
-        y_label <- "Proportion (peri-islet)"
-        title_prefix <- paste0(stat_mode, " Peri-islet Proportion")
-      }
+      y_label <- enrich_measure_label()
+      title_prefix <- paste(stat_mode, y_label)
 
       p <- plot_ly()
       for (s in levels(es$donor_status)) {
@@ -1750,388 +1379,58 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         plotly_islet_config("spatial_enrichment_bars")
     })
 
-    # ==== Card B-Right: Enrichment/Proportion Heatmap ====
+    # ==== Card B-Right: donor heatmap (owner review, 2026-10-20) ====
+    # One row per donor, grouped by status, so the spread between donors behind each bar of the left chart is
+    # visible. It replaced a status heatmap that drew the same numbers as the bar chart.
     output$enrichment_heatmap <- renderPlotly({
-      es <- enrich_summary()
-      req(es)
-
+      dv <- enrich_donor_values()
+      req(dv)
       region <- input$enrich_region %||% "peri"
-      # Per-cell numeric overlay toggle (default on). NULL-safe so the overlay
-      # is present on the first render before the checkbox registers.
       show_vals <- isTRUE(input$enrich_show_values %||% TRUE)
-
-      # Pivot to matrix: cell_type x donor_status
-      status_order <- c("ND", "Aab+", "T1D")
-      cell_types <- unique(es$cell_type)
-      statuses <- intersect(status_order, unique(es$donor_status))
-
-      mat <- matrix(NA_real_, nrow = length(statuses), ncol = length(cell_types),
-                    dimnames = list(statuses, cell_types))
-      for (i in seq_len(nrow(es))) {
-        s <- es$donor_status[i]
-        ct <- es$cell_type[i]
-        if (as.character(s) %in% rownames(mat) && ct %in% colnames(mat))
-          mat[as.character(s), ct] <- es$z_summary[i]
-      }
-
-      # Annotation text: more decimals for proportions (small numbers)
-      fmt <- if (region == "peri") "%.2f" else "%.4f"
-      text_mat <- matrix(sprintf(fmt, mat), nrow = nrow(mat), ncol = ncol(mat))
-      text_mat[is.na(mat)] <- ""
-
+      cell_types <- intersect(names(phenotype_options()), unique(dv$cell_type))
+      donors <- unique(dv[, c("case_id", "donor_status")])
+      donors <- donors[order(match(donors$donor_status, STATUS_ORDER), suppressWarnings(as.numeric(donors$case_id))), ]
+      row_lab <- paste0(donors$case_id, " (", donors$donor_status, ")")
+      mat <- matrix(NA_real_, nrow = nrow(donors), ncol = length(cell_types), dimnames = list(row_lab, cell_types))
+      mat[cbind(match(dv$case_id, donors$case_id), match(dv$cell_type, cell_types))] <- dv$value
+      fmt <- if (region == "peri") "%.2f" else "%.3f"
+      text_mat <- matrix(sprintf(fmt, mat), nrow = nrow(mat)); text_mat[is.na(mat)] <- ""
       if (region == "peri") {
-        # Diverging for z-scores (symmetric around 0)
         z_abs_max <- max(abs(mat), na.rm = TRUE)
         if (!is.finite(z_abs_max) || z_abs_max == 0) z_abs_max <- 1
-        colorscale <- list(c(0, "#2166AC"), c(0.5, "#FFFFFF"), c(1, "#B2182B"))
-        zmin <- -z_abs_max; zmax <- z_abs_max
-        cb_title <- "z-score"
-        title_text <- paste0(input$enrich_stat %||% "Median", " Enrichment z-score")
+        colorscale <- list(c(0, "#2166AC"), c(0.5, "#FFFFFF"), c(1, "#B2182B")); zmin <- -z_abs_max; zmax <- z_abs_max
       } else {
-        # Sequential for proportions (0 to max)
-        zmax <- max(mat, na.rm = TRUE)
-        if (!is.finite(zmax) || zmax == 0) zmax <- 0.1
-        colorscale <- list(c(0, "#FFFFFF"), c(0.5, "#FDB863"), c(1, "#B2182B"))
-        zmin <- 0
-        cb_title <- "Proportion"
-        region_label <- if (region == "core") "Core" else "Peri-islet"
-        title_text <- paste0(input$enrich_stat %||% "Median", " ", region_label, " Proportion")
+        zmax <- max(mat, na.rm = TRUE); if (!is.finite(zmax) || zmax == 0) zmax <- 0.1
+        colorscale <- list(c(0, "#FFFFFF"), c(0.5, "#FDB863"), c(1, "#B2182B")); zmin <- 0
       }
-
+      label <- enrich_measure_label()
+      # Lines between the status groups.
+      breaks <- which(diff(match(donors$donor_status, STATUS_ORDER)) != 0)
+      shapes <- lapply(breaks, function(b) list(type = "line", xref = "paper", x0 = 0, x1 = 1, yref = "y",
+                                                 y0 = b - 0.5, y1 = b - 0.5, line = list(color = islet_ink(), width = 2)))
       fonts <- plotly_islet_fonts()
-      plot_ly(
-        x = colnames(mat), y = rownames(mat), z = mat,
-        type = "heatmap",
-        colorscale = colorscale,
-        zmin = zmin, zmax = zmax,
-        text = if (show_vals) text_mat else NULL,
-        texttemplate = if (show_vals) "%{text}" else NULL,
-        textfont = if (show_vals) list(size = ISLET_FONT_SIZES$dense_min) else NULL,
-        hovertemplate = paste0("%{x}<br>%{y}<br>", cb_title, " = %{z:.4f}<extra></extra>"),
-        showscale = TRUE,
-        colorbar = list(title = list(text = cb_title, font = fonts$colorbar_title),
-                        tickfont = fonts$axis_tick)
-      ) %>% layout(
-        font = fonts$global,
-        title = list(text = title_text, font = fonts$title),
-        # automargin: phenotype names are long and angled at -30 deg, so without
-        # it plotly clips them against a fixed margin — which reads as "the font
-        # is too small" when the real problem is the label is cut off.
-        xaxis = list(title = list(text = "", font = fonts$axis_title),
-                     tickfont = fonts$axis_tick, tickangle = -30, automargin = TRUE),
-        yaxis = list(title = list(text = "", font = fonts$axis_title),
-                     tickfont = fonts$axis_tick, autorange = "reversed",
-                     automargin = TRUE)
-      ) %>%
-        plotly_islet_config("spatial_enrichment_heatmap")
+      plot_ly(x = colnames(mat), y = rownames(mat), z = mat, type = "heatmap", colorscale = colorscale,
+              zmin = zmin, zmax = zmax,
+              text = if (show_vals) text_mat else NULL,
+              texttemplate = if (show_vals) "%{text}" else NULL,
+              textfont = if (show_vals) list(size = ISLET_FONT_SIZES$dense_min) else NULL,
+              hovertemplate = paste0("%{x}<br>Donor %{y}<br>", label, " = %{z:.4f}<extra></extra>"),
+              colorbar = list(title = list(text = if (region == "peri") "z" else "Proportion",
+                                           font = fonts$colorbar_title), tickfont = fonts$axis_tick)) %>%
+        layout(font = fonts$global, title = list(text = paste0(label, " by donor"), font = fonts$title),
+               shapes = shapes,
+               xaxis = list(title = list(text = ""), tickfont = fonts$axis_tick, tickangle = -30, automargin = TRUE),
+               yaxis = list(title = list(text = ""), tickfont = list(size = ISLET_FONT_SIZES$dense_min),
+                            autorange = "reversed", automargin = TRUE, type = "category")) %>%
+        plotly_islet_config("spatial_enrichment_donor_heatmap")
     })
 
-    # ==== Card C-Left: Distance Box Plots ====
-    # Card C-Left data, extracted so `dl_distance_csv` exports the same per-islet
-    # rows and outlier flags the box plot draws.
-    distance_data <- reactive({
-      comp <- nbr_comp()
-      req(comp, "Donor Status" %in% colnames(comp))
-      metric <- input$distance_metric
-      req(metric, metric %in% colnames(comp))
-      opts <- phenotype_options()
-      match <- Filter(function(o) !is.na(o$min_dist) && o$min_dist == metric, opts)
-      req(length(match) > 0)  # retained phenotypes only
-      metric_label <- paste0("Min Distance to ", match[[1]]$label)
-
-      df <- data.frame(
-        value = comp[[metric]],
-        status = comp$`Donor Status`,
-        case_id = if ("Case ID" %in% colnames(comp)) comp$`Case ID` else NA,
-        islet_key = if ("islet_key" %in% colnames(comp)) comp$islet_key else NA_character_,
-        stringsAsFactors = FALSE
-      )
-
-      # Count non-NA per group before filtering
-      status_order <- c("ND", "Aab+", "T1D")
-      n_total <- tapply(df$value, df$status, length)
-      n_valid <- tapply(df$value, df$status, function(x) sum(is.finite(x)))
-      na_rate <- 1 - sum(is.finite(df$value)) / nrow(df)
-
-      df <- df[is.finite(df$value), , drop = FALSE]
-      if (nrow(df) == 0) {
-        return(list(empty = paste0(metric_label, " \u2014 all NA"),
-                    label = metric_label, metric = metric))
-      }
-
-      # Outlier handling via shared helper, applied to log1p(distance) to
-      # tame the long right tail; ghost \u00d7 markers preserve visibility.
-      df <- flag_outliers(df, value_col = "value", group_col = "status",
-                          method = "zscore", threshold = outlier_threshold(),
-                          transform = "log1p",
-                          enabled = isTRUE(remove_outliers()))
-      filter_summary <- summarize_outlier_filter(df)
-      filter_summary$label <- if (filter_summary$enabled) {
-        sprintf("|z| > %g per donor status on log(1+distance)",
-                suppressWarnings(as.numeric(outlier_threshold())))
-      } else filter_summary$label
-
-      list(label = metric_label, metric = metric, islets = df,
-           filter_summary = filter_summary, status_order = status_order,
-           n_total = n_total, n_valid = n_valid, na_rate = na_rate)
-    })
-
-    output$distance_boxplot <- renderPlotly({
-      d <- distance_data()
-      req(d)
-      metric_label <- d$label
-
-      # Populate the per-card outlier table reactiveVal (consumed by the
-      # `distance_outlier_info` renderUI below).
-      flagged <- if (is.null(d$islets)) NULL else d$islets[d$islets$is_outlier, , drop = FALSE]
-      if (!is.null(flagged) && nrow(flagged) > 0) {
-        distance_outliers(data.frame(
-          Phenotype     = metric_label,
-          Case_ID       = flagged$case_id,
-          Islet         = flagged$islet_key,
-          Donor_Status  = flagged$status,
-          Distance_um   = round(flagged$value, 1),
-          Z_Score_log1p = round(flagged$outlier_score, 2),
-          stringsAsFactors = FALSE
-        ))
-      } else {
-        distance_outliers(NULL)
-      }
-      if (!is.null(d$empty)) return(plotly_islet_empty(d$empty))
-
-      df <- d$islets; filter_summary <- d$filter_summary
-      status_order <- d$status_order
-      n_total <- d$n_total; n_valid <- d$n_valid; na_rate <- d$na_rate
-
-      df_ghost <- df[df$is_outlier, , drop = FALSE]
-      df_box   <- if (isTRUE(remove_outliers())) df[!df$is_outlier, , drop = FALSE] else df
-
-      df_box$status <- factor(df_box$status, levels = intersect(status_order, unique(df_box$status)))
-      if (nrow(df_ghost) > 0) {
-        df_ghost$status <- factor(df_ghost$status, levels = levels(df_box$status))
-      }
-      dcols <- donor_colors_reactive()
-      pt_sz <- input$nbr_pt_size %||% 5
-      pt_al <- 1 - (input$nbr_pt_alpha %||% 0.6)
-
-      # Subtitle with N per group
-      n_labels <- sapply(levels(df_box$status), function(s) {
-        nv <- n_valid[s]
-        nt <- n_total[s]
-        if (is.na(nv)) nv <- 0
-        if (is.na(nt)) nt <- 0
-        paste0(s, ": ", nv, "/", nt)
-      })
-      subtitle <- paste0("Non-NA: ", paste(n_labels, collapse = ", "),
-                          "<br>", round(na_rate * 100, 0), "% NA overall")
-      excl_suffix <- if (filter_summary$enabled && filter_summary$n_excluded > 0) {
-        sprintf(" | %d excluded (%s)", filter_summary$n_excluded, filter_summary$label)
-      } else if (!filter_summary$enabled) {
-        " | outlier filter OFF"
-      } else {
-        ""
-      }
-
-      p <- plot_ly()
-      for (s in levels(df_box$status)) {
-        sub <- df_box[df_box$status == s, , drop = FALSE]
-        if (nrow(sub) == 0) next
-        p <- p %>% add_trace(
-          y = sub$value, x = s, name = s,
-          type = "box",
-          boxpoints = "all", jitter = 0.3, pointpos = -1.5,
-          marker = list(size = pt_sz, opacity = pt_al, color = dcols[s]),
-          line = list(color = dcols[s]),
-          fillcolor = paste0(dcols[s], "44"),
-          hoverinfo = "y"
-        )
-      }
-      # Ghost layer: excluded outliers as faint grey \u00d7 markers per group
-      if (nrow(df_ghost) > 0) {
-        for (s in levels(df_box$status)) {
-          gsub_ <- df_ghost[df_ghost$status == s, , drop = FALSE]
-          if (nrow(gsub_) == 0) next
-          p <- p %>% add_trace(
-            y = gsub_$value, x = rep(s, nrow(gsub_)),
-            type = "scatter", mode = "markers",
-            marker = list(symbol = "x", size = pt_sz * 1.2,
-                          color = "rgba(80,80,80,0.55)",
-                          line = list(color = "rgba(50,50,50,0.7)", width = 0.8)),
-            showlegend = FALSE,
-            hoverinfo = "text",
-            text = paste0("Excluded outlier \u00b7 z = ",
-                          sprintf("%.2f", gsub_$outlier_score),
-                          " \u00b7 distance = ", round(gsub_$value, 1), " \u00b5m"),
-            name = paste0(s, " (excluded)")
-          )
-        }
-      }
-      fonts <- plotly_islet_fonts()
-      p %>% layout(
-        font = fonts$global,
-        title = list(text = paste0(metric_label, "<br><sup>", subtitle, excl_suffix, "</sup>"),
-                     font = fonts$title),
-        margin = list(t = 110),
-        xaxis = list(title = list(text = "", font = fonts$axis_title),
-                     tickfont = fonts$axis_tick, categoryorder = "array",
-                     categoryarray = c("ND", "Aab+", "T1D")),
-        yaxis = list(title = list(text = paste0("Distance (\u00b5m)"), font = fonts$axis_title),
-                     tickfont = fonts$axis_tick),
-        showlegend = FALSE
-      ) %>%
-        plotly_islet_config(paste0("spatial_distance_box_", gsub("[^A-Za-z0-9_]", "_", d$metric)))
-    })
-
-    # Card C-Left CSV: per-islet distances with the log1p outlier flags.
-    output$dl_distance_csv <- downloadHandler(
-      filename = function() paste0("spatial_distance_",
-                                   format(Sys.time(), "%Y%m%d_%H%M%S"), ".csv"),
-      content = function(file) {
-        d <- tryCatch(distance_data(), error = function(e) NULL)
-        out <- NULL
-        if (!is.null(d) && !is.null(d$islets)) {
-          isl <- d$islets
-          out <- data.frame(
-            metric        = d$label,
-            case_id       = isl$case_id,
-            islet_key     = isl$islet_key,
-            donor_status  = isl$status,
-            distance_um   = isl$value,
-            is_outlier    = isl$is_outlier,
-            z_log1p       = isl$outlier_score,
-            stringsAsFactors = FALSE)
-        }
-        fs <- if (is.null(d)) NULL else d$filter_summary
-        write_islet_csv(file, out, islet_csv_header(
-          "Spatial — distance to nearest cell of type, per islet",
-          paste("Metric:", if (is.null(d)) "(none)" else d$label),
-          paste("Donor groups:", paste(input$groups %||% "(all)", collapse = ", ")),
-          paste("Endocrine objects:", paste(sort(unique(as.character(prepared()$comp$object_class %||% "Islet"))), collapse = ", ")),
-          paste("Outlier rule:", if (is.null(fs)) "n/a"
-                                 else if (isTRUE(fs$enabled))
-                                   paste0(fs$label, "; ", fs$n_excluded, " of ", fs$n_total, " excluded")
-                                 else "OFF"),
-          "is_outlier marks the ghost x markers; rows are NOT dropped from this file so the full distribution is exportable."
-        ))
-      }
-    )
-
-    # ==== Card C-Right: two views selected by input$dist_view ====
-    #  "kde"      = donor-averaged signed-distance KDE over islet-associated
-    #               cells (release Parquet; development CSV) — the DEFAULT.
-    #  "cellwise" = per-cell tissue-wide distance density + phenotype composition
-    #               (release Parquet/DuckDB; development CSV, symlog axis) — ported from Senior.
-    load_immune_kde_data <- function() {
-      load_signed_distance_kde()
-    }
-
+    # ==== Distance-to-islet profile: per-cell density and composition across the tissue ====
+    # (release Parquet/DuckDB; development CSV, symlog axis; ported from Senior.) Its donor-averaged KDE view was
+    # removed in the owner review of 2026-10-20: that table holds only core and band cells, so it stopped at 20 um,
+    # and the Immune gradient card now shows the donor-fair profile.
     output$immune_distance_kde <- renderPlotly({
-      view <- input$dist_view %||% "kde"
-
-      if (identical(view, "kde")) {
-        kde_df <- load_immune_kde_data()
-        req(kde_df)
-
-        # Safety net: a stale CSV without case_id collapses to one donor per
-        # status (degrades to pooled, never crashes). The regenerated CSV has it.
-        if (!"case_id" %in% colnames(kde_df)) kde_df$case_id <- kde_df$donor_status
-
-        cell_type <- input$kde_immune_type
-        req(cell_type, phenotype_is_kept(.lookup_pheno_label(cell_type)))
-        metric <- input$kde_metric %||% "shape"
-        df <- kde_df[kde_df$phenotype == cell_type, , drop = FALSE]
-        type_label <- .lookup_pheno_label(cell_type)
-
-        # Filter to selected donor status groups (sidebar)
-        if (!is.null(input$groups)) {
-          df <- df[df$donor_status %in% input$groups, , drop = FALSE]
-        }
-        req(nrow(df) > 0)
-
-        # Clip to 1st-99th percentile
-        q_lo <- quantile(df$signed_dist, 0.01, na.rm = TRUE)
-        q_hi <- quantile(df$signed_dist, 0.99, na.rm = TRUE)
-        df <- df[df$signed_dist >= q_lo & df$signed_dist <= q_hi, , drop = FALSE]
-        req(nrow(df) > 0)
-
-        status_order <- c("ND", "Aab+", "T1D")
-        df$donor_status <- factor(df$donor_status, levels = intersect(status_order, unique(df$donor_status)))
-        dcols <- donor_colors_reactive()
-
-        # Per-donor densities on a shared grid, averaged with EQUAL donor weight
-        # (removes pseudoreplication, e.g. ND donor 6356 = 71% of ND's APC cells).
-        #   shape     -> MEAN of per-donor densities that each integrate to 1
-        #   abundance -> MEDIAN of per-donor densities scaled by that donor's count
-        grid_x <- seq(q_lo, q_hi, length.out = 512)
-        bw <- tryCatch(stats::bw.nrd0(df$signed_dist[is.finite(df$signed_dist)]),
-                       error = function(e) NULL)
-        dens_one <- function(v) {
-          v <- v[is.finite(v)]
-          if (length(v) < 2) return(NULL)
-          d <- if (is.null(bw)) density(v, n = 512, from = q_lo, to = q_hi)
-               else            density(v, bw = bw, n = 512, from = q_lo, to = q_hi)
-          if (identical(metric, "abundance")) d$y * length(v) else d$y
-        }
-        agg_donors <- function(mat) {
-          if (identical(metric, "abundance")) apply(mat, 1, median) else rowMeans(mat)
-        }
-
-        kde_list <- list(); n_donors <- list(); n_cells <- list(); y_max <- 0
-        for (s in levels(df$donor_status)) {
-          sdf <- df[df$donor_status == s, , drop = FALSE]
-          cols <- list()
-          for (dn in unique(sdf$case_id)) {
-            y <- dens_one(sdf$signed_dist[sdf$case_id == dn])
-            if (!is.null(y)) cols[[length(cols) + 1L]] <- y
-          }
-          if (length(cols) < 1) next
-          ybar <- agg_donors(do.call(cbind, cols))
-          kde_list[[s]] <- ybar
-          n_donors[[s]] <- length(cols)
-          n_cells[[s]]  <- nrow(sdf)
-          y_max <- max(y_max, max(ybar))
-        }
-        req(length(kde_list) > 0)
-
-        y_title <- if (identical(metric, "abundance"))
-                     "Median cells per µm per donor" else "Per-donor mean density (area = 1)"
-
-        fonts <- plotly_islet_fonts()
-        p <- plot_ly()
-        for (s in names(kde_list)) {
-          ybar <- kde_list[[s]]
-          lbl <- paste0(s, " (", n_donors[[s]], " donors, ",
-                        formatC(n_cells[[s]], big.mark = ","), " cells)")
-          p <- p %>% add_trace(
-            x = grid_x, y = ybar, type = "scatter", mode = "lines", name = lbl,
-            line = list(color = dcols[s], width = 2.5),
-            fill = "tozeroy", fillcolor = paste0(dcols[s], "22"),
-            hoverinfo = "text",
-            text = paste0(lbl, "<br>dist = ", round(grid_x, 1), " µm<br>",
-                          y_title, " = ", signif(ybar, 3)))
-        }
-        p <- p %>% add_trace(x = c(0, 0), y = c(0, y_max * 1.05),
-          type = "scatter", mode = "lines",
-          line = list(color = islet_ink(), width = 1.5, dash = "dash"),
-          showlegend = FALSE, hoverinfo = "none")
-        p %>% layout(
-          font = fonts$global, margin = list(t = 96),
-          title = list(text = paste0(type_label, " — Distance from Islet"),
-                       font = fonts$title, y = 0.97, yanchor = "top"),
-          xaxis = list(title = list(text = "Signed distance (µm) — inside islet ← 0 → outside",
-                                    font = fonts$axis_title),
-                       tickfont = fonts$axis_tick, zeroline = FALSE),
-          yaxis = list(title = list(text = y_title, font = fonts$axis_title),
-                       tickfont = fonts$axis_tick),
-          legend = list(orientation = "h", x = 0.5, xanchor = "center",
-                        y = 1.0, yanchor = "bottom",
-                        title = list(text = "Status (donor-averaged):",
-                                     font = fonts$legend_title, side = "top"),
-                        font = fonts$legend_text)
-        ) %>%
-          plotly_islet_config(paste0("spatial_distance_kde_", gsub("[^A-Za-z0-9_]", "_", type_label)))
-
-      } else {
+      {
         ptype <- input$dist_ptype %||% "density"
         mode  <- input$dist_mode %||% "phenotype"
         norm  <- input$dist_norm %||% "prop"
