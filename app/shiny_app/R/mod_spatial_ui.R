@@ -93,9 +93,9 @@ spatial_ui <- function(id) {
             tags$p(tags$strong("Composition"),
                    " shows each Leiden cluster's mean core phenotype proportions, for the checked donor statuses and",
                    " phenotypes: what each cluster is. Its Beta, Alpha, Delta and CHGA+ hormone-negative bars restate",
-                   " the shares the clusters are built from; the immune and residual bars do not."),
+                   " the proportions the clusters are built from; the immune and residual bars do not."),
             tags$p(tags$strong("Donor status"), " and ", tags$strong("Donor"),
-                   " show the share of each cluster's objects from each donor status or each donor: which",
+                   " show the proportion of each cluster's objects from each donor status or each donor: which",
                    " composition states are disease-associated, and whether a cluster belongs to a few donors. The",
                    " number above each bar is the cluster's donor count, and hover names its largest donor."),
             tags$p("The clusters are those of the Islet-Level UMAPs below, at the resolution chosen in the Data",
@@ -117,7 +117,7 @@ spatial_ui <- function(id) {
         card_title_help("Islet-Level UMAPs", style = "margin: 0 0 8px;", help = list(
           tags$p(textOutput(ns("embedding_method"), inline = TRUE)),
           tags$p("The left UMAP is coloured by Leiden cluster. The right one, the same layout, is coloured by each",
-                 " object's immune share of its 20 \u00b5m band (immune cells among all its band cells), saturating",
+                 " object's immune proportion in its 20 \u00b5m band (immune cells among all its band cells), saturating",
                  " at the 95th percentile; hover gives the value. The Trajectory tab shows the layout by donor status."))),
         fluidRow(
           column(6,
@@ -125,7 +125,7 @@ spatial_ui <- function(id) {
             plotlyOutput(ns("leiden_umap"), height = "480px")
           ),
           column(6,
-            h5("Band immune share", style = "font-size: 13px; margin-top: 0;"),
+            h5("Band immune proportion", style = "font-size: 13px; margin-top: 0;"),
             plotlyOutput(ns("spatial_umap_immune"), height = "480px")
           )
         )

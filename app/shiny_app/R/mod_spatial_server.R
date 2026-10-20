@@ -18,8 +18,8 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       if (!is.null(comp_method)) {
         return(sprintf(paste0(
           "Built from each object's endocrine composition: the Beta, Alpha, Delta and CHGA+ hormone-negative",
-          " shares of its core endocrine cells, for the %s objects with %s or more core cells. UMAP and Leiden",
-          " use one neighbour graph. No donor correction: the shares are counted within each object, so staining",
+          " proportions of its core endocrine cells, for the %s objects with %s or more core cells. UMAP and Leiden",
+          " use one neighbour graph. No donor correction: the proportions are counted within each object, so staining",
           " differences between donors do not enter them. Smaller objects have too few cells to place, so they",
           " have no UMAP point or cluster and are drawn grey, as tissue, when the tissue scatter is coloured by",
           " cluster."),
@@ -553,11 +553,11 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       # hover shows the true value.
       cap <- stats::quantile(plot_df$immune, 0.95, names = FALSE)
       plot_df$colour <- pmin(plot_df$immune, if (cap > 0) cap else max(plot_df$immune))
-      plot_df$.hover <- paste0("Band immune share: ", sprintf("%.3f", plot_df$immune), "<br>Status: ",
+      plot_df$.hover <- paste0("Band immune proportion: ", sprintf("%.3f", plot_df$immune), "<br>Status: ",
                                plot_df$donor_status, "<br>", plot_df$islet_key)
-      spatial_umap_plotly(plot_df, "colour", NULL, "Band immune share",
-                          paste0("Band immune share (", nrow(plot_df), " objects)"), "spatial_umap_immune",
-                          colorbar_title = "Immune<br>share")
+      spatial_umap_plotly(plot_df, "colour", NULL, "Band immune proportion",
+                          paste0("Band immune proportion (", nrow(plot_df), " objects)"), "spatial_umap_immune",
+                          colorbar_title = "Immune<br>proportion")
     })
 
     # ==== Cluster card, Composition view: each Leiden cluster's mean core phenotype proportions ====
@@ -732,7 +732,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           margin = list(t = 70),
           xaxis = list(title = list(text = "Cluster", font = fonts$axis_title), tickfont = fonts$axis_tick,
                        type = "category", categoryorder = "array", categoryarray = levels(donors$cluster)),
-          yaxis = list(title = list(text = "Share of the cluster's objects", font = fonts$axis_title),
+          yaxis = list(title = list(text = "Proportion of the cluster's objects", font = fonts$axis_title),
                        tickfont = fonts$axis_tick, range = c(0, 1.08), tickformat = ".0%"),
           legend = list(title = list(text = legend_title, font = fonts$legend_title),
                         font = list(size = ISLET_FONT_SIZES$dense_min))
@@ -1038,13 +1038,13 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           column(4,
             div(class = "card", style = card_style,
               card_title("Insulitis prevalence",
-                tags$p("Each donor's share of the selected endocrine objects with at least the chosen number of",
+                tags$p("Each donor's proportion of the selected endocrine objects with at least the chosen number of",
                        " immune cells in the core and the 20 µm band. Immune cells are every T cell, B cell,",
                        " macrophage and other leukocyte, subtyped or not. Bars are donor means ± SEM and each",
                        " point is a donor, so every donor counts once; the p value is a Kruskal-Wallis test on the",
-                       " donor shares."),
+                       " donor proportions."),
                 tags$p("The threshold follows nPOD's criterion of 15 CD45+ cells around an islet. It is a cell",
-                       " count, so small objects rarely reach it: with Clusters selected the shares fall. Uncheck",
+                       " count, so small objects rarely reach it: with Clusters selected the proportions fall. Uncheck",
                        " Cluster in the Data controls to count Islets only.")),
               div(style = ctrl_row,
                 sliderInput(ns("insulitis_threshold"), "Immune cells per object (at least)", min = 1, max = 50,
@@ -1056,14 +1056,14 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           column(4,
             div(class = "card", style = card_style,
               card_title("Immune cells and beta-cell content",
-                tags$p("For each donor, the mean immune share of the 20 µm band around its objects that still",
+                tags$p("For each donor, the mean immune proportion of the 20 µm band around its objects that still",
                        " have beta cells and around its insulin-deficient objects, joined by a line. An object is",
-                       " insulin-deficient when beta cells are under the chosen share of its core's Beta, Alpha,",
+                       " insulin-deficient when beta cells are under the chosen proportion of its core's Beta, Alpha,",
                        " Delta and CHGA+ hormone-negative cells. A donor with only one kind of object is a single",
                        " point."),
                 tags$p("In T1D, insulitis is expected mostly around islets that still hold beta cells.")),
               div(style = ctrl_row,
-                sliderInput(ns("beta_cut"), "Insulin-deficient below this beta-cell share", min = 0, max = 0.5,
+                sliderInput(ns("beta_cut"), "Insulin-deficient below this beta-cell proportion", min = 0, max = 0.5,
                             value = 0.1, step = 0.05, width = "100%")),
               plotlyOutput(ns("beta_immune"), height = "420px"),
               dl_csv("dl_beta_immune_csv")
@@ -1073,7 +1073,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
             div(class = "card", style = card_style,
               card_title("Immune gradient around islets",
                 tags$p("For each donor and each distance from the nearest endocrine object's border, the chosen",
-                       " cells' share of all cells there, divided by the same share in the donor's own tissue (its",
+                       " cells' proportion of all cells there, divided by the same proportion in the donor's own tissue (its",
                        " cells outside every endocrine object and its band). 1, the dashed line, is the donor's",
                        " tissue level; above 1 the cells gather there. Lines are the median of donors with their",
                        " IQR. Core holds the cells inside objects."),
@@ -1105,10 +1105,10 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                        " spread behind each bar is visible. Each donor's value is the mean over its objects."),
                 tags$p(tags$strong("Enrichment z"),
                        " (peri-islet mode) compares each phenotype's count in an object's band with the count expected",
-                       " from a reference share: z = (observed \u2212 expected) / \u221aexpected. z > 0 = more than",
-                       " expected. Baseline Cohort uses the phenotype's share of all analysed cells in the cohort, so",
+                       " from a reference proportion: z = (observed \u2212 expected) / \u221aexpected. z > 0 = more than",
+                       " expected. Baseline Cohort uses the phenotype's proportion of all analysed cells in the cohort, so",
                        " a donor with more of it everywhere scores high: it measures how many there are near islets.",
-                       " Own tissue uses the donor's own share outside every endocrine object and its band: it",
+                       " Own tissue uses the donor's own proportion outside every endocrine object and its band: it",
                        " measures whether they gather at islets. Proportion modes show the raw fraction (0\u20131)",
                        " of each compartment's cells."),
                 tags$p("Only the immune phenotypes are listed: the endocrine and exocrine classes are left out.",
@@ -1157,13 +1157,12 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                 tags$p(tags$strong("Group by"),
                        " Phenotype lists the immune phenotypes (the endocrine and exocrine classes are left out);",
                        " Marker+ lists every panel marker, all 31 being measured in every donor, a cell counting as",
-                       " positive at 0.10 or above on the cohort marker scale. In composition bars every status",
-                       " facet shares one y-axis scale, so their heights compare directly."),
-                tags$p(tags$strong("Y-axis Share."),
-                       " In composition bars it is the share of all cells at that distance that are of the phenotype",
+                       " positive at 0.10 or above on the cohort marker scale."),
+                tags$p(tags$strong("Y-axis Proportion."),
+                       " In composition bars it is the proportion of all cells at that distance that are of the phenotype",
                        " or positive for the marker, so a flat profile means an even mix and a peak means the cells",
-                       " gather there. Phenotypes stack (a cell has one); markers sit side by side, as a cell can be",
-                       " positive for several. In density curves it is the share of the status's cells of that class",
+                       " gather there. Each phenotype or marker has its own row and y-axis, so a rare one is not",
+                       " dwarfed by a common one; the row's ND, Aab+ and T1D columns use that one scale. In density curves it is the proportion of the status's cells of that class",
                        " per \u00b5m: where those cells lie, which also follows how much tissue lies at each distance."),
                 tags$p("Both views run to 200 \u00b5m outside the border. Composition bars are 5 \u00b5m wide;",
                        " density curves use 160 bins on the symlog axis. The dashed line is the border and the",
@@ -1175,7 +1174,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                              choices = c("Phenotype" = "phenotype", "Marker+" = "marker"),
                              selected = "phenotype", inline = TRUE),
                 radioButtons(ns("dist_norm"), "Y-axis",
-                             choices = c("Share" = "prop", "Raw count" = "count"),
+                             choices = c("Proportion" = "prop", "Raw count" = "count"),
                              selected = "prop", inline = TRUE),
                 radioButtons(ns("dist_ptype"), "Plot",
                              choices = c("Density curves" = "density",
@@ -1207,7 +1206,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                                             choices = NULL))
               )
             ),
-            plotlyOutput(ns("immune_distance_kde"), height = "520px")
+            uiOutput(ns("distance_profile_plot"))
           )
         ))
       )
@@ -1293,7 +1292,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
     output$insulitis_bars <- renderPlotly({
       d <- insulitis_data()
       thr <- input$insulitis_threshold %||% 15
-      donor_points_bars(d, paste0("Share of objects with ≥", thr, " immune cells"),
+      donor_points_bars(d, paste0("Proportion of objects with ≥", thr, " immune cells"),
                         "Insulitis prevalence", "spatial_insulitis_prevalence", fmt = "%.3f", percent = TRUE)
     })
 
@@ -1303,14 +1302,14 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         d <- tryCatch(insulitis_data(), error = function(e) NULL)
         out <- if (is.null(d)) NULL else
           data.frame(case_id = d$case_id, donor_status = as.character(d$status), objects = d$objects,
-                     insulitic_objects = d$insulitic, share = d$value, stringsAsFactors = FALSE)
+                     insulitic_objects = d$insulitic, proportion = d$value, stringsAsFactors = FALSE)
         write_islet_csv(file, out, islet_csv_header(
           "Spatial — insulitis prevalence per donor",
           paste("Insulitic object: at least", input$insulitis_threshold %||% 15,
                 "immune cells (every immune label) in the core and the 20 um band"),
           paste("Donor groups:", paste(input$groups %||% "(all)", collapse = ", ")),
           paste("Endocrine objects:", paste(sort(unique(as.character(prepared()$comp$object_class %||% "Islet"))), collapse = ", ")),
-          paste("Kruskal-Wallis p (donor shares):",
+          paste("Kruskal-Wallis p (donor proportions):",
                 if (is.null(d)) "N/A" else formatC(donor_kw_p(d$value, d$status), format = "g", digits = 4))))
       }
     )
@@ -1346,12 +1345,12 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       both <- table(d$case_id)
       p %>% layout(
         font = fonts$global, margin = list(t = 110),
-        title = list(text = paste0("Immune cells and beta-cell content<br><sup>Mean band immune share per donor<br>",
+        title = list(text = paste0("Immune cells and beta-cell content<br><sup>Mean band immune proportion per donor<br>",
                                    sum(both == 2), " donors have both kinds of object</sup>"),
                      font = fonts$title),
         xaxis = list(title = list(text = ""), tickfont = fonts$axis_tick, categoryorder = "array",
                      categoryarray = kinds),
-        yaxis = list(title = list(text = "Immune share of the 20 µm band", font = fonts$axis_title),
+        yaxis = list(title = list(text = "Immune proportion of the 20 µm band", font = fonts$axis_title),
                      tickfont = fonts$axis_tick, rangemode = "tozero"),
         legend = list(title = list(text = "Status", font = fonts$legend_title), font = fonts$legend_text)
       ) %>% plotly_islet_config("spatial_immune_by_beta_content")
@@ -1363,9 +1362,9 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         d <- tryCatch(beta_immune_data(), error = function(e) NULL)
         out <- if (is.null(d)) NULL else
           data.frame(case_id = d$case_id, donor_status = as.character(d$status), object_kind = as.character(d$kind),
-                     objects = d$objects, mean_band_immune_share = d$value, stringsAsFactors = FALSE)
+                     objects = d$objects, mean_band_immune_proportion = d$value, stringsAsFactors = FALSE)
         write_islet_csv(file, out, islet_csv_header(
-          "Spatial — band immune share by beta-cell content, per donor",
+          "Spatial — band immune proportion by beta-cell content, per donor",
           paste0("Insulin-deficient: beta cells under ", 100 * (input$beta_cut %||% 0.1),
                  "% of the core's Beta, Alpha, Delta and CHGA+ hormone-negative cells"),
           paste("Donor groups:", paste(input$groups %||% "(all)", collapse = ", ")),
@@ -1431,13 +1430,13 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                       showlegend = FALSE, hoverinfo = "none") %>%
         layout(
           font = fonts$global, margin = list(t = 110),
-          title = list(text = paste0(label, " around endocrine objects<br><sup>Share at each distance ÷ the ",
-                                     "donor's own tissue share<br>Median and IQR of donors</sup>"),
+          title = list(text = paste0(label, " around endocrine objects<br><sup>Proportion at each distance ÷ the ",
+                                     "donor's own tissue proportion<br>Median and IQR of donors</sup>"),
                        font = fonts$title),
           xaxis = list(title = list(text = "Distance from the object's border (µm)", font = fonts$axis_title),
                        tickfont = fonts$axis_tick, tickangle = -45, categoryorder = "array",
                        categoryarray = DISTANCE_BIN_LABELS),
-          yaxis = list(title = list(text = "× own tissue share", font = fonts$axis_title),
+          yaxis = list(title = list(text = "× own tissue proportion", font = fonts$axis_title),
                        tickfont = fonts$axis_tick, rangemode = "tozero"),
           # Below the plot: the donor's entry is long, and a side legend would narrow this card's plot.
           legend = list(orientation = "h", x = 0.5, xanchor = "center", y = -0.42, yanchor = "top",
@@ -1451,7 +1450,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         g <- tryCatch(gradient_data(), error = function(e) NULL)
         out <- if (is.null(g)) NULL else
           data.frame(case_id = g$case_id, donor_status = as.character(g$status), distance_bin_um = as.character(g$bin),
-                     cells = g$cells, chosen_cells = g$count, share = g$share, donor_tissue_share = g$tissue_share,
+                     cells = g$cells, chosen_cells = g$count, proportion = g$share, donor_tissue_proportion = g$tissue_share,
                      ratio_to_own_tissue = g$value, stringsAsFactors = FALSE)
         write_islet_csv(file, out, islet_csv_header(
           "Spatial — immune gradient around endocrine objects, per donor",
@@ -1570,6 +1569,13 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         plotly_islet_config("spatial_enrichment_donor_heatmap")
     })
 
+    # The profile's container grows with the composition rows (one per phenotype or marker).
+    cd_composition_height <- function(n_items) max(520, 150 * n_items + 110)
+    output$distance_profile_plot <- renderUI({
+      n <- if (identical(input$dist_ptype %||% "density", "composition")) length(input$dist_comp_items) else 0
+      plotlyOutput(ns("immune_distance_kde"), height = paste0(if (n) cd_composition_height(n) else 520, "px"))
+    })
+
     # ==== Distance-to-islet profile: per-cell density and composition across the tissue ====
     # (release Parquet/DuckDB; development CSV, symlog axis; ported from Senior.) Its donor-averaged KDE view was
     # removed in the owner review of 2026-10-20: that table holds only core and band cells, so it stopped at 20 um,
@@ -1587,66 +1593,66 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         item_colors <- if (identical(mode, "marker")) CELL_DIST_MARKER_COLORS else PHENOTYPE_COLORS
 
         if (identical(ptype, "composition")) {
-          # ---- Composition: stacked bars (phenotype or marker), one facet per status ----
+          # ---- Composition: one row per phenotype or marker, one column per donor status ----
+          # Owner, 2026-10-20: markers drawn side by side hid small proportions next to large ones, so each item has
+          # its own row and y-axis, shared by the three statuses of that row (the same y scaling for each group).
           items <- input$dist_comp_items
           req(length(items) > 0)
           res <- query_cell_distance_composition(mode, items, statuses, norm)
           req(res, nrow(res$comp) > 0)
           comp <- res$comp
           present <- intersect(status_order, unique(comp$donor_status))
+          items <- items[items %in% comp$item]
+          req(length(items) > 0)
           pcols <- item_colors[items]; pcols[is.na(pcols)] <- "#999999"; names(pcols) <- items
-          y_lab <- if (identical(norm, "prop")) "share of the cells at that distance" else "cells"
-          # Phenotypes are exclusive, so they stack; one cell can be positive for several markers, so markers sit
-          # side by side (stacking them counted such a cell once per marker).
-          stacked <- !identical(mode, "marker")
-          # One y range for every status facet (owner, 2026-10-20), from the tallest bar (or stack) of any status.
-          shown <- comp[comp$item %in% items, , drop = FALSE]
-          stack_max <- if (stacked) max(stats::aggregate(val ~ donor_status + binx, shown, sum)$val, na.rm = TRUE)
-                       else max(shown$val, na.rm = TRUE)
-          y_range <- c(0, stack_max * 1.05)
-          panels <- lapply(present, function(s) {
-            ss <- comp[comp$donor_status == s, , drop = FALSE]
-            pp <- plot_ly()
-            for (m in items) {
-              sub <- ss[ss$item == m, , drop = FALSE]
+          y_lab <- if (identical(norm, "prop")) "proportion of the cells at that distance" else "cells"
+          height <- cd_composition_height(length(items))
+          gap <- 30 / height
+          panels <- list()
+          for (m in items) {
+            row_max <- max(comp$val[comp$item == m], na.rm = TRUE)
+            y_range <- c(0, if (is.finite(row_max) && row_max > 0) row_max * 1.08 else 1)
+            for (s in present) {
+              sub <- comp[comp$item == m & comp$donor_status == s, , drop = FALSE]
               sub <- sub[order(sub$binx), , drop = FALSE]
-              if (nrow(sub) == 0) next
-              pp <- pp %>% add_trace(
-                x = sub$x, y = sub$val, type = "bar",
-                name = m, legendgroup = m, showlegend = identical(s, present[1]),
-                marker = list(color = unname(pcols[m])),
-                hoverinfo = "text",
-                hovertext = paste0(s, " · ", m, "<br>dist ≈ ", round(sub$x), " µm<br>",
-                                   formatC(sub$n, big.mark = ","), " of ", formatC(sub$total, big.mark = ","),
-                                   " cells (", sprintf("%.1f%%", 100 * sub$n / sub$total), ")"))
+              pp <- plot_ly() %>%
+                add_trace(x = sub$x, y = sub$val, type = "bar", marker = list(color = unname(pcols[m])),
+                          showlegend = FALSE, hoverinfo = "text",
+                          hovertext = paste0(s, " · ", m, "<br>dist ≈ ", round(sub$x), " µm<br>",
+                                             formatC(sub$n, big.mark = ","), " of ",
+                                             formatC(sub$total, big.mark = ","), " cells (",
+                                             sprintf("%.1f%%", 100 * sub$n / sub$total), ")")) %>%
+                add_trace(x = c(0, 0), y = y_range, type = "scatter", mode = "lines",
+                          line = list(color = islet_ink(), width = 1.2, dash = "dash"),
+                          showlegend = FALSE, hoverinfo = "none") %>%
+                # The outer edge of the 20 um peri-islet band.
+                add_trace(x = c(CD_BAND_UM, CD_BAND_UM), y = y_range, type = "scatter", mode = "lines",
+                          line = list(color = islet_ink(), width = 1.1, dash = "dot"),
+                          showlegend = FALSE, hoverinfo = "text",
+                          hovertext = paste0(CD_BAND_UM, " \u00b5m: band edge")) %>%
+                layout(bargap = 0.1,
+                       xaxis = list(title = "", tickfont = fonts$axis_tick, zeroline = FALSE,
+                                    range = c(res$lo, CD_MAX_OUTSIDE_UM), dtick = 40),
+                       yaxis = list(title = list(text = if (identical(s, present[1])) m else "",
+                                                 font = fonts$legend_title),
+                                    tickfont = list(size = ISLET_FONT_SIZES$dense_min), range = y_range,
+                                    tickformat = if (identical(norm, "prop")) ".1%" else NULL))
+              panels[[length(panels) + 1L]] <- pp
             }
-            pp <- pp %>% add_trace(x = c(0, 0), y = y_range,
-              type = "scatter", mode = "lines",
-              line = list(color = islet_ink(), width = 1.4, dash = "dash"),
-              showlegend = FALSE, hoverinfo = "none") %>%
-              # The outer edge of the 20 um peri-islet band.
-              add_trace(x = c(CD_BAND_UM, CD_BAND_UM), y = y_range, type = "scatter", mode = "lines",
-                        line = list(color = islet_ink(), width = 1.2, dash = "dot"),
-                        showlegend = FALSE, hoverinfo = "text", hovertext = paste0(CD_BAND_UM, " \u00b5m: band edge"))
-            pp %>% layout(barmode = if (stacked) "stack" else "group", bargap = 0.1,
-              xaxis = list(title = "", tickfont = fonts$axis_tick, zeroline = FALSE,
-                           range = c(res$lo, CD_MAX_OUTSIDE_UM), dtick = 20),
-              yaxis = list(title = list(text = s, font = fonts$legend_title),
-                           tickfont = fonts$axis_tick, range = y_range))
-          })
-          fig <- if (length(panels) == 1) panels[[1]]
-                 else plotly::subplot(panels, nrows = length(panels), shareX = TRUE,
-                                      titleY = TRUE, margin = 0.04)
+          }
+          fig <- plotly::subplot(panels, nrows = length(items), shareX = TRUE, titleY = TRUE,
+                                 margin = c(0.025, 0.01, gap / 2, gap / 2))
+          heads <- lapply(seq_along(present), function(j) list(
+            text = paste0("<b>", present[j], "</b>"), x = (j - 0.5) / length(present), y = 1, xref = "paper",
+            yref = "paper", xanchor = "center", yanchor = "bottom", showarrow = FALSE, font = fonts$legend_title))
           fig %>% layout(
-            font = fonts$global,
-            margin = list(t = 58, b = 62),
-            legend = list(orientation = "h", x = 0.5, xanchor = "center",
-                          y = 1.0, yanchor = "bottom", font = fonts$legend_text),
-            annotations = list(list(
+            font = fonts$global, showlegend = FALSE,
+            margin = list(t = 40, b = 70, l = 80),
+            annotations = c(heads, list(list(
               text = paste0("Signed distance (µm) — inside ← 0 → outside   ·   y = ", y_lab),
-              x = 0.5, y = -0.09, xref = "paper", yref = "paper",
+              x = 0.5, y = -48 / height, xref = "paper", yref = "paper",
               xanchor = "center", yanchor = "top", showarrow = FALSE,
-              font = fonts$axis_title))
+              font = fonts$axis_title)))
           ) %>% plotly_islet_config("spatial_cell_distance_composition")
 
         } else {

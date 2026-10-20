@@ -125,7 +125,7 @@ trajectory_ui <- function(id) {
         div(class = "card trajectory-controls", style = "padding: 15px; margin-bottom: 20px;",
           card_title_help("Pseudotime", help = list(
             tags$p("Each fitted object's Y-axis value (Data controls) against its pseudotime. The strip below",
-                   " cuts pseudotime into 25 bins: a bin's colour is the donor status holding the largest share of",
+                   " cuts pseudotime into 25 bins: a bin's colour is the donor status holding the largest proportion of",
                    " its own objects there, and its depth is the feature's mean in the bin."),
             tags$p(tags$strong("Pseudotime."),
                    " Diffusion pseudotime (scanpy DPT) on each object's cell make-up, after Barlow et al. 2024: for",
@@ -149,7 +149,7 @@ trajectory_ui <- function(id) {
           card_title_help("UMAPs", help = list(
             tags$p(tags$strong("UMAPs and Leiden clusters."),
                    " Built from each fitted object's endocrine composition (the Beta, Alpha, Delta and CHGA+",
-                   " hormone-negative shares of its core endocrine cells), with one neighbour graph for UMAP and",
+                   " hormone-negative proportions of its core endocrine cells), with one neighbour graph for UMAP and",
                    " Leiden and no donor correction; the same layout as the Spatial tab's UMAPs. The upper UMAP is",
                    " coloured by donor status, the lower by the feature chosen in the Data controls."),
             linked_help)),

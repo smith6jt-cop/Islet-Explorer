@@ -428,13 +428,13 @@ path.
 
 3. **Leiden clusters** (right): **Show** switches between three views. *Composition* (the default) is a stacked
    bar chart of each cluster's mean core phenotype proportions, clusters in numeric order: what each cluster is. Its
-   endocrine bars restate the shares the clusters are built from. *Donor status* and *Donor* (since 2026-10-20) split
+   endocrine bars restate the proportions the clusters are built from. *Donor status* and *Donor* (since 2026-10-20) split
    each cluster's objects by donor status or by donor, with each cluster's donor count above its bar: which
    composition states are disease-associated, and whether a cluster belongs to a few donors.
 4. **Islet-Level UMAPs** (full-width row below, since 2026-10-19): the Leiden UMAP and, since 2026-10-20, the same
-   layout coloured by each object's immune share of its 20 µm band, side by side at one size, both interactive (PNG
+   layout coloured by each object's immune proportion in its 20 µm band, side by side at one size, both interactive (PNG
    from each camera button). The layout by donor status is on the Trajectory tab.
-   - Built from each object's endocrine composition (the Beta, Alpha, Delta and CHGA+ hormone-negative shares of
+   - Built from each object's endocrine composition (the Beta, Alpha, Delta and CHGA+ hormone-negative proportions of
      its core endocrine cells) for the objects with ten or more core cells, with no donor correction (2026-10-19).
      Smaller objects have too few cells to place and have no point or cluster. Disease separates mainly by T1D
      beta-cell loss; ND and Aab+ objects overlap, as Aab+ donors range from ND-like to T1D-like.
@@ -454,20 +454,20 @@ objects selected in the tab's Data controls (the immune gradient reads per-cell 
 not apply to it). The section's own control panels and outlier controls were removed; each card carries its own
 selector. Cards only appear when neighborhood data is available in the H5AD.
 
-**Insulitis prevalence**: each donor's share of objects with at least the chosen number of immune cells (every
+**Insulitis prevalence**: each donor's proportion of objects with at least the chosen number of immune cells (every
 immune label, subtyped or not) in the core and the 20 µm band; default 15, after nPOD's 15 CD45+ cells. Bars are
-donor means ± SEM with each donor as a point, and a Kruskal-Wallis p on the donor shares. Small objects rarely reach
+donor means ± SEM with each donor as a point, and a Kruskal-Wallis p on the donor proportions. Small objects rarely reach
 the threshold, so uncheck Cluster to count Islets only. On v7, Islets only: donor medians ND 0, Aab+ 0.074, T1D
 0.185 (p = 0.01).
 
-**Immune cells and beta-cell content**: for each donor, the mean immune share of the band around its objects that
-still have beta cells and around its insulin-deficient objects (beta cells under the chosen share of the core's
+**Immune cells and beta-cell content**: for each donor, the mean immune proportion of the band around its objects that
+still have beta cells and around its insulin-deficient objects (beta cells under the chosen proportion of the core's
 endocrine cells, default 10%), joined by a line. On v7 Islets, in every T1D donor with both kinds the band around
 islets with beta cells holds more immune cells (0.17–0.27) than around insulin-deficient islets (0.05–0.13).
 
 **Immune gradient around islets**: for each donor and distance bin from the nearest endocrine object's border
-(Core, 0–20 … 200–400, >400 µm), the chosen immune cells' share of all cells there divided by the donor's own tissue
-share (its cells outside every endocrine object and band). 1 is the donor's tissue level. Lines are the donor median
+(Core, 0–20 … 200–400, >400 µm), the chosen immune cells' proportion of all cells there divided by the donor's own tissue
+proportion (its cells outside every endocrine object and band). 1 is the donor's tissue level. Lines are the donor median
 per status with the IQR. Dividing by the donor's own tissue separates gathering at islets from a donor having more
 immune cells everywhere. The donor chosen in the Data controls (the tissue scatter's donor) is drawn as a dotted line over
 the medians; hover gives its cell counts, and a point resting on fewer than 20 of the chosen cells is faded.
@@ -476,20 +476,21 @@ the medians; hover gives its cell counts, and a point resting on fewer than 20 o
 macrophages; the endocrine and exocrine classes are left out since 2026-10-20). Left, the status summary (median and IQR,
 or mean and SEM, of donor means); right, one row per donor grouped by status, so the spread behind each bar shows.
 - *Region*: Peri-islet enrichment z (diverging colours), Core proportion, Peri-islet proportion.
-- *Baseline* (enrichment z only): **Cohort** compares each band with the phenotype's share of all analysed cells in
+- *Baseline* (enrichment z only): **Cohort** compares each band with the phenotype's proportion of all analysed cells in
   the cohort, so it measures how many are near islets, and a donor with more of a cell type everywhere scores high.
-  **Own tissue** compares each band with the donor's own tissue share, so it measures gathering at islets. On v7
-  the cohort-baseline donor means rank-correlate 0.80–0.91 with the donors' tissue shares.
+  **Own tissue** compares each band with the donor's own tissue proportion, so it measures gathering at islets. On v7
+  the cohort-baseline donor means rank-correlate 0.80–0.91 with the donors' tissue proportions.
 - *Drop object z beyond ±5* removes those objects' values before each donor mean.
 
 **Distance-to-islet profile**: the per-cell view of every cell's signed distance to the nearest islet border across
 the tissue (symlog axis), as density curves or composition bars, by immune phenotype or by marker positivity (all 31
 panel markers from data root v8, each measured in every donor; positive = 0.10 or above on the cohort marker scale).
-In composition bars every status facet shares one y-axis scale. Both views stop 200 µm outside the border (composition bars 5 µm wide, density
-in 160 symlog bins), with a dotted line at the 20 µm band edge. In composition bars the Share y-axis is each phenotype's or marker's share of all cells
-at that distance (phenotypes stack; markers sit side by side, since one cell can be positive for several). Until
-2026-10-20 the bars divided by the status's total cells, so they followed how many cells lay at each distance and
-looked nearly flat from 20 to 120 µm. Every analysed cell counts, including those without a cell subtype. Every cell
+Both views stop 200 µm outside the border (composition bars 5 µm wide, density in
+160 symlog bins), with a dotted line at the 20 µm band edge. In composition bars the Proportion y-axis is the
+proportion of all cells at that distance that are of the phenotype or positive for the marker; each phenotype or
+marker has its own row and y-axis, and its ND, Aab+ and T1D columns use that one scale, so a rare marker is not
+dwarfed by a common one. Until 2026-10-20 the bars divided by the status's total cells, so they followed how many
+cells lay at each distance. Every analysed cell counts, including those without a cell subtype. Every cell
 counts once, so donors with more cells weigh more; the immune gradient is the donor-fair version. Its former
 donor-averaged KDE view was removed: its table holds only core and band cells, so it stopped at 20 µm.
 
