@@ -426,10 +426,11 @@ path.
    - **Zoom**: Drag to select a region, then the view zooms in. Double-click or click **Reset Zoom** to restore the full view.
    - Uses ggplot2 `renderPlot` (not plotly) for performance at >100K points
 
-3. **Cluster membership** (right, since 2026-10-20): each Leiden cluster's objects split by donor status (or by
-   donor), clusters in numeric order, with each cluster's donor count above its bar. It shows which composition
-   states are disease-associated and whether a cluster belongs to a few donors. (It replaced a chart of each
-   cluster's mean composition, which plotted back the endocrine shares the clusters are built from.)
+3. **Leiden clusters** (right): **Show** switches between three views. *Composition* (the default) is a stacked
+   bar chart of each cluster's mean core phenotype proportions, clusters in numeric order: what each cluster is. Its
+   endocrine bars restate the shares the clusters are built from. *Donor status* and *Donor* (since 2026-10-20) split
+   each cluster's objects by donor status or by donor, with each cluster's donor count above its bar: which
+   composition states are disease-associated, and whether a cluster belongs to a few donors.
 4. **Islet-Level UMAPs** (full-width row below, since 2026-10-19): the Leiden UMAP and, since 2026-10-20, the same
    layout coloured by each object's immune share of its 20 µm band, side by side at one size, both interactive (PNG
    from each camera button). The layout by donor status is on the Trajectory tab.

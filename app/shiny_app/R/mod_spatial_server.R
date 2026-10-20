@@ -560,6 +560,106 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                           colorbar_title = "Immune<br>share")
     })
 
+    # ==== Cluster card, Composition view: each Leiden cluster's mean core phenotype proportions ====
+    # The owner kept it (2026-10-20: "There still needs to be a cluster composition plot"): it is how a cluster is
+    # read, although its endocrine bars restate what the clusters are built from. The Membership views sit beside it.
+    cluster_composition_plot <- function() {
+      req(has_leiden())
+      pd <- prepared()
+      comp <- pd$comp
+
+      leiden_col <- input$leiden_res %||% {
+        nbr <- get_nbr_columns(colnames(comp))
+        nbr$leiden[2] %||% nbr$leiden[1]
+      }
+      req(leiden_col %in% colnames(comp))
+
+      # Filter by donor status
+      plot_comp <- comp
+      if (!is.null(input$groups) && "Donor Status" %in% colnames(plot_comp)) {
+        plot_comp <- plot_comp[plot_comp$`Donor Status` %in% input$groups, , drop = FALSE]
+      }
+
+      # Get phenotype proportion columns (prop_*), filtered by selected phenotypes
+      prop_cols <- grep("^prop_", colnames(plot_comp), value = TRUE)
+      prop_cols <- prop_cols[phenotype_is_kept(sub("^prop_", "", prop_cols))]
+      if (length(prop_cols) == 0) {
+        return(plotly_islet_empty("No phenotype proportion data"))
+      }
+      if (!is.null(input$pheno_filter) && length(input$pheno_filter) > 0) {
+        keep_cols <- paste0("prop_", input$pheno_filter)
+        prop_cols <- intersect(prop_cols, keep_cols)
+        if (length(prop_cols) == 0) {
+          return(plotly_islet_empty("No matching phenotypes selected"))
+        }
+      }
+
+      # Objects outside the embedding (under ten core cells on a composition root) have no cluster.
+      plot_comp <- plot_comp[!is.na(plot_comp[[leiden_col]]), , drop = FALSE]
+      if (nrow(plot_comp) == 0) return(plotly_islet_empty("No clustered objects"))
+      cluster <- as.character(plot_comp[[leiden_col]])
+
+      # Compute mean phenotype proportions per cluster
+      cluster_levels <- leiden_levels(cluster)
+      mat <- matrix(NA_real_, nrow = length(prop_cols), ncol = length(cluster_levels),
+                    dimnames = list(prop_cols, cluster_levels))
+      for (cl in cluster_levels) {
+        sub <- plot_comp[cluster == cl, prop_cols, drop = FALSE]
+        if (nrow(sub) > 0) {
+          mat[, cl] <- colMeans(sub, na.rm = TRUE)
+        }
+      }
+
+      # Build stacked bar data
+      bar_rows <- list()
+      for (i in seq_along(prop_cols)) {
+        for (j in seq_along(cluster_levels)) {
+          bar_rows[[length(bar_rows) + 1]] <- data.frame(
+            phenotype = gsub("^prop_", "", prop_cols[i]),
+            cluster = cluster_levels[j],
+            proportion = mat[i, j],
+            stringsAsFactors = FALSE
+          )
+        }
+      }
+      bar_df <- do.call(rbind, bar_rows)
+
+      # Remove phenotypes with zero proportion across all clusters
+      max_per_pheno <- tapply(bar_df$proportion, bar_df$phenotype, max, na.rm = TRUE)
+      keep_phenos <- names(max_per_pheno[max_per_pheno > 0])
+      bar_df <- bar_df[bar_df$phenotype %in% keep_phenos, , drop = FALSE]
+
+      # Use active phenotype palette where available
+      pheno_present <- unique(bar_df$phenotype)
+      pal <- palette()[pheno_present]
+      pal[is.na(pal)] <- "#CCCCCC"
+
+      canonical_order <- names(palette())
+      ordered_phenos <- intersect(canonical_order, keep_phenos)
+      ordered_phenos <- c(ordered_phenos, setdiff(keep_phenos, canonical_order))
+      bar_df$phenotype <- factor(bar_df$phenotype, levels = rev(ordered_phenos))
+      bar_df$cluster <- factor(bar_df$cluster, levels = cluster_levels)
+
+      fonts <- plotly_islet_fonts()
+      plot_ly(bar_df, x = ~cluster, y = ~proportion, color = ~phenotype,
+              colors = pal,
+              type = "bar") %>%
+        layout(
+          font = fonts$global,
+          barmode = "stack",
+          title = list(text = "Mean Phenotype Composition by Cluster", font = fonts$title),
+          xaxis = list(title = list(text = "Cluster", font = fonts$axis_title),
+                       tickfont = fonts$axis_tick),
+          yaxis = list(title = list(text = "Mean Proportion", font = fonts$axis_title),
+                       tickfont = fonts$axis_tick, range = c(0, 1)),
+          # Up to 12 reviewer-facing phenotype entries — use the dense floor directly rather than
+          # a max() formula that already evaluates to it.
+          legend = list(font = list(size = ISLET_FONT_SIZES$dense_min),
+                        title = list(text = "", font = fonts$legend_title))
+        ) %>%
+        plotly_islet_config("cluster_composition")
+    }
+
     # ==== Cluster membership (owner review, 2026-10-20) ====
     # Replaced a mean-composition-by-cluster chart that plotted back the endocrine shares the clusters are built
     # from. Each cluster's objects by donor status (or by donor): which composition states are disease-associated,
@@ -579,8 +679,9 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
     })
 
     output$cluster_composition <- renderPlotly({
+      by <- input$cluster_view %||% "composition"
+      if (identical(by, "composition")) return(cluster_composition_plot())
       m <- cluster_membership_data()
-      by <- input$cluster_member_by %||% "status"
       fonts <- plotly_islet_fonts()
       donors <- m$donors
       hover_cluster <- paste0("Cluster ", donors$cluster, ": ", donors$objects, " objects, ", donors$donors,
@@ -625,7 +726,8 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                             showarrow = FALSE, yanchor = "bottom", font = list(size = ISLET_FONT_SIZES$dense_min)) %>%
         layout(
           font = fonts$global, barmode = "stack",
-          title = list(text = paste0("Cluster membership (Leiden ", sub("^leiden_", "", m$leiden_col), ")"),
+          title = list(text = paste0("Cluster membership by ", if (identical(by, "donor")) "donor" else "donor status",
+                                     " (Leiden ", sub("^leiden_", "", m$leiden_col), ")"),
                        font = fonts$title),
           margin = list(t = 70),
           xaxis = list(title = list(text = "Cluster", font = fonts$axis_title), tickfont = fonts$axis_tick,

@@ -1,6 +1,6 @@
 # ---------- Spatial Tab module UI ----------
 # Exports: spatial_ui(id)
-# Layout: Data / View control panels (control_panel()), then Tissue Scatter (col-7) + Cluster membership (col-5),
+# Layout: Data / View control panels (control_panel()), then Tissue Scatter (col-7) + Leiden clusters (col-5: composition / membership),
 # then the two islet-level UMAPs side by side in a full-width row
 # + Neighborhood Analysis cards below (rendered server-side in output$neighborhood_cards): insulitis prevalence /
 #   immune cells and beta-cell content / immune gradient row, composition card, distance-to-islet profile card
@@ -89,17 +89,21 @@ spatial_ui <- function(id) {
       # ---- Right: Leiden cluster composition ----
       column(5,
         div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible; height: 100%;",
-          card_title_help("Cluster membership", style = "margin: 0 0 8px;", help = list(
-            tags$p("The share of each Leiden cluster's objects from each donor status, or from each donor. It shows",
-                   " which composition states are disease-associated and whether a cluster belongs to a few",
-                   " donors; the number above each bar is the cluster's donor count, and hover names its largest",
-                   " donor. The clusters are those of the Islet-Level UMAPs below, at the resolution chosen in the",
-                   " Data controls, for the checked donor statuses."),
-            tags$p("The clusters are built from the objects' endocrine shares, so their composition is not",
-                   " repeated here; colour the tissue scatter by Leiden cluster to see where they lie."))),
+          card_title_help("Leiden clusters", style = "margin: 0 0 8px;", help = list(
+            tags$p(tags$strong("Composition"),
+                   " shows each Leiden cluster's mean core phenotype proportions, for the checked donor statuses and",
+                   " phenotypes: what each cluster is. Its Beta, Alpha, Delta and CHGA+ hormone-negative bars restate",
+                   " the shares the clusters are built from; the immune and residual bars do not."),
+            tags$p(tags$strong("Donor status"), " and ", tags$strong("Donor"),
+                   " show the share of each cluster's objects from each donor status or each donor: which",
+                   " composition states are disease-associated, and whether a cluster belongs to a few donors. The",
+                   " number above each bar is the cluster's donor count, and hover names its largest donor."),
+            tags$p("The clusters are those of the Islet-Level UMAPs below, at the resolution chosen in the Data",
+                   " controls."))),
           uiOutput(ns("leiden_not_available")),
-          radioButtons(ns("cluster_member_by"), "Split by", c("Donor status" = "status", "Donor" = "donor"),
-                       selected = "status", inline = TRUE),
+          radioButtons(ns("cluster_view"), "Show",
+                       c("Composition" = "composition", "Donor status" = "status", "Donor" = "donor"),
+                       selected = "composition", inline = TRUE),
           plotlyOutput(ns("cluster_composition"), height = "650px")
         )
       )
