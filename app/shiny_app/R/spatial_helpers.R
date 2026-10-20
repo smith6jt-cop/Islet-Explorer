@@ -122,6 +122,11 @@ load_donor_tissue <- function(imageid) {
 # near-linear within +/- C um and log-compressed beyond, so bins are ~1-2 um
 # across the border and coarse far out.
 CD_SYMLOG_C   <- 25
+# Owner, 2026-10-20: the profile runs to 200 um outside the border, in finer bins, with a line at the 20 um band edge.
+CD_MAX_OUTSIDE_UM <- 200
+CD_BAND_UM        <- 20
+CD_COMP_BIN_UM    <- 5      # composition bar width (zero-anchored)
+CD_HIST_BINS      <- 160L   # density bins over the symlog range
 cd_symlog     <- function(x) sign(x) * log10(1 + abs(x) / CD_SYMLOG_C)
 cd_symlog_inv <- function(t) sign(t) * CD_SYMLOG_C * (10^abs(t) - 1)
 cd_symlog_ticks <- function(lo, hi) {
@@ -271,7 +276,7 @@ CELL_DIST_MARKER_COLORS <- c(
 #'         correcting for different total cell numbers per group) | "count".
 #' Returns list(hist[donor_status,binx,n,x,real_x,dens], lo, hi, n_by_status,
 #' norm). `dens` is per REAL um of distance either way.
-.query_cell_distance_hist_memory <- function(mode, group, statuses, norm = "prop", n_bins = 120L) {
+.query_cell_distance_hist_memory <- function(mode, group, statuses, norm = "prop", n_bins = CD_HIST_BINS) {
   df <- load_cell_distance()
   if (is.null(df) || length(statuses) == 0) return(NULL)
   base <- df[df$donor_status %in% statuses, , drop = FALSE]
@@ -280,7 +285,7 @@ CELL_DIST_MARKER_COLORS <- c(
   d <- .cd_subset(base, mode, group)
   if (nrow(d) < 2) return(NULL)
   lo <- min(as.numeric(stats::quantile(d$signed_dist, 0.001, na.rm = TRUE)), -50)
-  hi <- as.numeric(stats::quantile(d$signed_dist, 0.999, na.rm = TRUE))
+  hi <- CD_MAX_OUTSIDE_UM
   if (!isTRUE(hi > lo)) return(NULL)
   d <- d[d$signed_dist >= lo & d$signed_dist <= hi, , drop = FALSE]
   tlo <- cd_symlog(lo); thi <- cd_symlog(hi); dt <- (thi - tlo) / n_bins
@@ -309,7 +314,7 @@ CELL_DIST_MARKER_COLORS <- c(
 #' (floor(dist/bw)) so a bar edge sits on x=0; window forced to straddle 0.
 #' `norm` "prop" = fraction of the disease class's cells (÷ group total) |
 #' "count". Returns list(comp[donor_status,binx,item,n,x,val], lo, hi, bw, norm).
-.query_cell_distance_composition_memory <- function(mode, items, statuses, norm = "prop", n_bins = 16L) {
+.query_cell_distance_composition_memory <- function(mode, items, statuses, norm = "prop") {
   df <- load_cell_distance()
   if (is.null(df) || length(statuses) == 0 || length(items) == 0) return(NULL)
   base <- df[df$donor_status %in% statuses, , drop = FALSE]
@@ -324,9 +329,8 @@ CELL_DIST_MARKER_COLORS <- c(
   }
   if (nrow(sel) == 0) return(NULL)
   lo <- max(as.numeric(stats::quantile(sel$signed_dist, 0.005, na.rm = TRUE)), -100)
-  hi <- min(as.numeric(stats::quantile(sel$signed_dist, 0.995, na.rm = TRUE)), 300)
-  lo <- min(lo, -30); hi <- max(hi, 30)              # always straddle the islet border
-  bw <- (hi - lo) / n_bins
+  lo <- min(lo, -30); hi <- CD_MAX_OUTSIDE_UM         # always straddle the islet border
+  bw <- CD_COMP_BIN_UM
   base <- base[base$signed_dist >= lo & base$signed_dist <= hi, , drop = FALSE]
   base$binx <- floor(base$signed_dist / bw)          # zero-anchored bin edges
   rows <- list()
@@ -368,10 +372,10 @@ CELL_DIST_MARKER_COLORS <- c(
 }
 
 .query_cell_distance_hist_duckdb <- function(mode, group, statuses,
-                                              norm = "prop", n_bins = 120L) {
+                                              norm = "prop", n_bins = CD_HIST_BINS) {
   if (!length(statuses)) return(NULL)
   n_bins <- suppressWarnings(as.integer(n_bins))
-  if (!is.finite(n_bins) || n_bins < 1L) n_bins <- 120L
+  if (!is.finite(n_bins) || n_bins < 1L) n_bins <- CD_HIST_BINS
   con <- islet_duckdb_connection()
   rel <- islet_parquet_relation(CELL_DISTANCE_PARQUET_PATH, con)
   columns <- islet_parquet_columns(CELL_DISTANCE_PARQUET_PATH)
@@ -391,7 +395,7 @@ CELL_DIST_MARKER_COLORS <- c(
   ))
   if (!nrow(q) || as.numeric(q$n[[1]]) < 2) return(NULL)
   lo <- min(as.numeric(q$q_lo[[1]]), -50)
-  hi <- as.numeric(q$q_hi[[1]])
+  hi <- CD_MAX_OUTSIDE_UM
   if (!isTRUE(is.finite(lo) && is.finite(hi) && hi > lo)) return(NULL)
 
   tlo <- cd_symlog(lo)
@@ -429,11 +433,8 @@ CELL_DIST_MARKER_COLORS <- c(
        n_by_status = n_by_status, norm = norm)
 }
 
-.query_cell_distance_composition_duckdb <- function(mode, items, statuses,
-                                                     norm = "prop", n_bins = 16L) {
+.query_cell_distance_composition_duckdb <- function(mode, items, statuses, norm = "prop") {
   if (!length(statuses) || !length(items)) return(NULL)
-  n_bins <- suppressWarnings(as.integer(n_bins))
-  if (!is.finite(n_bins) || n_bins < 1L) n_bins <- 16L
   con <- islet_duckdb_connection()
   rel <- islet_parquet_relation(CELL_DISTANCE_PARQUET_PATH, con)
   columns <- islet_parquet_columns(CELL_DISTANCE_PARQUET_PATH)
@@ -457,11 +458,10 @@ CELL_DIST_MARKER_COLORS <- c(
   ))
   if (!nrow(q) || as.numeric(q$n[[1]]) == 0) return(NULL)
   lo <- max(as.numeric(q$q_lo[[1]]), -100)
-  hi <- min(as.numeric(q$q_hi[[1]]), 300)
   lo <- min(lo, -30)
-  hi <- max(hi, 30)
+  hi <- CD_MAX_OUTSIDE_UM
   if (!isTRUE(is.finite(lo) && is.finite(hi) && hi > lo)) return(NULL)
-  bw <- (hi - lo) / n_bins
+  bw <- CD_COMP_BIN_UM
   bin_expr <- sprintf("CAST(FLOOR(signed_dist / %.17g) AS BIGINT)", bw)
 
   rows <- vector("list", length(items))
@@ -491,7 +491,7 @@ CELL_DIST_MARKER_COLORS <- c(
   list(comp = as.data.frame(comp), lo = lo, hi = hi, bw = bw, norm = norm)
 }
 
-query_cell_distance_hist <- function(mode, group, statuses, norm = "prop", n_bins = 120L) {
+query_cell_distance_hist <- function(mode, group, statuses, norm = "prop", n_bins = CD_HIST_BINS) {
   if (.cd_using_parquet()) {
     return(tryCatch(
       .query_cell_distance_hist_duckdb(mode, group, statuses, norm, n_bins),
@@ -501,15 +501,14 @@ query_cell_distance_hist <- function(mode, group, statuses, norm = "prop", n_bin
   .query_cell_distance_hist_memory(mode, group, statuses, norm, n_bins)
 }
 
-query_cell_distance_composition <- function(mode, items, statuses,
-                                            norm = "prop", n_bins = 16L) {
+query_cell_distance_composition <- function(mode, items, statuses, norm = "prop") {
   if (.cd_using_parquet()) {
     return(tryCatch(
-      .query_cell_distance_composition_duckdb(mode, items, statuses, norm, n_bins),
+      .query_cell_distance_composition_duckdb(mode, items, statuses, norm),
       error = function(e) .cd_backend_failure("cell-distance composition query", e)
     ))
   }
-  .query_cell_distance_composition_memory(mode, items, statuses, norm, n_bins)
+  .query_cell_distance_composition_memory(mode, items, statuses, norm)
 }
 
 

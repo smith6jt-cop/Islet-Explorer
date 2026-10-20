@@ -1158,7 +1158,10 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                        " Phenotype lists the immune phenotypes (the endocrine and exocrine classes are left out);",
                        " Marker+ lists every panel marker, all 31 being measured in every donor, a cell counting as",
                        " positive at 0.10 or above on the cohort marker scale. In composition bars every status",
-                       " facet shares one y-axis scale, so their heights compare directly."))
+                       " facet shares one y-axis scale, so their heights compare directly."),
+                tags$p("Both views run to 200 \u00b5m outside the border. Composition bars are 5 \u00b5m wide;",
+                       " density curves use 160 bins on the symlog axis. The dashed line is the border and the",
+                       " dotted line the outer edge of the 20 \u00b5m peri-islet band."))
             ),
             tagList(
               div(style = ctrl_row,
@@ -1609,9 +1612,14 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
             pp <- pp %>% add_trace(x = c(0, 0), y = y_range,
               type = "scatter", mode = "lines",
               line = list(color = islet_ink(), width = 1.4, dash = "dash"),
-              showlegend = FALSE, hoverinfo = "none")
+              showlegend = FALSE, hoverinfo = "none") %>%
+              # The outer edge of the 20 um peri-islet band.
+              add_trace(x = c(CD_BAND_UM, CD_BAND_UM), y = y_range, type = "scatter", mode = "lines",
+                        line = list(color = islet_ink(), width = 1.2, dash = "dot"),
+                        showlegend = FALSE, hoverinfo = "text", hovertext = paste0(CD_BAND_UM, " \u00b5m: band edge"))
             pp %>% layout(barmode = "stack",
-              xaxis = list(title = "", tickfont = fonts$axis_tick, zeroline = FALSE),
+              xaxis = list(title = "", tickfont = fonts$axis_tick, zeroline = FALSE,
+                           range = c(res$lo, CD_MAX_OUTSIDE_UM), dtick = 20),
               yaxis = list(title = list(text = s, font = fonts$legend_title),
                            tickfont = fonts$axis_tick, range = y_range))
           })
@@ -1661,7 +1669,11 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           p <- p %>% add_trace(x = c(0, 0), y = c(0, y_max * 1.05),
             type = "scatter", mode = "lines",
             line = list(color = islet_ink(), width = 1.5, dash = "dash"),
-            showlegend = FALSE, hoverinfo = "none")
+            showlegend = FALSE, hoverinfo = "none") %>%
+            # The outer edge of the 20 um peri-islet band (the axis is symlog, so place it on that scale).
+            add_trace(x = rep(cd_symlog(CD_BAND_UM), 2), y = c(0, y_max * 1.05), type = "scatter", mode = "lines",
+                      line = list(color = islet_ink(), width = 1.2, dash = "dot"),
+                      showlegend = FALSE, hoverinfo = "text", hovertext = paste0(CD_BAND_UM, " \u00b5m: band edge"))
           ticks <- cd_symlog_ticks(res$lo, res$hi)
           p %>% layout(
             font = fonts$global,
@@ -1671,7 +1683,9 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
             xaxis = list(title = list(text = "Signed distance (µm, symlog) — inside ← 0 → outside",
                                       font = fonts$axis_title),
                          tickmode = "array", tickvals = ticks$vals, ticktext = ticks$text,
-                         tickfont = fonts$axis_tick, zeroline = FALSE),
+                         tickfont = fonts$axis_tick, zeroline = FALSE,
+                         # A little past 200 um so the last tick shows.
+                         range = c(cd_symlog(res$lo), cd_symlog(CD_MAX_OUTSIDE_UM) + 0.02)),
             yaxis = list(title = list(text = y_title, font = fonts$axis_title),
                          tickfont = fonts$axis_tick),
             legend = list(orientation = "h", x = 0.5, xanchor = "center",

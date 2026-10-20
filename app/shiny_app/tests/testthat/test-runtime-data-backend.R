@@ -77,12 +77,17 @@ test_that("DuckDB cell-distance queries preserve in-memory results", {
 
   memory_comp <- env$.query_cell_distance_composition_memory(
     "phenotype", c("Beta cell", "Macrophage"), c("ND", "Aab+", "T1D"),
-    "count", 12L
+    "count"
   )
   duck_comp <- env$.query_cell_distance_composition_duckdb(
     "phenotype", c("Beta cell", "Macrophage"), c("ND", "Aab+", "T1D"),
-    "count", 12L
+    "count"
   )
+  # Both views stop 200 um outside the border; composition bars are 5 um wide (owner, 2026-10-20).
+  expect_equal(memory_hist$hi, 200)
+  expect_equal(memory_comp$hi, 200)
+  expect_equal(memory_comp$bw, 5)
+  expect_true(max(memory_comp$comp$x) < 200)
   expect_equal(duck_comp$lo, memory_comp$lo, tolerance = 1e-12)
   expect_equal(duck_comp$hi, memory_comp$hi, tolerance = 1e-12)
   expect_equal(
