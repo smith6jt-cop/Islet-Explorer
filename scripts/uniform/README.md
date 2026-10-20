@@ -340,6 +340,13 @@ v8 (2026-10-20, test version only; the live app stays on v7) differs from v7 onl
 that are common to all donors"; every marker is measured in every image, and `build_image` stops if one is not).
 The flag is unchanged: the marker at or above 0.10 on the cohort scale.
 
+v9 (2026-10-20, test version only) adds `signed_dist_islet` to `cell_distance.csv`: each cell's signed distance to the
+nearest Islet only (negative inside one), beside `signed_dist`, the distance to the nearest Islet or Cluster. Clusters
+are small and scattered through the tissue, so 90 % of the cells beyond 20 um of any object were measured to a
+Cluster (median tissue-cell distance 133 um to any object, 204 um to an Islet), which blurred the profile around
+Islets (T1D CD3e+ at 0-5 um: 5.0 % by any object, 6.1 % by Islet). The distance-to-islet profile lets the reviewer
+choose. Nothing else changes from v8.
+
 The app reads `object_class` through an app-wide "Endocrine objects" selector (Islet / Cluster). The
 Trajectory tab does not use it: it fits every object with ten or more core cells (`total_cells_core` in
 `barlow_islet_features.csv`), whatever its class.

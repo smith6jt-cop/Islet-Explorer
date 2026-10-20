@@ -29,7 +29,7 @@ Donor demographics and autoantibodies, and the viewer image links, are carried f
 
     python scripts/uniform/assemble_uniform.py --run data/development/uniform-20donor-20261015 \\
         --donor-source data/development/protein-expanded-20261015-v3 \\
-        --output data/development/uniform-20donor-20261020-v8 --report-root tmp/uniform-20donor-20261020-v8
+        --output data/development/uniform-20donor-20261020-v9 --report-root tmp/uniform-20donor-20261020-v9
 """
 from __future__ import annotations
 
@@ -213,6 +213,16 @@ def build_image(run: Path, out: Path, tag: str, case: str, donors: pd.DataFrame,
     nearest = STRtree(bounds).nearest(pts)
     signed = shapely.distance(pts, bounds[nearest]) * PX
     signed[core_owner >= 0] *= -1
+    # The same to the nearest Islet only (owner, 2026-10-20): Clusters are small and scattered through the tissue,
+    # so 90 % of the cells beyond 20 um of any object are measured to a Cluster, which blurs the profile around
+    # Islets. Negative inside an Islet; a cell inside a Cluster is outside every Islet, so positive.
+    islet_ix = np.flatnonzero(np.array([o[1] == 'Islet' for o in objs], dtype=bool))
+    if len(islet_ix):
+        ibounds = bounds[islet_ix]
+        signed_islet = shapely.distance(pts, ibounds[STRtree(ibounds).nearest(pts)]) * PX
+        signed_islet[np.isin(core_owner, islet_ix)] *= -1
+    else:
+        signed_islet = np.full(len(pts), np.nan)
 
     obs, means, counts, morph, comp, targets, markers_rows, feats, lookup, unpaired = ([] for _ in range(10))
     display_name = np.full(len(cells), '', dtype=object)
@@ -348,7 +358,8 @@ def build_image(run: Path, out: Path, tag: str, case: str, donors: pd.DataFrame,
                                'cell_region': display_region, 'islet_name': display_name})
     tissue_tab.to_csv(out / 'donors' / f'{cid}.csv', index=False)
     distance = pd.DataFrame({'case_id': int(cid), 'donor_status': meta['Donor Status'], 'cell_region': display_region,
-                             'phenotype': labels, 'signed_dist': signed.astype(np.float32)})
+                             'phenotype': labels, 'signed_dist': signed.astype(np.float32),
+                             'signed_dist_islet': signed_islet.astype(np.float32)})
     unmeasured = [m for m in POS_MARKERS if np.isnan(X[:, MARKERS.index(m)]).all()]
     if unmeasured:
         raise ValueError(f'{tag}: {unmeasured} not measured, so not common to all donors; drop them from POS_MARKERS')
