@@ -468,7 +468,8 @@ islets with beta cells holds more immune cells (0.17–0.27) than around insulin
 (Core, 0–20 … 200–400, >400 µm), the chosen immune cells' share of all cells there divided by the donor's own tissue
 share (its cells outside every endocrine object and band). 1 is the donor's tissue level. Lines are the donor median
 per status with the IQR. Dividing by the donor's own tissue separates gathering at islets from a donor having more
-immune cells everywhere.
+immune cells everywhere. The donor chosen in the Data controls (the tissue scatter's donor) is drawn as a dotted line over
+the medians; hover gives its cell counts, and a point resting on fewer than 20 of the chosen cells is faded.
 
 **Phenotype composition & enrichment**: every listed phenotype at once. Left, the status summary (median and IQR,
 or mean and SEM, of donor means); right, one row per donor grouped by status, so the spread behind each bar shows.

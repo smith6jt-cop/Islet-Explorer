@@ -154,8 +154,9 @@ immune_gradient <- function(profile, labels) {
   hit <- tapply(b$n[b$phenotype %in% labels], key[b$phenotype %in% labels], sum)
   parts <- do.call(rbind, strsplit(names(total), "\r", fixed = TRUE))
   d <- data.frame(case_id = parts[, 1], bin = parts[, 2], cells = as.numeric(total), stringsAsFactors = FALSE)
-  d$share <- as.numeric(hit[names(total)]) / d$cells
-  d$share[is.na(d$share)] <- 0
+  d$count <- as.numeric(hit[names(total)])
+  d$count[is.na(d$count)] <- 0
+  d$share <- d$count / d$cells
   ref <- donor_tissue_share(profile, labels)
   d$tissue_share <- as.numeric(ref[d$case_id])
   d <- d[is.finite(d$tissue_share) & d$tissue_share > 0, , drop = FALSE]

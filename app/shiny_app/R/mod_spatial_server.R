@@ -974,13 +974,17 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                        " cells outside every endocrine object and its band). 1, the dashed line, is the donor's",
                        " tissue level; above 1 the cells gather there. Lines are the median of donors with their",
                        " IQR. Core holds the cells inside objects."),
+                tags$p("The dotted line is the donor chosen in the Data controls (the tissue scatter's donor), so",
+                       " changing the donor shows where that donor sits against its status. Hover gives its cell",
+                       " counts; a point resting on fewer than 20 of the chosen cells is faded, as one donor's B or",
+                       " CD4 T cells in a bin are often only a few."),
                 tags$p("Dividing by each donor's own tissue separates gathering at islets from a donor having more",
                        " immune cells everywhere. It reads per-cell data, so the Endocrine objects selector does",
                        " not apply.")),
               div(style = ctrl_row,
                 selectInput(ns("gradient_phenotype"), "Cells", choices = GRADIENT_CHOICES, selected = "all",
                             width = "100%")),
-              plotlyOutput(ns("immune_gradient"), height = "420px"),
+              plotlyOutput(ns("immune_gradient"), height = "480px"),
               dl_csv("dl_gradient_csv")
             )
           )
@@ -1251,6 +1255,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       }
     )
 
+    GRADIENT_MIN_CELLS <- 20
     GRADIENT_CHOICES <- c("All immune cells" = "all", "CD8a T cell" = "CD8a Tcell", "CD4 T cell" = "CD4 Tcell",
                           "B cell" = "B cell", "Macrophage" = "Macrophage")
     gradient_data <- reactive({
@@ -1283,6 +1288,26 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                              hovertext = sprintf("%s, %s µm<br>Median %.2f× own tissue (IQR %.2f-%.2f), %d donors",
                                                  s, q$bin, q$med, q$lo, q$hi, q$n), hoverinfo = "text")
       }
+      # The donor chosen in the Data controls (the tissue scatter's donor), drawn over the status medians. A point
+      # resting on fewer than GRADIENT_MIN_CELLS of the chosen cells is faded: one donor's B or CD4 T cells in a bin
+      # are often a handful.
+      sel <- selected_donor()
+      dd <- if (is.null(sel)) g[0, ] else g[g$case_id == as.character(as.integer(sel)), , drop = FALSE]
+      if (nrow(dd)) {
+        dd <- dd[order(dd$bin), , drop = FALSE]
+        s <- as.character(dd$status[1])
+        p <- p %>% add_trace(x = as.character(dd$bin), y = dd$value, type = "scatter", mode = "lines+markers",
+                             name = paste0("Donor ", dd$case_id[1], " (", s, ")"),
+                             line = list(color = islet_ink(), width = 2, dash = "dot"),
+                             marker = list(color = dcols[s], size = 11, line = list(color = islet_ink(), width = 1.5),
+                                           opacity = ifelse(dd$count >= GRADIENT_MIN_CELLS, 1, 0.3)),
+                             hovertext = sprintf("Donor %s (%s), %s \u00b5m<br>%.2f\u00d7 own tissue<br>%d of %s cells%s",
+                                                 dd$case_id, s, as.character(dd$bin), dd$value, as.integer(dd$count),
+                                                 format(dd$cells, big.mark = ","),
+                                                 ifelse(dd$count >= GRADIENT_MIN_CELLS, "",
+                                                        paste0(" (under ", GRADIENT_MIN_CELLS, ": faded)"))),
+                             hoverinfo = "text")
+      }
       p %>% add_trace(x = DISTANCE_BIN_LABELS, y = rep(1, length(DISTANCE_BIN_LABELS)), type = "scatter",
                       mode = "lines", line = list(color = islet_ink(), dash = "dash", width = 1),
                       showlegend = FALSE, hoverinfo = "none") %>%
@@ -1296,7 +1321,9 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                        categoryarray = DISTANCE_BIN_LABELS),
           yaxis = list(title = list(text = "× own tissue share", font = fonts$axis_title),
                        tickfont = fonts$axis_tick, rangemode = "tozero"),
-          legend = list(title = list(text = "Status", font = fonts$legend_title), font = fonts$legend_text)
+          # Below the plot: the donor's entry is long, and a side legend would narrow this card's plot.
+          legend = list(orientation = "h", x = 0.5, xanchor = "center", y = -0.42, yanchor = "top",
+                        font = fonts$legend_text)
         ) %>% plotly_islet_config("spatial_immune_gradient")
     })
 
@@ -1306,7 +1333,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         g <- tryCatch(gradient_data(), error = function(e) NULL)
         out <- if (is.null(g)) NULL else
           data.frame(case_id = g$case_id, donor_status = as.character(g$status), distance_bin_um = as.character(g$bin),
-                     cells = g$cells, share = g$share, donor_tissue_share = g$tissue_share,
+                     cells = g$cells, chosen_cells = g$count, share = g$share, donor_tissue_share = g$tissue_share,
                      ratio_to_own_tissue = g$value, stringsAsFactors = FALSE)
         write_islet_csv(file, out, islet_csv_header(
           "Spatial — immune gradient around endocrine objects, per donor",

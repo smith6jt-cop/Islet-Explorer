@@ -64,6 +64,7 @@ test_that("the immune gradient and own-tissue z divide by each donor's own tissu
   expect_equal(unname(share[c("1", "2", "3")]), c(0.05, 0.10, 0))
   g <- env$immune_gradient(profile, "CD8a Tcell")
   expect_equal(g$value[g$bin == "0-20"], 0.2 / 0.05)
+  expect_equal(g$count[g$bin == "0-20"], 2)
   expect_equal(g$value[g$bin == ">400"], 0.05 / 0.05)
   z <- env$own_tissue_enrich_z(.immune_comp(), "CD8a_Tcell", "CD8a Tcell", profile)
   expect_equal(z[1], (0 - 5) / sqrt(5))
