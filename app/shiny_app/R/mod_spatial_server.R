@@ -951,10 +951,6 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       card_title <- function(txt, ...) div(style = "display: flex; align-items: center; gap: 4px; margin: 0 0 8px 0; align-self: center;",
         h5(txt, style = "font-size: 15px; font-weight: 600; margin: 0;"),
         card_help(paste(txt, "help"), ...))
-      # Immune infiltration is offered in the phenotype selector of the first two cards.
-      infiltration_help <- tags$p(tags$strong("Immune infiltration"),
-        " is the share of immune cells (every T cell, B cell, macrophage and other leukocyte, subtyped or not)",
-        " among all analysed cells in the 20\u00b5m peri-islet band and in the core.")
       ctrl_row   <- "display: flex; gap: 6px 18px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 4px;"
       dl_csv <- function(id) div(style = "margin-top: 6px;",
         downloadButton(ns(id), "Download CSV", style = "font-size: 12px; padding: 3px 10px;"))
@@ -1010,7 +1006,6 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
             div(class = "card", style = card_style,
               card_title("Peri enrichment by status",
                 tags$p("Per-phenotype peri-zone enrichment across donor statuses, one point per donor."),
-                infiltration_help,
                 tags$p("Outlier exclusion follows the Neighborhood Analysis toggle (Tukey 1.5\u00d7IQR per donor",
                        " status \u2014 enrichment z is already standardised, so the IQR fence is used instead of the",
                        " modified z-score).")),
@@ -1029,8 +1024,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           column(4,
             div(class = "card", style = card_style,
               card_title("Peri vs core proportion",
-                tags$p("Each object's peri-islet proportion of the chosen phenotype against its core proportion."),
-                infiltration_help),
+                tags$p("Each object's peri-islet proportion of the chosen phenotype against its core proportion.")),
               div(style = ctrl_row,
                 div(style = "flex: 1; min-width: 180px;",
                   nbr_select("scatter_phenotype", "100%")
