@@ -1164,12 +1164,24 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                        " gather there. Each phenotype or marker has its own row and y-axis, so a rare one is not",
                        " dwarfed by a common one; the row's ND, Aab+ and T1D columns use that one scale. In density curves it is the proportion of the status's cells of that class",
                        " per \u00b5m: where those cells lie, which also follows how much tissue lies at each distance."),
+                tags$p(tags$strong("Distance to."),
+                       " Nearest Islet (the default) measures each cell to the nearest Islet's border; inside an",
+                       " Islet it is negative. Nearest Islet or Cluster also counts the Clusters, which are small and",
+                       " scattered through the tissue, so most cells beyond 20 \u00b5m are then measured to a Cluster",
+                       " and the profile around Islets is blurred."),
                 tags$p("Both views run to 200 \u00b5m outside the border. Composition bars are 5 \u00b5m wide;",
                        " density curves use 160 bins on the symlog axis. The dashed line is the border and the",
                        " dotted line the outer edge of the 20 \u00b5m peri-islet band."))
             ),
             tagList(
               div(style = ctrl_row,
+                # Distance to the nearest Islet, or to the nearest Islet or Cluster (owner, 2026-10-20). Roots
+                # before v9 hold only the second.
+                if (cell_distance_has_islet_distance())
+                  radioButtons(ns("dist_to"), "Distance to",
+                               choices = c("Nearest Islet" = "signed_dist_islet",
+                                           "Nearest Islet or Cluster" = "signed_dist"),
+                               selected = "signed_dist_islet", inline = TRUE),
                 radioButtons(ns("dist_mode"), "Group by",
                              choices = c("Phenotype" = "phenotype", "Marker+" = "marker"),
                              selected = "phenotype", inline = TRUE),
@@ -1583,6 +1595,11 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
     output$immune_distance_kde <- renderPlotly({
       {
         ptype <- input$dist_ptype %||% "density"
+        # The distance used: the reviewer's choice when the root has the Islet-only column (v9), else the only one.
+        dist_col <- if (cell_distance_has_islet_distance() &&
+                        identical(input$dist_to %||% "signed_dist_islet", "signed_dist_islet")) "signed_dist_islet"
+                    else "signed_dist"
+        dist_label <- if (identical(dist_col, "signed_dist_islet")) "nearest Islet" else "nearest Islet or Cluster"
         mode  <- input$dist_mode %||% "phenotype"
         norm  <- input$dist_norm %||% "prop"
         status_order <- c("ND", "Aab+", "T1D")
@@ -1598,7 +1615,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           # its own row and y-axis, shared by the three statuses of that row (the same y scaling for each group).
           items <- input$dist_comp_items
           req(length(items) > 0)
-          res <- query_cell_distance_composition(mode, items, statuses, norm)
+          res <- query_cell_distance_composition(mode, items, statuses, norm, dist_col)
           req(res, nrow(res$comp) > 0)
           comp <- res$comp
           present <- intersect(status_order, unique(comp$donor_status))
@@ -1649,7 +1666,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
             font = fonts$global, showlegend = FALSE,
             margin = list(t = 40, b = 70, l = 80),
             annotations = c(heads, list(list(
-              text = paste0("Signed distance (µm) — inside ← 0 → outside   ·   y = ", y_lab),
+              text = paste0("Signed distance to the ", dist_label, " (µm) — inside ← 0 → outside   ·   y = ", y_lab),
               x = 0.5, y = -48 / height, xref = "paper", yref = "paper",
               xanchor = "center", yanchor = "top", showarrow = FALSE,
               font = fonts$axis_title)))
@@ -1658,7 +1675,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         } else {
           # ---- Density: symlog filled curves per status (pooled per cell) ----
           group <- input$dist_group %||% "__all__"
-          res <- query_cell_distance_hist(mode, group, statuses, norm)
+          res <- query_cell_distance_hist(mode, group, statuses, norm, dist_col = dist_col)
           req(res, nrow(res$hist) > 0)
           hist <- res$hist
           present <- intersect(status_order, unique(hist$donor_status))
@@ -1697,7 +1714,8 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
             margin = list(t = 80),
             title = list(text = paste0(type_label, " — distance from islet"),
                          font = fonts$title, y = 0.97, yanchor = "top"),
-            xaxis = list(title = list(text = "Signed distance (µm, symlog) — inside ← 0 → outside",
+            xaxis = list(title = list(text = paste0("Signed distance to the ", dist_label,
+                                                    " (µm, symlog) — inside ← 0 → outside"),
                                       font = fonts$axis_title),
                          tickmode = "array", tickvals = ticks$vals, ticktext = ticks$text,
                          tickfont = fonts$axis_tick, zeroline = FALSE,

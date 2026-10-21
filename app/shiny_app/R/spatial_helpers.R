@@ -167,6 +167,28 @@ cell_distance_available <- function() {
   NULL
 }
 
+# The distance a profile is measured with (owner, 2026-10-20): signed_dist is to the nearest Islet or Cluster,
+# signed_dist_islet (data roots from v9) to the nearest Islet only. The queries read either through these two helpers.
+CD_DISTANCE_COLUMNS <- c("signed_dist", "signed_dist_islet")
+cell_distance_has_islet_distance <- function() {
+  if (.cd_using_parquet()) return("signed_dist_islet" %in% islet_parquet_columns(CELL_DISTANCE_PARQUET_PATH))
+  df <- load_cell_distance()
+  !is.null(df) && "signed_dist_islet" %in% names(df)
+}
+# In memory: the table with `signed_dist` holding the chosen distance (rows without one dropped).
+.cd_with_distance <- function(df, dist_col) {
+  if (is.null(df) || identical(dist_col, "signed_dist")) return(df)
+  if (!(dist_col %in% CD_DISTANCE_COLUMNS) || !(dist_col %in% names(df))) return(NULL)
+  df$signed_dist <- df[[dist_col]]
+  keep <- is.finite(df$signed_dist)
+  if (all(keep)) df else df[keep, , drop = FALSE]
+}
+# In DuckDB: the query with the chosen distance column in place of signed_dist.
+.cd_sql <- function(sql, dist_col) {
+  if (!(dist_col %in% CD_DISTANCE_COLUMNS)) stop("unknown distance column", call. = FALSE)
+  gsub("\\bsigned_dist\\b", dist_col, sql, perl = TRUE)
+}
+
 #' Load the all-cells (~2.65M) tissue-wide signed-distance table with caching.
 #' Columns: case_id, donor_status, cell_region, phenotype, signed_dist.
 load_cell_distance <- function() {
@@ -276,8 +298,9 @@ CELL_DIST_MARKER_COLORS <- c(
 #'         correcting for different total cell numbers per group) | "count".
 #' Returns list(hist[donor_status,binx,n,x,real_x,dens], lo, hi, n_by_status,
 #' norm). `dens` is per REAL um of distance either way.
-.query_cell_distance_hist_memory <- function(mode, group, statuses, norm = "prop", n_bins = CD_HIST_BINS) {
-  df <- load_cell_distance()
+.query_cell_distance_hist_memory <- function(mode, group, statuses, norm = "prop", n_bins = CD_HIST_BINS,
+                                             dist_col = "signed_dist") {
+  df <- .cd_with_distance(load_cell_distance(), dist_col)
   if (is.null(df) || length(statuses) == 0) return(NULL)
   base <- df[df$donor_status %in% statuses, , drop = FALSE]
   if (nrow(base) < 2) return(NULL)
@@ -314,8 +337,9 @@ CELL_DIST_MARKER_COLORS <- c(
 #' (floor(dist/bw)) so a bar edge sits on x=0; window forced to straddle 0.
 #' `norm` "prop" = fraction of the disease class's cells (÷ group total) |
 #' "count". Returns list(comp[donor_status,binx,item,n,x,val], lo, hi, bw, norm).
-.query_cell_distance_composition_memory <- function(mode, items, statuses, norm = "prop") {
-  df <- load_cell_distance()
+.query_cell_distance_composition_memory <- function(mode, items, statuses, norm = "prop",
+                                                    dist_col = "signed_dist") {
+  df <- .cd_with_distance(load_cell_distance(), dist_col)
   if (is.null(df) || length(statuses) == 0 || length(items) == 0) return(NULL)
   base <- df[df$donor_status %in% statuses, , drop = FALSE]
   if (nrow(base) == 0) return(NULL)
@@ -370,7 +394,7 @@ CELL_DIST_MARKER_COLORS <- c(
 }
 
 .query_cell_distance_hist_duckdb <- function(mode, group, statuses,
-                                              norm = "prop", n_bins = CD_HIST_BINS) {
+                                              norm = "prop", n_bins = CD_HIST_BINS, dist_col = "signed_dist") {
   if (!length(statuses)) return(NULL)
   n_bins <- suppressWarnings(as.integer(n_bins))
   if (!is.finite(n_bins) || n_bins < 1L) n_bins <- CD_HIST_BINS
@@ -380,17 +404,17 @@ CELL_DIST_MARKER_COLORS <- c(
   base_where <- .cd_base_predicate(statuses, con)
   item_where <- .cd_item_predicate(group, mode, columns, con)
 
-  totals <- DBI::dbGetQuery(con, paste0(
+  totals <- DBI::dbGetQuery(con, .cd_sql(paste0(
     "SELECT donor_status, count(*) AS n FROM ", rel,
     " WHERE ", base_where, " GROUP BY donor_status"
-  ))
+  ), dist_col))
   if (!nrow(totals) || sum(as.numeric(totals$n)) < 2) return(NULL)
 
-  q <- DBI::dbGetQuery(con, paste0(
+  q <- DBI::dbGetQuery(con, .cd_sql(paste0(
     "SELECT quantile_cont(signed_dist, 0.001) AS q_lo, ",
     "quantile_cont(signed_dist, 0.999) AS q_hi, count(*) AS n FROM ", rel,
     " WHERE ", base_where, " AND ", item_where
-  ))
+  ), dist_col))
   if (!nrow(q) || as.numeric(q$n[[1]]) < 2) return(NULL)
   lo <- min(as.numeric(q$q_lo[[1]]), -50)
   hi <- CD_MAX_OUTSIDE_UM
@@ -404,13 +428,13 @@ CELL_DIST_MARKER_COLORS <- c(
            "abs(signed_dist) / %.17g)) - %.17g) / %.17g) AS BIGINT), 0), %d)"),
     CD_SYMLOG_C, tlo, dt, n_bins - 1L
   )
-  agg <- DBI::dbGetQuery(con, paste0(
+  agg <- DBI::dbGetQuery(con, .cd_sql(paste0(
     "SELECT donor_status, ", bin_expr, " AS binx, count(*) AS n FROM ", rel,
     " WHERE ", base_where, " AND ", item_where,
     " AND signed_dist >= ", format(lo, digits = 17, scientific = FALSE),
     " AND signed_dist <= ", format(hi, digits = 17, scientific = FALSE),
     " GROUP BY donor_status, binx ORDER BY donor_status, binx"
-  ))
+  ), dist_col))
   if (!nrow(agg)) return(NULL)
   agg$binx <- as.integer(agg$binx)
   agg$n <- as.numeric(agg$n)
@@ -431,7 +455,8 @@ CELL_DIST_MARKER_COLORS <- c(
        n_by_status = n_by_status, norm = norm)
 }
 
-.query_cell_distance_composition_duckdb <- function(mode, items, statuses, norm = "prop") {
+.query_cell_distance_composition_duckdb <- function(mode, items, statuses, norm = "prop",
+                                                    dist_col = "signed_dist") {
   if (!length(statuses) || !length(items)) return(NULL)
   con <- islet_duckdb_connection()
   rel <- islet_parquet_relation(CELL_DISTANCE_PARQUET_PATH, con)
@@ -445,11 +470,11 @@ CELL_DIST_MARKER_COLORS <- c(
   if (!length(items)) return(NULL)
 
   select_where <- paste0("(", paste(item_predicates, collapse = " OR "), ")")
-  q <- DBI::dbGetQuery(con, paste0(
+  q <- DBI::dbGetQuery(con, .cd_sql(paste0(
     "SELECT quantile_cont(signed_dist, 0.005) AS q_lo, ",
     "quantile_cont(signed_dist, 0.995) AS q_hi, count(*) AS n FROM ", rel,
     " WHERE ", base_where, " AND ", select_where
-  ))
+  ), dist_col))
   if (!nrow(q) || as.numeric(q$n[[1]]) == 0) return(NULL)
   lo <- max(as.numeric(q$q_lo[[1]]), -100)
   lo <- min(lo, -30)
@@ -459,17 +484,17 @@ CELL_DIST_MARKER_COLORS <- c(
   bin_expr <- sprintf("CAST(FLOOR(signed_dist / %.17g) AS BIGINT)", bw)
   range_where <- paste0(" AND signed_dist >= ", format(lo, digits = 17, scientific = FALSE),
                         " AND signed_dist < ", format(hi, digits = 17, scientific = FALSE))
-  bin_totals <- DBI::dbGetQuery(con, paste0(
+  bin_totals <- DBI::dbGetQuery(con, .cd_sql(paste0(
     "SELECT donor_status, ", bin_expr, " AS binx, count(*) AS total FROM ", rel,
-    " WHERE ", base_where, range_where, " GROUP BY donor_status, binx"))
+    " WHERE ", base_where, range_where, " GROUP BY donor_status, binx"), dist_col))
 
   rows <- vector("list", length(items))
   for (i in seq_along(items)) {
-    rows[[i]] <- DBI::dbGetQuery(con, paste0(
+    rows[[i]] <- DBI::dbGetQuery(con, .cd_sql(paste0(
       "SELECT donor_status, ", bin_expr, " AS binx, count(*) AS n FROM ", rel,
       " WHERE ", base_where, " AND ", item_predicates[[i]], range_where,
       " GROUP BY donor_status, binx ORDER BY donor_status, binx"
-    ))
+    ), dist_col))
     if (nrow(rows[[i]])) rows[[i]]$item <- items[[i]]
   }
   rows <- rows[vapply(rows, nrow, integer(1)) > 0L]
@@ -485,24 +510,25 @@ CELL_DIST_MARKER_COLORS <- c(
   list(comp = as.data.frame(comp), lo = lo, hi = hi, bw = bw, norm = norm)
 }
 
-query_cell_distance_hist <- function(mode, group, statuses, norm = "prop", n_bins = CD_HIST_BINS) {
+query_cell_distance_hist <- function(mode, group, statuses, norm = "prop", n_bins = CD_HIST_BINS,
+                                     dist_col = "signed_dist") {
   if (.cd_using_parquet()) {
     return(tryCatch(
-      .query_cell_distance_hist_duckdb(mode, group, statuses, norm, n_bins),
+      .query_cell_distance_hist_duckdb(mode, group, statuses, norm, n_bins, dist_col),
       error = function(e) .cd_backend_failure("cell-distance density query", e)
     ))
   }
-  .query_cell_distance_hist_memory(mode, group, statuses, norm, n_bins)
+  .query_cell_distance_hist_memory(mode, group, statuses, norm, n_bins, dist_col)
 }
 
-query_cell_distance_composition <- function(mode, items, statuses, norm = "prop") {
+query_cell_distance_composition <- function(mode, items, statuses, norm = "prop", dist_col = "signed_dist") {
   if (.cd_using_parquet()) {
     return(tryCatch(
-      .query_cell_distance_composition_duckdb(mode, items, statuses, norm),
+      .query_cell_distance_composition_duckdb(mode, items, statuses, norm, dist_col),
       error = function(e) .cd_backend_failure("cell-distance composition query", e)
     ))
   }
-  .query_cell_distance_composition_memory(mode, items, statuses, norm)
+  .query_cell_distance_composition_memory(mode, items, statuses, norm, dist_col)
 }
 
 

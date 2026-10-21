@@ -490,7 +490,12 @@ Both views stop 200 µm outside the border (composition bars 5 µm wide, density
 proportion of all cells at that distance that are of the phenotype or positive for the marker; each phenotype or
 marker has its own row and y-axis, and its ND, Aab+ and T1D columns use that one scale, so a rare marker is not
 dwarfed by a common one. Until 2026-10-20 the bars divided by the status's total cells, so they followed how many
-cells lay at each distance. Every analysed cell counts, including those without a cell subtype. Every cell
+cells lay at each distance. Every analysed cell counts, including those without a cell subtype. **Distance to** (data root v9):
+*Nearest Islet* (the default) measures each cell to the nearest Islet's border; *Nearest Islet or Cluster* also counts
+Clusters, which are small and scattered through the tissue, so most cells beyond 20 µm are then measured to a Cluster
+and the profile around Islets blurs (T1D CD3e+ cells at 0–5 µm: 6.1% to the nearest Islet, 5.0% to any object).
+Beyond about 30 µm the proportions mostly level off at the tissue level, with a slow fall for immune markers over
+hundreds of µm. Every cell
 counts once, so donors with more cells weigh more; the immune gradient is the donor-fair version. Its former
 donor-averaged KDE view was removed: its table holds only core and band cells, so it stopped at 20 µm.
 

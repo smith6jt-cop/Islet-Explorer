@@ -50,6 +50,7 @@ test_that("DuckDB cell-distance queries preserve in-memory results", {
     phenotype = rep(c("Beta cell", "Macrophage", "Retired", "Unknown"),
                     length.out = n),
     signed_dist = seq(-180, 720, length.out = n) + stats::rnorm(n, sd = 2),
+    signed_dist_islet = seq(-120, 900, length.out = n) + stats::rnorm(n, sd = 3),
     INS_pos = rep(c(1L, 0L, 0L), length.out = n),
     CD8a_pos = rep(c(0L, 1L), length.out = n),
     stringsAsFactors = FALSE
@@ -103,6 +104,24 @@ test_that("DuckDB cell-distance queries preserve in-memory results", {
   in_bin <- inside[inside$donor_status == first$donor_status & floor(inside$signed_dist / 5) == first$binx, ]
   expect_equal(first$total, nrow(in_bin))
   expect_true(all(memory_share$comp$val <= 1))
+  # The distance to the nearest Islet (v9) reads the same in both backends.
+  memory_islet <- env$.query_cell_distance_composition_memory(
+    "marker", c("INS", "CD8a"), c("ND", "Aab+", "T1D"), "prop", "signed_dist_islet")
+  duck_islet <- env$.query_cell_distance_composition_duckdb(
+    "marker", c("INS", "CD8a"), c("ND", "Aab+", "T1D"), "prop", "signed_dist_islet")
+  expect_equal(duck_islet$lo, memory_islet$lo, tolerance = 1e-12)
+  expect_equal(
+    sort_result(duck_islet$comp, c("donor_status", "binx", "item")),
+    sort_result(memory_islet$comp, c("donor_status", "binx", "item")),
+    tolerance = 1e-12, ignore_attr = TRUE)
+  expect_false(isTRUE(all.equal(memory_islet$comp$val, memory_share$comp$val)))
+  hist_islet_mem <- env$.query_cell_distance_hist_memory("marker", "CD8a", c("ND", "Aab+", "T1D"), "prop", 24L,
+                                                         "signed_dist_islet")
+  hist_islet_duck <- env$.query_cell_distance_hist_duckdb("marker", "CD8a", c("ND", "Aab+", "T1D"), "prop", 24L,
+                                                          "signed_dist_islet")
+  expect_equal(sort_result(hist_islet_duck$hist, c("donor_status", "binx")),
+               sort_result(hist_islet_mem$hist, c("donor_status", "binx")), tolerance = 1e-12, ignore_attr = TRUE)
+  expect_error(env$.cd_sql("SELECT signed_dist", "x; DROP TABLE t"))
   expect_equal(duck_comp$lo, memory_comp$lo, tolerance = 1e-12)
   expect_equal(duck_comp$hi, memory_comp$hi, tolerance = 1e-12)
   expect_equal(
