@@ -1,7 +1,8 @@
 """Make the Panc Floyd header logos from www/logo.png (white background, 1536 x 1024).
 
 Writes www/logo-header-light.png (original colours, transparent background) and www/logo-header-dark.png (for the
-dark theme: "Panc" in white and "Floyd" in grey; owner, 2026-10-21). Run with the app venv's Python:
+dark theme: each word shades from white at its top to grey at its bottom; owner, 2026-10-21: "use both colors for the
+words"). In both, the holes of the P, a, o and d are transparent, not filled with the source image's white. Run with the app venv's Python:
     python scripts/app_assets/make_logo_variants.py
 """
 from pathlib import Path
@@ -12,14 +13,20 @@ from scipy import ndimage
 
 WWW = Path(__file__).resolve().parents[2] / "app" / "shiny_app" / "www"
 HEIGHT = 128            # output height in px (shown at 64 px, so sharp on 2x screens)
-DARK_TOP = np.array([0xff, 0xff, 0xff])      # "Panc" on the dark theme: white
-DARK_BOTTOM = np.array([0xa6, 0xa6, 0xa6])   # "Floyd" on the dark theme: grey
+DARK_TOP = np.array([0xff, 0xff, 0xff])      # the top of each word on the dark theme: white
+DARK_BOTTOM = np.array([0x9a, 0x9a, 0x9a])   # its bottom: grey
 
 rgb = np.asarray(Image.open(WWW / "logo.png").convert("RGB")).astype(float)
 near_white = rgb.min(axis=2) > 235
 lab, _ = ndimage.label(near_white)
 border = set(np.unique(np.concatenate([lab[0], lab[-1], lab[:, 0], lab[:, -1]]))) - {0}
 background = np.isin(lab, list(border))
+# The enclosed white of the lettering (the holes of P, a, o, d) is background too; enclosed white in the prism stays.
+fx = np.where(~background)[1]
+split = fx.min() + 0.35 * (fx.max() - fx.min())
+holes = [i for i, sl in enumerate(ndimage.find_objects(lab), start=1)
+         if sl is not None and i not in border and sl[1].start > split]
+background |= np.isin(lab, holes)
 
 # Opaque everywhere but the background; anti-aliased pixels next to it get alpha from their distance to white,
 # with the white mixed out of their colour.
@@ -47,12 +54,20 @@ mid = (ly.min() + ly.max()) / 2
 top_word = np.isin(comp, [i for i, cy in letter_parts if cy < mid])
 bottom_word = letters & ~top_word
 
+
+def word_shade(word):
+    """White at the word's top to grey at its bottom (the cap height and baseline, so descenders stay grey)."""
+    rows = np.where(word.any(axis=1))[0]
+    t = np.clip((np.arange(word.shape[0]) - rows.min()) / max(rows.max() - rows.min(), 1), 0, 1)
+    shade = DARK_TOP[None, :] * (1 - t[:, None]) + DARK_BOTTOM[None, :] * t[:, None]
+    return np.broadcast_to(shade[:, None, :], word.shape + (3,))
+
 y_lo, y_hi, x_lo, x_hi = ys.min(), ys.max() + 1, xs.min(), xs.max() + 1
 for name, recolour in (("logo-header-light.png", False), ("logo-header-dark.png", True)):
     out = fg.copy()
     if recolour:
-        out[top_word] = DARK_TOP
-        out[bottom_word] = DARK_BOTTOM
+        for word in (top_word, bottom_word):
+            out[word] = word_shade(word)[word]
     rgba = np.dstack([out, alpha * 255]).round().astype(np.uint8)[y_lo:y_hi, x_lo:x_hi]
     img = Image.fromarray(rgba, "RGBA")
     img = img.resize((round(img.width * HEIGHT / img.height), HEIGHT), Image.LANCZOS)

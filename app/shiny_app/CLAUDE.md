@@ -425,7 +425,8 @@ vscode's current theme"); a "Light theme" button at the top right switches back,
   `renderPlot()` takes `bg = "transparent"`, else the area outside a fixed-aspect plot is painted white.
 - **Header logo.** The Panc Floyd logo heads the page (owner, 2026-10-19) in two copies made by
   `scripts/app_assets/make_logo_variants.py` from `www/logo.png`: `logo-header-light.png` (original colours) and
-  `logo-header-dark.png` ("Panc" white, "Floyd" grey; owner, 2026-10-21); CSS shows the one for the current theme.
+  `logo-header-dark.png` (each word shading white to grey, top to bottom; owner, 2026-10-21); in both the holes of
+  P, a, o and d are transparent. CSS shows the one for the current theme.
 - **Downloads stay white.** ggplot downloads use `islet_ggsave()` (colour-only light overrides on top of the
   plot's own theme); the plotly camera button is replaced by one that re-draws the figure off screen in light
   colours (`isletDownloadLightPng`, same file name and 2800 x 1800 size).
