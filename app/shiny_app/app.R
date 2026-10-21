@@ -622,7 +622,8 @@ server <- function(input, output, session) {
   # Plot module: returns list(raw_df, raw_df_prezero, summary_df, get_selection_description)
   plot_returns <- plot_server("plot", prepared, selected_islet, active_tab, active_donor_colors,
                               remove_outliers = remove_outliers_global,
-                              outlier_threshold = outlier_z_global)
+                              outlier_threshold = outlier_z_global,
+                              palette = active_palette)
 
   # Trajectory module
   trajectory_server("traj", prepared_all, selected_islet, forced_image, active_tab, active_donor_colors,

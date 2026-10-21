@@ -80,6 +80,66 @@ await check('logo_dark_and_light', () => page.evaluate(() => {
     light.offsetParent === null && /logo-header-dark/.test(dark.src)};
 }));
 
+// Plot types (2026-10-21, second round): every type draws in both cards, its CSV downloads, and the object types
+// stay linked plots.
+const types = ['diameter', 'status', 'donor_medians', 'ecdf', 'donor_curves', 'xy', 'clinical', 'density'];
+const typeResults = {};
+for (const [card, id] of [['left', 'plot-plt'], ['right', 'plot-dist']]) {
+  for (const type of types) {
+    const before = await page.$eval('#' + id, gd => gd.layout?.title?.text || '');
+    await choose(`plot-${card}_type`, type);
+    await page.waitForFunction((id, old) => {
+      const gd = document.getElementById(id);
+      return gd && (gd.layout?.title?.text || '') !== old && !gd.classList.contains('recalculating');
+    }, {timeout: 60000}, id, before).catch(() => null);
+    await idle();
+    const drawn = await page.$eval('#' + id, gd => ({
+      title: (gd.layout?.title?.text || '').replace(/<[^>]+>/g, ' ').slice(0, 140),
+      traces: gd.data.filter(t => (t.x?.length || 0) > 1 || (t.y?.length || 0) > 1).length,
+      keyed: gd.data.filter(t => t.meta?.trajectory_role === 'islet').length }));
+    const heading = await page.$eval(`#plot-${card}_title`, el => el.textContent);
+    const csv = await page.$eval(card === 'left' ? '#plot-dl_summary' : '#plot-dl_distribution_csv',
+      async el => { const t = await (await fetch(el.href)).text(); const lines = t.split('\n').filter(Boolean);
+        return {header: lines.filter(l => l.startsWith('#')).length, rows: lines.filter(l => !l.startsWith('#')).length - 1,
+                first: lines.find(l => !l.startsWith('#'))?.slice(0, 100)}; });
+    typeResults[`${card}:${type}`] = {...drawn, heading, csv};
+    if (card === 'right') await shot(`plot_type_${type}`);
+  }
+}
+await check('plot_types_draw_in_both_cards', () => {
+  const linked = ['diameter', 'status', 'xy', 'clinical'];
+  const bad = Object.entries(typeResults).filter(([k, r]) => {
+    const type = k.split(':')[1];
+    return !(r.traces > 0 && r.csv.rows > 0 && r.csv.header > 3 && r.heading.length > 3 &&
+             (!linked.includes(type) || r.keyed > 0) && !/Loading|No data/.test(r.title));
+  }).map(([k]) => k);
+  return {passed: bad.length === 0, bad, results: typeResults};
+});
+await choose('plot-left_type', 'diameter');
+await choose('plot-right_type', 'status');
+await idle();
+
+await check('composition_by_donor_card', async () => {
+  await page.evaluate(() => {
+    const el = document.getElementById('plot-composition_by_donor');
+    document.getElementById('main-content').scrollTop += el.getBoundingClientRect().top - 500;
+  });
+  await plotted('plot-composition_by_donor');
+  await shot('composition_by_donor');
+  const fig = await page.$eval('#plot-composition_by_donor', gd => {
+    const bars = gd.data.filter(t => t.type === 'bar');
+    const donors = bars[0]?.x?.length || 0;
+    const sums = Array.from({length: donors}, (_, i) => bars.reduce((a, t) => a + (t.y[i] || 0), 0));
+    return {phenotypes: bars.map(t => t.name), donors, sums: sums.map(v => Math.round(v * 10) / 10)};
+  });
+  const csv = await page.$eval('#plot-dl_composition_csv', async el => (await (await fetch(el.href)).text()).split('\n').length);
+  await choose('plot-composition_region', 'peri');
+  await page.waitForFunction(() => /peri-islet band/.test(document.getElementById('plot-composition_by_donor').layout.title.text));
+  return {passed: fig.donors >= 15 && fig.sums.every(v => Math.abs(v - 100) < 0.6) && fig.phenotypes.includes('No subtype') &&
+    !fig.phenotypes.some(n => ['Endocrine', 'T cell', 'Immune'].includes(n)) && csv > 100, ...fig, csv_lines: csv};
+});
+await page.evaluate(() => { document.getElementById('main-content').scrollTop = 0; });
+
 // Scroll the main panel: header, tab bar and the tab's controls stay put, cards move under them.
 async function frozen(label) {
   return page.evaluate(label => {

@@ -16,7 +16,8 @@
 plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plot"),
                         donor_colors_reactive = reactive(DONOR_COLORS_BRIGHT),
                         remove_outliers = reactive(FALSE),
-                        outlier_threshold = reactive(3.0)) {
+                        outlier_threshold = reactive(3.0),
+                        palette = reactive(PHENOTYPE_COLORS)) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
@@ -272,6 +273,58 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
     # Reactive data chain:  raw_df_base -> raw_df -> plot_df -> summary_df
     # ===========================================================================
 
+    # ---- The Data controls' object filters: diameter range, age, sex, autoantibodies (Aab+ donors only) ----
+    # Shared by the plot cards (raw_df_base) and the Composition by donor card. `out` needs a donor_status column.
+    apply_plot_filters <- function(out) {
+      # Apply diameter range filter
+      if (!is.null(input$diam_range) && length(input$diam_range) == 2) {
+        diam_min <- as.numeric(input$diam_range[1])
+        diam_max <- as.numeric(input$diam_range[2])
+        if (is.finite(diam_min) && is.finite(diam_max)) {
+          out <- out %>%
+            dplyr::filter(is.finite(islet_diam_um) &
+                          islet_diam_um >= diam_min &
+                          islet_diam_um <= diam_max)
+        }
+      }
+
+      # Age filter
+      if (!is.null(input$age_range) && length(input$age_range) == 2 && "age" %in% colnames(out)) {
+        out <- out[is.finite(as.numeric(out$age)) &
+                   as.numeric(out$age) >= input$age_range[1] &
+                   as.numeric(out$age) <= input$age_range[2], , drop = FALSE]
+      }
+      # Sex filter (data column is `gender`)
+      if (!is.null(input$gender_filter) && "gender" %in% colnames(out)) {
+        out <- out[as.character(out$gender) %in% input$gender_filter, , drop = FALSE]
+      }
+
+      # Apply AAb filters (only within Aab+ donor group)
+      flags <- input$aab_flags
+      all_aab_cols <- c("AAb_GADA", "AAb_IA2A", "AAb_ZnT8A", "AAb_IAA", "AAb_mIAA")
+
+      others <- out %>% dplyr::filter(donor_status != "Aab+")
+      aabp   <- out %>% dplyr::filter(donor_status == "Aab+")
+
+      if (nrow(aabp) > 0) {
+        if (is.null(flags) || length(flags) == 0) {
+          aabp <- aabp[0, , drop = FALSE]
+        } else {
+          unchecked <- setdiff(all_aab_cols, flags)
+          unchecked_avail <- intersect(unchecked, colnames(aabp))
+          if (length(unchecked_avail) > 0) {
+            exclude_mat <- as.data.frame(aabp[, unchecked_avail, drop = FALSE])
+            for (cc in colnames(exclude_mat)) exclude_mat[[cc]] <- as.logical(exclude_mat[[cc]])
+            has_unchecked <- rowSums(exclude_mat, na.rm = TRUE) > 0
+            aabp <- aabp[!has_unchecked, , drop = FALSE]
+          }
+        }
+      }
+
+      out <- dplyr::bind_rows(others, aabp)
+      out
+    }
+
     # ---- raw_df_base: per-islet dataset aligned with current selections ----
     raw_df_base <- reactive({
       pd <- prepared()
@@ -392,52 +445,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       # No min-cells filter since 2026-10-17: the endocrine-object classes chosen above the tabs (Islet /
       # Cluster) select the objects, through prepared().
 
-      # Apply diameter range filter
-      if (!is.null(input$diam_range) && length(input$diam_range) == 2) {
-        diam_min <- as.numeric(input$diam_range[1])
-        diam_max <- as.numeric(input$diam_range[2])
-        if (is.finite(diam_min) && is.finite(diam_max)) {
-          out <- out %>%
-            dplyr::filter(is.finite(islet_diam_um) &
-                          islet_diam_um >= diam_min &
-                          islet_diam_um <= diam_max)
-        }
-      }
-
-      # Age filter
-      if (!is.null(input$age_range) && length(input$age_range) == 2 && "age" %in% colnames(out)) {
-        out <- out[is.finite(as.numeric(out$age)) &
-                   as.numeric(out$age) >= input$age_range[1] &
-                   as.numeric(out$age) <= input$age_range[2], , drop = FALSE]
-      }
-      # Sex filter (data column is `gender`)
-      if (!is.null(input$gender_filter) && "gender" %in% colnames(out)) {
-        out <- out[as.character(out$gender) %in% input$gender_filter, , drop = FALSE]
-      }
-
-      # Apply AAb filters (only within Aab+ donor group)
-      flags <- input$aab_flags
-      all_aab_cols <- c("AAb_GADA", "AAb_IA2A", "AAb_ZnT8A", "AAb_IAA", "AAb_mIAA")
-
-      others <- out %>% dplyr::filter(donor_status != "Aab+")
-      aabp   <- out %>% dplyr::filter(donor_status == "Aab+")
-
-      if (nrow(aabp) > 0) {
-        if (is.null(flags) || length(flags) == 0) {
-          aabp <- aabp[0, , drop = FALSE]
-        } else {
-          unchecked <- setdiff(all_aab_cols, flags)
-          unchecked_avail <- intersect(unchecked, colnames(aabp))
-          if (length(unchecked_avail) > 0) {
-            exclude_mat <- as.data.frame(aabp[, unchecked_avail, drop = FALSE])
-            for (cc in colnames(exclude_mat)) exclude_mat[[cc]] <- as.logical(exclude_mat[[cc]])
-            has_unchecked <- rowSums(exclude_mat, na.rm = TRUE) > 0
-            aabp <- aabp[!has_unchecked, , drop = FALSE]
-          }
-        }
-      }
-
-      out <- dplyr::bind_rows(others, aabp)
+      out <- apply_plot_filters(out)
       attr(out, "selection_used") <- w
       attr(out, "mode_used") <- mode
       out
@@ -509,11 +517,48 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       df
     })
 
-    # ---- summary_df: mean/SE (or SD/IQR) per bin per group ----
-    # Excludes flagged outliers when the global filter is ON; otherwise
-    # all rows contribute to the binned summary.
-    summary_df <- reactive({
-      df <- plot_df()
+    # ---- The chosen measure's axis label and short name (titles), shared by every plot type ----
+    measure_axis_label <- function() {
+      mode <- validated_mode()
+      wsel <- validated_selection() %||% ""
+      metric <- validated_metric()
+      if (identical(mode, "Microenvironment")) {
+        parts <- strsplit(wsel, "\\|")[[1]]
+        class_name <- if (length(parts) >= 1 && nzchar(parts[1])) parts[1] else "Structure"
+        region_tag <- if (length(parts) >= 2) parts[2] else "islet_core"
+        region_lbl <- switch(region_tag,
+                             islet_core  = "core",
+                             islet_band  = "peri-islet",
+                             islet_union = "core+peri",
+                             "region")
+        paste0(class_name, " area (% of ", region_lbl, " area)")
+      } else {
+        region_tag <- if (startsWith(wsel, "combined_prop_")) "core+peri"
+                       else if (startsWith(wsel, "peri_prop_")) "peri"
+                       else "core"
+        switch(metric,
+          "Counts"     = paste0("Cells per islet (", region_tag, ")"),
+          "Density"    = paste0("Cells per mm\u00b2 (", region_tag, " area)"),
+          "Percentage" = if (region_tag == "core+peri") "% of all (core+peri) cells"
+                         else if (region_tag == "peri")    "% of peri cells"
+                         else                              "% of core cells"
+        )
+      }
+    }
+    measure_name <- function() {
+      wsel <- validated_selection() %||% ""
+      if (identical(validated_mode(), "Microenvironment")) return(strsplit(wsel, "\\|")[[1]][1])
+      # extract_phenotype_from_column() turns the sanitised peri / combined stems ("Beta_cell",
+      # "CHGAplus_hormone-negative") back into the phenotype's label.
+      if (startsWith(wsel, "combined_prop_")) paste0(extract_phenotype_from_column(wsel), " core+peri proportion")
+      else if (startsWith(wsel, "peri_prop_")) paste0(extract_phenotype_from_column(wsel), " peri-islet proportion")
+      else if (startsWith(wsel, "prop_")) paste0(extract_phenotype_from_column(wsel), " proportion")
+      else wsel
+    }
+
+    # ---- Binned summary: mean/SE (or SD/IQR) per diameter bin and donor status ----
+    # Excludes flagged outliers when the global filter is ON; otherwise all rows contribute.
+    binned_summary <- function(df) {
       if (is.null(df) || !nrow(df)) return(data.frame())
       stat_choice <- input$stat %||% "mean_se"
       if (!stat_choice %in% c("mean_se", "mean_sd", "median_iqr")) {
@@ -526,15 +571,17 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
                     group_cols = c("donor_status", "diam_bin", "diam_mid"),
                     value_col  = "value",
                     stat       = stat_choice)
-    })
+    }
+    # The left card's summary (its CSV when it plots Against diameter; returned for the Statistics tab).
+    summary_df <- reactive(binned_summary(plot_df()))
 
     # ===========================================================================
     # Outputs: scatter plot (plt), distribution (dist), outlier info
     # ===========================================================================
 
-    # ---- Main scatter plot ----
-    output$plt <- renderPlotly({
-      sm <- summary_df()
+    # ---- Against diameter: every object against its diameter, with the binned summary per donor status ----
+    # `raw_rows` are a card's flagged, binned rows; `sm` their binned_summary().
+    diameter_figure <- function(raw_rows, sm) {
       if (is.null(sm) || !nrow(sm)) {
         return(plotly_islet_empty("Loading data..."))
       }
@@ -551,53 +598,11 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       color_map <- donor_colors_reactive()
 
       # Y-axis label
-      ylab <- if (identical(mode, "Microenvironment")) {
-        wsel <- selection
-        parts <- strsplit(wsel, "\\|")[[1]]
-        class_name <- if (length(parts) >= 1 && nzchar(parts[1])) parts[1] else "Structure"
-        region_tag <- if (length(parts) >= 2) parts[2] else "islet_core"
-        region_lbl <- switch(region_tag,
-                             islet_core  = "core",
-                             islet_band  = "peri-islet",
-                             islet_union = "core+peri",
-                             "region")
-        paste0(class_name, " area (% of ", region_lbl, " area)")
-      } else {
-        wsel <- selection
-        region_tag <- if (startsWith(wsel, "combined_prop_")) "core+peri"
-                       else if (startsWith(wsel, "peri_prop_")) "peri"
-                       else "core"
-        switch(metric,
-          "Counts"     = paste0("Cells per islet (", region_tag, ")"),
-          "Density"    = paste0("Cells per mm\u00b2 (", region_tag, " area)"),
-          "Percentage" = if (region_tag == "core+peri") "% of all (core+peri) cells"
-                         else if (region_tag == "peri")    "% of peri cells"
-                         else                              "% of core cells"
-        )
-      }
+      ylab <- measure_axis_label()
 
       # Title (with outlier badge appended)
-      base_title <- if (identical(mode, "Microenvironment")) {
-        # Extract class name from encoded "className|region" value
-        wsel <- selection
-        class_name <- strsplit(wsel, "\\|")[[1]][1]
-        paste0(class_name, " vs Islet Size")
-      } else {
-        wsel <- selection
-        # extract_phenotype_from_column() turns the sanitised peri / combined stems ("Beta_cell",
-        # "CHGAplus_hormone-negative") back into the phenotype's label.
-        if (startsWith(wsel, "combined_prop_")) {
-          nm <- paste0(extract_phenotype_from_column(wsel), " core+peri proportion")
-        } else if (startsWith(wsel, "peri_prop_")) {
-          nm <- paste0(extract_phenotype_from_column(wsel), " peri-islet proportion")
-        } else if (startsWith(wsel, "prop_")) {
-          nm <- paste0(extract_phenotype_from_column(wsel), " proportion")
-        } else {
-          nm <- wsel
-        }
-        paste0(nm, " vs Islet Size")
-      }
-      outlier_summary <- attr(plot_df(), "outlier_summary")
+      base_title <- paste0(measure_name(), " vs Islet Size")
+      outlier_summary <- attr(raw_rows, "outlier_summary")
       title_text <- paste0(base_title, outlier_title_suffix(outlier_summary))
 
       # Pseudo-log transform: apply manually to avoid ggplotly axis corruption
@@ -620,7 +625,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       donor_id_breaks <- NULL
 
       if (show_ind_points) {
-        raw <- plot_df()
+        raw <- raw_rows
         raw$donor_status <- factor(raw$donor_status, levels = grp_levels)
 
         # Object key shared with the distribution plot: hover links the two, a click selects (plot_link_*).
@@ -801,7 +806,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         plotly_islet_config("plot_scatter")
 
       trajectory_link_plot(gg, ns)
-    })
+    }
 
     # ---- Distribution controls ----
     # ---- Distribution violin/box plot ----
@@ -842,9 +847,10 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       list(all = rdf, summary = summarize_outlier_filter(rdf))
     })
 
-    output$dist <- renderPlotly({
-      dd <- dist_data()
-      if (is.null(dd)) return(NULL)
+    # ---- By donor status: a violin or box per donor status, every object as a point ----
+    # `dd` is list(all = a card's flagged rows, summary = their outlier summary).
+    status_figure <- function(dd) {
+      if (is.null(dd) || is.null(dd$all) || !nrow(dd$all)) return(plotly_islet_empty("No data for the current selection"))
       mode <- validated_mode()
       selection <- validated_selection() %||% ""
       metric <- validated_metric()
@@ -852,6 +858,8 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       # The point controls are shared with the scatter (View controls, "Both plots").
       color_by <- input$plot_color_by %||% "donor_status"
       rdf <- dd$all
+      rdf$donor_status <- factor(as.character(rdf$donor_status), levels = c("ND", "Aab+", "T1D"))
+      if (color_by == "donor_id" && "Case ID" %in% colnames(rdf)) rdf$donor_id <- factor(rdf$`Case ID`)
       rdf$link_key <- plot_link_keys(rdf)
       dist_summary <- dd$summary
       rdf_ghost <- rdf[rdf$is_outlier, , drop = FALSE]
@@ -862,30 +870,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       }
 
       # Y-axis label
-      ylab <- if (identical(mode, "Microenvironment")) {
-        wsel <- selection
-        parts <- strsplit(wsel, "\\|")[[1]]
-        class_name <- if (length(parts) >= 1 && nzchar(parts[1])) parts[1] else "Structure"
-        region_tag <- if (length(parts) >= 2) parts[2] else "islet_core"
-        region_lbl <- switch(region_tag,
-                             islet_core  = "core",
-                             islet_band  = "peri-islet",
-                             islet_union = "core+peri",
-                             "region")
-        paste0(class_name, " area (% of ", region_lbl, " area)")
-      } else {
-        wsel <- selection
-        region_tag <- if (startsWith(wsel, "combined_prop_")) "core+peri"
-                       else if (startsWith(wsel, "peri_prop_")) "peri"
-                       else "core"
-        switch(metric,
-          "Counts"     = paste0("Cells per islet (", region_tag, ")"),
-          "Density"    = paste0("Cells per mm\u00b2 (", region_tag, " area)"),
-          "Percentage" = if (region_tag == "core+peri") "% of all (core+peri) cells"
-                         else if (region_tag == "peri")    "% of peri cells"
-                         else                              "% of core cells"
-        )
-      }
+      ylab <- measure_axis_label()
 
       # Base violin or box
       g <- ggplot(rdf, aes(x = donor_status, y = value, fill = donor_status))
@@ -1016,7 +1001,211 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         ) %>%
         plotly_islet_config("plot_distribution")
       trajectory_link_plot(p, ns)
+    }
+
+    # ===========================================================================
+    # Plot types (owner, 2026-10-21): either card plots any of PLOT_TYPE_CHOICES (R/plot_types.R). The left card
+    # reads plot_df() (its own "Exclude zero values" box) and opens on Against diameter; the right one reads
+    # dist_data() and opens on By donor status. Output ids stay plt / dist and the CSVs dl_summary /
+    # dl_distribution_csv, each exporting what its card shows.
+    # ===========================================================================
+    PLOT_CARD_DEFAULT <- c(left = "diameter", right = "status")
+    card_type <- function(card) {
+      value <- input[[paste0(card, "_type")]]
+      if (is.null(value) || !islet_valid_scalar_choice(value, PLOT_TYPE_CHOICES, "plot_type_invalid"))
+        PLOT_CARD_DEFAULT[[card]] else value
+    }
+    card_type_label <- function(card) names(PLOT_TYPE_CHOICES)[match(card_type(card), PLOT_TYPE_CHOICES)]
+    output$left_title <- renderText(card_type_label("left"))
+    output$right_title <- renderText(card_type_label("right"))
+
+    # A card's rows: flagged for outliers, binned by diameter, with link keys.
+    card_rows <- function(card) {
+      if (card == "left") {
+        df <- plot_df()
+      } else {
+        dd <- dist_data()
+        if (is.null(dd) || is.null(dd$all) || !nrow(dd$all)) return(NULL)
+        bw <- suppressWarnings(as.numeric(input$binwidth))
+        if (length(bw) != 1 || !is.finite(bw) || bw <= 0) bw <- 50
+        df <- bin_islet_sizes(dd$all, "islet_diam_um", bw)
+        attr(df, "outlier_summary") <- dd$summary
+      }
+      if (is.null(df) || !nrow(df)) return(NULL)
+      df$donor_status <- as.character(df$donor_status)
+      df$link_key <- plot_link_keys(df)
+      df
+    }
+    # The rows the added types draw: flagged outliers left out while the filter is on.
+    card_kept_rows <- function(rows) {
+      if (isTRUE(remove_outliers()) && "is_outlier" %in% names(rows))
+        rows[!(rows$is_outlier %in% TRUE), , drop = FALSE] else rows
+    }
+    donor_id_palette <- function(rows) get_donor_palette(rows$`Case ID`)
+
+    # The card's x measure (Against another measure) and clinical value (Against a donor clinical value).
+    x_measure_choices <- reactive(plot_x_measure_choices(colnames(prepared()$comp), prepared()$combined_pairs))
+    clinical_choices <- reactive({
+      cols <- colnames(prepared()$comp)
+      PLOT_CLINICAL_CHOICES[PLOT_CLINICAL_CHOICES %in% cols]
     })
+    observe({
+      xs <- x_measure_choices()
+      cl <- clinical_choices()
+      for (card in c("left", "right")) {
+        x_id <- paste0(card, "_x_measure")
+        current <- isolate(input[[x_id]])
+        updateSelectInput(session, x_id, choices = xs,
+                          selected = if (!is.null(current) && current %in% unlist(xs)) current else
+                            intersect(c("immune_frac_peri", "islet_diam_um"), unlist(xs))[1])
+        c_id <- paste0(card, "_clinical")
+        current <- isolate(input[[c_id]])
+        updateSelectInput(session, c_id, choices = cl,
+                          selected = if (!is.null(current) && current %in% cl) current else unname(cl[1]))
+      }
+    })
+    card_choice <- function(card, what, allowed) {
+      value <- input[[paste0(card, "_", what)]]
+      if (is.null(value) || !islet_valid_scalar_choice(value, allowed, "plot_card_choice_invalid")) return(NULL)
+      value
+    }
+    flat_choices <- function(choices) { v <- unlist(unname(choices)); v }
+
+    card_figure <- function(card) {
+      type <- card_type(card)
+      rows <- card_rows(card)
+      if (is.null(rows)) {
+        return(trajectory_link_plot(plotly_islet_empty(if (card == "left") "Loading data..." else
+          "No data for the current selection"), ns))
+      }
+      status_cols <- donor_colors_reactive()
+      color_by <- input$plot_color_by %||% "donor_status"
+      log_y <- isTRUE(input$log_scale)
+      ylab <- measure_axis_label()
+      name <- measure_name()
+      kept <- card_kept_rows(rows)
+      fig <- switch(type,
+        diameter = diameter_figure(rows, binned_summary(rows)),
+        status = status_figure(list(all = rows, summary = attr(rows, "outlier_summary"))),
+        donor_medians = plot_donor_medians_figure(kept, ylab, name, status_cols, color_by, donor_id_palette(kept),
+                                                  log_y, input$pt_size %||% 3),
+        ecdf = plot_ecdf_figure(kept, ylab, name, status_cols, log_y),
+        donor_curves = plot_donor_curves_figure(kept, ylab, name, status_cols, log_y),
+        xy = {
+          xs <- flat_choices(x_measure_choices())
+          x_col <- card_choice(card, "x_measure", xs) %||% unname(xs[1])
+          plot_xy_figure(kept, plot_x_values(kept, prepared()$comp, x_col), names(xs)[match(x_col, xs)], ylab, name,
+                         status_cols, color_by, donor_id_palette(kept), log_y, input$pt_size %||% 3,
+                         input$pt_alpha %||% 0.4, isTRUE(input$show_points))
+        },
+        clinical = {
+          cl <- clinical_choices()
+          c_col <- card_choice(card, "clinical", cl) %||% unname(cl[1])
+          if (is.null(c_col) || is.na(c_col)) plotly_islet_empty("No donor clinical values in this data") else
+            plot_clinical_figure(kept, plot_clinical_values(kept, c_col), names(cl)[match(c_col, cl)], ylab, name,
+                                 status_cols, color_by, donor_id_palette(kept), log_y, input$pt_size %||% 3,
+                                 input$pt_alpha %||% 0.4, isTRUE(input$show_points))
+        },
+        density = plot_density_figure(kept, ylab, name, status_cols, log_y, isTRUE(input$log_scale_x))
+      )
+      if (type %in% c("diameter", "status")) fig else trajectory_link_plot(fig, ns)
+    }
+    output$plt <- renderPlotly(card_figure("left"))
+    output$dist <- renderPlotly(card_figure("right"))
+
+    # What a card's CSV holds: list(df, lines) for its current type.
+    card_export <- function(card) {
+      type <- card_type(card)
+      rows <- tryCatch(card_rows(card), error = function(e) NULL)
+      per_object <- function(df, extra = NULL) {
+        if (is.null(df) || !nrow(df)) return(NULL)
+        want <- c("Case ID", "islet_key", "donor_status", "value", extra, "islet_diam_um", "total_cells_core",
+                  "total_cells_peri", "is_outlier", "outlier_score")
+        df[, intersect(want, colnames(df)), drop = FALSE]
+      }
+      if (is.null(rows)) return(list(df = NULL, lines = "No rows for the current selection"))
+      kept <- card_kept_rows(rows)
+      switch(type,
+        diameter = list(df = binned_summary(rows), lines = c(
+          "Rows are per (donor status x diameter bin). y/ymin/ymax are the plotted values for the chosen Statistic.",
+          "Individual objects are not in this file: choose By donor status for per-object values.")),
+        status = list(df = per_object(rows), lines =
+          "is_outlier marks the ghost x markers. Rows are NOT dropped, so the full distribution is exportable."),
+        donor_medians = list(df = donor_median_table(kept), lines =
+          "One row per donor: median and quartiles (q1, q3) of the measure over its objects."),
+        ecdf = list(df = ecdf_table(kept), lines =
+          "Per donor status, each object's value and the proportion of the status's objects at or below it."),
+        donor_curves = list(df = per_object(kept), lines =
+          "Per-object values behind each donor's curve (a density over the donor's objects)."),
+        xy = {
+          xs <- flat_choices(x_measure_choices())
+          x_col <- card_choice(card, "x_measure", xs) %||% unname(xs[1])
+          kept$x_value <- plot_x_values(kept, prepared()$comp, x_col)
+          list(df = per_object(kept, "x_value"), lines = paste0("x_value: ", names(xs)[match(x_col, xs)],
+                                                                 "; value: the y measure"))
+        },
+        clinical = {
+          cl <- clinical_choices()
+          c_col <- card_choice(card, "clinical", cl) %||% unname(cl[1])
+          kept$clinical <- plot_clinical_values(kept, c_col)
+          list(df = donor_median_table(kept, extra = "clinical"), lines = paste0(
+            "One row per donor: median and quartiles of the measure over its objects; clinical: ",
+            names(cl)[match(c_col, cl)], " (NA: not recorded; HbA1c 0 is treated as not recorded)"))
+        },
+        density = list(df = per_object(kept), lines = "Per-object values behind the density contours.")
+      )
+    }
+    write_card_csv <- function(file, card) {
+      ex <- card_export(card)
+      desc <- tryCatch(get_selection_description(), error = function(e) character(0))
+      desc <- desc[!grepl("^Zero-value exclusion", desc)]
+      zero <- if (card == "left") input$exclude_zero_top else input$exclude_zero_dist
+      write_islet_csv(file, ex$df, c(
+        paste0("Plot \u2014 ", card, " card: ", card_type_label(card)),
+        paste("Measure:", measure_axis_label()),
+        desc,
+        paste0("Zero-value exclusion (", card, " plot): ", if (isTRUE(zero)) "ON" else "OFF"),
+        ex$lines))
+    }
+
+    # ===========================================================================
+    # Composition by donor (R/donor_composition.R): every donor's whole cell make-up, pooled over its objects
+    # ===========================================================================
+    composition_table <- reactive({
+      pd <- prepared()
+      req(pd$comp, pd$combined_pairs)
+      comp <- pd$comp %>%
+        dplyr::filter(`Donor Status` %in% validated_groups(), is.finite(islet_diam_um)) %>%
+        dplyr::mutate(donor_status = `Donor Status`)
+      comp <- apply_plot_filters(comp)
+      region <- input$composition_region %||% "core"
+      if (!islet_valid_scalar_choice(region, DONOR_COMPOSITION_REGIONS, "composition_region_invalid")) region <- "core"
+      donor_composition_table(comp, pd$combined_pairs, region)
+    })
+    output$composition_by_donor <- renderPlotly({
+      tab <- composition_table()
+      order <- input$composition_order %||% "beta"
+      if (!islet_valid_scalar_choice(order, DONOR_COMPOSITION_ORDERS, "composition_order_invalid")) order <- "beta"
+      region <- input$composition_region %||% "core"
+      region_label <- names(DONOR_COMPOSITION_REGIONS)[match(region, DONOR_COMPOSITION_REGIONS)] %||% "Core"
+      if (is.na(region_label)) region_label <- "Core"
+      donor_composition_figure(tab, if (nrow(tab)) donor_composition_order(tab, order) else character(0),
+                               palette(), donor_colors_reactive(), tolower(region_label))
+    })
+    output$dl_composition_csv <- downloadHandler(
+      filename = function() paste0("composition_by_donor_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".csv"),
+      content = function(file) {
+        tab <- composition_table()
+        desc <- tryCatch(get_selection_description(), error = function(e) character(0))
+        desc <- desc[!grepl("^(Data Layer|Selection|Metric|Statistic|Bin Width|Zero-value|Outlier)", desc)]
+        write_islet_csv(file, tab, c(
+          "Plot \u2014 Composition by donor",
+          paste("Region:", input$composition_region %||% "core"),
+          desc,
+          "cells: the donor's cells of the phenotype, pooled over its selected objects; total_cells: all its cells there",
+          "proportion = 100 * cells / total_cells; 'No subtype' holds the cells typed only to a general class"))
+      }
+    )
 
     # ---- Outlier info table in sidebar ----
     output$plot_outlier_info <- renderUI({
@@ -1119,24 +1308,12 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
     # ===========================================================================
 
     output$dl_summary <- downloadHandler(
-      filename = function() {
-        paste0("summary_", gsub("[^0-9A-Za-z]+", "_", Sys.time()), ".csv")
-      },
-      content = function(file) {
-        df <- tryCatch(summary_df(), error = function(e) NULL)
-        write_islet_csv(file, df, c(
-          "Plot — binned summary curve (the lines/points drawn on the scatter)",
-          get_selection_description(),
-          "Rows are per (donor status x diameter bin). y/ymin/ymax are the plotted values for the chosen Statistic.",
-          "Individual islet points are NOT in this file — use the Distribution CSV for per-islet values."
-        ))
-      }
+      filename = function() paste0("plot_left_", card_type("left"), "_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".csv"),
+      content = function(file) write_card_csv(file, "left")
     )
 
-    # Per-islet values behind the Distribution Comparison panel. This panel has
-    # its OWN zero-exclusion checkbox (`exclude_zero_dist`), independent of the
-    # main scatter's, so its export must come from `dist_data()` and not from
-    # the summary chain above.
+    # The right card's rows come from `dist_data()`, which has its OWN zero-exclusion checkbox
+    # (`exclude_zero_dist`), so each card's CSV is built from that card's rows (write_card_csv()).
     # ---------- Endocrine objects per donor (object_counts.R) ----------
     object_counts_data <- reactive({
       d <- load_object_counts()
@@ -1166,36 +1343,8 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
     )
 
     output$dl_distribution_csv <- downloadHandler(
-      filename = function() {
-        paste0("distribution_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".csv")
-      },
-      content = function(file) {
-        dd <- tryCatch(dist_data(), error = function(e) NULL)
-        out <- NULL
-        if (!is.null(dd) && !is.null(dd$all) && nrow(dd$all) > 0) {
-          rdf <- dd$all
-          want <- c("Case ID", "islet_key", "donor_status", "value",
-                    "islet_diam_um", "total_cells_core", "total_cells_peri",
-                    "is_outlier", "outlier_score")
-          out <- rdf[, intersect(want, colnames(rdf)), drop = FALSE]
-        }
-        fs <- if (is.null(dd)) NULL else dd$summary
-        desc <- tryCatch(get_selection_description(), error = function(e) character(0))
-        # This panel's zero toggle is its own; restate it so the header is not
-        # contradicted by the main scatter's line.
-        desc <- desc[!grepl("^Zero-value exclusion:", desc)]
-        write_islet_csv(file, out, c(
-          "Plot — Distribution Comparison panel, per-islet values",
-          desc,
-          paste("Zero-value exclusion (Distribution panel):",
-                if (isTRUE(input$exclude_zero_dist)) "ON" else "OFF"),
-          paste("Outlier rule:", if (is.null(fs)) "n/a"
-                                 else if (isTRUE(fs$enabled))
-                                   paste0(fs$label, "; ", fs$n_excluded, " of ", fs$n_total, " flagged")
-                                 else "OFF"),
-          "is_outlier marks the ghost x markers. Rows are NOT dropped, so the full distribution is exportable."
-        ))
-      }
+      filename = function() paste0("plot_right_", card_type("right"), "_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".csv"),
+      content = function(file) write_card_csv(file, "right")
     )
 
     # ===========================================================================
@@ -1248,7 +1397,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
 
       # Analysis-rule state. Without these a file with 17 outliers removed is
       # indistinguishable from one with none.
-      desc <- c(desc, paste("Zero-value exclusion:",
+      desc <- c(desc, paste("Zero-value exclusion (left plot):",
                             if (isTRUE(input$exclude_zero_top)) "ON" else "OFF"))
       desc <- c(desc, paste("Outlier filter:",
                             if (isTRUE(remove_outliers()))

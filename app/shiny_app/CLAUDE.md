@@ -152,6 +152,25 @@ Z-scored expression along pseudotime. Clamped [-2.5, 2.5], blue-white-red, dynam
 
 ## Plot Tab Features (Phase 5, Feb 2026)
 
+### Plot types and Composition by donor (owner, 2026-10-21)
+
+Each plot card has a **Plot type** selector offering every type in `PLOT_TYPE_CHOICES` (`R/plot_types.R`): Against
+diameter (the left card's default) and By donor status (the right's) are `diameter_figure()` / `status_figure()` in
+`mod_plot_server.R`; Donor medians (Kruskal-Wallis on donor medians), Cumulative distribution, One curve per donor,
+Against another measure (x chosen on the card: object measures or a phenotype's core / peri-islet %), Against a donor
+clinical value (age, BMI, HbA1c, C-peptide, T1D duration, autoantibody count; Spearman over donors) and Density against
+diameter are pure builders in `plot_types.R` (tables tested in `tests/testthat/test-plot-types.R`). The left card
+reads `plot_df()` and the right `dist_data()`, so each keeps its own "Exclude zero values" box (relabelled left / right
+plot); the added types leave out flagged outliers while the filter is on. Output ids stay `plt` / `dist` (linked-click
+sources) and the CSVs `dl_summary` / `dl_distribution_csv`, each exporting its card's current type (`card_export()`).
+Object types (Against diameter, By donor status, Against another measure, Against a donor clinical value) stay linked
+plots. The card title is the type's name.
+
+The full-width **Composition by donor** card (`R/donor_composition.R`) stacks each donor's pooled phenotype proportions
+(cells of the phenotype over all cells of its selected objects) in the core, band or both, with the general classes'
+cells together as "No subtype" so bars sum to 100 %. It applies the Data controls' object, donor and diameter filters
+(`apply_plot_filters()`, shared with `raw_df_base()`), not the measure, zero or outlier settings.
+
 ### Phenotype Composition Explorer
 Plot tab Cell Populations mode exposes 21 cell-type proportions (`prop_*` from H5AD `.obs`) + 21 peri-islet proportions (`peri_prop_*`) + 21 core+peri combined proportions (`combined_prop_*`, computed on the fly in `raw_df_base()`) alongside 3 hormone fractions. Grouped `selectInput` with up to 4 option groups (Hormone Positivity, Core, Peri-Islet, Core+Peri). The Combined group's choices are the intersection of `prop_*` and `peri_prop_*` stems — one entry per phenotype that has both region values.
 
@@ -526,7 +545,7 @@ organized control center for each that limits wasted space." Inside each panel, 
 equal columns of `control_group(title, ...)` (an uppercase group title over related controls; `span = 2` takes two
 columns), every input as wide as its column, and no tick grid under sliders. The Plot tab's Data controls are Objects
 and measure | Donors | Object size | Exclusions and its View controls Colour (both plots) | Points and axis (both
-plots) | Islet Size Distribution | Distribution Comparison; Trajectory and Spatial use three and four groups. The
+plots) | Against diameter | By donor status (the plot types they style); Trajectory and Spatial use three and four groups. The
 whole block is wrapped in `tab_controls()` and frozen under the header while the tab scrolls; the excluded-outlier
 table sits below it, not inside. Clicking a panel's title still collapses it to its title bar.
 

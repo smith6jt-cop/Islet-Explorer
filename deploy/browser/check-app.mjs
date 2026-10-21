@@ -188,8 +188,9 @@ try {
       const plotTab = document.querySelector('.tab-pane[data-value="Plot"]');
       const helpTitles = [...(plotTab?.querySelectorAll('details.card-help > summary') || [])]
         .map(summary => summary.title);
-      const wanted = ['Data controls help', 'View controls help', 'Islet Size Distribution help',
-        'Distribution Comparison help'];
+      // Since 2026-10-21 each plot card's title is its chosen plot type, so its help is named by side.
+      const wanted = ['Data controls help', 'View controls help', 'Left plot help', 'Right plot help',
+        'Composition by donor help'];
       return labels.length > 0 && !labels.some(label => hormoneLabels.includes(label)) &&
         !labels.some(label => retired.includes(label)) && metrics.length === 3 &&
         wanted.every(title => helpTitles.includes(title)) &&
@@ -217,9 +218,9 @@ try {
         inside: box.left >= 0 && box.right <= window.innerWidth && box.top >= 0 &&
         box.bottom <= window.innerHeight + 1, rules: Boolean(panel.querySelector('#show_phenotype_rules_plot'))};
     });
-    await page.click('.tab-pane[data-value="Plot"] summary[title="Islet Size Distribution help"]');
+    await page.click('.tab-pane[data-value="Plot"] summary[title="Left plot help"]');
     await page.waitForFunction(() => document.querySelectorAll('body > .card-help-panel').length === 1 &&
-      document.querySelector('summary[title="Islet Size Distribution help"]').parentElement.open, { timeout: 10000 });
+      document.querySelector('summary[title="Left plot help"]').parentElement.open, { timeout: 10000 });
     const single = await page.evaluate(() =>
       [...document.querySelectorAll('details.card-help[open] > summary')].map(summary => summary.title));
     await page.keyboard.press('Escape');
@@ -228,7 +229,7 @@ try {
     const after = await panelOpen();
     return {...opened, panel_kept: before === after, single, closed,
       passed: opened.open && opened.inside && opened.rules && before === after &&
-        JSON.stringify(single) === JSON.stringify(['Islet Size Distribution help']) && closed};
+        JSON.stringify(single) === JSON.stringify(['Left plot help']) && closed};
   });
   await check('reviewer_tabs', async () => page.evaluate(() => {
     const tabs = [...document.querySelectorAll('#tabs > li > a')].map(link => link.dataset.value);

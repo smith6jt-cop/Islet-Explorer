@@ -9,11 +9,6 @@
 #' its own help ("?" beside its title).
 plot_main_ui <- function(id, extra_panel = NULL) {
   ns <- NS(id)
-  linked_points_help <- tags$p(tags$strong("Linked points."),
-    " With \"Show individual points\" on (the default), hover over an object in either plot to ring it in both.",
-    " Click it in either plot to select it and open its segmentation map and single cells below; Clear selection",
-    " releases it. An object selected on the Trajectory tab is ringed here too. With \"Color points by\" set to",
-    " Donor ID, click a donor in the legend to show or hide it.")
   tagList(
     singleton(tags$script(src = islet_asset("trajectory-links.js"))),
     # Frozen under the page header while the tab scrolls (tab_controls()); its parent row holds the whole tab.
@@ -38,8 +33,8 @@ plot_main_ui <- function(id, extra_panel = NULL) {
           tags$p(tags$strong("Filters."),
                  " Unchecking an autoantibody removes the Aab+ donors positive for it (ND and T1D donors are not",
                  " affected). The diameter range keeps objects within it; the bin width sets the diameter bins of the",
-                 " Islet Size Distribution's summary. Exclude outliers drops objects whose robust z-score (median and",
-                 " MAD within each donor status) passes the threshold.")),
+                 " Against diameter summary. Exclude zero values applies to the card it names. Exclude outliers drops",
+                 " objects whose robust z-score (median and MAD within each donor status) passes the threshold.")),
         # Four titled groups in equal columns (owner, 2026-10-21: a more organized control center).
         control_grid(
           control_group("Objects and measure",
@@ -76,9 +71,8 @@ plot_main_ui <- function(id, extra_panel = NULL) {
                         min = 1, max = 75, value = 50, step = 1)
           ),
           control_group("Exclusions",
-            checkboxInput(ns("exclude_zero_top"), "Exclude zero values (size distribution)", value = FALSE),
-            checkboxInput(ns("exclude_zero_dist"), "Exclude zero values (distribution comparison)",
-                          value = FALSE),
+            checkboxInput(ns("exclude_zero_top"), "Exclude zero values (left plot)", value = FALSE),
+            checkboxInput(ns("exclude_zero_dist"), "Exclude zero values (right plot)", value = FALSE),
             # Non-namespaced: read by app.R as the app-wide outlier setting.
             tags$div(
               title = GLOBAL_OUTLIER_TOOLTIP,
@@ -93,11 +87,12 @@ plot_main_ui <- function(id, extra_panel = NULL) {
       control_panel("View controls",
         help = list(
           tags$p("View controls change how the plots are drawn, not what they contain. The groups marked \"both",
-                 " plots\" apply to the Islet Size Distribution and the Distribution Comparison alike; the two",
-                 " groups beside them apply to the plot they name. Click the panel's title to open or close it."),
+                 " plots\" apply to both cards, whatever they plot; the Against diameter and By donor status groups",
+                 " apply to those plot types (Log2 scale x-axis also to Density against diameter). Click the panel's",
+                 " title to open or close it."),
           tags$p("Use browser zoom (Ctrl +/\u2212) to resize cards.")),
         # Point controls apply to both plots (owner, 2026-10-19: the View controls must apply to both,
-        # not only the Distribution Comparison); the last two groups apply to the plot they name.
+        # not only one card); the last two groups apply to the plot type they name.
         control_grid(
           control_group("Colour (both plots)",
             selectInput(ns("plot_color_by"), "Color points by",
@@ -113,7 +108,7 @@ plot_main_ui <- function(id, extra_panel = NULL) {
             sliderInput(ns("pt_size"), "Point size", min = 0.3, max = 4.0, value = 3.0, step = 0.1),
             sliderInput(ns("pt_alpha"), "Point transparency", min = 0, max = 0.95, value = 0.4, step = 0.05)
           ),
-          control_group("Islet Size Distribution",
+          control_group("Against diameter",
             radioButtons(ns("stat"), "Summary statistic",
                          choices = c("Mean\u00b1SE" = "mean_se",
                                      "Mean\u00b1SD" = "mean_sd",
@@ -123,7 +118,7 @@ plot_main_ui <- function(id, extra_panel = NULL) {
                          selected = "None", inline = TRUE),
             checkboxInput(ns("log_scale_x"), "Log2 scale x-axis", value = FALSE)
           ),
-          control_group("Distribution Comparison",
+          control_group("By donor status",
             radioButtons(ns("dist_type"), "Plot type", choices = c("Violin", "Box"),
                          selected = "Violin", inline = TRUE)
           )
@@ -134,53 +129,51 @@ plot_main_ui <- function(id, extra_panel = NULL) {
     ),
     # The excluded-outlier table, when asked for, sits under the frozen controls rather than inside them.
     column(12, uiOutput(ns("plot_outlier_info"))),
-    # Left card: islet size distribution
-    column(6,
-      div(class = "card",
-          style = "margin-bottom: 20px; padding: 15px; border: 1px solid var(--islet-border-strong); border-radius: 8px; height: clamp(600px, 75vh, 1400px); display: flex; flex-direction: column; gap: 12px;",
-        div(style = "display: flex; align-items: center; justify-content: space-between; margin-top: 0;",
-          card_title_help("Islet Size Distribution", style = "margin: 0; color: var(--islet-fg);", help = list(
-            tags$p("The chosen measure of every endocrine object against its diameter, with each donor status's",
-                   " summary statistic per diameter bin (Summary statistic in the View controls)."),
-            tags$p(tags$strong("Islet diameter."),
-                   " The x axis is the diameter of a circle with the object's area. Diameter bins group objects for",
-                   " the summary statistic; the bin width is in the Data controls."),
-            linked_points_help)),
-          downloadButton(ns("dl_summary"), "Summary CSV",
-                         class = "btn-sm btn-outline-secondary",
-                         style = "font-size: 11px; padding: 2px 8px;")
-        ),
-        div(style = "flex: 1; min-height: 0; display: flex;",
-          plotlyOutput(ns("plt"), height = "calc(100% - 28px)")
-        )
-      )
-    ),
-    # Right card: distribution comparison. Widen to fill the row when no extra panel (e.g. the AI chat
-    # card) is present, otherwise its two columns are left as dead space.
-    column(if (is.null(extra_panel)) 6 else 4,
-      div(class = "card",
-          style = "margin-bottom: 20px; padding: 15px; border: 1px solid var(--islet-border-strong); border-radius: 8px; height: clamp(600px, 75vh, 1400px); display: flex; flex-direction: column; gap: 12px;",
-        div(style = "display: flex; align-items: center; justify-content: space-between; margin-top: 0;",
-          card_title_help("Distribution Comparison", style = "margin: 0; color: var(--islet-fg);", help = list(
-            tags$p("The chosen measure of every endocrine object, as a violin or box per donor status (Plot type",
-                   " in the View controls)."),
-            linked_points_help)),
-          downloadButton(ns("dl_distribution_csv"), "CSV",
-                         class = "btn-sm btn-outline-secondary",
-                         style = "font-size: 11px; padding: 2px 8px;")
-        ),
-        div(style = "flex: 1; min-height: 0; display: flex;",
-          plotlyOutput(ns("dist"), height = "calc(100% - 28px)")
-        )
-      )
-    ),
+    # The two plot cards: each plots any plot type (R/plot_types.R, owner 2026-10-21), opening on the two it always
+    # showed. The right card widens to fill the row when no extra panel (e.g. the AI chat card) is present.
+    column(6, plot_card_ui(ns, "left", "plt", "dl_summary")),
+    column(if (is.null(extra_panel)) 6 else 4, plot_card_ui(ns, "right", "dist", "dl_distribution_csv")),
     # Extra panel (e.g., AI chat) injected between cards and full-width panels
     extra_panel,
     # Full-width card below both plot cards: segmentation/drill-down viewer
     column(12,
       uiOutput(ns("segmentation_viewer_panel"))
     ),
+    # Every donor's whole cell make-up (R/donor_composition.R).
+    column(12, donor_composition_card_ui(ns)),
     # Per-donor counts of each endocrine object class (uniform root only): the one place Singles are shown.
     if (!is.null(load_object_counts())) column(12, object_counts_card_ui(ns))
+  )
+}
+
+#' One plot card: its title is the chosen plot type; the Plot type selector, the CSV button and, for the types that
+#' need one, the x measure or clinical value selector sit on the card.
+plot_card_ui <- function(ns, card, plot_id, dl_id) {
+  type_id <- paste0(card, "_type")
+  default <- if (card == "left") "diameter" else "status"
+  side <- if (card == "left") "Left" else "Right"
+  div(class = "card plot-type-card",
+      style = paste0("margin-bottom: 20px; padding: 15px; border: 1px solid var(--islet-border-strong);",
+                     " border-radius: 8px; height: clamp(600px, 75vh, 1400px); display: flex; flex-direction: column;",
+                     " gap: 8px; overflow: visible;"),
+    div(style = "display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;",
+      div(style = "display: flex; align-items: center; gap: 4px; min-width: 0;",
+        h5(textOutput(ns(paste0(card, "_title")), inline = TRUE), style = "margin: 0; color: var(--islet-fg);"),
+        do.call(card_help, c(list(paste(side, "plot help")), list(plot_types_help())))),
+      div(style = "display: flex; align-items: center; gap: 8px;",
+        div(class = "plot-type-select",
+            selectInput(ns(type_id), "Plot type", choices = PLOT_TYPE_CHOICES, selected = default, width = "360px")),
+        downloadButton(ns(dl_id), "CSV", class = "btn-sm btn-outline-secondary",
+                       style = "font-size: 11px; padding: 2px 8px;"))
+    ),
+    conditionalPanel(sprintf("input['%s'] == 'xy'", ns(type_id)),
+      div(class = "plot-type-select",
+          selectInput(ns(paste0(card, "_x_measure")), "X axis", choices = NULL, width = "380px"))),
+    conditionalPanel(sprintf("input['%s'] == 'clinical'", ns(type_id)),
+      div(class = "plot-type-select",
+          selectInput(ns(paste0(card, "_clinical")), "Clinical value", choices = NULL, width = "380px"))),
+    div(style = "flex: 1; min-height: 0; display: flex;",
+      plotlyOutput(ns(plot_id), height = "calc(100% - 28px)")
+    )
   )
 }

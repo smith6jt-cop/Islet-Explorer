@@ -1109,6 +1109,9 @@ CONTROL_PANEL_CSS <- paste0(
   "z-index: 1030; background: var(--islet-surface); padding-top: 8px; float: none !important; ",
   "box-shadow: 0 6px 6px -6px var(--islet-shadow); margin-bottom: 8px; } ",
   ".tab-controls .control-panel { margin-bottom: 8px; } ",
+  # The selectors on a Plot card: label beside the box, no bottom margin.
+  ".plot-type-select .form-group { display: flex; align-items: center; gap: 6px; margin: 0; } ",
+  ".plot-type-select .control-label { margin: 0; white-space: nowrap; font-size: 13px; } ",
   ".tab-controls-actions { display: flex; align-items: center; gap: 12px; padding-bottom: 8px; } ",
   ".control-panel-wrap { position: relative; } ",
   ".control-panel-wrap > .control-panel > summary { padding-right: 34px; } ",
