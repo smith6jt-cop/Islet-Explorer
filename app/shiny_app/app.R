@@ -458,9 +458,6 @@ ui <- fluidPage(
         tabPanel("Trajectory",
           trajectory_ui("traj")
         ),
-        tabPanel("Viewer",
-          viewer_ui("viewer")
-        ),
         # Hidden unless SHOW_STATISTICS_TAB=1 (see 00_globals.R).
         # tabsetPanel drops NULL entries, so this mounts nothing when off.
         if (SHOW_STATISTICS_TAB) {
@@ -477,7 +474,11 @@ ui <- fluidPage(
           tabPanel("Inflammation",
             inflammation_ui("inflam")
           )
-        }
+        },
+        # The Viewer is the last tab (owner, 2026-10-21).
+        tabPanel("Viewer",
+          viewer_ui("viewer")
+        )
       )
     )
   ),

@@ -232,7 +232,7 @@ try {
   });
   await check('reviewer_tabs', async () => page.evaluate(() => {
     const tabs = [...document.querySelectorAll('#tabs > li > a')].map(link => link.dataset.value);
-    return JSON.stringify(tabs) === JSON.stringify(['Plot', 'Trajectory', 'Viewer', 'Spatial']);
+    return JSON.stringify(tabs) === JSON.stringify(['Plot', 'Trajectory', 'Spatial', 'Viewer']);
   }));
   await check('document_and_accessibility_link', async () => page.evaluate(() =>
     document.title === 'Islet Explorer' && document.documentElement.lang === 'en' &&
@@ -246,8 +246,8 @@ try {
   const tabs = [
     { name: 'Plot', plots: [['#plot-plt', 'plotly'], ['#plot-dist', 'plotly']], downloads: ['#plot-dl_summary'] },
     { name: 'Trajectory', plots: [['#traj-traj_scatter', 'plotly'], ['#traj-paga_layout', 'plotly']], downloads: ['#traj-dl_umap_csv', '#traj-dl_paga_csv'] },
-    { name: 'Viewer', plots: [], downloads: [] },
     { name: 'Spatial', plots: [['#spatial-tissue_scatter', 'image']], downloads: ['#spatial-download_spatial'] },
+    { name: 'Viewer', plots: [], downloads: [] },
   ];
   let viewerHref;
   for (let index = 0; index < tabs.length; index += 1) {
