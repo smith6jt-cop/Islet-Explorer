@@ -514,6 +514,15 @@ plot. The Plot tab's old left sidebar column and its layout JS are gone; the syn
 (`sidebar_remove_outliers`, `sidebar_outlier_z`, `sidebar_donor_palette`). Spatial's phenotype list now uses the
 root's own label set (`root_phenotype_labels()`), not the palette, which still carries the frozen typing's labels.
 
+**Control center (owner, 2026-10-21):** "Both the data controls and visual controls are unevenly spaced; create a more
+organized control center for each that limits wasted space." Inside each panel, `control_grid(columns = 4)` lays out
+equal columns of `control_group(title, ...)` (an uppercase group title over related controls; `span = 2` takes two
+columns), every input as wide as its column, and no tick grid under sliders. The Plot tab's Data controls are Objects
+and measure | Donors | Object size | Exclusions and its View controls Colour (both plots) | Points and axis (both
+plots) | Islet Size Distribution | Distribution Comparison; Trajectory and Spatial use three and four groups. The
+whole block is wrapped in `tab_controls()` and frozen under the header while the tab scrolls; the excluded-outlier
+table sits below it, not inside. Clicking a panel's title still collapses it to its title bar.
+
 When adding a new phenotype-selecting input anywhere in the app, route its
 choices through `phenotype_keep()` / `phenotype_is_kept()` and put any marker
 explanation in the help popover of the panel or card that holds the control, not inline under it.

@@ -1076,6 +1076,40 @@ CONTROL_PANEL_CSS <- paste0(
   ".control-panel .form-group { margin-bottom: 6px; } ",
   ".control-panel h5 { margin: 4px 0 6px; font-size: 14px; font-weight: 600; color: var(--islet-fg); } ",
   ".control-panel .form-group:last-child { margin-bottom: 8px; }",
+  # The control grid (owner, 2026-10-21: "create a more organized control center ... that limits wasted space"):
+  # equal columns of titled groups, every input as wide as its column, tight vertical rhythm.
+  ".control-panel > summary { padding: 7px 0; } ",
+  ".control-panel[open] > summary { margin-bottom: 8px; } ",
+  ".control-grid { display: grid; grid-template-columns: repeat(var(--control-cols, 4), minmax(0, 1fr)); ",
+  "gap: 6px 18px; align-items: start; padding-bottom: 8px; } ",
+  ".control-group { min-width: 0; } ",
+  ".control-group.control-span-2 { grid-column: span 2; } ",
+  ".control-group-title { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; ",
+  "color: var(--islet-panel-hint); border-bottom: 1px solid var(--islet-border-strong); padding-bottom: 2px; ",
+  "margin: 0 0 6px; } ",
+  ".control-grid .shiny-input-container:not(.shiny-input-container-inline), .control-grid .form-group, ",
+  ".control-grid .selectize-control { width: 100% !important; max-width: 100%; } ",
+  ".control-grid .form-group { margin-bottom: 6px; } ",
+  ".control-grid .control-label { margin-bottom: 2px; } ",
+  ".control-grid .checkbox, .control-grid .radio { margin-top: 2px; margin-bottom: 2px; } ",
+  ".control-grid .shiny-options-group .checkbox-inline, .control-grid .shiny-options-group .radio-inline { ",
+  "margin: 0 12px 0 0; padding-top: 2px; } ",
+  # No tick grid under the sliders: the handles and the min / max labels carry the values, and the grid cost
+  # ~20 px a slider with labels that collided at column width.
+  ".control-grid .irs--shiny { margin-top: -2px; } ",
+  ".control-grid .irs-grid { display: none; } ",
+  ".control-grid .irs--shiny.irs-with-grid { height: 40px; } ",
+  ".control-checkbox-grid .shiny-options-group { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); ",
+  "gap: 0 12px; } ",
+  ".control-checkbox-grid .shiny-options-group .checkbox { margin: 2px 0; } ",
+  # The active tab's control panels stay under the frozen page header and tab bar (www/islet-theme.css) while the
+  # tab scrolls (owner, 2026-10-21: "Freeze the top panel, data and view controls when scrolling down");
+  # www/sticky-layout.js measures the header and tab bar into the two variables.
+  ".tab-controls { position: sticky; top: calc(var(--islet-header-h, 76px) + var(--islet-tabs-h, 42px)); ",
+  "z-index: 1030; background: var(--islet-surface); padding-top: 8px; float: none !important; ",
+  "box-shadow: 0 6px 6px -6px var(--islet-shadow); margin-bottom: 8px; } ",
+  ".tab-controls .control-panel { margin-bottom: 8px; } ",
+  ".tab-controls-actions { display: flex; align-items: center; gap: 12px; padding-bottom: 8px; } ",
   ".control-panel-wrap { position: relative; } ",
   ".control-panel-wrap > .control-panel > summary { padding-right: 34px; } ",
   ".control-panel-wrap > .card-help { position: absolute; top: 7px; right: 4px; } ",
@@ -1119,6 +1153,21 @@ control_panel <- function(title, ..., open = FALSE, help = NULL) {
   shiny::tags$div(class = "control-panel-wrap", panel,
                   do.call(card_help, c(list(paste(title, "help")), help)))
 }
+
+#' The inside of a control panel: `columns` equal columns of control_group()s.
+control_grid <- function(..., columns = 4) {
+  shiny::tags$div(class = "control-grid", style = sprintf("--control-cols: %d;", as.integer(columns)), ...)
+}
+
+#' One titled group of related controls in a control_grid(); `span = 2` takes two columns.
+control_group <- function(title, ..., span = 1) {
+  shiny::tags$div(class = paste("control-group", if (span > 1) "control-span-2"),
+                  if (!is.null(title)) shiny::tags$div(class = "control-group-title", title), ...)
+}
+
+#' A tab's control panels, frozen under the page header and tab bar while the tab scrolls (CONTROL_PANEL_CSS
+#' `.tab-controls`). Its parent must be the tab's full-height container, or it has nowhere to stick.
+tab_controls <- function(...) shiny::tags$div(class = "tab-controls", ...)
 
 #' TRUE when the served root is the uniform 20-donor build (one typing workflow for every donor).
 is_uniform_root <- function() file.exists(data_path("uniform_release.json"))

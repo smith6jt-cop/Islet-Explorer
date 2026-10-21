@@ -16,7 +16,8 @@ plot_main_ui <- function(id, extra_panel = NULL) {
     " Donor ID, click a donor in the legend to show or hide it.")
   tagList(
     singleton(tags$script(src = islet_asset("trajectory-links.js"))),
-    column(12,
+    # Frozen under the page header while the tab scrolls (tab_controls()); its parent row holds the whole tab.
+    column(12, class = "tab-controls",
       control_panel("Data controls", open = TRUE,
         help = list(
           phenotype_rules_button("show_phenotype_rules_plot"),
@@ -39,8 +40,9 @@ plot_main_ui <- function(id, extra_panel = NULL) {
                  " affected). The diameter range keeps objects within it; the bin width sets the diameter bins of the",
                  " Islet Size Distribution's summary. Exclude outliers drops objects whose robust z-score (median and",
                  " MAD within each donor status) passes the threshold.")),
-        fluidRow(
-          column(3,
+        # Four titled groups in equal columns (owner, 2026-10-21: a more organized control center).
+        control_grid(
+          control_group("Objects and measure",
             # Non-namespaced: synced with the Spatial tab's copy (app.R).
             object_class_selector("object_classes"),
             selectInput(ns("mode"), "Data layer",
@@ -49,7 +51,7 @@ plot_main_ui <- function(id, extra_panel = NULL) {
             uiOutput(ns("dynamic_selector")),
             uiOutput(ns("metric_selector"))
           ),
-          column(3,
+          control_group("Donors",
             checkboxGroupInput(ns("groups"), "Donor status",
                                choices = c("ND", "Aab+", "T1D"),
                                selected = c("ND", "Aab+", "T1D"),
@@ -63,89 +65,75 @@ plot_main_ui <- function(id, extra_panel = NULL) {
                                            "IAA" = "AAb_IAA",
                                            "mIAA" = "AAb_mIAA"),
                                selected = c("AAb_GADA", "AAb_IA2A", "AAb_ZnT8A", "AAb_IAA", "AAb_mIAA"),
-                               inline = TRUE)
+                               inline = TRUE),
+            uiOutput(ns("gender_filter_ui")),
+            uiOutput(ns("age_filter_ui"))
           ),
-          column(3,
-            uiOutput(ns("age_filter_ui")),
-            uiOutput(ns("gender_filter_ui"))
-          ),
-          column(3,
+          control_group("Object size",
             sliderInput(ns("diam_range"), "Islet diameter range (\u00b5m)",
                         min = 0, max = 500, value = c(0, 350), step = 10),
             sliderInput(ns("binwidth"), "Diameter bin width (\u00b5m)",
-                        min = 1, max = 75, value = 50, step = 1),
+                        min = 1, max = 75, value = 50, step = 1)
+          ),
+          control_group("Exclusions",
             checkboxInput(ns("exclude_zero_top"), "Exclude zero values (size distribution)", value = FALSE),
             checkboxInput(ns("exclude_zero_dist"), "Exclude zero values (distribution comparison)",
-                          value = FALSE)
-          )
-        ),
-        fluidRow(
-          column(3,
+                          value = FALSE),
             # Non-namespaced: read by app.R as the app-wide outlier setting.
             tags$div(
               title = GLOBAL_OUTLIER_TOOLTIP,
               checkboxInput("sidebar_remove_outliers", "Exclude outliers", value = FALSE)
-            )
-          ),
-          column(3,
+            ),
             sliderInput("sidebar_outlier_z", "Outlier z-threshold",
-                        min = 0.5, max = 10, value = 3, step = 0.5)
-          ),
-          column(6,
-            checkboxInput(ns("show_outlier_table"), "Show excluded-outlier table", value = FALSE),
-            uiOutput(ns("plot_outlier_info"))
+                        min = 0.5, max = 10, value = 3, step = 0.5),
+            checkboxInput(ns("show_outlier_table"), "Show excluded-outlier table", value = FALSE)
           )
         )
       ),
       control_panel("View controls",
         help = list(
-          tags$p("View controls change how the plots are drawn, not what they contain. The point controls under",
-                 " \"Both plots\" apply to the Islet Size Distribution and the Distribution Comparison alike; the",
-                 " two groups beside them apply to the plot they name. Click the panel's title to open or close it."),
+          tags$p("View controls change how the plots are drawn, not what they contain. The groups marked \"both",
+                 " plots\" apply to the Islet Size Distribution and the Distribution Comparison alike; the two",
+                 " groups beside them apply to the plot they name. Click the panel's title to open or close it."),
           tags$p("Use browser zoom (Ctrl +/\u2212) to resize cards.")),
-        fluidRow(
-          column(3,
-            radioButtons(ns("stat"), "Summary statistic (Islet Size Distribution)",
-                         choices = c("Mean\u00b1SE" = "mean_se",
-                                     "Mean\u00b1SD" = "mean_sd",
-                                     "Median + IQR" = "median_iqr"),
-                         selected = "mean_se"),
+        # Point controls apply to both plots (owner, 2026-10-19: the View controls must apply to both,
+        # not only the Distribution Comparison); the last two groups apply to the plot they name.
+        control_grid(
+          control_group("Colour (both plots)",
+            selectInput(ns("plot_color_by"), "Color points by",
+                        choices = c("Donor Status" = "donor_status", "Donor ID" = "donor_id"),
+                        selected = "donor_status"),
             # Non-namespaced: global donor palette, synced with Trajectory and Spatial (app.R).
             selectInput("sidebar_donor_palette", "Donor status colors",
                         choices = names(DONOR_PALETTES), selected = "Bright")
           ),
-          # Point controls apply to both plots (owner, 2026-10-19: the View controls must apply to both,
-          # not only the Distribution Comparison).
-          column(5,
-            h5("Both plots"),
-            fluidRow(
-              column(6,
-                selectInput(ns("plot_color_by"), "Color points by:",
-                            choices = c("Donor Status" = "donor_status", "Donor ID" = "donor_id"),
-                            selected = "donor_status"),
-                sliderInput(ns("pt_size"), "Point size", min = 0.3, max = 4.0, value = 3.0, step = 0.1),
-                sliderInput(ns("pt_alpha"), "Point transparency", min = 0, max = 0.95, value = 0.4, step = 0.05)
-              ),
-              column(6,
-                checkboxInput(ns("show_points"), "Show individual points", value = TRUE),
-                checkboxInput(ns("log_scale"), "Log scale y-axis", value = FALSE)
-              )
-            )
+          control_group("Points and axis (both plots)",
+            checkboxInput(ns("show_points"), "Show individual points", value = TRUE),
+            checkboxInput(ns("log_scale"), "Log scale y-axis", value = FALSE),
+            sliderInput(ns("pt_size"), "Point size", min = 0.3, max = 4.0, value = 3.0, step = 0.1),
+            sliderInput(ns("pt_alpha"), "Point transparency", min = 0, max = 0.95, value = 0.4, step = 0.05)
           ),
-          column(4,
-            h5("Islet Size Distribution"),
+          control_group("Islet Size Distribution",
+            radioButtons(ns("stat"), "Summary statistic",
+                         choices = c("Mean\u00b1SE" = "mean_se",
+                                     "Mean\u00b1SD" = "mean_sd",
+                                     "Median + IQR" = "median_iqr"),
+                         selected = "mean_se", inline = TRUE),
             radioButtons(ns("add_smooth"), "Trend line", choices = c("None", "LOESS"),
                          selected = "None", inline = TRUE),
-            checkboxInput(ns("log_scale_x"), "Log2 scale x-axis", value = FALSE),
-            h5("Distribution Comparison"),
+            checkboxInput(ns("log_scale_x"), "Log2 scale x-axis", value = FALSE)
+          ),
+          control_group("Distribution Comparison",
             radioButtons(ns("dist_type"), "Plot type", choices = c("Violin", "Box"),
                          selected = "Violin", inline = TRUE)
           )
         )
       ),
-      div(style = "display: flex; align-items: center; gap: 12px; margin-bottom: 12px;",
+      div(class = "tab-controls-actions",
         actionButton(ns("clear_link_selection"), "Clear selection", class = "btn-sm btn-outline-secondary"))
     ),
+    # The excluded-outlier table, when asked for, sits under the frozen controls rather than inside them.
+    column(12, uiOutput(ns("plot_outlier_info"))),
     # Left card: islet size distribution
     column(6,
       div(class = "card",

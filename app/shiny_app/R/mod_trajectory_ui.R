@@ -15,7 +15,8 @@ trajectory_ui <- function(id) {
   tagList(
     singleton(tags$script(src = islet_asset("trajectory-links.js"))),
     tags$style(HTML(".trajectory-linked-plot.html-widget.plotly { padding-top: 0; margin-top: 28px; }")),
-    fluidRow(column(12,
+    # Frozen under the page header while the tab scrolls (tab_controls()).
+    tab_controls(
       control_panel("Data controls", open = TRUE,
       help = list(
         phenotype_rules_button("show_phenotype_rules_traj"),
@@ -33,28 +34,28 @@ trajectory_ui <- function(id) {
       # The fitted cohort is every object with TRAJ_MIN_CELLS or more core cells (since 2026-10-18); the
       # status line reports how many objects were fitted.
       uiOutput(ns("traj_status")),
-      fluidRow(
-        column(4,
+      control_grid(columns = 3,
+        control_group("Measure",
           # Y-axis measure. Marker expression is the core-cell protein mean from .X
           # on the cohort marker scale; the cell-type ratio is Barlow et al.'s Fig 2F y-axis,
           # log(# cells / # endocrine cells), which removes the islet-size
           # confound that a raw count or proportion carries.
-          selectInput(ns("traj_y_mode"), "Y axis:",
+          selectInput(ns("traj_y_mode"), "Y axis",
                       choices = c("Marker expression" = "marker",
                                   "Cell-type ratio (log cells / endocrine cell)" = "ratio"),
                       selected = "ratio")
         ),
-        column(4,
+        control_group("Region",
           conditionalPanel(
             condition = "input.traj_y_mode == 'ratio'", ns = ns,
-            selectInput(ns("traj_ratio_region"), "Count cells in:",
+            selectInput(ns("traj_ratio_region"), "Count cells in",
                         choices = BARLOW_RATIO_REGIONS, selected = "core")
           )
         ),
-        column(4,
+        control_group("Feature",
           uiOutput(ns("traj_feature_selector"))
         )
-      ),
+      )
       ),
       control_panel("View controls",
         help = list(
@@ -64,28 +65,33 @@ trajectory_ui <- function(id) {
                  " Rank-normalized spreads objects evenly from 0 to 1; Raw DPT keeps the diffusion distances."),
           tags$p(tags$strong("Trend lines."),
                  " LOESS fits, overall or per donor status, with an optional 95% confidence band.")),
-        fluidRow(
-          column(4,
-            selectInput(ns("pt_scale"), "Pseudotime scale:",
+        control_grid(columns = 3,
+          control_group("Pseudotime and trends",
+            selectInput(ns("pt_scale"), "Pseudotime scale",
                        choices = c("Rank-normalized" = "rank",
                                    "Raw DPT" = "raw"),
-                       selected = "rank")
-          ),
-          column(4,
-            selectInput(ns("traj_show_trend"), "Trend lines:",
+                       selected = "rank"),
+            selectInput(ns("traj_show_trend"), "Trend lines",
                        choices = c("None" = "none",
                                    "Overall" = "overall",
                                    "By Donor Status" = "by_donor"),
-                       selected = "by_donor")
-          ),
-          column(4,
+                       selected = "by_donor"),
             checkboxInput(ns("traj_trend_ci"), "95% CI band on trends",
                           value = FALSE)
-          )
-        ),
-        fluidRow(
-          column(4,
-            selectInput(ns("traj_color_by"), "Color points by:",
+          ),
+          control_group("Points",
+            selectInput(ns("traj_point_size"), "Point size by",
+                       choices = c("Cell Count" = "total_cells",
+                                   "Islet Diameter" = "islet_diam_um",
+                                   "Uniform" = "uniform"),
+                       selected = "total_cells"),
+            sliderInput(ns("traj_point_size_slider"), "Point size",
+                        min = 0.5, max = 5.0, value = 1.5, step = 0.1),
+            sliderInput(ns("traj_alpha"), "Point transparency",
+                        min = 0, max = 0.95, value = 0.4, step = 0.05)
+          ),
+          control_group("Colour",
+            selectInput(ns("traj_color_by"), "Color points by",
                        choices = c("Donor Status" = "donor_status",
                                    "Donor ID" = "donor_id",
                                    "Leiden (res 0.3)" = "leiden_0.3",
@@ -93,32 +99,18 @@ trajectory_ui <- function(id) {
                                    "Leiden (res 0.8)" = "leiden_0.8",
                                    "Leiden (res 1.0)" = "leiden_1.0"),
                        selected = "donor_status"),
-            selectInput("traj_donor_palette", "Donor Status Colors",
+            selectInput("traj_donor_palette", "Donor status colors",
                         choices = names(DONOR_PALETTES),
-                        selected = "Bright")
-          ),
-          column(4,
-            selectInput(ns("traj_point_size"), "Point size by:",
-                       choices = c("Cell Count" = "total_cells",
-                                   "Islet Diameter" = "islet_diam_um",
-                                   "Uniform" = "uniform"),
-                       selected = "total_cells"),
-            sliderInput(ns("traj_point_size_slider"), "Point size:",
-                        min = 0.5, max = 5.0, value = 1.5, step = 0.1)
-          ),
-          column(4,
-            sliderInput(ns("traj_alpha"), "Point transparency:",
-                        min = 0, max = 0.95, value = 0.4, step = 0.05),
-            div(style = "border: 1px solid var(--islet-border-strong); padding: 10px; border-radius: 5px; background-color: var(--islet-surface-2); min-height: 100px;",
-              h5("Legend", style = "margin-top: 0; margin-bottom: 10px; font-weight: bold; color: var(--islet-fg); font-size: 15px;"),
+                        selected = "Bright"),
+            div(style = "border: 1px solid var(--islet-border-strong); padding: 8px 10px; border-radius: 5px; background-color: var(--islet-surface-2);",
               uiOutput(ns("traj_legend"))
             )
           )
         )
-      )
-    )),
-    div(style = "display: flex; align-items: center; gap: 12px; margin-bottom: 12px;",
-      actionButton(ns("clear_link_selection"), "Clear selection", class = "btn-sm btn-outline-secondary")),
+      ),
+      div(class = "tab-controls-actions",
+        actionButton(ns("clear_link_selection"), "Clear selection", class = "btn-sm btn-outline-secondary"))
+    ),
     fluidRow(
       # Left card: Scatterplot and heatmaps (narrowed from col-8)
       column(7,
