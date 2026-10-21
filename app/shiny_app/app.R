@@ -652,7 +652,9 @@ server <- function(input, output, session) {
   }
 
   # Spatial Neighborhood module
-  spatial_server("spatial", prepared, active_palette, active_donor_colors)
+  # Its two UMAPs are linked plots like the Plot and Trajectory tabs' (owner, 2026-10-21), so it shares the selection.
+  spatial_server("spatial", prepared, active_palette, active_donor_colors,
+                 selected_islet = selected_islet, active_tab = active_tab)
 
   # Inflammation module — cohort-level edgeR abundance + infiltration score.
   # Reads the cell-distance artifact through spatial_helpers.R (Parquet/DuckDB

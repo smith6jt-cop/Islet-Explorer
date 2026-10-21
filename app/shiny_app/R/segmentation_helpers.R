@@ -723,3 +723,107 @@ render_islet_segmentation_plot <- function(info, show_peri_boundary = TRUE, show
 
   p
 }
+
+# The segmentation map and single cells of the selected object, shared by the Plot, Trajectory and Spatial tabs'
+# `segmentation_viewer_panel` renderUIs (each renders it only while its tab is active: the outputs and inputs inside
+# are root-level and not namespaced, see app.R). `close_id` is the caller's namespaced Close button. "wide" puts the
+# controls, map and composition side by side in a card (Plot, Spatial); "stacked" puts the map over them (the
+# Trajectory tab's narrower column).
+segmentation_viewer_panel_ui <- function(info, close_id, layout = c("wide", "stacked")) {
+  layout <- match.arg(layout)
+  wide <- identical(layout, "wide")
+
+  # Check if single-cell drill-down data exists for this islet
+  cells <- if (drilldown_available()) load_islet_cells(info$case_id, info$islet_key) else NULL
+  has_cells <- !is.null(cells)
+
+  # Marker choices for color-by dropdown
+  marker_choices <- c("phenotype" = "phenotype")
+  if (has_cells) {
+    marker_cols <- setdiff(colnames(cells),
+                           c("X_centroid", "Y_centroid", "phenotype", "cell_region",
+                             "Cell.Area", "Cell Area", "Nucleus.Area", "Nucleus Area"))
+    if (length(marker_cols) > 0) {
+      marker_choices <- c(marker_choices, setNames(marker_cols, marker_cols))
+    }
+  }
+
+  # Build title: "Islet_N (case_id, status, age, sex)"
+  title_detail <- info$case_id
+  if (!is.null(info$donor_status)) title_detail <- paste0(title_detail, ", ", info$donor_status)
+  if (!is.null(info$donor_age) && !is.na(info$donor_age)) title_detail <- paste0(title_detail, ", age ", round(info$donor_age))
+  if (!is.null(info$donor_gender) && !is.na(info$donor_gender) && nzchar(info$donor_gender)) title_detail <- paste0(title_detail, ", ", info$donor_gender)
+  title <- paste0(info$islet_key, " (", title_detail, ")")
+
+  legend_line <- function(colour, label) {
+    div(style = "display: flex; align-items: center; margin-bottom: 8px;",
+      div(style = paste0("width: 24px; height: 3px; background-color: ", colour, "; margin-right: 8px;")),
+      span(label, style = "font-size: 14px;"))
+  }
+  controls <- div(style = "padding: 10px; background-color: var(--islet-surface-2); border-radius: 5px;",
+    if (has_cells) {
+      tagList(
+        h5("Layers", style = "margin-top: 0; font-size: 15px;"),
+        checkboxInput("drilldown_show_cells", "Single Cells", value = TRUE),
+        checkboxInput("drilldown_show_peri_boundary", "Peri Boundary", value = TRUE),
+        checkboxInput("drilldown_show_structures", "Structures", value = TRUE),
+        hr(style = "margin: 8px 0;"),
+        conditionalPanel(
+          condition = "input.drilldown_show_cells",
+          selectInput("drilldown_color_by", "Color by",
+                      choices = marker_choices, selected = "phenotype"),
+          selectInput("drilldown_palette", "Phenotype Palette",
+                      choices = c("Original", "High Contrast", "Colorblind Safe", "Maximum Distinction"),
+                      selected = "High Contrast"),
+          checkboxInput("drilldown_show_peri", "Show peri-islet cells", value = TRUE)
+        )
+      )
+    } else {
+      tagList(
+        h5("Legend", style = "margin-top: 0; margin-bottom: 10px; font-size: 15px;"),
+        legend_line("#0066CC", "Islet"),
+        legend_line("#00CCCC", "+20µm"),
+        legend_line("#CC00CC", "Nerve"),
+        legend_line("#CC0000", "Capillary"),
+        legend_line("#00AA00", "Lymphatic")
+      )
+    },
+    hr(style = "margin: 8px 0;"),
+    span(paste("Centroid:", round(info$centroid_x, 0), "/", round(info$centroid_y, 0), "µm"),
+         style = "color: var(--islet-fg-muted); font-size: 13px;")
+  )
+  map <- tagList(
+    plotOutput("islet_segmentation_view", height = if (wide) "650px" else "430px"),
+    div(style = "text-align: right; margin-top: 6px;",
+      downloadButton("dl_islet_segmentation_view", "Download PNG",
+                     class = "btn-sm btn-outline-primary")))
+  composition <- if (has_cells) {
+    conditionalPanel(
+      condition = "input.drilldown_show_cells",
+      div(style = paste0("padding: ", if (wide) 15 else 12, "px; background-color: var(--islet-surface-2); border-radius: 5px;"),
+        h5("Cell Composition", style = paste0("margin-top: 0; font-size: ", if (wide) 17 else 16, "px;")),
+        plotOutput("islet_drilldown_summary", height = if (wide) "400px" else "300px"),
+        div(style = "text-align: right; margin-top: 6px;",
+          downloadButton("dl_islet_drilldown_summary", "Download PNG",
+                         class = "btn-sm btn-outline-primary")),
+        if (wide) hr(),
+        tableOutput("islet_drilldown_table")
+      )
+    )
+  }
+  header <- div(style = "display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;",
+    if (wide) h3(title, style = "margin: 0; color: var(--islet-heading); font-size: 22px;")
+    else h4(title, style = "margin: 0; color: var(--islet-heading); font-size: 20px;"),
+    actionButton(close_id, "Close", class = "btn btn-sm btn-outline-secondary"))
+
+  if (wide) {
+    div(class = "card", style = "padding: 20px; margin-bottom: 20px; border: 2px solid #0066CC;",
+      header,
+      # Controls (left), map (centre), composition (right)
+      fluidRow(column(2, controls), column(6, map), column(4, composition)))
+  } else {
+    div(header,
+      # Map uses the full card width; controls and composition sit beneath it.
+      fluidRow(column(12, map), column(5, controls), column(7, composition)))
+  }
+}

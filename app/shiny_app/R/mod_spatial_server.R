@@ -7,8 +7,31 @@
 #   PHENOTYPE_COLORS — from drilldown_helpers.R
 #   donor_tissue_available(), get_available_donors(), load_donor_tissue() — from spatial_helpers.R
 
+# Colourings offered for each Spatial UMAP (owner, 2026-10-21: "multiple choices for coloring the umaps including
+# donor demographics and disease state"). Values name the source: "leiden" (the resolution in the Data controls),
+# "donor" and "donor_status", or a column of prepared()$comp; spatial_umap_colour_choices() drops the columns a
+# root lacks.
+SPATIAL_UMAP_COLOR_CHOICES <- list(
+  "Clusters" = c("Leiden cluster" = "leiden"),
+  "Disease state" = c("Donor status" = "donor_status", "Autoantibodies (number positive)" = "n_aab"),
+  "Donor" = c("Donor" = "donor", "Age (years)" = "age", "Age group" = "age_group", "Sex" = "gender",
+              "BMI" = "BMI", "HbA1c (%)" = "HbA1c_percent", "C-peptide (ng/mL)" = "C_peptide_ng_mL",
+              "T1D duration (years)" = "t1d_duration_years"),
+  "Object" = c("Band immune proportion" = "immune_frac_peri", "Core immune proportion" = "immune_frac_core",
+               "Diameter (\u00b5m)" = "islet_diam_um", "Core cells" = "total_cells_core")
+)
+
+#' SPATIAL_UMAP_COLOR_CHOICES without the column-backed choices `comp_cols` lacks.
+spatial_umap_colour_choices <- function(comp_cols) {
+  available <- function(v) v %in% c("leiden", "donor") | (v == "donor_status" & "Donor Status" %in% comp_cols) |
+    v %in% comp_cols
+  groups <- lapply(SPATIAL_UMAP_COLOR_CHOICES, function(g) g[available(unname(g))])
+  groups[lengths(groups) > 0]
+}
+
 spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
-                           donor_colors_reactive = reactive(DONOR_COLORS_BRIGHT)) {
+                           donor_colors_reactive = reactive(DONOR_COLORS_BRIGHT),
+                           selected_islet = reactiveVal(NULL), active_tab = reactive("Spatial")) {
 
   moduleServer(id, function(input, output, session) {
     output$embedding_method <- renderText({
@@ -210,13 +233,13 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       selected_phenos <- if (!is.null(prev)) prev else setdiff(phenos, PHENO_HIDE_DEFAULT)
 
       tagList(
-        div(style = "display: flex; align-items: center; gap: 6px; margin-bottom: 4px;",
-          tags$label("Phenotypes", style = "font-weight: 600; font-size: 13px; margin: 0;"),
+        # The group's title in the Data controls names it ("Phenotypes"); the boxes sit in a three-column grid.
+        div(style = "display: flex; align-items: center; gap: 6px; margin-bottom: 2px;",
           actionLink(ns("pheno_all"), "All", style = "font-size: 12px; color: var(--islet-link);"),
           span("|", style = "color: var(--islet-fg-muted);"),
           actionLink(ns("pheno_none"), "None", style = "font-size: 12px; color: var(--islet-link);")
         ),
-        div(style = "column-count: 2; column-gap: 8px;",
+        div(class = "control-checkbox-grid",
           checkboxGroupInput(ns("pheno_filter"), NULL,
                              choiceNames = choice_names,
                              choiceValues = as.list(phenos),
@@ -446,17 +469,19 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       NULL
     })
 
-    # One islet-level UMAP (points from islet_umap_plotly(), interleaved so no group hides another): the Leiden and
-    # Donor Status UMAPs share this layout so they draw at one size --
+    # One islet-level UMAP (points from islet_umap_plotly(), interleaved so no group hides another): the two
+    # Spatial UMAPs share this layout so they draw at one size --
     # the same marker size, the plot area in the left 78% of the widget and the legend in the rest, wide enough for
     # either legend (a legend that does not fit makes plotly widen the right margin and shrink that plot alone).
+    # Both are linked plots (trajectory_link_plot(), keyed by `.key`).
     spatial_umap_plotly <- function(plot_df, colour_col, pal, legend_title, title, filename_root,
                                     colorbar_title = NULL) {
       fonts <- plotly_islet_fonts()
       if (is.null(plot_df$.hover)) plot_df$.hover <- paste0(legend_title, ": ", plot_df[[colour_col]], "<br>",
                                if (colour_col != "donor_status") paste0("Status: ", plot_df$donor_status, "<br>") else "",
                                plot_df$islet_key)
-      p <- islet_umap_plotly(plot_df, "umap1", "umap2", colour_col, pal, ".hover", colorbar_title = colorbar_title)
+      p <- islet_umap_plotly(plot_df, "umap1", "umap2", colour_col, pal, ".hover", key = ".key",
+                             colorbar_title = colorbar_title)
       # A numeric colour has a colour bar instead of a legend; put it where the legend sits.
       # Slim, so it fits the legend's strip without plotly widening the margin and shrinking this plot alone.
       if (is.numeric(plot_df[[colour_col]])) {
@@ -469,7 +494,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           tr
         })
       }
-      p %>%
+      p <- p %>%
         layout(
           font = fonts$global,
           title = list(text = title, font = fonts$title),
@@ -486,79 +511,185 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                         itemsizing = "constant", tracegroupgap = 2)
         ) %>%
         plotly_islet_config(filename_root)
+      trajectory_link_plot(p, ns)
     }
 
-    output$leiden_umap <- renderPlotly({
-      req(has_leiden())
-      pd <- prepared()
-      comp <- pd$comp
-      req("leiden_umap_1" %in% colnames(comp), "leiden_umap_2" %in% colnames(comp))
-
-      leiden_col <- input$leiden_res %||% {
+    current_leiden_col <- function(comp) {
+      input$leiden_res %||% {
         nbr <- get_nbr_columns(colnames(comp))
         nbr$leiden[2] %||% nbr$leiden[1]
       }
-      req(leiden_col %in% colnames(comp))
+    }
 
-      # Filter by donor status
-      plot_comp <- comp
-      if (!is.null(input$groups) && "Donor Status" %in% colnames(plot_comp)) {
-        plot_comp <- plot_comp[plot_comp$`Donor Status` %in% input$groups, , drop = FALSE]
-      }
-
-      umap1 <- suppressWarnings(as.numeric(plot_comp$leiden_umap_1))
-      umap2 <- suppressWarnings(as.numeric(plot_comp$leiden_umap_2))
-      cluster <- as.character(plot_comp[[leiden_col]])
-
-      plot_df <- data.frame(
-        umap1 = umap1, umap2 = umap2, cluster = cluster,
-        donor_status = if ("Donor Status" %in% colnames(plot_comp)) as.character(plot_comp$`Donor Status`) else "",
-        islet_key = if ("islet_key" %in% colnames(plot_comp)) as.character(plot_comp$islet_key) else "",
-        stringsAsFactors = FALSE
-      )
-      plot_df <- plot_df[is.finite(plot_df$umap1) & is.finite(plot_df$umap2), , drop = FALSE]
-      if (nrow(plot_df) == 0) return(plotly_islet_empty("No UMAP data"))
-
-      # Sort cluster levels numerically
-      cluster_levels <- leiden_levels(plot_df$cluster)
-      plot_df$cluster <- factor(plot_df$cluster, levels = cluster_levels)
-      n_clusters <- length(cluster_levels)
-      pal_colors <- rep_len(leiden_palette, n_clusters)
-      pal <- setNames(pal_colors, cluster_levels)
-
-      res_label <- gsub("^leiden_", "", leiden_col)
-
-      spatial_umap_plotly(plot_df, "cluster", pal, "Cluster",
-                          paste0("Leiden ", res_label, " (", nrow(plot_df), " objects)"),
-                          paste0("leiden_umap_", res_label))
-    })
-
-    # ==== Band immune UMAP: the Leiden UMAP's layout, coloured by each object's 20 um band immune share ====
-    # It replaced a Donor Status UMAP identical to the Trajectory tab's (owner review, 2026-10-20), and ties the
-    # composition states to the immune surroundings this tab is about.
-    output$spatial_umap_immune <- renderPlotly({
+    # The objects in the embedding (UMAP coordinates), for the checked donor statuses.
+    spatial_umap_rows <- reactive({
       req(has_leiden())
       comp <- nbr_comp()
-      req("leiden_umap_1" %in% colnames(comp), "immune_frac_peri" %in% colnames(comp))
-      plot_df <- data.frame(
-        umap1 = suppressWarnings(as.numeric(comp$leiden_umap_1)),
-        umap2 = suppressWarnings(as.numeric(comp$leiden_umap_2)),
-        immune = suppressWarnings(as.numeric(comp$immune_frac_peri)),
-        donor_status = as.character(comp$`Donor Status`),
-        islet_key = as.character(comp$islet_key), stringsAsFactors = FALSE)
-      plot_df <- plot_df[is.finite(plot_df$umap1) & is.finite(plot_df$umap2) & is.finite(plot_df$immune), ,
-                         drop = FALSE]
-      if (nrow(plot_df) == 0) return(plotly_islet_empty("No UMAP data"))
-      # The share is skewed (most bands hold no immune cell), so the colour saturates at the 95th percentile;
-      # hover shows the true value.
-      cap <- stats::quantile(plot_df$immune, 0.95, names = FALSE)
-      plot_df$colour <- pmin(plot_df$immune, if (cap > 0) cap else max(plot_df$immune))
-      plot_df$.hover <- paste0("Band immune proportion: ", sprintf("%.3f", plot_df$immune), "<br>Status: ",
-                               plot_df$donor_status, "<br>", plot_df$islet_key)
-      spatial_umap_plotly(plot_df, "colour", NULL, "Band immune proportion",
-                          paste0("Band immune proportion (", nrow(plot_df), " objects)"), "spatial_umap_immune",
-                          colorbar_title = "Immune<br>proportion")
+      req("leiden_umap_1" %in% colnames(comp), "leiden_umap_2" %in% colnames(comp))
+      umap1 <- suppressWarnings(as.numeric(comp$leiden_umap_1))
+      umap2 <- suppressWarnings(as.numeric(comp$leiden_umap_2))
+      keep <- is.finite(umap1) & is.finite(umap2)
+      comp <- comp[keep, , drop = FALSE]
+      comp$.umap1 <- umap1[keep]
+      comp$.umap2 <- umap2[keep]
+      comp$.key <- trajectory_link_key(comp$`Case ID`, comp$islet_key)
+      comp
     })
+
+    # Offer only the colourings the served root has (the UI lists them all).
+    observe({
+      choices <- spatial_umap_colour_choices(colnames(prepared()$comp))
+      if (setequal(unlist(choices), unlist(SPATIAL_UMAP_COLOR_CHOICES))) return()
+      for (id in c("umap_color_left", "umap_color_right")) {
+        current <- isolate(input[[id]])
+        fallback <- if (id == "umap_color_left") "leiden" else
+          intersect(c("immune_frac_peri", "donor_status"), unlist(choices))[1]
+        updateSelectInput(session, id, choices = choices,
+                          selected = if (!is.null(current) && current %in% unlist(choices)) current else fallback)
+      }
+    })
+
+    # One UMAP figure coloured by `key` (a SPATIAL_UMAP_COLOR_CHOICES value).
+    spatial_umap_figure <- function(key, filename_root) {
+      comp <- spatial_umap_rows()
+      allowed <- unlist(unname(spatial_umap_colour_choices(colnames(comp))))  # names are the labels
+      if (!islet_valid_scalar_choice(key, allowed, "spatial_umap_colour_invalid")) key <- "leiden"
+      if (nrow(comp) == 0) return(trajectory_link_plot(plotly_islet_empty("No UMAP data"), ns))
+      label <- names(allowed)[match(key, allowed)]
+      status <- as.character(comp$`Donor Status`)
+      plot_df <- data.frame(umap1 = comp$.umap1, umap2 = comp$.umap2, donor_status = status,
+                            islet_key = as.character(comp$islet_key), .key = comp$.key, stringsAsFactors = FALSE)
+      donor <- paste0(comp$`Case ID`, " (", status, ")")
+      object_line <- paste0("Donor ", donor, "<br>", plot_df$islet_key)
+      title_n <- function(t) paste0(t, " (", format(nrow(plot_df), big.mark = ","), " objects)")
+      discrete <- function(values, levels, pal, legend_title, title = title_n(label)) {
+        plot_df$colour <- factor(values, levels = levels)
+        plot_df$.hover <- paste0(legend_title, ": ", ifelse(is.na(values), "not recorded", values), "<br>",
+                                 object_line)
+        spatial_umap_plotly(plot_df, "colour", pal, legend_title, title, filename_root)
+      }
+      continuous <- function(values, legend_title, colorbar_title, cap = FALSE, log_scale = FALSE, digits = 3) {
+        values <- suppressWarnings(as.numeric(values))
+        values[!is.finite(values)] <- NA
+        colour <- values
+        if (cap && any(!is.na(values))) {
+          # Skewed (most bands hold no immune cell): saturate at the 95th percentile; hover shows the true value.
+          top <- stats::quantile(values, 0.95, names = FALSE, na.rm = TRUE)
+          colour <- pmin(values, if (top > 0) top else max(values, na.rm = TRUE))
+        }
+        if (log_scale) colour <- log10(pmax(values, 1))
+        plot_df$colour <- colour
+        plot_df$.hover <- paste0(legend_title, ": ", ifelse(is.na(values), "not recorded", signif(values, digits)),
+                                 "<br>", object_line)
+        spatial_umap_plotly(plot_df, "colour", NULL, legend_title, title_n(legend_title), filename_root,
+                            colorbar_title = colorbar_title)
+      }
+
+      switch(key,
+        leiden = {
+          leiden_col <- current_leiden_col(comp)
+          req(leiden_col %in% colnames(comp))
+          cluster <- as.character(comp[[leiden_col]])
+          lv <- leiden_levels(cluster)
+          discrete(cluster, lv, setNames(rep_len(leiden_palette, length(lv)), lv), "Cluster",
+                   title_n(paste("Leiden", gsub("^leiden_", "", leiden_col))))
+        },
+        donor_status = {
+          lv <- intersect(c("ND", "Aab+", "T1D"), status)
+          discrete(status, lv, donor_colors_reactive()[lv], "Donor status")
+        },
+        donor = {
+          ids <- unique(data.frame(id = comp$`Case ID`, status = status, label = donor))
+          ids <- ids[order(match(ids$status, c("ND", "Aab+", "T1D")), suppressWarnings(as.numeric(ids$id))), ]
+          discrete(donor, ids$label, setNames(rep_len(leiden_palette, nrow(ids)), ids$label), "Donor")
+        },
+        n_aab = {
+          n <- suppressWarnings(as.integer(round(as.numeric(comp$n_aab))))
+          lv <- as.character(sort(unique(n[!is.na(n)])))
+          discrete(as.character(n), lv, setNames(viridisLite::viridis(length(lv), begin = 0.15, end = 0.95), lv),
+                   "Autoantibodies")
+        },
+        age_group = {
+          g <- as.character(comp$age_group)
+          lv <- intersect(c("<13", ">=13"), g)
+          lv <- c(lv, setdiff(sort(unique(g[!is.na(g)])), lv))
+          discrete(g, lv, setNames(rep_len(c("#E69F00", "#56B4E9", "#009E73", "#CC79A7"), length(lv)), lv),
+                   "Age group")
+        },
+        gender = {
+          g <- as.character(comp$gender)
+          g <- ifelse(g %in% c("F", "Female"), "Female", ifelse(g %in% c("M", "Male"), "Male", NA))
+          discrete(g, intersect(c("Female", "Male"), g), c(Female = "#CC79A7", Male = "#009E73"), "Sex")
+        },
+        HbA1c_percent = {
+          v <- suppressWarnings(as.numeric(comp$HbA1c_percent))
+          v[!is.na(v) & v <= 0] <- NA  # two donors' HbA1c is recorded as 0: not measured
+          continuous(v, label, "HbA1c (%)")
+        },
+        immune_frac_peri = continuous(comp$immune_frac_peri, label, "Immune<br>proportion", cap = TRUE),
+        immune_frac_core = continuous(comp$immune_frac_core, label, "Immune<br>proportion", cap = TRUE),
+        total_cells_core = continuous(comp$total_cells_core, label, "Core cells<br>(log10)", log_scale = TRUE),
+        islet_diam_um = continuous(comp$islet_diam_um, "Diameter (\u00b5m)", "Diameter<br>(\u00b5m)"),
+        age = continuous(comp$age, label, "Age<br>(years)"),
+        BMI = continuous(comp$BMI, label, "BMI"),
+        C_peptide_ng_mL = continuous(comp$C_peptide_ng_mL, label, "C-peptide<br>(ng/mL)"),
+        t1d_duration_years = continuous(comp$t1d_duration_years, label, "T1D duration<br>(years)"),
+        continuous(comp[[key]], label, label)
+      )
+    }
+
+    # Output ids keep their earlier names (the browser check and downloads name them); each now has a Color by.
+    output$leiden_umap <- renderPlotly({
+      spatial_umap_figure(input$umap_color_left %||% "leiden", "spatial_umap_left")
+    })
+    output$spatial_umap_immune <- renderPlotly({
+      spatial_umap_figure(input$umap_color_right %||% "immune_frac_peri", "spatial_umap_right")
+    })
+
+    # ---- Linked UMAPs: one validated selection route (hover stays in the browser, www/trajectory-links.js) ----
+    spatial_link_selection_key <- function() {
+      info <- selected_islet()
+      if (is.null(info)) return(NULL)
+      key <- trajectory_link_key(info$case_id, info$islet_key)
+      if (length(key) != 1L || is.na(key)) NULL else key
+    }
+    send_spatial_link_state <- function() {
+      session$sendCustomMessage(ns("linked_state"), list(
+        key = spatial_link_selection_key(), active = identical(active_tab(), "Spatial")))
+    }
+    observeEvent(input$linked_click, {
+      req(identical(active_tab(), "Spatial"))
+      event <- input$linked_click
+      key <- event$key
+      rows <- tryCatch(spatial_umap_rows(), error = function(e) NULL)
+      if (!is.character(key) || length(key) != 1L || is.na(key) ||
+          !is.character(event$source) || length(event$source) != 1L ||
+          !(event$source %in% ns(c("leiden_umap", "spatial_umap_immune"))) || is.null(rows) ||
+          !(key %in% rows$.key)) {
+        islet_log_validation_failure("spatial_link_invalid")
+        send_spatial_link_state()
+        return()
+      }
+      row <- rows[match(key, rows$.key), , drop = FALSE]
+      select_islet_from_key(as.character(row$`Case ID`), as.character(row$islet_key), prepared, selected_islet)
+      send_spatial_link_state()
+    }, ignoreInit = TRUE)
+    observeEvent(input$linked_ready, { send_spatial_link_state() }, ignoreInit = TRUE)
+    observe({ send_spatial_link_state() })
+    observeEvent(input$clear_link_selection, {
+      selected_islet(NULL)
+      send_spatial_link_state()
+    })
+
+    # The segmentation map of the selected object, under the UMAPs. Only while this tab is active: its outputs are
+    # root-level and shared with the Plot and Trajectory panels.
+    output$segmentation_viewer_panel <- renderUI({
+      if (!identical(active_tab(), "Spatial")) return(NULL)
+      info <- selected_islet()
+      if (is.null(info)) return(NULL)
+      segmentation_viewer_panel_ui(info, ns("clear_segmentation"), layout = "wide")
+    })
+    observeEvent(input$clear_segmentation, { selected_islet(NULL) })
 
     # ==== Cluster card, Composition view: each Leiden cluster's mean core phenotype proportions ====
     # The owner kept it (2026-10-20: "There still needs to be a cluster composition plot"): it is how a cluster is
