@@ -132,13 +132,44 @@ await check('composition_by_donor_card', async () => {
     const sums = Array.from({length: donors}, (_, i) => bars.reduce((a, t) => a + (t.y[i] || 0), 0));
     return {phenotypes: bars.map(t => t.name), donors, sums: sums.map(v => Math.round(v * 10) / 10)};
   });
+  // Leave out (third round): the core view leaves out the four endocrine types by default, the band view Exocrine.
+  const leftOut = await page.$$eval('input[name="plot-composition_leave_out"]:checked', els => els.map(e => e.value));
   const csv = await page.$eval('#plot-dl_composition_csv', async el => (await (await fetch(el.href)).text()).split('\n').length);
   await choose('plot-composition_region', 'peri');
   await page.waitForFunction(() => /peri-islet band/.test(document.getElementById('plot-composition_by_donor').layout.title.text));
+  const periLeftOut = await page.$$eval('input[name="plot-composition_leave_out"]:checked', els => els.map(e => e.value));
+  const endocrine = ['Beta cell', 'Alpha cell', 'Delta cell', 'CHGA+ hormone-negative'];
   return {passed: fig.donors >= 15 && fig.sums.every(v => Math.abs(v - 100) < 0.6) && fig.phenotypes.includes('No subtype') &&
-    !fig.phenotypes.some(n => ['Endocrine', 'T cell', 'Immune'].includes(n)) && csv > 100, ...fig, csv_lines: csv};
+    !fig.phenotypes.some(n => ['Endocrine', 'T cell', 'Immune', ...endocrine].includes(n)) && csv > 100 &&
+    endocrine.every(n => leftOut.includes(n)) && JSON.stringify(periLeftOut) === JSON.stringify(['Exocrine']),
+    ...fig, csv_lines: csv, left_out: leftOut, peri_left_out: periLeftOut};
 });
 await page.evaluate(() => { document.getElementById('main-content').scrollTop = 0; });
+
+// Third round: near-empty measures are not offered, and the default axis fits 99% of objects with the rest pinned.
+await check('near_empty_measures_not_offered', () => page.evaluate(() => {
+  const values = Object.keys(document.getElementById('plot-which').selectize.options);
+  const gone = ['peri_prop_CHGAplus_hormone-negative', 'prop_CD4 Tcell', 'prop_B cell', 'prop_Exocrine'];
+  return {passed: !gone.some(v => values.includes(v)) && values.includes('peri_prop_CD4_Tcell'), values};
+}));
+await check('axis_fits_the_bulk', async () => {
+  await choose('plot-which', 'peri_prop_CD4_Tcell');
+  await page.waitForFunction(() => /CD4 Tcell/.test(document.getElementById('plot-plt').layout?.title?.text || ''));
+  await idle();
+  const read = () => page.$eval('#plot-plt', gd => ({range: gd.layout.yaxis.range, title: gd.layout.title.text,
+    pinned: gd.data.filter(t => t.marker?.symbol === 'triangle-up-open' || (t.mode === 'markers' && t.marker?.symbol === 'triangle-up-open')).length}));
+  const bulk = await read();
+  await page.evaluate(() => { document.querySelectorAll('.tab-pane.active details.control-panel')[1].open = true; });
+  await page.click('input[name="plot-axis_range"][value="all"]');
+  await page.waitForFunction(() => !/off scale/.test(document.getElementById('plot-plt').layout?.title?.text || ''));
+  await idle();
+  const all = await read();
+  await page.click('input[name="plot-axis_range"][value="bulk"]');
+  await page.evaluate(() => { document.querySelectorAll('.tab-pane.active details.control-panel')[1].open = false; });
+  await choose('plot-which', 'prop_Beta cell');
+  await idle();
+  return {passed: /off scale/.test(bulk.title) && bulk.range[1] < 20 && !/off scale/.test(all.title), bulk, all};
+});
 
 // Scroll the main panel: header, tab bar and the tab's controls stay put, cards move under them.
 async function frozen(label) {

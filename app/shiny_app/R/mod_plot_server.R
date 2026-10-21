@@ -37,7 +37,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
 
     composition_selection_choices <- function(pd) {
       plot_composition_selection_choices(
-        colnames(pd$comp), pd$combined_pairs
+        colnames(pd$comp), pd$combined_pairs, comp = pd$comp
       )
     }
 
@@ -615,6 +615,10 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         sm$ymin <- plog(sm$ymin)
         sm$ymax <- plog(sm$ymax)
       }
+      # Axis range (View controls): fit 99% of objects; the objects above are open triangles at the top edge.
+      y_upper <- if (axis_clip() && !log_scale_on) plot_axis_upper(raw_rows$value, keep = sm$y) else NULL
+      y_top <- if (is.null(y_upper)) NULL else y_upper * 1.02
+      beyond_note <- NULL
 
       # Initialize base plot
       p <- ggplot(sm, aes(x = diam_mid, y = y, color = donor_status, group = donor_status))
@@ -637,9 +641,19 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
           raw$value <- plog(raw$value)
         }
 
+        # Objects above the fitted axis are pinned to its top (true value in the hover).
+        raw$beyond <- FALSE
+        raw$value_text <- paste0("Value: ", signif(raw$value, 4))
+        if (!is.null(y_top)) {
+          raw$beyond <- raw$value > y_top
+          raw$value[raw$beyond] <- y_top
+        }
+
         # Separate normal vs outliers
-        raw_normal   <- raw[!raw$is_outlier | is.na(raw$is_outlier), ]
+        raw_beyond   <- raw[raw$beyond & !(raw$is_outlier %in% TRUE), ]
+        raw_normal   <- raw[(!raw$is_outlier | is.na(raw$is_outlier)) & !raw$beyond, ]
         raw_outliers <- raw[raw$is_outlier & !is.na(raw$is_outlier), ]
+        beyond_note <- plot_beyond_note(nrow(raw_beyond))
 
         # Jitter width
         if (!is.null(input$log_scale_x) && input$log_scale_x) {
@@ -691,6 +705,14 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
                        inherit.aes = FALSE)
         }
 
+        if (nrow(raw_beyond) > 0) {
+          p <- p +
+            geom_point(data = raw_beyond,
+                       aes(x = diam_mid, y = value, color = donor_status, key = islet_click_key, text = value_text),
+                       position = position_jitter(width = jw, height = 0, seed = 23),
+                       shape = 2, size = input$pt_size * 1.3, stroke = 1, inherit.aes = FALSE)
+        }
+
         # Ghost outliers: faint grey × markers so excluded points are still
         # visible. Drawn last (on top) so reviewers can see WHERE in the
         # distribution the exclusions land without those points pulling the
@@ -700,7 +722,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
           p <- p +
             geom_point(data = raw_outliers,
                        aes(x = diam_mid, y = value, key = islet_click_key),
-                       position = position_jitter(width = jw, height = jh, seed = 31),
+                       position = position_jitter(width = jw, height = if (is.null(y_top)) jh else 0, seed = 31),
                        shape = 4,
                        size = input$pt_size * 1.1,
                        stroke = 0.9,
@@ -804,6 +826,12 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
                         title = list(font = fonts$legend_title)),
           margin = list(b = 100)) %>%
         plotly_islet_config("plot_scatter")
+      if (!is.null(y_top)) {
+        gg <- gg %>% layout(
+          title = list(text = plotly_title_with_sub(title_text, beyond_note), font = fonts$title),
+          yaxis = list(range = plot_axis_range(raw_rows$value, y_top), autorange = FALSE),
+          margin = list(t = 80, b = 100))
+      }
 
       trajectory_link_plot(gg, ns)
     }
@@ -872,6 +900,16 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       # Y-axis label
       ylab <- measure_axis_label()
 
+      # Axis range (View controls): fit 99% of objects. The violins / boxes are drawn from every value; the points
+      # above the axis are pinned to its top as open triangles (true value in the hover).
+      y_upper <- if (axis_clip() && !isTRUE(input$log_scale)) plot_axis_upper(dd$all$value) else NULL
+      y_top <- if (is.null(y_upper)) Inf else y_upper * 1.02
+      rdf$value_text <- paste0("Value: ", signif(rdf$value, 4))
+      rdf_pts <- rdf[!(rdf$value > y_top), , drop = FALSE]
+      rdf_beyond <- rdf[rdf$value > y_top, , drop = FALSE]
+      if (nrow(rdf_beyond)) rdf_beyond$value <- y_top
+      if (nrow(rdf_ghost)) rdf_ghost$value <- pmin(rdf_ghost$value, y_top)
+
       # Base violin or box
       g <- ggplot(rdf, aes(x = donor_status, y = value, fill = donor_status))
 
@@ -900,7 +938,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         if (color_by == "donor_id" && "donor_id" %in% colnames(rdf)) {
           donor_colors <- get_donor_palette(levels(rdf$donor_id))
           g <- g +
-            geom_jitter(aes(x = donor_status, y = value, color = donor_id, key = link_key),
+            geom_jitter(data = rdf_pts, aes(x = donor_status, y = value, color = donor_id, key = link_key),
                         position = position_jitter(width = 0.18, seed = 17),
                         alpha = 1 - (input$pt_alpha %||% 0.4),
                         size  = input$pt_size %||% 3,
@@ -911,7 +949,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
                                guide = guide_legend(override.aes = list(size = 3, alpha = 1)))
         } else {
           g <- g +
-            geom_jitter(aes(x = donor_status, y = value, color = donor_status, key = link_key),
+            geom_jitter(data = rdf_pts, aes(x = donor_status, y = value, color = donor_status, key = link_key),
                         position = position_jitter(width = 0.18, seed = 17),
                         alpha = 1 - (input$pt_alpha %||% 0.4),
                         size  = input$pt_size %||% 3,
@@ -919,6 +957,16 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
             scale_color_manual(values = donor_colors_reactive(),
                                guide = "none")
         }
+      }
+
+      if (isTRUE(input$show_points) && nrow(rdf_beyond) > 0) {
+        g <- g + geom_point(data = rdf_beyond,
+                            aes(x = donor_status, y = value,
+                                color = .data[[if (color_by == "donor_id" && "donor_id" %in% colnames(rdf_beyond))
+                                                 "donor_id" else "donor_status"]],
+                                key = link_key, text = value_text),
+                            position = position_jitter(width = 0.18, height = 0, seed = 23), shape = 2,
+                            size = (input$pt_size %||% 3) * 1.3, stroke = 1, inherit.aes = FALSE)
       }
 
       # Ghost \u00d7 layer: excluded outliers always rendered on the Distribution
@@ -953,7 +1001,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
                                     labels = scales::label_comma())
       }
 
-      p <- ggplotly(g, tooltip = c("x", "y", "colour"))
+      p <- ggplotly(g, tooltip = c("x", "y", "colour", "text"))
       p <- strip_plotly_color_leak(p)
 
       # Suppress plotly's built-in box outlier markers
@@ -1000,6 +1048,13 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
                         title = list(font = fonts$legend_title))
         ) %>%
         plotly_islet_config("plot_distribution")
+      if (is.finite(y_top)) {
+        p <- p %>% layout(
+          title = list(text = plotly_title_with_sub(title_text, plot_beyond_note(nrow(rdf_beyond))),
+                       font = fonts$title),
+          yaxis = list(range = plot_axis_range(dd$all$value, y_top), autorange = FALSE),
+          margin = list(t = 80))
+      }
       trajectory_link_plot(p, ns)
     }
 
@@ -1044,7 +1099,8 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
     donor_id_palette <- function(rows) get_donor_palette(rows$`Case ID`)
 
     # The card's x measure (Against another measure) and clinical value (Against a donor clinical value).
-    x_measure_choices <- reactive(plot_x_measure_choices(colnames(prepared()$comp), prepared()$combined_pairs))
+    x_measure_choices <- reactive(plot_x_measure_choices(colnames(prepared()$comp), prepared()$combined_pairs,
+                                                         comp = prepared()$comp))
     clinical_choices <- reactive({
       cols <- colnames(prepared()$comp)
       PLOT_CLINICAL_CHOICES[PLOT_CLINICAL_CHOICES %in% cols]
@@ -1071,6 +1127,9 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
     }
     flat_choices <- function(choices) { v <- unlist(unname(choices)); v }
 
+    # View controls > Axis range: "bulk" fits 99% of objects (default), "all" every object.
+    axis_clip <- function() !identical(input$axis_range, "all")
+
     card_figure <- function(card) {
       type <- card_type(card)
       rows <- card_rows(card)
@@ -1089,14 +1148,14 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         status = status_figure(list(all = rows, summary = attr(rows, "outlier_summary"))),
         donor_medians = plot_donor_medians_figure(kept, ylab, name, status_cols, color_by, donor_id_palette(kept),
                                                   log_y, input$pt_size %||% 3),
-        ecdf = plot_ecdf_figure(kept, ylab, name, status_cols, log_y),
-        donor_curves = plot_donor_curves_figure(kept, ylab, name, status_cols, log_y),
+        ecdf = plot_ecdf_figure(kept, ylab, name, status_cols, log_y, clip = axis_clip()),
+        donor_curves = plot_donor_curves_figure(kept, ylab, name, status_cols, log_y, clip = axis_clip()),
         xy = {
           xs <- flat_choices(x_measure_choices())
           x_col <- card_choice(card, "x_measure", xs) %||% unname(xs[1])
           plot_xy_figure(kept, plot_x_values(kept, prepared()$comp, x_col), names(xs)[match(x_col, xs)], ylab, name,
                          status_cols, color_by, donor_id_palette(kept), log_y, input$pt_size %||% 3,
-                         input$pt_alpha %||% 0.4, isTRUE(input$show_points))
+                         input$pt_alpha %||% 0.4, isTRUE(input$show_points), clip = axis_clip())
         },
         clinical = {
           cl <- clinical_choices()
@@ -1104,9 +1163,10 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
           if (is.null(c_col) || is.na(c_col)) plotly_islet_empty("No donor clinical values in this data") else
             plot_clinical_figure(kept, plot_clinical_values(kept, c_col), names(cl)[match(c_col, cl)], ylab, name,
                                  status_cols, color_by, donor_id_palette(kept), log_y, input$pt_size %||% 3,
-                                 input$pt_alpha %||% 0.4, isTRUE(input$show_points))
+                                 input$pt_alpha %||% 0.4, isTRUE(input$show_points), clip = axis_clip())
         },
-        density = plot_density_figure(kept, ylab, name, status_cols, log_y, isTRUE(input$log_scale_x))
+        density = plot_density_figure(kept, ylab, name, status_cols, log_y, isTRUE(input$log_scale_x),
+                                      clip = axis_clip())
       )
       if (type %in% c("diameter", "status")) fig else trajectory_link_plot(fig, ns)
     }
@@ -1182,6 +1242,25 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       if (!islet_valid_scalar_choice(region, DONOR_COMPOSITION_REGIONS, "composition_region_invalid")) region <- "core"
       donor_composition_table(comp, pd$combined_pairs, region)
     })
+    # Leave out: the root's phenotypes as choices; each region's default selection when the region changes.
+    composition_leave_out_choices <- reactive({
+      labels <- prepared()$combined_pairs$label
+      c(labels[phenotype_is_kept(labels)], DONOR_COMPOSITION_OTHER)
+    })
+    # Only the region resets the choice (toggling an object class must not).
+    observeEvent(input$composition_region, {
+      region <- input$composition_region %||% "core"
+      choices <- isolate(composition_leave_out_choices())
+      updateCheckboxGroupInput(session, "composition_leave_out", choices = choices, inline = TRUE,
+                               selected = intersect(donor_composition_default_leave_out(region), choices))
+    }, ignoreNULL = FALSE)
+    composition_leave_out <- function() {
+      v <- input$composition_leave_out
+      if (is.null(v)) return(character(0))
+      if (!islet_valid_choice_vector(v, composition_leave_out_choices(), "composition_leave_out_invalid"))
+        return(character(0))
+      v
+    }
     output$composition_by_donor <- renderPlotly({
       tab <- composition_table()
       order <- input$composition_order %||% "beta"
@@ -1190,7 +1269,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       region_label <- names(DONOR_COMPOSITION_REGIONS)[match(region, DONOR_COMPOSITION_REGIONS)] %||% "Core"
       if (is.na(region_label)) region_label <- "Core"
       donor_composition_figure(tab, if (nrow(tab)) donor_composition_order(tab, order) else character(0),
-                               palette(), donor_colors_reactive(), tolower(region_label))
+                               palette(), donor_colors_reactive(), tolower(region_label), composition_leave_out())
     })
     output$dl_composition_csv <- downloadHandler(
       filename = function() paste0("composition_by_donor_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".csv"),

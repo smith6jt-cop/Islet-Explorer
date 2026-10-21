@@ -30,7 +30,7 @@ PLOT_STATUS_LEVELS <- c("ND", "Aab+", "T1D")
 
 #' The x measures of "Against another measure": object measures, then each retained phenotype's core and peri-islet
 #' proportion (%). Values are prepared()$comp columns; `pairs` is prepared()$combined_pairs.
-plot_x_measure_choices <- function(comp_cols, pairs = NULL) {
+plot_x_measure_choices <- function(comp_cols, pairs = NULL, comp = NULL) {
   object <- c("Diameter (µm)" = "islet_diam_um", "Core cells" = "total_cells_core",
               "Peri-islet cells" = "total_cells_peri", "Core immune proportion (%)" = "immune_frac_core",
               "Band immune proportion (%)" = "immune_frac_peri")
@@ -38,8 +38,11 @@ plot_x_measure_choices <- function(comp_cols, pairs = NULL) {
   core <- peri <- character(0)
   if (!is.null(pairs) && nrow(pairs)) {
     pairs <- pairs[phenotype_is_kept(pairs$label), , drop = FALSE]
-    has_core <- pairs$core_col %in% comp_cols
-    has_peri <- pairs$peri_col %in% comp_cols
+    # As the measure list, without the near-empty proportions (plot_composition_selection_choices()).
+    enough <- function(cols) if (is.null(comp)) rep(TRUE, length(cols)) else
+      vapply(cols, function(k) plot_nonzero_fraction(comp, k) >= PLOT_MIN_NONZERO_FRACTION, logical(1))
+    has_core <- pairs$core_col %in% comp_cols & enough(pairs$core_col)
+    has_peri <- pairs$peri_col %in% comp_cols & enough(pairs$peri_col)
     core <- setNames(pairs$core_col[has_core], paste0(pairs$label[has_core], " (core %)"))
     peri <- setNames(pairs$peri_col[has_peri], paste0(pairs$label[has_peri], " (peri-islet %)"))
   }
@@ -124,10 +127,45 @@ plot_spearman <- function(x, y) {
   list(rho = unname(ct$estimate), p = ct$p.value, n = sum(ok))
 }
 
-plot_format_p <- function(p) if (!is.finite(p)) "n/a" else if (p < 0.001) format(p, digits = 2, scientific = TRUE) else
+plot_format_p <- function(p) if (!is.finite(p)) "n/a" else if (p < 1e-16) "< 1e-16" else
+  if (p < 0.001) format(p, digits = 2, scientific = TRUE) else
   formatC(p, digits = 3, format = "fg")
 
 # ---- Drawing helpers ----
+
+# Axis range (owner, 2026-10-21: "these outliers compact the rest of the data"). With View controls > Axis range at
+# "Fit 99% of objects" (the default), an axis whose few largest values stretch it ends a little above the 99th
+# percentile; the objects beyond it are drawn as open triangles at its edge, with their true value in the hover.
+PLOT_AXIS_QUANTILE <- 0.99
+
+#' The upper end of an axis fitted to the bulk of `values`, or NULL when every value fits without squeezing the rest
+#' (the largest value is within 25 % of the 99th percentile). `keep` are values the axis must still show (summary
+#' means). When 99 % of the values are 0, the axis fits the median of the nonzero ones.
+plot_axis_upper <- function(values, keep = NULL) {
+  v <- values[is.finite(values)]
+  if (length(v) < 20) return(NULL)
+  q <- stats::quantile(v, PLOT_AXIS_QUANTILE, names = FALSE)
+  if (q <= 0) {
+    nz <- v[v > 0]
+    if (!length(nz)) return(NULL)
+    q <- stats::median(nz)
+  }
+  if (max(v) <= q * 1.25) return(NULL)
+  lim <- q * 1.1
+  keep <- keep[is.finite(keep)]
+  if (length(keep)) lim <- max(lim, max(keep) * 1.05)
+  if (max(v) <= lim) NULL else lim
+}
+
+#' An axis range from the lowest value to `upper`, padded so markers at either end are not cut.
+plot_axis_range <- function(values, upper) {
+  low <- min(c(0, values[is.finite(values)]))
+  pad <- 0.03 * (upper - low)
+  c(low - pad, upper + pad)
+}
+
+#' Subtitle note for the objects drawn at an axis edge.
+plot_beyond_note <- function(n) if (n > 0) sprintf("%d off scale (\u25b3 at the edge)", n) else NULL
 
 #' Pseudo-log axis (asinh, as the Against diameter plot uses): the transform and tick positions/labels for `values`.
 plot_pseudo_log <- function(x) asinh(x / 2) / log(10)
@@ -223,7 +261,7 @@ plot_donor_medians_figure <- function(rows, ylab, name, status_cols, color_by = 
 }
 
 #' Cumulative distribution: for each donor status, the proportion of its objects at or below each value.
-plot_ecdf_figure <- function(rows, ylab, name, status_cols, log_scale = FALSE) {
+plot_ecdf_figure <- function(rows, ylab, name, status_cols, log_scale = FALSE, clip = FALSE) {
   tab <- ecdf_table(rows)
   if (!nrow(tab)) return(plotly_islet_empty("No data for the current selection"))
   tf <- if (log_scale) plot_pseudo_log else identity
@@ -238,17 +276,23 @@ plot_ecdf_figure <- function(rows, ylab, name, status_cols, log_scale = FALSE) {
   }
   xaxis <- list(title = list(text = ylab))
   if (log_scale) xaxis <- c(xaxis, plot_pseudo_log_axis(tab$value))
+  upper <- if (clip && !log_scale) plot_axis_upper(tab$value) else NULL
+  if (!is.null(upper)) xaxis$range <- plot_axis_range(tab$value, upper)
   zero_txt <- paste(vapply(unique(tab$donor_status), function(s) sprintf("%s %.0f%%", s,
     100 * mean(tab$value[tab$donor_status == s] == 0)), ""), collapse = ", ")
-  plot_type_layout(p, paste0(name, ": cumulative distribution"), paste0("Objects at 0: ", zero_txt),
+  plot_type_layout(p, paste0(name, ": cumulative distribution"),
+                   paste0(c(paste0("Objects at 0: ", zero_txt), if (!is.null(upper))
+                     sprintf("axis ends at %s; %d objects lie beyond it", signif(upper, 3), sum(tab$value > upper))),
+                     collapse = "; "),
                    xaxis = xaxis, yaxis = list(title = list(text = "Objects at or below (%)"), range = c(0, 102)),
                    filename_root = "plot_cumulative")
 }
 
 #' One curve per donor: each donor's density of the measure over its objects, scaled to the same height, stacked in
 #' donor-status order (a ridgeline). A tick marks each donor's median.
-plot_donor_curves_figure <- function(rows, ylab, name, status_cols, log_scale = FALSE) {
+plot_donor_curves_figure <- function(rows, ylab, name, status_cols, log_scale = FALSE, clip = FALSE) {
   tf <- if (log_scale) plot_pseudo_log else identity
+  upper <- if (clip && !log_scale) plot_axis_upper(rows$value) else NULL
   rows$value <- tf(rows$value)
   curves <- donor_density_curves(rows)
   if (!length(curves)) return(plotly_islet_empty("No data for the current selection"))
@@ -278,8 +322,12 @@ plot_donor_curves_figure <- function(rows, ylab, name, status_cols, log_scale = 
   p <- plot_status_legend(p, status_cols, intersect(PLOT_STATUS_LEVELS, vapply(curves, `[[`, "", "donor_status")))
   xaxis <- list(title = list(text = ylab))
   if (log_scale) xaxis <- c(xaxis, plot_pseudo_log_axis(2 * sinh(rows$value * log(10))))
+  if (!is.null(upper)) xaxis$range <- plot_axis_range(rows$value, upper)
   plot_type_layout(p, paste0(name, ": one curve per donor"),
-                   "Each curve is scaled to its own peak; the dotted tick is the donor's median",
+                   paste0(c("Each curve is scaled to its own peak; the dotted tick is the donor's median",
+                            if (!is.null(upper)) sprintf("axis ends at %s; %d objects lie beyond it",
+                                                         signif(upper, 3), sum(rows$value > upper, na.rm = TRUE))),
+                          collapse = "; "),
                    xaxis = xaxis,
                    yaxis = list(title = list(text = ""), tickvals = (n - seq_len(n)) + 0.35, ticktext = labels,
                                 showgrid = FALSE, range = c(-0.2, n + 0.1),
@@ -290,20 +338,32 @@ plot_donor_curves_figure <- function(rows, ylab, name, status_cols, log_scale = 
 #' Against another measure: every object's measure (y) against a second per-object measure (x), with Spearman's rho
 #' over objects and over donor medians. Object points carry link keys.
 plot_xy_figure <- function(rows, x, xlab, ylab, name, status_cols, color_by = "donor_status", donor_pal = NULL,
-                           log_scale = FALSE, point_size = 3, point_alpha = 0.4, show_points = TRUE) {
+                           log_scale = FALSE, point_size = 3, point_alpha = 0.4, show_points = TRUE,
+                           clip = FALSE) {
   rows$x <- x
   rows <- rows[is.finite(rows$x) & is.finite(rows$value), , drop = FALSE]
   if (!nrow(rows)) return(plotly_islet_empty("No objects have both values"))
   tf <- if (log_scale) plot_pseudo_log else identity
   rows$hover <- paste0("Donor ", plot_donor_label(rows$`Case ID`, rows$donor_status), "<br>", rows$islet_key,
                        "<br>", xlab, ": ", signif(rows$x, 3), "<br>", ylab, ": ", signif(rows$value, 3))
+  x_upper <- if (clip) plot_axis_upper(rows$x) else NULL
+  y_upper <- if (clip && !log_scale) plot_axis_upper(rows$value) else NULL
+  px <- if (is.null(x_upper)) rows$x else pmin(rows$x, x_upper * 1.02)
+  py <- if (is.null(y_upper)) rows$value else pmin(rows$value, y_upper * 1.02)
+  beyond <- px != rows$x | py != rows$value
   p <- plotly::plot_ly()
   if (isTRUE(show_points)) {
-    p <- plotly::add_trace(p, type = "scatter", mode = "markers", x = rows$x, y = tf(rows$value), key = rows$link_key,
-                           text = rows$hover, hoverinfo = "text", showlegend = FALSE,
-                           marker = list(color = plot_point_colours(rows, color_by, status_cols, donor_pal),
-                                         size = 3 + 2 * point_size, opacity = 1 - point_alpha,
-                                         line = list(color = "#000000", width = 0.4)))
+    colours <- plot_point_colours(rows, color_by, status_cols, donor_pal)
+    for (out in c(FALSE, TRUE)) {
+      i <- which(beyond == out)
+      if (!length(i)) next
+      p <- plotly::add_trace(p, type = "scatter", mode = "markers", x = px[i], y = tf(py[i]), key = rows$link_key[i],
+                             text = rows$hover[i], hoverinfo = "text", showlegend = FALSE,
+                             marker = if (out) list(symbol = "triangle-up-open", color = colours[i],
+                                                    size = 6 + 2 * point_size, line = list(width = 2))
+                                      else list(color = colours[i], size = 3 + 2 * point_size,
+                                                opacity = 1 - point_alpha, line = list(color = "#000000", width = 0.4)))
+    }
   }
   med <- donor_median_table(transform(rows, value = x))
   med_y <- donor_median_table(rows)
@@ -323,15 +383,19 @@ plot_xy_figure <- function(rows, x, xlab, ylab, name, status_cols, color_by = "d
                                                plot_format_p(r_don$p))), collapse = "; ")
   yaxis <- list(title = list(text = ylab))
   if (log_scale) yaxis <- c(yaxis, plot_pseudo_log_axis(rows$value))
-  plot_type_layout(p, paste0(name, " against ", xlab), if (nzchar(sub)) paste0(sub, "; diamonds are donor medians"),
-                   xaxis = list(title = list(text = xlab)), yaxis = yaxis, filename_root = "plot_against_measure")
+  if (!is.null(y_upper)) yaxis$range <- plot_axis_range(rows$value, y_upper * 1.02)
+  xaxis <- list(title = list(text = xlab))
+  if (!is.null(x_upper)) xaxis$range <- plot_axis_range(rows$x, x_upper * 1.02)
+  sub <- paste0(c(if (nzchar(sub)) sub, "diamonds are donor medians", plot_beyond_note(sum(beyond))), collapse = "; ")
+  plot_type_layout(p, paste0(name, " against ", xlab), sub,
+                   xaxis = xaxis, yaxis = yaxis, filename_root = "plot_against_measure")
 }
 
 #' Against a donor clinical value: each donor's median (bars its quartiles) at its clinical value, its objects behind
 #' it, and Spearman's rho over the donors that have a value.
 plot_clinical_figure <- function(rows, clinical, clinical_label, ylab, name, status_cols, color_by = "donor_status",
                                  donor_pal = NULL, log_scale = FALSE, point_size = 3, point_alpha = 0.4,
-                                 show_points = TRUE) {
+                                 show_points = TRUE, clip = FALSE) {
   rows$clinical <- clinical
   med <- donor_median_table(rows, extra = "clinical")
   if (!nrow(med)) return(plotly_islet_empty("No data for the current selection"))
@@ -342,17 +406,26 @@ plot_clinical_figure <- function(rows, clinical, clinical_label, ylab, name, sta
   tf <- if (log_scale) plot_pseudo_log else identity
   span <- diff(range(med$clinical))
   jitter <- if (span > 0) span * 0.012 else 0.05
+  y_upper <- if (clip && !log_scale) plot_axis_upper(rows$value, keep = med$median) else NULL
+  py <- if (is.null(y_upper)) rows$value else pmin(rows$value, y_upper * 1.02)
+  beyond <- py != rows$value
   p <- plotly::plot_ly()
   if (isTRUE(show_points) && nrow(rows)) {
     set.seed(17)
-    p <- plotly::add_trace(p, type = "scatter", mode = "markers",
-                           x = rows$clinical + stats::runif(nrow(rows), -jitter, jitter), y = tf(rows$value),
-                           key = rows$link_key, hoverinfo = "text",
-                           text = paste0("Donor ", plot_donor_label(rows$`Case ID`, rows$donor_status), "<br>",
-                                         rows$islet_key, "<br>", ylab, ": ", signif(rows$value, 3)),
-                           showlegend = FALSE,
-                           marker = list(color = plot_point_colours(rows, color_by, status_cols, donor_pal),
-                                         size = 2 + 1.5 * point_size, opacity = 0.6 * (1 - point_alpha)))
+    jx <- rows$clinical + stats::runif(nrow(rows), -jitter, jitter)
+    colours <- plot_point_colours(rows, color_by, status_cols, donor_pal)
+    hover <- paste0("Donor ", plot_donor_label(rows$`Case ID`, rows$donor_status), "<br>",
+                    rows$islet_key, "<br>", ylab, ": ", signif(rows$value, 3))
+    for (out in c(FALSE, TRUE)) {
+      i <- which(beyond == out)
+      if (!length(i)) next
+      p <- plotly::add_trace(p, type = "scatter", mode = "markers", x = jx[i], y = tf(py[i]),
+                             key = rows$link_key[i], hoverinfo = "text", text = hover[i], showlegend = FALSE,
+                             marker = if (out) list(symbol = "triangle-up-open", color = colours[i],
+                                                    size = 6 + 1.5 * point_size, line = list(width = 2))
+                                      else list(color = colours[i], size = 2 + 1.5 * point_size,
+                                                opacity = 0.6 * (1 - point_alpha)))
+    }
   }
   p <- plotly::add_trace(p, type = "scatter", mode = "markers", x = med$clinical, y = tf(med$median),
                          showlegend = FALSE, hoverinfo = "text",
@@ -372,14 +445,17 @@ plot_clinical_figure <- function(rows, clinical, clinical_label, ylab, name, sta
                                            if (missing == 1) "" else "s")), collapse = "; ")
   yaxis <- list(title = list(text = ylab))
   if (log_scale) yaxis <- c(yaxis, plot_pseudo_log_axis(c(med$q1, med$q3, rows$value)))
-  plot_type_layout(p, paste0(name, " against ", clinical_label), paste0(sub, "; diamonds are donor medians"),
+  if (!is.null(y_upper)) yaxis$range <- plot_axis_range(rows$value, y_upper * 1.02)
+  sub <- paste0(c(sub, "diamonds are donor medians", plot_beyond_note(sum(beyond & isTRUE(show_points)))),
+                collapse = "; ")
+  plot_type_layout(p, paste0(name, " against ", clinical_label), sub,
                    xaxis = list(title = list(text = clinical_label)), yaxis = yaxis,
                    filename_root = "plot_against_clinical")
 }
 
 #' Density against diameter: contour lines of each donor status's object density in (diameter, measure), each status
 #' normalised to its own objects, where the scatter's points pile up.
-plot_density_figure <- function(rows, ylab, name, status_cols, log_scale = FALSE, log_x = FALSE) {
+plot_density_figure <- function(rows, ylab, name, status_cols, log_scale = FALSE, log_x = FALSE, clip = FALSE) {
   rows <- rows[is.finite(rows$value) & is.finite(rows$islet_diam_um), , drop = FALSE]
   if (nrow(rows) < 10) return(plotly_islet_empty("Too few objects for a density"))
   tf <- if (log_scale) plot_pseudo_log else identity
@@ -395,6 +471,8 @@ plot_density_figure <- function(rows, ylab, name, status_cols, log_scale = FALSE
   }
   yaxis <- list(title = list(text = ylab))
   if (log_scale) yaxis <- c(yaxis, plot_pseudo_log_axis(rows$value))
+  upper <- if (clip && !log_scale) plot_axis_upper(rows$value) else NULL
+  if (!is.null(upper)) yaxis$range <- plot_axis_range(rows$value, upper)
   plot_type_layout(p, paste0(name, ": density against diameter"),
                    "Contours of each donor status's objects, each status normalised to its own count",
                    xaxis = list(title = list(text = "Islet diameter (µm)"), type = if (log_x) "log" else "linear"),
@@ -433,6 +511,11 @@ plot_types_help <- function() {
     shiny::tags$p(shiny::tags$strong("Density against diameter."),
                   " Contour lines of each donor status's objects in diameter and measure, each status normalised to",
                   " its own count, for where the scatter's points pile up."),
+    shiny::tags$p(shiny::tags$strong("Axis range."),
+                  " With Fit 99% of objects (View controls, the default), an axis that a few extreme objects would",
+                  " stretch ends just above the 99th percentile, and those objects are drawn as open triangles at its",
+                  " edge, with their true value in the hover; the count is in the subtitle. The violins, boxes, summary",
+                  " statistics and correlations still use every value. Fit every object shows the whole range."),
     shiny::tags$p(shiny::tags$strong("Exclusions."), " The card's Exclude zero values box (Data controls) and the outlier",
                   " filter apply to every type; outliers are left out of the added types when the filter is on."),
     shiny::tags$p(shiny::tags$strong("Linked points."),

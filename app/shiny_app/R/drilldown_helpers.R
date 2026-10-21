@@ -36,7 +36,7 @@ PHENOTYPE_COLORS_HIGH_CONTRAST <- c(
   "Beta cell"     = "#D32F2F",  # deep red
   "Alpha cell"    = "#FF8F00",  # amber
   "Delta cell"    = "#FDD835",  # bright yellow
-  "CHGA+ hormone-negative" = "#5E35B1",  # deep purple
+  "CHGA+ hormone-negative" = "#8D6E63",  # brown (was deep purple, a shade from CD8a Tcell and Macrophage; 2026-10-21)
   "Endocrine"     = "#8D6E63",  # brown
   "Acinar"        = "#00ACC1",  # cyan
   "Exocrine"     = "#00ACC1",  # Senior's residual class: the Acinar colour

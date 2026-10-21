@@ -11,6 +11,27 @@ DONOR_COMPOSITION_ORDERS <- c("Donor status, then beta-cell proportion" = "beta"
                               "Donor status, then donor ID" = "id")
 DONOR_COMPOSITION_OTHER <- "No subtype"
 
+# Leave out (owner, 2026-10-21: "the large proportions of endocrine obscure the other types for core, and exocrine does
+# the same thing in peri"): the phenotypes left out by default in each region; the bars then show the proportions of
+# the remaining cells. On v9 the four endocrine types are 99 % of core cells and Exocrine 93 % of band cells.
+DONOR_COMPOSITION_ENDOCRINE <- c("Beta cell", "Alpha cell", "Delta cell", "CHGA+ hormone-negative")
+donor_composition_default_leave_out <- function(region) {
+  switch(region, core = DONOR_COMPOSITION_ENDOCRINE, peri = "Exocrine",
+         both = c(DONOR_COMPOSITION_ENDOCRINE, "Exocrine"), character(0))
+}
+
+#' Proportions among the cells shown: `tab` without the `leave_out` phenotypes, `proportion` recomputed over the
+#' cells that remain (`proportion_all` keeps the proportion of all cells).
+donor_composition_shown <- function(tab, leave_out = character(0)) {
+  tab$proportion_all <- tab$proportion
+  tab <- tab[!(tab$phenotype %in% leave_out), , drop = FALSE]
+  if (!nrow(tab)) return(tab)
+  shown <- stats::ave(tab$cells, tab$case_id, FUN = sum)
+  tab$shown_cells <- shown
+  tab$proportion <- ifelse(shown > 0, 100 * tab$cells / shown, NA_real_)
+  tab
+}
+
 #' Long table, one row per donor and phenotype: cells, the donor's total cells in the region, proportion (%), objects.
 #' `comp` holds one row per object (prop_* and peri_prop_* fractions, total_cells_core / total_cells_peri);
 #' `pairs` is prepared()$combined_pairs (label, core_col, peri_col).
@@ -64,13 +85,18 @@ donor_composition_order <- function(tab, order = c("beta", "id")) {
   donors$case_id[order(match(donors$donor_status, c("ND", "Aab+", "T1D")), key2)]
 }
 
-donor_composition_figure <- function(tab, order_ids, palette, status_cols, region_label) {
+donor_composition_figure <- function(tab, order_ids, palette, status_cols, region_label, leave_out = character(0)) {
   if (!nrow(tab)) return(plotly_islet_empty("No donors for the current selection"))
+  tab <- donor_composition_shown(tab, leave_out)
+  if (!nrow(tab)) return(plotly_islet_empty("Every phenotype is left out"))
   status <- tab$donor_status[match(order_ids, tab$case_id)]
   labels <- paste0(order_ids, "<br>", status)
   tab$x <- factor(labels[match(tab$case_id, order_ids)], levels = labels)
+  # A phenotype with no cells in any donor shown (core Exocrine, band CHGA+ hormone-negative on v9) gets no legend entry.
+  cells_by <- tapply(tab$cells, tab$phenotype, sum)
   phenos <- unique(tab$phenotype)
-  phenos <- c(setdiff(phenos, DONOR_COMPOSITION_OTHER), DONOR_COMPOSITION_OTHER)
+  phenos <- phenos[cells_by[phenos] > 0]
+  phenos <- c(setdiff(phenos, DONOR_COMPOSITION_OTHER), intersect(DONOR_COMPOSITION_OTHER, phenos))
   p <- plotly::plot_ly()
   for (ph in phenos) {
     t <- tab[tab$phenotype == ph, , drop = FALSE]
@@ -79,8 +105,11 @@ donor_composition_figure <- function(tab, order_ids, palette, status_cols, regio
     p <- plotly::add_trace(p, type = "bar", x = t$x, y = t$proportion, name = ph, marker = list(color = col),
                            hoverinfo = "text",
                            text = paste0("Donor ", t$case_id, " (", t$donor_status, ")<br>", ph, ": ",
-                                         sprintf("%.1f", t$proportion), "% (", format(round(t$cells), big.mark = ","),
-                                         " of ", format(round(t$total_cells), big.mark = ","), " cells)<br>Objects: ",
+                                         sprintf("%.1f", t$proportion), "% of the cells shown (",
+                                         format(round(t$cells), big.mark = ","), " of ",
+                                         format(round(t$shown_cells), big.mark = ","), ")<br>",
+                                         sprintf("%.2f", t$proportion_all), "% of all ",
+                                         format(round(t$total_cells), big.mark = ","), " cells<br>Objects: ",
                                          t$n_objects),
                            textposition = "none")
   }
@@ -93,14 +122,18 @@ donor_composition_figure <- function(tab, order_ids, palette, status_cols, regio
   p %>%
     plotly::layout(
       barmode = "stack", font = fonts$global, bargap = 0.15,
-      title = list(text = paste0("Cell make-up of each donor's objects (", region_label, ")"), font = fonts$title,
-                   x = 0.02, xanchor = "left"),
+      title = list(text = plotly_title_with_sub(paste0("Cell make-up of each donor's objects (", region_label, ")"),
+                                                if (length(leave_out)) paste0("Leaving out ",
+                                                  paste(leave_out, collapse = ", "), "; bars are proportions of the",
+                                                  " remaining cells") else NULL),
+                   font = fonts$title, x = 0.02, xanchor = "left"),
       xaxis = list(title = list(text = "Donor", font = fonts$axis_title), tickfont = list(size = ISLET_FONT_SIZES$dense_min),
                    automargin = TRUE),
-      yaxis = list(title = list(text = "Proportion of cells (%)", font = fonts$axis_title), tickfont = fonts$axis_tick,
+      yaxis = list(title = list(text = if (length(leave_out)) "Proportion of the cells shown (%)" else
+                     "Proportion of cells (%)", font = fonts$axis_title), tickfont = fonts$axis_tick,
                    range = c(0, 108), tickvals = seq(0, 100, 25)),
       legend = list(font = fonts$legend_text, title = list(text = "Phenotype", font = fonts$legend_title)),
-      margin = list(t = 60, b = 80)) %>%
+      margin = list(t = 80, b = 80)) %>%
     plotly_islet_config("composition_by_donor")
 }
 
@@ -113,10 +146,15 @@ donor_composition_card_ui <- function(ns) {
                " chosen region. The squares above the bars give each donor's status."),
         tags$p(tags$strong("No subtype"), " (grey) holds the cells typed only to a general class (Endocrine, T cell",
                " or immune cells without a subtype), so each bar sums to 100%."),
+        tags$p(tags$strong("Leave out."), " One or two classes hold nearly every cell (the endocrine types in the",
+               " core, Exocrine in the band) and flatten the rest, so they are left out by default: the bars then",
+               " give each phenotype's proportion of the cells that remain, and hover also gives its proportion of",
+               " all cells. Changing the region restores its default; uncheck everything to see all cells."),
         tags$p(tags$strong("Filters."), " The Data controls' endocrine objects, donor status, autoantibody, age, sex",
                " and diameter filters apply. The Data layer, the measure, zero and outlier exclusions do not: they",
                " concern one measure, and this card shows every phenotype."),
-        tags$p("The CSV gives each donor's cells, total cells and proportion per phenotype."))),
+        tags$p("The CSV gives each donor's cells, total cells and proportion of all cells per phenotype, every",
+               " phenotype included."))),
       div(style = "display: flex; align-items: flex-end; gap: 14px;",
         div(style = "width: 190px;", selectInput(ns("composition_region"), "Region", choices = DONOR_COMPOSITION_REGIONS,
                                                  selected = "core", width = "100%")),
@@ -126,6 +164,8 @@ donor_composition_card_ui <- function(ns) {
           downloadButton(ns("dl_composition_csv"), "CSV", class = "btn-sm btn-outline-secondary",
                          style = "font-size: 11px; padding: 2px 8px;")))
     ),
+    div(class = "plot-type-select composition-leave-out",
+        checkboxGroupInput(ns("composition_leave_out"), "Leave out", choices = character(0), inline = TRUE)),
     plotlyOutput(ns("composition_by_donor"), height = "520px")
   )
 }

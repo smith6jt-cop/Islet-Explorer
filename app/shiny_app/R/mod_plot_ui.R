@@ -29,6 +29,9 @@ plot_main_ui <- function(id, extra_panel = NULL) {
                  " % is the phenotype's proportion of all analysed cells in the region. Counts are cells of the phenotype per",
                  " object. Density divides the count by the region's area: the object's outline for Core, the 20 \u00b5m",
                  " band for Peri-Islet, their sum for Core+Peri."),
+          tags$p(tags$strong("Measures offered."),
+                 " A phenotype proportion that is above zero in fewer than 1% of the objects is not offered: plotted,",
+                 " it is a line of points at zero."),
           cell_typing_help(),
           tags$p(tags$strong("Filters."),
                  " Unchecking an autoantibody removes the Aab+ donors positive for it (ND and T1D donors are not",
@@ -90,6 +93,11 @@ plot_main_ui <- function(id, extra_panel = NULL) {
                  " plots\" apply to both cards, whatever they plot; the Against diameter and By donor status groups",
                  " apply to those plot types (Log2 scale x-axis also to Density against diameter). Click the panel's",
                  " title to open or close it."),
+          tags$p(tags$strong("Axis range."),
+                 " Fit 99% of objects (the default) ends an axis that a few extreme objects would stretch just above",
+                 " the 99th percentile and draws those objects as open triangles at its edge (true value in the",
+                 " hover); Fit every object shows the whole range. It applies to both cards; the log scale shows",
+                 " every object."),
           tags$p("Use browser zoom (Ctrl +/\u2212) to resize cards.")),
         # Point controls apply to both plots (owner, 2026-10-19: the View controls must apply to both,
         # not only one card); the last two groups apply to the plot type they name.
@@ -105,6 +113,10 @@ plot_main_ui <- function(id, extra_panel = NULL) {
           control_group("Points and axis (both plots)",
             checkboxInput(ns("show_points"), "Show individual points", value = TRUE),
             checkboxInput(ns("log_scale"), "Log scale y-axis", value = FALSE),
+            # Owner, 2026-10-21: a few extreme objects squeezed the rest of the data into the bottom of the plot.
+            radioButtons(ns("axis_range"), "Axis range",
+                         choices = c("Fit 99% of objects" = "bulk", "Fit every object" = "all"),
+                         selected = "bulk", inline = TRUE),
             sliderInput(ns("pt_size"), "Point size", min = 0.3, max = 4.0, value = 3.0, step = 0.1),
             sliderInput(ns("pt_alpha"), "Point transparency", min = 0, max = 0.95, value = 0.4, step = 0.05)
           ),

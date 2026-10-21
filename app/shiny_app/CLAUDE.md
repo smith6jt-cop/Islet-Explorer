@@ -166,10 +166,23 @@ sources) and the CSVs `dl_summary` / `dl_distribution_csv`, each exporting its c
 Object types (Against diameter, By donor status, Against another measure, Against a donor clinical value) stay linked
 plots. The card title is the type's name.
 
+**Axis range and near-empty measures (owner, 2026-10-21: "these outliers compact the rest of the data").** View
+controls > Axis range defaults to "Fit 99% of objects": `plot_axis_upper()` ends an axis that a few values would
+stretch just above the 99th percentile (or the median of the nonzero values when 99 % are zero), and those objects
+are drawn as open triangles at its edge with their true value in the hover ("N off scale" in the subtitle);
+violins, summaries and correlations still use every value; the log scale is never clipped. Measures that are above
+zero in fewer than `PLOT_MIN_NONZERO_FRACTION` (1 %) of objects are not offered (`plot_composition_selection_choices(
+..., comp =)`; on v9 core B cell, CD4 Tcell, Exocrine and peri-islet CHGA+ hormone-negative): plotted they are a line
+of points at zero.
+
 The full-width **Composition by donor** card (`R/donor_composition.R`) stacks each donor's pooled phenotype proportions
 (cells of the phenotype over all cells of its selected objects) in the core, band or both, with the general classes'
 cells together as "No subtype" so bars sum to 100 %. It applies the Data controls' object, donor and diameter filters
-(`apply_plot_filters()`, shared with `raw_df_base()`), not the measure, zero or outlier settings.
+(`apply_plot_filters()`, shared with `raw_df_base()`), not the measure, zero or outlier settings. Its **Leave out**
+choice drops phenotypes and gives the rest as proportions of the remaining cells, defaulting per region to the four
+endocrine types (core, 99 % of cells on v9) or Exocrine (band, 93 %); phenotypes with no cells get no legend entry.
+CHGA+ hormone-negative is brown (#8D6E63) in the High Contrast palette since 2026-10-21; its deep purple was a shade
+from CD8a Tcell and Macrophage.
 
 ### Phenotype Composition Explorer
 Plot tab Cell Populations mode exposes 21 cell-type proportions (`prop_*` from H5AD `.obs`) + 21 peri-islet proportions (`peri_prop_*`) + 21 core+peri combined proportions (`combined_prop_*`, computed on the fly in `raw_df_base()`) alongside 3 hormone fractions. Grouped `selectInput` with up to 4 option groups (Hormone Positivity, Core, Peri-Islet, Core+Peri). The Combined group's choices are the intersection of `prop_*` and `peri_prop_*` stems — one entry per phenotype that has both region values.
