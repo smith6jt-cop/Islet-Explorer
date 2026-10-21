@@ -77,9 +77,13 @@ try {
   await page.click('a[data-value="Trajectory"]');
   await ready();
   const keys = await page.$eval('#' + ids[0], gd => gd.data.filter(t => t.meta?.trajectory_role === 'islet').flatMap(t => t.key));
-  const key = keys.find(k => /^78\|Islet_\d{4,}$/.test(k));
-  assert.ok(key, 'expanded-cohort short donor ID and long islet ID must be present');
-  const other = keys.find(k => !k.startsWith('78|'));
+  // A short donor ID with a long islet number exercises the key parsing (donor 112 on the uniform roots). Donor 78,
+  // which this check used to name, was removed from the app on 2026-10-15.
+  const longest = [...keys].sort((a, b) => b.split('|')[1].length - a.split('|')[1].length)[0];
+  const key = keys.find(k => /^\d{1,3}\|Islet_\d{3,}$/.test(k)) || longest;
+  assert.ok(key, 'fitted objects must carry link keys');
+  const other = keys.find(k => k.split('|')[0] !== key.split('|')[0]);
+  assert.ok(other, 'a second donor must be present');
   await page.evaluate(() => {
     window.linkInputs = [];
     window.jQuery(document).on('shiny:inputchanged.trajectoryCheck', event => { if (!event.isDefaultPrevented()) window.linkInputs.push(event.name); });
@@ -155,10 +159,17 @@ try {
     await page.click('a[data-value="Trajectory"]');
     await ready(); await highlighted(key);
     await ringAlignment(key);
+    // Bring each button into view below the frozen header and controls first: off screen, elementFromPoint finds
+    // nothing, and under the frozen controls it finds them.
     const coveredDownloads = await page.evaluate(() => ['traj-dl_umap_donor', 'traj-dl_umap_feature'].filter(id => {
-      const el = document.getElementById(id), r = el.getBoundingClientRect();
+      const el = document.getElementById(id), scroller = document.getElementById('main-content');
+      const frozen = document.querySelector('.tab-content > .tab-pane.active .tab-controls');
+      const below = frozen ? frozen.getBoundingClientRect().bottom : 0;
+      scroller.scrollTop += el.getBoundingClientRect().top - (below + 60);
+      const r = el.getBoundingClientRect();
       return !el.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2));
     }));
+    await page.evaluate(() => { document.getElementById('main-content').scrollTop = 0; });
     assert.deepEqual(coveredDownloads, [], 'UMAP canvases must not cover their download buttons');
     await page.screenshot({path: output.replace(/\.json$/, '.linked.png'), fullPage: true});
   });
@@ -225,23 +236,30 @@ try {
     await page.mouse.down(); await page.mouse.move(target.x + 40, target.y + 25, {steps: 5}); await page.mouse.up();
     assert.equal(await page.evaluate(() => window.linkInputs.filter(n => n === 'traj-linked_click').length), 1);
   });
-  await check('range recalculation clears a filtered-out pin', async () => {
-    // Pick the smallest visible islet, then exclude it from the fitted cohort.
-    await page.click('#traj-clear_link_selection');
-    const csvText = await page.$eval('#traj-dl_umap_csv', async el => (await fetch(el.href)).text());
-    // The export uses ordinary CSV quoting; only keys and numeric counts matter.
-    const rows = csvText.split('\n').filter(s => s && !s.startsWith('#')).map(s => s.split(',').map(x => x.replace(/^"|"$/g, '')));
-    const header = rows.shift(), idx = name => header.indexOf(name);
-    const sorted = rows.filter(r => Number.isFinite(+r[idx('total_cells')])).sort((a,b) => +a[idx('total_cells')] - +b[idx('total_cells')]);
-    const row = sorted[0], selected = row[idx('case_id')] + '|' + row[idx('islet_key')];
-    await emit(ids[1], 'plotly_click', selected); await highlighted(selected);
-    await page.$eval('#traj-cell_range', (el, lower) => {
-      window.jQuery(el).data('ionRangeSlider').update({from: lower}); window.jQuery(el).trigger('change');
-    }, +row[idx('total_cells')] + 5);
-    // Slider inputs are debounced; wait for R to receive the new range before
-    // pressing Recalculate, as a user would after moving the slider.
-    await page.waitForFunction(() => document.querySelector('#traj-traj_range_pending')?.innerText.includes('Range not applied'));
-    await page.click('#traj-recalculate_trajectory'); await ready(); await highlighted(null);
+  // The cell-range slider and Recalculate button this step used to drive were removed on 2026-10-17 (the trajectory
+  // fits every object with ten or more core cells), so no control can filter a pin out of the fitted set any more.
+  // Instead: a selection made on the Spatial tab's linked UMAPs, which hold the same ten-cell objects, is pinned here.
+  await check('a selection on the Spatial UMAPs is pinned on the Trajectory plots', async () => {
+    await page.click('#traj-clear_link_selection'); await highlighted(null);
+    await page.click('a[data-value="Spatial"]');
+    await page.waitForFunction(() => ['spatial-leiden_umap', 'spatial-spatial_umap_immune'].every(id =>
+      document.getElementById(id)?.querySelector('.trajectory-link-highlight')));
+    const trajKeys = new Set(keys);
+    const picked = await page.$eval('#spatial-leiden_umap', (gd, wanted) => {
+      const t = gd.data.find(t => t.meta?.trajectory_role === 'islet');
+      return t.key.find(k => wanted.includes(k) && k !== wanted[0]) || null;
+    }, [other, ...trajKeys]);
+    assert.ok(picked, 'the Spatial UMAP objects must overlap the fitted trajectory objects');
+    await page.evaluate(key => {
+      const gd = document.getElementById('spatial-leiden_umap');
+      const curveNumber = gd.data.findIndex(t => t.meta?.trajectory_role === 'islet' && t.key.includes(key));
+      const data = gd.data[curveNumber];
+      gd.emit('plotly_click', {points: [{curveNumber, pointNumber: data.key.indexOf(key), data}]});
+    }, picked);
+    await page.waitForSelector('#spatial-segmentation_viewer_panel #islet_segmentation_view');
+    await page.click('a[data-value="Trajectory"]');
+    await ready(); await highlighted(picked);
+    await page.click('#traj-clear_link_selection'); await highlighted(null);
   });
   await check('no visible output errors or browser exceptions', async () => {
     const errors = await page.$$eval('.shiny-output-error', elements => elements.filter(e=>e.getClientRects().length).map(e=>e.textContent));

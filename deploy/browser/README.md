@@ -15,7 +15,9 @@ It checks bidirectional hover across all three plots, exact donor/islet identity
 browser-only hover latency below 100 ms, pin/clear/close behavior, preservation
 through display changes and tab switching, zoom/resize, missing UMAP coordinates,
 native click/drag deduplication, range exclusion, and the 3000 × 2100 UMAP PNGs.
-The test expects the expanded cohort, including donor 78 and long islet names.
+It expects a uniform 20-donor root (a short donor ID with a long islet number, two or more donors) and a
+Spatial tab whose UMAPs hold the same ten-cell objects (2026-10-21; it used to name donor 78, removed on 2026-10-15,
+and the cell-range slider removed on 2026-10-17).
 Its JSON and screenshots are local test artifacts; screenshots contain plotted
 scientific data and should stay in the restricted local evidence directory.
 
