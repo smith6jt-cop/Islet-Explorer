@@ -31,7 +31,7 @@ PLOT_STATUS_LEVELS <- c("ND", "Aab+", "T1D")
 #' The x measures of "Against another measure": object measures, then each retained phenotype's core and peri-islet
 #' proportion (%). Values are prepared()$comp columns; `pairs` is prepared()$combined_pairs.
 plot_x_measure_choices <- function(comp_cols, pairs = NULL, comp = NULL) {
-  object <- c("Diameter (µm)" = "islet_diam_um", "Core cells" = "total_cells_core",
+  object <- c("Diameter (\u00b5m)" = "islet_diam_um", "Core cells" = "total_cells_core",
               "Peri-islet cells" = "total_cells_peri", "Core immune proportion (%)" = "immune_frac_core",
               "Band immune proportion (%)" = "immune_frac_peri")
   object <- object[object %in% comp_cols]
@@ -231,7 +231,7 @@ plot_donor_medians_figure <- function(rows, ylab, name, status_cols, color_by = 
   med$colour <- if (identical(color_by, "donor_id") && !is.null(donor_pal)) unname(donor_pal[med$case_id]) else
     unname(status_cols[med$donor_status])
   med$hover <- paste0("Donor ", plot_donor_label(med$case_id, med$donor_status), "<br>Objects: ", med$n_objects,
-                      "<br>Median: ", signif(med$median, 3), "<br>Quartiles: ", signif(med$q1, 3), " – ",
+                      "<br>Median: ", signif(med$median, 3), "<br>Quartiles: ", signif(med$q1, 3), " \u2013 ",
                       signif(med$q3, 3))
   p <- plotly::plot_ly()
   for (s in levels) {
@@ -377,7 +377,7 @@ plot_xy_figure <- function(rows, x, xlab, ylab, name, status_cols, color_by = "d
   p <- plot_status_legend(p, status_cols, intersect(PLOT_STATUS_LEVELS, rows$donor_status))
   r_obj <- plot_spearman(rows$x, rows$value)
   r_don <- plot_spearman(med$median, med$y)
-  sub <- paste0(c(if (!is.null(r_obj)) sprintf("Spearman ρ %.2f over %s objects", r_obj$rho,
+  sub <- paste0(c(if (!is.null(r_obj)) sprintf("Spearman \u03c1 %.2f over %s objects", r_obj$rho,
                                                format(r_obj$n, big.mark = ",")),
                   if (!is.null(r_don)) sprintf("%.2f over %d donor medians (p = %s)", r_don$rho, r_don$n,
                                                plot_format_p(r_don$p))), collapse = "; ")
@@ -395,7 +395,7 @@ plot_xy_figure <- function(rows, x, xlab, ylab, name, status_cols, color_by = "d
 #' it, and Spearman's rho over the donors that have a value.
 plot_clinical_figure <- function(rows, clinical, clinical_label, ylab, name, status_cols, color_by = "donor_status",
                                  donor_pal = NULL, log_scale = FALSE, point_size = 3, point_alpha = 0.4,
-                                 show_points = TRUE, clip = FALSE) {
+                                 show_points = TRUE, clip = FALSE, missing_label = "without a recorded value") {
   rows$clinical <- clinical
   med <- donor_median_table(rows, extra = "clinical")
   if (!nrow(med)) return(plotly_islet_empty("No data for the current selection"))
@@ -439,10 +439,10 @@ plot_clinical_figure <- function(rows, clinical, clinical_label, ylab, name, sta
                                        line = list(color = "#000000", width = 1.2)))
   p <- plot_status_legend(p, status_cols, intersect(PLOT_STATUS_LEVELS, med$donor_status))
   r <- plot_spearman(med$clinical, med$median)
-  sub <- paste0(c(if (!is.null(r)) sprintf("Spearman ρ %.2f over %d donors (p = %s)", r$rho, r$n,
+  sub <- paste0(c(if (!is.null(r)) sprintf("Spearman \u03c1 %.2f over %d donors (p = %s)", r$rho, r$n,
                                            plot_format_p(r$p)) else sprintf("%d donors", nrow(med)),
-                  if (missing > 0) sprintf("%d donor%s without a recorded value left out", missing,
-                                           if (missing == 1) "" else "s")), collapse = "; ")
+                  if (missing > 0) sprintf("%d donor%s %s left out", missing,
+                                           if (missing == 1) "" else "s", missing_label)), collapse = "; ")
   yaxis <- list(title = list(text = ylab))
   if (log_scale) yaxis <- c(yaxis, plot_pseudo_log_axis(c(med$q1, med$q3, rows$value)))
   if (!is.null(y_upper)) yaxis$range <- plot_axis_range(rows$value, y_upper * 1.02)
@@ -475,7 +475,7 @@ plot_density_figure <- function(rows, ylab, name, status_cols, log_scale = FALSE
   if (!is.null(upper)) yaxis$range <- plot_axis_range(rows$value, upper)
   plot_type_layout(p, paste0(name, ": density against diameter"),
                    "Contours of each donor status's objects, each status normalised to its own count",
-                   xaxis = list(title = list(text = "Islet diameter (µm)"), type = if (log_x) "log" else "linear"),
+                   xaxis = list(title = list(text = "Islet diameter (\u00b5m)"), type = if (log_x) "log" else "linear"),
                    yaxis = yaxis, filename_root = "plot_density")
 }
 
@@ -502,12 +502,13 @@ plot_types_help <- function() {
     shiny::tags$p(shiny::tags$strong("Against another measure."),
                   " Every object's measure against a second one chosen on the card (an object measure, or a",
                   " phenotype's core or peri-islet proportion), with donor medians as diamonds and Spearman's",
-                  " ρ over objects and over donor medians."),
+                  " \u03c1 over objects and over donor medians."),
     shiny::tags$p(shiny::tags$strong("Against a donor clinical value."),
                   " Each donor's median (diamond, bars its quartiles) at its age, BMI, HbA1c, C-peptide, T1D duration",
-                  " or autoantibody count, its objects behind it, and Spearman's ρ over the donors. Donors",
-                  " without a recorded value are left out: T1D duration exists only for T1D donors, and an HbA1c of",
-                  " 0 is treated as not recorded."),
+                  " or autoantibody count, its objects behind it, and Spearman's \u03c1 over the donors. Donors",
+                  " without a value are left out: T1D duration applies only to T1D donors (nPOD records five of the six",
+                  " as diagnosed during their terminal admission, duration 0, and one at 7 months), and the two donors",
+                  " whose HbA1c nPOD records as 0 were not measured."),
     shiny::tags$p(shiny::tags$strong("Density against diameter."),
                   " Contour lines of each donor status's objects in diameter and measure, each status normalised to",
                   " its own count, for where the scatter's points pile up."),

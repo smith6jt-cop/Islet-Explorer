@@ -1163,7 +1163,10 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
           if (is.null(c_col) || is.na(c_col)) plotly_islet_empty("No donor clinical values in this data") else
             plot_clinical_figure(kept, plot_clinical_values(kept, c_col), names(cl)[match(c_col, cl)], ylab, name,
                                  status_cols, color_by, donor_id_palette(kept), log_y, input$pt_size %||% 3,
-                                 input$pt_alpha %||% 0.4, isTRUE(input$show_points), clip = axis_clip())
+                                 input$pt_alpha %||% 0.4, isTRUE(input$show_points), clip = axis_clip(),
+                                 # ND and Aab+ donors have no diabetes, so no duration: not a missing value.
+                                 missing_label = if (identical(c_col, "t1d_duration_years")) "without T1D" else
+                                   "without a recorded value")
         },
         density = plot_density_figure(kept, ylab, name, status_cols, log_y, isTRUE(input$log_scale_x),
                                       clip = axis_clip())

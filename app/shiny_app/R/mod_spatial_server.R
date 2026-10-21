@@ -568,7 +568,8 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                                  object_line)
         spatial_umap_plotly(plot_df, "colour", pal, legend_title, title, filename_root)
       }
-      continuous <- function(values, legend_title, colorbar_title, cap = FALSE, log_scale = FALSE, digits = 3) {
+      continuous <- function(values, legend_title, colorbar_title, cap = FALSE, log_scale = FALSE, digits = 3,
+                             missing_text = "not recorded") {
         values <- suppressWarnings(as.numeric(values))
         values[!is.finite(values)] <- NA
         colour <- values
@@ -579,7 +580,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         }
         if (log_scale) colour <- log10(pmax(values, 1))
         plot_df$colour <- colour
-        plot_df$.hover <- paste0(legend_title, ": ", ifelse(is.na(values), "not recorded", signif(values, digits)),
+        plot_df$.hover <- paste0(legend_title, ": ", ifelse(is.na(values), missing_text, signif(values, digits)),
                                  "<br>", object_line)
         spatial_umap_plotly(plot_df, "colour", NULL, legend_title, title_n(legend_title), filename_root,
                             colorbar_title = colorbar_title)
@@ -633,7 +634,9 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         age = continuous(comp$age, label, "Age<br>(years)"),
         BMI = continuous(comp$BMI, label, "BMI"),
         C_peptide_ng_mL = continuous(comp$C_peptide_ng_mL, label, "C-peptide<br>(ng/mL)"),
-        t1d_duration_years = continuous(comp$t1d_duration_years, label, "T1D duration<br>(years)"),
+        # ND and Aab+ donors have no diabetes, hence no duration (grey).
+        t1d_duration_years = continuous(comp$t1d_duration_years, label, "T1D duration<br>(years)",
+                                        missing_text = ifelse(status == "T1D", "not recorded", "no T1D")),
         continuous(comp[[key]], label, label)
       )
     }
