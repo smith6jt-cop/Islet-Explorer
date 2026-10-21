@@ -53,7 +53,7 @@ and direct-lookup drill-down files in file formats suited to their access patter
 - **Composition trajectory**: Barlow-style PAGA/ForceAtlas2 and diffusion pseudotime, refit for the selected islet cell-count range
 - **Spatial neighborhood analysis**: Immune infiltration, enrichment z-scores, distance metrics
 - **Leiden clustering**: 4 resolution levels with UMAP visualization
-- **Configurable palettes**: Paul Tol (default), Bright, Okabe-Ito, Diverging — synced across all tabs
+- **Configurable palettes**: Bright (default), Paul Tol, Okabe-Ito, Diverging — synced across all tabs
 - **Demographic filters**: Age, sex, autoantibody status
 - **Frozen reviewer release**: Immutable OCI image plus checksummed scientific and image manifests
 

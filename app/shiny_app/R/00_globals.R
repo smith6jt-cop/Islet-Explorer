@@ -34,9 +34,10 @@ DONOR_COLORS_COLORBLIND <- c("ND" = "#0072B2", "Aab+" = "#D55E00", "T1D" = "#009
 
 DONOR_COLORS_CLASSIC <- c("ND" = "#2166AC", "Aab+" = "#B2182B", "T1D" = "#1B7837")
 
+# Bright is the default selection (app.R, the three palette selectors); no choice is labelled "(default)".
 DONOR_PALETTES <- list(
-  "Paul Tol (default)" = DONOR_COLORS,
   "Bright"             = DONOR_COLORS_BRIGHT,
+  "Paul Tol"           = DONOR_COLORS,
   "Okabe-Ito"          = DONOR_COLORS_COLORBLIND,
   "Diverging"          = DONOR_COLORS_CLASSIC
 )
