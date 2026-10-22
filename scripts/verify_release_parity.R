@@ -332,7 +332,8 @@ parity_run <- function(options, repo) {
         file.path(source_root, "gson", paste0(id, ".geojson.gz")))))
       candidates <- candidates[file.exists(candidates)]
       if (!length(candidates)) parity_fail("geometry_source_missing")
-      geometry <- sf::st_read(candidates[[1]], quiet = TRUE, options = "ARRAY_AS_STRING=YES")
+      geometry <- sf::st_read(builder$release_geometry_dsn(candidates[[1]]), quiet = TRUE,
+                              options = "ARRAY_AS_STRING=YES")
       sf::st_crs(geometry) <- NA
       for (index in unique(c(1L, ceiling(nrow(group) / 2), nrow(group)))) {
         row <- group[index, , drop = FALSE]

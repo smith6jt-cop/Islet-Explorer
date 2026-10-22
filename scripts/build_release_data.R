@@ -87,6 +87,13 @@ sha256_image_bundle <- function(image_root) {
   digest::digest(paste(records, collapse = "\n"), algo = "sha256", serialize = FALSE)
 }
 
+#' GDAL data source for a GeoJSON file: the path, or GDAL's gzip virtual file system for a compressed one (a
+#' uniform root carries only gson/*.geojson.gz; the app's loader reads them the same way).
+release_geometry_dsn <- function(path) {
+  path <- normalizePath(path, mustWork = TRUE)
+  if (grepl("[.]gz$", path)) paste0("/vsigzip/", path) else path
+}
+
 #' The H5AD bridge returns one-dimensional arrays; JSON has plain vectors. Applied before writing and before
 #' comparing, so the release's metadata equals the source's after one round trip.
 release_plain_list <- function(x) {
@@ -384,7 +391,7 @@ build_release <- function(options) {
     donor <- sub("[.]geojson([.]gz)?$", "", basename(src))
     target <- file.path(staging, "geometry", paste0(donor, ".gpkg"))
     dir.create(dirname(target), recursive = TRUE, showWarnings = FALSE)
-    geom <- sf::st_read(src, quiet = TRUE, options = "ARRAY_AS_STRING=YES")
+    geom <- sf::st_read(release_geometry_dsn(src), quiet = TRUE, options = "ARRAY_AS_STRING=YES")
     sf::st_crs(geom) <- NA
     sf::st_write(geom, target, layer = "segmentation", driver = "GPKG",
                  layer_options = "SPATIAL_INDEX=YES", quiet = TRUE)
