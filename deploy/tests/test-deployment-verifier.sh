@@ -100,4 +100,21 @@ check 64 "${verifier[@]}" --url http://127.0.0.1:0/islet-explorer/
 check 64 "${verifier[@]}" --url http://127.0.0.1:3939/other-app/
 check 64 "${verifier[@]}" --url http://127.0.0.1:3939/islet-explorer/ --expected-image latest
 
+# A reverse proxy on another host needs the backend on the VM's private address
+# (pubmaigan1, 2026-10-22). --publish-address makes that address the one
+# accepted listener and a valid URL host; loopback-only or an added wildcard
+# listener fails, and a third host is still not a valid URL.
+private='10.13.41.21'
+printf 'LISTEN 0 128 %s:3838 0.0.0.0:*\n' "${private}" > "${work_dir}/listeners"
+check 0 "${verifier[@]}" --url "http://${private}:3838/islet-explorer/" --publish-address "${private}" \
+  --expected-image "${image_id}" --range-path local_images/test.ome.tiff
+check 77 "${verifier[@]}" --url "${url}"
+printf 'LISTEN 0 128 127.0.0.1:3838 0.0.0.0:*\n' > "${work_dir}/listeners"
+check 77 "${verifier[@]}" --url "http://${private}:3838/islet-explorer/" --publish-address "${private}"
+printf 'LISTEN 0 128 %s:3838 0.0.0.0:*\nLISTEN 0 128 0.0.0.0:3838 *:*\n' "${private}" > "${work_dir}/listeners"
+check 77 "${verifier[@]}" --url "http://${private}:3838/islet-explorer/" --publish-address "${private}"
+check 64 "${verifier[@]}" --url http://10.20.30.40:3838/islet-explorer/ --publish-address "${private}"
+check 64 "${verifier[@]}" --url "${url}" --publish-address pubmaigan1
+check 64 "${verifier[@]}" --url "${url}" --publish-address '10.13.41.21;rm'
+
 echo 'Deployment listener, image identity, and Range verifier tests passed.'

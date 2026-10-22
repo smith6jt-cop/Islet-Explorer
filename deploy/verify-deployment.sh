@@ -5,11 +5,13 @@ usage() {
   cat <<'EOF'
 Usage: deploy/verify-deployment.sh --url URL [--container NAME]
        [--range-path RELATIVE_OME_TIFF_PATH] [--expected-image IMMUTABLE_REF]
+       [--publish-address IPV4]
 
-Checks container health, loopback-only publication, application HTTP response,
-production flags, dependency availability, read-only scientific mounts, and an
-optional OME-TIFF byte-range response. Run the external Basic-Auth checks from a
-non-UF network as described in deploy/README.md.
+Checks container health, exclusive publication on one address (the VM loopback
+by default, or the private VM address UFRC's proxy connects to), application
+HTTP response, production flags, dependency availability, read-only scientific
+mounts, and an optional OME-TIFF byte-range response. Run the external
+Basic-Auth checks from a non-UF network as described in deploy/README.md.
 EOF
 }
 
@@ -17,18 +19,28 @@ url=""
 container_name="islet-explorer"
 range_path=""
 expected_image=""
+publish_address="127.0.0.1"
 while (($#)); do
   case "$1" in
     --url) url="${2:?missing value for --url}"; shift 2 ;;
     --container) container_name="${2:?missing value for --container}"; shift 2 ;;
     --range-path) range_path="${2:?missing value for --range-path}"; shift 2 ;;
     --expected-image) expected_image="${2:?missing value for --expected-image}"; shift 2 ;;
+    --publish-address) publish_address="${2:?missing value for --publish-address}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "ERROR: unknown argument: $1" >&2; usage >&2; exit 64 ;;
   esac
 done
-[[ "${url}" =~ ^http://(127\.0\.0\.1|localhost):([0-9]{1,5})/islet-explorer/?$ ]] || {
-  echo "ERROR: expected http://127.0.0.1:PORT/islet-explorer/ (or localhost)." >&2
+[[ "${publish_address}" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || {
+  echo "ERROR: --publish-address must be an IPv4 address literal." >&2
+  exit 64
+}
+# The application URL is reached on the loopback (a smoke launcher) or on the
+# published address itself; a third host is never a valid target here.
+address_pattern="${publish_address//./\\.}"
+url_pattern="^http://(127\.0\.0\.1|localhost|${address_pattern}):([0-9]{1,5})/islet-explorer/?$"
+[[ "${url}" =~ ${url_pattern} ]] || {
+  echo "ERROR: expected http://127.0.0.1:PORT/islet-explorer/ (or localhost, or the published address ${publish_address})." >&2
   exit 64
 }
 backend_port="$((10#${BASH_REMATCH[2]}))"
@@ -86,16 +98,17 @@ if [[ -n "${expected_image}" ]]; then
   }
 fi
 
-# Reject every other binding on this port, including a specific non-loopback IP
-# alongside the expected listener. Checking only wildcard addresses misses that.
-ss -ltnH | awk -v port="${backend_port}" '
+# Reject every other binding on this port, including a specific other IP or a
+# wildcard alongside the expected listener. Checking only wildcard addresses
+# misses that.
+ss -ltnH | awk -v port="${backend_port}" -v expected="${publish_address}" '
   $4 ~ (":" port "$") {
-    if ($4 == "127.0.0.1:" port) found = 1
+    if ($4 == expected ":" port) found = 1
     else unexpected = 1
   }
   END { exit (!found || unexpected) }
 ' || {
-  echo "ERROR: backend port ${backend_port} must listen exclusively on 127.0.0.1." >&2
+  echo "ERROR: backend port ${backend_port} must listen exclusively on ${publish_address}." >&2
   exit 77
 }
 
@@ -139,4 +152,4 @@ if [[ -n "${range_path}" ]]; then
   echo "OME-TIFF Range response verified: ${content_range}."
 fi
 
-echo "Deployment verification passed for ${url} (health=${health}, loopback-only backend)."
+echo "Deployment verification passed for ${url} (health=${health}, backend bound to ${publish_address} only)."

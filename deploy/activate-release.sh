@@ -4,19 +4,26 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage: deploy/activate-release.sh --project-root ABS_PATH --release RELEASE
+         [--publish-address IPV4]
 
 Installs/updates the user Quadlet from a fully verified release. The immutable
 IMAGE_REF and DATA_SCHEMA are read from RELEASE_DIR/release.env. If startup or
 health verification fails, the prior unit is restored automatically.
+--publish-address publishes the backend on that VM address instead of the
+loopback 127.0.0.1: use it only for the private address UFRC's reverse proxy
+connects to, and only once UFRC has confirmed that the port is reachable from
+the proxy alone, because the application relies on the proxy's Basic Auth.
 EOF
 }
 
 project_root=""
 release=""
+publish_address="127.0.0.1"
 while (($#)); do
   case "$1" in
     --project-root) project_root="${2:?missing value for --project-root}"; shift 2 ;;
     --release) release="${2:?missing value for --release}"; shift 2 ;;
+    --publish-address) publish_address="${2:?missing value for --publish-address}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "ERROR: unknown argument: $1" >&2; usage >&2; exit 64 ;;
   esac
@@ -28,6 +35,10 @@ done
 }
 [[ "${release}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || {
   echo "ERROR: invalid release identifier." >&2
+  exit 64
+}
+[[ "${publish_address}" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || {
+  echo "ERROR: --publish-address must be an IPv4 address literal." >&2
   exit 64
 }
 for command_name in podman systemctl curl install sed awk; do
@@ -168,6 +179,7 @@ sed \
   -e "s|@@IMAGE_REF@@|$(escape_sed "${image_ref}")|g" \
   -e "s|@@DATA_SCHEMA@@|$(escape_sed "${data_schema}")|g" \
   -e "s|@@CPU_LIMIT@@|$(escape_sed "${cpu_limit}")|g" \
+  -e "s|@@PUBLISH_ADDRESS@@|$(escape_sed "${publish_address}")|g" \
   -e "s|@@DATA_DIR@@|$(escape_sed "${data_dir}")|g" \
   -e "s|@@IMAGE_DIR@@|$(escape_sed "${image_dir}")|g" \
   -e "s|@@LOG_DIR@@|$(escape_sed "${log_dir}")|g" \
@@ -186,14 +198,18 @@ install -m 0644 "${rendered}" "${unit_path}"
 restore_previous_unit() {
   if [[ -n "${backup}" && -f "${backup}" ]]; then
     echo "Activation failed; restoring and checking the prior Quadlet service." >&2
-    local previous_image
+    local previous_image previous_address
     previous_image="$(awk -F= '$1 == "Image" {sub(/^[^=]*=/, ""); print; exit}' "${backup}")"
     [[ -n "${previous_image}" ]] || return 1
+    # The prior unit is verified on the address it publishes (PublishPort=ADDR:3838:3838).
+    previous_address="$(awk -F= '$1 == "PublishPort" {sub(/^[^=]*=/, ""); split($0, a, ":"); print a[1]; exit}' "${backup}")"
+    [[ "${previous_address}" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || previous_address="127.0.0.1"
     install -m 0644 "${backup}" "${unit_path}" || return 1
     systemctl --user daemon-reload || return 1
     systemctl --user restart islet-explorer.service || return 1
     "${script_dir}/verify-deployment.sh" --url \
-      "http://127.0.0.1:3838/islet-explorer/" --container islet-explorer \
+      "http://${previous_address}:3838/islet-explorer/" --container islet-explorer \
+      --publish-address "${previous_address}" \
       --expected-image "${previous_image}" || return 1
     echo "Prior release restored and verified healthy; release state is unchanged." >&2
   else
@@ -227,7 +243,8 @@ if ! systemctl --user restart islet-explorer.service; then
   activation_failed
 fi
 if ! "${script_dir}/verify-deployment.sh" --url \
-  "http://127.0.0.1:3838/islet-explorer/" --container islet-explorer \
+  "http://${publish_address}:3838/islet-explorer/" --container islet-explorer \
+  --publish-address "${publish_address}" \
   --expected-image "${image_ref}"; then
   activation_failed
 fi
@@ -239,8 +256,9 @@ state_tmp="$(mktemp "${state_dir}/.active.state.XXXXXX")"
 {
   printf 'RELEASE=%s\n' "${release}"
   printf 'IMAGE_REF=%s\n' "${image_ref}"
+  printf 'PUBLISH_ADDRESS=%s\n' "${publish_address}"
   printf 'ACTIVATED_AT=%s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 } > "${state_tmp}"
 mv -f -- "${state_tmp}" "${state_dir}/active.state"
 
-echo "Activated Islet Explorer release ${release} (${image_ref})."
+echo "Activated Islet Explorer release ${release} (${image_ref}) on ${publish_address}:3838."

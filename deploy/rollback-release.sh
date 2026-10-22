@@ -23,6 +23,12 @@ previous_release="$(awk -F= '$1 == "RELEASE" {print $2; exit}' "${previous_state
   exit 65
 }
 
-echo "Rolling back to release ${previous_release}."
+# The previous deployment is restored on the address it was published on;
+# deployments recorded before PUBLISH_ADDRESS existed were loopback-only.
+previous_address="$(awk -F= '$1 == "PUBLISH_ADDRESS" {print $2; exit}' "${previous_state}")"
+[[ "${previous_address}" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || previous_address="127.0.0.1"
+
+echo "Rolling back to release ${previous_release} on ${previous_address}:3838."
 exec "${script_dir}/activate-release.sh" \
-  --project-root "${project_root}" --release "${previous_release}"
+  --project-root "${project_root}" --release "${previous_release}" \
+  --publish-address "${previous_address}"

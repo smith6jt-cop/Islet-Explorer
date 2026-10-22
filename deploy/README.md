@@ -84,9 +84,14 @@ capacity figures are historical evidence only; see
   `app_dir` route forwards requests to R/httpuv and returned full-file HTTP 200
   responses in the local browser test. All three image routes remain covered
   by the UFRC proxy's application-wide authentication.
-- Shiny listens on the container interface at 3838. The project requests Podman
-  publication on VM loopback at `127.0.0.1:3838`, pending UFRC confirmation that
-  the proxy can reach that target.
+- Shiny listens on the container interface at 3838. Podman publishes one VM
+  address only: the loopback `127.0.0.1:3838` by default, or, with
+  `activate-release.sh --publish-address`, the private VM address UFRC's reverse
+  proxy connects to (the proxy, `vpubweb.rc.ufl.edu`, is a separate host and
+  cannot reach the VM loopback). Publish on the private address only once UFRC
+  has confirmed that the port is reachable from the proxy alone, because the
+  application relies on the proxy's Basic Auth; `verify-deployment.sh` then
+  requires that address to be the exclusive listener.
 - The container and Shiny workers use the same `shiny` UID/GID. Rootless
   `keep-id` maps the UFRC service account to that identity.
 - AI, Statistics, and Inflammation are off. Production rejects a supplied
@@ -420,12 +425,11 @@ image/data pairs until the new release has survived a VM reboot test.
 
 ## 4. UFRC reverse-proxy and Basic-Auth acceptance
 
-Request public path `/islet-explorer/` and backend `127.0.0.1:3838`. UFRC must
-confirm that its proxy can reach VM loopback or return the required private backend
-address and agreed port. The current Quadlet, activation, and verification tooling
-assumes `127.0.0.1:3838`; if UFRC assigns a different target, do not activate until the
-project updates and re-reviews that configuration and tooling and repeats its tests.
-Ask UFRC to preserve WebSocket upgrades,
+Request public path `/islet-explorer/` and the backend. The proxy host cannot
+reach the VM loopback, so the backend is the VM's private address (`pubmaigan1`,
+`10.13.41.21:3838`); activate with `--publish-address 10.13.41.21` once UFRC
+confirms that only the proxy can reach that port (the 2026-10-22 activation is
+loopback-only until then). Ask UFRC to preserve WebSocket upgrades,
 forwarded host/protocol, long Shiny connections, and unbuffered HTTP byte ranges for
 multi-gigabyte TIFFs. Basic Auth must cover the page, WebSocket endpoint, downloads,
 TIFFs, XML, JSON, and other served static assets. Parquet, GeoPackage, H5AD, and

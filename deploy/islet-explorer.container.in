@@ -14,9 +14,11 @@ Pull=never
 UserNS=keep-id:uid=@@CONTAINER_UID@@,gid=@@CONTAINER_GID@@
 User=@@CONTAINER_UID@@:@@CONTAINER_GID@@
 
-# Shiny listens on the container interface; only loopback is published on the
-# VM. UFRC's TLS/Basic-Auth reverse proxy is the sole external entry point.
-PublishPort=127.0.0.1:3838:3838
+# Shiny listens on the container interface; the VM publishes one address only:
+# the loopback by default, or the private VM address UFRC's TLS/Basic-Auth
+# reverse proxy connects to (activate-release.sh --publish-address), which must
+# be reachable from that proxy alone.
+PublishPort=@@PUBLISH_ADDRESS@@:3838:3838
 
 Volume=@@DATA_DIR@@:/srv/islet-explorer/data:ro
 Volume=@@IMAGE_DIR@@:/srv/islet-explorer/app/shiny_app/www/local_images:ro
