@@ -1,6 +1,8 @@
 #!/usr/bin/env Rscript
 # Verify an Islet Explorer release before promotion.
-# Usage: Rscript scripts/verify_release_data.R --root /path/to/release [--mode full|core]
+# Usage: Rscript scripts/verify_release_data.R --root /path/to/release [--mode full|core] [--schema 1|5]
+# --schema sets ISLET_DATA_SCHEMA for the check (the release's declared schema must equal it); without it
+# the environment's value applies, as in the container.
 
 `%||%` <- function(x, y) if (is.null(x)) y else x
 
@@ -29,6 +31,7 @@ main <- function() {
   data_root <<- normalizePath(opts$root, mustWork = TRUE)
   data_path <<- function(...) file.path(data_root, ...)
   Sys.setenv(ISLET_VERIFY_RELEASE_HASHES = opts$mode %||% "full")
+  if (!is.null(opts$schema)) Sys.setenv(ISLET_DATA_SCHEMA = opts$schema)
   repo_root <- dirname(dirname(script_path()))
   source(file.path(repo_root, "app", "shiny_app", "R", "01_runtime_data_backend.R"),
          local = globalenv())

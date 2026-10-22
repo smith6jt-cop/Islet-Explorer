@@ -600,6 +600,13 @@ load_prepared_release <- function(root = data_root) {
            ", read ", nrow(out[[name]]), call. = FALSE)
     }
   }
+  # A schema-5 release carries the H5AD's embedding records (the Spatial tab's method text reads them, as
+  # prep_data() supplies them in development); a schema-1 release has none.
+  embedding <- islet_read_embedding_metadata(manifest, root)
+  if (!is.null(embedding)) {
+    out$composition_embedding <- embedding$composition_embedding
+    out$protein_embedding <- embedding$protein_embedding
+  }
   islet_log_event("release_data_loaded")
   out
 }

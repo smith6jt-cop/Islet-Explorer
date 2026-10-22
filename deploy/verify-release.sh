@@ -100,6 +100,27 @@ if [[ "${actual_images}" != "${expected_images}" ]]; then
   echo "ERROR: expected ${expected_images} OME-TIFF files, found ${actual_images}." >&2
   exit 65
 fi
+# Schema 5 (2026-10-22) is the uniform 20-donor contract: the schema-1 artifacts
+# plus the uniform root's own files and the embedding metadata, with the image
+# count declared in the data manifest (scripts/build_release_data.R).
+if [[ "${data_schema}" == 5 ]]; then
+  python3 - "${release_dir}/data/manifest.json" "${expected_images}" <<'PY'
+import json
+import sys
+with open(sys.argv[1]) as stream:
+    manifest = json.load(stream)
+required = {"core_area", "targets_all", "markers_all", "comp", "combined_pairs", "cell_distance",
+            "signed_distance_kde", "donor_tissue", "geometry", "adata_ins_root", "barlow_islet_features",
+            "islet_spatial_lookup", "donor_metadata", "cells", "images", "uniform_release",
+            "endocrine_objects_by_donor", "protein_phenotype_rules", "embedding_metadata"}
+if (str(manifest.get("schema_version")) != "5"
+        or manifest.get("expected_images") != int(sys.argv[2])
+        or not required.issubset(manifest.get("artifacts", {}))):
+    raise SystemExit("ERROR: a schema-5 release must declare its OME-TIFF count and every uniform-root artifact.")
+PY
+fi
+# Schemas 2-4 were the retired all-donor experiments; their contracts are kept
+# here as the record and no current runtime loads them.
 if [[ "${data_schema}" == 2 || "${data_schema}" == 3 || "${data_schema}" == 4 ]]; then
   python3 - "${release_dir}/data/manifest.json" "${expected_images}" "${data_schema}" <<'PY'
 import json

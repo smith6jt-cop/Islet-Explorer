@@ -15,6 +15,98 @@
 
 `%||%` <- function(x, y) if (is.null(x)) y else x
 
+# Data-release schemas (app/shiny_app/R/01_runtime_data_backend.R has the runtime side). "1" is the frozen
+# 15-donor contract (2026-09). "5" (2026-10-22) is the uniform 20-donor contract: the same summaries and
+# spatial tables, plus the uniform root's own files and the H5AD's embedding metadata as JSON. Ids 2-4
+# belonged to the retired all-donor experiments and are never reused.
+RELEASE_SCHEMAS <- c("1", "5")
+
+#' Files copied as they are, by schema: `required` must exist, `optional` are taken when present. A uniform
+#' root (uniform_release.json present) must be released as schema 5: under schema 1 the app would run with
+#' the frozen 15-donor behaviour (no uniform typing text, no object-count card, no composition-embedding
+#' method text) and never say so.
+release_passthrough_files <- function(schema, source_root) {
+  schema <- as.character(schema)
+  if (!(schema %in% RELEASE_SCHEMAS)) {
+    stop("Unsupported --schema ", schema, " (supported: ", paste(RELEASE_SCHEMAS, collapse = ", "), ")",
+         call. = FALSE)
+  }
+  uniform <- file.exists(file.path(source_root, "uniform_release.json"))
+  if (identical(schema, "1")) {
+    if (uniform) {
+      stop("The source root is a uniform 20-donor build (uniform_release.json); release it with --schema 5.",
+           call. = FALSE)
+    }
+    return(list(required = c("adata_ins_root.h5ad", "barlow_islet_features.csv", "islet_spatial_lookup.csv",
+                             "phenotype_rules.csv", "donor_metadata.csv"),
+                optional = character(0)))
+  }
+  if (!uniform) {
+    stop("--schema 5 needs a uniform root: uniform_release.json is missing under ", source_root, call. = FALSE)
+  }
+  list(required = c("adata_ins_root.h5ad", "barlow_islet_features.csv", "islet_spatial_lookup.csv",
+                    "donor_metadata.csv", "uniform_release.json", "endocrine_objects_by_donor.csv",
+                    "protein_phenotype_rules.csv"),
+       optional = "phenotype_rules.csv")
+}
+
+# The image bundle: every file of the image tree plus, for each OME-TIFF that is a symlink, the XML and
+# offsets sidecars beside its target (a uniform root links its TIFFs from other roots and carries no sidecars;
+# the Viewer loads faster with the offsets). One row per released file: its path in the release and the
+# file it is copied from. A complete tree (the frozen local_images) comes out as it is.
+IMAGE_SIDECAR_SUFFIXES <- c(".ome.xml", ".ome.tiff.offsets.json", ".offsets.json")
+release_image_files <- function(image_root) {
+  root <- normalizePath(image_root, mustWork = TRUE)
+  files <- tree_files(root)
+  rel <- substring(files, nchar(root) + 2L)
+  out <- data.frame(relative_path = rel, source = files, stringsAsFactors = FALSE)
+  for (i in grep("[.]ome[.]tiff?$", rel, ignore.case = TRUE)) {
+    target <- normalizePath(files[[i]], mustWork = TRUE)
+    source_stem <- sub("[.]ome[.]tiff?$", "", basename(target), ignore.case = TRUE)
+    release_stem <- sub("[.]ome[.]tiff?$", "", rel[[i]], ignore.case = TRUE)
+    for (suffix in IMAGE_SIDECAR_SUFFIXES) {
+      sidecar_rel <- paste0(release_stem, suffix)
+      sidecar_src <- file.path(dirname(target), paste0(source_stem, suffix))
+      if (!(sidecar_rel %in% out$relative_path) && file.exists(sidecar_src)) {
+        out <- rbind(out, data.frame(relative_path = sidecar_rel, source = sidecar_src,
+                                     stringsAsFactors = FALSE))
+      }
+    }
+  }
+  out <- out[order(out$relative_path, method = "radix"), , drop = FALSE]
+  rownames(out) <- NULL
+  out
+}
+
+#' The digest the materialized image tree will have (sha256_tree() of the copy), computed from the sources.
+sha256_image_bundle <- function(image_root) {
+  bundle <- release_image_files(image_root)
+  records <- vapply(seq_len(nrow(bundle)), function(i) {
+    paste(bundle$relative_path[[i]], sha256_file(bundle$source[[i]]), sep = "  ")
+  }, character(1))
+  digest::digest(paste(records, collapse = "\n"), algo = "sha256", serialize = FALSE)
+}
+
+#' The H5AD bridge returns one-dimensional arrays; JSON has plain vectors. Applied before writing and before
+#' comparing, so the release's metadata equals the source's after one round trip.
+release_plain_list <- function(x) {
+  if (is.list(x)) return(lapply(x, release_plain_list))
+  if (is.array(x) && length(dim(x)) == 1L) return(as.vector(x))
+  x
+}
+
+#' summary/embedding_metadata.json: the H5AD `uns` records prep_data() returns (composition_embedding,
+#' protein_embedding), which production reads back through islet_read_embedding_metadata().
+write_embedding_metadata <- function(master, target) {
+  dir.create(dirname(target), recursive = TRUE, showWarnings = FALSE)
+  meta <- release_plain_list(list(composition_embedding = master$composition_embedding,
+                                  protein_embedding = master$protein_embedding))
+  # 17 significant digits: every double reads back as the value the H5AD holds.
+  jsonlite::write_json(meta, target, auto_unbox = TRUE, pretty = TRUE, null = "null", na = "null",
+                       digits = I(17))
+  invisible(target)
+}
+
 parse_args <- function(args) {
   out <- list(materialize = "copy", schema = "1", allow_dirty = "false")
   i <- 1L
@@ -63,7 +155,8 @@ tree_files <- function(root) {
 sha256_tree <- function(root) {
   files <- tree_files(root)
   rel <- substring(files, nchar(normalizePath(root, mustWork = TRUE)) + 2L)
-  ord <- order(rel)
+  # Byte order, as the runtime's .islet_sha256_tree(): the digest must not depend on the host's locale.
+  ord <- order(rel, method = "radix")
   records <- vapply(ord, function(i) paste(rel[[i]], sha256_file(files[[i]]), sep = "  "),
                     character(1))
   digest::digest(paste(records, collapse = "\n"), algo = "sha256", serialize = FALSE)
@@ -189,6 +282,7 @@ build_release <- function(options) {
     stop("--materialize must be hardlink or copy", call. = FALSE)
   }
   schema <- as.character(options$schema %||% "1")
+  passthrough <- release_passthrough_files(schema, source_root)
 
   parent <- dirname(output)
   if (!dir.exists(parent) && !dir.create(parent, recursive = TRUE, showWarnings = FALSE)) {
@@ -239,6 +333,11 @@ build_release <- function(options) {
     write_frame_parquet(con, prepared[[name]], target, paste0("summary_", name))
     artifacts[[name]] <- file_artifact(target, staging, nrow(prepared[[name]]),
                                        names(prepared[[name]]))
+  }
+  if (identical(schema, "5")) {
+    target <- file.path(staging, "summary", "embedding_metadata.json")
+    write_embedding_metadata(master, target)
+    artifacts$embedding_metadata <- file_artifact(target, staging)
   }
 
   conversions <- list(
@@ -295,8 +394,8 @@ build_release <- function(options) {
   artifacts$geometry$feature_counts <- geometry_counts
 
   passthrough_files <- c(
-    "adata_ins_root.h5ad", "barlow_islet_features.csv",
-    "islet_spatial_lookup.csv", "phenotype_rules.csv", "donor_metadata.csv"
+    passthrough$required,
+    passthrough$optional[file.exists(file.path(source_root, passthrough$optional))]
   )
   for (rel in passthrough_files) {
     src <- file.path(source_root, rel)
@@ -312,9 +411,14 @@ build_release <- function(options) {
   # Images are part of the release and are available through data_path("images").
   # Their 100+ GiB tree hash is recorded, but startup does not re-read all TIFFs;
   # the deployment verifier performs that full check before promotion.
-  copy_tree(image_root, file.path(staging, "images"), mode)
+  image_bundle <- release_image_files(image_root)
+  for (i in seq_len(nrow(image_bundle))) {
+    copy_one(image_bundle$source[[i]], file.path(staging, "images", image_bundle$relative_path[[i]]), mode)
+  }
   artifacts$images <- tree_artifact(file.path(staging, "images"), staging,
                                     startup_verify = FALSE)
+  expected_images <- sum(grepl("[.]ome[.]tiff?$", image_bundle$relative_path, ignore.case = TRUE))
+  artifacts$images$ome_tiff_count <- expected_images
 
   source_files <- c(
     h5ad_path, file.path(source_root, "cell_distance.csv"),
@@ -334,6 +438,9 @@ build_release <- function(options) {
     materialization_mode = mode,
     git_commit = git_commit,
     git_dirty = git_dirty,
+    # The OME-TIFF count in images/, which deploy/generate-release-manifest.sh takes as the reviewed
+    # EXPECTED_IMAGES and deploy/verify-release.sh checks against the staged files.
+    expected_images = expected_images,
     artifacts = artifacts,
     canonical_sources = source_hashes
   )

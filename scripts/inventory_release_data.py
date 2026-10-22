@@ -214,8 +214,23 @@ def build_inventory(args: argparse.Namespace) -> dict:
               "source": {}, "release_artifacts": {}}
     for name in ("islet_explorer.h5ad", "adata_ins_root.h5ad"):
         report["source"][name] = h5ad_schema(source / name)
-    for name in ("cell_distance.csv", "signed_distance_kde.csv", "barlow_islet_features.csv",
-                 "islet_spatial_lookup.csv", "phenotype_rules.csv", "donor_metadata.csv"):
+    # A uniform 20-donor root (data schema 5) carries uniform_release.json, the object counts and the
+    # protein phenotype rules, and may lack phenotype_rules.csv; the frozen root (schema 1) is the reverse.
+    uniform = (source / "uniform_release.json").is_file()
+    csv_sources = ["cell_distance.csv", "signed_distance_kde.csv", "barlow_islet_features.csv",
+                   "islet_spatial_lookup.csv", "donor_metadata.csv"]
+    if uniform:
+        csv_sources += ["endocrine_objects_by_donor.csv", "protein_phenotype_rules.csv"]
+        if (source / "phenotype_rules.csv").is_file():
+            csv_sources.append("phenotype_rules.csv")
+        with (source / "uniform_release.json").open(encoding="utf-8") as stream:
+            release_keys = sorted(json.load(stream).keys())
+        # Key names only; the file's values name run paths and counts, which stay out of the inventory.
+        report["source"]["uniform_release.json"] = {"fields": release_keys,
+                                                    "sha256": sha256(source / "uniform_release.json")}
+    else:
+        csv_sources.append("phenotype_rules.csv")
+    for name in csv_sources:
         report["source"][name] = {**csv_schema(source / name), "sha256": sha256(source / name)}
     for name in ("cells", "donors"):
         report["source"][name] = group_csv_schemas(sorted((source / name).glob("*.csv")))

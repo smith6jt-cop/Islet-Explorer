@@ -82,6 +82,14 @@ parity_compare_frames <- function(expected, actual, keys, tolerance = 1e-12) {
        max_absolute_difference = if (length(differences)) max(differences) else 0)
 }
 
+# The builder's own file lists and digests (passthrough files by schema, the image bundle with its
+# resolved sidecars, the JSON form of the embedding metadata), so the check cannot drift from the build.
+parity_builder <- function(repo) {
+  env <- new.env(parent = globalenv())
+  sys.source(file.path(repo, "scripts", "build_release_data.R"), envir = env)
+  env
+}
+
 parity_runtime <- function(repo, root) {
   env <- new.env(parent = globalenv())
   env$data_root <- root
@@ -222,23 +230,40 @@ parity_run <- function(options, repo) {
       parity_compare_frames(prepared[[name]], actual, PARITY_SUMMARY_KEYS[[name]])
     })
   }
+  builder <- parity_builder(repo)
+  schema <- as.character(manifest$schema_version %||% "")
   record("passthrough_files_and_trees", {
     if (is.null(manifest)) parity_fail("verified_manifest_required")
-    files <- c("adata_ins_root.h5ad", "barlow_islet_features.csv", "islet_spatial_lookup.csv",
-                "phenotype_rules.csv", "donor_metadata.csv")
+    spec <- builder$release_passthrough_files(schema, source_root)
+    files <- c(spec$required, spec$optional[file.exists(file.path(source_root, spec$optional))])
     for (name in files) {
       if (!identical(parity_hash(file.path(source_root, name)),
                      parity_hash(file.path(release_root, name)))) parity_fail("passthrough_hash_mismatch")
     }
     # The release trees were read in full above. Compare their verified digests
     # with the current source trees without re-reading the 100+ GiB image copy.
-    for (name in c("cells", "images")) {
-      path <- if (name == "images") image_root else file.path(source_root, name)
-      if (!identical(parity_tree(path, source_env), manifest$artifacts[[name]]$sha256)) {
-        parity_fail("passthrough_tree_mismatch")
-      }
+    # The image digest is taken over the bundle the builder materializes: the
+    # source tree plus the sidecars resolved beside each linked TIFF.
+    if (!identical(parity_tree(file.path(source_root, "cells"), source_env),
+                   manifest$artifacts$cells$sha256)) parity_fail("passthrough_tree_mismatch")
+    if (!identical(builder$sha256_image_bundle(image_root), manifest$artifacts$images$sha256)) {
+      parity_fail("passthrough_tree_mismatch")
     }
     list(files = length(files), trees = 2L)
+  })
+  record("embedding_metadata", {
+    if (is.null(manifest)) parity_fail("verified_manifest_required")
+    # A schema-5 release carries the H5AD's embedding records; the frozen schema has none to carry.
+    if (!identical(schema, "5")) return(list(applicable = FALSE))
+    actual <- release_env$islet_read_embedding_metadata(manifest, release_root)
+    if (is.null(actual)) parity_fail("embedding_metadata_missing")
+    expected <- list(composition_embedding = prepared$composition_embedding,
+                     protein_embedding = prepared$protein_embedding)
+    canonical <- function(x) jsonlite::fromJSON(jsonlite::toJSON(
+      builder$release_plain_list(x), auto_unbox = TRUE, null = "null", na = "null", digits = I(17)),
+      simplifyVector = TRUE)
+    if (!identical(canonical(expected), canonical(actual))) parity_fail("embedding_metadata_mismatch")
+    list(applicable = TRUE, records = sum(!vapply(expected, is.null, logical(1))))
   })
   record("signed_distance_kde_table", {
     expected <- data.table::fread(file.path(source_root, "signed_distance_kde.csv"),

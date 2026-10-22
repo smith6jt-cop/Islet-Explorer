@@ -11,8 +11,8 @@ command writes release.env and MANIFEST.sha256, invalidating any prior
 verification stamp. IMAGE_REF must be an immutable registry digest or local
 image ID and must match the published scan evidence. EXPECTED_IMAGES is the
 approved OME-TIFF count, defaults to the original cohort's 15, and must match
-the staged files. Use 21 for the expanded cohort; never infer approval from
-the number of files present.
+the staged files. Use 20 with DATA_SCHEMA 5 for the uniform 20-donor cohort;
+never infer approval from the number of files present.
 EOF
 }
 

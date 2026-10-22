@@ -16,6 +16,15 @@ islet_release_schema <- function() {
   Sys.getenv("ISLET_DATA_SCHEMA", unset = "1")
 }
 
+# Data-release schemas the runtime accepts (scripts/build_release_data.R writes them). "1" is the frozen
+# 15-donor contract (2026-09). "5" (2026-10-22) is the uniform 20-donor contract: the same Parquet summaries
+# and spatial tables plus the uniform root's own files (uniform_release.json, endocrine_objects_by_donor.csv,
+# protein_phenotype_rules.csv) and the H5AD's embedding metadata as JSON; phenotype_rules.csv is optional
+# there. Ids 2-4 belonged to the retired all-donor experiments (deploy/verify-release.sh still names them)
+# and are never reused.
+ISLET_RELEASE_SCHEMAS <- c("1", "5")
+ISLET_EMBEDDING_METADATA_ARTIFACT <- "summary/embedding_metadata.json"
+
 islet_duckdb_connection <- function() {
   if (!requireNamespace("DBI", quietly = TRUE) ||
       !requireNamespace("duckdb", quietly = TRUE)) {
@@ -114,6 +123,36 @@ ISLET_REQUIRED_RELEASE_ARTIFACTS <- c(
   "islet_spatial_lookup", "phenotype_rules", "donor_metadata", "cells", "images"
 )
 
+ISLET_REQUIRED_RELEASE_ARTIFACTS_BY_SCHEMA <- list(
+  "1" = ISLET_REQUIRED_RELEASE_ARTIFACTS,
+  "5" = c(setdiff(ISLET_REQUIRED_RELEASE_ARTIFACTS, "phenotype_rules"), "protein_phenotype_rules",
+          "uniform_release", "endocrine_objects_by_donor", "embedding_metadata")
+)
+
+#' The artifact names a release of `schema` must declare and carry.
+islet_required_release_artifacts <- function(schema = islet_release_schema()) {
+  schema <- as.character(schema)
+  if (!(schema %in% names(ISLET_REQUIRED_RELEASE_ARTIFACTS_BY_SCHEMA))) {
+    stop("Unsupported data release schema: ", schema, " (supported: ",
+         paste(ISLET_RELEASE_SCHEMAS, collapse = ", "), ")", call. = FALSE)
+  }
+  ISLET_REQUIRED_RELEASE_ARTIFACTS_BY_SCHEMA[[schema]]
+}
+
+#' The H5AD `uns` embedding records a schema-5 release carries as JSON (`composition_embedding`,
+#' `protein_embedding`), as the lists prep_data() returns from the H5AD; NULL when the release has none.
+islet_read_embedding_metadata <- function(manifest, root = data_root) {
+  artifact <- (manifest$artifacts %||% list())[["embedding_metadata"]]
+  if (is.null(artifact)) return(NULL)
+  if (!requireNamespace("jsonlite", quietly = TRUE)) {
+    stop("The jsonlite package is required to read the release's embedding metadata.", call. = FALSE)
+  }
+  path <- .islet_artifact_path(root, artifact$relative_path)
+  if (!file.exists(path)) stop("Release artifact is missing: ", artifact$relative_path, call. = FALSE)
+  meta <- jsonlite::fromJSON(path, simplifyVector = TRUE)
+  list(composition_embedding = meta$composition_embedding, protein_embedding = meta$protein_embedding)
+}
+
 .islet_tree_files <- function(root) {
   files <- list.files(root, recursive = TRUE, full.names = TRUE,
                       all.files = TRUE, no.. = TRUE)
@@ -131,7 +170,9 @@ ISLET_REQUIRED_RELEASE_ARTIFACTS <- c(
   files <- .islet_tree_files(root)
   norm_root <- normalizePath(root, mustWork = TRUE)
   rel <- substring(files, nchar(norm_root) + 2L)
-  ord <- order(rel)
+  # Byte order, so the digest is the same on every host whatever its collation locale (the builder and the
+  # parity check order the same way).
+  ord <- order(rel, method = "radix")
   records <- vapply(ord, function(i) {
     paste(rel[[i]], .islet_sha256_file(files[[i]]), sep = "  ")
   }, character(1))
@@ -197,19 +238,20 @@ islet_validate_release <- function(root = data_root) {
          ", found ", actual_schema, call. = FALSE)
   }
 
+  required <- islet_required_release_artifacts(actual_schema)
   artifacts <- manifest$artifacts %||% list()
-  missing_entries <- setdiff(ISLET_REQUIRED_RELEASE_ARTIFACTS, names(artifacts))
+  missing_entries <- setdiff(required, names(artifacts))
   if (length(missing_entries)) {
     stop("Release manifest lacks required artifacts: ",
          paste(missing_entries, collapse = ", "), call. = FALSE)
   }
-  missing_paths <- vapply(ISLET_REQUIRED_RELEASE_ARTIFACTS, function(name) {
+  missing_paths <- vapply(required, function(name) {
     path <- .islet_artifact_path(root, artifacts[[name]]$relative_path)
     !file.exists(path) && !dir.exists(path)
   }, logical(1))
   if (any(missing_paths)) {
     stop("Release is incomplete; missing: ",
-         paste(ISLET_REQUIRED_RELEASE_ARTIFACTS[missing_paths], collapse = ", "),
+         paste(required[missing_paths], collapse = ", "),
          call. = FALSE)
   }
   islet_verify_release_hashes(manifest, root)

@@ -252,3 +252,105 @@ test_that("development segmentation reads compressed GeoJSON for padded donor ID
   expect_identical(geometry$name, "Islet_1234")
   expect_true(is.na(sf::st_crs(geometry)))
 })
+
+# ---- Data schema 5: the uniform 20-donor release contract (2026-10-22) ----
+
+test_that("schema 5 requires the uniform root's files and the embedding metadata; the frozen schema does not", {
+  env <- make_backend_env(tempfile("islet-schema-"))
+  expect_identical(env$ISLET_RELEASE_SCHEMAS, c("1", "5"))
+  one <- env$islet_required_release_artifacts("1")
+  five <- env$islet_required_release_artifacts("5")
+  expect_identical(one, env$ISLET_REQUIRED_RELEASE_ARTIFACTS)
+  expect_true("phenotype_rules" %in% one)
+  expect_false("phenotype_rules" %in% five)
+  expect_true(all(setdiff(one, "phenotype_rules") %in% five))
+  expect_true(all(c("uniform_release", "endocrine_objects_by_donor", "protein_phenotype_rules",
+                    "embedding_metadata") %in% five))
+  expect_false(any(c("uniform_release", "embedding_metadata") %in% one))
+  # The retired experimental ids are not accepted.
+  expect_error(env$islet_required_release_artifacts("4"), "Unsupported data release schema: 4")
+})
+
+test_that("a schema-5 release validates under ISLET_DATA_SCHEMA=5 and reads its embedding metadata back", {
+  skip_if_not_installed("digest")
+  skip_if_not_installed("jsonlite")
+  root <- tempfile("islet-schema5-")
+  dir.create(file.path(root, "summary"), recursive = TRUE)
+  env <- make_backend_env(root)
+  artifacts <- list()
+  for (name in env$islet_required_release_artifacts("5")) {
+    rel <- if (name == "embedding_metadata") env$ISLET_EMBEDDING_METADATA_ARTIFACT else paste0(name, ".txt")
+    path <- file.path(root, rel)
+    if (name == "embedding_metadata") {
+      jsonlite::write_json(list(composition_embedding = list(objects = 1215L, min_core_cells = 10L,
+                                                             features = c("Beta", "Alpha"), min_dist = 3),
+                                protein_embedding = NULL),
+                           path, auto_unbox = TRUE, null = "null")
+    } else writeLines(name, path)
+    artifacts[[name]] <- list(type = "file", relative_path = rel, sha256 = env$.islet_sha256_file(path),
+                              startup_verify = TRUE)
+  }
+  write_manifest <- function(artifacts) {
+    jsonlite::write_json(list(schema_version = "5", artifacts = artifacts), file.path(root, "manifest.json"),
+                         auto_unbox = TRUE)
+  }
+  write_manifest(artifacts)
+  withr::with_envvar(c(ISLET_DATA_SCHEMA = "5", ISLET_VERIFY_RELEASE_HASHES = "core"), {
+    manifest <- env$islet_validate_release(root)
+    expect_identical(manifest$schema_version, "5")
+    meta <- env$islet_read_embedding_metadata(manifest, root)
+    expect_identical(meta$composition_embedding$objects, 1215L)
+    expect_identical(meta$composition_embedding$features, c("Beta", "Alpha"))
+    expect_null(meta$protein_embedding)
+    # A manifest without the metadata artifact gives no metadata, and fails validation under schema 5.
+    without <- artifacts
+    without$embedding_metadata <- NULL
+    expect_null(env$islet_read_embedding_metadata(list(artifacts = without), root))
+    write_manifest(without)
+    expect_error(env$islet_validate_release(root), "embedding_metadata")
+  })
+  write_manifest(artifacts)
+  withr::with_envvar(c(ISLET_DATA_SCHEMA = "1", ISLET_VERIFY_RELEASE_HASHES = "core"), {
+    expect_error(env$islet_validate_release(root), "schema mismatch")
+  })
+})
+
+test_that("the production loader attaches a schema-5 release's embedding metadata to prepared()", {
+  skip_if_not_installed("jsonlite")
+  root <- tempfile("islet-loader-")
+  dir.create(file.path(root, "summary"), recursive = TRUE)
+  env <- make_backend_env(root)
+  sys.source(.find_source("R/data_loading.R"), envir = env)
+  jsonlite::write_json(list(composition_embedding = list(objects = 7L),
+                            protein_embedding = list(donor_correction = "harmony")),
+                       file.path(root, env$ISLET_EMBEDDING_METADATA_ARTIFACT), auto_unbox = TRUE)
+  env$islet_read_parquet <- function(path) data.frame(x = 1)
+  env$islet_log_event <- function(...) invisible(NULL)
+  env$islet_validate_release <- function(root) list(artifacts = list(
+    embedding_metadata = list(relative_path = env$ISLET_EMBEDDING_METADATA_ARTIFACT)))
+  out <- env$load_prepared_release(root)
+  expect_identical(out$composition_embedding$objects, 7L)
+  expect_identical(out$protein_embedding$donor_correction, "harmony")
+  expect_setequal(names(out), c(names(env$ISLET_SUMMARY_ARTIFACTS), "composition_embedding", "protein_embedding"))
+  # A schema-1 manifest adds nothing.
+  env$islet_validate_release <- function(root) list(artifacts = list())
+  expect_setequal(names(env$load_prepared_release(root)), names(env$ISLET_SUMMARY_ARTIFACTS))
+})
+
+test_that("tree digests use byte order, whatever the collation locale", {
+  skip_if_not_installed("digest")
+  root <- tempfile("islet-tree-order-")
+  dir.create(root)
+  writeLines("a", file.path(root, "a.csv"))
+  writeLines("b", file.path(root, "a_1.csv"))
+  env <- make_backend_env(root)
+  collate <- Sys.getlocale("LC_COLLATE")
+  on.exit(Sys.setlocale("LC_COLLATE", collate), add = TRUE)
+  Sys.setlocale("LC_COLLATE", "C")
+  in_c <- env$.islet_sha256_tree(root)
+  # en_US collation ignores punctuation and would put a_1.csv first; the digest must not change.
+  utf <- suppressWarnings(Sys.setlocale("LC_COLLATE", "en_US.UTF-8"))
+  skip_if(!nzchar(utf), "en_US.UTF-8 collation is not installed")
+  expect_identical(order(c("a_1.csv", "a.csv")), c(1L, 2L))
+  expect_identical(env$.islet_sha256_tree(root), in_c)
+})
