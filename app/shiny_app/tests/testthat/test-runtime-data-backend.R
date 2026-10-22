@@ -217,9 +217,9 @@ test_that("GeoPackage loading applies an indexed bounding-box filter", {
                                  x, y + 2, x, y), ncol = 2, byrow = TRUE)))
   }
   geom <- sf::st_sf(
-    id = c("near", "far"),
-    classification = c('{"name":"Islet"}', '{"name":"Nerve"}'),
-    geometry = sf::st_sfc(square(0, 0), square(100, 100))
+    id = c("near", "near_multi", "far"),
+    classification = c('{"name":"Islet"}', '{"name":"Nerve"}', '{"name":"Nerve"}'),
+    geometry = sf::st_sfc(square(0, 0), sf::st_multipolygon(list(square(3, 3), square(6, 6))), square(100, 100))
   )
   gpkg <- file.path(root, "geometry", "0001.gpkg")
   sf::st_write(geom, gpkg, layer = "segmentation", driver = "GPKG",
@@ -231,8 +231,12 @@ test_that("GeoPackage loading applies an indexed bounding-box filter", {
   sys.source(.find_source("R/segmentation_helpers.R"), envir = env)
   cropped <- env$load_case_geojson("1", centroid_x_um = 1,
                                    centroid_y_um = 1, buffer_um = 5)
-  expect_equal(nrow(cropped), 1L)
-  expect_equal(cropped$id, "near")
+  expect_equal(nrow(cropped), 2L)
+  expect_setequal(cropped$id, c("near", "near_multi"))
+  # A window of mixed types keeps each feature's stored type (sf would otherwise promote the POLYGON to
+  # MULTIPOLYGON), so production reads the same geometry types as development.
+  expect_identical(as.character(sf::st_geometry_type(cropped[cropped$id == "near", ])), "POLYGON")
+  expect_identical(as.character(sf::st_geometry_type(cropped[cropped$id == "near_multi", ])), "MULTIPOLYGON")
 })
 
 test_that("development segmentation reads compressed GeoJSON for padded donor IDs", {

@@ -197,6 +197,10 @@ parity_run <- function(options, repo) {
   report$identity$release_manifest_sha256 <- parity_hash(file.path(release_root, "manifest.json"))
   manifest <- record("release_manifest_and_full_hashes", {
     value <- release_env$islet_read_manifest(release_root)
+    # The runtime validates a release against ISLET_DATA_SCHEMA; here the release's declared schema is the
+    # one under test (the builder has already refused the wrong schema for the root, and the runtime
+    # refuses an id it does not know).
+    Sys.setenv(ISLET_DATA_SCHEMA = as.character(value$schema_version %||% ""))
     release_env$islet_validate_release(release_root)
     release_env$islet_verify_release_hashes(value, release_root, mode = "full")
     value
@@ -296,24 +300,35 @@ parity_run <- function(options, repo) {
     statuses <- sort(unique(as.character(cells$donor_status)))
     modes <- list(phenotype = sort(unique(as.character(cells$phenotype))),
                   marker = source_env$cell_distance_markers())
+    # The distance to the nearest Islet or Cluster, and (roots from v9) to the nearest Islet only.
+    distance_columns <- "signed_dist"
+    if (source_env$cell_distance_has_islet_distance()) {
+      if (!release_env$cell_distance_has_islet_distance()) parity_fail("islet_distance_availability_mismatch")
+      distance_columns <- c(distance_columns, "signed_dist_islet")
+    }
     for (mode in names(modes)) {
       items <- modes[[mode]]
       items <- items[!is.na(items) & nzchar(items)]
       for (norm in c("prop", "count")) {
         record(paste0("spatial_histogram_", mode, "_", norm), {
           rows <- 0L
-          for (item in c("__all__", items)) {
+          for (dist_col in distance_columns) for (item in c("__all__", items)) {
             result <- parity_query_result(
-              source_env$.query_cell_distance_hist_memory(mode, item, statuses, norm, 120L),
-              release_env$.query_cell_distance_hist_duckdb(mode, item, statuses, norm, 120L), "hist")
+              source_env$.query_cell_distance_hist_memory(mode, item, statuses, norm, 120L, dist_col),
+              release_env$.query_cell_distance_hist_duckdb(mode, item, statuses, norm, 120L, dist_col), "hist")
             rows <- rows + result$rows
           }
-          list(selections = length(items) + 1L, rows = rows)
+          list(selections = length(items) + 1L, distances = length(distance_columns), rows = rows)
         })
         record(paste0("spatial_composition_", mode, "_", norm), {
-          parity_query_result(
-            source_env$.query_cell_distance_composition_memory(mode, items, statuses, norm, 16L),
-            release_env$.query_cell_distance_composition_duckdb(mode, items, statuses, norm, 16L), "comp")
+          rows <- 0L
+          for (dist_col in distance_columns) {
+            result <- parity_query_result(
+              source_env$.query_cell_distance_composition_memory(mode, items, statuses, norm, dist_col),
+              release_env$.query_cell_distance_composition_duckdb(mode, items, statuses, norm, dist_col), "comp")
+            rows <- rows + result$rows
+          }
+          list(distances = length(distance_columns), rows = rows)
         })
       }
     }
@@ -333,7 +348,7 @@ parity_run <- function(options, repo) {
       candidates <- candidates[file.exists(candidates)]
       if (!length(candidates)) parity_fail("geometry_source_missing")
       geometry <- sf::st_read(builder$release_geometry_dsn(candidates[[1]]), quiet = TRUE,
-                              options = "ARRAY_AS_STRING=YES")
+                              options = "ARRAY_AS_STRING=YES", promote_to_multi = FALSE)
       sf::st_crs(geometry) <- NA
       for (index in unique(c(1L, ceiling(nrow(group) / 2), nrow(group)))) {
         row <- group[index, , drop = FALSE]

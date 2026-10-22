@@ -391,7 +391,9 @@ build_release <- function(options) {
     donor <- sub("[.]geojson([.]gz)?$", "", basename(src))
     target <- file.path(staging, "geometry", paste0(donor, ".gpkg"))
     dir.create(dirname(target), recursive = TRUE, showWarnings = FALSE)
-    geom <- sf::st_read(release_geometry_dsn(src), quiet = TRUE, options = "ARRAY_AS_STRING=YES")
+    # Each feature keeps its stored type (no promotion of a POLYGON / MULTIPOLYGON mix), as the app reads it.
+    geom <- sf::st_read(release_geometry_dsn(src), quiet = TRUE, options = "ARRAY_AS_STRING=YES",
+                        promote_to_multi = FALSE)
     sf::st_crs(geom) <- NA
     sf::st_write(geom, target, layer = "segmentation", driver = "GPKG",
                  layer_options = "SPATIAL_INDEX=YES", quiet = TRUE)

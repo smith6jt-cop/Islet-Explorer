@@ -62,7 +62,9 @@ load_case_geojson <- function(case_id, centroid_x_um = NULL,
 
   if (!is.null(gpkg_path)) {
     geometry <- tryCatch({
-      args <- list(dsn = gpkg_path, layer = "segmentation", quiet = TRUE)
+      # Keep each feature's stored type: by default sf promotes a window of mixed POLYGON and MULTIPOLYGON
+      # features to all-MULTIPOLYGON, which the whole-file development read does not do.
+      args <- list(dsn = gpkg_path, layer = "segmentation", quiet = TRUE, promote_to_multi = FALSE)
       if (has_bbox) {
         x <- as.numeric(centroid_x_um) / PIXEL_SIZE_UM
         y <- as.numeric(centroid_y_um) / PIXEL_SIZE_UM
@@ -108,7 +110,7 @@ load_case_geojson <- function(case_id, centroid_x_um = NULL,
     dsn <- if (grepl("\\.gz$", json_path)) {
       paste0("/vsigzip/", normalizePath(json_path, mustWork = TRUE))
     } else json_path
-    gj <- sf::st_read(dsn, quiet = TRUE)
+    gj <- sf::st_read(dsn, quiet = TRUE, promote_to_multi = FALSE)
     # Remove geographic CRS - these are actually image pixel/micron coordinates, not geographic
     # The GeoJSON export from QuPath uses pixel coordinates but sf assigns WGS84 by default
     sf::st_crs(gj) <- NA
