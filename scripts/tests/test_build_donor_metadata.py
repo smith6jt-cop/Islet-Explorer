@@ -183,5 +183,49 @@ class DonorMetadataTests(unittest.TestCase):
         ])
 
 
+
+class UniformCohortTests(unittest.TestCase):
+    """--uniform-cohort: every donor and field from the nPOD sheet (owner, 2026-10-22)."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        root = Path(self.temp.name)
+        self.cohort = root / "cohort.csv"
+        self.cohort.write_text("case_id,donor_status\n112,ND\n6534,T1D\n")
+        self.source = root / "npod.xlsx"
+        base = {"BMI": 17.0, "C_peptide_ng_mL": "1.2", "GADA_Result": "Negative", "IA_2A_Result": "Positive",
+                "mIAA_Result": "Negative", "ZnT8A_Result": "Negative", "height_cm": 96, "weight_kg": 15.7,
+                "BMI_percentile": None, "pancreas_weight_grams": 27.56, "admission_glucose_mg_dL": 512,
+                "peak_glucose_mg_dL": 512, "RIN": 7.8, "race_ethnicity": "White", "cause_of_death": "Anoxia"}
+        rows = [
+            dict(base, case_id="HDL112", donor_type="No Diabetes", age_years=3.72, diabetes_hx_years=None,
+                 sex="Female", HbA1c_percent=0.0, ICU_time_days="4.41 days", transit_time_minutes="960.00 minutes",
+                 case_recovery_type="Organ Donor", ABO_blood_type="B+"),
+            dict(base, case_id="6534", donor_type="Type 1 Diabetes", age_years=4.19, diabetes_hx_years=0.0,
+                 sex="Female", HbA1c_percent=15.6, ICU_time_days="7.72 days",
+                 transit_time_minutes="-1034.00 minutes", case_recovery_type="DCD Organ Donor", ABO_blood_type="O"),
+        ]
+        pd.DataFrame(rows).to_excel(self.source, sheet_name="data", index=False)
+
+    def test_fields_units_and_impossible_values(self):
+        out = metadata.build_uniform_metadata(self.cohort, self.source).set_index("case_id")
+        self.assertEqual(out.loc["112", "npod_case_id"], "HDL112")
+        self.assertEqual(out.loc["112", "age_years_npod"], 3.72)
+        self.assertTrue(pd.isna(out.loc["112", "HbA1c_percent"]))        # nPOD 0.0: not measured
+        self.assertTrue(pd.isna(out.loc["112", "t1d_duration_years"]))   # no diabetes: not applicable
+        self.assertEqual(out.loc["6534", "t1d_duration_years"], 0.0)
+        self.assertEqual(out.loc["112", "ICU_days"], 4.41)
+        self.assertTrue(pd.isna(out.loc["6534", "transit_time_min"]))    # negative: impossible
+        self.assertEqual(out.loc["112", "ABO_group"], "B")
+        self.assertEqual(out.loc["6534", "recovery_type"], "DCD Organ Donor")
+        self.assertEqual(out.loc["6534", "n_aab"], 1)
+
+    def test_status_must_match_the_cohort(self):
+        self.cohort.write_text("case_id,donor_status\n112,T1D\n6534,T1D\n")
+        with self.assertRaises(SystemExit):
+            metadata.build_uniform_metadata(self.cohort, self.source)
+
+
 if __name__ == "__main__":
     unittest.main()

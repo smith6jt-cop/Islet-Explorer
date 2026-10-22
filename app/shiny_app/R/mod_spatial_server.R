@@ -15,8 +15,16 @@ SPATIAL_UMAP_COLOR_CHOICES <- list(
   "Clusters" = c("Leiden cluster" = "leiden"),
   "Disease state" = c("Donor status" = "donor_status", "Autoantibodies (number positive)" = "n_aab"),
   "Donor" = c("Donor" = "donor", "Age (years)" = "age", "Age group" = "age_group", "Sex" = "gender",
-              "BMI" = "BMI", "HbA1c (%)" = "HbA1c_percent", "C-peptide (ng/mL)" = "C_peptide_ng_mL",
-              "T1D duration (years)" = "t1d_duration_years"),
+              "Race/ethnicity" = "race_ethnicity", "Height (cm)" = "height_cm", "Weight (kg)" = "weight_kg",
+              "BMI" = "BMI", "BMI percentile" = "BMI_percentile"),
+  "Clinical" = c("HbA1c (%)" = "HbA1c_percent", "C-peptide (ng/mL)" = "C_peptide_ng_mL",
+                 "T1D duration (years)" = "t1d_duration_years", "Admission glucose (mg/dL)" = "admission_glucose_mg_dL",
+                 "Peak glucose (mg/dL)" = "peak_glucose_mg_dL"),
+  # From the nPOD export (owner, 2026-10-22; v10 donor_metadata.csv).
+  "Donation and tissue" = c("Cause of death" = "cause_of_death", "Recovery type" = "recovery_type",
+                            "ICU stay (days)" = "ICU_days", "Organ transit time (min)" = "transit_time_min",
+                            "Pancreas weight (g)" = "pancreas_weight_g", "RNA integrity (RIN)" = "RIN",
+                            "Blood group (ABO)" = "ABO_group"),
   "Object" = c("Band immune proportion" = "immune_frac_peri", "Core immune proportion" = "immune_frac_core",
                "Diameter (\u00b5m)" = "islet_diam_um", "Core cells" = "total_cells_core")
 )
@@ -617,6 +625,13 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           discrete(g, lv, setNames(rep_len(c("#E69F00", "#56B4E9", "#009E73", "#CC79A7"), length(lv)), lv),
                    "Age group")
         },
+        race_ethnicity = , recovery_type = , cause_of_death = , ABO_group = {
+          g <- as.character(comp[[key]])
+          g[!nzchar(g)] <- NA
+          lv <- sort(unique(g[!is.na(g)]))
+          discrete(g, lv, setNames(rep_len(c("#E69F00", "#56B4E9", "#009E73", "#CC79A7", "#F0E442", "#0072B2",
+                                             "#D55E00"), length(lv)), lv), label)
+        },
         gender = {
           g <- as.character(comp$gender)
           g <- ifelse(g %in% c("F", "Female"), "Female", ifelse(g %in% c("M", "Male"), "Male", NA))
@@ -637,7 +652,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         # ND and Aab+ donors have no diabetes, hence no duration (grey).
         t1d_duration_years = continuous(comp$t1d_duration_years, label, "T1D duration<br>(years)",
                                         missing_text = ifelse(status == "T1D", "not recorded", "no T1D")),
-        continuous(comp[[key]], label, label)
+        continuous(comp[[key]], label, sub(" (", "<br>(", label, fixed = TRUE))
       )
     }
 

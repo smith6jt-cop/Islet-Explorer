@@ -23,7 +23,17 @@ PLOT_CLINICAL_CHOICES <- c(
   "HbA1c (%)"                        = "HbA1c_percent",
   "C-peptide (ng/mL)"                = "C_peptide_ng_mL",
   "T1D duration (years)"             = "t1d_duration_years",
-  "Autoantibodies (number positive)" = "n_aab"
+  "Autoantibodies (number positive)" = "n_aab",
+  # From the nPOD export (owner, 2026-10-22; v10 donor_metadata.csv).
+  "Height (cm)"                      = "height_cm",
+  "Weight (kg)"                      = "weight_kg",
+  "BMI percentile"                   = "BMI_percentile",
+  "Admission glucose (mg/dL)"        = "admission_glucose_mg_dL",
+  "Peak glucose (mg/dL)"             = "peak_glucose_mg_dL",
+  "ICU stay (days)"                  = "ICU_days",
+  "Organ transit time (min)"         = "transit_time_min",
+  "Pancreas weight (g)"              = "pancreas_weight_g",
+  "RNA integrity (RIN)"              = "RIN"
 )
 
 PLOT_STATUS_LEVELS <- c("ND", "Aab+", "T1D")
@@ -504,8 +514,9 @@ plot_types_help <- function() {
                   " phenotype's core or peri-islet proportion), with donor medians as diamonds and Spearman's",
                   " \u03c1 over objects and over donor medians."),
     shiny::tags$p(shiny::tags$strong("Against a donor clinical value."),
-                  " Each donor's median (diamond, bars its quartiles) at its age, BMI, HbA1c, C-peptide, T1D duration",
-                  " or autoantibody count, its objects behind it, and Spearman's \u03c1 over the donors. Donors",
+                  " Each donor's median (diamond, bars its quartiles) at a donor value from nPOD (age, BMI, HbA1c,",
+                  " C-peptide, T1D duration, autoantibody count, height, weight, BMI percentile, admission and peak",
+                  " glucose, ICU stay, organ transit time, pancreas weight, RNA integrity), its objects behind it, and Spearman's \u03c1 over the donors. Donors",
                   " without a value are left out: T1D duration applies only to T1D donors (nPOD records five of the six",
                   " as diagnosed during their terminal admission, duration 0, and one at 7 months), and the two donors",
                   " whose HbA1c nPOD records as 0 were not measured."),

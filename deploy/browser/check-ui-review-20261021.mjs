@@ -226,8 +226,11 @@ await check('spatial_umap_colour_choices', () => page.evaluate(() => {
     left: el.selectize.getValue(), right: document.getElementById('spatial-umap_color_right').selectize.getValue()};
 }));
 
+// The nPOD donor fields of v10 (2026-10-22) are among them.
 const colourings = ['donor_status', 'donor', 'age', 'age_group', 'gender', 'BMI', 'HbA1c_percent', 'C_peptide_ng_mL',
-  't1d_duration_years', 'n_aab', 'immune_frac_core', 'islet_diam_um', 'total_cells_core', 'leiden'];
+  't1d_duration_years', 'n_aab', 'race_ethnicity', 'cause_of_death', 'recovery_type', 'ABO_group', 'ICU_days',
+  'transit_time_min', 'pancreas_weight_g', 'RIN', 'peak_glucose_mg_dL', 'immune_frac_core', 'islet_diam_um',
+  'total_cells_core', 'leiden'];
 const drawn = {};
 for (const value of colourings) {
   const before = await page.$eval('#spatial-leiden_umap', gd => gd.layout?.title?.text);

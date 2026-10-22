@@ -299,10 +299,11 @@ prep_data <- function(master) {
   # which is deliberately NOT in git (741 donors of free-text clinical narrative;
   # `*.xlsx` is gitignored). Only the derived 15-row CSV is committed.
   #
-  # `age` from the H5AD stays the canonical modelling variable — this join adds
-  # `age_years_npod` alongside it rather than overwriting, because donor 112's
-  # nPOD age (3.72) disagrees with the H5AD (3.00) while the other 14 match
-  # exactly. Overwriting would silently shift existing results.
+  # `age` comes from the H5AD and this join adds `age_years_npod` alongside it. On the frozen 15-donor data
+  # donor 112's H5AD age (3.00) disagrees with nPOD (3.72); from the uniform v10 root (owner, 2026-10-22) the
+  # H5AD age is nPOD's, so the two agree. Every other column of the file joins as is (v10 adds height, weight,
+  # BMI percentile, glucose, ICU stay, transit time, pancreas weight, RIN, race/ethnicity, recovery type,
+  # cause of death, ABO group).
   #
   # Absent file is a normal state (Excel fallback path, fresh checkout before the
   # script is run) — skip quietly, every consumer already guards on the columns.

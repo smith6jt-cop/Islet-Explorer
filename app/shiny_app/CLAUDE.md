@@ -444,8 +444,11 @@ vscode's current theme"); a "Light theme" button at the top right switches back,
   Leiden; `umap_color_right`, default band immune proportion), from `SPATIAL_UMAP_COLOR_CHOICES`
   (`mod_spatial_server.R`): Leiden cluster; disease state (donor status, number of autoantibodies); the donor and their
   age, age group, sex, BMI, HbA1c, C-peptide and T1D duration; the object's core or band immune proportion, diameter,
-  core cell count (log10). `spatial_umap_colour_choices()` drops columns a root lacks. Unrecorded values are grey:
-  T1D duration is NA outside T1D, and HbA1c 0 (donors 6090 and 6232 on v9) is treated as not recorded. The output
+  core cell count (log10). From v10 (2026-10-22) also the nPOD donor fields (race/ethnicity, height, weight, BMI
+  percentile, admission and peak glucose, cause of death, recovery type, ICU stay, organ transit time, pancreas weight,
+  RIN, ABO group), which the Plot tab's "Against a donor clinical value" offers too when numeric.
+  `spatial_umap_colour_choices()` drops columns a root lacks. Values without a value are grey: T1D duration is NA
+  outside T1D (hover "no T1D"), and HbA1c is missing for 6090 and 6232 (nPOD records 0.0). The output
   ids stay `leiden_umap` / `spatial_umap_immune` (the browser checks name them).
 - **Per-donor tissue CSVs**: `data/donors/{imageid}.csv` with 5 columns (X_centroid, Y_centroid, phenotype, cell_region, islet_name). `cell_region` = core/peri/tissue.
 - **Leiden in H5AD**: 4 resolution columns (`leiden_0.3/0.5/0.8/1.0`) + 2 UMAP coords (`leiden_umap_1/2`). Extracted via `^leiden_` regex in `data_loading.R`.
