@@ -32,21 +32,38 @@ development-only service files are `deploy/islet-explorer-local.service`,
 production path described below. See
 [the protein expansion record](../docs/protein_expansion_20261003.md) for
 lineage and rollback to the frozen 15-donor root. The frozen 15-image release at
-`5809be4` and its dated image, scan, and parity evidence remain the reference
-production release. See [the September 28 handoff](../docs/HANDOFF_2026-09-28.md)
-and [the readiness record](../docs/ufrc_readiness.md).
+`5809be4` and its dated image, scan, and parity evidence were the reference
+production release until 2026-10-22; the production candidate is now the
+schema-5 release of the uniform root described in the next paragraph. See
+[the September 28 handoff](../docs/HANDOFF_2026-09-28.md) and
+[the readiness record](../docs/ufrc_readiness.md).
 
 On 2026-10-03 the owner approved six donor boundary sets (HPAP-078, 6090,
 6232, 6520, recovered 6539 and 6558) and the reconstruction phenotype rules,
 and selected Harmony on protein PCA with the uncorrected fit retained. On
 2026-10-15 the owner removed donor 78 (HDL078 / HPAP-078) from the app and all
 analysis (`scripts/excluded_donors.csv`); the app refuses any data root that
-still contains it. The 20-donor root passed its release validator; its browser
-check results are in [the protein expansion record](../docs/protein_expansion_20261003.md). It is not yet a production release: `scripts/build_release_data.R`
-and the runtime Parquet backend do not yet carry the protein embedding metadata
-or the expansion phenotype rules, and its images are symlinks to source paths
-outside the root. The earlier schema-2/3/4 all-donor runtimes and their
-capacity figures are historical experimental evidence; see
+still contains it. The 20 donors were then reprocessed through one workflow
+(`scripts/uniform/`), reviewed by the owner against the frozen app, and made
+the live local app on 2026-10-22 (root
+`data/development/uniform-20donor-20261022-v10/`).
+
+A uniform root is released under **data schema 5** (2026-10-22;
+`scripts/build_release_data.R --schema 5`, `ISLET_DATA_SCHEMA=5`): the schema-1
+Parquet summaries and spatial tables, plus the root's own files
+(`uniform_release.json`, `endocrine_objects_by_donor.csv`,
+`protein_phenotype_rules.csv`; `phenotype_rules.csv` only when the root has
+one) and the H5AD's embedding records as `summary/embedding_metadata.json`,
+which the production loader attaches to `prepared()`. The builder refuses to
+package a uniform root as schema 1, because the app would then run with the
+frozen 15-donor behaviour without saying so, and it copies the XML and offsets
+sidecars beside each linked TIFF, so the release's `images/` is complete even
+though the root links its images from other roots. The candidate built from
+commit `d55680a` is staged under `tmp/ufrc-release-20261022/` (its data
+bundle at `artifacts/release-d55680a/data/`); its verification, parity and
+image evidence are recorded in [the readiness record](../docs/ufrc_readiness.md).
+Schema ids 2-4 belonged to the earlier all-donor experiments, whose runtimes and
+capacity figures are historical evidence only; see
 [the phase-2 contract](../docs/donor_expansion_phase2.md).
 
 ## Fixed production contract
@@ -77,7 +94,10 @@ capacity figures are historical experimental evidence; see
   ephemeral state use bounded tmpfs mounts.
 - Resource guardrails are 2 CPUs, 14 GiB container memory, one numerical-library
   thread per R worker, and 2,048 PIDs, leaving host headroom on the base PubApps
-  allocation.
+  allocation. The CPU quota is rendered only where the user session has the
+  `cpu` cgroup controller delegated; `pubmaigan1` delegates `memory` and `pids`
+  only (2026-10-22), so there the 2-vCPU host size bounds CPU and activation says
+  so.
 
 The legacy `islet-explorer.def` is retained only as historical documentation and
 must not be used for reviewer hosting.
@@ -222,19 +242,29 @@ supports that alternative.
 
 On the data-build host, generate the one authoritative runtime bundle. Its
 `images/` subtree is part of that bundle and its `manifest.json` binds the data
-schema and source commit. The output directory must not already exist.
+schema, the source commit and the OME-TIFF count. The output directory must not
+already exist. A uniform 20-donor root takes `--schema 5`; the frozen 15-donor
+root under `data/` took `--schema 1`. The builder checks the root against the
+schema and refuses the wrong one. Set `RETICULATE_PYTHON` to the app's
+interpreter first (the H5AD is read through it).
 
 ```bash
 Rscript scripts/build_release_data.R \
-  --source-root data \
-  --image-root app/shiny_app/www/local_images \
+  --source-root data/development/uniform-20donor-20261022-v10 \
+  --image-root data/development/uniform-20donor-20261022-v10/images \
   --output /staging/islet-explorer-data-pubapps-2026-01 \
   --materialize copy \
-  --schema 1
+  --schema 5
 
 Rscript scripts/verify_release_data.R \
   --root /staging/islet-explorer-data-pubapps-2026-01 \
-  --mode full
+  --mode full --schema 5
+
+Rscript scripts/verify_release_parity.R \
+  --source-root data/development/uniform-20donor-20261022-v10 \
+  --image-root data/development/uniform-20donor-20261022-v10/images \
+  --release-root /staging/islet-explorer-data-pubapps-2026-01 \
+  --output-prefix /staging/islet-explorer-evidence/pubapps-2026-01/release-parity
 ```
 
 Use `--materialize copy` for the reviewer bundle so subsequent edits to canonical
@@ -242,12 +272,22 @@ inputs cannot change the release through shared inodes. Hardlinks are only a
 space-saving option for disposable local tests.
 The builder and image must come from the same clean Git commit; activation
 compares the OCI revision label, generated data manifest, and release metadata
-and refuses a mismatch.
+and refuses a mismatch. The parity check also requires that commit to be the
+checked-out, clean one, so run the builder and the checks from a clean checkout
+or linked worktree of the release commit.
 
-On the PubApps VM, use the assigned project path:
+The VM was provisioned on 2026-10-22: `pubmaigan1.ufhpc`, service account
+`maigan` (home `/pubapps/maigan` on the 1 TiB Qumulo share; RHEL 9.8; rootless
+Podman 5.8.2 with its image store on the 40 GB local disk at
+`/local/maigan/podman/storage`; cgroups v2; linger enabled; 2 vCPU, 15 GiB).
+It is reached from an HPG login node as `ssh pubmaigan1` (HPG's `maigan@hpg` key
+is authorized there), so the workstation stages through its HPG session with
+`rsync -e 'ssh hpg ssh' ... pubmaigan1:...`, at about 100 MB/s. The project path
+is `/pubapps/maigan/islet-explorer/`; the `deploy/` tooling of the release
+commit is copied to `tooling/deploy/` beside it.
 
 ```text
-/pubapps/<project>/islet-explorer/
+/pubapps/maigan/islet-explorer/
   releases/
     pubapps-2026-01/
       data/                  # output of the release-data builder
@@ -262,25 +302,26 @@ On the PubApps VM, use the assigned project path:
     deployments/             # successful active/previous state
 ```
 
-Stage from HiPerGator with resumable `rsync`; PubApps is not mounted on HPG and
-its VM SSH route is available from HPG. Transfer only the runtime whitelist, not
+Stage with resumable `rsync` through HPG; PubApps is not mounted on HPG and the
+VM's SSH route is available from HPG. Transfer only the runtime whitelist, not
 the repository, `.git` history, backups, caches, or upstream/raw trees.
 
 ```bash
-PROJECT_ROOT='/pubapps/<project>/islet-explorer'
-RELEASE='pubapps-2026-01'
+PROJECT_ROOT='/pubapps/maigan/islet-explorer'
+RELEASE='pubapps-2026-10-uniform-v10'
 RELEASE_DIR="${PROJECT_ROOT}/releases/${RELEASE}"
+HOP="ssh hpg ssh"   # the workstation's HPG control session, then the VM
 
-mkdir -p "${RELEASE_DIR}/data" "${RELEASE_DIR}/attestations" \
+ssh hpg ssh pubmaigan1 mkdir -p "${RELEASE_DIR}/data" "${RELEASE_DIR}/attestations" \
   "${PROJECT_ROOT}/incoming"
 
-# Run these from HPG, substituting the assigned VM and staged source paths.
-rsync -a --partial --info=progress2 <generated-release-data>/ \
-  <service-user>@<vm>:"${RELEASE_DIR}/data/"
-rsync -a /staging/islet-explorer-evidence/"${RELEASE}"/ \
-  <service-user>@<vm>:"${RELEASE_DIR}/attestations/"
-rsync -a /staging/islet-explorer-"${RELEASE}".oci.tar{,.metadata,.sha256} \
-  <service-user>@<vm>:/pubapps/<project>/islet-explorer/incoming/
+# From the workstation, substituting the staged source paths.
+rsync -a --partial --info=progress2 -e "${HOP}" <generated-release-data>/ \
+  pubmaigan1:"${RELEASE_DIR}/data/"
+rsync -a -e "${HOP}" /staging/islet-explorer-evidence/"${RELEASE}"/ \
+  pubmaigan1:"${RELEASE_DIR}/attestations/"
+rsync -a -e "${HOP}" /staging/islet-explorer-"${RELEASE}".oci.tar{,.metadata,.sha256} \
+  pubmaigan1:"${PROJECT_ROOT}/incoming/"
 ```
 
 Copy this `deploy/` tooling directory to the VM separately. On the VM, generate
@@ -296,29 +337,32 @@ deploy/load-image.sh \
 
 IMAGE_REF='sha256:<image-id-printed-by-load-image>'
 GIT_COMMIT='<40-character-release-commit>'
-EXPECTED_IMAGES=15
-DATA_SCHEMA=1
+EXPECTED_IMAGES=20
+DATA_SCHEMA=5
 
 deploy/generate-release-manifest.sh \
   "${RELEASE_DIR}" "${RELEASE}" "${IMAGE_REF}" "${GIT_COMMIT}" "${DATA_SCHEMA}" "${EXPECTED_IMAGES}"
 deploy/verify-release.sh "${RELEASE_DIR}"
 ```
 
-This example is for an exact, accepted 15-image release built from a clean
-revision and matched to its immutable image. Do not substitute the local
-21-image development route or raw-only additions bundle for the approved
-image source. Stage only declared runtime artifacts; do not deploy raw working
-directories, preview logs, or rejected images.
+This example is for an exact, accepted 20-image schema-5 release of the
+uniform root, built from a clean revision and matched to its immutable image
+(the frozen 15-image schema-1 release took `15` and `1`). Do not substitute a
+development route or a rejected bundle for the approved image source. Stage
+only declared runtime artifacts; do not deploy raw working directories,
+preview logs, or rejected images.
 
 Generation hashes the builder's `data/` output once, including its `images/`
 subtree, and rejects symlinks that escape the release plus filenames associated
 with credentials or mutable backups. Supply the independently reviewed OME-TIFF
 count as the sixth argument; generation rejects a different staged count and
 writes `MANIFEST_VERSION=2` and `EXPECTED_IMAGES` into the hashed `release.env`.
-The preserved 15-donor runtime uses data schema `1`. Later schema-2/3/4
-experiments do not establish an accepted production contract for the six
-additions. The explicit 15-image declaration here binds the selected cohort;
-omitting the count retains the generator's original default of 15.
+The preserved 15-donor runtime uses data schema `1`; the uniform 20-donor root
+uses schema `5`, and `verify-release.sh` checks that a schema-5 data manifest
+declares the same image count and every uniform-root artifact. Schema ids 2-4
+were the retired all-donor experiments and never an accepted contract. The
+explicit image declaration here binds the selected cohort; omitting the count
+retains the generator's original default of 15.
 
 Verification reads that declaration automatically, checks every manifest hash,
 and writes `.verified` tied to the manifest hash. Activation, the manual launcher,

@@ -28,7 +28,7 @@ Tmpfs=/var/lib/shiny-server:rw,size=64m,mode=0755,uid=@@CONTAINER_UID@@,gid=@@CO
 ReadOnly=true
 NoNewPrivileges=true
 DropCapability=all
-PodmanArgs=--cpus=2 --memory=14g --pids-limit=2048
+PodmanArgs=@@CPU_LIMIT@@--memory=14g --pids-limit=2048
 
 Environment=ISLET_RELEASE=@@RELEASE@@
 Environment=ISLET_RUNTIME_MODE=production

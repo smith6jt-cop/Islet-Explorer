@@ -144,6 +144,18 @@ podman run --rm \
   "${image_ref}" /srv/islet-explorer/scripts/verify_release_data.R \
   --root /srv/islet-explorer/data --mode core
 
+# A rootless CPU quota needs the cpu controller delegated to the user session
+# (cgroups v2). PubApps VMs delegate memory and pids only (2026-10-22,
+# pubmaigan1), and their 2-vCPU size bounds CPU by itself; a quota the kernel
+# cannot apply would keep the container from starting at all.
+cpu_limit=""
+controllers_file="/sys/fs/cgroup/user.slice/user-$(id -u).slice/user@$(id -u).service/cgroup.controllers"
+if [[ -r "${controllers_file}" ]] && grep -qw cpu "${controllers_file}"; then
+  cpu_limit="--cpus=2 "
+else
+  echo "NOTE: the cpu controller is not delegated to this user session; the container keeps the host's vCPU bound."
+fi
+
 escape_sed() { printf '%s' "$1" | sed 's/[&|\\]/\\&/g'; }
 rendered="$(mktemp)"
 unit_dir="${XDG_CONFIG_HOME:-${HOME}/.config}/containers/systemd"
@@ -155,6 +167,7 @@ sed \
   -e "s|@@RELEASE@@|$(escape_sed "${release}")|g" \
   -e "s|@@IMAGE_REF@@|$(escape_sed "${image_ref}")|g" \
   -e "s|@@DATA_SCHEMA@@|$(escape_sed "${data_schema}")|g" \
+  -e "s|@@CPU_LIMIT@@|$(escape_sed "${cpu_limit}")|g" \
   -e "s|@@DATA_DIR@@|$(escape_sed "${data_dir}")|g" \
   -e "s|@@IMAGE_DIR@@|$(escape_sed "${image_dir}")|g" \
   -e "s|@@LOG_DIR@@|$(escape_sed "${log_dir}")|g" \

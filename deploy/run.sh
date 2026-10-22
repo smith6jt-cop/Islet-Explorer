@@ -53,6 +53,16 @@ tmp_dir="${project_root}/runtime/tmp-smoke"
 mkdir -p -- "${log_dir}" "${tmp_dir}"
 chmod 0750 "${log_dir}" "${tmp_dir}"
 
+# As in activate-release.sh: the CPU quota only where the user session has the
+# cpu controller delegated (PubApps VMs delegate memory and pids only).
+cpu_limit=()
+controllers_file="/sys/fs/cgroup/user.slice/user-$(id -u).slice/user@$(id -u).service/cgroup.controllers"
+if [[ -r "${controllers_file}" ]] && grep -qw cpu "${controllers_file}"; then
+  cpu_limit=(--cpus=2)
+else
+  echo "NOTE: the cpu controller is not delegated to this user session; the container keeps the host's vCPU bound."
+fi
+
 # OCI images do not retain the Containerfile HEALTHCHECK. Set it here, as the
 # production Quadlet does, so verification can observe a healthy container.
 container_id="$(podman run --detach --rm \
@@ -64,7 +74,7 @@ container_id="$(podman run --detach --rm \
   --read-only \
   --cap-drop=ALL \
   --security-opt=no-new-privileges \
-  --cpus=2 --memory=14g --pids-limit=2048 \
+  "${cpu_limit[@]}" --memory=14g --pids-limit=2048 \
   --health-cmd='curl --fail --silent --show-error --max-time 8 http://127.0.0.1:3838/islet-explorer/' \
   --health-interval=30s --health-timeout=10s \
   --health-start-period=180s --health-retries=5 \
