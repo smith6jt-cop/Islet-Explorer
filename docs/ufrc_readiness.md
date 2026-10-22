@@ -1,6 +1,6 @@
 # Islet Explorer UFRC readiness and evidence index
 
-Updated 2026-10-16 for UFRC comment 13 and the owner-directed processing reset. This is the review index for the supplied
+Updated 2026-10-22 for the uniform 20-donor release candidate (data schema 5); the 2026-10-16 update covered UFRC comment 13 and the owner-directed processing reset. This is the review index for the supplied
 [`UFIT_PubApps_Instance_Request.docx`](../UFIT_PubApps_Instance_Request.docx),
 including its hosting policy, project plan, and development standards. It records
 implementation separately from acceptance. It is not a signed attestation or
@@ -31,27 +31,56 @@ or production external API. The proposed URL is
 `https://islet-explorer.rc.ufl.edu/islet-explorer/`. The backend address and port
 must come from UFRC; `127.0.0.1:3838` is a request, not an established proxy route.
 
-### Current local app and reprocessing status
+### Current local app and release candidate (2026-10-22)
 
 The only intended local development URL is
-`http://10.15.152.7:8080/islet-explorer/`, proxied to loopback port 3840.
-It has been offline at the owner's direction since 2026-10-15 and must remain
-offline until the uniform reprocessing output is accepted. Its last development
-root was `data/development/protein-expanded-20261015-v3/` (20 donors, 7,028
-islets); that root is not the selected launch candidate. Donor 78 (HDL078 /
-HPAP-078) was permanently removed from the app and all analysis by owner
-directive. The target is the other 20 donors, to be reprocessed through one
-reproducible workflow; that work has not started and decisions D1–D5 remain
-open. See the [owner directive](owner_directive_20261015.md) and
+`http://10.15.152.7:8080/islet-explorer/`, proxied to loopback port 3840. It
+was offline at the owner's direction from 2026-10-15, served a frozen copy of
+the app (tag `frozen-app-20261020`) from 2026-10-20 for the owner's review of
+the reprocessed data, and since 2026-10-22 serves the main tree on the uniform
+root `data/development/uniform-20donor-20261022-v10/` (20 donors, 4,763
+endocrine objects: 1,487 Islets and 3,276 Clusters, with 5,207 Singles counted
+but not analysed). Donor 78 (HDL078 / HPAP-078) stays permanently removed from
+the app and all analysis by owner directive. All 20 donors were typed and
+measured by one workflow (`scripts/uniform/`, [record](../scripts/uniform/README.md)),
+and every donor field comes from the nPOD export. See the
+[owner directive](owner_directive_20261015.md) and the
 [uniform reprocessing plan](uniform_reprocessing_plan_20261015.md).
 
-The frozen `5809be4` 15-image production artifact and its evidence remain a
-historical reference; they are not the selected launch candidate. Earlier
-October protein-expansion and September all-donor checks document historical
-roots only and do not establish acceptance of the new 20-donor workflow. Neither
-this checkout nor its static image route is a PubApps release. The current
-ticket, form, and IRM status are tracked in the
+The launch candidate is the **data-schema-5 release of that root built from
+commit `d55680a`**, staged on the workstation under
+`tmp/ufrc-release-20261022/` (data bundle `artifacts/release-d55680a/data/`,
+built from a clean linked worktree of the commit). Schema 5 packages the
+schema-1 summaries and spatial tables together with the uniform root's own
+files and the H5AD's embedding records; `deploy/README.md` § 2 has the
+commands. Its evidence is recorded in
+[the candidate record below](#schema-5-release-candidate-d55680a-2026-10-22) as
+each step completes. The container image is built on the workstation with
+Podman, Syft 1.51.1 and Grype 0.118.0 (the pinned CI versions), so no
+repository push is required for the image.
+
+The frozen `5809be4` 15-image production artifact and its evidence are a
+historical reference, superseded by this candidate. Earlier October
+protein-expansion and September all-donor checks document historical roots
+only. Neither this checkout nor its static image route is a PubApps release.
+The current ticket, form, and IRM status are tracked in the
 [launch-preparation note](ufrc_launch_preparation_20261015.md).
+
+### Schema-5 release candidate d55680a (2026-10-22)
+
+| Step | Result |
+|---|---|
+| Source commit | `d55680ae2a478ff66420c8ec57321e61501a0833` (branch `spatial-review-20261020`; the schema-5 tooling, commits `2f30ab0`, `961fdee`, `d74d2ef`, `6ffb6f2` and `d55680a`), built from the clean linked worktree `/data/panc_CODEX/Islet-Explorer-release-20261022` |
+| Source root | `data/development/uniform-20donor-20261022-v10/` (v10 = v9 with donor 112's nPOD age and the 29-column nPOD donor table) |
+| Data bundle | built 2026-10-22 17:20 UTC by `build_release_data.R --schema 5 --materialize copy` from the clean worktree at `d55680a` (66 min, under concurrent load): 19 artifacts; summaries 4,906 objects / 44,154 target rows / 58,872 marker rows / 12 combined pairs; 3,074,596 cell-distance rows; 300,045 signed-distance rows; 20 donor tissue tables; 20 GeoPackages with 674,717 features; 4,763 cell files; 80 image files (20 OME-TIFFs with XML and offsets sidecars, 155,515,691,675 bytes); `summary/embedding_metadata.json`. Log `tmp/ufrc-release-20261022/build-data-d55680a.log`. Three earlier bundles (`961fdee`, `d74d2ef`, `6ffb6f2`) were superseded by tooling fixes found by the checks below and removed |
+| Full-hash verification (`verify_release_data.R --mode full --schema 5`) | passed 2026-10-22 17:31 UTC: every artifact hash and Parquet row count |
+| Scientific parity (`verify_release_parity.R`) | passed 2026-10-22 17:58 UTC, 23 of 23 checks: canonical H5AD preparation, manifest and full hashes, source identity (clean `d55680a`), canonical source hashes, the five summary tables, passthrough files and trees, embedding metadata, signed-distance table, 20 donor tissue tables, 8 spatial histogram and composition families over both distance columns, and 60 geometry windows. Report `tmp/ufrc-release-20261022/evidence/release-parity-d55680a.{json,md}` |
+| Inventory (`inventory_release_data.py`, scvi-env Python) | completed 2026-10-22 17:58 UTC, bound to the parity report: 19 release artifacts, 20 OME-TIFFs / 690 pages, names and counts only. `tmp/ufrc-release-20261022/evidence/release-inventory-d55680a.{json,md}` |
+| Container image, SBOM and High/Critical gate | passed 2026-10-22 16:39 UTC on the workstation (rootless Podman 4.9.3, Syft 1.51.1, Grype 0.118.0): image `sha256:ae95fd238c72e0ec239942be0050ad72eb441bf34149218973edd41f5c7e9af9` from `d55680a` on base `rocker/shiny@sha256:dd10b638…`; upstream Shiny Server tests 315 + 8 passed; Python and R probes passed; Grype 0 High / 0 Critical (4,255 Medium, 189 Low, 196 Negligible); OCI archive `islet-explorer-pubapps-2026-10-uniform-v10-d55680a.oci.tar` (2.2 GB) with metadata and checksum. The first build (`6ffb6f2`) had failed the gate on handlebars, proxy-addr, compression, follow-redirects, pillow and certifi, all pinned since (see `deploy/BASE_HARDENING.md`). Evidence: `tmp/ufrc-release-20261022/evidence/image-scan-d55680a/` |
+| Release manifest (`generate-release-manifest.sh ... 5 20`) and `verify-release.sh` | passed 2026-10-22 18:01 UTC: release `pubapps-2026-10-uniform-v10` bound to image `ae95fd23…` and commit `d55680a` (`MANIFEST_VERSION=2`, `DATA_SCHEMA=5`, `EXPECTED_IMAGES=20`, 4,819 data files / 917,879,043 bytes, 80 image files / 155,515,691,675 bytes); nine attestation files (SBOM, raw SBOM, corrections, Grype report and database status, R and Python manifests, scan attestation, published image); `MANIFEST.sha256` 4,909 entries, manifest hash `96423b92cbaba71a7d44f2bfc10f8310c76817f671c4a27e62798c2b9bb4a9fc`; full verification stamp written on the workstation. `tmp/ufrc-release-20261022/release-status.json` summarizes the candidate |
+| Staging on the VM | image archive transferred and loaded on `pubmaigan1` 2026-10-22 16:42 UTC (`load-image.sh` verified the archive checksum, image ID, revision label and base); the 80 image files pre-staged to `releases/pubapps-2026-10-uniform-v10/data/images/` (155.5 GB, through the HPG session at 40-107 MB/s); the rest of the bundle, `release.env`, `MANIFEST.sha256` and the attestations follow the binding, then `verify-release.sh` and `activate-release.sh` run on the VM |
+| UFRC VM | provisioned 2026-10-22: `pubmaigan1.ufhpc`, service account `maigan` (home `/pubapps/maigan`, 1 TiB Qumulo share), RHEL 9.8, rootless Podman 5.8.2 (store on the 40 GB `/local`), cgroups v2, linger on, 2 vCPU / 15 GiB; reached from HPG login nodes as `ssh pubmaigan1`; project path `/pubapps/maigan/islet-explorer/` created, release tooling copied, 500 MB test transfer at about 100 MB/s |
+| UFRC proxy and Basic Auth acceptance | pending UFRC's proxy configuration to the VM loopback `127.0.0.1:3838` (ticket `83810`) |
 
 ### Historical regenerated 21-image candidate
 

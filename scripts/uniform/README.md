@@ -368,6 +368,19 @@ The app reads `object_class` through an app-wide "Endocrine objects" selector (I
 Trajectory tab does not use it: it fits every object with ten or more core cells (`total_cells_core` in
 `barlow_islet_features.csv`), whatever its class.
 
+### Production release (data schema 5), 2026-10-22
+
+A uniform root is packaged for PubApps by `scripts/build_release_data.R --schema 5` (`deploy/README.md` § 2):
+the five prepared tables as Parquet, the spatial tables as Parquet, the geometry as GeoPackage, `cells/`, the
+images with their XML and offsets sidecars resolved beside each linked TIFF, the passthrough files
+(`adata_ins_root.h5ad`, `barlow_islet_features.csv`, `islet_spatial_lookup.csv`, `donor_metadata.csv`,
+`uniform_release.json`, `endocrine_objects_by_donor.csv`, `protein_phenotype_rules.csv`) and the H5AD's
+`composition_embedding` / `protein_embedding` records as `summary/embedding_metadata.json`. `census.csv`,
+`cell_types/`, `image_sources.json` and `neighborhood_metrics.csv` are provenance of the root and are not
+served. The builder refuses `--schema 1` for a uniform root; the runtime (`ISLET_DATA_SCHEMA=5`) refuses a
+release that lacks any of the uniform files. The first candidate is built from v10 at commit `d55680a`
+(`tmp/ufrc-release-20261022/`; evidence in `docs/ufrc_readiness.md`).
+
 ## Canary, 2026-10-15
 
 Aab_6505 and ND_6232 went through every step. Cells matched to the earlier typing show what the first fit did with
