@@ -1,13 +1,13 @@
 // Focused check of the 2026-10-21 UI review: tab order, palette labels, grouped control panels, the frozen header /
 // tab bar / control panels, the Spatial UMAP colourings and the linked Spatial UMAPs. Use an isolated local worker:
-//   node deploy/browser/check-ui-review-20261021.mjs --url http://127.0.0.1:3841/islet-explorer-test/ \
+//   node deploy/browser/check-ui-review-20261021.mjs --url http://127.0.0.1:3840/islet-explorer/ \
 //     --output /tmp/ui-review-check.json [--shots <dir>]
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import puppeteer from 'puppeteer-core';
 
 const arg = name => process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] : null;
-const url = arg('--url') || 'http://127.0.0.1:3841/islet-explorer-test/';
+const url = arg('--url') || 'http://127.0.0.1:3840/islet-explorer/';
 const output = arg('--output') || '/tmp/ui-review-check.json';
 const shots = arg('--shots');
 const report = {checks: {}, errors: []};

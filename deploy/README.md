@@ -21,13 +21,12 @@ logging requirements and additional hardening guidance are in
 [`docs/pubapps_log_inventory.md`](../docs/pubapps_log_inventory.md).
 
 The local development app at `http://10.15.152.7:8080/islet-explorer/`
-(loopback port 3840) is offline at the owner's direction since 2026-10-15,
-until all donors are reprocessed through one reproducible workflow. Its service
-is stopped and disabled, and the nginx static image route is closed (see
-[the directive record](../docs/owner_directive_20261015.md#follow-up-decisions--2026-10-15)).
-Its last root was the 20-donor protein expansion rebuilt without donor 78
-(7,028 islets, `data/development/protein-expanded-20261015-v3/`), selected by
-`ISLET_DATA_ROOT` in the untracked `tmp/local-app.env`. Its
+(loopback port 3840) serves the main working tree on the reprocessed uniform root
+`data/development/uniform-20donor-20261022-v10/` since 2026-10-22 (owner: "make the
+test app the live app"), selected by `ISLET_DATA_ROOT` in the untracked
+`tmp/local-app.env`. It was offline from 2026-10-15 until the uniform reprocessing
+(see [the directive record](../docs/owner_directive_20261015.md#follow-up-decisions--2026-10-15)),
+and served a frozen copy (tag `frozen-app-20261020`) from 2026-10-20 to 2026-10-22. Its
 development-only service files are `deploy/islet-explorer-local.service`,
 `deploy/shiny-server-local.conf` and `deploy/run-local-r.sh`; they are not the
 production path described below. See
