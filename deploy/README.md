@@ -60,8 +60,10 @@ frozen 15-donor behaviour without saying so, and it copies the XML and offsets
 sidecars beside each linked TIFF, so the release's `images/` is complete even
 though the root links its images from other roots. The candidate built from
 commit `d55680a` is staged under `tmp/ufrc-release-20261022/` (its data
-bundle at `artifacts/release-d55680a/data/`); its verification, parity and
-image evidence are recorded in [the readiness record](../docs/ufrc_readiness.md).
+bundle at `artifacts/release-d55680a/data/`) and has been the active release
+`pubapps-2026-10-uniform-v10` on `pubmaigan1` since 2026-10-22; its
+verification, parity, image and deployment evidence are recorded in
+[the readiness record](../docs/ufrc_readiness.md).
 Schema ids 2-4 belonged to the earlier all-donor experiments, whose runtimes and
 capacity figures are historical evidence only; see
 [the phase-2 contract](../docs/donor_expansion_phase2.md).
