@@ -17,6 +17,17 @@ evidence_dir=${2:?Usage: harden-base.sh OUTPUT_DIR EVIDENCE_DIR}
 source_revision=ae268b685b234b3a97a33bf6caa28e6d395cb232
 source_sha256=4a1d74aa4e2c266f4aaa04198132a017cb8b1e07ef766d163f7dec5d9dc17a62
 source_url=https://api.github.com/repos/rstudio/shiny-server/tarball/$source_revision
+# Upstream's dependency files at that revision, and the project's copies with
+# four security pins (2026-10-22): handlebars 4.7.10 and compression 1.8.2 as
+# exact direct dependencies, proxy-addr 2.0.8 and follow-redirects 1.16.1 as
+# overrides. The pinned lock was regenerated from upstream's with the same npm
+# (`npm install --package-lock-only`) and differs from it only in those four
+# packages and compression's new dependency `destroy`; see BASE_HARDENING.md.
+upstream_package_sha256=191d5ee18b8b1263a3fff0109634e55f2bec78e13f3db004b751c8c0342bb714
+upstream_shrinkwrap_sha256=914bc927be865cb448c2eceff03fad641b93bea962c2bbacc485a14309a6b4fd
+pinned_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/shiny-server
+pinned_package_sha256=2a1615c5753d34353fc156d5ebecc639e79d0c0c169a7f98604b797c9f2ccec0
+pinned_shrinkwrap_sha256=100c670198b0afd136d228e5c16eb2593919c2a0968cd67c02760d3dedf8b0a3
 node_version=v24.20.0
 node_sha256=2f2c0da162318f0de47665410c7c8c2ed3d36c8f3105de4bbc61176c70a7cbf2
 node_url=https://nodejs.org/dist/$node_version/node-$node_version-linux-x64.tar.xz
@@ -46,6 +57,13 @@ export npm_config_update_notifier=false
 export GIT_CONFIG_COUNT=1
 export GIT_CONFIG_KEY_0=url.https://github.com/.insteadOf
 export GIT_CONFIG_VALUE_0=ssh://git@github.com/
+# Replace upstream's dependency files with the pinned copies, checking both.
+printf '%s  %s\n' "$upstream_package_sha256" package.json \
+  "$upstream_shrinkwrap_sha256" npm-shrinkwrap.json \
+  "$pinned_package_sha256" "$pinned_dir/package.json" \
+  "$pinned_shrinkwrap_sha256" "$pinned_dir/npm-shrinkwrap.json" | sha256sum --check --strict
+cp "$pinned_dir/package.json" package.json
+cp "$pinned_dir/npm-shrinkwrap.json" npm-shrinkwrap.json
 sha256sum npm-shrinkwrap.json > "$work_dir/shrinkwrap.sha256"
 npm ci --no-audit --no-fund > "$evidence_dir/npm-ci.log" 2>&1
 npm run build > "$evidence_dir/typescript-build.log" 2>&1
@@ -99,14 +117,23 @@ ln -s /usr/bin/pandoc "$output_dir/ext/pandoc/pandoc"
 [[ ! -e "$output_dir/node_modules/mocha" ]]
 "$output_dir/bin/shiny-server" --version > "$evidence_dir/staged-version.txt"
 python3 - "$evidence_dir" "$source_revision" "$source_url" "$source_sha256" \
-  "$node_version" "$node_url" "$node_sha256" <<'PY'
+  "$node_version" "$node_url" "$node_sha256" \
+  "$upstream_package_sha256" "$upstream_shrinkwrap_sha256" \
+  "$pinned_package_sha256" "$pinned_shrinkwrap_sha256" <<'PY'
 import json, pathlib, sys
-dest, revision, source_url, source_hash, node_version, node_url, node_hash = sys.argv[1:]
+(dest, revision, source_url, source_hash, node_version, node_url, node_hash,
+ upstream_package, upstream_shrinkwrap, pinned_package, pinned_shrinkwrap) = sys.argv[1:]
 pathlib.Path(dest, 'build-provenance.json').write_text(json.dumps({
     'upstream_revision': revision,
     'source_url': source_url, 'source_sha256': source_hash,
     'node_version': node_version, 'node_url': node_url, 'node_sha256': node_hash,
-    'dependency_policy': 'unchanged upstream npm-shrinkwrap.json; npm ci; omit dev at runtime',
+    'dependency_policy': ('upstream npm-shrinkwrap.json regenerated with four security pins '
+                          '(handlebars 4.7.10, compression 1.8.2, proxy-addr 2.0.8, follow-redirects 1.16.1); '
+                          'npm ci; omit dev at runtime'),
+    'upstream_package_json_sha256': upstream_package,
+    'upstream_npm_shrinkwrap_sha256': upstream_shrinkwrap,
+    'pinned_package_json_sha256': pinned_package,
+    'pinned_npm_shrinkwrap_sha256': pinned_shrinkwrap,
     'status': 'staged runtime; exact application image scan and browser gate still required'
 }, indent=2) + '\n')
 PY

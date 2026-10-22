@@ -5,6 +5,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       build-essential ca-certificates curl git python3 xz-utils \
     && rm -rf /var/lib/apt/lists/*
 COPY deploy/harden-base.sh /opt/islet-server-build/harden-base.sh
+COPY deploy/shiny-server/package.json deploy/shiny-server/npm-shrinkwrap.json /opt/islet-server-build/shiny-server/
 COPY deploy/tests/smoke-shiny-server.py /opt/islet-server-build/smoke-shiny-server.py
 COPY deploy/r-worker.py /opt/islet-server-build/r-worker.py
 COPY deploy/shiny-server.conf /opt/islet-server-build/shiny-server.conf

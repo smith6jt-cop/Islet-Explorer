@@ -11,6 +11,9 @@
 !deploy/
 !deploy/Containerfile
 !deploy/harden-base.sh
+!deploy/shiny-server/
+!deploy/shiny-server/package.json
+!deploy/shiny-server/npm-shrinkwrap.json
 !deploy/tests/
 !deploy/tests/smoke-shiny-server.py
 !deploy/install-production-r-deps.R

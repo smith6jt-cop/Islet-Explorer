@@ -1,8 +1,36 @@
 # Shiny Server base remediation
 
-Review date: 2026-09-08. This is a tested source-build remediation; the exact
-application image and its operating-system package upgrades still require the
-release build, SBOM, vulnerability scan, and browser gates.
+Review date: 2026-09-08, with the 2026-10-22 dependency pins below. This is a
+tested source-build remediation; the exact application image and its
+operating-system package upgrades still require the release build, SBOM,
+vulnerability scan, and browser gates.
+
+## 2026-10-22: four runtime dependency pins
+
+The first workstation build of the schema-5 release image (commit `6ffb6f2`)
+failed the High/Critical gate on advisories published after September against
+the runtime graph of the upstream revision below: handlebars 4.7.9
+(GHSA-8r5x-fm3f-whwj, GHSA-p8wg-vrv2-v86f, Critical), proxy-addr 2.0.7
+(GHSA-jqcg-44mw-7w3h, Critical), compression 1.8.1 (GHSA-vc2v-76pw-4v95, High)
+and follow-redirects 1.16.0 (GHSA-8r9p-f939-6h3c, GHSA-q3jh-wrc6-jgq8, High),
+each fixed in the next patch release. Upstream `main` had no newer revision.
+The same scan found pillow 12.3.0 and certifi 2026.7.22 in the application
+venv; `requirements-python.lock` now pins pillow 13.0.0 and certifi
+2026.10.19.
+
+[`shiny-server/package.json`](shiny-server/package.json) and
+[`shiny-server/npm-shrinkwrap.json`](shiny-server/npm-shrinkwrap.json) are
+upstream's files with handlebars `4.7.10` and compression `1.8.2` as exact
+direct dependencies and proxy-addr `2.0.8` and follow-redirects `1.16.1` as
+`overrides` (npm refuses an override that conflicts with a direct spec, hence
+the split). The lock was regenerated from upstream's with the locked Node
+24.20.0's npm 11.19.0 (`npm install --package-lock-only --ignore-scripts`); it
+differs from upstream's only in those four entries, compression 1.8.2's new
+dependency `destroy 1.2.0`, and the root entry's `engines` field, which npm
+refreshed from package.json. `harden-base.sh` checks the SHA-256 of upstream's
+two files and of the pinned copies before substituting them, then builds,
+tests and installs exactly as before; `build-provenance.json` records all four
+hashes. Every other package stays at upstream's locked version.
 
 The inspected `rocker/shiny:4.5.1` base contained Shiny Server 1.5.24.1034,
 Node 20.17.0, and npm 10.8.2. Its registry SBOM/Grype report recorded **33 High
@@ -25,9 +53,10 @@ describe that extracted package, not the original registry-image scan.
 
 The implementation instead builds the exact
 [official upstream source revision](https://github.com/rstudio/shiny-server/tree/ae268b685b234b3a97a33bf6caa28e6d395cb232)
-`ae268b685b234b3a97a33bf6caa28e6d395cb232`, preserving its `npm-shrinkwrap.json`
-byte-for-byte. This is a project-built upstream snapshot, and is not presented as
-a released Posit binary. Upstream made the Node/runtime-dependency/Express changes
+`ae268b685b234b3a97a33bf6caa28e6d395cb232`, with its `npm-shrinkwrap.json`
+preserved byte-for-byte until 2026-10-22 and since then carrying the four
+patch-level pins described above. This is a project-built upstream snapshot, and
+is not presented as a released Posit binary. Upstream made the Node/runtime-dependency/Express changes
 together with compatibility tests. Node 20 is
 [end of life; Node 24 is LTS](https://nodejs.org/en/about/previous-releases).
 
