@@ -83,17 +83,26 @@ RUN Rscript /opt/islet-explorer-build/install-production-r-deps.R
 
 # Remove unused system Python packaging tools only after all installs. Avoid
 # autoremove so scientific shared libraries remain; bound dependent removals to
-# the reviewed build tools and verify the isolated runtime after cleanup.
+# the reviewed build tools and verify the isolated runtime after cleanup. Only
+# the tools the upgraded base actually carries are removed: python3-mako arrives
+# as a dependency of gobject-introspection in some base revisions and not in
+# others, and apt-get aborts on a name that is neither installed nor indexed.
 RUN set -eux; \
     python3 -m venv /opt/islet-explorer-py; \
     /opt/islet-explorer-py/bin/python -m pip install --no-cache-dir 'pip==25.3'; \
     /opt/islet-explorer-py/bin/python -m pip install --no-cache-dir \
       --requirement /opt/islet-explorer-build/requirements-python.lock; \
-    apt-get -s remove python3-pip python3-setuptools python3-mako python3-wheel \
+    removable="$(dpkg-query -W -f='${binary:Package} ${db:Status-Status}\n' \
+      python3-pip python3-setuptools python3-mako python3-wheel 2>/dev/null \
+      | awk '$2 == "installed" { print $1 }')"; \
+    test -n "${removable}"; \
+    printf 'INSTALLED_BUILD_TOOLS=%s\n' "$(printf '%s' "${removable}" | tr '\n' ' ')" \
       > /opt/islet-explorer-build/system-build-tools-removal.txt; \
+    apt-get -s remove ${removable} \
+      >> /opt/islet-explorer-build/system-build-tools-removal.txt; \
     awk '$1 == "Remv" { sub(/:.*/, "", $2); if ($2 !~ /^(python3-pip|python3-setuptools|python3-mako|python3-wheel|gobject-introspection|gobject-introspection-bin|libgirepository-1[.]0-dev|libgirepository1[.]0-dev|librsvg2-dev|libmagick\+\+-dev|libmagick\+\+-6[.]q16-dev|libmagickcore-6[.]q16-dev|libmagickwand-6[.]q16-dev)$/) { print "Unexpected removal: " $2; exit 1 } }' \
       /opt/islet-explorer-build/system-build-tools-removal.txt; \
-    apt-get remove -y python3-pip python3-setuptools python3-mako python3-wheel; \
+    apt-get remove -y ${removable}; \
     python3 -c 'import importlib.util; assert all(importlib.util.find_spec(p) is None for p in ("pip", "setuptools", "mako", "wheel"))'; \
     /opt/islet-explorer-py/bin/python -m pip check; \
     /opt/islet-explorer-py/bin/python -c \
