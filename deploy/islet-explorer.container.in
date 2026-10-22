@@ -22,8 +22,10 @@ Volume=@@DATA_DIR@@:/srv/islet-explorer/data:ro
 Volume=@@IMAGE_DIR@@:/srv/islet-explorer/app/shiny_app/www/local_images:ro
 Volume=@@LOG_DIR@@:/var/log/shiny-server:rw
 Volume=@@TMP_DIR@@:/tmp/islet-explorer:rw
-Tmpfs=/run:rw,size=16m,mode=0755,uid=@@CONTAINER_UID@@,gid=@@CONTAINER_GID@@
-Tmpfs=/var/lib/shiny-server:rw,size=64m,mode=0755,uid=@@CONTAINER_UID@@,gid=@@CONTAINER_GID@@
+# U chowns each tmpfs to the container user (Podman 4.9 and 5.8 alike); the
+# uid=/gid= options are rejected by both as invalid mount options.
+Tmpfs=/run:rw,size=16m,mode=0755,U
+Tmpfs=/var/lib/shiny-server:rw,size=64m,mode=0755,U
 
 ReadOnly=true
 NoNewPrivileges=true

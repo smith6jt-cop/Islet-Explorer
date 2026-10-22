@@ -82,8 +82,8 @@ container_id="$(podman run --detach --rm \
   --volume "${release_dir}/data/images:/srv/islet-explorer/app/shiny_app/www/local_images:ro" \
   --volume "${log_dir}:/var/log/shiny-server:rw" \
   --volume "${tmp_dir}:/tmp/islet-explorer:rw" \
-  --tmpfs "/run:rw,size=16m,mode=0755,uid=${container_uid},gid=${container_gid}" \
-  --tmpfs "/var/lib/shiny-server:rw,size=64m,mode=0755,uid=${container_uid},gid=${container_gid}" \
+  --tmpfs "/run:rw,size=16m,mode=0755,U" \
+  --tmpfs "/var/lib/shiny-server:rw,size=64m,mode=0755,U" \
   --env "ISLET_RELEASE=${release}" \
   --env ISLET_RUNTIME_MODE=production \
   --env ISLET_DATA_ROOT=/srv/islet-explorer/data \
