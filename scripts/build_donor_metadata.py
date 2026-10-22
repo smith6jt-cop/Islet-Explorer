@@ -10,6 +10,11 @@ to silently remove identity-held donors or certify scientific inclusion.
 
 Without --cohort, the original command, cohort, and output schema are retained.
 
+With --uniform-cohort (scripts/uniform/cohort.csv), every donor of the 20-donor uniform cohort is read from the nPOD
+sheet, all in the original schema plus the extra donor fields (owner, 2026-10-22: the nPOD sheet is the source for
+every donor field, donor 112's age included). scripts/uniform/assemble_uniform.py --donor-metadata takes the age
+from it.
+
 The nPOD "All-Download" spreadsheet carries ~741 donors and 47 columns, including
 free-text admission courses, clinical histories, medication lists and HLA types.
 Only 15 donors and a handful of numeric/categorical fields are relevant here, so
@@ -286,6 +291,84 @@ def build_cohort_metadata(cohort_path, donor_key_path, npod_source=None):
     return pd.DataFrame(rows)
 
 
+# Extra donor fields (owner, 2026-10-22), each read from the nPOD sheet. Numbers keep nPOD's units; a value nPOD
+# records that cannot be true (a negative transit time) is left out with a warning.
+EXTRA_NUMERIC = {
+    "height_cm": "height_cm", "weight_kg": "weight_kg", "BMI_percentile": "BMI_percentile",
+    "pancreas_weight_g": "pancreas_weight_grams", "admission_glucose_mg_dL": "admission_glucose_mg_dL",
+    "peak_glucose_mg_dL": "peak_glucose_mg_dL", "ICU_days": "ICU_time_days",
+    "transit_time_min": "transit_time_minutes", "RIN": "RIN",
+}
+STATUS_SHORT = {"No Diabetes": "ND", "Autoantibody Positive": "Aab+", "Type 1 Diabetes": "T1D"}
+
+
+def leading_number(value):
+    """'4.32 days' -> 4.32; blank -> NaN."""
+    if value is None or (isinstance(value, float) and pd.isna(value)) or str(value).strip() == "":
+        return float("nan")
+    match = re.match(r"\s*(-?[0-9]+(?:\.[0-9]+)?)", str(value))
+    if not match:
+        raise ValueError(f"not a number: {value!r}")
+    return float(match.group(1))
+
+
+def build_uniform_metadata(cohort_path, source):
+    """Every donor of the uniform cohort from the nPOD sheet: the original columns plus EXTRA_NUMERIC and four
+    categories (race_ethnicity, recovery_type, cause_of_death, ABO_group)."""
+    cohort = pd.read_csv(cohort_path, dtype=str)
+    ids = [normalize_case_id(v) for v in cohort["case_id"]]
+    assert_no_excluded(ids, "Uniform cohort")
+    raw = pd.read_excel(source, sheet_name="data", dtype={"case_id": str})
+    raw["app_id"] = raw["case_id"].astype(str).str.strip().map(
+        lambda v: str(int(re.sub(r"^HDL", "", v))) if re.fullmatch(r"(HDL)?[0-9]+(\.0+)?", v) else None)
+    rows = []
+    for app_id, status in zip(ids, cohort["donor_status"]):
+        hits = raw.loc[raw["app_id"] == app_id]
+        if len(hits) != 1:
+            sys.exit(f"[donor-meta] expected one nPOD row for donor {app_id}, found {len(hits)}")
+        r = hits.iloc[0]
+        if STATUS_SHORT.get(r["donor_type"]) != status:
+            sys.exit(f"[donor-meta] donor {app_id}: cohort status {status}, nPOD {r['donor_type']}")
+        c_pep, c_pep_censored = parse_c_peptide(r.get("C_peptide_ng_mL"))
+        aabs = {out: parse_aab(r.get(col), app_id, col) for col, out in AAB_COLS.items()}
+        age = float(r["age_years"])
+        dur = r.get("diabetes_hx_years")
+        row = {
+            "case_id": app_id, "npod_case_id": r["case_id"], "donor_type": r["donor_type"],
+            "age_years_npod": age, "age_group": "<13" if age < AGE_GROUP_CUT else ">=13",
+            # Blank for donors without diabetes: not applicable, never zero.
+            "t1d_duration_years": float(dur) if pd.notna(dur) else float("nan"),
+            "sex": r["sex"], "BMI": optional_number(r.get("BMI"), "BMI"),
+            # nPOD records HbA1c 0.0 for two donors (6090, 6232) whose notes give no value: not measured.
+            "HbA1c_percent": hba1c if (hba1c := optional_number(r.get("HbA1c_percent"), "HbA1c")) > 0 else float("nan"),
+            "C_peptide_ng_mL": c_pep, "C_peptide_censored": c_pep_censored,
+            **aabs, "n_aab": sum(aabs.values()),
+        }
+        for out, col in EXTRA_NUMERIC.items():
+            value = leading_number(r.get(col))
+            if out == "transit_time_min" and value < 0:
+                print(f"[donor-meta] WARNING donor {app_id}: transit time {value} min is impossible; left out")
+                value = float("nan")
+            row[out] = value
+        row["race_ethnicity"] = r.get("race_ethnicity") if pd.notna(r.get("race_ethnicity")) else None
+        # nPOD's own labels ("Organ Donor", "DCD Organ Donor"; DCD: donation after circulatory death).
+        row["recovery_type"] = r.get("case_recovery_type") if pd.notna(r.get("case_recovery_type")) else None
+        row["cause_of_death"] = r.get("cause_of_death") if pd.notna(r.get("cause_of_death")) else None
+        abo = re.match(r"\s*(AB|A|B|O)", str(r.get("ABO_blood_type") or ""))
+        row["ABO_group"] = abo.group(1) if abo else None
+        rows.append(row)
+    out = pd.DataFrame(rows)
+    for col in ["age_years_npod", "sex", "BMI", "C_peptide_ng_mL"]:
+        bad = out.loc[out[col].isna(), "case_id"].tolist()
+        if bad:
+            sys.exit(f"[donor-meta] unexpected missing {col} for: {bad}")
+    for _, r in out.iterrows():
+        h5 = H5AD_AGE.get(r["case_id"])
+        if h5 is not None and abs(h5 - r["age_years_npod"]) > 0.01:
+            print(f"[donor-meta] donor {r['case_id']}: H5AD age {h5}, nPOD {r['age_years_npod']} (nPOD is used)")
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--source", default=None,
@@ -293,7 +376,18 @@ def main():
     ap.add_argument("--output", default=DEFAULT_OUT)
     ap.add_argument("--cohort", help="CSV with case_id, donor_source, and optional inclusion_status")
     ap.add_argument("--donor-key", help="CSV/XLSX with Case ID, Donor Status, Age, and Gender")
+    ap.add_argument("--uniform-cohort", help="scripts/uniform/cohort.csv: every donor from the nPOD sheet")
     args = ap.parse_args()
+
+    if args.uniform_cohort:
+        if os.path.realpath(args.output) == os.path.realpath(DEFAULT_OUT):
+            ap.error("--uniform-cohort requires a separate --output; the original donor_metadata.csv is preserved")
+        src = find_source(args.source)
+        out = build_uniform_metadata(args.uniform_cohort, src)
+        os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
+        out.to_csv(args.output, index=False)
+        print(f"[donor-meta] wrote {args.output} ({len(out)} rows x {out.shape[1]} cols) from {os.path.basename(src)}")
+        return
 
     if args.cohort:
         if not args.donor_key:

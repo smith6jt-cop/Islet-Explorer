@@ -347,6 +347,23 @@ Cluster (median tissue-cell distance 133 um to any object, 204 um to an Islet), 
 Islets (T1D CD3e+ at 0-5 um: 5.0 % by any object, 6.1 % by Islet). The distance-to-islet profile lets the reviewer
 choose. Nothing else changes from v8.
 
+v10 (2026-10-22, test version only) takes every donor field from the nPOD export (owner: "All data can be found in
+All-Download_From_nPOD_2026-07-27_163844.xlsx"): `scripts/build_donor_metadata.py --uniform-cohort` writes
+`scripts/uniform/donor_metadata.csv`, which `--donor-metadata` serves and from which each donor's age is taken. The one
+change to v9's values is donor 112's age, 3.72 years as nPOD records it instead of the 3.00 carried from v3 (age group
+unchanged); status, sex and autoantibodies are checked against the donor source and agree for all 20 donors. The
+table adds height, weight, BMI percentile, pancreas weight, admission and peak glucose, ICU days, organ transit time,
+RIN, race/ethnicity, recovery type (DCD or not), cause of death and ABO group. nPOD's 0.0 HbA1c (6090, 6232) is
+written as missing, and 6534's transit time (-1034 min) is left out as impossible.
+
+```bash
+$PY scripts/build_donor_metadata.py --uniform-cohort scripts/uniform/cohort.csv \
+    --source All-Download_From_nPOD_2026-07-27_163844.xlsx --output scripts/uniform/donor_metadata.csv
+$PY scripts/uniform/assemble_uniform.py --run $OUT --donor-source data/development/protein-expanded-20261015-v3 \
+    --donor-metadata scripts/uniform/donor_metadata.csv \
+    --output data/development/uniform-20donor-20261022-v10 --report-root tmp/uniform-20donor-20261022-v10
+```
+
 The app reads `object_class` through an app-wide "Endocrine objects" selector (Islet / Cluster). The
 Trajectory tab does not use it: it fits every object with ten or more core cells (`total_cells_core` in
 `barlow_islet_features.csv`), whatever its class.

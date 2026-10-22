@@ -140,6 +140,26 @@ def app_labels(calls: pd.DataFrame, immune: pd.DataFrame) -> np.ndarray:
 
 
 # ------------------------------------------------------------------------------------------- one image
+def apply_donor_metadata(donors: pd.DataFrame, md: pd.DataFrame) -> pd.DataFrame:
+    """Every donor's age from the nPOD donor table; stop if its status, sex or autoantibodies disagree."""
+    status = {'No Diabetes': 'ND', 'Autoantibody Positive': 'Aab+', 'Type 1 Diabetes': 'T1D'}
+    md = md.set_index(md.case_id.astype(int))
+    donors = donors.copy()
+    ids = donors.imageid.astype(int)
+    if set(ids) != set(md.index):
+        raise ValueError('donor metadata does not cover exactly the cohort')
+    for i, cid in zip(donors.index, ids):
+        m, d = md.loc[cid], donors.loc[i]
+        mine = (str(d.donor_status), str(d.gender)[0].upper(),
+                *(bool(float(d[k])) for k in ('GADA', 'IA2A', 'ZnT8A', 'mIAA')))
+        theirs = (status[m.donor_type], str(m.sex)[0].upper(),
+                  *(str(m['AAb_' + k]).lower() == 'true' for k in ('GADA', 'IA2A', 'ZnT8A', 'mIAA')))
+        if mine != theirs:
+            raise ValueError(f'donor {cid}: donor source {mine} disagrees with donor metadata {theirs}')
+    donors['age'] = [float(md.loc[cid, 'age_years_npod']) for cid in ids]
+    return donors
+
+
 def donor_fields(donors: pd.DataFrame, case: str) -> dict:
     r = donors.loc[donors.imageid.astype(int) == int(case)].iloc[0]
     return {'Case ID': f'{int(case):04d}', 'Donor Status': r.donor_status, 'Age': float(r.age), 'Gender': str(r.gender),
@@ -432,6 +452,10 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--run', type=Path, required=True)
     ap.add_argument('--donor-source', type=Path, required=True)
+    # From v10 (owner, 2026-10-22): the donor table built from the nPOD sheet (scripts/build_donor_metadata.py
+    # --uniform-cohort). It is the served donor_metadata.csv and gives every donor's age; status, sex and
+    # autoantibodies must agree with the donor source's.
+    ap.add_argument('--donor-metadata', type=Path)
     ap.add_argument('--output', type=Path, required=True)
     ap.add_argument('--report-root', type=Path, required=True)
     ap.add_argument('--workers', type=int, default=6)
@@ -445,6 +469,11 @@ def main() -> int:
         ['imageid', 'age', 'gender', 'donor_status', 'GADA', 'ZnT8A', 'IA2A', 'mIAA']].copy()
     if set(donors.imageid.astype(int)) != {int(r['case_id']) for r in rows}:
         raise ValueError('donor source does not cover exactly the cohort')
+    md_path = a.donor_metadata or a.donor_source / 'donor_metadata.csv'
+    md = pd.read_csv(md_path, dtype={'case_id': str})
+    assert_no_excluded(md.case_id, 'donor metadata')
+    if a.donor_metadata:
+        donors = apply_donor_metadata(donors, md)
     for d in ('cells', 'donors', 'gson', 'cell_types', 'images'):
         (out / d).mkdir(parents=True)
     reports.mkdir(parents=True)
@@ -498,7 +527,8 @@ def main() -> int:
     head = subprocess.run(['git', '-C', str(REPO), 'rev-parse', 'HEAD'], capture_output=True, text=True).stdout.strip()
     combined.uns['data_provenance'] = {'builder': 'scripts/uniform/assemble_uniform.py', 'git_commit': head,
                                       'run': str(a.run.resolve()), 'cell_typing': 'Islet-Explorer-Senior port',
-                                      'donor_source': str(a.donor_source.resolve())}
+                                      'donor_source': str(a.donor_source.resolve()),
+                                      'donor_metadata': str(md_path.resolve())}
     combined.write_h5ad(out / 'islet_explorer.h5ad', compression='gzip')
     trajectory.write_h5ad(out / 'adata_ins_root.h5ad', compression='gzip')
     pd.DataFrame([r for t in order for r in results[t]['features']]).to_csv(out / 'barlow_islet_features.csv', index=False)
@@ -518,8 +548,6 @@ def main() -> int:
     for k in ('islets', 'clusters', 'singles'):
         by_donor[k + '_per_mm2'] = by_donor[k] / by_donor['tissue_area_mm2']
     by_donor.to_csv(out / 'endocrine_objects_by_donor.csv', index=False)
-    md = pd.read_csv(a.donor_source / 'donor_metadata.csv', dtype={'case_id': str})
-    assert_no_excluded(md.case_id, 'donor metadata')
     md.to_csv(out / 'donor_metadata.csv', index=False)
     images = []
     for img in sorted((a.donor_source / 'images').iterdir()):
@@ -537,7 +565,8 @@ def main() -> int:
            'run': str(a.run.resolve()), 'scale_sha256': sha256(CT.typing_dir(a.run) / 'scale.parquet'),
            'shifts_sha256': sha256(CT.typing_dir(a.run) / 'shifts.json'),
            'cells_analysed': int(census.analysed.sum()), 'cells_excluded': int(census.excluded.sum()),
-           'cells_not_analysis_eligible': int(census.not_analysis_eligible.sum())}
+           'cells_not_analysis_eligible': int(census.not_analysis_eligible.sum()),
+           'donor_metadata': str(md_path.resolve()), 'donor_metadata_sha256': sha256(md_path)}
     (out / 'uniform_release.json').write_text(json.dumps(rel, indent=2) + '\n')
     print(json.dumps(rel, indent=2))
     return 0
