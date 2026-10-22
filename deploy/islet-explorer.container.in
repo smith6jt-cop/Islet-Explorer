@@ -44,6 +44,13 @@ Environment=SHOW_INFLAMMATION_TAB=0
 Environment=DEBUG_CREDENTIALS=0
 Environment=VIEWER_DEBUG=0
 Environment=TMPDIR=/tmp/islet-explorer
+# The entrypoint derives and creates these under TMPDIR for the service; set
+# here too so a `podman exec` (the deployment verifier's dependency probe) finds
+# writable caches on the read-only root instead of failing numba's import.
+Environment=R_USER=/tmp/islet-explorer/r-user
+Environment=XDG_CACHE_HOME=/tmp/islet-explorer/cache
+Environment=MPLCONFIGDIR=/tmp/islet-explorer/matplotlib
+Environment=NUMBA_CACHE_DIR=/tmp/islet-explorer/numba
 Environment=OMP_NUM_THREADS=1
 Environment=OPENBLAS_NUM_THREADS=1
 Environment=MKL_NUM_THREADS=1
