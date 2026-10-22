@@ -88,10 +88,13 @@ capacity figures are historical evidence only; see
   address only: the loopback `127.0.0.1:3838` by default, or, with
   `activate-release.sh --publish-address`, the private VM address UFRC's reverse
   proxy connects to (the proxy, `vpubweb.rc.ufl.edu`, is a separate host and
-  cannot reach the VM loopback). Publish on the private address only once UFRC
-  has confirmed that the port is reachable from the proxy alone, because the
-  application relies on the proxy's Basic Auth; `verify-deployment.sh` then
-  requires that address to be the exclusive listener.
+  cannot reach the VM loopback). The production activation uses
+  `--publish-address 10.13.41.21`; `verify-deployment.sh` then requires that
+  address to be the exclusive listener. The application relies on the proxy's
+  Basic Auth, so the private address is acceptable only because UFRC's network
+  filters it: measured on 2026-10-22, an HPG login node reaches the VM on port
+  22 only (a test listener on `10.13.41.21:3839` received nothing), the campus
+  network cannot reach the VM at all, and the VM's own firewalls are inactive.
 - The container and Shiny workers use the same `shiny` UID/GID. Rootless
   `keep-id` maps the UFRC service account to that identity.
 - AI, Statistics, and Inflammation are off. Production rejects a supplied
@@ -427,9 +430,9 @@ image/data pairs until the new release has survived a VM reboot test.
 
 Request public path `/islet-explorer/` and the backend. The proxy host cannot
 reach the VM loopback, so the backend is the VM's private address (`pubmaigan1`,
-`10.13.41.21:3838`); activate with `--publish-address 10.13.41.21` once UFRC
-confirms that only the proxy can reach that port (the 2026-10-22 activation is
-loopback-only until then). Ask UFRC to preserve WebSocket upgrades,
+`10.13.41.21:3838`), published with `--publish-address 10.13.41.21` since
+2026-10-22 21:16 UTC (the publish-address rule above records the measured
+network filtering that makes this acceptable). Ask UFRC to preserve WebSocket upgrades,
 forwarded host/protocol, long Shiny connections, and unbuffered HTTP byte ranges for
 multi-gigabyte TIFFs. Basic Auth must cover the page, WebSocket endpoint, downloads,
 TIFFs, XML, JSON, and other served static assets. Parquet, GeoPackage, H5AD, and
@@ -439,13 +442,15 @@ Run locally on the VM, substituting one TIFF relative path:
 
 ```bash
 deploy/verify-deployment.sh \
-  --url http://127.0.0.1:3838/islet-explorer/ \
+  --url http://10.13.41.21:3838/islet-explorer/ \
   --container islet-explorer \
+  --publish-address 10.13.41.21 \
   --range-path 'local_images/<image>.ome.tiff'
 ```
 
 The verifier fails if the backend port has any listener outside its expected
-`127.0.0.1` binding, including a specific non-loopback host IP, if data or
+binding (`127.0.0.1`, or the `--publish-address` given), including a wildcard
+or any other host IP, if data or
 images are writable, if feature flags or credentials violate the reviewer
 profile, if dependencies are absent, or if the byte request is not exactly a
 `206 Content-Range` response. Activation also checks that the running container

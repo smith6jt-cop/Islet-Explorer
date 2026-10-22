@@ -22,7 +22,7 @@
 | Reviewer-visible features | Plot, Trajectory, Viewer, Spatial in the planned reviewer profile; the exact production release still needs acceptance |
 | Disabled features | AI, Statistics, and Inflammation |
 | Production URL request | `https://islet-explorer.rc.ufl.edu/islet-explorer/` |
-| Production backend request | Shiny listens on container `0.0.0.0:3838`; the project requests rootless Podman publication on VM `127.0.0.1:3838`, subject to UFRC confirming the reachable proxy target |
+| Production backend | Shiny listens on container `0.0.0.0:3838`; rootless Podman publishes it on the VM's private address `10.13.41.21:3838` since 2026-10-22 (the proxy host cannot reach the VM loopback; UFRC's network filters the port, measured that day), pending UFRC's vhost in ticket 83810 |
 | Database requirement | No managed database and no database network service |
 | Runtime writes | Temporary files and operational logs only; scientific data are immutable and read-only |
 | External AI/API traffic | None |
@@ -238,8 +238,8 @@ Journal editors/reviewers
 UFRC high-availability reverse proxy
         | TLS termination, WebSocket upgrade, HTTP byte-range passthrough
         v
-Requested backend: PubApps VM 127.0.0.1:3838
-        | actual proxy target pending UFRC confirmation
+Backend: PubApps VM pubmaigan1, private address 10.13.41.21:3838
+        | published 2026-10-22; vhost pending in UFRC ticket 83810
         | rootless Podman forwarding
         v
 Islet Explorer/Shiny container 0.0.0.0:3838
