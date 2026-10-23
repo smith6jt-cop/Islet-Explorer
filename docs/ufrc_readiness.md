@@ -28,13 +28,17 @@ development name, so a candidate can be exercised through the real proxy and
 Basic Auth before it replaces what reviewers use. The
 schema-5 release is active on the VM with its backend published on the VM's
 private address `10.13.41.21:3838`, the host:port target UFRC's proxy needs
-(`vpubweb.rc.ufl.edu` cannot reach the VM loopback). The vhost with whole-site
-Basic Auth for `/islet-explorer/` is still pending in ticket `83810`. UFRC's
-guide says Public Restricted Basic Auth uses "credential lists provided by you",
-so the project supplies the neutral reviewer account, preferably as a bcrypt
-`htpasswd` entry through the restricted ticket rather than a cleartext password;
-the guide also expects the project to manage the service account's
-`authorized_keys` after initial setup.
+(`vpubweb.rc.ufl.edu` cannot reach the VM loopback). UFRC configured both
+vhosts with whole-site Basic Auth on 2026-10-23: the proxy mounts the project's
+`/pubapps` tree, reads the project-maintained `htpasswd` files `prod/auth` and
+`dev/auth`, serves a landing page from `prod/html` and `dev/html`, and serves
+the three image aliases itself from symlinks there into the active release
+(`deploy/README.md` § 4). Both public URLs answer; from the campus network the
+reviewer-access verifier passed all 15 checks on each hostname with UFRC's
+temporary test account. The project manages the credential files itself
+(bcrypt entries hashed locally; UFRC's guide calls Public Restricted Basic Auth
+"credential lists provided by you"), and the guide also expects the project to
+manage the service account's `authorized_keys` after initial setup.
 
 The selected reviewer profile remains Public Restricted access to a Sensitive
 collection: Plot, Trajectory, Viewer, and Spatial; AI, Statistics, and Inflammation
@@ -101,7 +105,7 @@ The current ticket, form, and IRM status are tracked in the
 | Staging instance beside production | **activated 2026-10-23 17:35 UTC** (`activate-release.sh --instance islet-explorer-dev --port 3839 --memory 4g --publish-address 10.13.41.21`, tooling `ee6e3e3`) on the same release: own Quadlet unit and container, `runtime/islet-explorer-dev/{logs,tmp}`, `deployments/islet-explorer-dev.active.state`; `verify-deployment.sh` passed (healthy, `10.13.41.21:3839` exclusive, Range `206 bytes 0-15/7792217538`). Production was then re-activated at 17:42 UTC with the 9 GiB cap (verifier passed again); both services active and healthy, resident memory about 0.8 GiB each at idle on the 15 GiB VM. Serves UFRC's `devislet-explorer.rc.ufl.edu` once its vhost exists (backend `http://pubmaigan1:3839/islet-explorer/`, own Basic Auth entry for maintainers). Logs: `tmp/ufrc-release-20261022/deploy-vm-d55680a-staging-3839-*.log`, `deploy-vm-d55680a-production-9g-*.log` |
 | Browser checks against the deployed container | passed 2026-10-22 18:37-18:39 UTC from the workstation through a two-hop SSH tunnel to the VM's loopback backend: `check-app.mjs` (every check, no accessibility rule violations, no browser or HTTP errors), `check-ui-review-20261021.mjs` (15 of 15: logo, plot types in both cards, composition by donor over 20 donors, near-empty measures hidden, axis fit, frozen controls on four tabs, Spatial colourings including the nPOD fields, hover and click linking, shared selection, clear) and `check-trajectory-links.mjs` (all steps, no errors). Reports: `tmp/ufrc-release-20261022/evidence/browser-vm-d55680a/` |
 | UFRC VM | provisioned 2026-10-22: `pubmaigan1.ufhpc`, service account `maigan` (home `/pubapps/maigan`, 1 TiB Qumulo share), RHEL 9.8, rootless Podman 5.8.2 (store on the 40 GB `/local`), cgroups v2, linger on, 2 vCPU / 15 GiB; reached from HPG login nodes as `ssh pubmaigan1`; project path `/pubapps/maigan/islet-explorer/` created, release tooling copied, 500 MB test transfer at about 100 MB/s |
-| UFRC proxy and Basic Auth acceptance | pending (ticket `83810`). On 2026-10-22 the hostname resolves to UFRC's proxy `vpubweb.rc.ufl.edu` (wildcard `*.rc.ufl.edu` certificate) but no vhost forwards `/islet-explorer/` yet (Apache default 404 on every path). The proxy is a separate host and cannot reach the VM loopback, so the backend is the VM's private address `10.13.41.21:3838`, published since 21:16 UTC (`activate-release.sh --publish-address`, tooling `9f29c4d`; the verifier requires that address as the exclusive listener). Measured before publishing, because the application relies on the proxy's Basic Auth: an HPG login node reaches the VM on port 22 only (a test listener on `10.13.41.21:3839` received no connection, port 3838 timed out as well), the campus workstation cannot reach the VM at all, and the VM's own firewalls are inactive, so the port is filtered by UFRC's network; the owner also judged HPG's MFA login stricter than the app's Basic Auth. On 2026-10-23 UFRC reported the DNS step done: `islet-explorer.rc.ufl.edu` and a `devislet-explorer.rc.ufl.edu` alias (UFRC's convention; served by the staging instance on `pubmaigan1:3839` since 2026-10-23) point to `vpubweb` in both the internal and external views, checked from campus and from a public resolver; the wildcard certificate covers both; every path still returns the proxy's default 404, so the vhost is not in place yet. Still pending from UFRC: the vhost with Basic Auth for `/islet-explorer/` and confirmation that the proxy reaches the backend. SSH access list requested: `smith6jt` (VM keys received from UFRC by email on 2026-10-22) |
+| UFRC proxy and Basic Auth acceptance | configured 2026-10-23 (ticket `83810`); campus acceptance passed; the external run and the reviewer credentials are pending. UFRC's two vhosts on `vpubweb.rc.ufl.edu` proxy `/islet-explorer/` (WebSocket included) to `pubmaigan1:3838` and `pubmaigan1:3839`, with Basic Auth on `<Location />` against the project-maintained files `prod/auth` and `dev/auth` (mode 640; Apache reads them as the service account), a `DocumentRoot` per hostname (`prod/html`, `dev/html`: the landing page `deploy/docroot/index.html`, favicon, logos) and the three image aliases excluded from proxying and served by Apache from symlinks into the active release's `data/images` (installed the same day; `activate-release.sh --docroot` keeps them with the release from the next activation). Measured from the campus network with UFRC's temporary test account: `deploy/verify-reviewer-access.py` 15/15 on both hostnames (anonymous 401 on the app, the Avivator entry point, the three aliases, both sidecars, the download route and the WebSocket; authenticated 200, the exact 16-byte 206 through Apache, 101 on Shiny Server's SockJS route); mid-file 8 MiB Range reads about 60 MB/s; the proxy's access and error logs are readable at `/pubapps/logs/maigan/`. Requested from UFRC: `http://` instead of `https://` on the backend lines (the `ws://` mapping listed first serves every request today, so nothing fails) and `ServerName https://...` so Apache's own redirects stop naming `http://`; `.htaccess` in the DocumentRoots is not read. History: the backend was published on `10.13.41.21:3838` on 2026-10-22 21:16 UTC after measuring that UFRC's network filters the port (an HPG login node reaches the VM on port 22 only, the campus workstation not at all, the VM's firewalls are inactive); DNS for both names was done on 2026-10-23. Evidence: `tmp/ufrc-release-20261022/evidence/proxy-acceptance-20261023/`. SSH access list requested: `smith6jt` (VM keys received from UFRC by email on 2026-10-22) |
 
 ### Historical regenerated 21-image candidate
 
@@ -254,21 +258,21 @@ verification record are retained in the restricted release record; earlier
 
 ## Remaining release sequence
 
-1. UFRC vhosts (ticket `83810`): `islet-explorer.rc.ufl.edu/islet-explorer/`
-   to `http://pubmaigan1:3838/islet-explorer/` and
-   `devislet-explorer.rc.ufl.edu/islet-explorer/` to
-   `http://pubmaigan1:3839/islet-explorer/`, paths preserved, whole-site Basic
-   Auth on both (the rest of the earlier requirements list is either already
-   requested, Apache's default behaviour, or handled on the VM). Supply the
-   credential entries (bcrypt `htpasswd` lines, one neutral reviewer account
-   for production and a maintainer account for staging) through the ticket.
+1. Credentials (project side; the vhosts went live on 2026-10-23): create the
+   neutral reviewer account for production and a maintainer account for
+   staging with the credential helper (bcrypt, password read from a 0600 file,
+   never on a command line), remove UFRC's temporary `test` entries from
+   `prod/auth` and `dev/auth`, and deliver the reviewer credential through the
+   journal's confidential channel. Requested from UFRC in ticket `83810`:
+   `http://` on the backend lines and `ServerName https://...` in both vhosts.
    Later, separately: confirm that the proxy consumes the `Authorization`
-   header without logging it, and the credential change/revocation procedure.
+   header without logging it, and the retention of `/pubapps/logs/maigan/`.
 2. External acceptance from a clean non-UF network with
-   `deploy/verify-reviewer-access.py` (`deploy/EXTERNAL_ACCEPTANCE.md`):
-   anonymous 401 on the app, the viewer, all three image aliases, sidecars, the
-   download route and the WebSocket; authenticated 200/206/101; then the four
-   tabs in a browser. Record the evidence in the candidate table above.
+   `deploy/verify-reviewer-access.py` (`deploy/EXTERNAL_ACCEPTANCE.md`; passed
+   from campus on 2026-10-23 with the test account on both hostnames) and the
+   browser check through the proxy (`deploy/browser/check-app.mjs
+   --auth-file`), then the four tabs by hand. Record the evidence in the
+   candidate table above.
 3. Institutional items still open: confirm that the August 31 instance form is
    linked to the main PubApps assessment and whether UFRC wants an amendment
    for the 20-donor inventory (individual assessment `IRM-456246` was canceled
@@ -281,7 +285,10 @@ verification record are retained in the restricted release record; earlier
 4. Operations before reviewer access: a VM reboot test of the lingering user
    service (UFRC's Shiny guide warns that system-level restart is not
    configured in PubApps; the enabled Quadlet under linger is unproven across
-   a reboot, which only UFRC can perform); allocation continuation before the
+   a reboot, which only UFRC can perform); at a quiet moment, re-activate both
+   instances so their deployment state records the DocumentRoot
+   (`deploy-vm.sh` passes `--docroot` since 2026-10-23) and a rollback moves
+   the proxy's image aliases too; allocation continuation before the
    trial term ends on 2026-11-30; a second named maintainer's key when one is
    designated.
 
