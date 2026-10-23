@@ -19,17 +19,26 @@ submit a duplicate form unless UFRC directs. Closure of the individual assessmen
 is not production approval. Trial allocation `RC83797` for group `maigan` is
 recorded for 2026-08-31 through 2026-11-30.
 
-UFRC comment 13, received 2026-10-16, says the VM will be provisioned next and
-asks for the first app's DNS and proxy requirements. The project reply is drafted
-in the [launch-preparation note](ufrc_launch_preparation_20261015.md); the
-proxy-reachable backend address remains pending UFRC's VM assignment.
+UFRC provisioned the VM `pubmaigan1` on 2026-10-22 and the DNS aliases on
+2026-10-23: `islet-explorer.rc.ufl.edu` and `devislet-explorer.rc.ufl.edu`, the
+production/development pair UFRC's deployment guide sets up for every
+application (the project runs no development instance; the name is unused). The
+schema-5 release is active on the VM with its backend published on the VM's
+private address `10.13.41.21:3838`, the host:port target UFRC's proxy needs
+(`vpubweb.rc.ufl.edu` cannot reach the VM loopback). The vhost with whole-site
+Basic Auth for `/islet-explorer/` is still pending in ticket `83810`. UFRC's
+guide says Public Restricted Basic Auth uses "credential lists provided by you",
+so the project supplies the neutral reviewer account, preferably as a bcrypt
+`htpasswd` entry through the restricted ticket rather than a cleartext password;
+the guide also expects the project to manage the service account's
+`authorized_keys` after initial setup.
 
 The selected reviewer profile remains Public Restricted access to a Sensitive
 collection: Plot, Trajectory, Viewer, and Spatial; AI, Statistics, and Inflammation
 disabled; immutable local scientific files; no managed database, upload endpoint,
-or production external API. The proposed URL is
-`https://islet-explorer.rc.ufl.edu/islet-explorer/`. The backend address and port
-must come from UFRC; `127.0.0.1:3838` is a request, not an established proxy route.
+or production external API. The URL is
+`https://islet-explorer.rc.ufl.edu/islet-explorer/`; the UFRC project name is
+Panc Floyd.
 
 ### Current local app and release candidate (2026-10-22)
 
@@ -241,25 +250,33 @@ verification record are retained in the restricted release record; earlier
 
 ## Remaining release sequence
 
-1. Continue current UFRC coordination on ticket `83810` / `SYSCONFIG-8173`:
-   confirm that the August 31 instance form is linked to the PubApps master
-   assessment, and ask whether UFRC wants an amendment. Individual assessment
-   `IRM-456246` was canceled on 2026-10-15; do not reopen it unless UFRC directs.
-2. Keep the local app offline while the owner resolves decisions D1–D5 and the
-   20-donor workflow is implemented and run. Donor 78/HDL078 remains permanently
-   excluded. Follow the gates and acceptance criteria in the
-   [uniform reprocessing plan](uniform_reprocessing_plan_20261015.md); the
-   October 15 v3 and frozen 15-donor root are comparison history, not launch
-   candidates.
-3. After the owner accepts the reprocessed data, create a fresh release
-   inventory and update the submitted request only in the way UFRC specifies.
-   Then produce candidate-specific image/data artifacts, hashes, source parity,
-   SBOM/scan, browser, capacity, and operational evidence.
-4. Confirm the assigned host, account, storage quotas, SSH route, proxy/backend,
-   authentication, logging, and ongoing scan process with UFRC. Retain UFRC
-   production acceptance and PI/data-owner go-live approval before bringing up
-   a production service or delivering reviewer credentials. Arrange allocation
-   continuation before the recorded trial term ends on 2026-11-30.
+1. UFRC vhost (ticket `83810`): proxy `/islet-explorer/` to
+   `http://10.13.41.21:3838/islet-explorer/` with the path preserved, whole-site
+   Basic Auth, WebSocket upgrade, unbuffered Range passthrough, long read
+   timeouts, forwarded host and protocol. Supply the neutral reviewer credential
+   (bcrypt `htpasswd` entry) through the ticket; ask UFRC to confirm that the
+   proxy consumes the `Authorization` header without logging it and to state
+   the credential change/revocation procedure.
+2. External acceptance from a clean non-UF network with
+   `deploy/verify-reviewer-access.py` (`deploy/EXTERNAL_ACCEPTANCE.md`):
+   anonymous 401 on the app, the viewer, all three image aliases, sidecars, the
+   download route and the WebSocket; authenticated 200/206/101; then the four
+   tabs in a browser. Record the evidence in the candidate table above.
+3. Institutional items still open: confirm that the August 31 instance form is
+   linked to the main PubApps assessment and whether UFRC wants an amendment
+   for the 20-donor inventory (individual assessment `IRM-456246` was canceled
+   on 2026-10-15; do not reopen it unless UFRC directs); UFRC's own
+   vulnerability scan and its record of the PI attestation (the repository
+   copy of the form still shows the attestation date pending); the
+   UFIT-monitored destination and retention for `runtime/logs` and the user
+   journal ([log inventory](pubapps_log_inventory.md)); PI/data-owner go-live
+   approval and the confidential credential-delivery channel.
+4. Operations before reviewer access: a VM reboot test of the lingering user
+   service (UFRC's Shiny guide warns that system-level restart is not
+   configured in PubApps; the enabled Quadlet under linger is unproven across
+   a reboot, which only UFRC can perform); allocation continuation before the
+   trial term ends on 2026-11-30; a second named maintainer's key when one is
+   designated.
 
 ## Browser dependency coverage
 
