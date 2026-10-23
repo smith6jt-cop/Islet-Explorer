@@ -100,11 +100,13 @@ capacity figures are historical evidence only; see
 - AI, Statistics, and Inflammation are off. Production rejects a supplied
   `KEY` or `OPENAI_API_KEY`; no Navigator secret or AI egress is needed.
 - The root filesystem, code, data, and images are read-only. Writable host
-  mounts are limited to `runtime/logs` and `runtime/tmp`; `/run` and Shiny's
+  mounts are limited to `runtime/logs` and `runtime/tmp` (for the staging
+  instance, `runtime/islet-explorer-dev/logs` and `.../tmp`); `/run` and Shiny's
   ephemeral state use bounded tmpfs mounts.
-- Resource guardrails are 2 CPUs, 14 GiB container memory, one numerical-library
-  thread per R worker, and 2,048 PIDs, leaving host headroom on the base PubApps
-  allocation. The CPU quota is rendered only where the user session has the
+- Resource guardrails are 2 CPUs, a memory cap per instance (9 GiB production,
+  4 GiB staging; `activate-release.sh --memory`), one numerical-library thread
+  per R worker, and 2,048 PIDs, leaving the 15 GiB VM its own headroom when
+  both instances run. The CPU quota is rendered only where the user session has the
   `cpu` cgroup controller delegated; `pubmaigan1` delegates `memory` and `pids`
   only (2026-10-22), so there the 2-vCPU host size bounds CPU and activation says
   so.
@@ -411,15 +413,51 @@ If service replacement fails, exit 70 reports completed recovery and exit 71
 reports that recovery could not be verified and requires operator attention.
 Preflight failures can also use exit 70 before any service is replaced.
 
+### Staging instance
+
+UFRC pairs every application hostname with a development one
+(`devislet-explorer.rc.ufl.edu` beside `islet-explorer.rc.ufl.edu`, both on the
+proxy). The project uses it for a second, independent service on the same VM:
+a release candidate can be exercised through the real proxy and Basic Auth
+before it replaces what reviewers are using. `--instance` names the service;
+everything it owns is derived from that name, so the production service is
+never touched:
+
+```bash
+deploy/activate-release.sh \
+  --project-root '/pubapps/<project>/islet-explorer' \
+  --release 'pubapps-2026-11' \
+  --instance islet-explorer-dev --port 3839 --memory 4g \
+  --publish-address 10.13.41.21
+```
+
+| | production | staging |
+|---|---|---|
+| Quadlet unit / container | `islet-explorer.container`, `islet-explorer` | `islet-explorer-dev.container`, `islet-explorer-dev` |
+| Host port (container 3838) | 3838 | 3839 |
+| Memory cap | 9g | 4g |
+| Runtime mounts | `runtime/logs`, `runtime/tmp` | `runtime/islet-explorer-dev/logs`, `.../tmp` |
+| Deployment state | `deployments/active.state`, `previous.state` | `deployments/islet-explorer-dev.active.state`, `.previous.state` |
+| Proxy hostname | `islet-explorer.rc.ufl.edu` → `pubmaigan1:3838` | `devislet-explorer.rc.ufl.edu` → `pubmaigan1:3839` |
+
+Both instances mount the same read-only release directories, so staging the
+active release costs no storage; a candidate release is a second directory
+under `releases/`. Activation refuses a host port another unit already
+publishes. The staging hostname carries the same Sensitive data and needs its
+own Basic Auth entry at the proxy (maintainers only). Rollback takes the same
+`--instance`.
+
 Useful operations:
 
 ```bash
-systemctl --user status islet-explorer.service
+systemctl --user status islet-explorer.service islet-explorer-dev.service
 journalctl --user -u islet-explorer.service -f
 tail -F /pubapps/<project>/islet-explorer/runtime/logs/*.log
 
 deploy/rollback-release.sh \
   --project-root '/pubapps/<project>/islet-explorer'
+deploy/rollback-release.sh \
+  --project-root '/pubapps/<project>/islet-explorer' --instance islet-explorer-dev
 ```
 
 Never edit an active release or point the service at a mutable image tag. Build

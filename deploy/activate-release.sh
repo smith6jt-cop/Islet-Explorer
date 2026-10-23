@@ -4,26 +4,37 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage: deploy/activate-release.sh --project-root ABS_PATH --release RELEASE
-         [--publish-address IPV4]
+         [--publish-address IPV4] [--instance NAME] [--port PORT] [--memory SIZE]
 
 Installs/updates the user Quadlet from a fully verified release. The immutable
 IMAGE_REF and DATA_SCHEMA are read from RELEASE_DIR/release.env. If startup or
 health verification fails, the prior unit is restored automatically.
 --publish-address publishes the backend on that VM address instead of the
 loopback 127.0.0.1: use it only for the private address UFRC's reverse proxy
-connects to, and only once UFRC has confirmed that the port is reachable from
-the proxy alone, because the application relies on the proxy's Basic Auth.
+connects to, and only where UFRC's network keeps that port from every other
+host, because the application relies on the proxy's Basic Auth.
+--instance names an independent service beside the production one (default
+islet-explorer): its own Quadlet unit, container, host port (--port, default
+3838), memory cap (--memory, default 9g), deployment state and runtime
+directories. The staging instance is islet-explorer-dev on port 3839 (4g); the
+caps of all instances together must leave the 15 GiB VM its own headroom.
 EOF
 }
 
 project_root=""
 release=""
 publish_address="127.0.0.1"
+instance="islet-explorer"
+port="3838"
+memory="9g"
 while (($#)); do
   case "$1" in
     --project-root) project_root="${2:?missing value for --project-root}"; shift 2 ;;
     --release) release="${2:?missing value for --release}"; shift 2 ;;
     --publish-address) publish_address="${2:?missing value for --publish-address}"; shift 2 ;;
+    --instance) instance="${2:?missing value for --instance}"; shift 2 ;;
+    --port) port="${2:?missing value for --port}"; shift 2 ;;
+    --memory) memory="${2:?missing value for --memory}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "ERROR: unknown argument: $1" >&2; usage >&2; exit 64 ;;
   esac
@@ -39,6 +50,18 @@ done
 }
 [[ "${publish_address}" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || {
   echo "ERROR: --publish-address must be an IPv4 address literal." >&2
+  exit 64
+}
+[[ "${instance}" =~ ^[a-z][a-z0-9-]{0,40}$ ]] || {
+  echo "ERROR: --instance must be a lowercase name of letters, digits and hyphens." >&2
+  exit 64
+}
+[[ "${port}" =~ ^[0-9]{1,5}$ ]] && port="$((10#${port}))" && ((port >= 1 && port <= 65535)) || {
+  echo "ERROR: --port must be between 1 and 65535." >&2
+  exit 64
+}
+[[ "${memory}" =~ ^[1-9][0-9]*[mg]$ ]] || {
+  echo "ERROR: --memory must be a size such as 9g or 4096m." >&2
   exit 64
 }
 for command_name in podman systemctl curl install sed awk; do
@@ -92,12 +115,24 @@ container_gid="$(podman run --rm --entrypoint /usr/bin/id "${image_ref}" -g shin
 data_dir="${release_dir}/data"
 image_dir="${release_dir}/data/images"
 runtime_dir="${project_root}/runtime"
-log_dir="${runtime_dir}/logs"
-tmp_dir="${runtime_dir}/tmp"
 state_dir="${runtime_dir}/deployments"
+# The production instance keeps the original layout (runtime/logs, runtime/tmp,
+# deployments/active.state); every other instance has its own runtime tree and
+# state files, so two services never share a writable directory.
+if [[ "${instance}" == islet-explorer ]]; then
+  instance_runtime="${runtime_dir}"
+  state_name="active"
+  previous_name="previous"
+else
+  instance_runtime="${runtime_dir}/${instance}"
+  state_name="${instance}.active"
+  previous_name="${instance}.previous"
+fi
+log_dir="${instance_runtime}/logs"
+tmp_dir="${instance_runtime}/tmp"
 
 mkdir -p -- "${log_dir}" "${tmp_dir}" "${state_dir}"
-chmod 0750 "${runtime_dir}" "${log_dir}" "${tmp_dir}" "${state_dir}"
+chmod 0750 "${runtime_dir}" "${instance_runtime}" "${log_dir}" "${tmp_dir}" "${state_dir}"
 for readable_dir in "${data_dir}" "${image_dir}"; do
   [[ -r "${readable_dir}" && -x "${readable_dir}" ]] || {
     echo "ERROR: service account cannot read ${readable_dir}." >&2
@@ -110,6 +145,21 @@ for writable_dir in "${log_dir}" "${tmp_dir}" "${state_dir}"; do
     exit 73
   }
 done
+
+unit_dir="${XDG_CONFIG_HOME:-${HOME}/.config}/containers/systemd"
+unit_path="${unit_dir}/${instance}.container"
+service_name="${instance}.service"
+# Two instances cannot publish the same host port; refuse before touching any
+# service rather than letting the restart fail and recovery run.
+if [[ -d "${unit_dir}" ]]; then
+  for other_unit in "${unit_dir}"/*.container; do
+    [[ -f "${other_unit}" && "${other_unit}" != "${unit_path}" ]] || continue
+    if grep -Eq "^PublishPort=[0-9.]+:${port}:3838$" "${other_unit}"; then
+      echo "ERROR: host port ${port} is already published by $(basename "${other_unit}")." >&2
+      exit 65
+    fi
+  done
+fi
 
 image_revision="$(podman image inspect --format \
   '{{ index .Labels "org.opencontainers.image.revision" }}' "${image_ref}")"
@@ -169,17 +219,18 @@ fi
 
 escape_sed() { printf '%s' "$1" | sed 's/[&|\\]/\\&/g'; }
 rendered="$(mktemp)"
-unit_dir="${XDG_CONFIG_HOME:-${HOME}/.config}/containers/systemd"
-unit_path="${unit_dir}/islet-explorer.container"
 backup=""
 trap 'rm -f -- "${rendered}" "${backup:-}"' EXIT
 
 sed \
   -e "s|@@RELEASE@@|$(escape_sed "${release}")|g" \
+  -e "s|@@INSTANCE@@|$(escape_sed "${instance}")|g" \
   -e "s|@@IMAGE_REF@@|$(escape_sed "${image_ref}")|g" \
   -e "s|@@DATA_SCHEMA@@|$(escape_sed "${data_schema}")|g" \
   -e "s|@@CPU_LIMIT@@|$(escape_sed "${cpu_limit}")|g" \
+  -e "s|@@MEMORY@@|$(escape_sed "${memory}")|g" \
   -e "s|@@PUBLISH_ADDRESS@@|$(escape_sed "${publish_address}")|g" \
+  -e "s|@@PORT@@|${port}|g" \
   -e "s|@@DATA_DIR@@|$(escape_sed "${data_dir}")|g" \
   -e "s|@@IMAGE_DIR@@|$(escape_sed "${image_dir}")|g" \
   -e "s|@@LOG_DIR@@|$(escape_sed "${log_dir}")|g" \
@@ -198,28 +249,33 @@ install -m 0644 "${rendered}" "${unit_path}"
 restore_previous_unit() {
   if [[ -n "${backup}" && -f "${backup}" ]]; then
     echo "Activation failed; restoring and checking the prior Quadlet service." >&2
-    local previous_image previous_address
+    local previous_image previous_publish previous_address previous_port
     previous_image="$(awk -F= '$1 == "Image" {sub(/^[^=]*=/, ""); print; exit}' "${backup}")"
     [[ -n "${previous_image}" ]] || return 1
-    # The prior unit is verified on the address it publishes (PublishPort=ADDR:3838:3838).
-    previous_address="$(awk -F= '$1 == "PublishPort" {sub(/^[^=]*=/, ""); split($0, a, ":"); print a[1]; exit}' "${backup}")"
+    # The prior unit is verified on the address and port it publishes
+    # (PublishPort=ADDR:PORT:3838).
+    previous_publish="$(awk -F= '$1 == "PublishPort" {sub(/^[^=]*=/, ""); print; exit}' "${backup}")"
+    previous_address="${previous_publish%%:*}"
+    previous_port="${previous_publish#*:}"
+    previous_port="${previous_port%%:*}"
     [[ "${previous_address}" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || previous_address="127.0.0.1"
+    [[ "${previous_port}" =~ ^[0-9]{1,5}$ ]] || previous_port="${port}"
     install -m 0644 "${backup}" "${unit_path}" || return 1
     systemctl --user daemon-reload || return 1
-    systemctl --user restart islet-explorer.service || return 1
+    systemctl --user restart "${service_name}" || return 1
     "${script_dir}/verify-deployment.sh" --url \
-      "http://${previous_address}:3838/islet-explorer/" --container islet-explorer \
+      "http://${previous_address}:${previous_port}/islet-explorer/" --container "${instance}" \
       --publish-address "${previous_address}" \
       --expected-image "${previous_image}" || return 1
     echo "Prior release restored and verified healthy; release state is unchanged." >&2
   else
     echo "First activation failed; stopping and removing the candidate service." >&2
-    systemctl --user stop islet-explorer.service || return 1
+    systemctl --user stop "${service_name}" || return 1
     rm -f -- "${unit_path}" || return 1
     systemctl --user daemon-reload || return 1
-    if podman container exists islet-explorer; then
+    if podman container exists "${instance}"; then
       local still_running
-      still_running="$(podman inspect --format '{{.State.Running}}' islet-explorer)" || return 1
+      still_running="$(podman inspect --format '{{.State.Running}}' "${instance}")" || return 1
       [[ "${still_running}" == false ]] || return 1
     fi
     echo "Candidate service removed; no release was activated." >&2
@@ -239,26 +295,29 @@ if ! systemctl --user daemon-reload; then
 fi
 # Quadlet's [Install] section wires the generated service into default.target;
 # generated units themselves are not enabled with `systemctl enable`.
-if ! systemctl --user restart islet-explorer.service; then
+if ! systemctl --user restart "${service_name}"; then
   activation_failed
 fi
 if ! "${script_dir}/verify-deployment.sh" --url \
-  "http://${publish_address}:3838/islet-explorer/" --container islet-explorer \
+  "http://${publish_address}:${port}/islet-explorer/" --container "${instance}" \
   --publish-address "${publish_address}" \
   --expected-image "${image_ref}"; then
   activation_failed
 fi
 
-if [[ -f "${state_dir}/active.state" ]]; then
-  cp -- "${state_dir}/active.state" "${state_dir}/previous.state"
+if [[ -f "${state_dir}/${state_name}.state" ]]; then
+  cp -- "${state_dir}/${state_name}.state" "${state_dir}/${previous_name}.state"
 fi
-state_tmp="$(mktemp "${state_dir}/.active.state.XXXXXX")"
+state_tmp="$(mktemp "${state_dir}/.${state_name}.state.XXXXXX")"
 {
   printf 'RELEASE=%s\n' "${release}"
   printf 'IMAGE_REF=%s\n' "${image_ref}"
+  printf 'INSTANCE=%s\n' "${instance}"
   printf 'PUBLISH_ADDRESS=%s\n' "${publish_address}"
+  printf 'PORT=%s\n' "${port}"
+  printf 'MEMORY=%s\n' "${memory}"
   printf 'ACTIVATED_AT=%s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 } > "${state_tmp}"
-mv -f -- "${state_tmp}" "${state_dir}/active.state"
+mv -f -- "${state_tmp}" "${state_dir}/${state_name}.state"
 
-echo "Activated Islet Explorer release ${release} (${image_ref}) on ${publish_address}:3838."
+echo "Activated Islet Explorer release ${release} (${image_ref}) as ${instance} on ${publish_address}:${port} (memory ${memory})."

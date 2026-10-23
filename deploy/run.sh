@@ -7,6 +7,13 @@ project_root="${PROJECT_ROOT:?set PROJECT_ROOT to /pubapps/<project>/islet-explo
 release="${RELEASE:?set RELEASE to a verified release identifier}"
 port="${PORT:-3838}"
 container_name="${CONTAINER_NAME:-islet-explorer-smoke}"
+# A smoke container may run beside the production and staging instances, so
+# its default cap is the staging one.
+memory="${MEMORY:-4g}"
+[[ "${memory}" =~ ^[1-9][0-9]*[mg]$ ]] || {
+  echo "ERROR: MEMORY must be a size such as 4g or 4096m." >&2
+  exit 64
+}
 
 [[ "${project_root}" == /* && "${project_root}" =~ ^[A-Za-z0-9._/-]+$ ]] || {
   echo "ERROR: PROJECT_ROOT must be an absolute path without whitespace." >&2
@@ -74,7 +81,7 @@ container_id="$(podman run --detach --rm \
   --read-only \
   --cap-drop=ALL \
   --security-opt=no-new-privileges \
-  "${cpu_limit[@]}" --memory=14g --pids-limit=2048 \
+  "${cpu_limit[@]}" --memory="${memory}" --pids-limit=2048 \
   --health-cmd='curl --fail --silent --show-error --max-time 8 http://127.0.0.1:3838/islet-explorer/' \
   --health-interval=30s --health-timeout=10s \
   --health-start-period=180s --health-retries=5 \

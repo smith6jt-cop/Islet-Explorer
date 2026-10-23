@@ -40,7 +40,11 @@ MOCK
 cat > "${mock_bin}/systemctl" <<'MOCK'
 #!/usr/bin/env bash
 set -euo pipefail
-unit="${XDG_CONFIG_HOME}/containers/systemd/islet-explorer.container"
+# The unit acted on is the instance named by the *.service argument
+# (activate-release.sh --instance); the production service is the default.
+service="islet-explorer"
+for arg in "$@"; do [[ "${arg}" == *.service ]] && service="${arg%.service}"; done
+unit="${XDG_CONFIG_HOME}/containers/systemd/${service}.container"
 image="$(awk -F= '$1 == "Image" {print $2; exit}' "${unit}" 2>/dev/null || true)"
 printf '%s\n' "$* ${image}" >> "${MOCK_CASE}/systemctl-calls"
 case "${2:-}" in
@@ -140,6 +144,11 @@ for scenario in success reload_fail start_fail candidate_health_fail recovery_re
       cmp -s "${state}/previous.state" "${case_dir}/original-state" || fail 'previous state lost'
       grep -Fqx "${candidate_image}" "${case_dir}/health-checks" || fail 'candidate identity was not verified'
       grep -Fq 'verified: 21 OME-TIFFs' "${case_dir}/output" || fail 'activation did not use the expanded release count'
+      grep -qx 'ContainerName=islet-explorer' "${unit}" || fail 'production unit lost its container name'
+      grep -qx 'PublishPort=127.0.0.1:3838:3838' "${unit}" || fail 'production unit lost its loopback port'
+      grep -q -- '--memory=9g ' "${unit}" || fail 'production unit lost its default memory cap'
+      grep -qx "Volume=${project}/runtime/logs:/var/log/shiny-server:rw" "${unit}" || fail 'production logs moved'
+      grep -qx 'PORT=3838' "${state}/active.state" || fail 'port not recorded'
       env PATH="${mock_bin}:${PATH}" XDG_CONFIG_HOME="${config}" \
         MOCK_CASE="${case_dir}" MOCK_SCENARIO=success \
         MOCK_CANDIDATE_IMAGE="${prior_image}" MOCK_COMMIT="${commit}" \
@@ -169,5 +178,79 @@ for scenario in success reload_fail start_fail candidate_health_fail recovery_re
       ;;
   esac
 done
+
+# A second instance (the staging service beside production, 2026-10-23) gets
+# its own unit, container name, host port, memory cap, runtime tree and state
+# files, leaves the production unit and state untouched, refuses a port another
+# unit already publishes, and rolls back on its own state.
+case_dir="${work_dir}/second_instance"
+project="${case_dir}/project"
+config="${case_dir}/config"
+unit_dir="${config}/containers/systemd"
+state="${project}/runtime/deployments"
+mkdir -p "${unit_dir}" "${state}"
+make_release "${project}" new "${candidate_image}" 21 2
+make_release "${project}" old "${prior_image}" 15 1
+printf '[Container]\nImage=%s\nPublishPort=127.0.0.1:3838:3838\n' "${prior_image}" > "${unit_dir}/islet-explorer.container"
+cp "${unit_dir}/islet-explorer.container" "${case_dir}/original-unit"
+printf 'RELEASE=old\nIMAGE_REF=%s\n' "${prior_image}" > "${state}/active.state"
+cp "${state}/active.state" "${case_dir}/original-state"
+run_dev() {
+  env PATH="${mock_bin}:${PATH}" XDG_CONFIG_HOME="${config}" \
+    MOCK_CASE="${case_dir}" MOCK_SCENARIO=success \
+    MOCK_CANDIDATE_IMAGE="${candidate_image}" MOCK_COMMIT="${commit}" "$@"
+}
+run_dev bash "${fixture_deploy}/activate-release.sh" --project-root "${project}" --release new \
+  --instance islet-explorer-dev --port 3839 --memory 4g > "${case_dir}/output" 2>&1 || {
+    cat "${case_dir}/output" >&2
+    fail 'second instance activation failed'
+  }
+dev_unit="${unit_dir}/islet-explorer-dev.container"
+[[ -f "${dev_unit}" ]] || fail 'second instance unit was not rendered'
+grep -qx 'ContainerName=islet-explorer-dev' "${dev_unit}" || fail 'second instance container name'
+grep -qx 'PublishPort=127.0.0.1:3839:3838' "${dev_unit}" || fail 'second instance port'
+grep -q -- '--memory=4g ' "${dev_unit}" || fail 'second instance memory cap'
+grep -qx "Volume=${project}/runtime/islet-explorer-dev/logs:/var/log/shiny-server:rw" "${dev_unit}" || fail 'second instance log directory'
+grep -qx "Volume=${project}/runtime/islet-explorer-dev/tmp:/tmp/islet-explorer:rw" "${dev_unit}" || fail 'second instance tmp directory'
+[[ -d "${project}/runtime/islet-explorer-dev/logs" && -d "${project}/runtime/islet-explorer-dev/tmp" ]] || fail 'second instance runtime tree'
+cmp -s "${unit_dir}/islet-explorer.container" "${case_dir}/original-unit" || fail 'production unit changed by the second instance'
+cmp -s "${state}/active.state" "${case_dir}/original-state" || fail 'production state changed by the second instance'
+[[ ! -e "${state}/previous.state" ]] || fail 'production previous state written by the second instance'
+grep -qx 'RELEASE=new' "${state}/islet-explorer-dev.active.state" || fail 'second instance state not recorded'
+grep -qx 'INSTANCE=islet-explorer-dev' "${state}/islet-explorer-dev.active.state" || fail 'second instance name not recorded'
+grep -qx 'PORT=3839' "${state}/islet-explorer-dev.active.state" || fail 'second instance port not recorded'
+grep -qx 'MEMORY=4g' "${state}/islet-explorer-dev.active.state" || fail 'second instance memory not recorded'
+[[ ! -e "${state}/islet-explorer-dev.previous.state" ]] || fail 'first second-instance activation wrote a previous state'
+grep -q 'restart islet-explorer-dev.service' "${case_dir}/systemctl-calls" || fail 'second instance service was not restarted'
+grep -q 'restart islet-explorer.service' "${case_dir}/systemctl-calls" && fail 'production service was restarted by the second instance'
+cp "${dev_unit}" "${case_dir}/dev-unit-before-collision"
+set +e
+run_dev bash "${fixture_deploy}/activate-release.sh" --project-root "${project}" --release new \
+  --instance islet-explorer-dev --port 3838 --memory 4g > "${case_dir}/collision-output" 2>&1
+status=$?
+set -e
+[[ "${status}" == 65 ]] || { cat "${case_dir}/collision-output" >&2; fail "port collision: expected exit 65, got ${status}"; }
+grep -Fq 'already published by islet-explorer.container' "${case_dir}/collision-output" || fail 'port collision not reported'
+cmp -s "${dev_unit}" "${case_dir}/dev-unit-before-collision" || fail 'port collision changed the unit'
+run_dev bash "${fixture_deploy}/activate-release.sh" --project-root "${project}" --release old \
+  --instance islet-explorer-dev --port 3839 --memory 4g > "${case_dir}/output-old" 2>&1 || {
+    cat "${case_dir}/output-old" >&2
+    fail 'second instance re-activation failed'
+  }
+grep -qx 'RELEASE=old' "${state}/islet-explorer-dev.active.state" || fail 'second instance re-activation not recorded'
+grep -qx 'RELEASE=new' "${state}/islet-explorer-dev.previous.state" || fail 'second instance previous state missing'
+env PATH="${mock_bin}:${PATH}" XDG_CONFIG_HOME="${config}" \
+  MOCK_CASE="${case_dir}" MOCK_SCENARIO=success \
+  MOCK_CANDIDATE_IMAGE="${candidate_image}" MOCK_COMMIT="${commit}" \
+  bash "${fixture_deploy}/rollback-release.sh" --project-root "${project}" --instance islet-explorer-dev \
+  > "${case_dir}/rollback-output" 2>&1 || {
+    cat "${case_dir}/rollback-output" >&2
+    fail 'second instance rollback failed'
+  }
+grep -Fq 'Rolling back islet-explorer-dev to release new on 127.0.0.1:3839' "${case_dir}/rollback-output" || fail 'second instance rollback target'
+grep -qx 'RELEASE=new' "${state}/islet-explorer-dev.active.state" || fail 'second instance rollback not recorded'
+grep -qx 'PublishPort=127.0.0.1:3839:3838' "${dev_unit}" || fail 'second instance rollback lost its port'
+grep -q -- '--memory=4g ' "${dev_unit}" || fail 'second instance rollback lost its memory cap'
+cmp -s "${state}/active.state" "${case_dir}/original-state" || fail 'production state changed by the second instance rollback'
 
 echo 'Deployment activation and verified recovery tests passed.'

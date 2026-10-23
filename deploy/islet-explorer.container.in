@@ -1,11 +1,11 @@
 [Unit]
-Description=Islet Explorer reviewer application (@@RELEASE@@)
+Description=Islet Explorer @@INSTANCE@@ (@@RELEASE@@)
 Wants=network-online.target
 After=network-online.target
 RequiresMountsFor=@@DATA_DIR@@ @@IMAGE_DIR@@ @@LOG_DIR@@ @@TMP_DIR@@
 
 [Container]
-ContainerName=islet-explorer
+ContainerName=@@INSTANCE@@
 Image=@@IMAGE_REF@@
 Pull=never
 
@@ -14,11 +14,11 @@ Pull=never
 UserNS=keep-id:uid=@@CONTAINER_UID@@,gid=@@CONTAINER_GID@@
 User=@@CONTAINER_UID@@:@@CONTAINER_GID@@
 
-# Shiny listens on the container interface; the VM publishes one address only:
-# the loopback by default, or the private VM address UFRC's TLS/Basic-Auth
-# reverse proxy connects to (activate-release.sh --publish-address), which must
-# be reachable from that proxy alone.
-PublishPort=@@PUBLISH_ADDRESS@@:3838:3838
+# Shiny listens on the container interface; the VM publishes one address and
+# port per instance: the loopback by default, or the private VM address UFRC's
+# TLS/Basic-Auth reverse proxy connects to (activate-release.sh
+# --publish-address), which UFRC's network keeps from every other host.
+PublishPort=@@PUBLISH_ADDRESS@@:@@PORT@@:3838
 
 Volume=@@DATA_DIR@@:/srv/islet-explorer/data:ro
 Volume=@@IMAGE_DIR@@:/srv/islet-explorer/app/shiny_app/www/local_images:ro
@@ -32,7 +32,7 @@ Tmpfs=/var/lib/shiny-server:rw,size=64m,mode=0755,U
 ReadOnly=true
 NoNewPrivileges=true
 DropCapability=all
-PodmanArgs=@@CPU_LIMIT@@--memory=14g --pids-limit=2048
+PodmanArgs=@@CPU_LIMIT@@--memory=@@MEMORY@@ --pids-limit=2048
 
 Environment=ISLET_RELEASE=@@RELEASE@@
 Environment=ISLET_RUNTIME_MODE=production

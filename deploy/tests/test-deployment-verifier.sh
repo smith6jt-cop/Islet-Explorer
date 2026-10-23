@@ -117,4 +117,15 @@ check 64 "${verifier[@]}" --url http://10.20.30.40:3838/islet-explorer/ --publis
 check 64 "${verifier[@]}" --url "${url}" --publish-address pubmaigan1
 check 64 "${verifier[@]}" --url "${url}" --publish-address '10.13.41.21;rm'
 
+# Production and the staging instance publish different ports on the same
+# address (2026-10-23); each verifies its own port and ignores the other's.
+printf 'LISTEN 0 128 %s:3838 0.0.0.0:*\nLISTEN 0 128 %s:3839 0.0.0.0:*\n' "${private}" "${private}" \
+  > "${work_dir}/listeners"
+check 0 "${verifier[@]}" --url "http://${private}:3838/islet-explorer/" --publish-address "${private}"
+check 0 "${verifier[@]}" --url "http://${private}:3839/islet-explorer/" --publish-address "${private}" \
+  --container islet-explorer-dev
+printf 'LISTEN 0 128 %s:3838 0.0.0.0:*\nLISTEN 0 128 127.0.0.1:3839 0.0.0.0:*\n' "${private}" \
+  > "${work_dir}/listeners"
+check 77 "${verifier[@]}" --url "http://${private}:3839/islet-explorer/" --publish-address "${private}"
+
 echo 'Deployment listener, image identity, and Range verifier tests passed.'
