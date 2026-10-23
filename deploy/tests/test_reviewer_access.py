@@ -65,7 +65,7 @@ def synthetic_server(mode="pass"):
                 else:
                     self.send(401, b"PRIVATE_ERROR_CANARY", {"WWW-Authenticate": 'Basic realm="PRIVATE_REALM_CANARY"'})
                 return
-            if self.path.endswith("websocket/"):
+            if self.path.endswith("/websocket") or self.path.endswith("websocket/"):
                 key = self.headers["Sec-WebSocket-Key"]
                 accept = base64.b64encode(hashlib.sha1(
                     (key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode(),

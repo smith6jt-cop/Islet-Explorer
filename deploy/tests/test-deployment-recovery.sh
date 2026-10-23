@@ -253,4 +253,90 @@ grep -qx 'PublishPort=127.0.0.1:3839:3838' "${dev_unit}" || fail 'second instanc
 grep -q -- '--memory=4g ' "${dev_unit}" || fail 'second instance rollback lost its memory cap'
 cmp -s "${state}/active.state" "${case_dir}/original-state" || fail 'production state changed by the second instance rollback'
 
+# UFRC's proxy serves the three image aliases itself from a DocumentRoot on the
+# shared filesystem (vhost of 2026-10-23). With --docroot, activation points
+# DOCROOT/islet-explorer/{local_images,images,img_data} at the verified
+# release's images, a failed activation points them back at the restored
+# release, an alias that is a real directory is refused before any service is
+# touched, and rollback replays the recorded DocumentRoot.
+case_dir="${work_dir}/docroot"
+project="${case_dir}/project"
+config="${case_dir}/config"
+unit_dir="${config}/containers/systemd"
+state="${project}/runtime/deployments"
+docroot="${case_dir}/html"
+mkdir -p "${unit_dir}" "${state}" "${docroot}"
+make_release "${project}" new "${candidate_image}" 21 2
+make_release "${project}" old "${prior_image}" 15 1
+printf '[Container]\nImage=%s\nPublishPort=127.0.0.1:3838:3838\nVolume=%s/releases/old/data/images:/srv/islet-explorer/app/shiny_app/www/local_images:ro\n' \
+  "${prior_image}" "${project}" > "${unit_dir}/islet-explorer.container"
+printf 'RELEASE=old\nIMAGE_REF=%s\n' "${prior_image}" > "${state}/active.state"
+printf '%s\n' "${prior_image}" > "${case_dir}/running-image"
+run_docroot() {
+  local scenario="$1" candidate="$2"
+  shift 2
+  env PATH="${mock_bin}:${PATH}" XDG_CONFIG_HOME="${config}" \
+    MOCK_CASE="${case_dir}" MOCK_SCENARIO="${scenario}" \
+    MOCK_CANDIDATE_IMAGE="${candidate}" MOCK_COMMIT="${commit}" "$@"
+}
+aliases_point_at() {
+  local target="$1" alias
+  for alias in local_images images img_data; do
+    [[ -L "${docroot}/islet-explorer/${alias}" && "$(readlink "${docroot}/islet-explorer/${alias}")" == "${target}" ]] || return 1
+  done
+  [[ -z "$(find "${docroot}/islet-explorer" -name '.*.tmp' -print -quit)" ]]
+}
+run_docroot success "${candidate_image}" bash "${fixture_deploy}/activate-release.sh" --project-root "${project}" \
+  --release new --docroot "${docroot}" > "${case_dir}/output" 2>&1 || {
+    cat "${case_dir}/output" >&2
+    fail 'activation with a DocumentRoot failed'
+  }
+aliases_point_at "${project}/releases/new/data/images" || fail 'image aliases do not point at the activated release'
+grep -qx "DOCROOT=${docroot}" "${state}/active.state" || fail 'DocumentRoot not recorded'
+grep -Fq "Proxy image aliases under ${docroot}/islet-explorer now point at ${project}/releases/new/data/images" "${case_dir}/output" || \
+  fail 'alias update not reported'
+cp "${unit_dir}/islet-explorer.container" "${case_dir}/unit-before-refusal"
+cp "${case_dir}/systemctl-calls" "${case_dir}/calls-before-refusal"
+rm "${docroot}/islet-explorer/images"
+mkdir "${docroot}/islet-explorer/images"
+set +e
+run_docroot success "${candidate_image}" bash "${fixture_deploy}/activate-release.sh" --project-root "${project}" \
+  --release old --docroot "${docroot}" > "${case_dir}/refusal-output" 2>&1
+status=$?
+set -e
+[[ "${status}" == 65 ]] || { cat "${case_dir}/refusal-output" >&2; fail "real directory in an alias's place: expected exit 65, got ${status}"; }
+grep -Fq "${docroot}/islet-explorer/images exists and is not a symlink" "${case_dir}/refusal-output" || fail 'real directory not reported'
+[[ -d "${docroot}/islet-explorer/images" && ! -L "${docroot}/islet-explorer/images" ]] || fail 'the real directory was removed'
+cmp -s "${unit_dir}/islet-explorer.container" "${case_dir}/unit-before-refusal" || fail 'refusal changed the unit'
+cmp -s "${case_dir}/systemctl-calls" "${case_dir}/calls-before-refusal" || fail 'refusal touched the service'
+rmdir "${docroot}/islet-explorer/images"
+ln -s "${project}/releases/new/data/images" "${docroot}/islet-explorer/images"
+# A failed activation of the old release (its image is the failing candidate
+# here) restores the new unit; aliases that had drifted follow the restored release.
+for alias in local_images images img_data; do ln -sfn "${project}/releases/old/data/images" "${docroot}/islet-explorer/${alias}"; done
+set +e
+run_docroot candidate_health_fail "${prior_image}" bash "${fixture_deploy}/activate-release.sh" --project-root "${project}" \
+  --release old --docroot "${docroot}" > "${case_dir}/failed-output" 2>&1
+status=$?
+set -e
+[[ "${status}" == 70 ]] || { cat "${case_dir}/failed-output" >&2; fail "failed activation with a DocumentRoot: expected exit 70, got ${status}"; }
+grep -Fq 'restored and verified healthy' "${case_dir}/failed-output" || fail 'recovery outcome missing with a DocumentRoot'
+aliases_point_at "${project}/releases/new/data/images" || fail 'image aliases do not follow the restored release'
+grep -qx 'RELEASE=new' "${state}/active.state" || fail 'failed activation changed the active state'
+run_docroot success "${candidate_image}" bash "${fixture_deploy}/activate-release.sh" --project-root "${project}" \
+  --release old --docroot "${docroot}" > "${case_dir}/output-old" 2>&1 || {
+    cat "${case_dir}/output-old" >&2
+    fail 'activation of the old release with a DocumentRoot failed'
+  }
+aliases_point_at "${project}/releases/old/data/images" || fail 'image aliases do not point at the re-activated old release'
+grep -qx "DOCROOT=${docroot}" "${state}/previous.state" || fail 'previous state lost the DocumentRoot'
+run_docroot success "${candidate_image}" bash "${fixture_deploy}/rollback-release.sh" --project-root "${project}" \
+  > "${case_dir}/rollback-output" 2>&1 || {
+    cat "${case_dir}/rollback-output" >&2
+    fail 'rollback with a DocumentRoot failed'
+  }
+grep -qx 'RELEASE=new' "${state}/active.state" || fail 'rollback did not restore the new release'
+grep -qx "DOCROOT=${docroot}" "${state}/active.state" || fail 'rollback lost the DocumentRoot'
+aliases_point_at "${project}/releases/new/data/images" || fail 'image aliases do not follow the rollback'
+
 echo 'Deployment activation and verified recovery tests passed.'

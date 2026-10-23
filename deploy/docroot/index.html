@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Islet Explorer</title>
+<link rel="icon" href="/favicon.ico">
+<style>
+  :root { color-scheme: light dark; --bg: #ffffff; --fg: #1f1f1f; --muted: #555555; --accent: #3b6a9e; --card: #f4f6f8; --border: #d0d4d8; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #1f1f1f; --fg: #cccccc; --muted: #a0a0a0; --accent: #6ea0d8; --card: #262626; --border: #3a3a3a; } }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 17px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 44rem; margin: 0 auto; padding: 3rem 1rem 4rem; }
+  .logo { height: 56px; }
+  .logo-light { display: block; } .logo-dark { display: none; }
+  @media (prefers-color-scheme: dark) { .logo-light { display: none; } .logo-dark { display: block; } }
+  h1 { font-size: 2rem; margin: 1.25rem 0 0.5rem; }
+  p { margin: 0.6rem 0; }
+  .muted { color: var(--muted); }
+  a.button { display: inline-block; margin: 1.5rem 0; padding: 0.7rem 1.2rem; background: var(--accent); color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; }
+  a.button:focus-visible { outline: 3px solid var(--fg); outline-offset: 2px; }
+  .banner { display: none; padding: 0.6rem 0.9rem; border: 1px solid var(--border); background: var(--card); border-radius: 6px; margin-bottom: 1rem; }
+  .banner.show { display: block; }
+</style>
+</head>
+<body>
+<main>
+  <div id="staging" class="banner" role="status">Staging instance: this copy is for the study team's own checks before a release reaches reviewers.</div>
+  <img class="logo logo-light" src="/logo-header-light.png" alt="">
+  <img class="logo logo-dark" src="/logo-header-dark.png" alt="">
+  <h1>Islet Explorer</h1>
+  <p>An interactive explorer of pancreatic islet CODEX multiplexed imaging data from nPOD donors without diabetes, with islet autoantibodies, and with type 1 diabetes. It compares endocrine composition and the islet microenvironment across donors through linked plots, a trajectory view, spatial neighbourhoods and a whole-slide image viewer.</p>
+  <p>Laboratory of Maigan Brusko, PhD, University of Florida.</p>
+  <p><a class="button" href="/islet-explorer/">Open the Islet Explorer</a></p>
+  <p class="muted">Access is restricted to invited reviewers. The browser asks for the username and password you were given; the same sign-in covers the application and its images.</p>
+  <p class="muted">Section-level associations and the orientation of the trajectory do not establish disease progression.</p>
+</main>
+<script>if (/^dev/.test(location.hostname)) { document.getElementById('staging').classList.add('show'); }</script>
+</body>
+</html>

@@ -45,6 +45,13 @@ class Target:
     prefix: str
 
 
+# Shiny Server answers WebSocket upgrades only on its SockJS route
+# (/<app>/__sockjs__/n=<token>/<server>/<session>/websocket); the bare
+# "websocket/" route of a plain Shiny worker hangs behind it until the proxy
+# times out. The token, server and session values are arbitrary for a handshake.
+DEFAULT_WEBSOCKET_PATH = "__sockjs__/n=acceptance/000/acceptance/websocket"
+
+
 def validate_url(value: str) -> Target:
     try:
         if re.search(r"[\s\\?#\x00-\x1f\x7f]", value):
@@ -134,7 +141,7 @@ def websocket_headers(origin: str) -> tuple[dict, str]:
 
 
 def verify_access(target: Target, credentials: Credentials, image_path: str,
-                  prefix_sha256: str, *, sidecar_paths=(), websocket_path="websocket/",
+                  prefix_sha256: str, *, sidecar_paths=(), websocket_path=DEFAULT_WEBSOCKET_PATH,
                   download_path="session/auth-boundary-probe/download/auth-boundary-probe",
                   timeout=10.0, transport=None) -> dict:
     """Transport injection is for synthetic tests only; the CLI always uses TLS."""
@@ -228,7 +235,7 @@ def main(argv=None) -> int:
     parser.add_argument("--auth-file", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--sidecar-path", action="append", default=[])
-    parser.add_argument("--websocket-path", default="websocket/")
+    parser.add_argument("--websocket-path", default=DEFAULT_WEBSOCKET_PATH)
     parser.add_argument("--download-path", default="session/auth-boundary-probe/download/auth-boundary-probe")
     parser.add_argument("--timeout", type=float, default=10.0)
     try:

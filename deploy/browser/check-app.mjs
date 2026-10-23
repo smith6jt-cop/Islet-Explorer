@@ -16,8 +16,8 @@ const EXPANDED_DONORS = 15 + ADDITIONS.length;
 const options = {};
 for (let index = 2; index < process.argv.length; index += 2) {
   const key = process.argv[index];
-  if (!['--url', '--output', '--chrome', '--expanded'].includes(key) || !process.argv[index + 1]) {
-    throw new Error('Usage: check-app.mjs --url APP_URL --output REPORT.json [--chrome CHROME_PATH] [--expanded true]');
+  if (!['--url', '--output', '--chrome', '--expanded', '--auth-file'].includes(key) || !process.argv[index + 1]) {
+    throw new Error('Usage: check-app.mjs --url APP_URL --output REPORT.json [--chrome CHROME_PATH] [--expanded true] [--auth-file JSON]');
   }
   options[key.slice(2)] = process.argv[index + 1];
 }
@@ -26,12 +26,30 @@ const appUrl = new URL(options.url);
 if (!['http:', 'https:'].includes(appUrl.protocol) || appUrl.username || appUrl.password ||
     appUrl.search || appUrl.hash) throw new Error('Supply an HTTP(S) application URL without credentials or query parameters');
 if (!appUrl.pathname.endsWith('/')) appUrl.pathname += '/';
+// Through UFRC's proxy the whole site sits behind Basic Auth. The credential comes
+// from the same owner-only 0600 JSON file as deploy/verify-reviewer-access.py and
+// is sent only to the HTTPS origin; it never reaches the report.
+let credentials = null;
+if (options['auth-file']) {
+  if (appUrl.protocol !== 'https:') throw new Error('--auth-file requires an https application URL');
+  const authPath = path.resolve(options['auth-file']);
+  const authStat = await fs.lstat(authPath);
+  if (!authStat.isFile() || (authStat.mode & 0o777) !== 0o600) {
+    throw new Error('--auth-file must be a regular file with mode 0600');
+  }
+  const parsed = JSON.parse(await fs.readFile(authPath, 'utf8'));
+  if (!parsed || typeof parsed !== 'object' || Object.keys(parsed).sort().join(',') !== 'password,username' ||
+      typeof parsed.username !== 'string' || typeof parsed.password !== 'string') {
+    throw new Error('--auth-file must hold exactly {"username": ..., "password": ...}');
+  }
+  credentials = { username: parsed.username, password: parsed.password };
+}
 
 const report = {
   schemaVersion: 1,
   runState: 'running',
   startedAt: new Date().toISOString(),
-  target: { origin: appUrl.origin, applicationPath: appUrl.pathname },
+  target: { origin: appUrl.origin, applicationPath: appUrl.pathname, basicAuth: Boolean(credentials) },
   versions: {
     puppeteer: require('puppeteer-core/package.json').version,
     axe: require('axe-core/package.json').version,
@@ -44,7 +62,9 @@ const report = {
   externalRequestsBlocked: 0,
   limitations: [
     'Automated checks are a subset of accessibility review; visualizations and assistive-technology use still require manual review.',
-    'This run does not establish external Basic Auth, UFRC proxy behavior, or production-container security.',
+    credentials
+      ? 'This run went through the HTTPS origin with Basic Auth; it does not establish production-container security.'
+      : 'This run does not establish external Basic Auth, UFRC proxy behavior, or production-container security.',
   ],
 };
 const axeSource = await fs.readFile(require.resolve('axe-core/axe.min.js'), 'utf8');
@@ -71,6 +91,7 @@ async function check(name, operation) {
 
 async function instrument(page) {
   page.setDefaultTimeout(180000);
+  if (credentials) await page.authenticate(credentials);
   await page.setViewport({ width: 1600, height: 1100, deviceScaleFactor: 1 });
   await page.setRequestInterception(true);
   page.on('request', request => {

@@ -1,8 +1,11 @@
 # External reviewer access acceptance
 
 Run this after UFRC configures the canonical HTTPS endpoint and whole-site Basic
-Authentication. No external pass is currently claimed: the endpoint and real
-reviewer credential file are still required. Python 3 on Linux is sufficient.
+Authentication. UFRC's vhosts went live on 2026-10-23; from the campus network,
+with UFRC's temporary test account, all 15 checks passed on both hostnames that
+day (`deploy/README.md` § 4). No external pass is claimed yet: the run from a
+clean non-UF network with the real reviewer credential file is still required.
+Python 3 on Linux is sufficient.
 
 Create an owner-only **0600** regular JSON file outside the checkout containing
 `{"username":"<reviewer username>","password":"<reviewer password>"}`. Edit it
@@ -28,7 +31,9 @@ python3 deploy/verify-reviewer-access.py \
 ```
 
 Repeat `--sidecar-path` for known XML/JSON sidecars. The default WebSocket route is
-`websocket/`, matching Shiny's browser client; use `--websocket-path` when the
+Shiny Server's SockJS endpoint (`__sockjs__/n=<token>/<server>/<session>/websocket`,
+with placeholder values; the bare `websocket/` route of a plain Shiny worker hangs
+behind Shiny Server until the proxy times out); use `--websocket-path` when the
 deployed route differs. The anonymous download probe defaults to
 `session/auth-boundary-probe/download/auth-boundary-probe`; it checks that proxy
 authentication runs before Shiny session lookup. `--download-path` can instead

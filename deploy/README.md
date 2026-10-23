@@ -413,6 +413,26 @@ If service replacement fails, exit 70 reports completed recovery and exit 71
 reports that recovery could not be verified and requires operator attention.
 Preflight failures can also use exit 70 before any service is replaced.
 
+Since 2026-10-23 UFRC's proxy serves the three image aliases
+(`/islet-explorer/local_images/`, `images/`, `img_data/`) itself from an Apache
+`DocumentRoot` on the shared `/pubapps` filesystem instead of proxying them
+(§ 4). `--docroot DIR` makes those aliases follow the deployment: once the new
+service is verified, `DIR/islet-explorer/{local_images,images,img_data}` are
+replaced atomically by symlinks to the release's `data/images`; if a later
+step fails, they follow the restored release; an alias that is a real directory
+is refused (exit 65) before any service is touched. The DocumentRoot is
+recorded in the deployment state, so `rollback-release.sh` replays it. The
+proxy's NFS lookup cache can hand out the previous target for up to a minute
+after a swap.
+
+```bash
+deploy/activate-release.sh \
+  --project-root '/pubapps/<project>/islet-explorer' \
+  --release 'pubapps-2026-01' \
+  --publish-address 10.13.41.21 \
+  --docroot '/pubapps/<project>/islet-explorer/prod/html'
+```
+
 ### Staging instance
 
 UFRC pairs every application hostname with a development one
@@ -428,7 +448,8 @@ deploy/activate-release.sh \
   --project-root '/pubapps/<project>/islet-explorer' \
   --release 'pubapps-2026-11' \
   --instance islet-explorer-dev --port 3839 --memory 4g \
-  --publish-address 10.13.41.21
+  --publish-address 10.13.41.21 \
+  --docroot '/pubapps/<project>/islet-explorer/dev/html'
 ```
 
 | | production | staging |
@@ -439,6 +460,7 @@ deploy/activate-release.sh \
 | Runtime mounts | `runtime/logs`, `runtime/tmp` | `runtime/islet-explorer-dev/logs`, `.../tmp` |
 | Deployment state | `deployments/active.state`, `previous.state` | `deployments/islet-explorer-dev.active.state`, `.previous.state` |
 | Proxy hostname | `islet-explorer.rc.ufl.edu` → `pubmaigan1:3838` | `devislet-explorer.rc.ufl.edu` → `pubmaigan1:3839` |
+| Proxy DocumentRoot and auth file | `prod/html`, `prod/auth` | `dev/html`, `dev/auth` |
 
 Both instances mount the same read-only release directories, so staging the
 active release costs no storage; a candidate release is a second directory
@@ -466,15 +488,57 @@ image/data pairs until the new release has survived a VM reboot test.
 
 ## 4. UFRC reverse-proxy and Basic-Auth acceptance
 
-Request public path `/islet-explorer/` and the backend. The proxy host cannot
-reach the VM loopback, so the backend is the VM's private address (`pubmaigan1`,
-`10.13.41.21:3838`), published with `--publish-address 10.13.41.21` since
-2026-10-22 21:16 UTC (the publish-address rule above records the measured
-network filtering that makes this acceptable). Ask UFRC to preserve WebSocket upgrades,
-forwarded host/protocol, long Shiny connections, and unbuffered HTTP byte ranges for
-multi-gigabyte TIFFs. Basic Auth must cover the page, WebSocket endpoint, downloads,
-TIFFs, XML, JSON, and other served static assets. Parquet, GeoPackage, H5AD, and
-other release-data paths must not be directly web-accessible.
+UFRC configured the two vhosts on its proxy `vpubweb.rc.ufl.edu` on 2026-10-23
+(ticket `83810`). The proxy is a separate host that mounts the same `/pubapps`
+filesystem as the VM and runs each vhost as the service account (`mpm_itk`);
+it cannot reach the VM loopback, so the backend is the VM's private address
+(`pubmaigan1`, published with `--publish-address 10.13.41.21` since 2026-10-22
+21:16 UTC; the publish-address rule above records the measured network
+filtering that makes this acceptable). What the project operates, and where,
+under the project root `/pubapps/maigan/islet-explorer/`:
+
+| | production | staging |
+|---|---|---|
+| Public URL | `https://islet-explorer.rc.ufl.edu/islet-explorer/` | `https://devislet-explorer.rc.ufl.edu/islet-explorer/` |
+| Backend (`ProxyPass`, WebSocket included) | `pubmaigan1:3838` | `pubmaigan1:3839` |
+| Basic Auth (`<Location />`, the whole site) | `AuthUserFile` `prod/auth` | `dev/auth` |
+| Apache `DocumentRoot` (landing page at `/`, `/favicon.ico`) | `prod/html` | `dev/html` |
+| Image aliases served by Apache, not proxied (`ProxyPass ... !`) | `prod/html/islet-explorer/{local_images,images,img_data}` | the same under `dev/html` |
+| Proxy access and error logs (`nobody:maigan`, readable) | `/pubapps/logs/maigan/islet-explorer-{access,error}.log` | `.../devislet-explorer-{access,error}.log` |
+
+Because the proxy serves the three image aliases from the filesystem itself,
+the Viewer's Range requests for multi-gigabyte OME-TIFFs never pass through
+the container (measured 2026-10-23: exact 16-byte `206`, about 60 MB/s on
+8 MiB mid-file reads from campus). `activate-release.sh --docroot` keeps each
+alias a symlink into the verified release (§ 3); `shiny-server.conf` still
+serves the same names inside the container for the VM-local verifier. The
+auth files are bcrypt `htpasswd` files the project maintains itself (mode 640;
+Apache reads them as the service account): hash locally with `htpasswd -B`,
+never put a cleartext password in the ticket or on a command line, and replace
+the file atomically (rsync or `mv`). The landing page is
+`deploy/docroot/index.html` (its staging banner shows itself on the `dev`
+hostname); install it with the favicon and header logos:
+
+```bash
+rsync -a deploy/docroot/index.html app/shiny_app/www/favicon.ico \
+  app/shiny_app/www/logo-header-dark.png app/shiny_app/www/logo-header-light.png \
+  '<vm>:/pubapps/<project>/islet-explorer/prod/html/'
+```
+
+`.htaccess` files in these DocumentRoots are not read by the proxy (measured
+2026-10-23). Apache's own redirects (for example `/islet-explorer` without the
+slash) name `http://` until UFRC sets `ServerName https://...` in the vhosts;
+the load balancer bounces them back to HTTPS meanwhile. UFRC's first
+configuration named `https://pubmaigan1:...` on the HTTP backend lines; the
+`ws://` mapping listed first serves every request, so nothing fails, but the
+correct scheme (`http://`) has been requested. Both corrections are in ticket
+`83810`.
+
+The contract the vhosts must keep: WebSocket upgrades, forwarded host, long
+Shiny connections, unbuffered byte ranges for the TIFFs, and Basic Auth on the
+page, WebSocket endpoint, downloads, TIFFs, XML, JSON and every other served
+path. Parquet, GeoPackage, H5AD and other release-data paths must not be
+web-accessible: only `data/images` is linked into the DocumentRoots.
 
 Run locally on the VM, substituting one TIFF relative path:
 
@@ -494,6 +558,15 @@ profile, if dependencies are absent, or if the byte request is not exactly a
 `206 Content-Range` response. Activation also checks that the running container
 uses the requested immutable image. The manual `run.sh` launcher applies the
 same verification when an alternate loopback `PORT` is selected for a smoke test.
+
+Acceptance so far: on 2026-10-23, from the campus network and with UFRC's
+temporary test account, `deploy/verify-reviewer-access.py` passed all 15
+checks on both hostnames (anonymous `401` on the app, the Avivator entry
+point, the three image aliases, both sidecars, the download route and the
+WebSocket; authenticated `200`, the exact 16-byte `206`, `101` on Shiny
+Server's SockJS route, which is the verifier's default WebSocket path since
+that day). The run from a clean non-UF network with the reviewer credential is
+still required.
 
 Before reviewer credentials are released, use a clean non-UF browser/network to
 verify the required route behavior:

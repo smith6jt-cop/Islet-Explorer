@@ -53,9 +53,16 @@ previous_port="$(read_state PORT)"
 [[ "${previous_port}" =~ ^[0-9]{1,5}$ ]] || previous_port="3838"
 previous_memory="$(read_state MEMORY)"
 [[ "${previous_memory}" =~ ^[1-9][0-9]*[mg]$ ]] || previous_memory="9g"
+# The proxy's image aliases (activate-release.sh --docroot) follow the
+# deployment they were recorded with; older states have none.
+previous_docroot="$(read_state DOCROOT)"
+docroot_args=()
+if [[ "${previous_docroot}" == /* && "${previous_docroot}" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+  docroot_args=(--docroot "${previous_docroot}")
+fi
 
 echo "Rolling back ${instance} to release ${previous_release} on ${previous_address}:${previous_port}."
 exec "${script_dir}/activate-release.sh" \
   --project-root "${project_root}" --release "${previous_release}" \
   --instance "${instance}" --port "${previous_port}" --memory "${previous_memory}" \
-  --publish-address "${previous_address}"
+  --publish-address "${previous_address}" "${docroot_args[@]}"

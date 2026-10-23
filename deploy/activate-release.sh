@@ -5,6 +5,7 @@ usage() {
   cat <<'EOF'
 Usage: deploy/activate-release.sh --project-root ABS_PATH --release RELEASE
          [--publish-address IPV4] [--instance NAME] [--port PORT] [--memory SIZE]
+         [--docroot ABS_PATH]
 
 Installs/updates the user Quadlet from a fully verified release. The immutable
 IMAGE_REF and DATA_SCHEMA are read from RELEASE_DIR/release.env. If startup or
@@ -18,6 +19,13 @@ islet-explorer): its own Quadlet unit, container, host port (--port, default
 3838), memory cap (--memory, default 9g), deployment state and runtime
 directories. The staging instance is islet-explorer-dev on port 3839 (4g); the
 caps of all instances together must leave the 15 GiB VM its own headroom.
+--docroot names the Apache DocumentRoot UFRC's proxy serves the image aliases
+from itself (DOCROOT/islet-explorer/{local_images,images,img_data}, excluded
+from proxying in the vhost; prod/html and dev/html under the project root).
+Once the new service is verified, each alias is replaced atomically by a symlink
+to this release's data/images; if a later step fails, the aliases follow the
+restored release. An alias that is a real directory is refused before any
+service is touched.
 EOF
 }
 
@@ -27,6 +35,7 @@ publish_address="127.0.0.1"
 instance="islet-explorer"
 port="3838"
 memory="9g"
+docroot=""
 while (($#)); do
   case "$1" in
     --project-root) project_root="${2:?missing value for --project-root}"; shift 2 ;;
@@ -35,6 +44,7 @@ while (($#)); do
     --instance) instance="${2:?missing value for --instance}"; shift 2 ;;
     --port) port="${2:?missing value for --port}"; shift 2 ;;
     --memory) memory="${2:?missing value for --memory}"; shift 2 ;;
+    --docroot) docroot="${2:?missing value for --docroot}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "ERROR: unknown argument: $1" >&2; usage >&2; exit 64 ;;
   esac
@@ -62,6 +72,10 @@ done
 }
 [[ "${memory}" =~ ^[1-9][0-9]*[mg]$ ]] || {
   echo "ERROR: --memory must be a size such as 9g or 4096m." >&2
+  exit 64
+}
+[[ -z "${docroot}" || ( "${docroot}" == /* && "${docroot}" =~ ^[A-Za-z0-9._/-]+$ ) ]] || {
+  echo "ERROR: --docroot must be an absolute path without whitespace." >&2
   exit 64
 }
 for command_name in podman systemctl curl install sed awk; do
@@ -145,6 +159,23 @@ for writable_dir in "${log_dir}" "${tmp_dir}" "${state_dir}"; do
     exit 73
   }
 done
+# The proxy's static image aliases (shiny-server.conf serves the same three
+# names from the container). They must already be symlinks, or absent: nothing
+# here deletes a real directory.
+docroot_aliases=(local_images images img_data)
+if [[ -n "${docroot}" ]]; then
+  [[ -d "${docroot}" && -w "${docroot}" && -x "${docroot}" ]] || {
+    echo "ERROR: --docroot ${docroot} is not a writable directory." >&2
+    exit 73
+  }
+  for alias in "${docroot_aliases[@]}"; do
+    alias_path="${docroot}/islet-explorer/${alias}"
+    if [[ -e "${alias_path}" && ! -L "${alias_path}" ]]; then
+      echo "ERROR: ${alias_path} exists and is not a symlink; the proxy's image aliases must be symlinks into releases/." >&2
+      exit 65
+    fi
+  done
+fi
 
 unit_dir="${XDG_CONFIG_HOME:-${HOME}/.config}/containers/systemd"
 unit_path="${unit_dir}/${instance}.container"
@@ -246,6 +277,21 @@ if [[ -f "${unit_path}" ]]; then
 fi
 install -m 0644 "${rendered}" "${unit_path}"
 
+# Point the proxy's image aliases at one release's images. Each alias is
+# replaced by rename(2), so the proxy never sees a missing or half-written link
+# (its NFS lookup cache may still hand out the old target for up to a minute).
+publish_docroot_links() {
+  local target="$1" alias link tmp_link
+  mkdir -p -- "${docroot}/islet-explorer" || return 1
+  for alias in "${docroot_aliases[@]}"; do
+    link="${docroot}/islet-explorer/${alias}"
+    tmp_link="${docroot}/islet-explorer/.${alias}.${instance}.tmp"
+    ln -sfn -- "${target}" "${tmp_link}" || return 1
+    mv -Tf -- "${tmp_link}" "${link}" || { rm -f -- "${tmp_link}"; return 1; }
+  done
+  echo "Proxy image aliases under ${docroot}/islet-explorer now point at ${target}."
+}
+
 restore_previous_unit() {
   if [[ -n "${backup}" && -f "${backup}" ]]; then
     echo "Activation failed; restoring and checking the prior Quadlet service." >&2
@@ -267,6 +313,17 @@ restore_previous_unit() {
       "http://${previous_address}:${previous_port}/islet-explorer/" --container "${instance}" \
       --publish-address "${previous_address}" \
       --expected-image "${previous_image}" || return 1
+    if [[ -n "${docroot}" ]]; then
+      # The restored unit mounts its release's images on the container's
+      # local_images path; the proxy aliases follow it.
+      local previous_images
+      previous_images="$(awk '/^Volume=.*:\/srv\/islet-explorer\/app\/shiny_app\/www\/local_images:ro$/ {sub(/^Volume=/, ""); sub(/:\/srv\/islet-explorer\/app\/shiny_app\/www\/local_images:ro$/, ""); print; exit}' "${backup}")"
+      if [[ -n "${previous_images}" ]]; then
+        publish_docroot_links "${previous_images}" || return 1
+      else
+        echo "NOTE: the restored unit names no image directory; the proxy image aliases are unchanged." >&2
+      fi
+    fi
     echo "Prior release restored and verified healthy; release state is unchanged." >&2
   else
     echo "First activation failed; stopping and removing the candidate service." >&2
@@ -304,6 +361,10 @@ if ! "${script_dir}/verify-deployment.sh" --url \
   --expected-image "${image_ref}"; then
   activation_failed
 fi
+if [[ -n "${docroot}" ]] && ! publish_docroot_links "${image_dir}"; then
+  echo "ERROR: could not point the proxy image aliases at ${image_dir}." >&2
+  activation_failed
+fi
 
 if [[ -f "${state_dir}/${state_name}.state" ]]; then
   cp -- "${state_dir}/${state_name}.state" "${state_dir}/${previous_name}.state"
@@ -316,8 +377,11 @@ state_tmp="$(mktemp "${state_dir}/.${state_name}.state.XXXXXX")"
   printf 'PUBLISH_ADDRESS=%s\n' "${publish_address}"
   printf 'PORT=%s\n' "${port}"
   printf 'MEMORY=%s\n' "${memory}"
+  printf 'DOCROOT=%s\n' "${docroot}"
   printf 'ACTIVATED_AT=%s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 } > "${state_tmp}"
 mv -f -- "${state_tmp}" "${state_dir}/${state_name}.state"
 
-echo "Activated Islet Explorer release ${release} (${image_ref}) as ${instance} on ${publish_address}:${port} (memory ${memory})."
+docroot_note=""
+[[ -n "${docroot}" ]] && docroot_note=", proxy image aliases in ${docroot}"
+echo "Activated Islet Explorer release ${release} (${image_ref}) as ${instance} on ${publish_address}:${port} (memory ${memory})${docroot_note}."
