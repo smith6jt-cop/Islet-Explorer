@@ -244,6 +244,37 @@ payload; it is the fallback if B-I or B-II are not undertaken and the review rou
    stay in the loop for statistics. Only pursue C1 (more processes) if concurrency bites
    before that decision.
 
+### Would more HiPerGator resources help? Would a GPU?
+
+**A larger VM helps concurrency only, and only with more than one R process.** The
+baseline measured the VM's core as fast per thread as the workstation's (sort 328 ms
+against 379 ms), and every step a reviewer waits for runs single-threaded in one R
+process. More vCPUs therefore leave a single reviewer's times unchanged, and with one
+process the extra cores sit idle. They pay once C1 runs two or three R processes: each
+needs about 2.3 GB resident, so 4 vCPUs and 24 GB would carry three processes with room
+for the Podman store and the page cache. That is a line in the PubApps ticket, not a
+HiPerGator allocation: the reviewer app must run on the PubApps VM, because UFRC's proxy
+reaches only that VM and HiPerGator compute nodes have no public ingress. HiPerGator
+could take build-time work (the 66-minute data bundle, parity checks, image scans), but
+the workstation's 32 cores already do that faster than a typical node, so there is no gain
+there either. Nothing on the server side changes what an off-campus reviewer feels; that
+is payload over their link, which only A1, A4, A5 and the Plan B options address.
+
+**No GPU helps on the server, and the reviewer's GPU is already in use.** The server's
+time goes to R-level figure construction (`ggplotly()`), JSON serialisation, PNG
+rasterisation and message transfer; none of it runs on a GPU, R's plotting stack cannot
+use one, and PubApps VMs have none (this one is a two-vCPU VMware guest). Deflate
+compression (A1) costs tens of milliseconds of CPU per message. Where a GPU does matter is
+the browser: Avivator already renders the OME-TIFF tiles with WebGL, and in Plan B the
+170 k-cell tissue scatter would move from a server-drawn PNG to a WebGL layer
+(`deck.gl` or plotly `scattergl`) on the reviewer's own GPU, which removes the PNG
+render from the server (16 % of its time) and makes recolouring instant; the points go
+over once as binary arrays of roughly the same size as one PNG. GPUs on HiPerGator are
+useful upstream, in the cell-level pipeline (segmentation, typing, embeddings over 2.6
+million cells), which runs offline and does not touch the app's responsiveness; the
+trajectory and PAGA computations on 5,000 objects take seconds on a CPU and belong in the
+release bundle (B2), not on an accelerator.
+
 ### Verification for every item
 
 Run `bench-app.mjs` on staging before and after each change, from campus and with the
