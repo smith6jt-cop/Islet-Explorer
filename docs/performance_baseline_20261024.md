@@ -6,9 +6,10 @@ Is that the app's own architecture or the PubApps hosting (VM, NFS data, UFRC pr
 is a reasonable expectation for loading and responsiveness?
 
 **Answer in one paragraph.** For one reviewer, the hosting adds nothing measurable: through
-the public URL from a campus workstation, every step of a fixed scenario took the same time
-as the identical release container running on the build workstation (local NVMe data, a
-much faster CPU). What an off-campus reviewer feels is the app's own payload crossing their
+the public URL from a campus workstation, and through an SSH tunnel straight to the VM
+backend, every step of a fixed scenario took the same time as the identical release
+container running on the build workstation (local NVMe data, a 32-core CPU against the
+VM's two). What an off-campus reviewer feels is the app's own payload crossing their
 link: the first screen sends 3.5 MB over the WebSocket (the Plot tab is rendered twice at
 startup), every change of the plotted measure sends 1.7 MB (58 % of it per-point hover text),
 the Spatial tab 1.5 MB, the PAGA layout 1.5 MB, and the Viewer's first image view 10.7 MB of
@@ -32,9 +33,8 @@ those after each activation pays them once, and everyone after them does not.
   network emulation added on top of the real path: `home` 40 ms latency, 25 Mbps down,
   5 Mbps up; `slow` 120 ms, 8 Mbps, 2 Mbps. (D) *Staging instance:* the first session in
   its R process. (E) *Cold R process:* the workstation container right after a restart.
-  The VM backend reached directly through the SSH tunnel (the vantage point that would
-  separate the proxy from the VM) still needs the owner's HPG session; from the campus
-  result it can only add a few tens of milliseconds per step.
+  (F) *VM backend through the SSH tunnel* (workstation → HPG login node → `10.13.41.21:3838`),
+  the vantage point that separates the proxy from the VM.
 - **Scenario** (`deploy/browser/bench-app.mjs`, three cold runs per vantage point in a
   fresh browser context, medians reported, then two warm visits): page load until the
   Plot tab's two cards are drawn; two changes of the plotted measure; a drill-down click
@@ -47,8 +47,8 @@ those after each activation pays them once, and everyone after them does not.
 - **Supporting measurements:** HTTP timings of the page, scripts and TIFF Range reads with
   curl (proxy versus workstation container); a capture of the WebSocket frames split by
   output and by plotly trace field; a server-side micro-benchmark run inside the container
-  (CPU, DuckDB over the release Parquet, GeoPackage window read, cells CSVs; the VM half
-  waits for the HPG session).
+  (CPU, DuckDB over the release Parquet, GeoPackage window read, cells CSVs), on the
+  workstation and in the production container on the VM.
 - **Evidence:** `tmp/ufrc-release-20261022/evidence/performance-baseline-20261024/`
   (bench reports, curl timings, payload analysis, micro-benchmark). Reports hold timings
   and byte counts only.
@@ -57,23 +57,23 @@ those after each activation pays them once, and everyone after them does not.
 
 Medians of three cold runs. Steps are wall time from the action until the output is drawn.
 
-| Step | Workstation container | Public URL, campus | Public URL, 25/5 Mbps + 40 ms | Public URL, 8/2 Mbps + 120 ms |
-|------|----------------------:|-------------------:|------------------------------:|------------------------------:|
-| Page: first byte | 122 ms | 131 ms | 167 ms | 245 ms |
-| Page: Shiny connected | 268 ms | 324 ms | 663 ms | 1.5 s |
-| Page: Plot tab drawn | 3.9 s | 3.6 s | 8.8 s | 11.5 s |
-| Page assets transferred (gzip) | 1.5 MB | 1.5 MB | 1.5 MB | 1.5 MB |
-| WebSocket bytes to the first screen | 3.5 MB | 3.5 MB | 3.5 MB | 3.5 MB |
-| Change the plotted measure | 1.8 s | 1.2 s | 2.9 s | 3.7 s |
-| Change it again | 1.3 s | 1.3 s | 3.1 s | 3.8 s |
-| Drill-down click | 513 ms | 753 ms | 667 ms | 753 ms |
-| Open Trajectory tab | 202 ms | 237 ms | 214 ms | 228 ms |
-| Build PAGA layout | 1.0 s | 1.0 s | 2.4 s | 3.1 s |
-| Open Spatial tab | 2.2 s | 2.2 s | 3.8 s | 4.5 s |
-| Change Spatial donor | 1.2 s | 1.9 s | 1.6 s | 1.9 s |
-| Viewer: first tiles | 533 ms | 612 ms | 1.5 s | 3.8 s |
-| Viewer: Range bytes until quiet | 2.6 MB | 10.7 MB | 10.7 MB | 10.7 MB |
-| Warm revisit: Plot tab drawn | 3.9 s | 3.5 s | 8.1 s | 10.7 s |
+| Step | Workstation container | VM backend via tunnel | Public URL, campus | Public URL, 25/5 Mbps + 40 ms | Public URL, 8/2 Mbps + 120 ms |
+|------|----------------------:|----------------------:|-------------------:|------------------------------:|------------------------------:|
+| Page: first byte | 122 ms | 118 ms | 131 ms | 167 ms | 245 ms |
+| Page: Shiny connected | 268 ms | 272 ms | 324 ms | 663 ms | 1.5 s |
+| Page: Plot tab drawn | 3.9 s | 3.5 s | 3.6 s | 8.8 s | 11.5 s |
+| Page assets transferred (gzip) | 1.5 MB | 1.5 MB | 1.5 MB | 1.5 MB | 1.5 MB |
+| WebSocket bytes to the first screen | 3.5 MB | 3.5 MB | 3.5 MB | 3.5 MB | 3.5 MB |
+| Change the plotted measure | 1.8 s | 1.1 s | 1.2 s | 2.9 s | 3.7 s |
+| Change it again | 1.3 s | 1.3 s | 1.3 s | 3.1 s | 3.8 s |
+| Drill-down click | 513 ms | 518 ms | 753 ms | 667 ms | 753 ms |
+| Open Trajectory tab | 202 ms | 182 ms | 237 ms | 214 ms | 228 ms |
+| Build PAGA layout | 1.0 s | 1.1 s | 1.0 s | 2.4 s | 3.1 s |
+| Open Spatial tab | 2.2 s | 2.4 s | 2.2 s | 3.8 s | 4.5 s |
+| Change Spatial donor | 1.2 s | 1.3 s | 1.9 s | 1.6 s | 1.9 s |
+| Viewer: first tiles | 533 ms | 579 ms | 612 ms | 1.5 s | 3.8 s |
+| Viewer: Range bytes until quiet | 2.6 MB | 6.5 MB | 10.7 MB | 10.7 MB | 10.7 MB |
+| Warm revisit: Plot tab drawn | 3.9 s | 3.9 s | 3.5 s | 8.1 s | 10.7 s |
 
 Server compute plus transfer ("busy" until the last output message) and WebSocket bytes per
 step, workstation container versus the public URL from campus:
@@ -97,10 +97,12 @@ One-time costs per R process (first session after the process starts):
 | First PAGA layout | 5.9 s | 5.2 s |
 | Later sessions in the same process | 0.2 s / 1.0 s | 0.2 s / 1.0 s |
 
-HTTP through the proxy from campus (curl, medians of five): TLS handshake 14 ms, page first
-byte 132 ms (136 ms on the workstation container: the R process renders the page), the
-1.09 MB gzipped plotly bundle in 98 ms (78 ms locally), a 16-byte TIFF Range in 21 ms, an
-8 MiB mid-file Range in 169 ms (about 50 MB/s). The proxy adds about 20 ms per request.
+HTTP (curl, medians of five) through the proxy from campus, through the tunnel to the VM
+backend, and on the workstation container: page first byte 132 / 107 / 136 ms (the R
+process renders the page), the 1.09 MB gzipped plotly bundle 98 / 80 / 78 ms, an 8 MiB
+mid-file TIFF Range 169 / 99 / 9 ms (about 50 MB/s through the proxy, 85 MB/s through the
+tunnel), a 16-byte Range 21 ms through the proxy with a 14 ms TLS handshake. The proxy adds
+about 20 ms per request over the backend.
 
 WebSocket payload of the Plot tab (frame capture on the workstation container): the first
 screen carries 3.56 MB, of which the distribution card 1.82 MB and the size scatter 1.48 MB,
@@ -112,20 +114,40 @@ Compression is not available on this socket (Shiny Server's SockJS does not nego
 permessage-deflate and the proxy cannot compress frames), so payload reduction has to
 happen in the app.
 
-Server-side micro-benchmark inside the workstation container (single thread): CPU loop
-90 ms, 1000×1000 matrix product 31 ms, sort of 5 M values 379 ms; DuckDB reads of the
-summary Parquet 15 ms, one donor's tissue table (174 k rows) 14–20 ms, the 38 MB
-cell-distance Parquet grouped 15 ms; GeoPackage window read of 2,172 features 17 ms; 20
-cells CSVs 15 ms. Data access is not where the seconds go; the plotly figure construction
-and serialisation in R are. The same script is ready to run inside the production
-container for the hardware factor (`vm-measure.sh` in the evidence directory).
+The VM (`pubmaigan1`, VMware guest): 2 vCPUs of an AMD EPYC 9355, 15.7 GB of memory,
+load average 0.00 with both instances up 18 hours and healthy, their R processes resident
+at 2.3 GB (production) and 2.1 GB (staging) against caps of 9 and 4 GiB. `/pubapps` is
+NFS v3 over TCP from the Qumulo filer (1 MiB read size); an 8 MiB read from a TIFF ran at
+750–850 MB/s and the 38 MB cell-distance Parquet came from the page cache.
+
+Server-side micro-benchmark, single thread, workstation container versus the production
+container on the VM:
+
+| Measurement | Workstation | VM |
+|---|---:|---:|
+| CPU: scalar loop (5 M) | 90 ms | 91 ms |
+| CPU: 1000×1000 matrix product | 31 ms | 20 ms |
+| CPU: sort 5 M values | 379 ms | 328 ms |
+| DuckDB: summary `islets.parquet` | 15 ms | 11–13 ms |
+| DuckDB: one donor's tissue table (174 k rows) | 14–20 ms | 14–16 ms |
+| DuckDB: 38 MB cell-distance Parquet, grouped | 15 ms | 17 ms |
+| sf: GeoPackage window read, 2,172 features | 17 ms | 201–259 ms |
+| 20 cells CSVs (first touch / cached) | 15 / 14 ms | 46 / 21 ms |
+
+The VM's core is as fast as the workstation's for R, which is why the two vantage points
+match. The one data access that is slower over NFS is the GeoPackage window read (SQLite
+page reads, about 0.2 s), visible as the drill-down's extra 0.2–0.3 s through the proxy.
+Data access is otherwise not where the seconds go; the plotly figure construction and
+serialisation in R are.
 
 ## Reading
 
-1. **Hosting versus app.** From campus, the public URL matched the workstation container
-   step for step (differences of 0 to 0.3 s, within run-to-run noise), although the
-   workstation has a far faster CPU and local data. The VM, its NFS data and the proxy
-   are therefore not what the reviewer feels. The WebSocket is a real `wss://` socket
+1. **Hosting versus app.** The VM backend through the tunnel and the public URL from
+   campus both matched the workstation container step for step (differences of 0 to
+   0.3 s, within run-to-run noise), although the workstation has sixteen times the cores
+   and local data: the VM's two cores are as fast per thread, the app is single-threaded
+   per session, and the data reads are small. The VM, its NFS data and the proxy are
+   therefore not what the reviewer feels. The WebSocket is a real `wss://` socket
    through the proxy (no SockJS fallback), redirects and assets are served correctly, and
    the proxy's per-request overhead is about 20 ms.
 2. **The off-campus experience is payload times link.** Emulating a residential link on

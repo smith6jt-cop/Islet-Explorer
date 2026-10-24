@@ -660,8 +660,8 @@ node deploy/browser/bench-app.mjs --url https://islet-explorer.rc.ufl.edu/islet-
 ```
 
 The 2026-10-24 baseline and its reading are in `docs/performance_baseline_20261024.md`:
-the public URL from campus matched the workstation container step for step, so the
-hosting adds nothing measurable for one reviewer; what an off-campus reviewer feels
+the VM backend through the tunnel and the public URL from campus both matched the
+workstation container step for step, so the hosting adds nothing measurable for one reviewer; what an off-campus reviewer feels
 is the app's own payload (1.7 MB per Plot interaction, 3.6 MB for the first screen,
 which is rendered twice) over their link, plus two one-time costs per R process
 (the first Trajectory open, about 12 s, and the first PAGA layout, about 5 s).
