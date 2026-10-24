@@ -199,6 +199,28 @@ the payload and startup work above (less compute per step) or more than one R pr
 app, which open-source Shiny Server does not offer and would need a different serving
 arrangement.
 
+## Plan A Level 1, measured locally before deployment (2026-10-24, commit `eba12b4`)
+
+The same scenario against the edited app on the workstation (plain `shiny::runApp` on the
+development root, so the Viewer's Range step and the Parquet backend are not represented;
+the Shiny Server compression is in the image build and is measured on staging):
+
+| Measure | Before | After Level 1 |
+|---|---:|---:|
+| WebSocket bytes to the first screen | 3.56 MB (Plot cards sent twice) | 1.20 MB (sent once) |
+| WebSocket bytes per Plot change | 1.70 MB | 1.12 MB |
+| of which hover text | 0.99 MB | 0.45 MB |
+| First Trajectory open in a fresh R process | 11.6–12.7 s | 0.25 s (warmed at start) |
+| First PAGA layout in a fresh R process | 5.2–5.9 s | 1.3 s |
+| Plot change, server compute | 1.1–1.2 s | 1.1–1.2 s (unchanged; Level 2's `plot_ly()` item) |
+
+What remains in a Plot change is the two cards' 8,600 object points: compact hover text
+0.45 MB, keys 0.16 MB, coordinates 0.18 MB, and a per-point colour array on the
+distribution card's single marker trace (0.09 MB). With the socket compression the
+1.12 MB travels as roughly 0.2 MB. The test suite (370) and the deployment test suites
+pass; the production effect is measured after the image and data bundle are rebuilt for
+the commit and staging is activated with `--local-data`.
+
 ## What to do about it
 
 The [performance plans](performance_plans_20261024.md) turn these findings into Plan A

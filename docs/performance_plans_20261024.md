@@ -112,6 +112,19 @@ disk. `activate-release.sh` can copy those three trees from the verified release
 NFS and behind Apache). Effect: drill-down 0.75 s → about 0.55 s and steadier donor
 changes. Half a day in tooling plus the existing verification.
 
+**Level 1 status (2026-10-24, commit `eba12b4`, not yet deployed).** A1 (compression in
+the Shiny Server build), A2 (single first render), A3 (warm-up of the H5AD, pseudotime and
+PAGA at process start), A4 (five-significant-figure coordinates on the Plot cards, the
+Trajectory scatter and the UMAPs), A5 (compact per-object hover; the violin outlines carry
+no hover) and A7 (`activate-release.sh --local-data`, with its recovery test) are
+implemented and verified locally; the measured effect is recorded in the baseline
+document. A6 (partial plotly bundle) is deferred: `plotly::partial_bundle()` fetches the
+bundle from a CDN at render time, which the production container must not do, so it needs
+the bundle vendored into the image first, for a first-visit-only gain. Deployment needs
+the usual image rebuild (the Shiny Server patch is in the image) and data bundle for the
+new commit, then the staging acceptance with `bench-app.mjs` confirming the negotiated
+`permessage-deflate` extension through the proxy.
+
 ### Level 2: days each, app changes measured on staging
 
 **B1. Build the Plot cards and the Trajectory scatter with `plot_ly()` directly.**
