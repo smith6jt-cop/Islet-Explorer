@@ -199,6 +199,15 @@ the payload and startup work above (less compute per step) or more than one R pr
 app, which open-source Shiny Server does not offer and would need a different serving
 arrangement.
 
+## What to do about it
+
+The [performance plans](performance_plans_20261024.md) turn these findings into Plan A
+(quick wins by feasibility level: socket compression in the project's Shiny Server
+build, the startup double render, warming the trajectory computations, payload trims,
+direct `plot_ly()` figures, caching) and Plan B (a complete overhaul that moves the
+interactive work to the browser), with the profile that shows `ggplotly()` conversion as
+the dominant server cost.
+
 ## Re-running
 
 `deploy/README.md` § 5 "Responsiveness baseline" has the commands. Keep the same scenario
