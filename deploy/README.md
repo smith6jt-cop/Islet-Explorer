@@ -626,3 +626,42 @@ that project-plan item 6 applies to this Sensitive deployment, review Basic Auth
 SSH access quarterly while peer review remains active. Renew the PubApps allocation
 before expiration. Remove Basic Auth only after written PI/data-owner/nPOD and UFRC
 approval of the exact public-release bundle.
+
+### Responsiveness baseline
+
+`deploy/browser/bench-app.mjs` drives one fixed reviewer scenario against an
+explicitly selected application URL and records, per step, how long the browser
+waited and where the time went: the time until the server reported busy (one
+round trip), the time until its last output message arrived (server compute plus
+transfer), the bytes that crossed the WebSocket, and the browser's own draw. The
+scenario is: page load until the Plot tab's two cards are drawn, two changes of the
+plotted measure, a drill-down click, the Trajectory tab and its PAGA layout, the
+Spatial tab and a donor change, and the Viewer's first tiles. Each cold run uses a
+fresh browser context (empty cache); two warm visits follow. `--throttle home`
+(40 ms, 25/5 Mbps) and `--throttle slow` (120 ms, 8/2 Mbps) add emulated link
+conditions on top of the real path. Reports hold timings and byte counts only.
+
+Run the same scenario from the vantage points that separate the app from the
+hosting, and compare medians:
+
+```bash
+# the release image and data bundle on the build workstation (app alone)
+podman run -d --name islet-bench ... localhost/islet-explorer:<release>   # same mounts and env as the unit
+node deploy/browser/bench-app.mjs --url http://127.0.0.1:3843/islet-explorer/ \
+  --output evidence/bench-workstation.json --runs 3 --label workstation-container
+# the VM backend through the SSH tunnel (adds the VM and its NFS data)
+node deploy/browser/bench-app.mjs --url http://127.0.0.1:3842/islet-explorer/ \
+  --output evidence/bench-vm-direct.json --runs 3 --label vm-direct
+# the public URL (adds UFRC's proxy, TLS and Basic Auth)
+node deploy/browser/bench-app.mjs --url https://islet-explorer.rc.ufl.edu/islet-explorer/ \
+  --auth-file ~/restricted/prod-auth.json --output evidence/bench-proxy.json --runs 3 --label proxy
+node deploy/browser/bench-app.mjs --url https://islet-explorer.rc.ufl.edu/islet-explorer/ \
+  --auth-file ~/restricted/prod-auth.json --output evidence/bench-proxy-home.json --runs 3 --throttle home
+```
+
+The 2026-10-24 baseline and its reading are in `docs/performance_baseline_20261024.md`:
+the public URL from campus matched the workstation container step for step, so the
+hosting adds nothing measurable for one reviewer; what an off-campus reviewer feels
+is the app's own payload (1.7 MB per Plot interaction, 3.6 MB for the first screen,
+which is rendered twice) over their link, plus two one-time costs per R process
+(the first Trajectory open, about 12 s, and the first PAGA layout, about 5 s).
