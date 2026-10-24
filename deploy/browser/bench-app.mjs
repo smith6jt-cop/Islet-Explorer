@@ -114,7 +114,14 @@ async function idleAfter(page, t0, timeout = 180000) {
 class SocketMeter {
   constructor(client) {
     this.bytesIn = 0; this.framesIn = 0; this.bytesOut = 0; this.framesOut = 0; this.sockets = 0;
+    // DevTools reports frame payloads after decompression, so the negotiated extension (permessage-deflate
+    // or none) is read from the handshake response instead; it tells whether the socket is compressed.
+    this.extensions = null;
     client.on('Network.webSocketCreated', () => { this.sockets += 1; });
+    client.on('Network.webSocketHandshakeResponseReceived', ({ response }) => {
+      const headers = Object.fromEntries(Object.entries(response.headers || {}).map(([k, v]) => [k.toLowerCase(), v]));
+      this.extensions = headers['sec-websocket-extensions'] || 'none';
+    });
     client.on('Network.webSocketFrameReceived', ({ response }) => {
       this.framesIn += 1; this.bytesIn += response.payloadData?.length || 0;
     });
@@ -309,7 +316,7 @@ async function scenario(browser, runIndex, warm) {
   run.load.valueTimeline = initial.map(v => ({ name: v.name, afterConnectMs: Math.round(v.t - connectedAt) }));
   run.load.navigation = await navigationTiming(page);
   run.load.http = http.since(httpMark);
-  run.load.socket = await socketTransport(page);
+  run.load.socket = { ...(await socketTransport(page) || {}), extensions: socket.extensions };
   if (warm) {
     await page.close();
     return { run, errors };

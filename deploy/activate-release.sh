@@ -5,7 +5,7 @@ usage() {
   cat <<'EOF'
 Usage: deploy/activate-release.sh --project-root ABS_PATH --release RELEASE
          [--publish-address IPV4] [--instance NAME] [--port PORT] [--memory SIZE]
-         [--docroot ABS_PATH]
+         [--docroot ABS_PATH] [--local-data ABS_PATH]
 
 Installs/updates the user Quadlet from a fully verified release. The immutable
 IMAGE_REF and DATA_SCHEMA are read from RELEASE_DIR/release.env. If startup or
@@ -26,6 +26,15 @@ Once the new service is verified, each alias is replaced atomically by a symlink
 to this release's data/images; if a later step fails, the aliases follow the
 restored release. An alias that is a real directory is refused before any
 service is touched.
+--local-data names a directory on the VM's local disk (for example
+/local/maigan/releases). The release's data/geometry, data/cells and
+data/spatial trees, whose many small reads are slow over NFS (a drill-down's
+GeoPackage window took 0.2 s there against 17 ms on local disk), are copied to
+LOCAL_DATA/RELEASE/data/, checked file by file against MANIFEST.sha256, and
+mounted over the same paths inside the container; the image tree stays on the
+shared filesystem. A mismatch stops the activation before any service is
+touched. Copies of earlier releases are kept so a restored or rolled-back unit
+still finds its data; remove a retired release's copy by hand.
 EOF
 }
 
@@ -36,6 +45,7 @@ instance="islet-explorer"
 port="3838"
 memory="9g"
 docroot=""
+local_data=""
 while (($#)); do
   case "$1" in
     --project-root) project_root="${2:?missing value for --project-root}"; shift 2 ;;
@@ -45,6 +55,7 @@ while (($#)); do
     --port) port="${2:?missing value for --port}"; shift 2 ;;
     --memory) memory="${2:?missing value for --memory}"; shift 2 ;;
     --docroot) docroot="${2:?missing value for --docroot}"; shift 2 ;;
+    --local-data) local_data="${2:?missing value for --local-data}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "ERROR: unknown argument: $1" >&2; usage >&2; exit 64 ;;
   esac
@@ -76,6 +87,10 @@ done
 }
 [[ -z "${docroot}" || ( "${docroot}" == /* && "${docroot}" =~ ^[A-Za-z0-9._/-]+$ ) ]] || {
   echo "ERROR: --docroot must be an absolute path without whitespace." >&2
+  exit 64
+}
+[[ -z "${local_data}" || ( "${local_data}" == /* && "${local_data}" =~ ^[A-Za-z0-9._/-]+$ ) ]] || {
+  echo "ERROR: --local-data must be an absolute path without whitespace." >&2
   exit 64
 }
 for command_name in podman systemctl curl install sed awk; do
@@ -240,6 +255,45 @@ podman run --rm \
 # (cgroups v2). PubApps VMs delegate memory and pids only (2026-10-22,
 # pubmaigan1), and their 2-vCPU size bounds CPU by itself; a quota the kernel
 # cannot apply would keep the container from starting at all.
+# Local-disk copies of the small-read data trees (--local-data). rsync brings
+# the copy up to date (unchanged files are skipped), then every file is checked
+# against the release manifest; a mismatch stops the activation here, before
+# any service is touched. The copies are mounted over the same paths inside the
+# container by the Volume lines rendered below.
+local_data_trees=(geometry cells spatial)
+local_data_volumes=""
+local_data_mount=""
+if [[ -n "${local_data}" ]]; then
+  command -v rsync >/dev/null || { echo "ERROR: --local-data needs rsync." >&2; exit 69; }
+  local_release_data="${local_data}/${release}/data"
+  mkdir -p -- "${local_release_data}" || { echo "ERROR: cannot create ${local_release_data}." >&2; exit 73; }
+  for tree in "${local_data_trees[@]}"; do
+    [[ -d "${data_dir}/${tree}" ]] || { echo "ERROR: the release has no data/${tree} tree to copy." >&2; exit 65; }
+    rsync -a --delete -- "${data_dir}/${tree}/" "${local_release_data}/${tree}/" || {
+      echo "ERROR: copying data/${tree} to ${local_release_data} failed." >&2
+      exit 74
+    }
+  done
+  manifest_subset="$(mktemp)"
+  grep -E "  data/(geometry|cells|spatial)/" "${release_dir}/MANIFEST.sha256" > "${manifest_subset}" || true
+  [[ -s "${manifest_subset}" ]] || {
+    rm -f -- "${manifest_subset}"
+    echo "ERROR: MANIFEST.sha256 lists no files under data/{geometry,cells,spatial}." >&2
+    exit 65
+  }
+  if ! (cd -- "${local_data}/${release}" && sha256sum --check --quiet --strict "${manifest_subset}"); then
+    rm -f -- "${manifest_subset}"
+    echo "ERROR: the local copies under ${local_release_data} do not match MANIFEST.sha256." >&2
+    exit 65
+  fi
+  rm -f -- "${manifest_subset}"
+  for tree in "${local_data_trees[@]}"; do
+    local_data_volumes+="Volume=${local_release_data}/${tree}:/srv/islet-explorer/data/${tree}:ro"$'\n'
+  done
+  local_data_mount=" ${local_release_data}"
+  echo "Local copies of data/{geometry,cells,spatial} under ${local_release_data} verified against MANIFEST.sha256."
+fi
+
 cpu_limit=""
 controllers_file="/sys/fs/cgroup/user.slice/user-$(id -u).slice/user@$(id -u).service/cgroup.controllers"
 if [[ -r "${controllers_file}" ]] && grep -qw cpu "${controllers_file}"; then
@@ -268,7 +322,14 @@ sed \
   -e "s|@@TMP_DIR@@|$(escape_sed "${tmp_dir}")|g" \
   -e "s|@@CONTAINER_UID@@|${container_uid}|g" \
   -e "s|@@CONTAINER_GID@@|${container_gid}|g" \
-  "${script_dir}/islet-explorer.container.in" > "${rendered}"
+  -e "s|@@LOCAL_DATA_MOUNT@@|$(escape_sed "${local_data_mount}")|g" \
+  "${script_dir}/islet-explorer.container.in" > "${rendered}.sed"
+# The local-data placeholder line becomes one Volume line per copied tree, or
+# nothing at all when --local-data is not given.
+awk -v volumes="${local_data_volumes}" \
+  '$0 == "@@LOCAL_DATA_VOLUMES@@" { printf "%s", volumes; next } { print }' \
+  "${rendered}.sed" > "${rendered}"
+rm -f -- "${rendered}.sed"
 
 mkdir -p -- "${unit_dir}"
 if [[ -f "${unit_path}" ]]; then
@@ -378,10 +439,13 @@ state_tmp="$(mktemp "${state_dir}/.${state_name}.state.XXXXXX")"
   printf 'PORT=%s\n' "${port}"
   printf 'MEMORY=%s\n' "${memory}"
   printf 'DOCROOT=%s\n' "${docroot}"
+  printf 'LOCAL_DATA=%s\n' "${local_data}"
   printf 'ACTIVATED_AT=%s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 } > "${state_tmp}"
 mv -f -- "${state_tmp}" "${state_dir}/${state_name}.state"
 
 docroot_note=""
 [[ -n "${docroot}" ]] && docroot_note=", proxy image aliases in ${docroot}"
-echo "Activated Islet Explorer release ${release} (${image_ref}) as ${instance} on ${publish_address}:${port} (memory ${memory})${docroot_note}."
+local_data_note=""
+[[ -n "${local_data}" ]] && local_data_note=", local data copies in ${local_data}/${release}"
+echo "Activated Islet Explorer release ${release} (${image_ref}) as ${instance} on ${publish_address}:${port} (memory ${memory})${docroot_note}${local_data_note}."

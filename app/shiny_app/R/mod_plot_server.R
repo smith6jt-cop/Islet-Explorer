@@ -114,6 +114,25 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       value
     })
 
+    # The Population Measure, Metric, age and sex controls are renderUI outputs, so their inputs reach the
+    # server one flush after the first render. The cards used to render on the fallbacks and again on the
+    # real values, which doubled the first screen's work and payload (3.5 MB; performance baseline,
+    # 2026-10-24). The data chain waits once for the controls that will exist; the flag never goes back.
+    plot_controls_mounted <- reactiveVal(FALSE)
+    observe({
+      if (plot_controls_mounted()) return()
+      if (is.null(input$which)) return()
+      if (!identical(validated_mode(), "Microenvironment") && is.null(input$metric)) return()
+      comp <- prepared()$comp
+      if (!is.null(comp)) {
+        has_age <- "age" %in% colnames(comp) && any(is.finite(suppressWarnings(as.numeric(comp$age))))
+        if (has_age && is.null(input$age_range)) return()
+        has_sex <- "gender" %in% colnames(comp) && length(stats::na.omit(unique(as.character(comp$gender)))) > 0
+        if (has_sex && is.null(input$gender_filter)) return()
+      }
+      plot_controls_mounted(TRUE)
+    })
+
     # ---- Donor palette helper (consistent colors across scatter & distribution) ----
     get_donor_palette <- function(ids) {
       if (is.null(ids)) return(character(0))
@@ -327,6 +346,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
 
     # ---- raw_df_base: per-islet dataset aligned with current selections ----
     raw_df_base <- reactive({
+      req(plot_controls_mounted())
       pd <- prepared()
       mode <- validated_mode()
       groups <- validated_groups()
@@ -588,6 +608,8 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       mode <- validated_mode()
       selection <- validated_selection() %||% ""
       metric <- validated_metric()
+      # Compact hover per object, from the untransformed rows (the drawn values may be pseudo-log or pinned).
+      hover_by_key <- plot_point_hover_map(raw_rows)
 
       grp_levels <- c("ND", "Aab+", "T1D")
       sm$donor_status <- factor(sm$donor_status, levels = grp_levels)
@@ -795,6 +817,8 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       # Scrub the "colour: black" leak (from the shape-21 summary point's
       # color = "black" parameter) and any duplicate donor_status lines.
       gg <- strip_plotly_color_leak(gg)
+      # Payload: compact hover on the object points, five significant figures on the coordinates.
+      gg <- plotly_round_coordinates(plotly_compact_point_hover(gg, hover_by_key))
       # Add thin black outlines to all marker traces
       for (i in seq_along(gg$x$data)) {
         tr <- gg$x$data[[i]]
@@ -886,6 +910,8 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       # The point controls are shared with the scatter (View controls, "Both plots").
       color_by <- input$plot_color_by %||% "donor_status"
       rdf <- dd$all
+      # Compact hover per object, from the rows as flagged (before pinning or ghosting changes their values).
+      hover_by_key <- plot_point_hover_map(rdf)
       rdf$donor_status <- factor(as.character(rdf$donor_status), levels = c("ND", "Aab+", "T1D"))
       if (color_by == "donor_id" && "Case ID" %in% colnames(rdf)) rdf$donor_id <- factor(rdf$`Case ID`)
       rdf$link_key <- plot_link_keys(rdf)
@@ -1003,6 +1029,17 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
 
       p <- ggplotly(g, tooltip = c("x", "y", "colour", "text"))
       p <- strip_plotly_color_leak(p)
+      # Payload: compact hover on the object points, five significant figures on the coordinates. The violin
+      # outlines arrive as line traces with one generated hover text per polygon vertex (about 70 KB each,
+      # naming the vertex's density value); nothing a reviewer reads, so they carry no hover at all.
+      p <- plotly_round_coordinates(plotly_compact_point_hover(p, hover_by_key))
+      for (i in seq_along(p$x$data)) {
+        tr <- p$x$data[[i]]
+        if (identical(tr$mode, "lines") && is.null(tr$key) && length(tr$text) > 1) {
+          p$x$data[[i]]$text <- NULL
+          p$x$data[[i]]$hoverinfo <- "none"
+        }
+      }
 
       # Suppress plotly's built-in box outlier markers
       if (!is.null(input$dist_type) && input$dist_type == "Box") {
@@ -1265,6 +1302,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       v
     }
     output$composition_by_donor <- renderPlotly({
+      req(plot_controls_mounted())
       tab <- composition_table()
       order <- input$composition_order %||% "beta"
       if (!islet_valid_scalar_choice(order, DONOR_COMPOSITION_ORDERS, "composition_order_invalid")) order <- "beta"
@@ -1332,6 +1370,21 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
     plot_link_keys <- function(df) {
       if (!all(c("Case ID", "islet_key") %in% names(df))) return(rep(NA_character_, nrow(df)))
       trajectory_link_key(df$`Case ID`, df$islet_key)
+    }
+    # One compact hover text per object key for both cards: donor and object, donor status, diameter, and the
+    # true value. ggplotly() otherwise lists every mapped aesthetic with its variable name, about 110 bytes a
+    # point, which was 58 % of each 1.7 MB Plot message (performance baseline, 2026-10-24).
+    plot_point_hover_map <- function(df) {
+      keys <- plot_link_keys(df)
+      ok <- !is.na(keys)
+      if (!any(ok)) return(character(0))
+      diam <- if ("islet_diam_um" %in% names(df)) suppressWarnings(as.numeric(df$islet_diam_um)) else rep(NA_real_, nrow(df))
+      value <- if ("value" %in% names(df)) suppressWarnings(as.numeric(df$value)) else rep(NA_real_, nrow(df))
+      text <- paste0(df$`Case ID`, " · ", df$islet_key,
+                     "<br>", df$donor_status,
+                     ifelse(is.finite(diam), paste0(" · ", round(diam), " µm"), ""),
+                     "<br>Value: ", ifelse(is.finite(value), as.character(signif(value, 4)), "NA"))
+      stats::setNames(text[ok], keys[ok])
     }
     plot_link_selection_key <- function() {
       info <- selected_islet()

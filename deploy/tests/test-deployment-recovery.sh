@@ -99,6 +99,13 @@ make_release() {
   for ((index = 1; index <= count; index++)); do
     printf 'image fixture %s\n' "${index}" > "${destination}/data/images/${index}.ome.tiff"
   done
+  # The small-read trees that --local-data copies to the VM's local disk.
+  local tree
+  for tree in geometry cells spatial; do
+    mkdir -p "${destination}/data/${tree}/nested"
+    printf '%s fixture %s a\n' "${tree}" "${release}" > "${destination}/data/${tree}/a.bin"
+    printf '%s fixture %s b\n' "${tree}" "${release}" > "${destination}/data/${tree}/nested/b.bin"
+  done
   (
     cd -- "${destination}"
     find data release.env -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum > MANIFEST.sha256
@@ -338,5 +345,93 @@ run_docroot success "${candidate_image}" bash "${fixture_deploy}/rollback-releas
 grep -qx 'RELEASE=new' "${state}/active.state" || fail 'rollback did not restore the new release'
 grep -qx "DOCROOT=${docroot}" "${state}/active.state" || fail 'rollback lost the DocumentRoot'
 aliases_point_at "${project}/releases/new/data/images" || fail 'image aliases do not follow the rollback'
+
+# --local-data copies the release's geometry, cells and spatial trees to the
+# VM's local disk, checks them against MANIFEST.sha256 and mounts them over the
+# container's data paths (2026-10-24). A copy that does not match the manifest
+# stops the activation before any service is touched; copies of earlier
+# releases stay in place; rollback replays the recorded directory.
+case_dir="${work_dir}/local_data"
+project="${case_dir}/project"
+config="${case_dir}/config"
+unit_dir="${config}/containers/systemd"
+state="${project}/runtime/deployments"
+local_data="${case_dir}/local"
+unit="${unit_dir}/islet-explorer.container"
+mkdir -p "${unit_dir}" "${state}" "${local_data}"
+make_release "${project}" new "${candidate_image}" 21 2
+make_release "${project}" old "${prior_image}" 15 1
+run_local() {
+  local scenario="$1" candidate="$2"
+  shift 2
+  env PATH="${mock_bin}:${PATH}" XDG_CONFIG_HOME="${config}" \
+    MOCK_CASE="${case_dir}" MOCK_SCENARIO="${scenario}" \
+    MOCK_CANDIDATE_IMAGE="${candidate}" MOCK_COMMIT="${commit}" "$@"
+}
+local_copies_match() {
+  local release="$1" tree
+  for tree in geometry cells spatial; do
+    cmp -s "${project}/releases/${release}/data/${tree}/a.bin" "${local_data}/${release}/data/${tree}/a.bin" || return 1
+    cmp -s "${project}/releases/${release}/data/${tree}/nested/b.bin" "${local_data}/${release}/data/${tree}/nested/b.bin" || return 1
+  done
+}
+run_local success "${candidate_image}" bash "${fixture_deploy}/activate-release.sh" --project-root "${project}" \
+  --release new --local-data "${local_data}" > "${case_dir}/output" 2>&1 || {
+    cat "${case_dir}/output" >&2
+    fail 'activation with local data copies failed'
+  }
+local_copies_match new || fail 'local data copies do not match the release'
+for tree in geometry cells spatial; do
+  grep -qx "Volume=${local_data}/new/data/${tree}:/srv/islet-explorer/data/${tree}:ro" "${unit}" || fail "unit does not mount the local ${tree} copy"
+done
+grep -qx "Volume=${project}/releases/new/data:/srv/islet-explorer/data:ro" "${unit}" || fail 'unit lost the shared data mount'
+grep -q "^RequiresMountsFor=.* ${local_data}/new/data$" "${unit}" || fail 'unit does not require the local data mount'
+grep -q '@@LOCAL_DATA' "${unit}" && fail 'unit kept a local-data placeholder'
+grep -qx "LOCAL_DATA=${local_data}" "${state}/active.state" || fail 'local data directory not recorded'
+grep -Fq "Local copies of data/{geometry,cells,spatial} under ${local_data}/new/data verified against MANIFEST.sha256" "${case_dir}/output" || \
+  fail 'local data verification not reported'
+# A stale local copy with a preserved timestamp survives rsync's quick check; the
+# manifest check must catch it before the service is touched.
+cp "${unit}" "${case_dir}/unit-before-mismatch"
+cp "${case_dir}/systemctl-calls" "${case_dir}/calls-before-mismatch"
+printf 'cells fixture new X\n' > "${local_data}/new/data/cells/a.bin"   # same length as the fixture
+touch -r "${project}/releases/new/data/cells/a.bin" "${local_data}/new/data/cells/a.bin"
+set +e
+run_local success "${candidate_image}" bash "${fixture_deploy}/activate-release.sh" --project-root "${project}" \
+  --release new --local-data "${local_data}" > "${case_dir}/mismatch-output" 2>&1
+status=$?
+set -e
+[[ "${status}" == 65 ]] || { cat "${case_dir}/mismatch-output" >&2; fail "mismatched local copy: expected exit 65, got ${status}"; }
+grep -Fq "do not match MANIFEST.sha256" "${case_dir}/mismatch-output" || fail 'mismatched local copy not reported'
+cmp -s "${unit}" "${case_dir}/unit-before-mismatch" || fail 'mismatched local copy changed the unit'
+cmp -s "${case_dir}/systemctl-calls" "${case_dir}/calls-before-mismatch" || fail 'mismatched local copy touched the service'
+rm "${local_data}/new/data/cells/a.bin"
+# Activating the old release adds its own copy and leaves the new release's in place.
+run_local success "${candidate_image}" bash "${fixture_deploy}/activate-release.sh" --project-root "${project}" \
+  --release old --local-data "${local_data}" > "${case_dir}/output-old" 2>&1 || {
+    cat "${case_dir}/output-old" >&2
+    fail 'activation of the old release with local data copies failed'
+  }
+local_copies_match old || fail 'old release local copies do not match'
+[[ -f "${local_data}/new/data/geometry/a.bin" ]] || fail 'activation removed the local copy of another release'
+grep -qx "Volume=${local_data}/old/data/geometry:/srv/islet-explorer/data/geometry:ro" "${unit}" || fail 'old release unit does not mount its local copy'
+grep -qx "LOCAL_DATA=${local_data}" "${state}/previous.state" || fail 'previous state lost the local data directory'
+run_local success "${candidate_image}" bash "${fixture_deploy}/rollback-release.sh" --project-root "${project}" \
+  > "${case_dir}/rollback-output" 2>&1 || {
+    cat "${case_dir}/rollback-output" >&2
+    fail 'rollback with local data copies failed'
+  }
+grep -qx 'RELEASE=new' "${state}/active.state" || fail 'rollback did not restore the new release'
+grep -qx "LOCAL_DATA=${local_data}" "${state}/active.state" || fail 'rollback lost the local data directory'
+grep -qx "Volume=${local_data}/new/data/spatial:/srv/islet-explorer/data/spatial:ro" "${unit}" || fail 'rollback unit does not mount the local copy'
+# Without --local-data the unit carries no local mounts and the placeholder is gone.
+run_local success "${candidate_image}" bash "${fixture_deploy}/activate-release.sh" --project-root "${project}" \
+  --release old > "${case_dir}/output-plain" 2>&1 || {
+    cat "${case_dir}/output-plain" >&2
+    fail 'activation without local data failed'
+  }
+grep -q "/srv/islet-explorer/data/geometry:ro" "${unit}" && fail 'unit without --local-data mounts a local copy'
+grep -q '@@LOCAL_DATA' "${unit}" && fail 'unit without --local-data kept a placeholder'
+grep -qx 'LOCAL_DATA=' "${state}/active.state" || fail 'empty local data directory not recorded'
 
 echo 'Deployment activation and verified recovery tests passed.'

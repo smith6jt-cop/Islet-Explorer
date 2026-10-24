@@ -32,6 +32,24 @@ two files and of the pinned copies before substituting them, then builds,
 tests and installs exactly as before; `build-provenance.json` records all four
 hashes. Every other package stays at upstream's locked version.
 
+## 2026-10-24: WebSocket compression (permessage-deflate)
+
+The responsiveness baseline (`docs/performance_baseline_20261024.md`) showed that what an
+off-campus reviewer waits for is the app's WebSocket payload over their link (3.5 MB for
+the first screen, 1.7 MB per Plot change), and that Shiny Server's SockJS transport sends
+it uncompressed. SockJS passes `faye_server_options` straight to `faye-websocket`, whose
+`extensions` option negotiates permessage-deflate with browsers that offer it, so the
+project build now adds one runtime dependency, `permessage-deflate 0.1.7` (Apache-2.0; its
+only dependency, `safe-buffer`, was already locked at 5.1.2), and patches the six-line
+option block into `lib/proxy/sockjs.js`'s `sockjs.createServer` call. `harden-base.sh`
+checks the SHA-256 of the upstream file before and of the patched file after the
+substitution, alongside the manifest hashes; `build-provenance.json` names the addition.
+Measured on the app's own messages: the Plot cards compress 5.3 times, the Spatial tab
+(a base64 PNG) 2.8 times. Per-message zlib on the VM costs tens of milliseconds; each
+connection holds about 300 KB of compression state. Browsers that do not offer the
+extension, and the proxy's health checks, are unaffected. The negotiated extension is
+read from the handshake response by `deploy/browser/bench-app.mjs` (`socket.extensions`).
+
 The inspected `rocker/shiny:4.5.1` base contained Shiny Server 1.5.24.1034,
 Node 20.17.0, and npm 10.8.2. Its registry SBOM/Grype report recorded **33 High
 and 3 Critical matches**. These were real package findings; none is suppressed.

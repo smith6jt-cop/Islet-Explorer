@@ -2,7 +2,7 @@
 Description=Islet Explorer @@INSTANCE@@ (@@RELEASE@@)
 Wants=network-online.target
 After=network-online.target
-RequiresMountsFor=@@DATA_DIR@@ @@IMAGE_DIR@@ @@LOG_DIR@@ @@TMP_DIR@@
+RequiresMountsFor=@@DATA_DIR@@ @@IMAGE_DIR@@ @@LOG_DIR@@ @@TMP_DIR@@@@LOCAL_DATA_MOUNT@@
 
 [Container]
 ContainerName=@@INSTANCE@@
@@ -21,6 +21,7 @@ User=@@CONTAINER_UID@@:@@CONTAINER_GID@@
 PublishPort=@@PUBLISH_ADDRESS@@:@@PORT@@:3838
 
 Volume=@@DATA_DIR@@:/srv/islet-explorer/data:ro
+@@LOCAL_DATA_VOLUMES@@
 Volume=@@IMAGE_DIR@@:/srv/islet-explorer/app/shiny_app/www/local_images:ro
 Volume=@@LOG_DIR@@:/var/log/shiny-server:rw
 Volume=@@TMP_DIR@@:/tmp/islet-explorer:rw

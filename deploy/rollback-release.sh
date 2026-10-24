@@ -60,6 +60,13 @@ docroot_args=()
 if [[ "${previous_docroot}" == /* && "${previous_docroot}" =~ ^[A-Za-z0-9._/-]+$ ]]; then
   docroot_args=(--docroot "${previous_docroot}")
 fi
+# The local-disk data copies (activate-release.sh --local-data) are replayed the
+# same way; the previous release's copy is still in place because activation
+# never removes another release's copy.
+previous_local_data="$(read_state LOCAL_DATA)"
+if [[ "${previous_local_data}" == /* && "${previous_local_data}" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+  docroot_args+=(--local-data "${previous_local_data}")
+fi
 
 echo "Rolling back ${instance} to release ${previous_release} on ${previous_address}:${previous_port}."
 exec "${script_dir}/activate-release.sh" \

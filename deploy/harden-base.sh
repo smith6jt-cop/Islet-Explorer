@@ -23,11 +23,19 @@ source_url=https://api.github.com/repos/rstudio/shiny-server/tarball/$source_rev
 # overrides. The pinned lock was regenerated from upstream's with the same npm
 # (`npm install --package-lock-only`) and differs from it only in those four
 # packages and compression's new dependency `destroy`; see BASE_HARDENING.md.
+# 2026-10-24 adds one runtime dependency, permessage-deflate 0.1.7 (below).
 upstream_package_sha256=191d5ee18b8b1263a3fff0109634e55f2bec78e13f3db004b751c8c0342bb714
 upstream_shrinkwrap_sha256=914bc927be865cb448c2eceff03fad641b93bea962c2bbacc485a14309a6b4fd
 pinned_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/shiny-server
-pinned_package_sha256=2a1615c5753d34353fc156d5ebecc639e79d0c0c169a7f98604b797c9f2ccec0
-pinned_shrinkwrap_sha256=100c670198b0afd136d228e5c16eb2593919c2a0968cd67c02760d3dedf8b0a3
+pinned_package_sha256=e8cbb9dd19c2f985b1371b21932e35f105fa00b2136c4b1ed8a57e2a963f6b4b
+pinned_shrinkwrap_sha256=d9c60e1497639dd9afaff76640d373258c6e4d6669d65c3ede9b8151fa74e12b
+# 2026-10-24: the WebSocket transport offers permessage-deflate (the app's figure messages
+# shrink about five times on the wire, see BASE_HARDENING.md). The pinned manifest adds
+# permessage-deflate 0.1.7 (its one dependency, safe-buffer, is already locked), and
+# lib/proxy/sockjs.js gets a six-line option block passed through SockJS to faye-websocket.
+# Both the upstream file and the patched result are hash-checked.
+upstream_sockjs_sha256=f5bc3729f08b2110f34d0196cb2e8b27a305792c4f7e255ac23e60d04795a253
+patched_sockjs_sha256=9c671905f16d61cb1b93c71717b2762266d0f08cf31e2cffc5635b01f7f2af32
 node_version=v24.20.0
 node_sha256=2f2c0da162318f0de47665410c7c8c2ed3d36c8f3105de4bbc61176c70a7cbf2
 node_url=https://nodejs.org/dist/$node_version/node-$node_version-linux-x64.tar.xz
@@ -44,6 +52,33 @@ printf '%s  %s\n' "$source_sha256" "$work_dir/source.tar.gz" \
 tar -xzf "$work_dir/source.tar.gz" --strip-components=1 -C "$work_dir/source"
 cd "$work_dir/source"
 [[ "$(cat .nvmrc)" = "$node_version" ]]
+
+# Offer permessage-deflate on the SockJS WebSocket transport (2026-10-24). SockJS hands
+# `faye_server_options` to faye-websocket, whose `extensions` option negotiates the
+# compression with browsers that request it; everything else in the file stays as upstream.
+printf '%s  %s\n' "$upstream_sockjs_sha256" lib/proxy/sockjs.js | sha256sum --check --strict
+python3 - lib/proxy/sockjs.js <<'PY'
+import pathlib, sys
+path = pathlib.Path(sys.argv[1])
+source = path.read_text()
+old = """    heartbeat_delay: heartbeatDelay,
+    disconnect_delay: disconnectDelay
+  });
+"""
+new = """    heartbeat_delay: heartbeatDelay,
+    disconnect_delay: disconnectDelay,
+    // Islet Explorer (deploy/BASE_HARDENING.md, 2026-10-24): offer permessage-deflate on the
+    // WebSocket transport. faye-websocket negotiates it with browsers that ask for it, which
+    // shrinks the app's figure messages about five times for reviewers on slow links.
+    faye_server_options: {
+      extensions: [require('permessage-deflate')]
+    }
+  });
+"""
+assert source.count(old) == 1, "sockjs.createServer block not found exactly once"
+path.write_text(source.replace(old, new))
+PY
+printf '%s  %s\n' "$patched_sockjs_sha256" lib/proxy/sockjs.js | sha256sum --check --strict
 mkdir -p ext/node
 tar -xJf "$work_dir/node.tar.xz" --strip-components=1 -C ext/node
 cp ext/node/bin/node ext/node/bin/shiny-server
@@ -128,8 +163,9 @@ pathlib.Path(dest, 'build-provenance.json').write_text(json.dumps({
     'source_url': source_url, 'source_sha256': source_hash,
     'node_version': node_version, 'node_url': node_url, 'node_sha256': node_hash,
     'dependency_policy': ('upstream npm-shrinkwrap.json regenerated with four security pins '
-                          '(handlebars 4.7.10, compression 1.8.2, proxy-addr 2.0.8, follow-redirects 1.16.1); '
-                          'npm ci; omit dev at runtime'),
+                          '(handlebars 4.7.10, compression 1.8.2, proxy-addr 2.0.8, follow-redirects 1.16.1) '
+                          'plus permessage-deflate 0.1.7 for WebSocket compression (lib/proxy/sockjs.js '
+                          'patched, both hashes checked); npm ci; omit dev at runtime'),
     'upstream_package_json_sha256': upstream_package,
     'upstream_npm_shrinkwrap_sha256': upstream_shrinkwrap,
     'pinned_package_json_sha256': pinned_package,

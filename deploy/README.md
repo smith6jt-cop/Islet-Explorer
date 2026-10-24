@@ -425,12 +425,25 @@ recorded in the deployment state, so `rollback-release.sh` replays it. The
 proxy's NFS lookup cache can hand out the previous target for up to a minute
 after a swap.
 
+`--local-data DIR` (2026-10-24) copies the release's `data/geometry`, `data/cells`
+and `data/spatial` trees, about 880 MB whose many small reads are slow over NFS
+(a drill-down's GeoPackage window took 0.2 s there against 17 ms on local disk),
+to `DIR/<release>/data/` on the VM's local disk, checks every copied file
+against `MANIFEST.sha256` (a mismatch stops the activation, exit 65, before any
+service is touched) and mounts the copies over the same paths inside the
+container; the image tree stays on `/pubapps`. The directory is recorded in the
+deployment state and replayed by `rollback-release.sh`; copies of earlier
+releases are kept so a restored unit still finds its data, and a retired
+release's copy is removed by hand. On `pubmaigan1` the directory is
+`/local/maigan/releases` (the 40 GB local disk that also holds the Podman store).
+
 ```bash
 deploy/activate-release.sh \
   --project-root '/pubapps/<project>/islet-explorer' \
   --release 'pubapps-2026-01' \
   --publish-address 10.13.41.21 \
-  --docroot '/pubapps/<project>/islet-explorer/prod/html'
+  --docroot '/pubapps/<project>/islet-explorer/prod/html' \
+  --local-data /local/<service-account>/releases
 ```
 
 ### Staging instance

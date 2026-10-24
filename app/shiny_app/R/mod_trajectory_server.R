@@ -834,6 +834,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
 
       # Convert to plotly with custom data for reliable click handling
       p <- ggplotly(g, tooltip = c("colour", "text"), source = ns("traj_scatter"))
+      p <- plotly_round_coordinates(p)
       # Strip "colour: black" leak (from overall LOESS line's color="black"
       # parameter) and collapse duplicate donor_status entries in hover text.
       p <- strip_plotly_color_leak(p)

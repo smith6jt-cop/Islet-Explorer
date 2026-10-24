@@ -25,6 +25,7 @@
         "nan": "^2.28.0",
         "optimist": "github:rstudio/node-optimist#dbbadda31e53b63225a57e172a528b1ddc52be52",
         "pause": "0.1.0",
+        "permessage-deflate": "0.1.7",
         "q": "^1.5.1",
         "qs": "^6.16.0",
         "send": "^1.2.1",
@@ -3313,6 +3314,15 @@
       "integrity": "sha512-aeHLgQCtI3tcuYVnrvAeVb4Tkm1za4r3YDv3hMeUxcRxet3dbEhJOdtoMrsT/Q5tY3Oy2A1A9FD5el5tWp2FSg==",
       "engines": {
         "node": ">= 0.6"
+      }
+    },
+    "node_modules/permessage-deflate": {
+      "version": "0.1.7",
+      "resolved": "https://registry.npmjs.org/permessage-deflate/-/permessage-deflate-0.1.7.tgz",
+      "integrity": "sha512-EUNi/RIsyJ1P1u9QHFwMOUWMYetqlE22ZgGbad7YP856WF4BFF0B7DuNy6vEGsgNNud6c/SkdWzkne71hH8MjA==",
+      "license": "Apache-2.0",
+      "dependencies": {
+        "safe-buffer": "*"
       }
     },
     "node_modules/picocolors": {

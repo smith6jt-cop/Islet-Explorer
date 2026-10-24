@@ -502,6 +502,26 @@ ui <- fluidPage(
   }
 )
 
+# Warm the per-process trajectory caches. The scanpy diffusion pseudotime (about 12 s) and the PAGA
+# layout (about 5 s) of the default cohort are computed once per R process; until now the first
+# reviewer to open the Trajectory tab after each activation paid for them (performance baseline,
+# 2026-10-24). Computed here, before the first session, they fall inside the unit's start period,
+# which its health check hides. On by default in production; ISLET_WARM_TRAJECTORY=1|0 overrides
+# it (local development restarts faster without it).
+.warm_trajectory_default <- if (identical(tolower(Sys.getenv("ISLET_RUNTIME_MODE", "development")),
+                                          "production")) "1" else "0"
+if (identical(Sys.getenv("ISLET_WARM_TRAJECTORY", .warm_trajectory_default), "1")) {
+  .warm_trajectory_ok <- tryCatch({
+    # The trajectory H5AD is read once per process too (islet_read_h5ad_shared); the first session
+    # otherwise waits for it as well.
+    .warm_h5ad <- data_path("adata_ins_root.h5ad")
+    if (file.exists(.warm_h5ad)) invisible(islet_read_h5ad_shared(.warm_h5ad))
+    !is.null(compute_scanpy_pseudotime(TRAJ_MIN_CELLS, Inf)) &&
+      !is.null(paga_result(TRAJ_MIN_CELLS, Inf))
+  }, error = function(e) FALSE)
+  islet_log_event(if (isTRUE(.warm_trajectory_ok)) "trajectory_warm_ok" else "trajectory_warm_failed")
+}
+
 server <- function(input, output, session) {
 
   # ---- Shared reactive state ----

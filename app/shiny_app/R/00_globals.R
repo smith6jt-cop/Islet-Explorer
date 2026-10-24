@@ -517,6 +517,42 @@ plotly_islet_empty <- function(msg) {
                               font = list(size = ISLET_FONT_SIZES$title)))
 }
 
+# Payload trims for built plotly figures (performance baseline, 2026-10-24: each Plot change sent 1.7 MB over
+# the WebSocket, 58 % of it the hover text ggplotly() composes from every mapped aesthetic and 27 % full-precision
+# coordinates; off campus that payload, not the hosting, is what a reviewer waits for).
+
+#' Round the numeric x/y arrays of every trace to `digits` significant figures. Five keep every digit an axis or
+#' hover shows (a 2,000 px axis resolves about three) and halve the bytes of the coordinate arrays.
+plotly_round_coordinates <- function(p, digits = 5) {
+  if (is.null(p$x$data)) return(p)
+  for (i in seq_along(p$x$data)) {
+    for (axis in c("x", "y")) {
+      v <- p$x$data[[i]][[axis]]
+      if (is.numeric(v)) p$x$data[[i]][[axis]] <- signif(v, digits)
+    }
+  }
+  p
+}
+
+#' Replace the hover text of the keyed object traces (those `trajectory_link_plot()` links) with one compact text
+#' per object key, `hover_by_key` being a named character vector. Traces without a key, and points whose key has
+#' no text, keep what ggplotly() produced.
+plotly_compact_point_hover <- function(p, hover_by_key) {
+  if (!length(hover_by_key) || is.null(p$x$data)) return(p)
+  for (i in seq_along(p$x$data)) {
+    key <- p$x$data[[i]]$key
+    if (is.null(key)) next
+    key <- as.character(unlist(key))
+    text <- unname(hover_by_key[key])
+    if (!length(text) || all(is.na(text))) next
+    old <- as.character(unlist(p$x$data[[i]]$text))
+    if (length(old) == length(text)) text[is.na(text)] <- old[is.na(text)]
+    p$x$data[[i]]$text <- text
+    p$x$data[[i]]$hoverinfo <- "text"
+  }
+  p
+}
+
 # Islet-level UMAP markers, shared by the Spatial and Trajectory UMAPs. Colouring a plotly scatter by a group makes
 # one trace per group, drawn in turn, so the last group (T1D) was painted over the others wherever they met and hid
 # where each disease state sat. Here every point is one trace in a fixed interleaved order (golden-ratio stride over
@@ -554,7 +590,8 @@ islet_umap_plotly <- function(df, x, y, colour, pal = NULL, text, key = NULL, so
     marker$color <- col
   }
   p <- plotly::plot_ly(source = source %||% "A")
-  p <- plotly::add_trace(p, x = df[[x]], y = df[[y]], type = "scatter", mode = "markers",
+  # Five significant figures on the coordinates (payload; see plotly_round_coordinates()).
+  p <- plotly::add_trace(p, x = signif(df[[x]], 5), y = signif(df[[y]], 5), type = "scatter", mode = "markers",
                          text = df[[text]], hoverinfo = "text", showlegend = FALSE,
                          key = if (!is.null(key)) df[[key]] else NULL, marker = marker)
   # The legend stubs are added after the build: plot_ly() drops an all-NA trace's name along with its data.
