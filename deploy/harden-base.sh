@@ -24,11 +24,13 @@ source_url=https://api.github.com/repos/rstudio/shiny-server/tarball/$source_rev
 # (`npm install --package-lock-only`) and differs from it only in those four
 # packages and compression's new dependency `destroy`; see BASE_HARDENING.md.
 # 2026-10-24 adds one runtime dependency, permessage-deflate 0.1.7 (below).
+# 2026-10-25 adds a fifth pin, body-parser 2.4.0 as an override (GHSA-27r3-jxmh-p828),
+# whose dependency range moves qs to 6.16.1; see BASE_HARDENING.md.
 upstream_package_sha256=191d5ee18b8b1263a3fff0109634e55f2bec78e13f3db004b751c8c0342bb714
 upstream_shrinkwrap_sha256=914bc927be865cb448c2eceff03fad641b93bea962c2bbacc485a14309a6b4fd
 pinned_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/shiny-server
-pinned_package_sha256=e8cbb9dd19c2f985b1371b21932e35f105fa00b2136c4b1ed8a57e2a963f6b4b
-pinned_shrinkwrap_sha256=d9c60e1497639dd9afaff76640d373258c6e4d6669d65c3ede9b8151fa74e12b
+pinned_package_sha256=1b57c364d942417f015578676f2490c9c4bff72331a3747a5e456e4b14c36892
+pinned_shrinkwrap_sha256=d3ddc237a34ab5bd141881a65e807dbe8a738accfc62041d3285209448a294a9
 # 2026-10-24: the WebSocket transport offers permessage-deflate (the app's figure messages
 # shrink about five times on the wire, see BASE_HARDENING.md). The pinned manifest adds
 # permessage-deflate 0.1.7 (its one dependency, safe-buffer, is already locked), and
@@ -162,8 +164,9 @@ pathlib.Path(dest, 'build-provenance.json').write_text(json.dumps({
     'upstream_revision': revision,
     'source_url': source_url, 'source_sha256': source_hash,
     'node_version': node_version, 'node_url': node_url, 'node_sha256': node_hash,
-    'dependency_policy': ('upstream npm-shrinkwrap.json regenerated with four security pins '
-                          '(handlebars 4.7.10, compression 1.8.2, proxy-addr 2.0.8, follow-redirects 1.16.1) '
+    'dependency_policy': ('upstream npm-shrinkwrap.json regenerated with five security pins '
+                          '(handlebars 4.7.10, compression 1.8.2, proxy-addr 2.0.8, follow-redirects 1.16.1, '
+                          'body-parser 2.4.0 with qs 6.16.1) '
                           'plus permessage-deflate 0.1.7 for WebSocket compression (lib/proxy/sockjs.js '
                           'patched, both hashes checked); npm ci; omit dev at runtime'),
     'upstream_package_json_sha256': upstream_package,

@@ -50,6 +50,21 @@ connection holds about 300 KB of compression state. Browsers that do not offer t
 extension, and the proxy's health checks, are unaffected. The negotiated extension is
 read from the handshake response by `deploy/browser/bench-app.mjs` (`socket.extensions`).
 
+## 2026-10-25: body-parser pin
+
+The first build of the Plan A Level 1 image (commit `4da5ac4`) failed the High/Critical
+gate on one advisory published after the 2026-10-22 scan: body-parser 2.3.0, the request
+body parser of express 5.2.1 (GHSA-27r3-jxmh-p828, CVE-2026-111181, High: denial of
+service through trailing bytes after a compressed request body), fixed in 2.4.0, released
+2026-10-22. body-parser is not a direct dependency, so it joins proxy-addr and
+follow-redirects as an `overrides` entry (`body-parser 2.4.0`), and its lock entry carries
+2.4.0's dependency ranges. Of those, `qs ^6.16.1` was not met by the locked 6.16.0, so qs
+moves to 6.16.1 (same dependencies and licence, within the root's own `^6.16.0`). Both
+lock entries were written from the registry metadata because the workstation's npm
+refuses to regenerate the lock (`allow-git`/`allow-remote` none); `npm ci --dry-run`
+accepted the pair and both tarballs' integrity hashes were verified before the rebuild.
+Nothing else in the graph changes.
+
 The inspected `rocker/shiny:4.5.1` base contained Shiny Server 1.5.24.1034,
 Node 20.17.0, and npm 10.8.2. Its registry SBOM/Grype report recorded **33 High
 and 3 Critical matches**. These were real package findings; none is suppressed.
