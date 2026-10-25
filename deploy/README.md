@@ -298,6 +298,17 @@ is authorized there), so the workstation stages through its HPG session with
 is `/pubapps/maigan/islet-explorer/`; the `deploy/` tooling of the release
 commit is copied to `tooling/deploy/` beside it.
 
+A candidate staged beside a running release needs a release name of its own:
+`releases/<name>/` is the running release's data directory, and staging it again
+under the same name would rewrite the files under the live container. The name
+is free text (the Plan A Level 1 candidate of 2026-10-25 used
+`pubapps-2026-10-uniform-v10-perf1`); the earlier release stays in place for
+rollback. When the image tree is unchanged, copy it on the VM from the earlier
+release first (`cp -a .../data/images`, about 15 minutes for 145 GB on the share)
+so the upload only has to match it by checksum. Copy the `deploy/` tooling of the
+new commit to `tooling/deploy/` before activating with a flag the VM's copy does
+not know yet, and record the commit in `tooling/DEPLOY_TOOLING_COMMIT`.
+
 ```text
 /pubapps/maigan/islet-explorer/
   releases/

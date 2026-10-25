@@ -218,8 +218,54 @@ What remains in a Plot change is the two cards' 8,600 object points: compact hov
 0.45 MB, keys 0.16 MB, coordinates 0.18 MB, and a per-point colour array on the
 distribution card's single marker trace (0.09 MB). With the socket compression the
 1.12 MB travels as roughly 0.2 MB. The test suite (370) and the deployment test suites
-pass; the production effect is measured after the image and data bundle are rebuilt for
-the commit and staging is activated with `--local-data`.
+pass; the effect through the proxy is in the next section.
+
+## Plan A Level 1 on staging (2026-10-25, commit `e10b2ee`, release `pubapps-2026-10-uniform-v10-perf1`)
+
+The release built from the Level 1 commits (the image with the compression patch and the
+body-parser pin, the data bundle of the same commit) was activated on the staging instance
+`islet-explorer-dev` on 2026-10-25 16:03 UTC with `--local-data /local/maigan/releases`;
+production stays on `d55680a`. The same scenario through UFRC's proxy at
+`devislet-explorer.rc.ufl.edu`, five runs per column, medians. The baseline columns are
+the 2026-10-24 runs: production from campus, the staging instance cold from campus (first
+open of each tab in a fresh R process) and production with the emulated home link.
+`socket.extensions` reported `permessage-deflate` on every connection. The browser counts
+WebSocket bytes after decompression, so the bytes columns show the payload trims only; the
+compression shows in the times on the emulated link.
+
+| Step | Production, campus (baseline) | Staging cold, campus (baseline) | Staging Level 1, campus | Production, home link (baseline) | Staging Level 1, home link |
+|---|---:|---:|---:|---:|---:|
+| Page: Plot tab drawn | 3.6 s | 5.7 s | 3.6 s | 8.8 s | 4.1 s |
+| WebSocket bytes to the first screen | 3.5 MB | 3.5 MB | 1.1 MB | 3.5 MB | 1.1 MB |
+| Plot change (measure) | 1.2 s | 1.2 s | 1.5 s | 2.9 s | 1.5 s |
+| Plot change again | 1.3 s | 1.3 s | 1.2 s | 3.1 s | 1.6 s |
+| Drill-down click | 753 ms | 853 ms | 704 ms | 667 ms | 603 ms |
+| Trajectory tab | 237 ms | 12.7 s | 264 ms | 214 ms | 192 ms |
+| PAGA layout | 1.0 s | 5.2 s | 1.2 s | 2.4 s | 1.6 s |
+| Spatial tab | 2.2 s | 3.1 s | 3.2 s | 3.8 s | 2.6 s |
+| Spatial donor change | 1.9 s | 2.0 s | 1.9 s | 1.6 s | 1.2 s |
+| Viewer first tiles | 612 ms | 658 ms | 615 ms | 1.5 s | 1.5 s |
+| Warm revisit: Plot tab drawn | 3.5 s | 5.8 s | 2.5 s | 8.1 s | 3.5 s |
+
+Reading:
+
+- On the emulated home link every payload-heavy step roughly halves: first screen 8.8 →
+  4.1 s, Plot change 2.9 → 1.5 s, Spatial 3.8 → 2.6 s, PAGA 2.4 → 1.6 s, warm revisit
+  8.1 → 3.5 s. Compression and trims together bring the home-link times down to the
+  baseline's campus times, which is what Level 1 set out to do.
+- On campus the step times are unchanged within noise, as expected (the link was never
+  the cost there), except the warm revisit (3.5 → 2.5 s, one render instead of two) and
+  the first open of Trajectory and PAGA in a fresh process (12.7 s and 5.2 s → 0.26 s and
+  1.2 s), which the warm-up now pays before the health check lets traffic in.
+- The Plot change still costs 1.1–1.5 s of server compute. That is Level 2's direct
+  `plot_ly()` item.
+- The Spatial tab opens in 3.2 s on staging against 2.2 s on production from campus; the
+  staging instance measured 3.1 s on the baseline day too, so this is the instance (4 GiB
+  cap), not Level 1. Worth a look when Level 2 touches the tissue scatter.
+- The Viewer is unchanged: its tiles come from Apache, outside the socket.
+
+Evidence: `tmp/ufrc-release-20261022/evidence/performance-baseline-20261024/level1-staging/`
+(`bench-staging-level1-campus.json`, `bench-staging-level1-home.json`, logs).
 
 ## What to do about it
 

@@ -112,18 +112,27 @@ disk. `activate-release.sh` can copy those three trees from the verified release
 NFS and behind Apache). Effect: drill-down 0.75 s → about 0.55 s and steadier donor
 changes. Half a day in tooling plus the existing verification.
 
-**Level 1 status (2026-10-24, commit `eba12b4`, not yet deployed).** A1 (compression in
-the Shiny Server build), A2 (single first render), A3 (warm-up of the H5AD, pseudotime and
-PAGA at process start), A4 (five-significant-figure coordinates on the Plot cards, the
-Trajectory scatter and the UMAPs), A5 (compact per-object hover; the violin outlines carry
-no hover) and A7 (`activate-release.sh --local-data`, with its recovery test) are
-implemented and verified locally; the measured effect is recorded in the baseline
-document. A6 (partial plotly bundle) is deferred: `plotly::partial_bundle()` fetches the
-bundle from a CDN at render time, which the production container must not do, so it needs
-the bundle vendored into the image first, for a first-visit-only gain. Deployment needs
-the usual image rebuild (the Shiny Server patch is in the image) and data bundle for the
-new commit, then the staging acceptance with `bench-app.mjs` confirming the negotiated
-`permessage-deflate` extension through the proxy.
+**Level 1 status (2026-10-25: on the staging instance, commit `e10b2ee`, release
+`pubapps-2026-10-uniform-v10-perf1`).** A1 (compression in the Shiny Server build), A2
+(single first render), A3 (warm-up of the H5AD, pseudotime and PAGA at process start), A4
+(five-significant-figure coordinates on the Plot cards, the Trajectory scatter and the
+UMAPs), A5 (compact per-object hover; the violin outlines carry no hover) and A7
+(`activate-release.sh --local-data`, with its recovery test) were implemented in `eba12b4`
+and are deployed on `islet-explorer-dev` (`devislet-explorer.rc.ufl.edu`) since 2026-10-25
+16:03 UTC, under a release name of their own beside production, which stays on
+`pubapps-2026-10-uniform-v10` (`d55680a`). Development is in-house: nothing moves to
+production as part of this plan until the owner decides. The first image build (`4da5ac4`)
+failed the High/Critical gate on an advisory published after the previous scan
+(body-parser 2.3.0, GHSA-27r3-jxmh-p828); `e10b2ee` pins 2.4.0 (`deploy/BASE_HARDENING.md`).
+Measured through the staging URL (`performance_baseline_20261024.md`, "Plan A Level 1 on
+staging"): `permessage-deflate` negotiated on every connection; first screen 3.5 → 1.1 MB
+over the socket and sent once; first Trajectory open on a fresh process 12.7 s → 0.26 s and
+first PAGA 5.2 → 1.2 s; warm revisit of the Plot tab 5.8 → 2.5 s on that instance; the
+per-change server compute is unchanged, as expected (Level 2's `plot_ly()` item). A6
+(partial plotly bundle) stays deferred: `plotly::partial_bundle()` fetches the bundle from
+a CDN at render time, which the production container must not do, so it needs the bundle
+vendored into the image first, for a first-visit-only gain. Next: Level 2 items, measured
+on the same staging instance.
 
 ### Level 2: days each, app changes measured on staging
 
