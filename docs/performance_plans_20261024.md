@@ -134,8 +134,10 @@ a CDN at render time, which the production container must not do, so it needs th
 vendored into the image first, for a first-visit-only gain. Next: Level 2 items, measured
 on the same staging instance.
 
-**Level 2 status (2026-10-26: built and measured locally; staging deployment recorded in
-`docs/ufrc_readiness.md`).** B1: the two Plot cards (Against diameter, By donor status) and
+**Level 2 status (2026-10-26: commit `5095863`, with the owner's outlier request `0b55429`,
+on the staging instance since 19:23 UTC as release `pubapps-2026-10-uniform-v10-perf2`;
+the deployment record is in `docs/ufrc_readiness.md`, the staging measurements in
+`performance_baseline_20261024.md`).** B1: the two Plot cards (Against diameter, By donor status) and
 the Trajectory scatter are built with `plot_ly()` directly by the pure builders in
 `app/shiny_app/R/plot_figures.R`, keeping the ggplot layers' statistics (the same
 `position_jitter()` widths and seeds, matched against `ggplot2::layer_data()` in the tests;
@@ -160,7 +162,12 @@ it needs a new data schema and the parity work that goes with it, while the Leve
 already hides the per-process cost from reviewers. Local measurements before deployment:
 `performance_baseline_20261024.md`, "Plan A Level 2, measured locally before deployment".
 The same commit carries the owner's 2026-10-26 layout request (tab bar in the header row,
-Clear selection in the Data controls).
+Clear selection in the Data controls). Measured on staging (five runs, campus / home link,
+against Level 1 on the same instance): Plot change 1.5 → 0.72 s / 1.5 → 1.1 s, Spatial tab
+3.2 → 1.3 s / 2.6 → 1.6 s, Spatial donor change 1.9 → 0.40 s / 1.2 → 0.41 s, first screen
+3.6 → 2.7 s / 4.1 → 3.1 s, warm revisit 2.5 → 1.8 s / 3.5 → 3.1 s; the process built its
+Plot cards once for ten runs. Follow-up: the process's first PNG draw (ragg's font cache,
+about 4 s, seen on the first Trajectory open) belongs in the warm-up.
 
 ### Level 2: days each, app changes measured on staging
 

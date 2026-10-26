@@ -319,6 +319,58 @@ Evidence: `tmp/ufrc-release-20261022/evidence/performance-baseline-20261024/leve
 (`bench-local-level2.json`, the pre-strip run, `ws-payload*.txt`, the browser reports, the
 header screenshots).
 
+## Plan A Level 2 on staging (2026-10-26, commit `0b55429`, release `pubapps-2026-10-uniform-v10-perf2`)
+
+Same scenario and tool as the Level 1 section, through `devislet-explorer.rc.ufl.edu` with the
+staging account, five cold runs from campus and five with the emulated home link, run
+within minutes of the activation (the first campus run is the process's first traffic after
+its warm-up). Medians of the five runs; the two right-hand columns are the Level 1 and
+Level 2 candidates on the same instance.
+
+| Step | Staging cold baseline, campus (2026-10-24) | Level 1, campus | Level 2, campus | Production baseline, home link | Level 1, home link | Level 2, home link |
+|---|---:|---:|---:|---:|---:|---:|
+| Plot tab drawn (first screen) | 5.7 s | 3.6 s | 2.7 s | 8.8 s | 4.1 s | 3.1 s |
+| WebSocket bytes to first screen | 3.5 MB | 1.1 MB | 1.2 MB | 3.5 MB | 1.1 MB | 1.2 MB |
+| Plot change | 1.2 s | 1.5 s | 0.72 s | 2.9 s | 1.5 s | 1.1 s |
+| Plot change, server compute + transfer | 1.1 s | 1.5 s | 0.64 s | 2.8 s | 1.4 s | 1.0 s |
+| Plot change again | 1.3 s | 1.2 s | 0.54 s | 3.1 s | 1.6 s | 0.94 s |
+| Drill-down click | 853 ms | 704 ms | 654 ms | 667 ms | 603 ms | 703 ms |
+| Trajectory tab (first open per browser session) | 12.7 s | 264 ms | 711 ms | 214 ms | 192 ms | 217 ms |
+| PAGA layout | 5.2 s | 1.2 s | 1.2 s | 2.4 s | 1.6 s | 1.2 s |
+| Spatial tab | 3.1 s | 3.2 s | 1.3 s | 3.8 s | 2.6 s | 1.6 s |
+| Spatial donor change | 2.0 s | 1.9 s | 403 ms | 1.6 s | 1.2 s | 414 ms |
+| Viewer first tiles | 658 ms | 615 ms | 593 ms | 1.5 s | 1.5 s | 1.5 s |
+| Warm revisit, Plot tab drawn | 5.8 s | 2.5 s | 1.8 s | 8.1 s | 3.5 s | 3.1 s |
+
+Reading:
+
+- The Plot change halves again on campus (1.5 s → 0.72 s total, 0.64 s of it server
+  compute plus transfer) and reaches 1.1 s on the home link; its message stays at 1.1 MB
+  with `permessage-deflate` negotiated on every connection. The first run of the process
+  built its six cards (0.93 s per change) and every later run was served from the cache:
+  the staging log holds six `plot_card_built` events for ten cold runs and ten warm
+  revisits across both benchmarks.
+- The Spatial tab is where the cache shows most: 3.2 s → 1.3 s on campus, 2.6 s → 1.6 s at
+  home, and a donor change 1.9 s → 0.40 s (server part 987 → 133 ms). The first Spatial
+  open of the process still took 3.3 s, so the tissue scatter's first draw is unchanged by
+  `ragg`; it is the repeat draws that are gone.
+- First screen 3.6 → 2.7 s on campus (2.3 s once the process has drawn it) and 4.1 → 3.1 s
+  at home; warm revisit 2.5 → 1.8 s. The PAGA message shrank from 1.45 MB to 0.97 MB
+  (the build inputs no longer travel) without a change to the step time on campus.
+- One regression to note: the first Trajectory open of the process took 4.2 s on the
+  first campus run (later sessions 0.15 s of server time, 0.6–0.7 s drawn), although the
+  warm-up had completed 26 s after the start. The warm-up computes the pseudotime and the
+  PAGA layout; what it does not do is the process's first PNG draw, which with `ragg` and
+  `systemfonts` in a fresh container builds the font cache once. A one-line addition to
+  the warm-up (draw one small PNG at start) would move that cost before the health check;
+  it is the next Level 2 follow-up, not a reason to hold the release.
+- `check-app.mjs --auth-file` through the proxy: passed, every check (36), no failed
+  checks, no browser errors, no accessibility rule violations.
+
+Evidence: `tmp/ufrc-release-20261022/evidence/performance-baseline-20261024/level2-staging/`
+(`bench-staging-level2-campus.json`, `bench-staging-level2-home.json`, logs) and
+`evidence/browser-staging-0b55429/`.
+
 ## What to do about it
 
 The [performance plans](performance_plans_20261024.md) turn these findings into Plan A
