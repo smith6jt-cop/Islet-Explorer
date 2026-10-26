@@ -2,6 +2,8 @@
 
 **2026-10-15:** donor 78 (HDL078 / HPAP-078) was removed from all analysis. `common.read_cohort()` now rejects any manifest naming it, so `cohort-v1.csv` and the tools built on it are retained as historical records only.
 
+**2026-10-22 onward, T1D hypotheses on the accepted v10 root:** [the proposal](../../docs/T1D_research_hypotheses_20261022.md) defines a new set of ten hypotheses; the H1–H10 paragraphs further down this file describe the historical schema-4 experiment and use different definitions. The scripts with date suffixes `20261022` to `20261026` implement H1–H4 on `data/development/uniform-20donor-20261022-v10/` under the owner directions recorded at the top of `CLAUDE.md`, with the analysis-side acquisition-edge correction of 2026-10-24 and, from 2026-10-25, methods taken from the local papers. They read the served root only and write under `output/<analysis>_<date>/`, which is not under version control; each output folder carries its README, commands, source hashes and validation records. Tests: `scripts/tests/test_h1_edge_corrections.py`, `test_h1_followups_20261024.py`, `test_h3_boundary_compartments_20261025.py`.
+
 **2026-09-29 restoration and owner direction:** `6b7884b` restored the default
 15-donor app. Original IDs, geometry, measurements, missingness and phenotype
 labels must be preserved; a validated common 21-donor trajectory, UMAP and
