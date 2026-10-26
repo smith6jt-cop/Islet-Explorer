@@ -690,9 +690,15 @@ statistics_server <- function(id, raw_df, get_selection_description,
           # Count AAbs per islet (same for all islets from same donor).
           # `sapply` returns a plain vector when only one AAb column survives the
           # intersect above, which rowSums() cannot take — force a matrix.
+          # IAA and micro-IAA are one assay (owner, 2026-10-26): a donor positive on either counts once.
+          aab_count_cols <- aab_avail
+          if (all(c("AAb_IAA", "AAb_mIAA") %in% aab_avail)) {
+            aab_sub$AAb_IAA <- as.logical(aab_sub$AAb_IAA) | as.logical(aab_sub$AAb_mIAA)
+            aab_count_cols <- setdiff(aab_avail, "AAb_mIAA")
+          }
           aab_sub$n_aab <- rowSums(
-            matrix(unlist(lapply(aab_avail, function(col) as.numeric(as.logical(aab_sub[[col]])))),
-                   nrow = nrow(aab_sub), ncol = length(aab_avail)),
+            matrix(unlist(lapply(aab_count_cols, function(col) as.numeric(as.logical(aab_sub[[col]])))),
+                   nrow = nrow(aab_sub), ncol = length(aab_count_cols)),
             na.rm = TRUE)
           aab_summary <- aab_sub
 

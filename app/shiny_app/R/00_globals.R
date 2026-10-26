@@ -445,7 +445,12 @@ plotly_islet_dark <- function(p) {
   if (length(L$annotations)) {
     L$annotations <- lapply(L$annotations, function(a) { a$font$color <- pal$ink; a })
   }
-  L$hoverlabel$bordercolor <- pal$line
+  # Hover labels (owner, 2026-10-26: the grey hover text was hard to read on the ND blue): plotly paints the label
+  # text in the border color when no font color is set, so the text was #6b6b6b on the trace color. A dark box with
+  # white text and a light border reads on every trace color; the light theme keeps plotly's trace-colored label.
+  L$hoverlabel$bgcolor <- "#252526"
+  L$hoverlabel$bordercolor <- pal$muted
+  L$hoverlabel$font <- utils::modifyList(L$hoverlabel$font %||% list(), list(color = "#ffffff"))
   p$x$layout <- L
   p$x$data <- lapply(p$x$data, function(tr) {
     recolour <- function(cb) { cb$tickfont$color <- pal$ink; if (is.list(cb$title)) cb$title$font$color <- pal$ink; cb }

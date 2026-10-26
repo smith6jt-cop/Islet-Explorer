@@ -488,6 +488,14 @@ vscode's current theme"); a "Light theme" button at the top right switches back,
 - **Synthetic union rows need density**: `prep_data()` synthesizes `islet_union` rows by summing core+band. Must compute `area_um2`, `region_um2`, and `area_density = area_um2/region_um2` — setting these to `NA` causes Microenvironment Core+Peri to drop 12/15 donors (default metric is Density, NA filtered by `!is.na(value)`).
 - **`updateSelectInput` after `renderUI`**: Server-side updates targeting an input that lives inside a `renderUI`-mounted block must share a reactive dependency with the renderUI, or fire only after the UI has mounted on the client. Putting the update inside its own naked `observe({})` can race the UI mount and silently leave the dropdown empty. Pattern: nest the `updateSelectInput` inside the same observer that builds the choices reactive.
 - **`reactiveVal` to stabilize a `renderUI` boolean**: a `reactive()` boolean re-fires its dependents whenever its INPUTS change, even if the value is unchanged — so a `renderUI` keyed on it rebuilds (destroying child DOM, including iframes/WebGL canvases). Mirror the boolean into a `reactiveVal` via an `observe`; `reactiveVal` dedups, so the `renderUI` only re-renders when the boolean truly flips. See § "Viewer Tab (Avivator) — iframe Persistence".
+- **Owner wording and filters (2026-10-26)**: the Spatial card "Immune cells and beta-cell content" names its two
+  groups "Insulin-deficient Islets" and "Insulin-containing Islets" (`immune_by_beta_content()` levels; the card's
+  CSV and tests use the same strings). The Plot tab's autoantibody filter offers one IAA box: it stands for the IAA
+  and micro-IAA (mIAA) columns together (`apply_plot_filters()` adds `AAb_mIAA` to the flags when `AAb_IAA` is
+  ticked; the uniform root's nPOD table carries only `AAb_mIAA`, and its `n_aab` already counts the assay once; the
+  hidden Statistics tab counts IAA or mIAA as one). Dark-theme hover labels are a dark box with white text
+  (`plotly_islet_dark()`): plotly paints the label text in the border color when no font color is set, which had put
+  grey text on the donor-blue background.
 - **Cross-session cache (Plan A Level 2, 2026-10-26)**: `app.R` sets `shinyOptions(cache = cachem::cache_mem())`
   (256 MB, per R process) and the two Plot cards (`card_cache_key()`), the composition card and the Spatial tissue
   scatter PNG are `bindCache()`d, keyed on every input their builders read (the card's rows included), the palette

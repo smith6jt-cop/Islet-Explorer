@@ -38,7 +38,7 @@ plot_main_ui <- function(id, extra_panel = NULL) {
           cell_typing_help(),
           tags$p(tags$strong("Filters."),
                  " Unchecking an autoantibody removes the Aab+ donors positive for it (ND and T1D donors are not",
-                 " affected). The diameter range keeps objects within it; the bin width sets the diameter bins of the",
+                 " affected); IAA covers the IAA and micro-IAA assays. The diameter range keeps objects within it; the bin width sets the diameter bins of the",
                  " Against diameter summary. Exclude zero values applies to the card it names.")),
         # Four titled groups in equal columns (owner, 2026-10-21: a more organized control center).
         control_grid(
@@ -58,13 +58,15 @@ plot_main_ui <- function(id, extra_panel = NULL) {
                                inline = TRUE),
             tags$label("Autoantibodies (Aab+ donors)", class = "control-label"),
             uiOutput(ns("aab_warning")),
+            # One IAA assay (owner, 2026-10-26): the IAA box covers the IAA and micro-IAA (mIAA) columns,
+            # whichever the root carries (the nPOD table of the uniform root has mIAA); apply_plot_filters()
+            # expands the flag.
             checkboxGroupInput(ns("aab_flags"), NULL,
                                choices = c("GADA" = "AAb_GADA",
                                            "IA2A" = "AAb_IA2A",
                                            "ZnT8A" = "AAb_ZnT8A",
-                                           "IAA" = "AAb_IAA",
-                                           "mIAA" = "AAb_mIAA"),
-                               selected = c("AAb_GADA", "AAb_IA2A", "AAb_ZnT8A", "AAb_IAA", "AAb_mIAA"),
+                                           "IAA" = "AAb_IAA"),
+                               selected = c("AAb_GADA", "AAb_IA2A", "AAb_ZnT8A", "AAb_IAA"),
                                inline = TRUE),
             uiOutput(ns("gender_filter_ui")),
             uiOutput(ns("age_filter_ui"))

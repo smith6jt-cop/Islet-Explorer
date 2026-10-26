@@ -58,12 +58,13 @@ immune_by_beta_content <- function(comp, cut = 0.1) {
   ok <- is.finite(beta) & is.finite(comp$immune_frac_peri)
   if (!any(ok)) return(NULL)
   d <- data.frame(case_id = as.character(comp$`Case ID`[ok]), status = as.character(comp$`Donor Status`[ok]),
-                  kind = ifelse(beta[ok] >= cut, "Beta cells present", "Insulin-deficient"),
+                  # Group names (owner, 2026-10-26): "Insulin-deficient Islets" and "Insulin-containing Islets".
+                  kind = ifelse(beta[ok] >= cut, "Insulin-containing Islets", "Insulin-deficient Islets"),
                   immune = comp$immune_frac_peri[ok], stringsAsFactors = FALSE)
   out <- do.call(rbind, lapply(split(d, list(d$case_id, d$kind), drop = TRUE), function(g)
     data.frame(case_id = g$case_id[1], status = g$status[1], kind = g$kind[1], value = mean(g$immune),
                objects = nrow(g), stringsAsFactors = FALSE)))
-  out$kind <- factor(out$kind, levels = c("Insulin-deficient", "Beta cells present"))
+  out$kind <- factor(out$kind, levels = c("Insulin-deficient Islets", "Insulin-containing Islets"))
   out$status <- .donor_status_factor(out$status)
   out[order(out$status, out$case_id, out$kind), , drop = FALSE]
 }

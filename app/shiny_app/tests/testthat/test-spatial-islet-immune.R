@@ -34,11 +34,11 @@ test_that("band immune share is split by beta-cell content per donor", {
   env <- .immune_env()
   d <- env$immune_by_beta_content(.immune_comp(), 0.1)
   one <- d[d$case_id == "1", ]
-  expect_equal(one$value[one$kind == "Beta cells present"], 0.01)
+  expect_equal(one$value[one$kind == "Insulin-containing Islets"], 0.01)
   # 0.05 beta share is under the cut: insulin-deficient with the beta-free object.
-  expect_equal(one$value[one$kind == "Insulin-deficient"], mean(c(0.05, 0.10)))
-  expect_equal(one$objects[one$kind == "Insulin-deficient"], 2)
-  expect_false(any(d$case_id == "3" & d$kind == "Beta cells present"))
+  expect_equal(one$value[one$kind == "Insulin-deficient Islets"], mean(c(0.05, 0.10)))
+  expect_equal(one$objects[one$kind == "Insulin-deficient Islets"], 2)
+  expect_false(any(d$case_id == "3" & d$kind == "Insulin-containing Islets"))
 })
 
 test_that("cluster membership counts objects by status and donor, clusters in numeric order", {

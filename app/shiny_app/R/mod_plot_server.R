@@ -290,6 +290,8 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       # Apply AAb filters (only within Aab+ donor group)
       flags <- input$aab_flags
       all_aab_cols <- c("AAb_GADA", "AAb_IA2A", "AAb_ZnT8A", "AAb_IAA", "AAb_mIAA")
+      # The IAA box stands for both insulin-autoantibody columns (owner, 2026-10-26: one IAA group).
+      if (!is.null(flags) && "AAb_IAA" %in% flags) flags <- union(flags, "AAb_mIAA")
 
       others <- out %>% dplyr::filter(donor_status != "Aab+")
       aabp   <- out %>% dplyr::filter(donor_status == "Aab+")
@@ -1068,9 +1070,10 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       desc <- c(desc, paste("Donor Groups:", paste(validated_groups(), collapse = ", ")))
 
       if (length(input$aab_flags) > 0) {
-        all_aab <- c("AAb_GADA", "AAb_IA2A", "AAb_ZnT8A", "AAb_IAA", "AAb_mIAA")
+        all_aab <- c("AAb_GADA", "AAb_IA2A", "AAb_ZnT8A", "AAb_IAA")
         excluded <- setdiff(all_aab, input$aab_flags)
         if (length(excluded) > 0) {
+          excluded[excluded == "AAb_IAA"] <- "AAb_IAA (IAA or mIAA)"
           aab_desc <- paste("AAb Filter: Excluding donors with", paste(excluded, collapse = ", "))
           desc <- c(desc, aab_desc)
         } else {
