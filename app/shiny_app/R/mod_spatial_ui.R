@@ -38,7 +38,10 @@ spatial_ui <- function(id) {
             uiOutput(ns("donor_selector")),
             radioButtons(ns("region_filter"), "Show cells",
                          choices = c("All" = "all", "Core + Peri" = "core_peri", "Core Only" = "core"),
-                         selected = "all", inline = TRUE)
+                         selected = "all", inline = TRUE),
+            # Owner, 2026-10-26: the Clear selection button lives in the Data controls.
+            tags$div(class = "control-group-title control-subtitle", "Selected object"),
+            clear_selection_button(ns)
           ),
           control_group("Phenotypes", span = 2, uiOutput(ns("phenotype_filter")))
         )
@@ -60,9 +63,7 @@ spatial_ui <- function(id) {
                         choices = names(DONOR_PALETTES), selected = "Bright")
           )
         )
-      ),
-      div(class = "tab-controls-actions",
-        actionButton(ns("clear_link_selection"), "Clear selection", class = "btn-sm btn-outline-secondary"))
+      )
     ),
     # ==== ROW 1: Tissue Scatter + Leiden cluster composition ====
     fluidRow(style = "display: flex; flex-wrap: wrap;",
@@ -135,7 +136,8 @@ spatial_ui <- function(id) {
                  " at 7 months), and the two donors whose HbA1c nPOD records as 0 were not measured."),
           tags$p(tags$strong("Linked points."),
                  " Hover over an object in either UMAP to ring it in both. Click it to select it and open its",
-                 " segmentation map and single cells below; Clear selection releases it. An object selected on the",
+                 " segmentation map and single cells below; Clear selection (Data controls) releases it. An object",
+                 " selected on the",
                  " Plot or Trajectory tab is ringed here too."))),
         fluidRow(
           column(6,

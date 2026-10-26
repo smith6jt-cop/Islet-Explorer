@@ -134,6 +134,34 @@ a CDN at render time, which the production container must not do, so it needs th
 vendored into the image first, for a first-visit-only gain. Next: Level 2 items, measured
 on the same staging instance.
 
+**Level 2 status (2026-10-26: built and measured locally; staging deployment recorded in
+`docs/ufrc_readiness.md`).** B1: the two Plot cards (Against diameter, By donor status) and
+the Trajectory scatter are built with `plot_ly()` directly by the pure builders in
+`app/shiny_app/R/plot_figures.R`, keeping the ggplot layers' statistics (the same
+`position_jitter()` widths and seeds, matched against `ggplot2::layer_data()` in the tests;
+`stats::loess` with the layers' span and weights and ggplot2's 95 % band; ggplot's
+mm-to-px point sizes and area size scale). Building both cards on the full data takes about
+100 ms each plus 120 ms of `plotly_build()` and JSON per card, where the ggplot path took
+about 1.1 s for the pair. One finding along the way: a `plot_ly()` widget carries its build
+inputs (`x$attrs`, `x$visdat`) beside the built traces, so the browser received every array
+twice (884 and 951 KB per card instead of about 440 KB each); `plotly_strip_build_inputs()`
+in `trajectory_links.R` drops them from every linked plot, which also trims the Spatial
+UMAP messages. B3: `bindCache()` on the two Plot cards (keyed on the card's rows, its type,
+every View input, the measure labels, the palette and the theme), the composition card and
+the Spatial tissue scatter PNG, with a 256 MB per-process `cachem` cache set in `app.R`.
+Measured in one R process with `shiny::testServer` on the full data: a measure change that
+misses the cache costs 550–920 ms of server time, a hit 30–80 ms; a second session with the
+same inputs gets the same key (three entries after three sessions). A built card is logged
+as `plot_card_built`, so a process's misses can be counted in its log. B4: `ragg` joins the
+image's R packages (`scripts/install_shiny_deps.R`; the production image lacked it, the
+workstation had it, so the local tissue-scatter numbers did not change), and the PNG cache of
+B3 removes the repeat draws. B2 (precomputed pseudotime and PAGA in the bundle) is deferred:
+it needs a new data schema and the parity work that goes with it, while the Level 1 warm-up
+already hides the per-process cost from reviewers. Local measurements before deployment:
+`performance_baseline_20261024.md`, "Plan A Level 2, measured locally before deployment".
+The same commit carries the owner's 2026-10-26 layout request (tab bar in the header row,
+Clear selection in the Data controls).
+
 ### Level 2: days each, app changes measured on staging
 
 **B1. Build the Plot cards and the Trajectory scatter with `plot_ly()` directly.**

@@ -196,20 +196,22 @@ plot_donor_label <- function(case_id, status) paste0(case_id, " (", status, ")")
 
 #' The common layout of the added plot types: fonts, title (with an optional second line), axes, legend.
 plot_type_layout <- function(p, title, subtitle = NULL, xaxis = list(), yaxis = list(), legend_title = NULL,
-                             filename_root, margin = list(t = if (is.null(subtitle)) 60 else 85, b = 70)) {
+                             filename_root, margin = list(t = if (is.null(subtitle)) 60 else 85, b = 70),
+                             legend = list(), showlegend = NULL) {
   fonts <- plotly_islet_fonts()
-  p %>%
-    plotly::layout(
+  p <- plotly::layout(p,
       font = fonts$global,
       title = list(text = plotly_title_with_sub(title, subtitle), font = fonts$title, x = 0.02, xanchor = "left"),
       xaxis = utils::modifyList(list(title = list(font = fonts$axis_title), tickfont = fonts$axis_tick,
                                      automargin = TRUE, zeroline = FALSE), xaxis),
       yaxis = utils::modifyList(list(title = list(font = fonts$axis_title), tickfont = fonts$axis_tick,
                                      automargin = TRUE, zeroline = FALSE), yaxis),
-      legend = list(font = fonts$legend_text, title = list(text = legend_title %||% "", font = fonts$legend_title),
-                    orientation = "h", x = 0, y = -0.18, xanchor = "left", yanchor = "top"),
-      margin = margin, hovermode = "closest") %>%
-    plotly_islet_config(filename_root)
+      legend = utils::modifyList(
+        list(font = fonts$legend_text, title = list(text = legend_title %||% "", font = fonts$legend_title),
+             orientation = "h", x = 0, y = -0.18, xanchor = "left", yanchor = "top"), legend),
+      margin = margin, hovermode = "closest")
+  if (!is.null(showlegend)) p <- plotly::layout(p, showlegend = showlegend)
+  plotly_islet_config(p, filename_root)
 }
 
 #' Status legend entries (empty traces), so a plot whose points carry per-point colours still has a legend.
@@ -533,7 +535,8 @@ plot_types_help <- function() {
     shiny::tags$p(shiny::tags$strong("Linked points."),
                   " In the types that draw objects (Against diameter, By donor status, Against another measure, Against",
                   " a donor clinical value), hover over an object to ring it in both cards; click it to open its",
-                  " segmentation map and single cells below. Clear selection releases it. An object selected on",
+                  " segmentation map and single cells below. Clear selection (Data controls) releases it. An object",
+                  " selected on",
                   " another tab is ringed here too."),
     shiny::tags$p("The CSV button exports what the card shows: binned summaries, per-object values or one row per",
                   " donor, as the type plots."))

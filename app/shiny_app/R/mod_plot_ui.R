@@ -71,7 +71,10 @@ plot_main_ui <- function(id, extra_panel = NULL) {
             sliderInput(ns("diam_range"), "Islet diameter range (\u00b5m)",
                         min = 0, max = 500, value = c(0, 350), step = 10),
             sliderInput(ns("binwidth"), "Diameter bin width (\u00b5m)",
-                        min = 1, max = 75, value = 50, step = 1)
+                        min = 1, max = 75, value = 50, step = 1),
+            # Owner, 2026-10-26: the Clear selection button lives in the Data controls.
+            tags$div(class = "control-group-title control-subtitle", "Selected object"),
+            clear_selection_button(ns)
           ),
           control_group("Exclusions",
             checkboxInput(ns("exclude_zero_top"), "Exclude zero values (left plot)", value = FALSE),
@@ -135,9 +138,7 @@ plot_main_ui <- function(id, extra_panel = NULL) {
                          selected = "Violin", inline = TRUE)
           )
         )
-      ),
-      div(class = "tab-controls-actions",
-        actionButton(ns("clear_link_selection"), "Clear selection", class = "btn-sm btn-outline-secondary"))
+      )
     ),
     # The excluded-outlier table, when asked for, sits under the frozen controls rather than inside them.
     column(12, uiOutput(ns("plot_outlier_info"))),

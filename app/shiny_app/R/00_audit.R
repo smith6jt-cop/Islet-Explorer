@@ -26,6 +26,8 @@
   scanpy_dpt_failed = "WARN",
   trajectory_warm_ok = "INFO",
   trajectory_warm_failed = "WARN",
+  # A Plot card built in R (a miss in the process-wide cache, Plan A Level 2 B3): counts the builds a process does.
+  plot_card_built = "INFO",
   barlow_fallback_too_large = "WARN",
   segmentation_asset_missing = "WARN",
   segmentation_annotations_missing = "WARN",

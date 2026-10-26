@@ -149,37 +149,6 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       cols
     }
 
-    # ---- Pseudo-log break points (includes 0 + powers of 10) ----
-    # Filters out breaks that are too close in pseudo-log transformed space
-    # to prevent label overlap (e.g., 0 and 1 collide on large-range axes).
-    pseudo_log_breaks <- function(base = 10) {
-      function(limits) {
-        max_val <- max(limits)
-        if (max_val <= 0) return(0)
-        max_pow <- ceiling(log(max_val, base))
-        min_pow <- if (max_val < 1) floor(log(max_val, base)) else 0
-        candidates <- sort(unique(c(0, base^seq(min_pow, max_pow))))
-        candidates <- candidates[candidates <= max_val * 1.1]
-
-        # Greedy filter: drop breaks whose transformed position is too close
-        trans_pos <- asinh(candidates / 2) / log(base)
-        total_range <- diff(range(trans_pos))
-        if (total_range == 0) return(candidates)
-        min_gap <- max(0.3, total_range * 0.15)
-
-        keep <- logical(length(candidates))
-        keep[1] <- TRUE
-        last_kept <- trans_pos[1]
-        for (i in seq_along(candidates)[-1]) {
-          if (trans_pos[i] - last_kept >= min_gap) {
-            keep[i] <- TRUE
-            last_kept <- trans_pos[i]
-          }
-        }
-        candidates[keep]
-      }
-    }
-
     # ---- Reactive storage for outlier table (replaces global <<- assignment) ----
     plot_outliers <- reactiveVal(NULL)
 
@@ -600,264 +569,25 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
     # ===========================================================================
 
     # ---- Against diameter: every object against its diameter, with the binned summary per donor status ----
-    # `raw_rows` are a card's flagged, binned rows; `sm` their binned_summary().
+    # `raw_rows` are a card's flagged, binned rows; `sm` their binned_summary(). Built with plot_ly() directly
+    # (R/plot_figures.R, Plan A Level 2): the ggplot + ggplotly() path cost most of a Plot change's server time.
+    PLOT_STAT_LABELS <- c(mean_se = "Mean \u00b1 SE", mean_sd = "Mean \u00b1 SD", median_iqr = "Median (IQR)")
     diameter_figure <- function(raw_rows, sm) {
-      if (is.null(sm) || !nrow(sm)) {
-        return(plotly_islet_empty("Loading data..."))
-      }
-      mode <- validated_mode()
-      selection <- validated_selection() %||% ""
-      metric <- validated_metric()
-      # Compact hover per object, from the untransformed rows (the drawn values may be pseudo-log or pinned).
-      hover_by_key <- plot_point_hover_map(raw_rows)
-
-      grp_levels <- c("ND", "Aab+", "T1D")
-      sm$donor_status <- factor(sm$donor_status, levels = grp_levels)
-
+      if (is.null(sm) || !nrow(sm)) return(plotly_islet_empty("Loading data..."))
       color_by <- input$plot_color_by %||% "donor_status"
-
-      # Summary lines always use donor_status colors
-      color_map <- donor_colors_reactive()
-
-      # Y-axis label
-      ylab <- measure_axis_label()
-
-      # Title (with outlier badge appended)
-      base_title <- paste0(measure_name(), " vs Islet Size")
-      outlier_summary <- attr(raw_rows, "outlier_summary")
-      title_text <- paste0(base_title, outlier_title_suffix(outlier_summary))
-
-      # Pseudo-log transform: apply manually to avoid ggplotly axis corruption
-      log_scale_on <- !is.null(input$log_scale) && input$log_scale
-      plog <- function(x) asinh(x / 2) / log(10)
-      orig_y_vals <- numeric(0)
-      if (log_scale_on) {
-        orig_y_vals <- c(sm$y, sm$ymin, sm$ymax)
-        sm$y    <- plog(sm$y)
-        sm$ymin <- plog(sm$ymin)
-        sm$ymax <- plog(sm$ymax)
-      }
-      # Axis range (View controls): fit 99% of objects; the objects above are open triangles at the top edge.
-      y_upper <- if (axis_clip() && !log_scale_on) plot_axis_upper(raw_rows$value, keep = sm$y) else NULL
-      y_top <- if (is.null(y_upper)) NULL else y_upper * 1.02
-      beyond_note <- NULL
-
-      # Initialize base plot
-      p <- ggplot(sm, aes(x = diam_mid, y = y, color = donor_status, group = donor_status))
-
-      # Individual points layer FIRST (drawn underneath summary lines)
-      show_ind_points <- isTRUE(input$show_points)
-      donor_colors <- NULL
-      donor_id_breaks <- NULL
-
-      if (show_ind_points) {
-        raw <- raw_rows
-        raw$donor_status <- factor(raw$donor_status, levels = grp_levels)
-
-        # Object key shared with the distribution plot: hover links the two, a click selects (plot_link_*).
-        raw$islet_click_key <- plot_link_keys(raw)
-
-        # Transform y-values for pseudo-log if needed
-        if (log_scale_on) {
-          orig_y_vals <- c(orig_y_vals, raw$value)
-          raw$value <- plog(raw$value)
-        }
-
-        # Objects above the fitted axis are pinned to its top (true value in the hover).
-        raw$beyond <- FALSE
-        raw$value_text <- paste0("Value: ", signif(raw$value, 4))
-        if (!is.null(y_top)) {
-          raw$beyond <- raw$value > y_top
-          raw$value[raw$beyond] <- y_top
-        }
-
-        # Separate normal vs outliers
-        raw_beyond   <- raw[raw$beyond & !(raw$is_outlier %in% TRUE), ]
-        raw_normal   <- raw[(!raw$is_outlier | is.na(raw$is_outlier)) & !raw$beyond, ]
-        raw_outliers <- raw[raw$is_outlier & !is.na(raw$is_outlier), ]
-        beyond_note <- plot_beyond_note(nrow(raw_beyond))
-
-        # Jitter width
-        if (!is.null(input$log_scale_x) && input$log_scale_x) {
-          jw <- 0.15
-        } else {
-          jw <- max(1, as.numeric(input$binwidth) * 0.35)
-        }
-
-        # Vertical jitter
-        yr <- suppressWarnings(range(raw$value, na.rm = TRUE))
-        ydiff <- if (all(is.finite(yr))) diff(yr) else 0
-        is_counts <- identical(metric, "Counts")
-        jh <- if (is_counts) {
-          mx <- max(0.02 * ydiff, 0.5)
-          if (!is.finite(mx) || mx <= 0) 0.5 else mx
-        } else {
-          mx <- 0.01 * ydiff
-          if (!is.finite(mx) || mx < 0) 0 else mx
-        }
-
-        # Normal points layer. Jitter is seeded so visual positions are
-        # stable across reactive re-renders (toggling zero-exclusion or the
-        # outlier filter doesn't shuffle the cloud).
-        if (color_by == "donor_id") {
-          if ("Case ID" %in% colnames(raw_normal)) {
-            raw_normal$donor_id <- factor(raw_normal$`Case ID`)
-            donor_colors <- get_donor_palette(levels(raw_normal$donor_id))
-            donor_id_breaks <- levels(raw_normal$donor_id)
-            p <- p +
-              geom_point(data = raw_normal,
-                         aes(x = diam_mid, y = value, color = donor_id, key = islet_click_key),
-                         position = position_jitter(width = jw, height = jh, seed = 17),
-                         size = input$pt_size, alpha = 1 - input$pt_alpha,
-                         inherit.aes = FALSE)
-          } else {
-            p <- p +
-              geom_point(data = raw_normal,
-                         aes(x = diam_mid, y = value, color = donor_status, key = islet_click_key),
-                         position = position_jitter(width = jw, height = jh, seed = 17),
-                         size = input$pt_size, alpha = 1 - input$pt_alpha,
-                         inherit.aes = FALSE)
-          }
-        } else {
-          p <- p +
-            geom_point(data = raw_normal,
-                       aes(x = diam_mid, y = value, color = donor_status, key = islet_click_key),
-                       position = position_jitter(width = jw, height = jh, seed = 17),
-                       size = input$pt_size, alpha = 1 - input$pt_alpha,
-                       inherit.aes = FALSE)
-        }
-
-        if (nrow(raw_beyond) > 0) {
-          p <- p +
-            geom_point(data = raw_beyond,
-                       aes(x = diam_mid, y = value, color = donor_status, key = islet_click_key, text = value_text),
-                       position = position_jitter(width = jw, height = 0, seed = 23),
-                       shape = 2, size = input$pt_size * 1.3, stroke = 1, inherit.aes = FALSE)
-        }
-
-        # Ghost outliers: faint grey × markers so excluded points are still
-        # visible. Drawn last (on top) so reviewers can see WHERE in the
-        # distribution the exclusions land without those points pulling the
-        # summary trend lines. Distinct seed so ghost markers don't sit
-        # exactly on top of normal points of the same coordinate.
-        if (nrow(raw_outliers) > 0) {
-          p <- p +
-            geom_point(data = raw_outliers,
-                       aes(x = diam_mid, y = value, key = islet_click_key),
-                       position = position_jitter(width = jw, height = if (is.null(y_top)) jh else 0, seed = 31),
-                       shape = 4,
-                       size = input$pt_size * 1.1,
-                       stroke = 0.9,
-                       colour = "grey45",
-                       alpha = 0.55,
-                       inherit.aes = FALSE,
-                       show.legend = FALSE)
-        }
-      }
-
-      # Summary lines + error bars ON TOP of individual points
-      p <- p +
-        geom_line(alpha = ifelse(!is.null(input$add_smooth) && input$add_smooth == "LOESS", 0, 1),
-                  linewidth = 1.2) +
-        geom_point(shape = 21, aes(fill = donor_status), color = "black", stroke = 0.4, size = 2.5) +
-        geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0)
-
-      # Color scale (must include donor_id colors when applicable)
-      if (!is.null(donor_colors)) {
-        combined_colors <- c(color_map, donor_colors)
-        p <- p + scale_color_manual(values = combined_colors,
-                                     breaks = donor_id_breaks,
-                                     name = "Donor ID")
-      } else {
-        p <- p + scale_color_manual(values = color_map, breaks = grp_levels, drop = FALSE)
-      }
-      # Fill scale for summary points (shape=21 outline)
-      p <- p + scale_fill_manual(values = color_map, guide = "none")
-
-      p <- p +
-        labs(x = "Islet diameter (\u00b5m)", y = ylab, color = NULL, title = title_text) +
-        theme_islet() +
-        theme(legend.position = c(1, 1),
-              legend.justification = c(1, 1),
-              legend.direction = "vertical")
-
-      # X-axis scale
-      xmax <- suppressWarnings(max(sm$diam_mid, na.rm = TRUE))
-      if (!is.finite(xmax)) xmax <- 300
-
-      if (!is.null(input$log_scale_x) && input$log_scale_x) {
-        max_pow <- ceiling(log2(xmax))
-        major_breaks <- 2^(0:max_pow)
-        p <- p + scale_x_continuous(trans = "log2", breaks = major_breaks)
-      } else {
-        major_breaks <- seq(0, ceiling(xmax / 50) * 50, by = 50)
-        minor_breaks <- seq(0, ceiling(xmax / 10) * 10, by = 10)
-        p <- p + scale_x_continuous(breaks = major_breaks, minor_breaks = minor_breaks)
-      }
-
-      # Y-axis log scale (manual pseudo-log — ggplotly can't handle trans objects)
-      if (log_scale_on) {
-        orig_range <- range(orig_y_vals[is.finite(orig_y_vals)])
-        brks <- pseudo_log_breaks(10)(orig_range)
-        p <- p + scale_y_continuous(
-          breaks = plog(brks),
-          labels = scales::label_comma()(brks)
-        )
-      }
-
-      # Minor grid
-      p <- p + theme(panel.grid.minor = element_line(linewidth = 0.2, colour = "#eeeeee"))
-
-      # LOESS smoothing overlay
-      if (!is.null(input$add_smooth) && input$add_smooth == "LOESS") {
-        p <- p + geom_smooth(se = FALSE, method = "loess", span = 0.6, linewidth = 0.9)
-      }
-
-      gg <- ggplotly(p, source = ns("plot_scatter"))
-      # Scrub the "colour: black" leak (from the shape-21 summary point's
-      # color = "black" parameter) and any duplicate donor_status lines.
-      gg <- strip_plotly_color_leak(gg)
-      # Payload: compact hover on the object points, five significant figures on the coordinates.
-      gg <- plotly_round_coordinates(plotly_compact_point_hover(gg, hover_by_key))
-      # Add thin black outlines to all marker traces
-      for (i in seq_along(gg$x$data)) {
-        tr <- gg$x$data[[i]]
-        if (!is.null(tr$mode) && grepl("markers", tr$mode)) {
-          gg$x$data[[i]]$marker$line <- list(color = "black", width = 0.5)
-        }
-      }
-      # Clean plotly legend: strip "(ID, N)" -> "ID" from ggplotly trace naming
-      for (i in seq_along(gg$x$data)) {
-        nm <- gg$x$data[[i]]$name
-        if (!is.null(nm)) {
-          cleaned <- gsub("^\\((.+),\\s*\\d+\\)$", "\\1", nm)
-          gg$x$data[[i]]$name <- cleaned
-          gg$x$data[[i]]$legendgroup <- cleaned
-        }
-      }
-      fonts <- plotly_islet_fonts()
-      gg <- gg %>%
-        layout(
-          font = fonts$global,
-          title = list(font = fonts$title),
-          xaxis = list(title = list(font = fonts$axis_title),
-                       tickfont = fonts$axis_tick),
-          yaxis = list(title = list(font = fonts$axis_title),
-                       tickfont = fonts$axis_tick),
-          legend = list(orientation = "h", x = 0, y = -0.25,
-                        xanchor = "left", yanchor = "top",
-                        font = fonts$legend_text,
-                        title = list(font = fonts$legend_title)),
-          margin = list(b = 100)) %>%
-        plotly_islet_config("plot_scatter")
-      if (!is.null(y_top)) {
-        gg <- gg %>% layout(
-          title = list(text = plotly_title_with_sub(title_text, beyond_note), font = fonts$title),
-          yaxis = list(range = plot_axis_range(raw_rows$value, y_top), autorange = FALSE),
-          margin = list(t = 80, b = 100))
-      }
-
-      trajectory_link_plot(gg, ns)
+      stat_label <- PLOT_STAT_LABELS[input$stat %||% "mean_se"]
+      fig <- plot_diameter_figure(raw_rows, sm, plot_point_hover_map(raw_rows), list(
+        color_by = color_by, status_cols = donor_colors_reactive(),
+        donor_pal = if (identical(color_by, "donor_id") && "Case ID" %in% colnames(raw_rows))
+          get_donor_palette(raw_rows$`Case ID`) else NULL,
+        show_points = isTRUE(input$show_points), pt_size = input$pt_size %||% 3, pt_alpha = input$pt_alpha %||% 0.4,
+        log_x = isTRUE(input$log_scale_x), log_y = isTRUE(input$log_scale), binwidth = input$binwidth,
+        counts = identical(validated_metric(), "Counts"), smooth = identical(input$add_smooth, "LOESS"),
+        stat_label = if (is.na(stat_label)) "Mean" else unname(stat_label),
+        ylab = measure_axis_label(),
+        title = paste0(measure_name(), " vs Islet Size", outlier_title_suffix(attr(raw_rows, "outlier_summary"))),
+        clip = axis_clip()))
+      trajectory_link_plot(fig, ns)
     }
 
     # ---- Distribution controls ----
@@ -900,199 +630,23 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
     })
 
     # ---- By donor status: a violin or box per donor status, every object as a point ----
-    # `dd` is list(all = a card's flagged rows, summary = their outlier summary).
+    # `dd` is list(all = a card's flagged rows, summary = their outlier summary). Built with plot_ly() directly
+    # (R/plot_figures.R, Plan A Level 2). The point controls are shared with the scatter (View controls).
     status_figure <- function(dd) {
       if (is.null(dd) || is.null(dd$all) || !nrow(dd$all)) return(plotly_islet_empty("No data for the current selection"))
-      mode <- validated_mode()
-      selection <- validated_selection() %||% ""
-      metric <- validated_metric()
-
-      # The point controls are shared with the scatter (View controls, "Both plots").
       color_by <- input$plot_color_by %||% "donor_status"
-      rdf <- dd$all
-      # Compact hover per object, from the rows as flagged (before pinning or ghosting changes their values).
-      hover_by_key <- plot_point_hover_map(rdf)
-      rdf$donor_status <- factor(as.character(rdf$donor_status), levels = c("ND", "Aab+", "T1D"))
-      if (color_by == "donor_id" && "Case ID" %in% colnames(rdf)) rdf$donor_id <- factor(rdf$`Case ID`)
-      rdf$link_key <- plot_link_keys(rdf)
-      dist_summary <- dd$summary
-      rdf_ghost <- rdf[rdf$is_outlier, , drop = FALSE]
-      rdf <- rdf[!rdf$is_outlier | is.na(rdf$is_outlier), , drop = FALSE]
-      if (nrow(rdf_ghost) > 0 && !is.null(rdf_ghost$donor_status)) {
-        rdf_ghost$donor_status <- factor(rdf_ghost$donor_status,
-                                         levels = c("ND", "Aab+", "T1D"))
-      }
-
-      # Y-axis label
-      ylab <- measure_axis_label()
-
-      # Axis range (View controls): fit 99% of objects. The violins / boxes are drawn from every value; the points
-      # above the axis are pinned to its top as open triangles (true value in the hover).
-      y_upper <- if (axis_clip() && !isTRUE(input$log_scale)) plot_axis_upper(dd$all$value) else NULL
-      y_top <- if (is.null(y_upper)) Inf else y_upper * 1.02
-      rdf$value_text <- paste0("Value: ", signif(rdf$value, 4))
-      rdf_pts <- rdf[!(rdf$value > y_top), , drop = FALSE]
-      rdf_beyond <- rdf[rdf$value > y_top, , drop = FALSE]
-      if (nrow(rdf_beyond)) rdf_beyond$value <- y_top
-      if (nrow(rdf_ghost)) rdf_ghost$value <- pmin(rdf_ghost$value, y_top)
-
-      # Base violin or box
-      g <- ggplot(rdf, aes(x = donor_status, y = value, fill = donor_status))
-
-      if (!is.null(input$dist_type) && input$dist_type == "Box") {
-        g <- g + geom_boxplot(
-          outlier.shape  = NA,
-          outlier.size   = 0,
-          outlier.colour = NA,
-          outlier.fill   = NA,
-          outlier.alpha  = 0,
-          outlier.stroke = 0,
-          alpha = 0.8
-        )
-      } else {
-        g <- g + geom_violin(trim = FALSE, alpha = 0.8)
-      }
-
-      g <- g +
-        scale_fill_manual(values = donor_colors_reactive(),
-                          guide = "none")
-
-      # Individual points (kept = non-outliers). Jitter is seeded so the
-      # visual positions are stable across reactive re-renders \u2014 toggling
-      # other controls won't shuffle the cloud.
-      if (isTRUE(input$show_points)) {
-        if (color_by == "donor_id" && "donor_id" %in% colnames(rdf)) {
-          donor_colors <- get_donor_palette(levels(rdf$donor_id))
-          g <- g +
-            geom_jitter(data = rdf_pts, aes(x = donor_status, y = value, color = donor_id, key = link_key),
-                        position = position_jitter(width = 0.18, seed = 17),
-                        alpha = 1 - (input$pt_alpha %||% 0.4),
-                        size  = input$pt_size %||% 3,
-                        stroke = 0, inherit.aes = FALSE) +
-            scale_color_manual(values = donor_colors,
-                               breaks = levels(rdf$donor_id),
-                               name = "Donor ID",
-                               guide = guide_legend(override.aes = list(size = 3, alpha = 1)))
-        } else {
-          g <- g +
-            geom_jitter(data = rdf_pts, aes(x = donor_status, y = value, color = donor_status, key = link_key),
-                        position = position_jitter(width = 0.18, seed = 17),
-                        alpha = 1 - (input$pt_alpha %||% 0.4),
-                        size  = input$pt_size %||% 3,
-                        stroke = 0, inherit.aes = FALSE) +
-            scale_color_manual(values = donor_colors_reactive(),
-                               guide = "none")
-        }
-      }
-
-      if (isTRUE(input$show_points) && nrow(rdf_beyond) > 0) {
-        g <- g + geom_point(data = rdf_beyond,
-                            aes(x = donor_status, y = value,
-                                color = .data[[if (color_by == "donor_id" && "donor_id" %in% colnames(rdf_beyond))
-                                                 "donor_id" else "donor_status"]],
-                                key = link_key, text = value_text),
-                            position = position_jitter(width = 0.18, height = 0, seed = 23), shape = 2,
-                            size = (input$pt_size %||% 3) * 1.3, stroke = 1, inherit.aes = FALSE)
-      }
-
-      # Ghost \u00d7 layer: excluded outliers always rendered on the Distribution
-      # panel so users can see WHERE in the violin/box they live. Drawn last
-      # so they sit on top of the violin/box body.
-      if (nrow(rdf_ghost) > 0) {
-        ghost_size <- (input$pt_size %||% 3) * 1.4
-        g <- g + geom_jitter(
-          data = rdf_ghost,
-          aes(x = donor_status, y = value, key = link_key),
-          inherit.aes = FALSE,
-          position = position_jitter(width = 0.18, seed = 31),
-          shape = 4,
-          size = ghost_size,
-          stroke = 0.9,
-          colour = "grey45",
-          alpha = 0.6,
-          show.legend = FALSE
-        )
-      }
-
-      title_text <- paste0("Distribution across donor groups",
-                           outlier_title_suffix(dist_summary))
-      g <- g +
-        labs(x = "Donor Status", y = ylab, title = title_text) +
-        theme_islet() +
-        theme(legend.position = if (color_by == "donor_id") "right" else "none")
-
-      if (isTRUE(input$log_scale)) {
-        g <- g + scale_y_continuous(trans = scales::pseudo_log_trans(base = 10),
-                                    breaks = pseudo_log_breaks(10),
-                                    labels = scales::label_comma())
-      }
-
-      p <- ggplotly(g, tooltip = c("x", "y", "colour", "text"))
-      p <- strip_plotly_color_leak(p)
-      # Payload: compact hover on the object points, five significant figures on the coordinates. The violin
-      # outlines arrive as line traces with one generated hover text per polygon vertex (about 70 KB each,
-      # naming the vertex's density value); nothing a reviewer reads, so they carry no hover at all.
-      p <- plotly_round_coordinates(plotly_compact_point_hover(p, hover_by_key))
-      for (i in seq_along(p$x$data)) {
-        tr <- p$x$data[[i]]
-        if (identical(tr$mode, "lines") && is.null(tr$key) && length(tr$text) > 1) {
-          p$x$data[[i]]$text <- NULL
-          p$x$data[[i]]$hoverinfo <- "none"
-        }
-      }
-
-      # Suppress plotly's built-in box outlier markers
-      if (!is.null(input$dist_type) && input$dist_type == "Box") {
-        for (i in seq_along(p$x$data)) {
-          if (!is.null(p$x$data[[i]]$type) && p$x$data[[i]]$type == "box") {
-            p$x$data[[i]]$marker$opacity      <- 0
-            p$x$data[[i]]$marker$size          <- 0
-            p$x$data[[i]]$marker$color         <- "rgba(0,0,0,0)"
-            p$x$data[[i]]$marker$outliercolor  <- "rgba(0,0,0,0)"
-            p$x$data[[i]]$boxpoints            <- FALSE
-          }
-        }
-      }
-
-      # Add thin black outlines to jitter point traces
-      for (i in seq_along(p$x$data)) {
-        tr <- p$x$data[[i]]
-        if (!is.null(tr$mode) && grepl("markers", tr$mode)) {
-          p$x$data[[i]]$marker$line <- list(color = "black", width = 0.5)
-        }
-      }
-
-      # Clean plotly legend: strip "(ID, N)" -> "ID"
-      for (i in seq_along(p$x$data)) {
-        nm <- p$x$data[[i]]$name
-        if (!is.null(nm)) {
-          cleaned <- gsub("^\\((.+),\\s*\\d+\\)$", "\\1", nm)
-          p$x$data[[i]]$name <- cleaned
-          p$x$data[[i]]$legendgroup <- cleaned
-        }
-      }
-      fonts <- plotly_islet_fonts()
-      p <- p %>%
-        layout(
-          showlegend = isTRUE(color_by == "donor_id"),
-          font = fonts$global,
-          title = list(font = fonts$title),
-          xaxis = list(title = list(font = fonts$axis_title),
-                       tickfont = fonts$axis_tick),
-          yaxis = list(title = list(font = fonts$axis_title),
-                       tickfont = fonts$axis_tick),
-          legend = list(font = fonts$legend_text,
-                        title = list(font = fonts$legend_title))
-        ) %>%
-        plotly_islet_config("plot_distribution")
-      if (is.finite(y_top)) {
-        p <- p %>% layout(
-          title = list(text = plotly_title_with_sub(title_text, plot_beyond_note(nrow(rdf_beyond))),
-                       font = fonts$title),
-          yaxis = list(range = plot_axis_range(dd$all$value, y_top), autorange = FALSE),
-          margin = list(t = 80))
-      }
-      trajectory_link_plot(p, ns)
+      rows <- dd$all
+      if (!"link_key" %in% colnames(rows)) rows$link_key <- plot_link_keys(rows)
+      fig <- plot_status_figure(rows, plot_point_hover_map(rows), list(
+        color_by = color_by, status_cols = donor_colors_reactive(),
+        donor_pal = if (identical(color_by, "donor_id") && "Case ID" %in% colnames(rows))
+          get_donor_palette(rows$`Case ID`) else NULL,
+        show_points = isTRUE(input$show_points), pt_size = input$pt_size %||% 3, pt_alpha = input$pt_alpha %||% 0.4,
+        log_y = isTRUE(input$log_scale), box = identical(input$dist_type, "Box"),
+        ylab = measure_axis_label(),
+        title = paste0("Distribution across donor groups", outlier_title_suffix(dd$summary)),
+        clip = axis_clip()))
+      trajectory_link_plot(fig, ns)
     }
 
     # ===========================================================================
@@ -1169,6 +723,8 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
 
     card_figure <- function(card) {
       type <- card_type(card)
+      # Logged on every build: bindCache() skips this function on a hit, so the log counts the misses.
+      islet_log_event("plot_card_built")
       rows <- card_rows(card)
       if (is.null(rows)) {
         return(trajectory_link_plot(plotly_islet_empty(if (card == "left") "Loading data..." else
@@ -1210,8 +766,21 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       )
       if (type %in% c("diameter", "status")) fig else trajectory_link_plot(fig, ns)
     }
-    output$plt <- renderPlotly(card_figure("left"))
-    output$dist <- renderPlotly(card_figure("right"))
+    # Cached across sessions (Plan A Level 2, B3): one R process serves every reviewer, so a card of a complete
+    # input set is built once. The key is the card's rows (data, filters, zero and outlier state, link keys), its
+    # type, every View input the builders read, the card's own selectors, the measure labels, the palette and the
+    # theme; the process-wide cache is set in app.R.
+    card_cache_key <- function(card) {
+      list(card = card, type = card_type(card), rows = card_rows(card),
+           view = lapply(c("plot_color_by", "pt_size", "pt_alpha", "show_points", "log_scale", "log_scale_x",
+                           "add_smooth", "binwidth", "stat", "dist_type", "axis_range"), function(k) input[[k]]),
+           card_inputs = list(input[[paste0(card, "_x_measure")]], input[[paste0(card, "_clinical")]]),
+           labels = c(measure_axis_label(), measure_name()), metric = validated_metric(),
+           outliers = list(remove_outliers(), outlier_threshold()), status_cols = donor_colors_reactive(),
+           theme = islet_theme_mode())
+    }
+    output$plt <- bindCache(renderPlotly(card_figure("left")), card_cache_key("left"))
+    output$dist <- bindCache(renderPlotly(card_figure("right")), card_cache_key("right"))
 
     # What a card's CSV holds: list(df, lines) for its current type.
     card_export <- function(card) {
@@ -1301,7 +870,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         return(character(0))
       v
     }
-    output$composition_by_donor <- renderPlotly({
+    output$composition_by_donor <- bindCache(renderPlotly({
       req(plot_controls_mounted())
       tab <- composition_table()
       order <- input$composition_order %||% "beta"
@@ -1311,7 +880,10 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       if (is.na(region_label)) region_label <- "Core"
       donor_composition_figure(tab, if (nrow(tab)) donor_composition_order(tab, order) else character(0),
                                palette(), donor_colors_reactive(), tolower(region_label), composition_leave_out())
-    })
+    }),
+      # Cached across sessions (B3): everything the figure reads.
+      composition_table(), input$composition_order, input$composition_region, composition_leave_out(), palette(),
+      donor_colors_reactive(), islet_theme_mode(), plot_controls_mounted())
     output$dl_composition_csv <- downloadHandler(
       filename = function() paste0("composition_by_donor_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".csv"),
       content = function(file) {

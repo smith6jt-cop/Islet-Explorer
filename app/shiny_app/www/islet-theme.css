@@ -87,15 +87,19 @@ html[data-theme="dark"] {
 }
 .theme-toggle:hover { background: var(--islet-hover); }
 
-/* Page header: the Panc Floyd logo, in the copy that reads on the current theme, and the theme switch. */
-/* Frozen with the tab bar while the page scrolls (owner, 2026-10-21); each tab's control panels stick below them
-   (CONTROL_PANEL_CSS .tab-controls, heights from www/sticky-layout.js). */
+/* Page header: the Panc Floyd logo, in the copy that reads on the current theme, the tab bar at its right and the
+   theme switch, in one row (owner, 2026-10-26: "too much wasted space in the top panel/header area. Move the tabs
+   to the right side so the top of the Data controls is just under the logo"). Frozen while the page scrolls
+   (owner, 2026-10-21); each tab's control panels stick below it (CONTROL_PANEL_CSS .tab-controls, height from
+   www/sticky-layout.js). The tab list (#tabs, the <ul> of tabsetPanel()) is placed in the header by app.R. */
 .app-header {
-  display: flex; align-items: center; justify-content: space-between; margin: 0; padding: 4px 0 8px;
+  display: flex; align-items: flex-end; gap: 24px; margin: 0; padding: 0;
   position: sticky; top: 0; z-index: 1032; background: var(--islet-surface);
+  border-bottom: 1px solid var(--islet-border-strong);
 }
-#tabs { position: sticky; top: var(--islet-header-h, 80px); z-index: 1031; background: var(--islet-surface); }
-.app-header .theme-toggle { float: none; margin: 0; }
+.app-header .brand-logo { align-self: center; }
+.app-header #tabs { margin-left: auto; position: static; border-bottom: 0; }
+.app-header .theme-toggle { float: none; margin: 0 0 6px; align-self: center; }
 .brand-logo { height: 64px; width: auto; }
 html[data-theme="dark"] .brand-logo-light, html:not([data-theme="dark"]) .brand-logo-dark { display: none; }
 

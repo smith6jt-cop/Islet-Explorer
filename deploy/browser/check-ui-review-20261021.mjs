@@ -62,7 +62,8 @@ await check('palette_without_default_label', () => page.evaluate(() => {
   return {passed: !names.some(n => /default/i.test(n)) && value === 'Bright' && names[0] === 'Bright', names, value};
 }));
 await check('plot_data_controls_grid', () => page.evaluate(() => {
-  const grid = document.querySelector('#tabs ~ .tab-content .tab-pane.active .control-panel[open] .control-grid');
+  // The tab list sits in the header row since 2026-10-26, so the tab content is found on its own.
+  const grid = document.querySelector('.tab-content .tab-pane.active .control-panel[open] .control-grid');
   const groups = [...(grid?.children || [])];
   const tops = groups.map(g => Math.round(g.getBoundingClientRect().top));
   const widths = groups.map(g => Math.round(g.getBoundingClientRect().width));
@@ -184,8 +185,11 @@ async function frozen(label) {
     scroller.scrollTop = 700;
     const after = Object.fromEntries(Object.entries(parts).map(([k, el]) => [k, Math.round(el.getBoundingClientRect().top)]));
     const cardMoved = card.getBoundingClientRect().top < cardBefore - 300;
-    const stacked = after.tabs >= after.header + parts.header.getBoundingClientRect().height - 1 &&
-      after.controls >= after.tabs + parts.tabs.getBoundingClientRect().height - 1;
+    // Since 2026-10-26 the tab bar is inside the header row, so the controls stack right under the header; the
+    // older layout (tab bar under the header) is still accepted.
+    const headerBottom = after.header + parts.header.getBoundingClientRect().height - 1;
+    const stacked = parts.header.contains(parts.tabs) ? after.controls >= headerBottom :
+      after.tabs >= headerBottom && after.controls >= after.tabs + parts.tabs.getBoundingClientRect().height - 1;
     // The frozen header is at the top of the scroll panel, and nothing scrolled under is drawn over it.
     const top = document.elementFromPoint(400, after.controls + 10);
     const result = {passed: scroller.scrollTop > 600 && cardMoved && stacked &&

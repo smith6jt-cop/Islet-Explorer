@@ -267,6 +267,58 @@ Reading:
 Evidence: `tmp/ufrc-release-20261022/evidence/performance-baseline-20261024/level1-staging/`
 (`bench-staging-level1-campus.json`, `bench-staging-level1-home.json`, logs).
 
+## Plan A Level 2, measured locally before deployment (2026-10-26)
+
+The in-house service on port 3840 (development backend, no warm-up, no socket compression,
+the workstation's `ragg` already in use) through nginx on port 8080, five cold runs of the
+same scenario with `bench-app.mjs`, the R process restarted just before run 1 so that run 1
+starts with an empty cache and the later runs show the cross-session cache. Level 1 local
+numbers are the two-run measurement of 2026-10-24 on the same service.
+
+| Step | Level 1 local | Level 2 local, run 1 (empty cache) | Level 2 local, runs 2–5 (cache warm) |
+|---|---:|---:|---:|
+| Plot tab drawn (first screen) | 4.1 s | 9.3 s (fresh R process, data load included) | 2.7 s |
+| WebSocket bytes to first screen | 1.2 MB | 1.2 MB | 1.2 MB |
+| Plot change, total | 1.2 s | 1.1 s | 0.75 s |
+| Plot change, server compute + transfer | 1.1 s | 0.96 s | 0.65 s |
+| Plot change again, server compute + transfer | 1.2 s | 0.77 s | 0.52 s |
+| Spatial tab, server compute + transfer | 2.1 s | 4.3 s (first donor CSV of the process) | 1.7 s |
+| Spatial donor change, server compute + transfer | 2.2 s | 1.0 s | 0.37 s |
+| Trajectory tab, first open | 0.20 s (warm process) | 18 s (no warm-up locally) | 0.25 s |
+| PAGA layout | 1.1 s | 5.9 s (first of the process) | 1.1 s |
+| Warm revisit, Plot tab drawn | 2.4 s | 2.3 s | 2.2 s |
+
+Reading:
+
+- The Plot cards no longer go through `ggplotly()`: building a card is about 100 ms of R
+  plus 120 ms of `plotly_build()` and JSON on the full data, so a cache miss on a measure
+  change costs 0.55–0.92 s of server time end to end (data path, both cards, the other outputs
+  of the tab) against 1.1 s before, and a cache hit 30–80 ms (`shiny::testServer`, one R
+  process, 4,759 objects). In the running app the `plot_card_built` log confirms it: a two-run
+  check logged six builds, all in the first five seconds of run 1 (first screen and the two
+  measure changes, two cards each), and none in run 2 or the warm revisits. The 0.5–0.65 s
+  the bench still counts as "server compute + transfer" on a warm Plot change is therefore
+  not the figures: it is the rest of the tab's work on a measure change (the data path, the
+  measure selectors' re-render and their round trips) and, mostly, the browser, which parses
+  and draws the first 450 KB card before it takes delivery of the second, so the metric's
+  floor is a card's draw time, not the server's.
+- The first version of the direct figures doubled the payload (2.4 MB first screen, 2.3 MB a
+  Plot change): a `plot_ly()` widget keeps its build inputs beside the built traces and sends
+  both. Stripped, the messages are back at Level 1's 1.2 MB and 1.1 MB (`ws-payload.txt`
+  against `ws-payload-before-strip.txt` in the evidence directory); the hover text is now
+  58 % of a card's message, the keys 19 %, the per-point colours 11 %.
+- The Spatial donor change is the clearest cache effect: 2.2 s to 0.37 s on a repeat.
+- The drill-down (1.3–4.4 s here) is the development GeoJSON backend, not the app change;
+  the release bundle reads indexed GeoPackages (0.6–0.7 s on staging).
+- Browser suites on the same service: `check-app.mjs` 36 of 36, the UI review suite 18 of 18
+  (two layout checks updated for the tab bar inside the header row), the trajectory links
+  suite passed; `check-plot-load.mjs` fails on the uniform root's phenotype names (a
+  historical 15-donor check, failing before this change too).
+
+Evidence: `tmp/ufrc-release-20261022/evidence/performance-baseline-20261024/level2-local/`
+(`bench-local-level2.json`, the pre-strip run, `ws-payload*.txt`, the browser reports, the
+header screenshots).
+
 ## What to do about it
 
 The [performance plans](performance_plans_20261024.md) turn these findings into Plan A

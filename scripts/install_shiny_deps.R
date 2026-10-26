@@ -26,8 +26,10 @@ pkgs <- c(
   "sf","anndata","reticulate","data.table","magick","xml2","base64enc","httr2","curl",
   # Embedded read-only analytics + release-integrity verification
   "DBI","duckdb","digest",
-  # Rendering / helpers
-  "RColorBrewer","scales","htmltools","htmlwidgets","cluster",
+  # Rendering / helpers. ragg: shiny::renderPlot() draws with the AGG device when it is installed (option
+  # shiny.useragg, on by default), two to three times faster than png() on the 170 k-cell tissue scatter (Plan A
+  # Level 2, B4, 2026-10-26); the image's system libraries (harfbuzz, fribidi, freetype, png, jpeg, tiff) are there.
+  "RColorBrewer","scales","htmltools","htmlwidgets","cluster","ragg",
   # Phase 16 statistics: mixed-effects model + post-hoc contrasts. Required by
   # utils_stats.R (lmerTest::lmer) and mod_statistics_server.R (emmeans::emmeans).
   # If missing in /usr/local/lib/R/site-library the shiny-server worker fails

@@ -4,6 +4,40 @@
 
 # ---------- UI ----------
 
+# The tabs, built once: tabsetPanel() returns the tab list (an <ul>, children[[1]]) and the tab content
+# (children[[2]]); the page puts the list in the header row and the content under it (2026-10-26).
+app_tabset <- tabsetPanel(id = "tabs",
+  tabPanel("Plot",
+    fluidRow(
+      plot_main_ui("plot", extra_panel = if (AI_ENABLED) column(2, ai_assistant_ui("ai")) else NULL)
+    )
+  ),
+  tabPanel("Trajectory",
+    trajectory_ui("traj")
+  ),
+  # Hidden unless SHOW_STATISTICS_TAB=1 (see 00_globals.R).
+  # tabsetPanel drops NULL entries, so this mounts nothing when off.
+  if (SHOW_STATISTICS_TAB) {
+    tabPanel("Statistics",
+      statistics_ui("stats")
+    )
+  },
+  tabPanel("Spatial",
+    spatial_ui("spatial")
+  ),
+  # Hidden unless SHOW_INFLAMMATION_TAB=1 (see 00_globals.R).
+  # tabsetPanel drops NULL entries, so this mounts nothing when off.
+  if (SHOW_INFLAMMATION_TAB) {
+    tabPanel("Inflammation",
+      inflammation_ui("inflam")
+    )
+  },
+  # The Viewer is the last tab (owner, 2026-10-21).
+  tabPanel("Viewer",
+    viewer_ui("viewer")
+  )
+)
+
 ui <- fluidPage(
   title = "Islet Explorer",
   lang = "en",
@@ -442,45 +476,22 @@ ui <- fluidPage(
       # input$app_theme; its value is set from the page theme before Shiny binds it, so plots draw once.
       # The Panc Floyd logo heads the page (owner, 2026-10-19); the light-text copy is shown on the dark theme
       # (both made by scripts/app_assets/make_logo_variants.py from www/logo.png).
+      # The Panc Floyd logo heads the page (owner, 2026-10-19); the light-text copy is shown on the dark theme
+      # (both made by scripts/app_assets/make_logo_variants.py from www/logo.png). The tab list sits in the same
+      # row, right of the logo, so each tab's Data controls start just under the logo (owner, 2026-10-26: "too much
+      # wasted space in the top panel/header area"); the tab content follows below. Theme switch
+      # (www/islet-theme.js) and the hidden text input that carries the theme to the server as input$app_theme;
+      # its value is set from the page theme before Shiny binds it, so plots draw once.
       div(class = "app-header",
         tags$img(src = islet_asset("logo-header-light.png"), class = "brand-logo brand-logo-light", alt = "Panc Floyd"),
         tags$img(src = islet_asset("logo-header-dark.png"), class = "brand-logo brand-logo-dark", alt = "Panc Floyd"),
+        app_tabset$children[[1]],
         tags$button(id = "theme_toggle", type = "button", class = "theme-toggle", "Light theme")),
       tags$input(id = "app_theme", type = "text", value = "dark", style = "display: none;",
                  `aria-hidden` = "true", tabindex = "-1"),
       tags$script(HTML("document.getElementById('app_theme').value =",
                        " document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';")),
-      tabsetPanel(id = "tabs",
-        tabPanel("Plot",
-          fluidRow(
-            plot_main_ui("plot", extra_panel = if (AI_ENABLED) column(2, ai_assistant_ui("ai")) else NULL)
-          )
-        ),
-        tabPanel("Trajectory",
-          trajectory_ui("traj")
-        ),
-        # Hidden unless SHOW_STATISTICS_TAB=1 (see 00_globals.R).
-        # tabsetPanel drops NULL entries, so this mounts nothing when off.
-        if (SHOW_STATISTICS_TAB) {
-          tabPanel("Statistics",
-            statistics_ui("stats")
-          )
-        },
-        tabPanel("Spatial",
-          spatial_ui("spatial")
-        ),
-        # Hidden unless SHOW_INFLAMMATION_TAB=1 (see 00_globals.R).
-        # tabsetPanel drops NULL entries, so this mounts nothing when off.
-        if (SHOW_INFLAMMATION_TAB) {
-          tabPanel("Inflammation",
-            inflammation_ui("inflam")
-          )
-        },
-        # The Viewer is the last tab (owner, 2026-10-21).
-        tabPanel("Viewer",
-          viewer_ui("viewer")
-        )
-      )
+      div(class = "tabbable", app_tabset$children[[2]])
     )
   ),
   tags$footer(
@@ -489,6 +500,11 @@ ui <- fluidPage(
     tags$a(href = "https://accessibility.ufl.edu/", "UF Accessibility")
   )
 )
+
+# Rendered outputs cached across sessions (Plan A Level 2, B3: bindCache() on the Plot cards, the composition card
+# and the Spatial tissue scatter). One R process serves every reviewer, so a figure of the same complete input set
+# is built once; in memory, least recently used first out, bounded per process.
+shinyOptions(cache = cachem::cache_mem(max_size = 256 * 1024^2))
 
 # ---------- Server ----------
 

@@ -12,9 +12,31 @@ trajectory_link_key <- function(case_id, islet_key) {
   out
 }
 
-trajectory_link_plot <- function(p, ns) {
-  # Build once so keys stay aligned with ggplotly's color/group trace splits.
+#' Build a plotly figure and drop the build inputs plotly keeps beside the built traces (`x$attrs`, `x$visdat`,
+#' `x$cur_data`). The widget sent them to the browser as well, which doubled a plot_ly() figure's payload
+#' (2026-10-26: 311 of 657 KB on a 5,000-point trace; the Plot cards 884 and 951 KB instead of about 450 each).
+#' The browser reads only data, layout and config, and later layout(), config() and plotly_build() calls still work
+#' on the stripped figure. Scalars plotly recycled to one value per point (hoverinfo "text" on every point, 65 KB a
+#' card) go back to scalars.
+plotly_strip_build_inputs <- function(p) {
   p <- plotly::plotly_build(p)
+  p$x$attrs <- NULL
+  p$x$visdat <- NULL
+  p$x$cur_data <- NULL
+  scalar_fields <- c("hoverinfo", "hovertemplate", "legendgroup", "name", "showlegend", "visible", "mode", "type",
+                     "xaxis", "yaxis")
+  for (i in seq_along(p$x$data)) {
+    for (f in scalar_fields) {
+      v <- p$x$data[[i]][[f]]
+      if (length(v) > 1 && is.atomic(v) && length(unique(v)) == 1) p$x$data[[i]][[f]] <- v[1]
+    }
+  }
+  p
+}
+
+trajectory_link_plot <- function(p, ns) {
+  # Build once so keys stay aligned with the trace splits, without the build inputs (payload).
+  p <- plotly_strip_build_inputs(p)
   # Plotly's R binding otherwise forwards every hover/afterplot event to Shiny.
   p$x$shinyEvents <- character(0)
   for (axis in c("xaxis", "yaxis")) {

@@ -1142,14 +1142,17 @@ CONTROL_PANEL_CSS <- paste0(
   # The active tab's control panels stay under the frozen page header and tab bar (www/islet-theme.css) while the
   # tab scrolls (owner, 2026-10-21: "Freeze the top panel, data and view controls when scrolling down");
   # www/sticky-layout.js measures the header and tab bar into the two variables.
-  ".tab-controls { position: sticky; top: calc(var(--islet-header-h, 76px) + var(--islet-tabs-h, 42px)); ",
-  "z-index: 1030; background: var(--islet-surface); padding-top: 8px; float: none !important; ",
+  # Since 2026-10-26 the tab bar sits in the header row (www/islet-theme.css), so the controls start just under
+  # the logo: --islet-tabs-h is 0 then (www/sticky-layout.js).
+  ".tab-controls { position: sticky; top: calc(var(--islet-header-h, 70px) + var(--islet-tabs-h, 0px)); ",
+  "z-index: 1030; background: var(--islet-surface); padding-top: 6px; float: none !important; ",
   "box-shadow: 0 6px 6px -6px var(--islet-shadow); margin-bottom: 8px; } ",
   ".tab-controls .control-panel { margin-bottom: 8px; } ",
+  # A second titled block inside a control group (the Clear selection button under a group's own controls).
+  ".control-group-title.control-subtitle { margin-top: 10px; } ",
   # The selectors on a Plot card: label beside the box, no bottom margin.
   ".plot-type-select .form-group { display: flex; align-items: center; gap: 6px; margin: 0; } ",
   ".plot-type-select .control-label { margin: 0; white-space: nowrap; font-size: 13px; } ",
-  ".tab-controls-actions { display: flex; align-items: center; gap: 12px; padding-bottom: 8px; } ",
   ".control-panel-wrap { position: relative; } ",
   ".control-panel-wrap > .control-panel > summary { padding-right: 34px; } ",
   ".control-panel-wrap > .card-help { position: absolute; top: 7px; right: 4px; } ",
@@ -1205,9 +1208,16 @@ control_group <- function(title, ..., span = 1) {
                   if (!is.null(title)) shiny::tags$div(class = "control-group-title", title), ...)
 }
 
-#' A tab's control panels, frozen under the page header and tab bar while the tab scrolls (CONTROL_PANEL_CSS
+#' A tab's control panels, frozen under the page header while the tab scrolls (CONTROL_PANEL_CSS
 #' `.tab-controls`). Its parent must be the tab's full-height container, or it has nowhere to stick.
 tab_controls <- function(...) shiny::tags$div(class = "tab-controls", ...)
+
+#' The "Clear selection" button of a tab's Data controls: releases the pinned object (its ring in every linked plot
+#' and its segmentation panel). Owner, 2026-10-26: the button belongs in the Data controls, not in a row of its own
+#' under the panels. Each tab's module server observes `clear_link_selection`.
+clear_selection_button <- function(ns) {
+  shiny::actionButton(ns("clear_link_selection"), "Clear selection", class = "btn-sm btn-outline-secondary")
+}
 
 #' TRUE when the served root is the uniform 20-donor build (one typing workflow for every donor).
 is_uniform_root <- function() file.exists(data_path("uniform_release.json"))

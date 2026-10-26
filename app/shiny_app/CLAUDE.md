@@ -166,6 +166,19 @@ sources) and the CSVs `dl_summary` / `dl_distribution_csv`, each exporting its c
 Object types (Against diameter, By donor status, Against another measure, Against a donor clinical value) stay linked
 plots. The card title is the type's name.
 
+**Direct plotly figures (Plan A Level 2, 2026-10-26).** Against diameter, By donor status and the Trajectory
+scatter are built with `plot_ly()` by the pure builders in `R/plot_figures.R` (`plot_diameter_figure()`,
+`plot_status_figure()`, `trajectory_scatter_figure()`; `tests/testthat/test-plot-figures.R`), no longer through
+`ggplot()` + `ggplotly()`, whose conversion was 36 % of a Plot change's server time (performance baseline,
+2026-10-24). They keep the ggplot layers' statistics: the same `position_jitter()` widths and seeds (`plot_jitter()`:
+17 for the points, 23 for the pinned triangles, 31 for the ghost crosses, 42 on the Trajectory scatter, matched
+against `ggplot2::layer_data()` in the tests), LOESS through `stats::loess` with each layer's span and weights and
+ggplot2's 95 % band (`plot_loess_curve()`), ggplot's mm-to-px point sizes (`plotly_point_px()`) and area size scale
+(`plot_area_size_px()`). The Trajectory scatter is one keyed trace drawn in `islet_umap_order()`, so no donor status
+is painted over another; its trend bands are the status colour at alpha 0.15 whatever the colouring. The violins and
+boxes are plotly's own traces over the kept values. `plot_pseudo_log_breaks()` gives the Plot cards' pseudo-log
+y-axis ticks (it was a module-local helper).
+
 **Axis range and near-empty measures (owner, 2026-10-21: "these outliers compact the rest of the data").** View
 controls > Axis range defaults to "Fit 99% of objects": `plot_axis_upper()` ends an axis that a few values would
 stretch just above the 99th percentile (or the median of the nonzero values when 99 % are zero), and those objects
@@ -427,6 +440,12 @@ vscode's current theme"); a "Light theme" button at the top right switches back,
   `scripts/app_assets/make_logo_variants.py` from `www/logo.png`: `logo-header-light.png` (original colours) and
   `logo-header-dark.png` (each word shading white to grey, top to bottom; owner, 2026-10-21); in both the holes of
   P, a, o and d are transparent. CSS shows the one for the current theme.
+- **Header row (2026-10-26).** The tab list of `tabsetPanel()` (`app_tabset$children[[1]]`, the `<ul>` with id
+  `tabs`) sits in `.app-header` right of the logo, the theme switch after it, so each tab's Data controls start just
+  under the logo (owner: "too much wasted space in the top panel/header area. Move the tabs to the right side so the
+  top of the Data controls is just under the logo"); the tab content (`children[[2]]`) follows the header.
+  `www/sticky-layout.js` sets `--islet-tabs-h` to 0 while the list is inside the header, so `.tab-controls` stick
+  right under it.
 - **Downloads stay white.** ggplot downloads use `islet_ggsave()` (colour-only light overrides on top of the
   plot's own theme); the plotly camera button is replaced by one that re-draws the figure off screen in light
   colours (`isletDownloadLightPng`, same file name and 2800 x 1800 size).
@@ -461,6 +480,11 @@ vscode's current theme"); a "Light theme" button at the top right switches back,
 - **Synthetic union rows need density**: `prep_data()` synthesizes `islet_union` rows by summing core+band. Must compute `area_um2`, `region_um2`, and `area_density = area_um2/region_um2` — setting these to `NA` causes Microenvironment Core+Peri to drop 12/15 donors (default metric is Density, NA filtered by `!is.na(value)`).
 - **`updateSelectInput` after `renderUI`**: Server-side updates targeting an input that lives inside a `renderUI`-mounted block must share a reactive dependency with the renderUI, or fire only after the UI has mounted on the client. Putting the update inside its own naked `observe({})` can race the UI mount and silently leave the dropdown empty. Pattern: nest the `updateSelectInput` inside the same observer that builds the choices reactive.
 - **`reactiveVal` to stabilise a `renderUI` boolean**: a `reactive()` boolean re-fires its dependents whenever its INPUTS change, even if the value is unchanged — so a `renderUI` keyed on it rebuilds (destroying child DOM, including iframes/WebGL canvases). Mirror the boolean into a `reactiveVal` via an `observe`; `reactiveVal` dedups, so the `renderUI` only re-renders when the boolean truly flips. See § "Viewer Tab (Avivator) — iframe Persistence".
+- **Cross-session cache (Plan A Level 2, 2026-10-26)**: `app.R` sets `shinyOptions(cache = cachem::cache_mem())`
+  (256 MB, per R process) and the two Plot cards (`card_cache_key()`), the composition card and the Spatial tissue
+  scatter PNG are `bindCache()`d, keyed on every input their builders read (the card's rows included), the palette
+  and `islet_theme_mode()`. One R process serves every reviewer, so the second reviewer's first screen is a cache
+  hit. A new input read by one of those figures must be added to its key, or a reviewer sees another's stale figure.
 - **Robust plotly clicks**: `plotly_click` can be suppressed on macOS (clicking does nothing, no notification). Click-to-select goes through `trajectory_link_plot()` (`www/trajectory-links.js`), which commits on native pointer events as well; use it for any new selectable plot. It also links hover across the tab's plots (Trajectory: scatter and UMAPs; Plot: size scatter and distribution; Spatial: the two UMAPs, whose click opens the segmentation panel under them).
 
 ## Phenotype Rules — Marker Definitions in the UI (May 2026)
@@ -564,7 +588,11 @@ columns), every input as wide as its column, and no tick grid under sliders. The
 and measure | Donors | Object size | Exclusions and its View controls Colour (both plots) | Points and axis (both
 plots) | Against diameter | By donor status (the plot types they style); Trajectory and Spatial use three and four groups. The
 whole block is wrapped in `tab_controls()` and frozen under the header while the tab scrolls; the excluded-outlier
-table sits below it, not inside. Clicking a panel's title still collapses it to its title bar.
+table sits below it, not inside. Clicking a panel's title still collapses it to its title bar. Since 2026-10-26 the
+Clear selection button (`clear_selection_button()`) sits inside each tab's Data controls (under a "Selected object"
+sub-title in the Plot tab's Object size group and the Spatial tab's Tissue scatter group, its own group on the
+Trajectory tab), not in a row of its own under the panels (owner: "add the 'clear selection' button to the data
+controls").
 
 When adding a new phenotype-selecting input anywhere in the app, route its
 choices through `phenotype_keep()` / `phenotype_is_kept()` and put any marker

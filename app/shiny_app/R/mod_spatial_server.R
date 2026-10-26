@@ -453,7 +453,14 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         )
     })
 
-    output$tissue_scatter <- shiny::renderPlot({ spatial_tissue_scatter_plot() }, height = 800, bg = "transparent")
+    # Cached across sessions (Plan A Level 2, B3): the 170 k-cell PNG of a donor and drawing options is drawn once
+    # per process. The key is everything spatial_tissue_scatter_plot() reads; the output size is part of it.
+    output$tissue_scatter <- bindCache(
+      shiny::renderPlot({ spatial_tissue_scatter_plot() }, height = 800, bg = "transparent"),
+      selected_donor(), donor_status(), input$region_filter, input$color_by, input$pheno_filter,
+      input$color_background, palette(), has_leiden(),
+      if (identical(input$color_by, "leiden") && has_leiden()) list(input$leiden_res, islet_leiden_map()) else NULL,
+      scatter_zoom$xmin, scatter_zoom$xmax, scatter_zoom$ymin, scatter_zoom$ymax, islet_theme_mode())
     output$dl_tissue_scatter <- shiny::downloadHandler(
       filename = function() {
         donor_id <- selected_donor()

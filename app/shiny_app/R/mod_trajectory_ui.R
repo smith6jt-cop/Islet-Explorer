@@ -10,7 +10,8 @@ trajectory_ui <- function(id) {
   ns <- NS(id)
   linked_help <- tags$p(tags$strong("Linked plots."),
     " Hover over an object in either UMAP or the pseudotime scatter to highlight it in all three. Click to select it",
-    " and open its segmentation map; Clear selection releases it. An object selected on the Plot tab is ringed",
+    " and open its segmentation map; Clear selection (Data controls) releases it. An object selected on the Plot",
+    " tab is ringed",
     " here too.")
   tagList(
     singleton(tags$script(src = islet_asset("trajectory-links.js"))),
@@ -34,7 +35,7 @@ trajectory_ui <- function(id) {
       # The fitted cohort is every object with TRAJ_MIN_CELLS or more core cells (since 2026-10-18); the
       # status line reports how many objects were fitted.
       uiOutput(ns("traj_status")),
-      control_grid(columns = 3,
+      control_grid(columns = 4,
         control_group("Measure",
           # Y-axis measure. Marker expression is the core-cell protein mean from .X
           # on the cohort marker scale; the cell-type ratio is Barlow et al.'s Fig 2F y-axis,
@@ -54,7 +55,9 @@ trajectory_ui <- function(id) {
         ),
         control_group("Feature",
           uiOutput(ns("traj_feature_selector"))
-        )
+        ),
+        # Owner, 2026-10-26: the Clear selection button lives in the Data controls.
+        control_group("Selected object", clear_selection_button(ns))
       )
       ),
       control_panel("View controls",
@@ -107,9 +110,7 @@ trajectory_ui <- function(id) {
             )
           )
         )
-      ),
-      div(class = "tab-controls-actions",
-        actionButton(ns("clear_link_selection"), "Clear selection", class = "btn-sm btn-outline-secondary"))
+      )
     ),
     fluidRow(
       # Left card: Scatterplot and heatmaps (narrowed from col-8)

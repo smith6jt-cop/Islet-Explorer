@@ -609,6 +609,10 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
     })
 
     # ---------- Trajectory scatter plot ----------
+    # Built with plot_ly() directly (R/plot_figures.R, Plan A Level 2): the ggplot + ggplotly() path cost most of
+    # the step's server time. Colours, sizes, the jitter (seed 42, +/- 1.2 % of the pseudotime domain, +/- 8 % of
+    # the value range, never clamped: the axis is widened instead, see traj_pt_extent()) and the weighted LOESS
+    # trends (weight log1p(cells), span 0.75) with their 95 % bands are those of the ggplot layers it replaces.
     output$traj_scatter <- renderPlotly({
       df <- traj_data_clean()
       if (is.null(df) || nrow(df) == 0) {
@@ -621,243 +625,53 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         return(trajectory_link_plot(plotly_islet_empty("No trajectory data available"), ns))
       }
 
-
-      # Determine color mapping and aesthetics
-      color_by   <- input$traj_color_by %||% "donor_status"
-      size_by    <- input$traj_point_size %||% "uniform"
-      trend_type <- input$traj_show_trend %||% "by_donor"
-      alpha_val  <- 1 - (input$traj_alpha %||% 0.4)
-      point_size <- input$traj_point_size_slider %||% 3.0
-      # 95% CI bands on the LOESS trends (Bodenmiller 2025 Fig 2D/5E convention:
-      # every smoothed trajectory carries a confidence band).
-      show_ci    <- isTRUE(input$traj_trend_ci %||% TRUE)
-      df$loess_weight <- log1p(df$total_cells)
-      trend_df <- df
-
-      # Pseudotime extent, taken from the data rather than assumed to be [0, 1] — on the
-      # "raw" scale the axis is true DPT and does not span [0, 1]. Shared with the strip
-      # heatmap below via traj_pt_extent() so the two panels stay aligned.
-      pt_ext <- traj_pt_extent(df$pt)
-      pt_dom <- pt_ext$dom
-
-      # Always apply jitter — use the kept-rows range as the jitter scale
-      # so ghost points land in the same visual frame.
-      #
-      # Jitter is NOT clamped back into the domain: the previous pmax/pmin
-      # clamp piled roughly the outermost 1.2% of points onto the exact
-      # endpoints (~60 islets per side), producing artificial spikes at both
-      # ends. The axis is widened by the jitter amount instead (see pt_lim).
-      #
-      # set.seed() inside a render function would reset the session-global RNG
-      # stream, so the previous seed is saved and restored around the draw.
-      .seed_saved <- if (exists(".Random.seed", envir = .GlobalEnv)) {
-        get(".Random.seed", envir = .GlobalEnv)
-      } else NULL
-      set.seed(42)
-      jitter_amount_x <- pt_ext$jitter
-      jitter_amount_y <- diff(range(df$value, na.rm = TRUE)) * 0.08
-      df$pt    <- df$pt + runif(nrow(df), -jitter_amount_x, jitter_amount_x)
-      df$value <- df$value + runif(nrow(df), -jitter_amount_y, jitter_amount_y)
-      if (is.null(.seed_saved)) {
-        suppressWarnings(rm(".Random.seed", envir = .GlobalEnv))
-      } else {
-        assign(".Random.seed", .seed_saved, envir = .GlobalEnv)
-      }
-
-      # Plot limits: domain plus the jitter margin, so jittered points are not
-      # clipped and no pile-up appears at the endpoints. The strip heatmap uses the
-      # same padded limits (traj_pt_extent()$lim) so the panels stay aligned.
-      pt_lim <- pt_ext$lim
-
-      # Create base aesthetic mapping with cell count for hover
-      df$hover_cells <- paste0("Donor: ", df$case_id, "<br>Islet: ", df$islet_key,
-              "<br>Pseudotime: ", signif(trend_df$pt, 3),
-              "<br>Value: ", signif(trend_df$value, 3),
-              "<br>Cells: ", df$total_cells)
-      aes_mapping <- aes(x = pt, y = value, text = hover_cells, key = link_key)
-
-      # Add color aesthetic
-      if (color_by == "donor_status") {
-        df$donor_status <- factor(df$donor_status, levels = c("ND", "Aab+", "T1D"))
-        aes_mapping$colour <- as.name("donor_status")
-        color_title <- "Donor Status"
-      } else if (color_by == "donor_id") {
-        df$donor_id <- factor(df$donor_id)
-        aes_mapping$colour <- as.name("donor_id")
-        color_title <- "Donor ID"
-      } else if (startsWith(color_by, "leiden_") && color_by %in% colnames(df)) {
-        # Sort factor levels numerically so legend reads 0,1,2,... instead of 0,1,10,11
+      color_by <- input$traj_color_by %||% "donor_status"
+      # A Leiden column absent from df (e.g. the Excel fallback) colours by donor status instead.
+      if (startsWith(color_by, "leiden_") && !color_by %in% colnames(df)) color_by <- "donor_status"
+      if (color_by == "donor_id") {
+        lv <- levels(factor(df$donor_id))
+        colours <- if (length(lv) <= 12) {
+          setNames(RColorBrewer::brewer.pal(min(12, max(3, length(lv))), "Paired")[seq_along(lv)], lv)
+        } else setNames(grDevices::rainbow(length(lv), s = 0.8, v = 0.8), lv)
+        colour_label <- "Donor ID"
+      } else if (startsWith(color_by, "leiden_")) {
+        # Levels in numeric order, so the hover reads 0, 1, 2, ... rather than 0, 1, 10, 11.
         lvl_vals <- unique(stats::na.omit(df[[color_by]]))
         num_vals <- suppressWarnings(as.numeric(lvl_vals))
-        sorted_lvls <- if (!any(is.na(num_vals))) lvl_vals[order(num_vals)] else sort(lvl_vals)
-        df[[color_by]] <- factor(df[[color_by]], levels = sorted_lvls)
-        aes_mapping$colour <- as.name(color_by)
-        color_title <- paste("Leiden", sub("^leiden_", "res ", color_by))
-      } else if (startsWith(color_by, "leiden_")) {
-        # Column not present in df (e.g., Excel fallback) — fall back to donor_status
-        df$donor_status <- factor(df$donor_status, levels = c("ND", "Aab+", "T1D"))
-        aes_mapping$colour <- as.name("donor_status")
-        color_title <- "Donor Status"
-        color_by <- "donor_status"
-      }
-
-      # Add size aesthetic if not uniform
-      if (size_by != "uniform") {
-        if (size_by == "islet_diam_um" && "islet_diam_um" %in% colnames(df)) {
-          if (!all(is.na(df$islet_diam_um))) {
-            aes_mapping$size <- as.name("islet_diam_um")
-          }
-        } else if (size_by == "total_cells" && "total_cells" %in% colnames(df)) {
-          df$size_cells <- sqrt(df$total_cells)
-          aes_mapping$size <- as.name("size_cells")
-        }
-      }
-
-      # Create plot
-      g <- ggplot(df, aes_mapping)
-      if (size_by == "uniform") {
-        g <- g + geom_point(alpha = alpha_val, size = point_size, stroke = 0)
+        lv <- as.character(if (!any(is.na(num_vals))) lvl_vals[order(num_vals)] else sort(lvl_vals))
+        colours <- setNames(if (length(lv) <= 12) {
+          RColorBrewer::brewer.pal(max(3, min(12, length(lv))), "Set3")[seq_len(length(lv))]
+        } else scales::hue_pal()(length(lv)), lv)
+        colour_label <- paste("Leiden", sub("^leiden_", "res ", color_by))
       } else {
-        g <- g + geom_point(alpha = alpha_val, stroke = 0)
-      }
-      g <- g +
-        theme_islet() +
-        theme(
-          legend.position = "none",
-          plot.margin = unit(c(5, 5, 5, 5), "pt"),
-          plot.title = element_text(margin = margin(b = 15))
-        )
-
-      # Apply color scales
-      if (color_by == "donor_status") {
-        g <- g + scale_color_manual(
-          values = donor_colors_reactive(),
-          name = color_title, drop = FALSE)
-      } else if (color_by == "donor_id") {
-        df$donor_id <- factor(df$donor_id)
-        n_donors <- length(levels(df$donor_id))
-        if (n_donors <= 12) {
-          colors <- RColorBrewer::brewer.pal(min(12, max(3, n_donors)), "Paired")
-          names(colors) <- levels(df$donor_id)[1:length(colors)]
-        } else {
-          colors <- rainbow(n_donors, s = 0.8, v = 0.8)
-          names(colors) <- levels(df$donor_id)
-        }
-        g <- g + scale_color_manual(values = colors, name = color_title, drop = FALSE)
-      } else if (startsWith(color_by, "leiden_") && color_by %in% colnames(df)) {
-        clust_levels <- levels(df[[color_by]])
-        n_clust <- length(clust_levels)
-        clust_colors <- if (n_clust <= 12) {
-          RColorBrewer::brewer.pal(max(3, min(12, n_clust)), "Set3")[seq_len(n_clust)]
-        } else {
-          scales::hue_pal()(n_clust)
-        }
-        names(clust_colors) <- clust_levels
-        g <- g + scale_color_manual(values = clust_colors, name = color_title, drop = FALSE)
+        color_by <- "donor_status"
+        colours <- donor_colors_reactive()
+        colour_label <- "Donor Status"
       }
 
-      # Size scale
-      if (size_by != "uniform" && size_by == "islet_diam_um" && "islet_diam_um" %in% colnames(df)) {
-        if (!all(is.na(df$islet_diam_um))) {
-          size_range <- c(0.5 * point_size, 2.5 * point_size)
-          g <- g + scale_size_continuous(name = "Islet Diameter (um)", range = size_range, guide = "none")
-        }
-      } else if (size_by == "total_cells" && "size_cells" %in% colnames(df)) {
-        size_range <- c(0.3 * point_size, 3.0 * point_size)
-        g <- g + scale_size_continuous(name = "Cell Count", range = size_range, guide = "none")
-      }
-
-      # Trend lines
-      pt_range <- range(df$pt, na.rm = TRUE)
-
-      if (trend_type == "overall") {
-        g <- g + geom_smooth(data = trend_df, method = "loess", se = show_ci, color = islet_ink(),
-                             linewidth = 1, fullrange = FALSE, span = 0.75,
-                             inherit.aes = FALSE,
-                             aes(x = pt, y = value, weight = loess_weight))
-      } else if (trend_type == "by_donor") {
-        if ("donor_status" %in% names(df) && !all(is.na(df$donor_status))) {
-          df$donor_status <- factor(df$donor_status, levels = c("ND", "Aab+", "T1D"))
-          trend_colors <- donor_colors_reactive()
-
-          if (color_by == "donor_id" || startsWith(color_by, "leiden_")) {
-            # Use explicit color per-status loop — adding a second scale_color_manual
-            # after a Leiden/donor_id cluster scale would override it and blank out the points.
-            for (status in c("ND", "Aab+", "T1D")) {
-              df_subset <- trend_df[trend_df$donor_status == status & !is.na(trend_df$donor_status), ]
-              if (nrow(df_subset) > 0) {
-                g <- g + geom_smooth(data = df_subset,
-                                     aes(x = pt, y = value, weight = loess_weight),
-                                     inherit.aes = FALSE,
-                                     method = "loess", se = show_ci,
-                                     linewidth = 0.8, show.legend = FALSE, fullrange = FALSE, span = 0.75,
-                                     color = trend_colors[status],
-                                     fill = trend_colors[status], alpha = 0.15)
-              }
-            }
-          } else {
-            g <- g + geom_smooth(data = trend_df,
-              method = "loess", se = show_ci,
-              linewidth = 0.8, show.legend = FALSE, fullrange = FALSE, span = 0.75,
-              inherit.aes = FALSE,
-              mapping = aes(x = pt, y = value, group = donor_status,
-                            color = donor_status, weight = loess_weight))
-          }
-        }
-      }
-
-      # Labels
-      # The y-axis label MUST name the quantity, not just the feature: a ratio
-      # and a gate-rescaled marker mean are different units on the same plot slot.
+      # Labels: the y-axis names the quantity, not just the feature (a ratio and a gate-rescaled marker mean are
+      # different units on the same plot slot).
       if (identical(input$traj_y_mode %||% "ratio", "ratio")) {
         selected_feature <- input$traj_ratio_type %||% "Selected cell type"
         reg <- input$traj_ratio_region %||% "core"
         metric_label <- sprintf("\u2014 log(cells per endocrine cell, %s)",
-                                switch(reg, core = "core", peri = "peri",
-                                       "core + 20 \u00b5m peri"))
+                                switch(reg, core = "core", peri = "peri", "core + 20 \u00b5m peri"))
       } else {
         selected_feature <- input$traj_feature %||% "Selected feature"
         metric_label <- "\u2014 normalized expression (mean per islet, 0\u20131)"
       }
-      x_label <- if ((input$pt_scale %||% "rank") == "raw") {
-        "Pseudotime (raw DPT)"
-      } else {
-        "Pseudotime (rank-normalized)"
-      }
+      x_label <- if ((input$pt_scale %||% "rank") == "raw") "Pseudotime (raw DPT)" else "Pseudotime (rank-normalized)"
 
-      g <- g + labs(
-        x = x_label,
-        y = paste(selected_feature, metric_label),
-        title = NULL
-      ) +
-      coord_cartesian(xlim = pt_lim, ylim = range(df$value, na.rm = TRUE) * c(1, 1) + c(-0.05, 0.05) * diff(range(df$value, na.rm = TRUE)))
-
-      # Convert to plotly with custom data for reliable click handling
-      p <- ggplotly(g, tooltip = c("colour", "text"), source = ns("traj_scatter"))
-      p <- plotly_round_coordinates(p)
-      # Strip "colour: black" leak (from overall LOESS line's color="black"
-      # parameter) and collapse duplicate donor_status entries in hover text.
-      p <- strip_plotly_color_leak(p)
-
-      # Layout and attach browser-local linked highlighting.
-      fonts <- plotly_islet_fonts()
-      p <- p %>%
-        layout(
-          showlegend = FALSE,
-          title = NULL,
-          font = fonts$global,
-          margin = list(l = 80, r = 20, t = 30, b = 70, pad = 5),
-          xaxis = list(fixedrange = FALSE, automargin = TRUE, range = pt_lim,
-                       title = list(font = fonts$axis_title),
-                       tickfont = fonts$axis_tick),
-          yaxis = list(fixedrange = FALSE, automargin = TRUE,
-                       title = list(font = fonts$axis_title),
-                       tickfont = fonts$axis_tick),
-          legend = list(font = fonts$legend_text,
-                        title = list(font = fonts$legend_title))
-        ) %>%
-        plotly_islet_config("trajectory_scatter")
-      trajectory_link_plot(p, ns)
+      fig <- trajectory_scatter_figure(df, list(
+        color_by = color_by, colours = colours, colour_label = colour_label,
+        size_by = input$traj_point_size %||% "uniform", point_size = input$traj_point_size_slider %||% 3.0,
+        alpha = 1 - (input$traj_alpha %||% 0.4), trend = input$traj_show_trend %||% "by_donor",
+        # 95% CI bands on the LOESS trends (Bodenmiller 2025 Fig 2D/5E convention).
+        show_ci = isTRUE(input$traj_trend_ci %||% TRUE), status_cols = donor_colors_reactive(), ink = islet_ink(),
+        x_label = x_label, y_label = paste(selected_feature, metric_label),
+        # The pseudotime extent is shared with the strip heatmap below (traj_pt_extent()), so the two stay aligned.
+        pt_ext = traj_pt_extent(df$pt)))
+      trajectory_link_plot(fig, ns)
     })
 
     # One validated selection route for all three linked plots. Hover stays in JS.
