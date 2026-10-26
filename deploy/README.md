@@ -502,6 +502,16 @@ systemctl --user status islet-explorer.service islet-explorer-dev.service
 journalctl --user -u islet-explorer.service -f
 tail -F /pubapps/<project>/islet-explorer/runtime/logs/*.log
 
+# Stop both instances (a problem on the site): the proxy then answers 502/503; the
+# image aliases under prod/html and dev/html are static files and keep answering.
+# A manual stop is never auto-restarted; `start` brings an instance back in about a
+# minute (R start, release data, trajectory warm-up, then the health check).
+systemctl --user stop islet-explorer.service islet-explorer-dev.service
+systemctl --user start islet-explorer.service islet-explorer-dev.service
+# The units are wanted by default.target and the account lingers, so a VM reboot
+# starts them again; to keep one down across a reboot, mask it (unmask to undo).
+systemctl --user mask islet-explorer-dev.service
+
 deploy/rollback-release.sh \
   --project-root '/pubapps/<project>/islet-explorer'
 deploy/rollback-release.sh \
