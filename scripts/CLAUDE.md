@@ -86,7 +86,7 @@ types).
 python -c "import anndata as ad; a=ad.read_h5ad('data/adata_ins_root.h5ad'); print(a.uns['neighbors']['params'])"
 ```
 
-**Robust root selection** (replaces single-islet `argmax(INS)` over ND): root = medoid of top-50 ND islets by INS in scVI space. Anchored by the centre-of-mass of "healthy ND, INS-high" islets and naturally draws from multiple donors. Current root: index 703, donor 6516, INS 0.663 (99.7th percentile).
+**Robust root selection** (replaces single-islet `argmax(INS)` over ND): root = medoid of top-50 ND islets by INS in scVI space. Anchored by the center-of-mass of "healthy ND, INS-high" islets and naturally draws from multiple donors. Current root: index 703, donor 6516, INS 0.663 (99.7th percentile).
 
 ### Step 5b: Combined-mode pseudotime (Harmony θ=0.1 + structures α=0.15)
 

@@ -96,10 +96,10 @@ statistics_server <- function(id, raw_df, get_selection_description,
 
       # ---- Zero-value exclusion (sensitivity for zero-inflated features) ----
       # Removes rows whose feature value == 0 before outlier flagging, donor-level
-      # aggregation, mixed-effects modelling, demographics, and per-bin tests.
+      # aggregation, mixed-effects modeling, demographics, and per-bin tests.
       # AUC is recomputed from the same filtered frame, so it IS affected.
       #
-      # ORDER MATTERS: this runs BEFORE flag_outliers() so the robust centre and
+      # ORDER MATTERS: this runs BEFORE flag_outliers() so the robust center and
       # scale (median / MAD) are computed on the values that actually enter the
       # tests. Flagging first would derive the MAD from a zero-inflated vector
       # and then discard the zeros — a different, and wrong, outlier set. This
@@ -141,8 +141,8 @@ statistics_server <- function(id, raw_df, get_selection_description,
       # flagged. But the *drop* and the *count* are deferred until after them:
       # `outlier_summary` used to be measured at this point and then reported as
       # "N islets excluded last Run", counting exclusions against a superset of
-      # what was actually tested. Summarising post-filter makes the reported
-      # count refer to the analysed set. See `outlier_summary` below.
+      # what was actually tested. Summarizing post-filter makes the reported
+      # count refer to the analyzed set. See `outlier_summary` below.
 
       # ---- Min-cells filter (like spatial tab) ----
       # `%||%` only catches NULL; clearing the numericInput sends NA, and
@@ -198,7 +198,7 @@ statistics_server <- function(id, raw_df, get_selection_description,
       }
 
       # ---- Apply the deferred outlier drop (see the flagging block above) ----
-      # Summarise first, so the count describes the rows that survived every
+      # Summarize first, so the count describes the rows that survived every
       # other filter -- i.e. the population actually tested.
       outlier_summary_pre <- summarize_outlier_filter(rdf)
       if (stats_filter_on) {
@@ -218,7 +218,7 @@ statistics_server <- function(id, raw_df, get_selection_description,
       # `selection_used` is the RAW column encoding ("prop_Beta cell",
       # "Capillary|islet_core"), which used to reach plot axes and card titles
       # verbatim. `feature_display_label()` resolves it to a readable name and
-      # returns anything it does not recognise unchanged. The raw form is kept
+      # returns anything it does not recognize unchanged. The raw form is kept
       # as `feature_col` for the CSV, where the exact column matters.
       feature_col  <- attr(raw_df(), "selection_used") %||% "Unknown"
       feature_name <- feature_display_label(feature_col)
@@ -344,7 +344,7 @@ statistics_server <- function(id, raw_df, get_selection_description,
           d_ci_hi = cd$ci_hi,
           # Unstandardised difference + Welch CI, in the feature's own units.
           # This is what the forest plot now shows: it does not depend on which
-          # SD you standardise by, which matters because the group SDs here can
+          # SD you standardize by, which matters because the group SDs here can
           # differ by 50x (floor effects) and the pooled-SD d then lands at an
           # arbitrary point between the two Glass deltas.
           raw_diff = cd$raw_diff,
@@ -369,7 +369,7 @@ statistics_server <- function(id, raw_df, get_selection_description,
       }
 
       # ---- Per-group descriptive summary (donor level) ----
-      # The spread within each group is what makes a standardised effect size
+      # The spread within each group is what makes a standardized effect size
       # readable, and on this cohort it is wildly unequal (donor-mean SDs of
       # 4.06 / 10.75 / 0.575 for prop_Beta cell). Surfacing it next to the
       # effect sizes is the difference between "d = 6.15" meaning something and
@@ -841,7 +841,7 @@ statistics_server <- function(id, raw_df, get_selection_description,
       st <- stats_run()
       if (is.null(st)) {
         # Distinguish "not run yet" from "ran, but the filters left nothing".
-        # Both used to render the same grey "click Run Statistics" line, so an
+        # Both used to render the same gray "click Run Statistics" line, so an
         # over-restrictive filter looked exactly like an idle tab.
         reason <- stats_empty_reason()
         if (!is.null(reason)) {
@@ -864,7 +864,7 @@ statistics_server <- function(id, raw_df, get_selection_description,
                           if (st$zero_dropped == 1) "" else "s"))
       } else NULL
 
-      # Warn when a min-cells value was typed but could not be honoured (Excel
+      # Warn when a min-cells value was typed but could not be honored (Excel
       # fallback path, where the per-islet cell counts are unavailable). Silently
       # ignoring it is what made the Microenvironment min-cells bug invisible.
       min_cells_warn <- if (!isTRUE(st$min_cells_applied)) {
@@ -1065,7 +1065,7 @@ statistics_server <- function(id, raw_df, get_selection_description,
           tags$em("Sensitivity check"), " panel below."),
 
         # ---- Per-group spread ----
-        # Effect sizes below are unreadable without it: a standardised d divides
+        # Effect sizes below are unreadable without it: a standardized d divides
         # by a pooled SD, which only means something when the group SDs are
         # comparable. Show them so the reader can judge that themselves.
         group_block,
@@ -1198,8 +1198,8 @@ statistics_server <- function(id, raw_df, get_selection_description,
       fmt_d <- function(x) ifelse(is.na(x), "N/A", sprintf("%.2f", x))
 
       # Effect-size columns: the unstandardised difference leads (it does not
-      # depend on which SD you standardise by), Cohen's d follows as the
-      # standardised companion, and Glass's delta shows the range d is picking a
+      # depend on which SD you standardize by), Cohen's d follows as the
+      # standardized companion, and Glass's delta shows the range d is picking a
       # point inside of when the group SDs differ.
       blank_row <- function(contrast, p, padj, sig) data.frame(
         Contrast = contrast, `p-value` = p, `p (adj)` = padj,
@@ -2022,20 +2022,20 @@ statistics_server <- function(id, raw_df, get_selection_description,
         if (is.null(os)) {
           tagList(
             tags$strong("Outlier handling: "),
-            sprintf("For each donor status (ND / Aab+ / T1D), islets whose robust |z| (median/MAD modified z-score) exceeds %g are excluded from all donor-level aggregation, mixed-effects modelling, and stratified tests. Detection is two-sided — both high and low extremes are flagged. When MAD = 0 (zero-inflated groups) the rule falls back to classical mean/SD. ", local_thr),
+            sprintf("For each donor status (ND / Aab+ / T1D), islets whose robust |z| (median/MAD modified z-score) exceeds %g are excluded from all donor-level aggregation, mixed-effects modeling, and stratified tests. Detection is two-sided — both high and low extremes are flagged. When MAD = 0 (zero-inflated groups) the rule falls back to classical mean/SD. ", local_thr),
             "The control is local to the Statistics tab (Section 1 ", tags$em("Exclude outliers"),
             " checkbox + threshold slider) and operates independently of the Plot / Trajectory / Spatial synced toggle. ",
-            "On the Plot and Trajectory scatters, outliers still render as faint grey × markers when their own filter is on.",
+            "On the Plot and Trajectory scatters, outliers still render as faint gray × markers when their own filter is on.",
             tags$br()
           )
         } else if (isTRUE(os$enabled)) {
           tagList(
             tags$strong("Outlier handling: "),
-            sprintf("This run excluded %d islet%s (%s, robust median/MAD; mean/SD fallback when MAD = 0) before donor-level aggregation, mixed-effects modelling, and stratified tests. ",
+            sprintf("This run excluded %d islet%s (%s, robust median/MAD; mean/SD fallback when MAD = 0) before donor-level aggregation, mixed-effects modeling, and stratified tests. ",
                     os$n_excluded, if (os$n_excluded == 1) "" else "s", os$label),
             "The control is local to the Statistics tab (Section 1 ", tags$em("Exclude outliers"),
             " checkbox + threshold slider); the Plot / Trajectory / Spatial tabs share their own synced controls. ",
-            "The Spatial peri enrichment plot uses Tukey 1.5×IQR per donor status, since enrichment z is already a standardised quantity.",
+            "The Spatial peri enrichment plot uses Tukey 1.5×IQR per donor status, since enrichment z is already a standardized quantity.",
             tags$br()
           )
         } else {
@@ -2051,7 +2051,7 @@ statistics_server <- function(id, raw_df, get_selection_description,
       zero_para <- if (isTRUE(st$exclude_zero)) {
         tagList(
           tags$strong("Zero-value exclusion: "),
-          sprintf("This run dropped %s islet%s with value == 0 before donor-level aggregation, mixed-effects modelling, demographics, and per-bin tests. ",
+          sprintf("This run dropped %s islet%s with value == 0 before donor-level aggregation, mixed-effects modeling, demographics, and per-bin tests. ",
                   formatC(st$zero_dropped, format = "d", big.mark = ","),
                   if (st$zero_dropped == 1) "" else "s"),
           "Useful for zero-inflated features — rare phenotypes whose core or peri-islet proportion is exactly 0 in most islets. ",
@@ -2118,7 +2118,7 @@ statistics_server <- function(id, raw_df, get_selection_description,
           "spread \u2014 on this cohort they frequently do not (floor effects can leave one group ",
           "at ~0 with almost no variance, giving 50-fold variance ratios). Where that happens ",
           "the contrast is marked \u2020 and d should be read as indicative only; the raw ",
-          "difference is the quantity that does not depend on which SD you standardise by. ",
+          "difference is the quantity that does not depend on which SD you standardize by. ",
           "Per-group means and SDs are shown in the primary card so this is checkable.",
           tags$br(), tags$br(),
           tags$strong("Islet size (companion models): "),
@@ -2129,9 +2129,9 @@ statistics_server <- function(id, raw_df, get_selection_description,
           tags$code("value ~ donor_status + diameter + (1 + diameter|donor)"), " (is the group difference ",
           "still there at a common islet size?) and ",
           tags$code("value ~ donor_status × diameter + (1 + diameter|donor)"),
-          " (does the group difference depend on size?). Diameter is mean-centred, so the ",
+          " (does the group difference depend on size?). Diameter is mean-centered, so the ",
           "adjusted donor-status term is the difference at the mean islet diameter, and is ",
-          "modelled in units of 100 µm purely so the fits stay well conditioned (linear ",
+          "modeled in units of 100 µm purely so the fits stay well conditioned (linear ",
           "rescaling cannot move a p-value). ",
           tags$strong("Both companions carry a per-donor random diameter slope, not just a random intercept. "),
           "A random intercept absorbs each donor's baseline but leaves nothing for donor-to-donor ",
@@ -2155,7 +2155,7 @@ statistics_server <- function(id, raw_df, get_selection_description,
           "disease-stage differences survive adjustment for age-associated endotypes. ",
           "Their <13 / \u226513 year cut is data-supported on this cohort rather than ",
           "arbitrary: our ages are bimodal with a gap from 4.22 to 14.56 years, and 13 ",
-          "falls inside it. Age comes from the H5AD, which is canonical for modelling ",
+          "falls inside it. Age comes from the H5AD, which is canonical for modeling ",
           "(it disagrees with the nPOD record for one donor, both under the cut). ",
           tags$strong("HbA1c and C-peptide are deliberately NOT adjusted for: "),
           "both are downstream consequences of beta-cell loss rather than confounders ",
@@ -2309,9 +2309,9 @@ statistics_server <- function(id, raw_df, get_selection_description,
                                      if (is.finite(sm$p_interaction) && sm$p_interaction < st$alpha)
                                        "  *** effect is size-dependent; the omnibus p is a marginal average ***"
                                      else ""))
-            lines <- c(lines, paste0("# Size companion - diameter mean-centred at: ",
+            lines <- c(lines, paste0("# Size companion - diameter mean-centered at: ",
                                      if (is.finite(sm$mean_diam)) sprintf("%.2f um", sm$mean_diam) else "N/A",
-                                     sprintf(" (modelled in units of %g um)", SIZE_COMPANION_DIAM_SCALE)))
+                                     sprintf(" (modeled in units of %g um)", SIZE_COMPANION_DIAM_SCALE)))
             # Which error term the size terms got. Both companions carry a
             # per-donor random diameter slope; a fallback to a random intercept
             # tests them against islet-level residual instead of the 15 donors

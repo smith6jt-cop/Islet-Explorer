@@ -32,9 +32,9 @@ all 20 images is in `$OUT/typing/`; see [the README](../scripts/uniform/README.m
 **App root, 2026-10-16 (P4 built, awaiting review).** `scripts/uniform/assemble_uniform.py` builds the whole
 cohort from the uniform run, with nothing appended to the frozen release. The current build is
 `data/development/uniform-20donor-20261019-v7/` (v1-v6 are superseded by the fixes below). It holds 20 donors
-and 10,113 endocrine objects (1,491 islets, 3,415 clusters and 5,207 singles). Islets and clusters with analysed
+and 10,113 endocrine objects (1,491 islets, 3,415 clusters and 5,207 singles). Islets and clusters with analyzed
 cells in both core and 20 um band are the 4,763 analysis rows on v5 (1,487 islets, 3,276 clusters). Singles are only
-counted (v4, below). That is 3.07 million analysed cells, with 33,843 Excluded (11,095 for an unresolved hormone, v5) and
+counted (v4, below). That is 3.07 million analyzed cells, with 33,843 Excluded (11,095 for an unresolved hormone, v5) and
 320,737 without a nucleus. The app serves Islets and Clusters behind an app-wide selector (A5), which since 2026-10-17 also
 replaces every minimum-cells control. The Trajectory instead fits every object with ten or more core cells,
 whatever its class (owner, 2026-10-18). Local checks on v4 (2026-10-18): 232 R tests pass, and the browser
@@ -46,7 +46,7 @@ cannot, so the four Viewer checks fail there. The PAGA and Plot vocabulary check
 not, so PAGA silently fell back to Fruchterman-Reingold). The build report is `tmp/uniform-20donor-20261018-v5/`; on v5 the harness again passes 45 of 45.
 
 **Owner ruling, 2026-10-19 (v6).** The UMAPs separated disease poorly. The investigation found the original
-15-donor UMAP's separation was donor batch (72 % same-donor neighbours; same disease among other-donor neighbours at
+15-donor UMAP's separation was donor batch (72 % same-donor neighbors; same disease among other-donor neighbors at
 chance; donor explained 86 % of HLADR variance, disease 1 %), while v5's protein + Harmony layout lost much of the
 real disease difference, T1D beta-cell loss, because Harmony on donor also removes donor-level disease shifts. On
 the owner's choice ("ten-cell cutoff", composition refit), the UMAP and Leiden are now the endocrine composition of
@@ -59,10 +59,10 @@ boundary file has the same content, and the protein record differs only by Harmo
 **v7, 2026-10-19.** The v6 composition UMAP was one dense blob with two detached islands. The islands are real
 objects (31 all-beta small islets, mostly ND and Aab+; 21 all-alpha insulin-deficient islets, mostly T1D; each far
 above chance from the donors' pooled make-up, spread over 10-12 donors, not fragments of one islet and not a typing
-artefact) but their detachment came from identical features: tied points pull together in a 30-neighbour graph. On
+artifact) but their detachment came from identical features: tied points pull together in a 30-neighbor graph. On
 the owner's direction (adjust min_dist and spread; points must not appear to overlap), the UMAP is refitted at
 min_dist 3, spread 3 on the same graph, so those objects are the ends of the cloud and on-screen overlap falls from 42 %
-to 7 % of points within half a marker of a neighbour. The fit now runs on one thread, because the thread count changed
+to 7 % of points within half a marker of a neighbor. The fit now runs on one thread, because the thread count changed
 the layout and Leiden (adjusted Rand 0.63); v6's Leiden cannot be reproduced exactly, and v7's clusters agree with
 v6's at adjusted Rand 0.57-0.73. The app draws each UMAP as one interleaved trace, so no disease state is painted over
 another. v7 was rebuilt by the assembler (report `tmp/uniform-20donor-20261019-v7/`): X, every table and every
@@ -101,7 +101,7 @@ segmentation map draws them. Of the 5,207 Singles, 4,720 cells are typed (1,081 
 **Owner ruling, 2026-10-18 (v5).** "These hormones are mutually exclusive so there needs to be resolution or
 exclusion based on the approved islet cell typing methods. The 'only' and 'at all' designations are not biology,
 they are indicators of technical problems that need to be solved. We need to add a CHGA+INS-GCG-SST- cell type."
-The second hormone is neighbour bleed (see [the README](../scripts/uniform/README.md)); a hormone now names a cell
+The second hormone is neighbor bleed (see [the README](../scripts/uniform/README.md)); a hormone now names a cell
 only at 2x the runner-up (Senior's confirmation margin), else the cell is Excluded (11,095), and CHGA+
 hormone-negative is a cell type (2,350; mean share of Islet endocrine cells ND 2.3 %, Aab+ 2.8 %, T1D 4.7 %). The
 trajectory fits 1,215 objects (rho -0.67; ND 0.29 < Aab+ 0.36 < T1D 0.73).

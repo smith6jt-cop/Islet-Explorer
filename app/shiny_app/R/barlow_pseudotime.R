@@ -111,7 +111,7 @@ compute_barlow_pseudotime <- function(min_cells = 1, max_cells = NA, object_clas
   }
 
   res <- tryCatch({
-    set.seed(1)  # destiny's eigendecomposition is randomised; pin it so the
+    set.seed(1)  # destiny's eigendecomposition is randomized; pin it so the
                  # axis does not move between two runs at the same threshold.
     dm <- destiny::DiffusionMap(Mu, k = 15, n_eigs = 10,
                                 distance = "cosine", verbose = FALSE)

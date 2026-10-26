@@ -175,7 +175,7 @@ scatter are built with `plot_ly()` by the pure builders in `R/plot_figures.R` (`
 against `ggplot2::layer_data()` in the tests), LOESS through `stats::loess` with each layer's span and weights and
 ggplot2's 95 % band (`plot_loess_curve()`), ggplot's mm-to-px point sizes (`plotly_point_px()`) and area size scale
 (`plot_area_size_px()`). The Trajectory scatter is one keyed trace drawn in `islet_umap_order()`, so no donor status
-is painted over another; its trend bands are the status colour at alpha 0.15 whatever the colouring. The violins and
+is painted over another; its trend bands are the status color at alpha 0.15 whatever the coloring. The violins and
 boxes are plotly's own traces over the kept values. `plot_pseudo_log_breaks()` gives the Plot cards' pseudo-log
 y-axis ticks (it was a module-local helper).
 
@@ -247,7 +247,7 @@ Carries two cohort-level analyses adapted from Steenbuck et al. 2025 (Bodenmille
   `calcNormFactors` → `estimateDisp` → `glmQLFit` → `glmQLFTest`; three contrasts, three cell
   regions, volcano + table + CSV. **Counts, not proportions:** proportions are compositionally
   constrained, so the β-cell collapse in T1D inflates every other type's proportion; the
-  library-size offset separates that artefact from a real abundance change. T1D vs ND gives
+  library-size offset separates that artifact from a real abundance change. T1D vs ND gives
   Beta cell logFC −5.55 (FDR 0.0011), CD8a Tcell +2.71 (0.0013), Delta −2.88, Immune +3.23.
 - **Card C — Infiltration score.** `1` inside the islet, `1/d` outside (d = µm from the edge,
   floored at 1 µm). See "Whole-slide false negatives" below — the denominator, the FDR family and
@@ -261,7 +261,7 @@ filters genuinely do not apply.
 
 ### Whole-slide false negatives in the infiltration score (Jul 2026)
 
-Steenbuck et al. image **75 islet-centred ROIs per donor**; we image **whole sections**. Three
+Steenbuck et al. image **75 islet-centered ROIs per donor**; we image **whole sections**. Three
 consequences, all of which suppress real signal, all measured:
 
 **1. The denominator was the dominant defect.** Their per-image denominator is islet-local by
@@ -282,7 +282,7 @@ n surviving FDR      0             4
 
 Four of seven family phenotypes cross from null to significant **on the denominator alone**. The
 default is now `isletperi` (the ROI analogue); `near100` and `all` remain selectable, the last
-labelled as a comparison rather than a baseline.
+labeled as a comparison rather than a baseline.
 
 The **numerator needed no change**: 87.8% of the CD8a score mass already comes from within 20 µm of
 an islet although only 16% of CD8a cells are there, so the `1/d` weight works as intended. Capping
@@ -331,10 +331,10 @@ than a silent assumption.
 **5. Nearest-islet attribution — checked, not a confounder.** On a whole slide `signed_dist` is to
 the *nearest* islet, so in principle a peri-ductal or perivascular aggregate could be credited as
 islet infiltration in a way a single-islet ROI makes impossible. Tested: islet crowding (mean
-centroid nearest-neighbour distance) and islet count do not differ by stage (Kruskal-Wallis p = 0.83
+centroid nearest-neighbor distance) and islet count do not differ by stage (Kruskal-Wallis p = 0.83
 and 0.53), and the score correlates weakly with islet geometry (|rho| ≤ 0.35 vs islet count, ≤ 0.26
 vs crowding). What correlation exists is *negative* — more islets means a bigger denominator, not
-accidental credit. Caveat: `islet_spatial_lookup.csv` holds 10,736 records for the 5,214 analysed
+accidental credit. Caveat: `islet_spatial_lookup.csv` holds 10,736 records for the 5,214 analyzed
 islets (roughly two entries per islet), so the crowding figure is valid for between-donor comparison
 but not as an absolute distance.
 
@@ -428,25 +428,25 @@ The Viewer embeds a local Avivator build (`www/avivator`, Vite bundle) in an `<i
 
 **Secondary mitigation** (if macOS flicker persists after the above): rebuild Avivator with `useDevicePixels: false`. The bundle only reads `image_url` + `channel_config` query params, so this can't be toggled at runtime.
 
-## Colour Theme (2026-10-18)
+## Color Theme (2026-10-18)
 
-Dark by default, modelled on VS Code's Dark Modern theme (owner: "Make the default theme of the app dark similar to
+Dark by default, modeled on VS Code's Dark Modern theme (owner: "Make the default theme of the app dark similar to
 vscode's current theme"); a "Light theme" button at the top right switches back, remembered in localStorage
 (`islet-theme`). `<html data-theme>` is set before first paint by the inline script at the top of `app.R`'s
-`<head>`; `www/islet-theme.css` defines the colours as CSS variables (`--islet-fg`, `--islet-surface-2`,
+`<head>`; `www/islet-theme.css` defines the colors as CSS variables (`--islet-fg`, `--islet-surface-2`,
 `--islet-info-bg`, ...) and the dark overrides of Bootstrap 3, selectize, sliders, modals and tables;
 `www/islet-theme.js` switches it and writes the hidden text input `app_theme`.
 
-- **Inline styles use the variables, never literal colours** (`style = "color: var(--islet-fg-muted);"`), so one
-  switch recolours them. Structure-legend swatches and donor colours stay literal.
+- **Inline styles use the variables, never literal colors** (`style = "color: var(--islet-fg-muted);"`), so one
+  switch recolors them. Structure-legend swatches and donor colors stay literal.
 - **Plots follow the theme on the server.** `theme_islet()` (ggplot2 4 `ink` / `paper`, so geoms without an
-  explicit colour follow it) and `plotly_islet_config()` (`plotly_islet_dark()`) read `islet_theme_mode()`, which
+  explicit color follow it) and `plotly_islet_config()` (`plotly_islet_dark()`) read `islet_theme_mode()`, which
   reads `input$app_theme` from the ROOT session -- inside a module `getDefaultReactiveDomain()$input` is
   namespaced and never sees it. A plot that draws a fixed reference line or text uses `islet_ink()`, not black.
   `renderPlot()` takes `bg = "transparent"`, else the area outside a fixed-aspect plot is painted white.
 - **Header logo.** The Panc Floyd logo heads the page (owner, 2026-10-19) in two copies made by
-  `scripts/app_assets/make_logo_variants.py` from `www/logo.png`: `logo-header-light.png` (original colours) and
-  `logo-header-dark.png` (each word shading white to grey, top to bottom; owner, 2026-10-21); in both the holes of
+  `scripts/app_assets/make_logo_variants.py` from `www/logo.png`: `logo-header-light.png` (original colors) and
+  `logo-header-dark.png` (each word shading white to gray, top to bottom; owner, 2026-10-21); in both the holes of
   P, a, o and d are transparent. CSS shows the one for the current theme.
 - **Header row (2026-10-26).** The tab list of `tabsetPanel()` (`app_tabset$children[[1]]`, the `<ul>` with id
   `tabs`) sits in `.app-header` right of the logo, the theme switch after it, so each tab's Data controls start just
@@ -454,9 +454,9 @@ vscode's current theme"); a "Light theme" button at the top right switches back,
   top of the Data controls is just under the logo"); the tab content (`children[[2]]`) follows the header.
   `www/sticky-layout.js` sets `--islet-tabs-h` to 0 while the list is inside the header, so `.tab-controls` stick
   right under it.
-- **Downloads stay white.** ggplot downloads use `islet_ggsave()` (colour-only light overrides on top of the
+- **Downloads stay white.** ggplot downloads use `islet_ggsave()` (color-only light overrides on top of the
   plot's own theme); the plotly camera button is replaced by one that re-draws the figure off screen in light
-  colours (`isletDownloadLightPng`, same file name and 2800 x 1800 size).
+  colors (`isletDownloadLightPng`, same file name and 2800 x 1800 size).
 
 ## App-Specific Conventions
 
@@ -464,9 +464,9 @@ vscode's current theme"); a "Light theme" button at the top right switches back,
 - **Font size minimums**: Use `h5` (not `h6`) with explicit `font-size: 15px` for panel headings. Legend items minimum 14-15px.
 - **Large scatter plots (>50K points)**: Use `ggplot2::renderPlot()` NOT `plotlyOutput()` -- plotly cannot handle 100K+ points interactively. Use small `size` (0.3-0.5) and low `alpha` (0.3-0.6).
 - **Tissue scatter coordinate convention**: `coord_fixed() + scale_y_reverse()` matches microscopy convention (y increases downward, spatial proportions preserved)
-- **Leiden cluster mapping for cells**: Islet-level Leiden assignments map to single cells via `islet_name` column lookup. Tissue background cells without an islet get `cluster = "tissue"` (grey), and so do the cells of an object outside the embedding (under ten core cells on a composition root).
+- **Leiden cluster mapping for cells**: Islet-level Leiden assignments map to single cells via `islet_name` column lookup. Tissue background cells without an islet get `cluster = "tissue"` (gray), and so do the cells of an object outside the embedding (under ten core cells on a composition root).
 - **Composition embedding (owner, 2026-10-19)**: on a uniform root from v6, `leiden_*`, `leiden_umap_1/2` and the trajectory H5AD's `X_umap` are the endocrine composition of the objects with ten or more core cells (the Beta, Alpha, Delta and CHGA+ hormone-negative shares of each core's endocrine cells; `scripts/uniform/composition_embedding.py`), NA for smaller objects. `prepared()$composition_embedding` (H5AD `uns`) drives the Spatial method text; the Leiden clusters card (composition and membership) drops NA clusters; the Trajectory tab's UMAPs show the same layout for its fitted objects, which are the same ten-cell set. The Harmony protein embedding stays in the H5AD as `X_umap_protein` / `protein_leiden_<r>` but is not shown. Why: `scripts/uniform/README.md` (App root). From v7 the layout uses min_dist 3, spread 3 (fitted on one thread), so points no longer pile up and the all-beta / all-alpha objects are the ends of the cloud rather than detached islands.
-- **UMAP drawing (2026-10-19)**: the Spatial UMAPs and the Trajectory screen UMAPs are drawn by `islet_umap_plotly()` (`00_globals.R`): one marker trace in a fixed interleaved order (`islet_umap_order()`), outlined in the background colour, with an empty trace per group for the legend (legend clicks off). Colouring by group in `plot_ly()` / `ggplotly()` made one trace per group drawn in turn, so T1D was painted over ND and Aab+ wherever they met. The Trajectory ggplot reactives stay as the PNG downloads, with the same row order; the white-background plotly export swaps the outline to white (`www/islet-theme.js`).
+- **UMAP drawing (2026-10-19)**: the Spatial UMAPs and the Trajectory screen UMAPs are drawn by `islet_umap_plotly()` (`00_globals.R`): one marker trace in a fixed interleaved order (`islet_umap_order()`), outlined in the background color, with an empty trace per group for the legend (legend clicks off). Coloring by group in `plot_ly()` / `ggplotly()` made one trace per group drawn in turn, so T1D was painted over ND and Aab+ wherever they met. The Trajectory ggplot reactives stay as the PNG downloads, with the same row order; the white-background plotly export swaps the outline to white (`www/islet-theme.js`).
 - **Spatial UMAP colourings (owner, 2026-10-21)**: each Spatial UMAP has its own Color by (`umap_color_left`, default
   Leiden; `umap_color_right`, default band immune proportion), from `SPATIAL_UMAP_COLOR_CHOICES`
   (`mod_spatial_server.R`): Leiden cluster; disease state (donor status, number of autoantibodies); the donor and their
@@ -474,7 +474,7 @@ vscode's current theme"); a "Light theme" button at the top right switches back,
   core cell count (log10). From v10 (2026-10-22) also the nPOD donor fields (race/ethnicity, height, weight, BMI
   percentile, admission and peak glucose, cause of death, recovery type, ICU stay, organ transit time, pancreas weight,
   RIN, ABO group), which the Plot tab's "Against a donor clinical value" offers too when numeric.
-  `spatial_umap_colour_choices()` drops columns a root lacks. Values without a value are grey: T1D duration is NA
+  `spatial_umap_colour_choices()` drops columns a root lacks. Values without a value are gray: T1D duration is NA
   outside T1D (hover "no T1D"), and HbA1c is missing for 6090 and 6232 (nPOD records 0.0). The output
   ids stay `leiden_umap` / `spatial_umap_immune` (the browser checks name them).
 - **Per-donor tissue CSVs**: `data/donors/{imageid}.csv` with 5 columns (X_centroid, Y_centroid, phenotype, cell_region, islet_name). `cell_region` = core/peri/tissue.
@@ -487,7 +487,7 @@ vscode's current theme"); a "Light theme" button at the top right switches back,
 - **Deferred heavy file loading**: `annotations.tsv` (72 MB) lazy-loaded via `.seg_lazy` environment in `segmentation_helpers.R`.
 - **Synthetic union rows need density**: `prep_data()` synthesizes `islet_union` rows by summing core+band. Must compute `area_um2`, `region_um2`, and `area_density = area_um2/region_um2` — setting these to `NA` causes Microenvironment Core+Peri to drop 12/15 donors (default metric is Density, NA filtered by `!is.na(value)`).
 - **`updateSelectInput` after `renderUI`**: Server-side updates targeting an input that lives inside a `renderUI`-mounted block must share a reactive dependency with the renderUI, or fire only after the UI has mounted on the client. Putting the update inside its own naked `observe({})` can race the UI mount and silently leave the dropdown empty. Pattern: nest the `updateSelectInput` inside the same observer that builds the choices reactive.
-- **`reactiveVal` to stabilise a `renderUI` boolean**: a `reactive()` boolean re-fires its dependents whenever its INPUTS change, even if the value is unchanged — so a `renderUI` keyed on it rebuilds (destroying child DOM, including iframes/WebGL canvases). Mirror the boolean into a `reactiveVal` via an `observe`; `reactiveVal` dedups, so the `renderUI` only re-renders when the boolean truly flips. See § "Viewer Tab (Avivator) — iframe Persistence".
+- **`reactiveVal` to stabilize a `renderUI` boolean**: a `reactive()` boolean re-fires its dependents whenever its INPUTS change, even if the value is unchanged — so a `renderUI` keyed on it rebuilds (destroying child DOM, including iframes/WebGL canvases). Mirror the boolean into a `reactiveVal` via an `observe`; `reactiveVal` dedups, so the `renderUI` only re-renders when the boolean truly flips. See § "Viewer Tab (Avivator) — iframe Persistence".
 - **Cross-session cache (Plan A Level 2, 2026-10-26)**: `app.R` sets `shinyOptions(cache = cachem::cache_mem())`
   (256 MB, per R process) and the two Plot cards (`card_cache_key()`), the composition card and the Spatial tissue
   scatter PNG are `bindCache()`d, keyed on every input their builders read (the card's rows included), the palette
@@ -514,7 +514,7 @@ legends, and tests route through `phenotype_keep()`/`phenotype_filter_rows()`, l
 Naming aliases: PHENOTYPE_COLORS (drilldown_helpers.R) uses
 `CD8a Tcell` / `CD4 Tcell` / `Blood Vessel` / `SMA+`; the CSV uses
 `CD8 T cell` / `CD4 T cell` / `Blood vessel` / `Smooth Muscle`. The
-`PHENOTYPE_ALIASES` map normalises PHENOTYPE_COLORS → CSV before lookup.
+`PHENOTYPE_ALIASES` map normalizes PHENOTYPE_COLORS → CSV before lookup.
 
 **Canonical display label (Jul 2026):** the PHENOTYPE_COLORS / data
 `phenotype`-column form is the single canonical label shown to users
@@ -568,7 +568,7 @@ text should be in the hidden window behind the question mark icon in all tabs", 
 under one icon per tab, distribute the help text to multiple icons according to the card the text refers to."
 Nothing explanatory goes inline under a control or above a plot; status and error messages (no data, range not
 applied, outlier tables) stay where they are. Each card puts its help beside its title with
-`card_title_help(title, help = list(...))` (or `card_help()` directly, as the Spatial neighbourhood `card_title()`
+`card_title_help(title, help = list(...))` (or `card_help()` directly, as the Spatial neighborhood `card_title()`
 does); a control panel takes `control_panel(..., help = list(...))`, which puts the icon at the right of its title
 bar but outside its `<summary>`, so opening the help does not open or close the panel. Text about the tab's data
 (object classes, cell typing, phenotype rules button) goes with the Data controls. `www/card-help.js` keeps one
@@ -584,7 +584,7 @@ and visual. Make the layout and separation consistent throughout the app." Each 
 Neighborhood Analysis section) opens with `control_panel("Data controls", open = TRUE, ...)` — what is selected,
 filtered or computed — and `control_panel("View controls", ...)` — how it is drawn — full width at the top of the tab
 (`control_panel()` and `CONTROL_PANEL_CSS` in `00_globals.R`). A selector that only chooses what one card
-plots stays on that card (Trajectory heatmap and PAGA, Spatial neighbourhood cards); downloads sit with their
+plots stays on that card (Trajectory heatmap and PAGA, Spatial neighborhood cards); downloads sit with their
 plot. The Plot tab's old left sidebar column and its layout JS are gone; the synced inputs keep their ids
 (`sidebar_remove_outliers`, `sidebar_outlier_z`, `sidebar_donor_palette`; the first two are no longer rendered,
 see below). Spatial's phenotype list now uses the
@@ -594,7 +594,7 @@ root's own label set (`root_phenotype_labels()`), not the palette, which still c
 organized control center for each that limits wasted space." Inside each panel, `control_grid(columns = 4)` lays out
 equal columns of `control_group(title, ...)` (an uppercase group title over related controls; `span = 2` takes two
 columns), every input as wide as its column, and no tick grid under sliders. The Plot tab's Data controls are Objects
-and measure | Donors | Object size | Exclusions and its View controls Colour (both plots) | Points and axis (both
+and measure | Donors | Object size | Exclusions and its View controls Color (both plots) | Points and axis (both
 plots) | Against diameter | By donor status (the plot types they style); Trajectory and Spatial use three and four groups. The
 whole block is wrapped in `tab_controls()` and frozen under the header while the tab scrolls; the excluded-outlier
 table sits below it, not inside. Clicking a panel's title still collapses it to its title bar. Since 2026-10-26 the
@@ -619,7 +619,7 @@ Single source of truth in `R/00_globals.R`:
 **In-plot plotly text — the settings `layout(font=)` does NOT reach (Jul 2026).** Three separate mechanisms, all previously unset on every plot in the app, and collectively the reason text still read small after the May 2026 pass:
 
 - **`hoverlabel.font`** — tooltips render at plotly's ~13px default no matter what `layout(font=)` says. Several plots (Leiden UMAP, tissue scatter, Card A bars) are read *primarily* via hover. Now applied centrally by `plotly_islet_config()`.
-- **`uniformtext`** — for `bar` and `heatmap` traces plotly silently **shrinks** in-cell text to fit the box, so a `textfont = list(size = 14)` can render at 8px. `minsize` sets the floor; `mode` decides the overflow behaviour: `"hide"` (default) drops the label — right for numeric heatmap values, which overlap illegibly — and `"show"` forces it, which is required for the Statistics `bin_heatmap` significance stars (a hidden star reads as "not significant"). Pass `uniform_text_mode = "show"` there.
+- **`uniformtext`** — for `bar` and `heatmap` traces plotly silently **shrinks** in-cell text to fit the box, so a `textfont = list(size = 14)` can render at 8px. `minsize` sets the floor; `mode` decides the overflow behavior: `"hide"` (default) drops the label — right for numeric heatmap values, which overlap illegibly — and `"show"` forces it, which is required for the Statistics `bin_heatmap` significance stars (a hidden star reads as "not significant"). Pass `uniform_text_mode = "show"` there.
 - **`automargin = TRUE`** — required on any axis with `tickangle` or long category names, else plotly clips the labels against a fixed margin. Clipped labels read as "the font is too small" when the label is really just cut off. Set on the enrichment bars/heatmap, the bin heatmap, and the ggplotly-converted Statistics plots.
 
 **Two ggplotly conversion losses** (both silent, both fixed centrally):
@@ -627,7 +627,7 @@ Single source of truth in `R/00_globals.R`:
 - **`labs(subtitle = ...)` is DROPPED.** Three Statistics plots put their correlation / BH-correction / Kruskal-Wallis p-values there, so those lines never reached the page at all. Use `plotly_title_with_sub(title, subtitle)` to rebuild the title as `"<title><br><sup><subtitle></sup>"` and pass it to `layout(title = list(text = ...))`. Add `margin = list(t = 80)` so the two-line title has room.
 - **Faceting relocates axis titles into `layout.annotations`.** For an unfaceted plot ggplotly keeps them in `layout.xaxis.title`, so the usual overlay works. Add a facet and *both* the strip labels and the axis titles move to `annotations`, where the overlay is ignored and they render at ~14.6px. `plotly_islet_strip_fonts(gg)` restyles both — strips get `strip`, `annotationType == "axis"` entries get `axis_title`. Pipe it directly after `ggplotly()`, before `layout()`.
 
-**`annotate()` / `geom_text()` `size` is MILLIMETRES, not points.** `size = 4` is 11.4pt and `size = 5` is 14.2pt — both *below* the 18pt base, which is what the five placeholder annotations in this app were using. Use `ISLET_ANNOTATE_SIZE` (= `ISLET_FONT_SIZES$base / ggplot2::.pt`) instead of a literal.
+**`annotate()` / `geom_text()` `size` is MILLIMETERS, not points.** `size = 4` is 11.4pt and `size = 5` is 14.2pt — both *below* the 18pt base, which is what the five placeholder annotations in this app were using. Use `ISLET_ANNOTATE_SIZE` (= `ISLET_FONT_SIZES$base / ggplot2::.pt`) instead of a literal.
 
 **Empty states**: use `plotly_islet_empty(msg)` rather than `plotly_empty() %>% layout(title = msg)` — the latter renders its title at plotly's default size.
 - `ISLET_PNG_DIMS` (10 × 7 in @ 300 dpi → 3000 × 2100 px) and `ISLET_HEATMAP_PNG_DIMS` (12 × 8 in) for `ggsave()` in `downloadHandler()` `content` functions.

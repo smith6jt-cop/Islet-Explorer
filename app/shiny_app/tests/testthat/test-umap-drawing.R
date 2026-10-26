@@ -1,4 +1,4 @@
-# islet_umap_plotly(): one interleaved, keyed marker trace, so no colour group is painted over another.
+# islet_umap_plotly(): one interleaved, keyed marker trace, so no color group is painted over another.
 
 .umap_env <- function() {
   env <- new.env(parent = globalenv())
@@ -36,7 +36,7 @@ test_that("groups are drawn as one interleaved trace with legend-only stubs", {
   expect_identical(env$islet_umap_order(30), env$islet_umap_order(30))
 })
 
-test_that("a numeric colour is one trace with a colour bar and no legend stubs", {
+test_that("a numeric color is one trace with a color bar and no legend stubs", {
   env <- .umap_env()
   traces <- plotly::plotly_build(env$islet_umap_plotly(.umap_df(), "x", "y", "value", text = "hover",
                                                        colorbar_title = "Log cell ratio"))$x$data

@@ -12,7 +12,7 @@ PHENOTYPE_COLORS <- c(
   "CHGA+ hormone-negative" = "#6D597A",  # muted plum
   "Endocrine"     = "#D4A373",  # tan
   "Acinar"        = "#A8DADC",  # light teal
-  "Exocrine"     = "#A8DADC",  # Senior's residual class: the Acinar colour
+  "Exocrine"     = "#A8DADC",  # Senior's residual class: the Acinar color
   "Ductal"        = "#457B9D",  # steel blue
   "ECAD+"         = "#6A994E",  # olive green
   "Structural"    = "#9B9B9B",  # gray
@@ -39,7 +39,7 @@ PHENOTYPE_COLORS_HIGH_CONTRAST <- c(
   "CHGA+ hormone-negative" = "#8D6E63",  # brown (was deep purple, a shade from CD8a Tcell and Macrophage; 2026-10-21)
   "Endocrine"     = "#8D6E63",  # brown
   "Acinar"        = "#00ACC1",  # cyan
-  "Exocrine"     = "#00ACC1",  # Senior's residual class: the Acinar colour
+  "Exocrine"     = "#00ACC1",  # Senior's residual class: the Acinar color
   "Ductal"        = "#43A047",  # green
   "ECAD+"         = "#7CB342",  # lime green
   "Structural"    = "#9E9E9E",  # gray
@@ -66,7 +66,7 @@ PHENOTYPE_COLORS_COLORBLIND <- c(
   "CHGA+ hormone-negative" = "#661100",  # dark red
   "Endocrine"     = "#AA4499",  # purple
   "Acinar"        = "#44AA99",  # teal
-  "Exocrine"     = "#44AA99",  # Senior's residual class: the Acinar colour
+  "Exocrine"     = "#44AA99",  # Senior's residual class: the Acinar color
   "Ductal"        = "#332288",  # indigo
   "ECAD+"         = "#117733",  # green
   "Structural"    = "#888888",  # gray
@@ -93,7 +93,7 @@ PHENOTYPE_COLORS_MAX_DISTINCT <- c(
   "CHGA+ hormone-negative" = "#882D17",  # reddish brown
   "Endocrine"     = "#F38400",  # vivid orange
   "Acinar"        = "#A1CAF1",  # very light blue
-  "Exocrine"     = "#A1CAF1",  # Senior's residual class: the Acinar colour
+  "Exocrine"     = "#A1CAF1",  # Senior's residual class: the Acinar color
   "Ductal"        = "#008856",  # vivid green
   "ECAD+"         = "#C2B280",  # dark yellowish brown
   "Structural"    = "#848482",  # medium gray
@@ -201,7 +201,7 @@ render_islet_drilldown_plot <- function(info, cells, color_by = "phenotype", sho
   cells$y_px <- cells$Y_centroid / PIXEL_SIZE_UM
 
   if (color_by == "phenotype" && "phenotype" %in% colnames(cells)) {
-    # Categorical coloring by phenotype (using fill to avoid colour conflict with structures)
+    # Categorical coloring by phenotype (using fill to avoid color conflict with structures)
     pheno_present <- phenotype_keep(sort(unique(cells$phenotype)))
     pal <- palette[pheno_present]
     # Fill missing phenotypes with gray

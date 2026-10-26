@@ -213,7 +213,7 @@ load_cell_distance <- function() {
   })
   if (!is.null(df)) {
     df <- df[is.finite(df$signed_dist), , drop = FALSE]
-    # Every analysed cell is kept (2026-10-20): Marker+ counts and the composition share's denominator must include
+    # Every analyzed cell is kept (2026-10-20): Marker+ counts and the composition share's denominator must include
     # the cells under a retired label (unsubtyped "T cell" and "Immune", "Endocrine"), which dropping them at the
     # loader left out (22% of CD3e+ cells). The phenotype choices are gated in cell_distance_phenotypes().
     .cell_distance_cache$data <- df
@@ -266,7 +266,7 @@ cell_distance_markers <- function() {
   sub("_pos$", "", grep("_pos$", colnames(df), value = TRUE))
 }
 
-# Distinct colours for the marker-mode composition stacks.
+# Distinct colors for the marker-mode composition stacks.
 CELL_DIST_MARKER_COLORS <- c(
   INS = "#E6194B", GCG = "#3CB44B", SST = "#B8A600", CD3e = "#4363D8",
   CD8a = "#F58231", CD4 = "#911EB4", CD20 = "#42D4F4", CD68 = "#F032E6",

@@ -260,7 +260,7 @@ build_channel_config_b64 <- function(names_vec) {
   add_pc <- function(idx0, name, hex) {
     if (!is.na(idx0) && idx0 >= 0) prim[[length(prim)+1]] <<- list(index = idx0, name = name, color = hex, visible = TRUE)
   }
-  # Order: INS (red), GCG (blue), SST (yellow), DAPI (grey)
+  # Order: INS (red), GCG (blue), SST (yellow), DAPI (gray)
   add_pc(idx0_ins,  "INS",  hex_red)
   add_pc(idx0_gcg,  "GCG",  hex_blue)
   add_pc(idx0_sst,  "SST",  hex_yellow)

@@ -56,7 +56,7 @@ Parquet summaries and spatial tables, plus the root's own files
 one) and the H5AD's embedding records as `summary/embedding_metadata.json`,
 which the production loader attaches to `prepared()`. The builder refuses to
 package a uniform root as schema 1, because the app would then run with the
-frozen 15-donor behaviour without saying so, and it copies the XML and offsets
+frozen 15-donor behavior without saying so, and it copies the XML and offsets
 sidecars beside each linked TIFF, so the release's `images/` is complete even
 though the root links its images from other roots. The candidate built from
 commit `d55680a` is staged under `tmp/ufrc-release-20261022/` (its data

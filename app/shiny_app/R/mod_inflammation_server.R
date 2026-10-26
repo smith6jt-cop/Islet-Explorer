@@ -117,7 +117,7 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
                     paste(mism, collapse = ", "),
                     paste(sprintf("%.2f", suppressWarnings(as.numeric(d$age))[d$`Case ID` %in% mism]), collapse = ", "),
                     paste(sprintf("%.2f", suppressWarnings(as.numeric(d$age_years_npod))[d$`Case ID` %in% mism]), collapse = ", ")),
-            "The H5AD value is used for all modelling so existing results do not shift.")
+            "The H5AD value is used for all modeling so existing results do not shift.")
         } else NULL
       )
     })
@@ -168,7 +168,7 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
         write_islet_csv(file, cohort(), islet_csv_header(
           "Donor cohort — nPOD clinical metadata",
           "Source: scripts/build_donor_metadata.py -> data/donor_metadata.csv",
-          "age = H5AD value (canonical for modelling); age_years_npod = nPOD record",
+          "age = H5AD value (canonical for modeling); age_years_npod = nPOD record",
           "t1d_duration_years is NA for non-diabetic donors (not applicable, not zero)"))
       }
     )
@@ -253,7 +253,7 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
         sprintf(". Common dispersion %.3f (BCV %.2f).", e$dispersion, sqrt(e$dispersion)),
         tags$br(),
         tags$span(style = "color: #888;",
-          "logFC is on a log2 scale after library-size normalisation, so it is a change in ",
+          "logFC is on a log2 scale after library-size normalization, so it is a change in ",
           "abundance rather than in share of the tissue. FDR is Benjamini-Hochberg across ",
           "the cell types tested in this contrast."))
     })
@@ -322,7 +322,7 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
         if (is.null(e)) return(write_islet_csv(file, NULL, "edgeR results unavailable"))
         write_islet_csv(file, e$res, islet_csv_header(
           paste0("edgeR differential abundance — ", e$label),
-          "Negative-binomial GLM, quasi-likelihood F-test, library-size normalised",
+          "Negative-binomial GLM, quasi-likelihood F-test, library-size normalized",
           paste("Cells included:", e$n_cells, "| region:", input$edger_region %||% "core_peri"),
           paste("Cell types tested:", e$n_tested,
                 "| dropped by filterByExpr:", e$n_dropped),
@@ -344,7 +344,7 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
                          choices = avail, selected = sel, inline = TRUE)
     })
 
-    # Steenbuck et al.: score 1 inside the islet, 1/d outside, normalised by the
+    # Steenbuck et al.: score 1 inside the islet, 1/d outside, normalized by the
     # total cell count of the image.
     #
     # THE DENOMINATOR IS THE ADAPTATION THAT MATTERS. Their images are 75 ROIs
@@ -360,7 +360,7 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
     # significant purely on the denominator.
     #
     # Default is therefore the islet-proximal population (the ROI analogue).
-    # Whole-section remains selectable for comparison, clearly labelled.
+    # Whole-section remains selectable for comparison, clearly labeled.
     #
     # The NUMERATOR needs no adaptation: 87.8% of the CD8a score mass already
     # comes from within 20 um of an islet even though only 16% of CD8a cells are
@@ -463,7 +463,7 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
     # 3 contrasts has a floor of q = 0.167 -- no pairwise contrast could ever
     # reach q < 0.05 whatever the biology. Printing such a column would be a
     # guaranteed false negative dressed as a result. They are reported raw and
-    # labelled exploratory instead.
+    # labeled exploratory instead.
     infil_tests_all <- reactive({
       s <- infiltration()
       phenos <- sort(unique(s$phenotype))
@@ -683,7 +683,7 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
           "forces an adaptation it is stated below."),
         tags$p(
           tags$strong("Differential abundance. "),
-          "Per-donor cell-type counts are modelled with edgeR: ",
+          "Per-donor cell-type counts are modeled with edgeR: ",
           tags$code("filterByExpr"), " → ", tags$code("calcNormFactors"), " → ",
           tags$code("estimateDisp"), " → ", tags$code("glmQLFit"), " → ",
           tags$code("glmQLFTest"), ", with Benjamini-Hochberg across cell types. ",
@@ -692,15 +692,15 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
           tags$strong("Counts rather than proportions is the substantive choice: "),
           "proportions must sum to 1, so the loss of β cells in T1D inflates every other ",
           "cell type's proportion whether or not its absolute abundance moved. The ",
-          "library-size offset removes that artefact."),
+          "library-size offset removes that artifact."),
         tags$p(
           tags$strong("Infiltration score. "),
           "Each cell scores 1 if it lies inside an islet and 1/d otherwise, with d the ",
           "distance in µm from the islet edge; per-donor sums are divided by that donor's ",
           "total cell count. The score rewards accumulation in the peri-islet space and ",
-          "penalises accumulation in distal tissue, which a plain density cannot ",
+          "penalizes accumulation in distal tissue, which a plain density cannot ",
           "distinguish. ", tags$strong("Adaptations: "),
-          "the paper normalises per imaging ROI and we normalise per donor section (this ",
+          "the paper normalizes per imaging ROI and we normalize per donor section (this ",
           "cohort has no ROIs); and 1/d is floored at d = 1 µm so a cell one micron ",
           "outside the edge cannot outweigh a cell inside it."),
         tags$p(
@@ -719,7 +719,7 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
           "that floor by the family size, so a corrected pairwise column would bottom out at ",
           "q = 0.17 \u2014 ", tags$strong("no biology whatsoever could produce a significant ",
           "value in it"), ". Printing one would be a guaranteed false negative dressed as a ",
-          "result, so the pairwise values are reported raw and labelled exploratory. The ",
+          "result, so the pairwise values are reported raw and labeled exploratory. The ",
           "omnibus family is small enough (7) to have genuine headroom: its floor is q = 0.014. ",
           "The card states these limits next to the table so a null reads as ",
           tags$em("underpowered"), ", not as ", tags$em("no effect"), "."),
@@ -747,16 +747,16 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
           "credit. The ambiguity is real but does not drive these results."),
         tags$p(
           tags$strong("Why the denominator is islet-proximal. "),
-          "Steenbuck et al. image 75 islet-centred ROIs per donor, so their per-image ",
+          "Steenbuck et al. image 75 islet-centered ROIs per donor, so their per-image ",
           "denominator is islet-local by construction. Our whole sections are not: the ratio ",
           "of all cells to islet-proximal cells ranges 4.1x to 23.2x across our 15 donors. ",
           "That variation is technical, and it is not confounded with disease stage ",
           "(Kruskal-Wallis p = 0.53), so it does not bias direction \u2014 it inflates variance ",
-          "and costs power. Measured: normalising by the whole section instead of the ",
+          "and costs power. Measured: normalizing by the whole section instead of the ",
           "islet-proximal population moved T cell from p = 0.18 to 0.008, Immune 0.11 to 0.02, ",
           "B cell 0.065 to 0.016 and CD8a T cell 0.027 to 0.011. Three phenotypes crossed from ",
           "null to significant on the denominator alone, which is why the ROI analogue is the ",
-          "default and the whole-section option is labelled as a comparison, not a baseline."),
+          "default and the whole-section option is labeled as a comparison, not a baseline."),
         tags$p(
           tags$strong("What this tab does not do. "),
           "It does not adjust for age, sex or BMI — those adjustments live in the ",

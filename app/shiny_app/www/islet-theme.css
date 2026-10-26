@@ -1,11 +1,11 @@
-/* Islet Explorer colour themes (2026-10-18).
+/* Islet Explorer color themes (2026-10-18).
  *
- * Dark is the default, modelled on VS Code's "Dark Modern" theme; Light keeps the app's earlier look. The theme is
+ * Dark is the default, modeled on VS Code's "Dark Modern" theme; Light keeps the app's earlier look. The theme is
  * the `data-theme` attribute on <html>, set before first paint by the script in app.R's <head> from localStorage
  * ("islet-theme"), and switched by the button at the top right. Plots follow it on the server (theme_islet(),
  * plotly_islet_config() read input$app_theme); PNG downloads stay white for publication.
  *
- * Inline styles in the R UI code use the variables below rather than literal colours, so one switch recolours them.
+ * Inline styles in the R UI code use the variables below rather than literal colors, so one switch recolors them.
  */
 
 :root,

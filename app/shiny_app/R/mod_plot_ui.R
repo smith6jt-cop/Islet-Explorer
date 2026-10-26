@@ -25,11 +25,11 @@ plot_main_ui <- function(id, extra_panel = NULL) {
                  " Cell Populations shows the cell make-up of each endocrine object. Microenvironment shows the proportion",
                  " of a region's area covered by Nerve, Capillary or Lymphatic structure objects."),
           tags$p(tags$strong("Regions."),
-                 " Core is the cells whose centre lies inside the object's outline. Peri-Islet is the cells in a 20",
+                 " Core is the cells whose center lies inside the object's outline. Peri-Islet is the cells in a 20",
                  " \u00b5m band around it, inside the tissue and outside every other endocrine object. Core+Peri pools",
                  " both."),
           tags$p(tags$strong("Metrics."),
-                 " % is the phenotype's proportion of all analysed cells in the region. Counts are cells of the phenotype per",
+                 " % is the phenotype's proportion of all analyzed cells in the region. Counts are cells of the phenotype per",
                  " object. Density divides the count by the region's area: the object's outline for Core, the 20 \u00b5m",
                  " band for Peri-Islet, their sum for Core+Peri."),
           tags$p(tags$strong("Measures offered."),
@@ -101,7 +101,7 @@ plot_main_ui <- function(id, extra_panel = NULL) {
         # Point controls apply to both plots (owner, 2026-10-19: the View controls must apply to both,
         # not only one card); the last two groups apply to the plot type they name.
         control_grid(
-          control_group("Colour (both plots)",
+          control_group("Color (both plots)",
             selectInput(ns("plot_color_by"), "Color points by",
                         choices = c("Donor Status" = "donor_status", "Donor ID" = "donor_id"),
                         selected = "donor_status"),

@@ -30,7 +30,7 @@ and the old comparator remain available in the offline artifacts.
 
 - Keep the verified 0.3774 µm/pixel calibration. Do not copy the IO60 script's
   `setPixelSizeMicrons(0.5078,0.5078)`. Its buffer calls operate directly on
-  pixel coordinates despite using variables named in micrometres. The adapted
+  pixel coordinates despite using variables named in micrometers. The adapted
   helper transforms X and Y to physical coordinates before buffering, then
   transforms back; anisotropic calibration is covered by a regression check.
 - Keep the INS/GCG/SST foreground model. IO60's `Islets2.json` also needs CD99,

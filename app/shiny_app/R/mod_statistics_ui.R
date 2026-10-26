@@ -60,7 +60,7 @@ statistics_ui <- function(id) {
         tags$strong("What you get."), " One headline result (mixed-effects p + ICC) and an ",
         "effect-size forest plot up front. Secondary tests, size-stratified per-bin patterns, ",
         "trapezoidal AUC, and confounder checks (age, sex, AAb count, covariate-adjusted model) ",
-        "follow as clearly-labelled ", tags$em("exploratory"), " material."),
+        "follow as clearly-labeled ", tags$em("exploratory"), " material."),
       p(style = "margin: 0; font-size: 13px; line-height: 1.5; color: #333;",
         tags$strong("How to use it."), " Pick a feature in the sidebar (shared with the Plot tab), ",
         "then click ", tags$strong("Run Statistics"), ". Significance is judged at a fixed ",

@@ -138,7 +138,7 @@ The VM's core is as fast as the workstation's for R, which is why the two vantag
 match. The one data access that is slower over NFS is the GeoPackage window read (SQLite
 page reads, about 0.2 s), visible as the drill-down's extra 0.2–0.3 s through the proxy.
 Data access is otherwise not where the seconds go; the plotly figure construction and
-serialisation in R are.
+serialization in R are.
 
 ## Reading
 
@@ -168,7 +168,7 @@ serialisation in R are.
      could be computed when the process starts, or warmed by a request after activation,
      so no reviewer meets them.
    - The Viewer's first view pulls 10.7 MB of tile ranges through Apache (multipart
-     byte ranges are honoured there; the local Shiny Server static route answers a
+     byte ranges are honored there; the local Shiny Server static route answers a
      multi-range request with a 200 and the whole file, which only matters for local runs).
 4. **Shared R process.** Shiny Server (open source) serves every session of the app from
    one R process, so simultaneous reviewers queue behind each other's compute (about
@@ -215,7 +215,7 @@ the Shiny Server compression is in the image build and is measured on staging):
 | Plot change, server compute | 1.1–1.2 s | 1.1–1.2 s (unchanged; Level 2's `plot_ly()` item) |
 
 What remains in a Plot change is the two cards' 8,600 object points: compact hover text
-0.45 MB, keys 0.16 MB, coordinates 0.18 MB, and a per-point colour array on the
+0.45 MB, keys 0.16 MB, coordinates 0.18 MB, and a per-point color array on the
 distribution card's single marker trace (0.09 MB). With the socket compression the
 1.12 MB travels as roughly 0.2 MB. The test suite (370) and the deployment test suites
 pass; the effect through the proxy is in the next section.
@@ -306,7 +306,7 @@ Reading:
   Plot change): a `plot_ly()` widget keeps its build inputs beside the built traces and sends
   both. Stripped, the messages are back at Level 1's 1.2 MB and 1.1 MB (`ws-payload.txt`
   against `ws-payload-before-strip.txt` in the evidence directory); the hover text is now
-  58 % of a card's message, the keys 19 %, the per-point colours 11 %.
+  58 % of a card's message, the keys 19 %, the per-point colors 11 %.
 - The Spatial donor change is the clearest cache effect: 2.2 s to 0.37 s on a repeat.
 - The drill-down (1.3–4.4 s here) is the development GeoJSON backend, not the app change;
   the release bundle reads indexed GeoPackages (0.6–0.7 s on staging).

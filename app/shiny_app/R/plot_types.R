@@ -186,7 +186,7 @@ plot_pseudo_log_axis <- function(values) {
   list(tickvals = plot_pseudo_log(brks), ticktext = format(brks, big.mark = ",", scientific = FALSE, trim = TRUE))
 }
 
-#' Colours of the object points: donor status, or each donor (the Plot tab's Donor ID palette, `donor_pal`).
+#' Colors of the object points: donor status, or each donor (the Plot tab's Donor ID palette, `donor_pal`).
 plot_point_colours <- function(rows, color_by, status_cols, donor_pal) {
   if (identical(color_by, "donor_id")) unname(donor_pal[as.character(rows$`Case ID`)])
   else unname(status_cols[as.character(rows$donor_status)])
@@ -214,7 +214,7 @@ plot_type_layout <- function(p, title, subtitle = NULL, xaxis = list(), yaxis = 
   plotly_islet_config(p, filename_root)
 }
 
-#' Status legend entries (empty traces), so a plot whose points carry per-point colours still has a legend.
+#' Status legend entries (empty traces), so a plot whose points carry per-point colors still has a legend.
 plot_status_legend <- function(p, status_cols, levels) {
   for (s in levels) {
     p <- plotly::add_trace(p, type = "scatter", mode = "markers", x = list(NA), y = list(NA), name = s,
@@ -466,7 +466,7 @@ plot_clinical_figure <- function(rows, clinical, clinical_label, ylab, name, sta
 }
 
 #' Density against diameter: contour lines of each donor status's object density in (diameter, measure), each status
-#' normalised to its own objects, where the scatter's points pile up.
+#' normalized to its own objects, where the scatter's points pile up.
 plot_density_figure <- function(rows, ylab, name, status_cols, log_scale = FALSE, log_x = FALSE, clip = FALSE) {
   rows <- rows[is.finite(rows$value) & is.finite(rows$islet_diam_um), , drop = FALSE]
   if (nrow(rows) < 10) return(plotly_islet_empty("Too few objects for a density"))
@@ -486,7 +486,7 @@ plot_density_figure <- function(rows, ylab, name, status_cols, log_scale = FALSE
   upper <- if (clip && !log_scale) plot_axis_upper(rows$value) else NULL
   if (!is.null(upper)) yaxis$range <- plot_axis_range(rows$value, upper)
   plot_type_layout(p, paste0(name, ": density against diameter"),
-                   "Contours of each donor status's objects, each status normalised to its own count",
+                   "Contours of each donor status's objects, each status normalized to its own count",
                    xaxis = list(title = list(text = "Islet diameter (\u00b5m)"), type = if (log_x) "log" else "linear"),
                    yaxis = yaxis, filename_root = "plot_density")
 }
@@ -523,7 +523,7 @@ plot_types_help <- function() {
                   " as diagnosed during their terminal admission, duration 0, and one at 7 months), and the two donors",
                   " whose HbA1c nPOD records as 0 were not measured."),
     shiny::tags$p(shiny::tags$strong("Density against diameter."),
-                  " Contour lines of each donor status's objects in diameter and measure, each status normalised to",
+                  " Contour lines of each donor status's objects in diameter and measure, each status normalized to",
                   " its own count, for where the scatter's points pile up."),
     shiny::tags$p(shiny::tags$strong("Axis range."),
                   " With Fit 99% of objects (View controls, the default), an axis that a few extreme objects would",

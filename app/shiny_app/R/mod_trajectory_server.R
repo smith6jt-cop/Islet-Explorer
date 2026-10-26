@@ -351,7 +351,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       # Note: peri-islet immune/density columns are NOT exposed here as
       # Y-axis features. Users select pseudotime mode (Core / Core+Peri)
       # to incorporate the peri-zone and structural-density signals into
-      # the X-axis (pseudotime) instead, then visualise the associated
+      # the X-axis (pseudotime) instead, then visualize the associated
       # markers (CD3e, CD8a, CD45, CD31, CD34, PDPN, etc.) on Y.
       choices <- list()
       if (length(hormone_markers)  > 0) choices[["Hormone Markers"]]  <- setNames(hormone_markers, hormone_markers)
@@ -610,7 +610,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
 
     # ---------- Trajectory scatter plot ----------
     # Built with plot_ly() directly (R/plot_figures.R, Plan A Level 2): the ggplot + ggplotly() path cost most of
-    # the step's server time. Colours, sizes, the jitter (seed 42, +/- 1.2 % of the pseudotime domain, +/- 8 % of
+    # the step's server time. Colors, sizes, the jitter (seed 42, +/- 1.2 % of the pseudotime domain, +/- 8 % of
     # the value range, never clamped: the axis is widened instead, see traj_pt_extent()) and the weighted LOESS
     # trends (weight log1p(cells), span 0.75) with their 95 % bands are those of the ggplot layers it replaces.
     output$traj_scatter <- renderPlotly({
@@ -626,7 +626,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       }
 
       color_by <- input$traj_color_by %||% "donor_status"
-      # A Leiden column absent from df (e.g. the Excel fallback) colours by donor status instead.
+      # A Leiden column absent from df (e.g. the Excel fallback) colors by donor status instead.
       if (startsWith(color_by, "leiden_") && !color_by %in% colnames(df)) color_by <- "donor_status"
       if (color_by == "donor_id") {
         lv <- levels(factor(df$donor_id))
@@ -874,7 +874,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
               panel.grid = element_blank(), axis.line = element_blank())
     })
     # The screen UMAPs are drawn by islet_umap_plotly() (one interleaved trace, outlined points) rather than
-    # ggplotly(), which split the donor-status colours into traces drawn in turn so T1D covered the others. The
+    # ggplotly(), which split the donor-status colors into traces drawn in turn so T1D covered the others. The
     # ggplot reactives above remain the PNG downloads.
     interactive_umap <- function(g, source, colour, pal = NULL, legend_title) {
       df <- traj_data_clean()
@@ -1251,7 +1251,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
     )
 
     # The heatmap's underlying matrix. `z` is the plotted (clamped) value;
-    # `bin_mean` is the raw per-bin mean it was standardised from, so the
+    # `bin_mean` is the raw per-bin mean it was standardized from, so the
     # z-scoring is reproducible from the file.
     output$dl_multi_heatmap_csv <- downloadHandler(
       filename = function() paste0("trajectory_multi_heatmap_",

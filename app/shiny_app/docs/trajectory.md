@@ -165,7 +165,7 @@ These are recorded because they are confident, plausible, and wrong. Do not re-l
 
 ## 5. Known-imperfect, accepted
 
-**The root is a medoid, and a medoid is the wrong shape for a root.** It is the centre of mass
+**The root is a medoid, and a medoid is the wrong shape for a root.** It is the center of mass
 of the top-50 INS-high ND islets, so it sits at the **88.2nd percentile of DC1 — not a tip**.
 DPT's unsigned distance therefore folds. Impact is tail-only: the 11.8% beyond the root is the
 healthy ND tail and correctly receives *low* pseudotime; contamination is 3.3% of the top
@@ -317,7 +317,7 @@ Consequences worth stating plainly:
 
 - **The 31 markers enter only through scVI.** They are not fed to the diffusion map directly and
   they are not weighted or selected. Whatever scVI encoded is what the trajectory sees.
-- **INS is used for the ROOT, not for the axis.** The root is the medoid, in the harmonised latent,
+- **INS is used for the ROOT, not for the axis.** The root is the medoid, in the harmonized latent,
   of the top-50 ND islets ranked by mean INS (`K_ROOT = 50`). A single-islet `argmax(INS)` root was
   replaced because it is brittle to staining outliers. After that, INS has no further role.
 - **The marker picked as the Y axis is display only.** It comes from `.X` (mean marker expression
@@ -328,7 +328,7 @@ Consequences worth stating plainly:
   in the file but unused by Step 5. The `combined` mode is the exception: it concatenates the peri
   scVI latent plus z-scored structural blocks scaled by `ALPHA_STRUCT = 0.15`.
 - **Each islet is a MEAN over its cells.** An islet of 3 cells and one of 1,902 cells are both a
-  single point, weighted equally in the neighbour graph. This is the origin of the noise problem
+  single point, weighted equally in the neighbor graph. This is the origin of the noise problem
   below.
 
 ## 10. Cell-count-stratified pseudotime (Aug 2026)
@@ -344,7 +344,7 @@ islets with dpt > 0.6: median 7 cells               vs 10-11 in the bulk
 min_cells >= 25 collapses the tail: frac(dpt>0.6) 3.97% -> 0.44%, max 1.00 -> 0.76
 ```
 
-Because scanpy normalises DPT by dividing by the maximum reachable distance, that tail sets the top
+Because scanpy normalizes DPT by dividing by the maximum reachable distance, that tail sets the top
 of the axis for everyone: **96.0% of islets land below 0.6**, and the bulk (to p95) occupies only
 57.4% of the drawn axis.
 
@@ -393,14 +393,14 @@ ND < Aab+ < T1D donor ordering.
 
 **Splitting did NOT fix the axis compression, and for large islets it made it worse** (bulk-to-p95
 36.1% vs 57.4%). That is the honest result: the compression is a property of scanpy's divide-by-max
-normalisation, which manufactures a long right tail in *any* stratum — the small islets were not
+normalization, which manufactures a long right tail in *any* stratum — the small islets were not
 solely responsible. The axis-limits fix (clipping the *view* to ~p99 with `coord_cartesian()`,
 leaving the data untouched) is orthogonal and still outstanding.
 
 ### >>> The strata are NOT on a common scale <<<
 
 Each is an independent diffusion map: separate Harmony fit, separate root islet, separate
-divide-by-max normalisation. `small = 0.4` and `large = 0.4` do not mean the same thing. The app
+divide-by-max normalization. `small = 0.4` and `large = 0.4` do not mean the same thing. The app
 enforces this rather than trusting the reader — `cmp_scale_warning` in `mod_trajectory_server.R`
 renders a red banner whenever the two pseudotime cards show different strata, an amber one when
 either shows a stratum, and the comparison card's CSV header carries the same warning.
@@ -428,7 +428,7 @@ Method (Barlow et al., eLife 2024;13:RP100535, Methods -> "PAGA analysis"), all 
 | step | value |
 |---|---|
 | features | cell-type counts, islet core + 20 µm peri, ÷ endocrine cells in the core, log1p |
-| neighbours | cosine distance, 15 nearest |
+| neighbors | cosine distance, 15 nearest |
 | clustering | Leiden, resolution 1 |
 | embedding | PAGA, then `sc.tl.draw_graph(init_pos = "paga")` = ForceAtlas2 |
 | pseudotime axis | scanpy diffusion map + DPT; destiny DPT fallback when scanpy is unavailable |
@@ -533,7 +533,7 @@ scatter: prop_Beta cell (Plot tab)   12.4%        125            84.0%
 scatter: prop_CD8a (Plot tab)         2.8%        129            96.4%
 ```
 
-Colour by Pseudotime, Selected feature, Donor status, Leiden cluster or Donor. `coord_fixed()` and
+Color by Pseudotime, Selected feature, Donor status, Leiden cluster or Donor. `coord_fixed()` and
 blanked ticks: layout coordinates are unitless and isotropic, and only relative position means
 anything. Rebuilds with the cell range, cached per range.
 

@@ -87,7 +87,7 @@ test_that("normality_tests reports per-group W/p and flags undersized groups", {
   expect_false(is.na(nd$W))
 })
 
-test_that("flag_outliers flags extreme values per group and honours enabled=FALSE", {
+test_that("flag_outliers flags extreme values per group and honors enabled=FALSE", {
   # 1..9 are inliers, 100 is a clear outlier (modified z >> 3 with MAD > 0)
   df <- data.frame(donor_status = rep("ND", 10), value = c(1:9, 100))
   fl <- flag_outliers(df, "value", "donor_status", method = "zscore",
@@ -121,7 +121,7 @@ test_that("flag_outliers(exclude_zeros=TRUE) removes zeros from the scoring popu
   expect_true(fl$is_outlier[22])
   expect_false(any(fl$is_outlier[13:21]))
 
-  # Centre/scale come from the non-zero subset, not the full vector.
+  # Center/scale come from the non-zero subset, not the full vector.
   nz <- c(1:9, 100)
   med <- median(nz); mad_nz <- median(abs(nz - med))
   expect_equal(fl$outlier_score[13], 0.6745 * (1 - med) / mad_nz)
@@ -191,7 +191,7 @@ test_that("summary_stats produces mean/se and median/iqr summaries", {
 
 # ---- Per-bin donor-level tests (Statistics Section 3) ----
 
-# Helper: two islets for one donor in a bin, centred on `base`.
+# Helper: two islets for one donor in a bin, centered on `base`.
 .donor_islets <- function(bin, mid, cid, status, base) {
   data.frame(diam_bin = bin, diam_mid = mid, `Case ID` = cid,
              donor_status = status, value = c(base, base + 0.1),

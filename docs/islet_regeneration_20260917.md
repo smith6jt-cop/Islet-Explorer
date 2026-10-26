@@ -61,7 +61,7 @@ project. No new annotation is accepted automatically as an islet.
 [`project.qpproj`](../data/reviews/qupath-regenerated-islets-20260917-r5/project.qpproj)
 in QuPath 0.7. The [raw-channel gallery](../data/development/islet-regeneration-20260917-r5/index.html)
 contains INS/GCG/SST/CHGA comparisons. Green and yellow outlines are newly
-generated candidates; grey outlines are the previous segmentation.
+generated candidates; gray outlines are the previous segmentation.
 
 | Donor | New boundary candidates | Green | Yellow: extra review | Separate point foci |
 |---|---:|---:|---:|---:|

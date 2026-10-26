@@ -54,7 +54,7 @@ spatial_ui <- function(id) {
                         selected = "phenotype"),
             checkboxInput(ns("color_background"), "Color background cells", value = FALSE)
           ),
-          control_group("Colours",
+          control_group("Colors",
             selectInput("spatial_palette", "Phenotype colors",
                         choices = c("Original", "High Contrast", "Colorblind Safe", "Maximum Distinction"),
                         selected = "High Contrast"),
@@ -72,7 +72,7 @@ spatial_ui <- function(id) {
         div(class = "card", style = "padding: 15px; margin-bottom: 15px; height: 100%;",
           div(style = "display: flex; align-items: center; gap: 10px; margin-bottom: 8px;",
             card_title_help("Tissue Scatter Plot", help = list(
-              tags$p("Every analysed cell of the chosen donor at its position. Drag to zoom; double-click or Reset",
+              tags$p("Every analyzed cell of the chosen donor at its position. Drag to zoom; double-click or Reset",
                      " Zoom to return. Show cells (Data controls) limits the plot to cells in endocrine-object cores,",
                      " or cores and their 20 \u00b5m peri-islet bands."))),
             actionButton(ns("scatter_reset_zoom"), "Reset Zoom",
@@ -116,22 +116,22 @@ spatial_ui <- function(id) {
     # ==== ROW 1b: the two islet-level UMAPs, one size (owner, 2026-10-19) ====
     # Side by side across the full width: in the old half-width card each had ~280 px, so a legend that did not
     # fit made plotly shrink that plot alone. Both use spatial_umap_plotly(); each downloads from its camera button.
-    # Each has its own colouring (owner, 2026-10-21: "multiple choices for coloring the umaps including donor
+    # Each has its own coloring (owner, 2026-10-21: "multiple choices for coloring the umaps including donor
     # demographics and disease state"), and the two are linked plots: hover rings an object in both, a click opens
     # its segmentation map below.
     fluidRow(column(12,
       div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible;",
         card_title_help("Islet-Level UMAPs", style = "margin: 0 0 8px;", help = list(
           tags$p(textOutput(ns("embedding_method"), inline = TRUE)),
-          tags$p("The two plots are the same layout, each coloured by its own Color by choice: Leiden cluster (at",
+          tags$p("The two plots are the same layout, each colored by its own Color by choice: Leiden cluster (at",
                  " the resolution in the Data controls), disease state (donor status, autoantibody count), the",
                  " donor and their demographics (age, age group, sex, race/ethnicity, height, weight, BMI and its",
                  " percentile), clinical values (HbA1c, C-peptide, T1D duration, admission and peak glucose), the",
                  " donation and tissue (cause of death, recovery type, ICU stay, organ transit time, pancreas weight,",
                  " RNA integrity, blood group), all from nPOD, or the object itself (its immune proportion in the core or the 20 \u00b5m band,",
-                 " its diameter, its core cell count). A donor value colours every object of that donor alike."),
+                 " its diameter, its core cell count). A donor value colors every object of that donor alike."),
           tags$p("Immune proportions saturate at the 95th percentile and the cell count is on a log scale; hover",
-                 " gives the true value. Donors without a value are grey: T1D duration applies only to T1D donors",
+                 " gives the true value. Donors without a value are gray: T1D duration applies only to T1D donors",
                  " (nPOD records five of the six as diagnosed during their terminal admission, duration 0, and one",
                  " at 7 months), and the two donors whose HbA1c nPOD records as 0 were not measured."),
           tags$p(tags$strong("Linked points."),

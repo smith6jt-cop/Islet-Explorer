@@ -8,7 +8,7 @@
 #
 #   Card A  Donor cohort         nPOD clinical metadata incl. T1D duration
 #   Card B  edgeR abundance      negative-binomial DA on per-donor cell counts
-#   Card C  Infiltration score   distance-weighted immune localisation
+#   Card C  Infiltration score   distance-weighted immune localization
 #
 # Layout note: every plot here sits in a col-6 or wider container. The Statistics
 # tab's col-4 cards clipped their titles and axis labels (a 453 px title in a
@@ -82,7 +82,7 @@ inflammation_ui <- function(id) {
     section_heading("2", "Differential Abundance (edgeR)",
                     "Which cell types change in number between disease stages?",
                     tip = paste0("Negative-binomial GLM with quasi-likelihood F-tests on ",
-                                 "per-donor cell counts, library-size normalised. ",
+                                 "per-donor cell counts, library-size normalized. ",
                                  "Benjamini-Hochberg across cell types.")),
     div(style = paste0("background: #eef6ee; border-left: 4px solid #2e7d32; border-radius: 4px; ",
                        "padding: 10px 14px; margin-bottom: 12px; font-size: 13px; line-height: 1.5; color: #1b4620;"),
@@ -90,7 +90,7 @@ inflammation_ui <- function(id) {
       "Proportions are compositionally constrained: they must sum to 1, so a collapse in ",
       "β-cell number mechanically inflates every other cell type's proportion even when ",
       "that type's absolute abundance is unchanged. edgeR models raw counts with a ",
-      "library-size offset, which separates a real abundance change from that artefact. ",
+      "library-size offset, which separates a real abundance change from that artifact. ",
       "The Statistics tab tests proportions and is subject to this; these results are not."),
     fluidRow(
       column(12,
@@ -131,11 +131,11 @@ inflammation_ui <- function(id) {
 
     # ===== SECTION 3: Infiltration score =====
     section_heading("3", "Infiltration Score",
-                    "Distance-weighted immune localisation relative to the islet edge.",
+                    "Distance-weighted immune localization relative to the islet edge.",
                     tip = paste0("Score = 1 for cells inside an islet and 1/d for cells ",
-                                 "outside it (d = µm from the islet edge), normalised by ",
+                                 "outside it (d = µm from the islet edge), normalized by ",
                                  "the donor's total cell count. Rewards peri-islet ",
-                                 "accumulation, penalises distal accumulation. FDR runs ",
+                                 "accumulation, penalizes distal accumulation. FDR runs ",
                                  "across all phenotypes present, not the display selection.")),
     div(style = paste0("background: #f4f8fc; border-left: 4px solid #4477AA; border-radius: 4px; ",
                        "padding: 10px 14px; margin-bottom: 12px; font-size: 13px; line-height: 1.5; color: #2c4760;"),
@@ -143,7 +143,7 @@ inflammation_ui <- function(id) {
       "Every cell scores ", tags$code("1"), " if it lies inside an islet and ",
       tags$code("1/d"), " if outside, with ", tags$em("d"),
       " the distance in µm from the islet edge; the per-donor sum is divided by that ",
-      "donor's total cell count. Steenbuck et al. normalise per imaging ROI — this ",
+      "donor's total cell count. Steenbuck et al. normalize per imaging ROI — this ",
       "cohort has whole-section CODEX images rather than ROIs, so the ROI analogue \u2014 ",
       "islet + peri-islet cells \u2014 is the default denominator here. Distances come from ",
       tags$code("the cell-distance release artifact"), " (negative = inside the islet). ",
@@ -154,14 +154,14 @@ inflammation_ui <- function(id) {
         div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible;",
           fluidRow(
             column(5,
-              selectInput(ns("infil_denom"), "Normalise by (denominator)",
+              selectInput(ns("infil_denom"), "Normalize by (denominator)",
                           choices = c("Islet + peri-islet cells" = "isletperi",
                                       "Cells within 100 µm of an islet" = "near100",
                                       "All cells on the section" = "all"),
                           selected = "isletperi"),
               tags$small(style = "color: #888; display: block; margin-top: -10px; line-height: 1.35;",
-                "The ROI analogue. Steenbuck et al. normalise per islet-centred ROI; ",
-                "normalising by the whole section instead adds 4\u201323\u00d7 donor-to-donor ",
+                "The ROI analogue. Steenbuck et al. normalize per islet-centered ROI; ",
+                "normalizing by the whole section instead adds 4\u201323\u00d7 donor-to-donor ",
                 "variance and hid three phenotypes that are significant under the default.")
             ),
             column(4,

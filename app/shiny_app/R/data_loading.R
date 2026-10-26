@@ -256,7 +256,7 @@ prep_data <- function(master) {
   }
 
   # Carry the per-islet cell counts onto targets_all so the Microenvironment
-  # mode can honour the "Min cells/islet" filter.
+  # mode can honor the "Min cells/islet" filter.
   #
   # `total_cells_core` / `total_cells_peri` arrive on `comp` via the neighborhood
   # merge above, but `targets_all` is built from the targets sheet with a fixed

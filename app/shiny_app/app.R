@@ -43,7 +43,7 @@ ui <- fluidPage(
   lang = "en",
   useShinyjs(),
   tags$head(
-    # Colour theme: dark by default (VS Code Dark Modern), light on request; chosen before first paint from the
+    # Color theme: dark by default (VS Code Dark Modern), light on request; chosen before first paint from the
     # reviewer's last choice so the page never flashes the other theme. See www/islet-theme.css.
     tags$script(HTML("(function(){var t='dark';try{var s=window.localStorage.getItem('islet-theme');",
                      "if(s==='light'||s==='dark')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();")),
@@ -532,6 +532,13 @@ if (identical(Sys.getenv("ISLET_WARM_TRAJECTORY", .warm_trajectory_default), "1"
     # otherwise waits for it as well.
     .warm_h5ad <- data_path("adata_ins_root.h5ad")
     if (file.exists(.warm_h5ad)) invisible(islet_read_h5ad_shared(.warm_h5ad))
+    # The process's first PNG draw builds the font cache (ragg + systemfonts in a fresh container, about 4 s,
+    # paid by the first renderPlot() a reviewer triggered: 4.2 s on the first Trajectory open of the Level 2
+    # staging process, 2026-10-26). One small text draw here moves it before the health check.
+    .warm_png <- tempfile(fileext = ".png")
+    if (requireNamespace("ragg", quietly = TRUE)) ragg::agg_png(.warm_png, width = 64, height = 64) else
+      grDevices::png(.warm_png, width = 64, height = 64)
+    graphics::plot.new(); graphics::text(0.5, 0.5, "warm"); grDevices::dev.off(); unlink(.warm_png)
     !is.null(compute_scanpy_pseudotime(TRAJ_MIN_CELLS, Inf)) &&
       !is.null(paga_result(TRAJ_MIN_CELLS, Inf))
   }, error = function(e) FALSE)
@@ -546,7 +553,7 @@ server <- function(input, output, session) {
 
   # Immutable process-wide object; reactive() preserves the existing module
   # interface without repeating I/O or prep_data() for each reviewer.
-  # The app-wide endocrine-object selection (owner A5): Islet, EndocrineCluster (Singles are counted, not analysed,
+  # The app-wide endocrine-object selection (owner A5): Islet, EndocrineCluster (Singles are counted, not analyzed,
   # since 2026-10-18). Every tab but Trajectory reads prepared(), so filtering it here is the one place the
   # selection applies; the Trajectory tab fits objects of ten or more core cells instead.
   # The selector sits in the Data controls of the Plot tab (object_classes) and the Spatial tab

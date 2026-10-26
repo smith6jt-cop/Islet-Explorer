@@ -596,7 +596,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
     # "Exclude zero values" checkbox is fully independent of the left panel's
     # equivalent \u2014 toggling one no longer affects the other. Outliers are
     # flagged on the dist-specific subset so the helper sees the same
-    # distribution it is summarising, and ghost \u00d7 markers render at positions
+    # distribution it is summarizing, and ghost \u00d7 markers render at positions
     # consistent with the current zero-exclusion state.
     # Distribution-panel data, extracted from the renderer so `dl_distribution_csv`
     # exports exactly what this panel shows. NOTE it reads `raw_df_base()` and its
@@ -1043,7 +1043,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
           paste("Donor status:", paste(validated_groups(), collapse = ", ")),
           "Islet: >= 2 whole cells and >= 35 um; Cluster: >= 2 cells, smaller; Single: one endocrine cell",
           "Singles are counted only; they are not analysis objects",
-          "singles_excluded: the Single's strongest hormone is under twice the next; singles_not_analysed: it has no nucleus",
+          "singles_excluded: the Single's strongest hormone is under twice the next; singles_not_analyzed: it has no nucleus",
           "*_per_mm2: objects per mm2 of the section's tissue outline",
           paste("Rows:", if (is.null(d)) 0 else nrow(d), "donors")))
       }

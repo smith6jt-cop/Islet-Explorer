@@ -65,7 +65,7 @@
 .traces <- function(fig) plotly::plotly_build(fig)$x$data
 .keyed <- function(traces) Filter(function(t) !is.null(t$key) && identical(t$mode, "markers"), traces)
 .keys <- function(trace) as.character(unlist(trace$key))
-# plotly_build() gives every trace an error_y colour; the summary points are those with an error array.
+# plotly_build() gives every trace an error_y color; the summary points are those with an error array.
 .with_error <- function(traces) Filter(function(t) !is.null(t$error_y$array), traces)
 
 test_that("the diameter figure draws the objects with their keys, pins the object above the axis and ghosts the outlier", {
@@ -117,7 +117,7 @@ test_that("the diameter figure follows its View options", {
   lines <- Filter(function(t) identical(t$mode, "lines"), b$x$data)
   expect_length(lines, 3)
   expect_true(all(vapply(lines, function(t) length(t$x) == 80, logical(1))))
-  # Colour by donor: the points carry the donor colours, the legend lists the donors, not the statuses.
+  # Color by donor: the points carry the donor colors, the legend lists the donors, not the statuses.
   pal <- c("6001" = "#111111", "6002" = "#222222", "6003" = "#333333")
   b <- plotly::plotly_build(env$plot_diameter_figure(rows, sm, hover, .diameter_opts(color_by = "donor_id", donor_pal = pal)))
   normal <- .keyed(b$x$data)[[1]]
@@ -218,7 +218,7 @@ test_that("the trajectory scatter is one keyed trace with the trends and bands o
   expect_length(lines, 3)
   expect_equal(b$x$layout$xaxis$range, c(-0.012, 1.012))
   expect_false(isTRUE(b$x$layout$showlegend))
-  # The overall trend: one band and one line in the ink colour; no trend at all when asked.
+  # The overall trend: one band and one line in the ink color; no trend at all when asked.
   b <- plotly::plotly_build(env$trajectory_scatter_figure(df, .traj_opts(df, trend = "overall")))
   lines <- Filter(function(t) identical(t$mode, "lines") && is.null(t$fill), b$x$data)
   expect_length(lines, 1)

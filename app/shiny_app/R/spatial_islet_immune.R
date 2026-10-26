@@ -96,7 +96,7 @@ cluster_membership <- function(comp, leiden_col) {
 # ---- Cell counts by donor, phenotype and distance from the nearest endocrine object ----
 .distance_profile_cache <- new.env(parent = emptyenv())
 
-#' Counts of every analysed cell by donor, phenotype and distance bin, plus each donor's tissue counts (cells
+#' Counts of every analyzed cell by donor, phenotype and distance bin, plus each donor's tissue counts (cells
 #' outside every endocrine object and its band). Read once per worker from the cell-distance table, without the
 #' retired-label filter of load_cell_distance(): the immune total counts the cells without a subtype. NULL when the
 #' table is absent.

@@ -7,11 +7,11 @@
 #   more than `threshold` SDs from that group's mean. Outliers are flagged on
 #   the returned data.frame; downstream code decides whether to render them as
 #   ghost points or drop them. The IQR fallback is kept for cards plotting an
-#   already-standardised, roughly symmetric quantity (Spatial Card A on
+#   already-standardized, roughly symmetric quantity (Spatial Card A on
 #   enrichment z-scores).
 #
 # `exclude_zeros = TRUE` removes zero-valued rows from the scoring population
-# entirely — they neither contribute to the centre/scale nor receive a score
+# entirely — they neither contribute to the center/scale nor receive a score
 # (their outlier_score stays NA). Use it for genuinely zero-inflated features
 # where a spike at 0 would collapse the MAD; do NOT use it on quantities that
 # merely take negative values (e.g. enrichment z-scores contain no exact zeros,
@@ -109,7 +109,7 @@ flag_outliers <- function(df,
 
     if (exclude_zeros) {
       # Zeros are removed from the SCORING POPULATION entirely: they neither
-      # contribute to the centre/scale nor receive a score. Scoring a zero
+      # contribute to the center/scale nor receive a score. Scoring a zero
       # against a distribution it was excluded from produces a large spurious
       # negative (e.g. 0.6745 * (0 - median_nz) / MAD_nz) that then surfaces in
       # the outlier tables and tooltips as if it meant something. NA is the
@@ -138,7 +138,7 @@ flag_outliers <- function(df,
         df$outlier_score[nz_idx] <- fence_dist
         df$is_outlier[nz_idx] <- !is.na(nz_vals) & (nz_vals < lo | nz_vals > hi)
       }
-      # Zero rows keep the initialised is_outlier = FALSE / outlier_score = NA.
+      # Zero rows keep the initialized is_outlier = FALSE / outlier_score = NA.
     } else {
       if (method == "zscore") {
         rz <- robust_zscore(grp_vals, grp_vals)
@@ -221,9 +221,9 @@ GLOBAL_OUTLIER_TOOLTIP <- paste0(
   "excluded from trend lines, donor-level means, and statistical tests. ",
   "Detection is two-sided — both high and low extremes are flagged. When MAD = 0 ",
   "(zero-inflated groups), the rule falls back to classical mean/SD. Excluded ",
-  "points still appear on scatter and box plots as faint grey × markers; counts ",
+  "points still appear on scatter and box plots as faint gray × markers; counts ",
   "are shown next to each plot title. The Spatial peri enrichment plot uses Tukey ",
-  "1.5×IQR instead, since enrichment z-scores are already a standardised, ",
+  "1.5×IQR instead, since enrichment z-scores are already a standardized, ",
   "roughly symmetric quantity; the Spatial distance box plot applies the z-score ",
   "rule on log(1 + distance)."
 )
@@ -232,23 +232,23 @@ GLOBAL_OUTLIER_TOOLTIP <- paste0(
 #
 # ggplot geoms with a hard-coded `color = "black"` parameter (e.g. shape=21
 # summary points, "overall" LOESS lines) cause ggplotly to surface the literal
-# string "colour: black" in the hover tooltip. The same conversion also emits
-# both the `fill` and inherited `colour` aesthetics for shape-21 points, so the
+# string "color: black" in the hover tooltip. The same conversion also emits
+# both the `fill` and inherited `color` aesthetics for shape-21 points, so the
 # donor_status label can appear twice. This helper post-processes a ggplotly
-# object's traces and removes those artefacts. Safe to apply unconditionally.
+# object's traces and removes those artifacts. Safe to apply unconditionally.
 strip_plotly_color_leak <- function(gg) {
   if (is.null(gg) || is.null(gg$x) || is.null(gg$x$data)) return(gg)
 
   scrub <- function(s) {
     if (is.null(s) || length(s) == 0) return(s)
     s <- as.character(s)
-    # Drop any "colour: black" or "colour: #cccccc" line (the overall trend line is drawn in the theme ink; case-insensitive),
+    # Drop any "color: black" or "color: #cccccc" line (the overall trend line is drawn in the theme ink; case-insensitive),
     # collapsing the surrounding <br> separator so the tooltip stays compact.
     s <- gsub("(?i)<br\\s*/?\\s*>\\s*colou?r:\\s*(?:black|#[0-9a-f]{3,8})\\s*(?=<br|$)", "", s, perl = TRUE)
     s <- gsub("(?i)^\\s*colou?r:\\s*(?:black|#[0-9a-f]{3,8})\\s*<br\\s*/?\\s*>", "", s, perl = TRUE)
     s <- gsub("(?i)^\\s*colou?r:\\s*(?:black|#[0-9a-f]{3,8})\\s*$", "", s, perl = TRUE)
     # Collapse adjacent duplicate donor_status lines (handles the ggplotly
-    # case where both `fill` and `colour` aesthetics emit the same value).
+    # case where both `fill` and `color` aesthetics emit the same value).
     s <- gsub("(donor_status:\\s*([^<]+))(<br\\s*/?\\s*>donor_status:\\s*\\2)+",
               "\\1", s, perl = TRUE)
     s
@@ -436,7 +436,7 @@ lmer_test_donor <- function(rdf) {
   list(p_value = p_val, icc = icc, fit = fit, error_msg = error_msg)
 }
 
-# Diameter is modelled in units of 100 um rather than raw micrometres. Linear
+# Diameter is modeled in units of 100 um rather than raw micrometers. Linear
 # rescaling cannot change an F-test or a p-value; it only keeps the random-slope
 # fits in size_companion_models() numerically well conditioned. See the comment
 # at the `.diam_c` assignment there.
@@ -459,7 +459,7 @@ SIZE_COMPANION_DIAM_SCALE <- 100
 #' group-dependent. That is an estimand issue, not bias, but it has to be visible
 #' rather than left for the user to infer from the Section 3 per-bin views.
 #'
-#' Diameter is MEAN-CENTRED so that, under lmerTest's Type III anova, the
+#' Diameter is MEAN-CENTERED so that, under lmerTest's Type III anova, the
 #' `donor_status` term in the additive model is the group difference at the mean
 #' islet diameter rather than at the unobservable diameter of zero.
 #'
@@ -505,14 +505,14 @@ size_companion_models <- function(rdf, diam_col = "islet_diam_um") {
     return(out)
   }
   out$mean_diam <- mean(d$.diam)
-  # Centred AND rescaled to units of 100 um (SIZE_COMPANION_DIAM_SCALE). Scaling
+  # Centered AND rescaled to units of 100 um (SIZE_COMPANION_DIAM_SCALE). Scaling
   # a predictor linearly cannot move an F-test or its p-value -- this is purely
-  # numerical hygiene. Raw micrometres put the diameter variance orders of
+  # numerical hygiene. Raw micrometers put the diameter variance orders of
   # magnitude above the intercept variance, and the random-slope fits below then
   # emit "nearly unidentifiable: very large eigenvalue" and, for prop_Beta cell,
   # a gradient warning at the convergence tolerance. On the 100 um scale both fit
   # clean. Only the SLOPE ESTIMATE changes units (per 100 um, not per um);
-  # `mean_diam` stays in micrometres because it is a reported centring point.
+  # `mean_diam` stays in micrometers because it is a reported centering point.
   d$.diam_c <- (d$.diam - out$mean_diam) / SIZE_COMPANION_DIAM_SCALE
   d$.cf <- factor(d$`Case ID`)
   d$donor_status <- droplevels(factor(d$donor_status))
@@ -586,7 +586,7 @@ size_companion_models <- function(rdf, diam_col = "islet_diam_um") {
   }
 
   # A fit that "converged" onto ~0 denominator d.f. carries no information; its
-  # p is an artefact (the 3-donor case returned exactly 1.000). Refuse it rather
+  # p is an artifact (the 3-donor case returned exactly 1.000). Refuse it rather
   # than print it.
   if (!is.finite(out$denom_df_interaction) || out$denom_df_interaction < 1) {
     out$p_interaction <- NA_real_
@@ -620,7 +620,7 @@ size_companion_models <- function(rdf, diam_col = "islet_diam_um") {
 #'
 #' Age is read from the H5AD `age` column, NOT from the nPOD metadata join. The
 #' two disagree for exactly one donor (112: H5AD 3.00 vs nPOD 3.72) and the H5AD
-#' value is canonical for modelling so existing results do not shift. Both fall
+#' value is canonical for modeling so existing results do not shift. Both fall
 #' under 13, so the binning is identical either way — but the rule matters if
 #' another donor is ever added.
 #'
@@ -701,7 +701,7 @@ age_group_companion_model <- function(rdf, cut = 13) {
 #' stratified analysis or contributes nothing to it.
 #'
 #' @param group_values donor_status labels, one per DONOR (already aggregated)
-#' @return TRUE if the bin can be analysed
+#' @return TRUE if the bin can be analyzed
 bin_coverage_ok <- function(group_values) {
   g <- as.character(group_values)
   g <- g[!is.na(g) & nzchar(g)]
@@ -895,7 +895,7 @@ format_p_value <- function(x, digits = 2, sci_below = 1e-4, na = "N/A") {
 #' — but Glass's delta is 4.39 against the ND SD and 31.03 against the T1D SD.
 #' d = 6.15 is an arbitrary point in that range, presented with a CI that implies
 #' precision it does not have. `raw_diff` (17.85 percentage points here) is the
-#' quantity that does not depend on which SD you standardise by.
+#' quantity that does not depend on which SD you standardize by.
 #'
 #' `var_ratio_warn` flags var ratio > 4, the point past which the pooled SD is
 #' not a reasonable common scale.

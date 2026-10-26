@@ -143,7 +143,7 @@ rasters byte-for-byte.
 
 The [HPAP-078 diagnostic QuPath project](../data/reviews/qupath-endocrine-pixel-diagnostic-20260917/project.qpproj)
 contains 1,056 cyan candidate regions from that sensitivity, plus the original
-grey geometry. Native serialization checks freshly hashed all **267,993 cells**
+gray geometry. Native serialization checks freshly hashed all **267,993 cells**
 before and after import; cell/nuclear geometry, UUIDs, classifications, parents
 and measurements are unchanged. All original annotation geometry is preserved.
 The source and previously delivered user-editable projects were not modified.

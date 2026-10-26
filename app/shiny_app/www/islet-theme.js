@@ -1,4 +1,4 @@
-/* Islet Explorer colour theme switch and white-background PNG export (2026-10-18). See islet-theme.css. */
+/* Islet Explorer color theme switch and white-background PNG export (2026-10-18). See islet-theme.css. */
 (function () {
   'use strict';
 
@@ -38,7 +38,7 @@
 
   // ---- PNG export on a white background ----------------------------------------------------------------------------
   // The modebar camera exports what is on screen; on the dark theme that would be a dark figure. Downloads are for
-  // publication, so the replacement button (plotly_islet_config) re-draws the figure off screen in light colours.
+  // publication, so the replacement button (plotly_islet_config) re-draws the figure off screen in light colors.
   var INK = '#222222';
   var DARK_PAPER = '#1f1f1f';  // ISLET_THEME_PALETTE$dark$paper
 

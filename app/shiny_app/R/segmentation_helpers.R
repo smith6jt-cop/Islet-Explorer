@@ -821,7 +821,7 @@ segmentation_viewer_panel_ui <- function(info, close_id, layout = c("wide", "sta
   if (wide) {
     div(class = "card", style = "padding: 20px; margin-bottom: 20px; border: 2px solid #0066CC;",
       header,
-      # Controls (left), map (centre), composition (right)
+      # Controls (left), map (center), composition (right)
       fluidRow(column(2, controls), column(6, map), column(4, composition)))
   } else {
     div(header,

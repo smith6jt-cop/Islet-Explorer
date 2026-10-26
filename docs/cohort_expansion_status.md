@@ -84,7 +84,7 @@ whole-image biological acceptance.
 InstanSeg uses model 0.1.1 and the established 22 segmentation channels.
 Structural measurements are scoped to Tissue annotations and preserve cell
 UUIDs and parents. Imports preserve the original ordered 31-marker panel,
-raw mean intensities as float32, a `log1p` layer, and float64 micrometre coordinates.
+raw mean intensities as float32, a `log1p` layer, and float64 micrometer coordinates.
 HPAP-078 remains an
 HPAP source with analysis ID `78` and viewer/export directory ID `0078`.
 

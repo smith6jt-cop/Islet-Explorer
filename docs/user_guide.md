@@ -94,7 +94,7 @@ Each phenotype is defined by which markers must be **positive** (`+`) and which 
 
 `INS, GCG, SST, SMA, CD20, CD3e, CD68, CD163, CD8a, CD4, HLADR, PDPN, CD34, CD31, B3TUBB`.
 The H5AD/scVI panel contains 31 markers; additional markers are available for
-visualisation but are not part of the gating CSV. An upstream template once listed
+visualization but are not part of the gating CSV. An upstream template once listed
 `CD99` and `CD56`, but neither exists in this 31-plex panel, so those phantom columns
 were removed from the app's canonical rule file.
 
@@ -135,7 +135,7 @@ of Plot. A caption reports how many rows the most recent run excluded.
 
 ### What you see when the filter is ON
 
-- Excluded points still render on the Plot panels as **faint grey × markers** ("ghost points") so their locations remain auditable.
+- Excluded points still render on the Plot panels as **faint gray × markers** ("ghost points") so their locations remain auditable.
 - The Plot tab shows an exclusion count and an optional excluded-outlier table with case, group, value and score.
 - Plot ghost-marker positions are stably jittered, so toggling the control does not shuffle the cloud.
 
@@ -207,12 +207,12 @@ The Plot tab is the primary exploration interface. It has a **sidebar** (left) a
 - **AAb Filter**: Filter by autoantibody positivity (when available)
 - **Age Range**: Slider to restrict donor age (H5AD only)
 - **Sex**: Checkbox filter (H5AD only)
-- **Endocrine objects** (first in the Data controls; the Spatial tab has a copy that stays in step): choose Islets and/or Clusters. Singles (one endocrine cell) are not analysed; the Endocrine objects per donor card at the bottom of the Plot tab counts them, and the segmentation map outlines them in orange. This replaced the Min cells/islet filter on 2026-10-17; every tab except Trajectory uses the selected classes (Trajectory fits every object with 10 or more core cells).
+- **Endocrine objects** (first in the Data controls; the Spatial tab has a copy that stays in step): choose Islets and/or Clusters. Singles (one endocrine cell) are not analyzed; the Endocrine objects per donor card at the bottom of the Plot tab counts them, and the segmentation map outlines them in orange. This replaced the Min cells/islet filter on 2026-10-17; every tab except Trajectory uses the selected classes (Trajectory fits every object with 10 or more core cells).
 - **Diameter Range**: Restrict islet diameter in μm
 
 ### Main Panel
 
-- **Scatter (left)**: Interactive Plotly scatter, diameter vs selected feature, with binned summary lines per donor status. Excluded outliers (see [Outlier Handling](#outlier-handling)) appear as faint grey × ghost markers.
+- **Scatter (left)**: Interactive Plotly scatter, diameter vs selected feature, with binned summary lines per donor status. Excluded outliers (see [Outlier Handling](#outlier-handling)) appear as faint gray × ghost markers.
 - **Distribution (right)**: Violin or box plot of the same feature, grouped by donor status. Has its own **independent** "Exclude zero values" checkbox — toggling it no longer affects the left scatter. Outlier ghost × markers render here too.
 - **View controls**: the point controls under *Both plots* (color by, point size, transparency, show individual points, log y-axis) apply to the scatter and the distribution alike; Trend line, log2 x-axis and the summary statistic apply to the scatter, Plot type to the distribution. Individual points are shown by default (since 2026-10-19).
 - **Outlier Table**: Lists excluded outliers for the selected feature. Hover the "Show excluded-outlier table" checkbox label in the sidebar for the rule.
@@ -336,7 +336,7 @@ Embedded OME-TIFF viewer (Avivator) for full-resolution multiplexed imaging data
 
 Rigorous statistical analysis of the currently selected feature from the Plot sidebar. The Statistics tab **shares the Plot sidebar** — changing the feature, filters, or disease groups in the sidebar updates both Plot and Statistics simultaneously.
 
-An **"About this tab"** banner at the top summarises what the tab does, the donor cohort (N=15), and the primary test (a donor-aware mixed-effects model with donor as a random intercept). Each section heading carries a small **(?)** icon — hover it for a one-line description of that section's contents.
+An **"About this tab"** banner at the top summarizes what the tab does, the donor cohort (N=15), and the primary test (a donor-aware mixed-effects model with donor as a random intercept). Each section heading carries a small **(?)** icon — hover it for a one-line description of that section's contents.
 
 The tab uses a **5-section narrative layout** that walks you through a logical analytical flow, with numbered headings and brief explanations at each step.
 
@@ -363,7 +363,7 @@ Three equal-height cards showing the core statistical results:
 Stratified analysis testing whether group differences depend on islet size (effect modification):
 
 - **Stratified Tests by Islet Diameter**: Heatmap of BH-corrected q-values (ANOVA and Kendall τ) computed within each diameter bin. Identifies which size ranges drive or lack group differences. P-values are corrected across bins to control false discovery rate.
-- **Trend Analysis (Kendall τ)**: Measures correlation between disease stage (ND=0, Aab+=1, T1D=2) and the feature value within each size bin. τ > 0 means the feature increases with disease progression; τ < 0 means it decreases. Points colored by significance (red = significant, grey = NS).
+- **Trend Analysis (Kendall τ)**: Measures correlation between disease stage (ND=0, Aab+=1, T1D=2) and the feature value within each size bin. τ > 0 means the feature increases with disease progression; τ < 0 means it decreases. Points colored by significance (red = significant, gray = NS).
 - **Bin coverage rule**: The heatmap and the trend plot use the same rule — a bin is tested only if at least 2 donor-status groups each have ≥ 2 donors with finite values after filtering. Bins that fail this rule are silently omitted from both plots so the coverage stays in sync.
 
 ### Section 4: Confounders & Deeper Analysis
@@ -378,7 +378,7 @@ Full-width **Demographics** card (H5AD only, hidden for Excel fallback):
 
 ### Section 5: Methods Reference
 
-Dynamic text (subdued grey background) describing all statistical tests, corrections, and assumptions. Adjusts based on test type and parameters selected in Section 1.
+Dynamic text (subdued gray background) describing all statistical tests, corrections, and assumptions. Adjusts based on test type and parameters selected in Section 1.
 
 ### Using the Statistics Tab
 
@@ -412,7 +412,7 @@ path.
    - Color by: Phenotype (21 cell types) or Leiden cluster
    - Leiden resolution dropdown (0.3, 0.5, 0.8, 1.0) — visible when Leiden coloring selected
    - Region filter: All cells, Core + Peri only, or Core only
-   - **Color background cells**: Toggle to show tissue background cells in phenotype colors (dimmed) instead of grey
+   - **Color background cells**: Toggle to show tissue background cells in phenotype colors (dimmed) instead of gray
    - **Phenotype filter**: Show/hide individual phenotypes with checkboxes. Use **All** / **None** links to quickly select or clear all types. Dynamically populated from the selected donor's cell types.
    - Donor status checkboxes
    - Phenotype and Donor Status palette selectors
@@ -420,7 +420,7 @@ path.
 
 2. **Tissue Scatter** (center, 800px height)
    - Full tissue-wide scatter plot of ~177K cells per donor
-   - Background: tissue cells in light grey by default, or colored by phenotype when "Color background cells" is checked
+   - Background: tissue cells in light gray by default, or colored by phenotype when "Color background cells" is checked
    - Foreground: core/peri cells colored by phenotype or Leiden cluster
    - Spatial coordinate convention: `coord_fixed()` + `scale_y_reverse()` (microscopy standard)
    - **Zoom**: Drag to select a region, then the view zooms in. Double-click or click **Reset Zoom** to restore the full view.
@@ -432,7 +432,7 @@ path.
    each cluster's objects by donor status or by donor, with each cluster's donor count above its bar: which
    composition states are disease-associated, and whether a cluster belongs to a few donors.
 4. **Islet-Level UMAPs** (full-width row below, since 2026-10-19): the Leiden UMAP and, since 2026-10-20, the same
-   layout coloured by each object's immune proportion in its 20 µm band, side by side at one size, both interactive (PNG
+   layout colored by each object's immune proportion in its 20 µm band, side by side at one size, both interactive (PNG
    from each camera button). The layout by donor status is on the Trajectory tab.
    - Built from each object's endocrine composition (the Beta, Alpha, Delta and CHGA+ hormone-negative proportions of
      its core endocrine cells) for the objects with ten or more core cells, with no donor correction (2026-10-19).
@@ -475,8 +475,8 @@ the medians; hover gives its cell counts, and a point resting on fewer than 20 o
 **Phenotype composition & enrichment**: every immune phenotype at once (CD8a and CD4 T cells, B cells,
 macrophages; the endocrine and exocrine classes are left out since 2026-10-20). Left, the status summary (median and IQR,
 or mean and SEM, of donor means); right, one row per donor grouped by status, so the spread behind each bar shows.
-- *Region*: Peri-islet enrichment z (diverging colours), Core proportion, Peri-islet proportion.
-- *Baseline* (enrichment z only): **Cohort** compares each band with the phenotype's proportion of all analysed cells in
+- *Region*: Peri-islet enrichment z (diverging colors), Core proportion, Peri-islet proportion.
+- *Baseline* (enrichment z only): **Cohort** compares each band with the phenotype's proportion of all analyzed cells in
   the cohort, so it measures how many are near islets, and a donor with more of a cell type everywhere scores high.
   **Own tissue** compares each band with the donor's own tissue proportion, so it measures gathering at islets. On v7
   the cohort-baseline donor means rank-correlate 0.80–0.91 with the donors' tissue proportions.
@@ -490,7 +490,7 @@ Both views stop 200 µm outside the border (composition bars 5 µm wide, density
 proportion of all cells at that distance that are of the phenotype or positive for the marker; each phenotype or
 marker has its own row and y-axis, and its ND, Aab+ and T1D columns use that one scale, so a rare marker is not
 dwarfed by a common one. Until 2026-10-20 the bars divided by the status's total cells, so they followed how many
-cells lay at each distance. Every analysed cell counts, including those without a cell subtype. **Distance to** (data root v9):
+cells lay at each distance. Every analyzed cell counts, including those without a cell subtype. **Distance to** (data root v9):
 *Nearest Islet* (the default) measures each cell to the nearest Islet's border; *Nearest Islet or Cluster* also counts
 Clusters, which are small and scattered through the tissue, so most cells beyond 20 µm are then measured to a Cluster
 and the profile around Islets blurs (T1D CD3e+ cells at 0–5 µm: 6.1% to the nearest Islet, 5.0% to any object).
@@ -501,7 +501,7 @@ donor-averaged KDE view was removed: its table holds only core and band cells, s
 
 *Removed on 2026-10-20*: Peri enrichment by status (one column of the composition card), Peri vs core proportion
 (immune cells almost never lie in the core and endocrine cells almost never in the band, so the points sat on one
-axis), and Distance to nearest cell (measured from the core's centre, so it tracked object radius, rank correlation
+axis), and Distance to nearest cell (measured from the core's center, so it tracked object radius, rank correlation
 0.78–0.86; its T1D difference disappeared once radius was subtracted).
 
 ### Data Coverage

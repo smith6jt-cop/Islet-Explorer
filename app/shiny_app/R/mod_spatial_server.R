@@ -9,7 +9,7 @@
 
 # Colourings offered for each Spatial UMAP (owner, 2026-10-21: "multiple choices for coloring the umaps including
 # donor demographics and disease state"). Values name the source: "leiden" (the resolution in the Data controls),
-# "donor" and "donor_status", or a column of prepared()$comp; spatial_umap_colour_choices() drops the columns a
+# "donor" and "donor_status", or a column of prepared()$comp; spatial_umap_color_choices() drops the columns a
 # root lacks.
 SPATIAL_UMAP_COLOR_CHOICES <- list(
   "Clusters" = c("Leiden cluster" = "leiden"),
@@ -50,9 +50,9 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         return(sprintf(paste0(
           "Built from each object's endocrine composition: the Beta, Alpha, Delta and CHGA+ hormone-negative",
           " proportions of its core endocrine cells, for the %s objects with %s or more core cells. UMAP and Leiden",
-          " use one neighbour graph. No donor correction: the proportions are counted within each object, so staining",
+          " use one neighbor graph. No donor correction: the proportions are counted within each object, so staining",
           " differences between donors do not enter them. Smaller objects have too few cells to place, so they",
-          " have no UMAP point or cluster and are drawn grey, as tissue, when the tissue scatter is coloured by",
+          " have no UMAP point or cluster and are drawn gray, as tissue, when the tissue scatter is colored by",
           " cluster."),
           format(as.integer(comp_method$objects), big.mark = ","), as.integer(comp_method$min_core_cells)))
       }
@@ -497,7 +497,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                                plot_df$islet_key)
       p <- islet_umap_plotly(plot_df, "umap1", "umap2", colour_col, pal, ".hover", key = ".key",
                              colorbar_title = colorbar_title)
-      # A numeric colour has a colour bar instead of a legend; put it where the legend sits.
+      # A numeric color has a color bar instead of a legend; put it where the legend sits.
       # Slim, so it fits the legend's strip without plotly widening the margin and shrinking this plot alone.
       if (is.numeric(plot_df[[colour_col]])) {
         p <- plotly::plotly_build(p)
@@ -564,7 +564,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       }
     })
 
-    # One UMAP figure coloured by `key` (a SPATIAL_UMAP_COLOR_CHOICES value).
+    # One UMAP figure colored by `key` (a SPATIAL_UMAP_COLOR_CHOICES value).
     spatial_umap_figure <- function(key, filename_root) {
       comp <- spatial_umap_rows()
       allowed <- unlist(unname(spatial_umap_colour_choices(colnames(comp))))  # names are the labels
@@ -656,7 +656,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         age = continuous(comp$age, label, "Age<br>(years)"),
         BMI = continuous(comp$BMI, label, "BMI"),
         C_peptide_ng_mL = continuous(comp$C_peptide_ng_mL, label, "C-peptide<br>(ng/mL)"),
-        # ND and Aab+ donors have no diabetes, hence no duration (grey).
+        # ND and Aab+ donors have no diabetes, hence no duration (gray).
         t1d_duration_years = continuous(comp$t1d_duration_years, label, "T1D duration<br>(years)",
                                         missing_text = ifelse(status == "T1D", "not recorded", "no T1D")),
         continuous(comp[[key]], label, sub(" (", "<br>(", label, fixed = TRUE))
@@ -1112,7 +1112,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           paste("Endocrine objects:", paste(sort(unique(as.character(prepared()$comp$object_class %||% "Islet"))), collapse = ", ")),
           paste("Phenotypes shown:", paste(input$enrich_phenos %||% "(none)", collapse = ", ")),
           paste("Object z outside [-5, 5] dropped before the donor mean:", if (isTRUE(input$enrich_clip)) "ON" else "OFF"),
-          "Rows: level=donor is each donor's mean over its objects; the other level summarises those donor means."
+          "Rows: level=donor is each donor's mean over its objects; the other level summarizes those donor means."
         ))
       }
     )
@@ -1256,13 +1256,13 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           div(class = "card", style = card_style,
             div(style = ctrl_row,
               card_title("Phenotype composition & enrichment",
-                tags$p("Every immune phenotype at once, in the core or the 20 \u00b5m band. The left chart summarises",
+                tags$p("Every immune phenotype at once, in the core or the 20 \u00b5m band. The left chart summarizes",
                        " each donor status across its donors; the heatmap shows each donor, grouped by status, so the",
                        " spread behind each bar is visible. Each donor's value is the mean over its objects."),
                 tags$p(tags$strong("Enrichment z"),
                        " (peri-islet mode) compares each phenotype's count in an object's band with the count expected",
                        " from a reference proportion: z = (observed \u2212 expected) / \u221aexpected. z > 0 = more than",
-                       " expected. Baseline Cohort uses the phenotype's proportion of all analysed cells in the cohort, so",
+                       " expected. Baseline Cohort uses the phenotype's proportion of all analyzed cells in the cohort, so",
                        " a donor with more of it everywhere scores high: it measures how many there are near islets.",
                        " Own tissue uses the donor's own proportion outside every endocrine object and its band: it",
                        " measures whether they gather at islets. Proportion modes show the raw fraction (0\u20131)",
@@ -1416,7 +1416,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
     # ==== Neighborhood row 1 (owner review, 2026-10-20): insulitis, insulitis by beta content, immune gradient ====
     # They replaced Peri enrichment by status (one column of the composition card), Peri vs core proportion (immune
     # cells almost never in the core, endocrine cells almost never in the band) and Distance to nearest cell (taken
-    # from the core's centre, so it tracked object radius). Helpers: R/spatial_islet_immune.R. Every value is
+    # from the core's center, so it tracked object radius). Helpers: R/spatial_islet_immune.R. Every value is
     # donor-level.
     donor_points_bars <- function(d, y_title, title, filename, fmt = "%.3f", percent = FALSE) {
       dcols <- donor_colors_reactive()

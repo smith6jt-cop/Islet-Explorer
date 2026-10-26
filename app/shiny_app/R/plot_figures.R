@@ -4,7 +4,7 @@
 # text from every mapped aesthetic. The three figures are markers, summary points with error bars, LOESS lines and
 # violin or box layers, so since 2026-10-26 they are built here with plot_ly() on the data frames the modules
 # prepare. Each builder is a pure function of its rows and an options list (tests/testthat/test-plot-figures.R);
-# the module passes the inputs and attaches the linked-plot behaviour (trajectory_link_plot()). The statistics are
+# the module passes the inputs and attaches the linked-plot behavior (trajectory_link_plot()). The statistics are
 # those of the ggplot layers they replace: the same jitter widths and seeds (ggplot2::position_jitter), the same
 # LOESS (stats::loess with the layer's span and weights) and the same 95 % band (the t quantile on the loess
 # degrees of freedom, as ggplot2's predictdf.loess).
@@ -120,7 +120,7 @@ plot_loess_curve <- function(x, y, weights = NULL, span = 0.75, se = FALSE, n = 
   out[is.finite(out$y), , drop = FALSE]
 }
 
-#' The curve of plot_loess_curve() as a line, with its band when it has one. `fill` is the band colour (rgba).
+#' The curve of plot_loess_curve() as a line, with its band when it has one. `fill` is the band color (rgba).
 plot_add_loess <- function(p, curve, colour, width, fill = NULL, legendgroup = NULL) {
   if (is.null(curve) || !nrow(curve)) return(p)
   if (!is.null(fill) && any(is.finite(curve$ci))) {
@@ -134,7 +134,7 @@ plot_add_loess <- function(p, curve, colour, width, fill = NULL, legendgroup = N
                     legendgroup = legendgroup)
 }
 
-#' A colour with an alpha, as plotly wants it.
+#' A color with an alpha, as plotly wants it.
 plot_rgba <- function(colour, alpha) {
   rgb <- grDevices::col2rgb(colour)[, 1]
   sprintf("rgba(%d,%d,%d,%.2f)", rgb[1], rgb[2], rgb[3], alpha)
@@ -142,8 +142,8 @@ plot_rgba <- function(colour, alpha) {
 
 # ---- Against diameter ----
 
-#' Against diameter: every object against its diameter (jittered, coloured by donor status or donor), the objects
-#' above a fitted axis as open triangles at its top, flagged outliers as grey crosses, and each donor status's
+#' Against diameter: every object against its diameter (jittered, colored by donor status or donor), the objects
+#' above a fitted axis as open triangles at its top, flagged outliers as gray crosses, and each donor status's
 #' binned summary (points, error bars, a line or a LOESS trend) on top.
 #' `rows`: the card's flagged, binned rows (value, diam_mid, donor_status, is_outlier, Case ID, islet_key,
 #' link_key); `sm`: their binned summary (donor_status, diam_mid, y, ymin, ymax, n); `hover`: text by key.
@@ -209,7 +209,7 @@ plot_diameter_figure <- function(rows, sm, hover, o) {
     }
     ghost <- shown & outlier
     if (any(ghost)) {
-      # Excluded outliers stay visible as grey crosses, so a reviewer sees where the exclusions land.
+      # Excluded outliers stay visible as gray crosses, so a reviewer sees where the exclusions land.
       j <- plot_jitter(jx(x[ghost]), y[ghost], jw, if (is.null(y_top)) jh else 0, 31)
       p <- plot_add_points(p, ujx(j$x), j$y, key[ghost], text[ghost], "#737373", px * 1.1, opacity = 0.55,
                            symbol = "x-thin-open", line = list(color = "#737373", width = 1.3))
@@ -217,7 +217,7 @@ plot_diameter_figure <- function(rows, sm, hover, o) {
   }
 
   # Summary per donor status on top of the points: a line (or a LOESS trend over the bins), the summary points
-  # with their error bars. The summary points carry the status legend unless the points are coloured by donor.
+  # with their error bars. The summary points carry the status legend unless the points are colored by donor.
   for (s in intersect(levels, unique(sm$donor_status))) {
     i <- which(sm$donor_status == s)
     col <- unname(o$status_cols[s])
@@ -236,7 +236,7 @@ plot_diameter_figure <- function(rows, sm, hover, o) {
     p <- plotly::add_trace(p, type = "scatter", mode = "markers", x = signif(sm$diam_mid[i], 5),
                            y = signif(sm_y[i], 5), name = s, legendgroup = group, showlegend = !donor_id,
                            hoverinfo = "text",
-                           text = paste0(s, "<br>Bin centre: ", signif(sm$diam_mid[i], 4), " µm<br>",
+                           text = paste0(s, "<br>Bin center: ", signif(sm$diam_mid[i], 4), " µm<br>",
                                          o$stat_label %||% "Summary", ": ", signif(sm$y[i], 4), " (",
                                          signif(sm$ymin[i], 4), " to ", signif(sm$ymax[i], 4), ")<br>Objects: ",
                                          sm$n[i]),
@@ -268,8 +268,8 @@ plot_diameter_figure <- function(rows, sm, hover, o) {
 # ---- By donor status ----
 
 #' By donor status: a violin or box per donor status drawn from every kept value, every object as a jittered point
-#' (coloured by status or donor), the objects above a fitted axis as open triangles at its top, flagged outliers as
-#' grey crosses on top. `rows`: the card's flagged rows (value, donor_status, is_outlier, Case ID, islet_key,
+#' (colored by status or donor), the objects above a fitted axis as open triangles at its top, flagged outliers as
+#' gray crosses on top. `rows`: the card's flagged rows (value, donor_status, is_outlier, Case ID, islet_key,
 #' link_key); `hover`: text by key. `o`: list(color_by, status_cols, donor_pal, show_points, pt_size, pt_alpha,
 #' log_y, box, ylab, title, clip).
 plot_status_figure <- function(rows, hover, o) {
@@ -363,10 +363,10 @@ plot_area_size_px <- function(v, range_mm) {
   plotly_point_px(range_mm[1] + sqrt(r) * diff(range_mm))
 }
 
-#' The Trajectory scatter: every fitted object's value against its pseudotime (jittered), coloured by donor status,
+#' The Trajectory scatter: every fitted object's value against its pseudotime (jittered), colored by donor status,
 #' donor or Leiden cluster, sized uniformly or by diameter or cell count, with the LOESS trend (overall, or one per
 #' donor status) and its 95 % band, weighted by log1p(cells) as the ggplot layers were. `df`: traj_data_clean()
-#' rows with link_key; `o`: list(color_by, colours (named over the colour column's values), colour_label, size_by,
+#' rows with link_key; `o`: list(color_by, colors (named over the color column's values), color_label, size_by,
 #' point_size, alpha, trend, show_ci, status_cols, ink, x_label, y_label, pt_ext (traj_pt_extent(df$pt))).
 trajectory_scatter_figure <- function(df, o) {
   n <- nrow(df)

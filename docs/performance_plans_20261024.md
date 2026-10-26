@@ -24,7 +24,7 @@ directory):
 | 13 % | `data.table::fread` of the development CSV backend (absent in production, which reads Parquet) |
 
 Nothing in that profile is data access or statistics; it is figure construction and
-serialisation in R. The payload those figures produce, and what compression would do to
+serialization in R. The payload those figures produce, and what compression would do to
 it (measured on staging):
 
 | Message | Raw | Deflate (level 6) | Brotli | Composition |
@@ -318,14 +318,14 @@ there either. Nothing on the server side changes what an off-campus reviewer fee
 is payload over their link, which only A1, A4, A5 and the Plan B options address.
 
 **No GPU helps on the server, and the reviewer's GPU is already in use.** The server's
-time goes to R-level figure construction (`ggplotly()`), JSON serialisation, PNG
+time goes to R-level figure construction (`ggplotly()`), JSON serialization, PNG
 rasterisation and message transfer; none of it runs on a GPU, R's plotting stack cannot
 use one, and PubApps VMs have none (this one is a two-vCPU VMware guest). Deflate
 compression (A1) costs tens of milliseconds of CPU per message. Where a GPU does matter is
 the browser: Avivator already renders the OME-TIFF tiles with WebGL, and in Plan B the
 170 k-cell tissue scatter would move from a server-drawn PNG to a WebGL layer
 (`deck.gl` or plotly `scattergl`) on the reviewer's own GPU, which removes the PNG
-render from the server (16 % of its time) and makes recolouring instant; the points go
+render from the server (16 % of its time) and makes recoloring instant; the points go
 over once as binary arrays of roughly the same size as one PNG. GPUs on HiPerGator are
 useful upstream, in the cell-level pipeline (segmentation, typing, embeddings over 2.6
 million cells), which runs offline and does not touch the app's responsiveness; the

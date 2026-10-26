@@ -68,7 +68,7 @@ method switches. See the memory note `shiny_testserver_audit_harness` for the tw
 Answering "does this account for islet number/size differences between groups?" — measured, and the
 answer is partly reassuring:
 
-- **Islet-count imbalance is already neutralised.** Raw counts run 121–981 per donor (8.1:1), but
+- **Islet-count imbalance is already neutralized.** Raw counts run 121–981 per donor (8.1:1), but
   effective observations saturate at ~1/ICC: at ICC = 0.139 that is 6.87–7.17 per donor, an
   effective ratio of **1.04:1**. Donor counts are balanced 5/5/5.
 - **Residual heteroscedasticity is present but harmless to the tests** (51:1 variance ratio;
@@ -116,7 +116,7 @@ Prompted by "our data are whole-slide, theirs were single-islet ROIs". Three mec
   alone.**
 - **Hard power ceiling.** At 5 donors/stage the best attainable KW p is 0.00193 and pairwise Wilcoxon
   0.00794. BH across 21 pairwise contrasts floors at q = 0.167 — **no pairwise contrast could ever be
-  significant**. Those columns are now reported raw and labelled exploratory, with the ceiling printed
+  significant**. Those columns are now reported raw and labeled exploratory, with the ceiling printed
   beside the table so a null reads as underpowered rather than as no effect.
 - **Pre-specified family** `INFLAM_FDR_FAMILY` (7 immune phenotypes, fixed in source, floor q = 0.014
   vs 0.041 across 21). Out-of-family phenotypes display uncorrected and marked `‡`.
@@ -153,7 +153,7 @@ moves.
 |---|---|
 | `master_results.xlsx` (Sep 2025) | live Excel fallback for `load_master_auto()` |
 | `adata_ins_root.h5ad`, `islet_explorer.h5ad` | live pipeline inputs |
-| `islet_spatial_lookup.csv` | live — **but holds 10,736 records for 5,214 analysed islets** (~2 entries each); fine for lookups, do not use it for absolute geometry |
+| `islet_spatial_lookup.csv` | live — **but holds 10,736 records for 5,214 analyzed islets** (~2 entries each); fine for lookups, do not use it for absolute geometry |
 | `cell_distance.csv` (2.65M rows) | live; both Inflammation cards read it |
 | `All-Download_From_nPOD_*.xlsx` (repo root, gitignored) | **keep** — needed to regenerate `donor_metadata.csv` |
 | `CellCompartments.tsv` (repo root, 11.5 GB) | **live input**, hard-coded at `codex_restore_validation.py:81`. The previous handoff said "delete if disk pressure appears" — that is misleading; it would break the Phenocycler screen. `/home` is at 80% with 693 GB free, so no pressure. |

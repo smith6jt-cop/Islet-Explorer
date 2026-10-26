@@ -429,7 +429,7 @@ try {
                  total: m ? Number(m[1]) : null, fitted: m ? Number(m[2]) : null, selector_hidden: hidden };
       });
     });
-    // Singles are counted, not analysed (owner, 2026-10-18): no Single choice in the object selector, and the
+    // Singles are counted, not analyzed (owner, 2026-10-18): no Single choice in the object selector, and the
     // Plot tab's per-donor card shows them.
     await page.click('#tabs a[data-value="Plot"]');
     await check('singles_counted_not_analysed', async () => {

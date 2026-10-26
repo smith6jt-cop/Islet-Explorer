@@ -34,7 +34,7 @@ DONOR_COLORS_COLORBLIND <- c("ND" = "#0072B2", "Aab+" = "#D55E00", "T1D" = "#009
 
 DONOR_COLORS_CLASSIC <- c("ND" = "#2166AC", "Aab+" = "#B2182B", "T1D" = "#1B7837")
 
-# Bright is the default selection (app.R, the three palette selectors); no choice is labelled "(default)".
+# Bright is the default selection (app.R, the three palette selectors); no choice is labeled "(default)".
 DONOR_PALETTES <- list(
   "Bright"             = DONOR_COLORS_BRIGHT,
   "Paul Tol"           = DONOR_COLORS,
@@ -209,7 +209,7 @@ if (!nzchar(Sys.getenv("RETICULATE_PYTHON", ""))) {
     if (.py_has_anndata(.py)) { candidate_python <- .py; break }
   }
   # If none advertised anndata (e.g. the capability probe couldn't run), fall
-  # back to the first existing candidate so behaviour is no worse than before.
+  # back to the first existing candidate so behavior is no worse than before.
   if (!nzchar(candidate_python) && length(.py_candidates)) {
     candidate_python <- .py_candidates[[1]]
     islet_log_event("python_anndata_unavailable")
@@ -280,7 +280,7 @@ AI_ENABLED <- isTRUE(as.logical(Sys.getenv("ISLET_ENABLE_AI", "FALSE")))
 # ============================================================================
 # Plot font + theme helpers (May 2026)
 # ============================================================================
-# Centralised font sizing so every plot in the app reads clearly on screen and
+# Centralized font sizing so every plot in the app reads clearly on screen and
 # downloads as a presentation/publication-ready PNG. "Presentation-first"
 # baseline: base 16pt, 18pt titles, 14pt legends, 12pt minimum for dense rows.
 
@@ -299,7 +299,7 @@ ISLET_FONT_SIZES <- list(
 )
 
 # ggplot's `annotate("text", size = N)` / `geom_text(size = N)` take
-# MILLIMETRES, not points. Passing a point-like number (14, 16) silently
+# MILLIMETERS, not points. Passing a point-like number (14, 16) silently
 # produces enormous text; passing 4 or 5 — as this app did — produces 11.4pt /
 # 14.2pt, i.e. BELOW the 18pt base. Convert explicitly.
 ISLET_ANNOTATE_SIZE <- ISLET_FONT_SIZES$base / ggplot2::.pt
@@ -315,18 +315,18 @@ islet_asset <- function(path) {
   paste0(path, "?v=", substr(unname(tools::md5sum(file)), 1, 10))
 }
 
-# ---- Colour theme (2026-10-18: dark by default, after VS Code's Dark Modern) ----
+# ---- Color theme (2026-10-18: dark by default, after VS Code's Dark Modern) ----
 # The page theme is the <html data-theme> attribute (www/islet-theme.css / islet-theme.js), mirrored to the server
 # as input$app_theme. theme_islet() and plotly_islet_config() read it, so every plot drawn inside a render
 # depends on it and redraws when the reviewer switches theme. Downloads stay white (islet_ggsave(), and the
-# plotly camera button re-draws the figure in light colours).
+# plotly camera button re-draws the figure in light colors).
 ISLET_THEME_PALETTE <- list(
   dark  = list(paper = "#1f1f1f", ink = "#cccccc", muted = "#9d9d9d", grid = "#333333", zero = "#555555",
                line = "#6b6b6b"),
   light = list(paper = "#ffffff", ink = "#000000", muted = "#555555", grid = "#ebebeb", zero = "#bdbdbd",
                line = "#444444"))
 
-#' The theme's foreground colour, for lines and text a plot draws in a fixed colour (medians, reference lines).
+#' The theme's foreground color, for lines and text a plot draws in a fixed color (medians, reference lines).
 islet_ink <- function() ISLET_THEME_PALETTE[[islet_theme_mode()]]$ink
 
 #' "dark" or "light": the reviewer's theme for the current session (dark when there is no session or input).
@@ -342,8 +342,8 @@ islet_theme_mode <- function() {
 
 theme_islet <- function(base_size = ISLET_FONT_SIZES$base, mode = islet_theme_mode()) {
   pal <- ISLET_THEME_PALETTE[[mode]]
-  # ggplot2 4: ink / paper also set the default colours of geoms, so text and lines drawn without an explicit
-  # colour follow the theme.
+  # ggplot2 4: ink / paper also set the default colors of geoms, so text and lines drawn without an explicit
+  # color follow the theme.
   ggplot2::theme_minimal(base_size = base_size, ink = pal$ink, paper = pal$paper) +
     ggplot2::theme(
       plot.background = ggplot2::element_rect(fill = pal$paper, colour = NA),
@@ -422,8 +422,8 @@ plotly_islet_config <- function(p, filename_root = "islet_explorer_plot",
   )
 }
 
-#' Recolour a built plotly figure for the dark theme: backgrounds, text, every axis, legend, annotations and
-#' colour bars. Trace colours are left alone.
+#' Recolor a built plotly figure for the dark theme: backgrounds, text, every axis, legend, annotations and
+#' color bars. Trace colors are left alone.
 plotly_islet_dark <- function(p) {
   pal <- ISLET_THEME_PALETTE$dark
   p <- plotly::plotly_build(p)
@@ -457,7 +457,7 @@ plotly_islet_dark <- function(p) {
 }
 
 #' ggsave() for downloadHandlers: publication PNGs stay on a white background whatever the screen theme, by
-#' overriding only the theme's colours (the plot's own theme tweaks are kept).
+#' overriding only the theme's colors (the plot's own theme tweaks are kept).
 islet_ggsave <- function(file, plot, ...) {
   pal <- ISLET_THEME_PALETTE$light
   light <- ggplot2::theme(
@@ -553,21 +553,21 @@ plotly_compact_point_hover <- function(p, hover_by_key) {
   p
 }
 
-# Islet-level UMAP markers, shared by the Spatial and Trajectory UMAPs. Colouring a plotly scatter by a group makes
+# Islet-level UMAP markers, shared by the Spatial and Trajectory UMAPs. Coloring a plotly scatter by a group makes
 # one trace per group, drawn in turn, so the last group (T1D) was painted over the others wherever they met and hid
 # where each disease state sat. Here every point is one trace in a fixed interleaved order (golden-ratio stride over
 # the rows, which come grouped by donor), and an empty trace per group carries the legend, whose clicks are turned
-# off because they could only hide the empty trace. The thin outline in the background colour keeps touching points
+# off because they could only hide the empty trace. The thin outline in the background color keeps touching points
 # apart; the white-background PNG export swaps it to white (www/islet-theme.js).
 # Size 4 px: on the v7 layout (min_dist 3, spread 3) in a Spatial UMAP, 7 % of points lie within half a marker of a
-# neighbour (13 % at 5 px; 42 % at 4 px on v6's layout).
+# neighbor (13 % at 5 px; 42 % at 4 px on v6's layout).
 ISLET_UMAP_MARKER <- list(size = 4, opacity = 0.9, outline = 0.6)
 
 #' Row order for drawing UMAP points: a fixed interleave (golden-ratio stride), the same on every render.
 islet_umap_order <- function(n) order((seq_len(n) * 0.6180339887498949) %% 1)
 
-#' `colour` names a discrete column (coloured by `pal`, a named vector) or a numeric one (inferno, scaled to its
-#' range, with a colour bar titled `colorbar_title`; NA grey).
+#' `color` names a discrete column (colored by `pal`, a named vector) or a numeric one (inferno, scaled to its
+#' range, with a color bar titled `colorbar_title`; NA gray).
 islet_umap_plotly <- function(df, x, y, colour, pal = NULL, text, key = NULL, source = NULL,
                               colorbar_title = NULL, size = ISLET_UMAP_MARKER$size) {
   numeric_colour <- is.numeric(df[[colour]])
@@ -661,7 +661,7 @@ islet_png_filename <- function(stem) {
 # PHENOTYPE_COLORS (drilldown_helpers.R) uses 21 names; a few don't have rows
 # in the CSV (residuals from the upstream single-cell pipeline). Those get
 # hand-written descriptions in PHENOTYPE_RESIDUALS below. The alias map
-# normalises PHENOTYPE_COLORS keys -> CSV keys for the four known mismatches.
+# normalizes PHENOTYPE_COLORS keys -> CSV keys for the four known mismatches.
 
 PHENOTYPE_RULES_PATH <- data_path("phenotype_rules.csv")
 
@@ -701,7 +701,7 @@ PHENOTYPE_RESIDUALS <- list(
   APCs = list(
     parent = "Immune", pos = character(), neg = character(),
     anypos_groups = list(),
-    description = "Antigen-presenting cells aggregate (HLADR+ myeloid lineage). Used as an aggregate immune category in neighbourhood metrics; not a CSV-rule phenotype."
+    description = "Antigen-presenting cells aggregate (HLADR+ myeloid lineage). Used as an aggregate immune category in neighborhood metrics; not a CSV-rule phenotype."
   ),
   Structural = list(
     parent = "all", pos = character(), neg = character(),
@@ -932,7 +932,7 @@ phenotype_rules_modal_ui <- function() {
           "this CODEX panel. Marker values are spillover-corrected (REDSEA), aligned between images (UniFORM) and ",
           "put on one cohort scale from background to the 99.9th percentile."),
         shiny::tags$p("Endocrine cells are called only inside an endocrine object (Islet, Cluster or Single; a ",
-          "Single is then counted, not analysed, and its cell treated as a tissue cell). Insulin, glucagon and ",
+          "Single is then counted, not analyzed, and its cell treated as a tissue cell). Insulin, glucagon and ",
           "somatostatin are mutually exclusive: the strongest names the cell only when it is at least twice the ",
           "next, otherwise the cell is excluded. A CHGA+ cell with no hormone above the image's level is CHGA+ ",
           "hormone-negative. Nerve, ",
@@ -1021,7 +1021,7 @@ phenotype_rules_modal_ui <- function() {
 
 # Resolve a sanitised data-column name (e.g. "prop_CD8a_Tcell", "peri_prop_Beta_cell",
 # "min_dist_Macrophage", "enrich_z_B_cell") back to a phenotype label. Returns
-# NULL/the input unchanged if no known prefix is recognised.
+# NULL/the input unchanged if no known prefix is recognized.
 extract_phenotype_from_column <- function(col) {
   if (is.null(col) || is.na(col) || !nzchar(col)) return(NULL)
   for (pre in c("combined_prop_", "peri_prop_", "peri_count_",
@@ -1243,12 +1243,12 @@ object_classes_help <- function() {
   if (!is_uniform_root()) return(NULL)
   shiny::tags$p(shiny::tags$strong("Endocrine objects."),
     " The selector in the Data controls of the Plot and Spatial tabs (the two are kept in step) chooses the ",
-    "classes analysed. An Islet has two or more whole cells and is at least ",
+    "classes analyzed. An Islet has two or more whole cells and is at least ",
     "35 µm across (the mean of its largest and smallest caliper diameter); a Cluster has two or more cells ",
     "and is smaller. Rows and plots use only the selected classes. The Trajectory tab instead fits every object ",
     "with ten or more core cells, whatever its class. A Single (one endocrine cell outside any islet or cluster) ",
     "is not an analysis object: it has no core or peri-islet band, and its cell is an ordinary tissue cell, which ",
-    "may fall in a neighbouring object's band. Singles are only counted (the Plot tab's Endocrine objects per ",
+    "may fall in a neighboring object's band. Singles are only counted (the Plot tab's Endocrine objects per ",
     "donor card) and drawn on the segmentation map.")
 }
 
@@ -1317,7 +1317,7 @@ phenotype_hint_ui <- function(name, prefix = "Markers:",
 # Retired phenotypes (Jul 2026)
 # ============================================================================
 # Nine labels are excluded from the app everywhere a phenotype is listed,
-# coloured, selected or tested. Two reasons, and they are the same reason twice:
+# colored, selected or tested. Two reasons, and they are the same reason twice:
 #
 #   Endocrine, Immune, T cell, Endothelial   parents of other labels in the set,
 #                                            so they are gate-failure residuals
@@ -1329,8 +1329,8 @@ phenotype_hint_ui <- function(name, prefix = "Markers:",
 #
 # Excluded rather than deleted from PHENOTYPE_COLORS: the DATA still carries
 # these labels, and every lookup in this app is by exact name, so a palette
-# without them would return NA and silently grey out real cells. Keeping the
-# colours and filtering at the point of USE means a stray row is dropped, not
+# without them would return NA and silently gray out real cells. Keeping the
+# colors and filtering at the point of USE means a stray row is dropped, not
 # mis-drawn.
 #
 # `phenotype_keep()` is the single gate. Anything enumerating phenotypes for a
@@ -1343,7 +1343,7 @@ phenotype_hint_ui <- function(name, prefix = "Markers:",
 PHENOTYPE_RETIRED <- c("Endocrine", "Acinar", "Endothelial", "T cell",
                        "Immune", "Unknown", "ECAD+", "Structural", "APCs")
 
-# Endocrine object classes analysed by the app (owner A5, 2026-10-16, with a filter). Singles (one endocrine cell)
+# Endocrine object classes analyzed by the app (owner A5, 2026-10-16, with a filter). Singles (one endocrine cell)
 # are not analysis objects (owner, 2026-10-18: "Singles should not be included in any islet-level analysis except
 # for quantifying or showing how many there are"); a uniform root counts them in endocrine_objects_by_donor.csv
 # and draws them on the segmentation map.
@@ -1414,7 +1414,7 @@ phenotype_marker_definitions <- function(path = data_path("protein_phenotype_rul
 UNIFORM_PHENOTYPE_DEFINITIONS <- c(
   "Beta cell" = paste("inside an Islet or Cluster, a cell admitted as endocrine whose highest hormone is insulin, at",
                       "least twice the next hormone (a cell under that margin is excluded: the hormones are mutually",
-                      "exclusive, and the runner-up is mostly a touching neighbour's hormone)"),
+                      "exclusive, and the runner-up is mostly a touching neighbor's hormone)"),
   "Alpha cell" = "as Beta cell, with glucagon the highest hormone",
   "Delta cell" = "as Beta cell, with somatostatin the highest hormone",
   "CHGA+ hormone-negative" = paste("inside an Islet or Cluster, CHGA at or above the image's tissue CHGA level",

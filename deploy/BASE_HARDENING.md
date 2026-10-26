@@ -59,7 +59,7 @@ service through trailing bytes after a compressed request body), fixed in 2.4.0,
 2026-10-22. body-parser is not a direct dependency, so it joins proxy-addr and
 follow-redirects as an `overrides` entry (`body-parser 2.4.0`), and its lock entry carries
 2.4.0's dependency ranges. Of those, `qs ^6.16.1` was not met by the locked 6.16.0, so qs
-moves to 6.16.1 (same dependencies and licence, within the root's own `^6.16.0`). Both
+moves to 6.16.1 (same dependencies and license, within the root's own `^6.16.0`). Both
 lock entries were written from the registry metadata because the workstation's npm
 refuses to regenerate the lock (`allow-git`/`allow-remote` none); `npm ci --dry-run`
 accepted the pair and both tarballs' integrity hashes were verified before the rebuild.

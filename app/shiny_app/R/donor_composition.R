@@ -144,7 +144,7 @@ donor_composition_card_ui <- function(ns) {
         tags$p("Each donor's cell make-up: the proportion of each phenotype among all the cells of the donor's",
                " selected endocrine objects, pooled over the objects (a large object counts for more cells), in the",
                " chosen region. The squares above the bars give each donor's status."),
-        tags$p(tags$strong("No subtype"), " (grey) holds the cells typed only to a general class (Endocrine, T cell",
+        tags$p(tags$strong("No subtype"), " (gray) holds the cells typed only to a general class (Endocrine, T cell",
                " or immune cells without a subtype), so each bar sums to 100%."),
         tags$p(tags$strong("Leave out."), " One or two classes hold nearly every cell (the endocrine types in the",
                " core, Exocrine in the band) and flatten the rest, so they are left out by default: the bars then",

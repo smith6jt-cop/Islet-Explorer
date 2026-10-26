@@ -26,11 +26,11 @@ In HPAP, cyan `Islet` objects retain the exact approved IDs, names and outlines.
 The 9,569 cells inside them are reparented using native ROI containment. All
 cell/nucleus shapes, cell classifications and raw measurements are preserved;
 the two islet-distance measurements are recalculated. Tissue-clipped
-`IsletExpanded` objects provide 20-µm context. Grey `Previous segmentation`
+`IsletExpanded` objects provide 20-µm context. Gray `Previous segmentation`
 objects retain the older geometry.
 
 The other five donors have cyan `Endocrine pixel candidate` objects. Their
-existing cell parents and regional measurements still refer to the grey
+existing cell parents and regional measurements still refer to the gray
 previous segmentation and must not be used as measurements of the new outlines.
 HPAP approval does not automatically approve these donors or any cell phenotype
 thresholds. Each candidate remains editable in the new project.

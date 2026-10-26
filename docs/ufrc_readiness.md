@@ -59,7 +59,7 @@ the app (tag `frozen-app-20261020`) from 2026-10-20 for the owner's review of
 the reprocessed data, and since 2026-10-22 serves the main tree on the uniform
 root `data/development/uniform-20donor-20261022-v10/` (20 donors, 4,763
 endocrine objects: 1,487 Islets and 3,276 Clusters, with 5,207 Singles counted
-but not analysed). Donor 78 (HDL078 / HPAP-078) stays permanently removed from
+but not analyzed). Donor 78 (HDL078 / HPAP-078) stays permanently removed from
 the app and all analysis by owner directive. All 20 donors were typed and
 measured by one workflow (`scripts/uniform/`, [record](../scripts/uniform/README.md)),
 and every donor field comes from the nPOD export. See the
