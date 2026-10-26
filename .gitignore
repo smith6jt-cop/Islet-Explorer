@@ -39,6 +39,11 @@ literature/*
 
 # Generated analysis/review outputs outside the standard data/ tree.
 /reports/
+# Hypothesis-testing results (output/<analysis>_<date>/, from 2026-10-22): per-object
+# tables, model fits, figures and full-text extractions of the local papers. Each
+# folder carries its README, commands and source hashes; the scripts that
+# regenerate it are tracked under scripts/research/.
+/output/
 *.h5ad
 *.h5
 *.hdf5
