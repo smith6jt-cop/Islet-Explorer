@@ -27,8 +27,10 @@ application; since 2026-10-23 a staging instance (`islet-explorer-dev`,
 development name, so a candidate can be exercised through the real proxy and
 Basic Auth before it replaces what reviewers use (since 2026-10-26 19:23 UTC it
 runs the Plan A Level 2 candidate `0b55429`, release `pubapps-2026-10-uniform-v10-perf2`,
-after the Level 1 candidate `e10b2ee` of 2026-10-25; both recorded below; production
-stays on `d55680a`). The
+after the Level 1 candidate `e10b2ee` of 2026-10-25; both recorded below). **Production
+runs the same release since 2026-10-26 20:51 UTC**, promoted by the owner ("Push what is
+complete so far to the live app"); `pubapps-2026-10-uniform-v10` (`d55680a`) stays on the
+VM for `rollback-release.sh`. The
 schema-5 release is active on the VM with its backend published on the VM's
 private address `10.13.41.21:3838`, the host:port target UFRC's proxy needs
 (`vpubweb.rc.ufl.edu` cannot reach the VM loopback). UFRC configured both
@@ -129,8 +131,8 @@ carries the Plan A Level 1 responsiveness work (`docs/performance_plans_20261024
 | Browser acceptance suite through the proxy | `deploy/browser/check-app.mjs --auth-file` against `devislet-explorer.rc.ufl.edu` with the staging account, 2026-10-25 16:44 UTC: passed, every check (36), no failed checks, no browser or console errors, no application HTTP errors, no accessibility rule violations. Report `tmp/ufrc-release-20261022/evidence/browser-staging-e10b2ee/check-app-staging-e10b2ee.json` |
 ### Plan A Level 2 candidate 0b55429 on the staging instance (2026-10-26)
 
-Second candidate for the staging instance (production stays on `d55680a`). It carries the
-Plan A Level 2 responsiveness work and two owner requests of the day
+Second candidate for the staging instance, and since 20:51 UTC the production release. It
+carries the Plan A Level 2 responsiveness work and two owner requests of the day
 (`docs/performance_plans_20261024.md`, `docs/performance_baseline_20261024.md`).
 
 | Item | Result |
@@ -143,6 +145,27 @@ Plan A Level 2 responsiveness work and two owner requests of the day
 | Activation (staging instance only) | **activated 2026-10-26 19:23 UTC** as `islet-explorer-dev` on `10.13.41.21:3839` (4 GiB, `--docroot dev/html`, `--local-data /local/maigan/releases`): the image loaded from the archive, the release re-hashed on the VM (manifest `c9c02a82…`), the local copies of `data/{geometry,cells,spatial}` verified against `MANIFEST.sha256`, the service healthy within 40 s, `verify-deployment.sh` passed (backend bound to the private address only, OME-TIFF Range response verified), `dev/html` image aliases moved to the perf2 release. Production (`islet-explorer`, `pubapps-2026-10-uniform-v10`, image `ae95fd23…`) untouched. Log `tmp/ufrc-release-20261022/deploy-vm-0b55429-staging-3839-20261026T190742Z.log`. |
 | Responsiveness through the proxy | `deploy/browser/bench-app.mjs` against `devislet-explorer.rc.ufl.edu` from campus and with the emulated home link, 2026-10-26 19:24–19:26 UTC, five cold runs each: `permessage-deflate` on every connection; against the Level 1 candidate on the same instance, first screen 3.6 → 2.7 s (campus) and 4.1 → 3.1 s (home), Plot change 1.5 → 0.72 s and 1.5 → 1.1 s, Spatial tab 3.2 → 1.3 s and 2.6 → 1.6 s, Spatial donor change 1.9 → 0.40 s and 1.2 → 0.41 s, warm revisit 2.5 → 1.8 s and 3.5 → 3.1 s; the process built its Plot cards once (six `plot_card_built` events for ten cold runs). One regression: the process's first Trajectory open took 4.2 s (the first PNG draw builds `ragg`'s font cache; later sessions 0.6–0.7 s), to be folded into the warm-up. Table and reading in `docs/performance_baseline_20261024.md`, "Plan A Level 2 on staging". |
 | Browser acceptance suite through the proxy | `deploy/browser/check-app.mjs --auth-file` against `devislet-explorer.rc.ufl.edu` with the staging account, 2026-10-26 19:26 UTC: passed, every check (36), no failed checks, no browser or console errors, no accessibility rule violations; report `tmp/ufrc-release-20261022/evidence/browser-staging-0b55429/check-app-staging-0b55429.json`. |
+| **Production activation** | **activated 2026-10-26 20:51 UTC** by the owner ("Push what is complete so far to the live app"), run in the session with the `!` prefix because the auto-mode classifier refuses production deployments from the assistant: the release worktree on `0b55429`, then `RELEASE_NAME=pubapps-2026-10-uniform-v10-perf2 PUBLISH_ADDRESS=10.13.41.21 deploy-vm.sh --skip-stage` (`islet-explorer` on `10.13.41.21:3838`, 9 GiB, `--docroot prod/html`, `--local-data /local/maigan/releases`): `verify-release.sh` re-hashed the release on the VM, the local data copies verified against `MANIFEST.sha256`, `verify-deployment.sh` passed (health healthy, backend bound to the private address only, OME-TIFF Range response verified), `prod/html` image aliases moved to the perf2 release; app loaded 20:50:52, release data loaded 20:51:00, trajectory warm-up ok 20:51:19 UTC. The previous release `pubapps-2026-10-uniform-v10` (`d55680a`, image `ae95fd23…`) stays on the VM for `rollback-release.sh`; the staging instance is unchanged on the same release. |
+| Production checks through the proxy | `check-app.mjs --auth-file` against `islet-explorer.rc.ufl.edu` with the production account, 2026-10-26 20:54 UTC: passed, every check (36), no errors, no accessibility rule violations (`evidence/browser-production-0b55429/`). `bench-app.mjs`, three cold runs from campus against the 2026-10-24 production baseline: first screen 3.6 → 2.6 s, Plot change 1.2 → 0.75 s, Spatial tab 2.2 → 1.3 s, Spatial donor change 1.9 → 0.44 s, warm revisit 3.5 → 1.8 s, socket bytes to the first screen 3.5 → 1.2 MB, `permessage-deflate` on every connection (`evidence/performance-baseline-20261024/level2-production/`). |
+
+### Candidate 080714b on the staging instance (2026-10-26, American spelling and the warm-up's first PNG draw)
+
+Third candidate of the day for the staging instance, on top of the Level 2 candidate
+below: the owner's spelling rule ("American English throughout") applied to every label,
+help text, comment and record, and the process warm-up's first PNG draw (the
+4 s font-cache cost seen on the first Trajectory open of the Level 2 process). Production
+runs the Level 2 release since 20:51 UTC; this candidate goes to staging first.
+
+| Item | Result |
+|---|---|
+| Source commit | `080714b321c75fb5c3bf5e559ffa2243d683005d` (branch `spatial-review-20261020`): American spelling in UI text, comments and documentation (code identifiers and API names unchanged); `app.R` warm-up draws one 64 px PNG before the health check. 437 tests pass; `check-app.mjs` (36) and the UI review suite (18) pass against the in-house service. |
+| Container image, SBOM and High/Critical gate | **gate passed 2026-10-26 20:07 UTC** at `080714b`: image `sha256:52057049b29e9f41048b654325218ac6d4aa6cb766621d2a41e0dbf06bcc1ae5`, 0 High / 0 Critical (4,305 Medium, 189 Low, 196 Negligible; the same dependency set as the two builds of the Level 2 candidate), Syft 1.51.1 / Grype 0.118.0 (`evidence/image-scan-080714b/`). |
+| Data bundle | built 2026-10-26 19:47–20:38 UTC from the worktree at `080714b` by the unchanged builder (51 min, in parallel with the image build); full hashes, parity and inventory running at the time of this record. |
+| Release manifest and `verify-release.sh` | pending the bundle verification. |
+| Staging on the VM | the unchanged 145 GB image tree copied on the VM from the perf2 release (`cp -a`) into `releases/pubapps-2026-10-uniform-v10-perf3/data/images` before the build finished; deploy tooling synced to `080714b`. Upload pending the manifest. |
+| Activation (staging instance only) | pending. |
+| Responsiveness through the proxy | pending. |
+| Browser acceptance suite through the proxy | pending. |
 
 ### Historical regenerated 21-image candidate
 

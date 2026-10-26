@@ -119,8 +119,9 @@ changes. Half a day in tooling plus the existing verification.
 UMAPs), A5 (compact per-object hover; the violin outlines carry no hover) and A7
 (`activate-release.sh --local-data`, with its recovery test) were implemented in `eba12b4`
 and are deployed on `islet-explorer-dev` (`devislet-explorer.rc.ufl.edu`) since 2026-10-25
-16:03 UTC, under a release name of their own beside production, which stays on
-`pubapps-2026-10-uniform-v10` (`d55680a`). Development is in-house: nothing moves to
+16:03 UTC, under a release name of their own beside production, which stayed on
+`pubapps-2026-10-uniform-v10` (`d55680a`) until the owner promoted the Level 2 candidate
+(Levels 1 and 2 together) on 2026-10-26 20:51 UTC. Development is in-house: nothing moves to
 production as part of this plan until the owner decides. The first image build (`4da5ac4`)
 failed the High/Critical gate on an advisory published after the previous scan
 (body-parser 2.3.0, GHSA-27r3-jxmh-p828); `e10b2ee` pins 2.4.0 (`deploy/BASE_HARDENING.md`).

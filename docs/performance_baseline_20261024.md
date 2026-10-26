@@ -371,6 +371,26 @@ Evidence: `tmp/ufrc-release-20261022/evidence/performance-baseline-20261024/leve
 (`bench-staging-level2-campus.json`, `bench-staging-level2-home.json`, logs) and
 `evidence/browser-staging-0b55429/`.
 
+### On production (2026-10-26 20:51 UTC, same release)
+
+The owner promoted the release to the production instance the same evening ("Push what is
+complete so far to the live app"). Three cold runs from campus against the production
+baseline of 2026-10-24, medians; the acceptance suite through `islet-explorer.rc.ufl.edu`
+passed (36 of 36).
+
+| Step | Production baseline (2026-10-24) | Production, Levels 1 + 2 |
+|---|---:|---:|
+| Plot tab drawn (first screen) | 3.6 s | 2.6 s |
+| WebSocket bytes to first screen | 3.5 MB | 1.2 MB |
+| Plot change | 1.2 s | 0.75 s |
+| Spatial tab | 2.2 s | 1.3 s |
+| Spatial donor change | 1.9 s | 0.44 s |
+| PAGA layout | 1.0 s | 0.93 s |
+| Warm revisit, Plot tab drawn | 3.5 s | 1.8 s |
+
+Evidence: `evidence/performance-baseline-20261024/level2-production/`,
+`evidence/browser-production-0b55429/`.
+
 ## What to do about it
 
 The [performance plans](performance_plans_20261024.md) turn these findings into Plan A
