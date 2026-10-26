@@ -1,7 +1,10 @@
 # ---------- Plot module UI ----------
 # Exports: plot_main_ui(id)
-# All Plot-related inputs are namespaced by this module, except the app-wide synced controls
-# (sidebar_remove_outliers, sidebar_outlier_z, sidebar_donor_palette), whose ids keep their old names.
+# All Plot-related inputs are namespaced by this module, except the app-wide synced control
+# sidebar_donor_palette, whose id keeps its old name. The outlier exclusion (sidebar_remove_outliers,
+# sidebar_outlier_z, show_outlier_table) is no longer rendered (owner, 2026-10-26: "remove the outlier removal
+# function from the app ... make sure all data is shown by default"); app.R keeps its reactives at their defaults
+# (off, z 3), so every object is shown and the server paths that read them are unchanged.
 # Controls sit in the tab's Data / View panels (control_panel(), 2026-10-17), as on every tab; the left
 # sidebar they used to occupy is gone. The hidden Statistics tab reads the same inputs.
 
@@ -36,8 +39,7 @@ plot_main_ui <- function(id, extra_panel = NULL) {
           tags$p(tags$strong("Filters."),
                  " Unchecking an autoantibody removes the Aab+ donors positive for it (ND and T1D donors are not",
                  " affected). The diameter range keeps objects within it; the bin width sets the diameter bins of the",
-                 " Against diameter summary. Exclude zero values applies to the card it names. Exclude outliers drops",
-                 " objects whose robust z-score (median and MAD within each donor status) passes the threshold.")),
+                 " Against diameter summary. Exclude zero values applies to the card it names.")),
         # Four titled groups in equal columns (owner, 2026-10-21: a more organized control center).
         control_grid(
           control_group("Objects and measure",
@@ -76,17 +78,11 @@ plot_main_ui <- function(id, extra_panel = NULL) {
             tags$div(class = "control-group-title control-subtitle", "Selected object"),
             clear_selection_button(ns)
           ),
+          # The outlier exclusion controls that followed these boxes are not rendered since 2026-10-26 (owner):
+          # every object is shown; the server keeps the filter off.
           control_group("Exclusions",
             checkboxInput(ns("exclude_zero_top"), "Exclude zero values (left plot)", value = FALSE),
-            checkboxInput(ns("exclude_zero_dist"), "Exclude zero values (right plot)", value = FALSE),
-            # Non-namespaced: read by app.R as the app-wide outlier setting.
-            tags$div(
-              title = GLOBAL_OUTLIER_TOOLTIP,
-              checkboxInput("sidebar_remove_outliers", "Exclude outliers", value = FALSE)
-            ),
-            sliderInput("sidebar_outlier_z", "Outlier z-threshold",
-                        min = 0.5, max = 10, value = 3, step = 0.5),
-            checkboxInput(ns("show_outlier_table"), "Show excluded-outlier table", value = FALSE)
+            checkboxInput(ns("exclude_zero_dist"), "Exclude zero values (right plot)", value = FALSE)
           )
         )
       ),
@@ -140,7 +136,7 @@ plot_main_ui <- function(id, extra_panel = NULL) {
         )
       )
     ),
-    # The excluded-outlier table, when asked for, sits under the frozen controls rather than inside them.
+    # The excluded-outlier table's slot (empty while the outlier controls are not rendered, 2026-10-26).
     column(12, uiOutput(ns("plot_outlier_info"))),
     # The two plot cards: each plots any plot type (R/plot_types.R, owner 2026-10-21), opening on the two it always
     # showed. The right card widens to fill the row when no extra panel (e.g. the AI chat card) is present.

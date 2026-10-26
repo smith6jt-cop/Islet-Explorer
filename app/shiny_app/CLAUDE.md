@@ -179,6 +179,14 @@ is painted over another; its trend bands are the status colour at alpha 0.15 wha
 boxes are plotly's own traces over the kept values. `plot_pseudo_log_breaks()` gives the Plot cards' pseudo-log
 y-axis ticks (it was a module-local helper).
 
+**Outlier exclusion hidden (owner, 2026-10-26: "remove the outlier removal function from the app. Don't break
+anything, just don't show it and make sure all data is shown by default").** The Exclude outliers box, the z-threshold
+slider and the excluded-outlier table are no longer rendered in the Plot tab's Exclusions group (the zero-value
+boxes stay). `app.R`'s `remove_outliers_global()` / `outlier_z_global()` keep their defaults (off, 3), so
+`flag_outliers()` still runs with `enabled = FALSE` (no object is dropped, no ghost markers, titles carry no badge),
+the CSV provenance reports the filter OFF, and the hidden Statistics tab's reads are unchanged. To bring the
+controls back, restore the three inputs in `mod_plot_ui.R`; nothing else moved.
+
 **Axis range and near-empty measures (owner, 2026-10-21: "these outliers compact the rest of the data").** View
 controls > Axis range defaults to "Fit 99% of objects": `plot_axis_upper()` ends an axis that a few values would
 stretch just above the 99th percentile (or the median of the nonzero values when 99 % are zero), and those objects
@@ -578,7 +586,8 @@ filtered or computed — and `control_panel("View controls", ...)` — how it is
 (`control_panel()` and `CONTROL_PANEL_CSS` in `00_globals.R`). A selector that only chooses what one card
 plots stays on that card (Trajectory heatmap and PAGA, Spatial neighbourhood cards); downloads sit with their
 plot. The Plot tab's old left sidebar column and its layout JS are gone; the synced inputs keep their ids
-(`sidebar_remove_outliers`, `sidebar_outlier_z`, `sidebar_donor_palette`). Spatial's phenotype list now uses the
+(`sidebar_remove_outliers`, `sidebar_outlier_z`, `sidebar_donor_palette`; the first two are no longer rendered,
+see below). Spatial's phenotype list now uses the
 root's own label set (`root_phenotype_labels()`), not the palette, which still carries the frozen typing's labels.
 
 **Control center (owner, 2026-10-21):** "Both the data controls and visual controls are unevenly spaced; create a more

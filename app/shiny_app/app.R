@@ -628,9 +628,12 @@ server <- function(input, output, session) {
     get_donor_color_palette(donor_palette_name())
   })
 
-  # Global outlier filter, set by the Plot tab's Data controls. Defaults to FALSE so the raw distribution renders
-  # out of the box. The Spatial tab's copy went with the outlier box plots it drove (owner review, 2026-10-20), and
-  # the Trajectory tab exposes none. Modules read `remove_outliers_global()` and `outlier_z_global()`.
+  # Global outlier filter. Its controls (the Plot tab's Exclude outliers box, z-threshold slider and outlier table)
+  # are not rendered since 2026-10-26 (owner: "remove the outlier removal function from the app ... make sure all
+  # data is shown by default"), so these reactives stay at their defaults, off and z 3, and every object is shown;
+  # the observers below never fire without the inputs. The Spatial tab's copy went with the outlier box plots it
+  # drove (owner review, 2026-10-20), and the Trajectory tab exposes none. Modules and the hidden Statistics tab
+  # still read `remove_outliers_global()` and `outlier_z_global()`, so nothing downstream changed.
   remove_outliers_rv <- reactiveVal(FALSE)
 
   observeEvent(input$sidebar_remove_outliers, {
@@ -641,7 +644,7 @@ server <- function(input, output, session) {
     isTRUE(remove_outliers_rv())
   })
 
-  # Global outlier z-threshold (the Plot tab's slider). Default 3.0, range 0.5–10, step 0.5; feeds
+  # Global outlier z-threshold (the Plot tab's former slider). Default 3.0, range 0.5–10, step 0.5; feeds
   # `flag_outliers(threshold = …)` for every z-score site.
   outlier_z_rv <- reactiveVal(3.0)
 
