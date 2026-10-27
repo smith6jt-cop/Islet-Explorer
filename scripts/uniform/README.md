@@ -14,7 +14,7 @@ segmentation.
 | InstanSeg channels | DAPI, CD68, CD44, VIM, ECAD, LGALS3, panCK, CD3e, BActin: Senior's 13 with a CODEX counterpart; CD99, HLA-A, CD79a and Iba1 are not in this panel and are dropped, as IO60pLN dropped CD99 | owner, 2026-10-15 |
 | Islet method | Senior v3: per-image islet pixel classifier (`islet_classifier_fit.py`), script 1 (size-adaptive erode/dilate, 50 µm² minimum), step 1b (objects made of whole cell segmentations; Islet / EndocrineCluster / EndocrineSingle) | owner, 2026-10-15; step 1b rule 2026-10-16 |
 | CD99's role in the islet classifier | CHGA | owner, 2026-10-15 |
-| Tissue outlines | Reused unchanged: the original project's Tissue for the original 15, the six-donor review project's for the additions | owner, 2026-10-15 |
+| Tissue outlines | The original project's Tissue for the original 15, reused unchanged; for the five additions, redrawn from the image (`redraw_tissue.py`, every hole filled) after the review project's outlines were found defective (below) | owner, 2026-10-15; additions 2026-10-27 |
 | Peri-islet bands | None in QuPath, as in Senior v3 (per-cell signed distances instead); the app's 20 µm peri regions are computed downstream | Senior v3 |
 
 ## What differs from Senior v3 (CODEX parameters only)
@@ -281,6 +281,39 @@ Owner rulings later on 2026-10-16, applied:
 Run of 2026-10-17 after these rulings and the two open items: `$OUT/typing/summary.csv`, written by
 `typing/summary.py` (per image: kept cells, Beta / Alpha / Delta,
 Excluded and its three kinds, Immune by definition, structure calls, Exocrine, refined Unresolved).
+
+## Additions' Tissue redrawn (owner, 2026-10-27)
+
+The additions' Tissue outlines, reused from the six-donor review project's `Tissue` pixel classifier, were never
+compared with the images until the owner found ND_6232's "horribly inaccurate" (2026-10-26; standing rule in the root
+CLAUDE.md). Measured against DAPI (`tissue_qc.py`): ND_6232's outline held 39 % of the nucleated tissue (the original
+15: 93.9-98.9 %), half the other donors' cells per mm2, and 89 % of its endocrine objects touched it; ND_6539, Aab_6558,
+Aab_6090 and T1D_6520 held 289-3,525 holes under 500 um2 each (the 15: none). Cell detection, islet objects and
+structures run only inside Tissue.
+
+- `redraw_tissue.py` draws Tissue from the image: DAPI (nuclei) or ColIV / VIM / SMA (stroma) at the original
+  classifier's 3.02 um, pieces under 80 um2 removed, clipped to the image less 5 um as the original Tissue was. Without
+  hole filling the same rule reproduces the original 15 outlines at Dice 0.958-0.991. The owner approved the outlines
+  "if all holes are filled", so every hole is filled. The files are `tissue_outlines/<image>.geojson` (tracked despite
+  the `*.geojson` ignore rule), named in `cohort.csv`'s `tissue_outline`; `run_uniform.py`'s `tissue_export` copies
+  such a file instead of exporting from the source project and records both checksums. The annotation must be unnamed:
+  a named Tissue changes every cell's `Parent` from "Annotation (Tissue)", which the pipeline keys tissue cells on, and
+  the first import (named) left every cell ineligible; the runner now refuses a named outline and `tissue_qc.py`
+  reports the proportion of cells with that Parent.
+- The additions' Lymphatic objects (KEEP_CLASSIFIER) were the original Lymphatics classifier's objects inside the old
+  outlines; `additions_lymphatics.py` (with `qupath/lymphatics_in_tissue.groovy`, read-only) draws them again with the
+  same classifier file inside the new Tissue, before `structure_thresholds.py make`.
+- Run `data/development/uniform-20donor-20261027` is a full copy of `uniform-20donor-20261015` (which v10 came from and
+  is untouched), with the five images reset (`superseded/review-tissue-outlines-20261027/`, and
+  `superseded/named-tissue-annotation-20261027/` for the named-outline pass) and run again from `tissue_export`. Their
+  new cells changed the cohort scale's insulin and somatostatin floors (883 -> 817, 2,005 -> 1,916), so all 20 fits and
+  islet chains ran again (the 15 from their pre-islet snapshots), then typing (`redsea_cells.py --force` for the five)
+  and `assemble_uniform.py` into `data/development/uniform-20donor-20261027-v11`.
+- After the rerun the five hold 99.6-99.8 % of their nucleated tissue, no holes, 11,345-12,607 cells per mm2 of
+  nucleated tissue (the 15: 10,676-14,171) and 1.1-5.9 % of objects touching the outline. ND_6232: 93,727 -> 172,332
+  cells. The 15's cell counts are unchanged; their typed counts move by 0-40 endocrine and up to about 120 immune cells
+  per image (the cohort scale and UniFORM alignment include the five), and four of them changed by 1-6 objects.
+  Checks and renders: `output/tissue_outline_check_20261026/`.
 
 ## App root (P4), 2026-10-16
 

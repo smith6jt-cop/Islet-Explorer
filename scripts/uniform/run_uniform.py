@@ -355,7 +355,10 @@ class Runner:
             hist.mkdir(parents=True, exist_ok=True)
             rec.rename(hist / f'{step.id}.{time.time_ns()}.json')
         t0 = time.time()
-        ok = self.run_fit(tag, step) if step.kind == 'fit' else self.run_qupath(tag, step)
+        if step.id == 'tissue_export' and self.rows[tag].get('tissue_outline'):
+            ok = self.copy_tissue_outline(tag, step)
+        else:
+            ok = self.run_fit(tag, step) if step.kind == 'fit' else self.run_qupath(tag, step)
         if ok and step.post:
             ok = self.post(tag, step)
         print(f'{tag}: {step.id}: {"PASS" if ok else "FAIL"} ({time.time() - t0:.0f}s)', flush=True)
@@ -442,6 +445,33 @@ class Runner:
         return rc == 0 and self.passed(tag, step.id)
 
     # ---- Python steps -----------------------------------------------------------------------------------------
+    def copy_tissue_outline(self, tag: str, step: Step) -> bool:
+        """tissue_export for an image whose cohort row names a redrawn outline (redraw_tissue.py, owner 2026-10-27):
+        the file is copied in place of the source project's Tissue, and the record keeps both checksums."""
+        src = REPO / self.rows[tag]['tissue_outline']
+        if not src.is_file():
+            print(f'{tag}: {step.id}: REFUSED, redrawn outline missing: {src}', flush=True)
+            return False
+        feats = json.loads(src.read_text())['features']
+        # A named annotation changes every cell's `Parent` from "Annotation (Tissue)", which the pipeline keys tissue
+        # cells on (islet_cell_test.TISSUE_PARENT): the first redraw import of 2026-10-27 left all cells ineligible.
+        if len(feats) != 1 or (feats[0].get('properties') or {}).get('name') or \
+                ((feats[0].get('properties') or {}).get('classification') or {}).get('name') != 'Tissue':
+            print(f'{tag}: {step.id}: REFUSED, {src} must hold one unnamed Tissue annotation', flush=True)
+            return False
+        dst = Path(self.subst(step.args[0], tag))
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dst)
+        ok = sha256(src) == sha256(dst)
+        rec = {'schema': 'uniform.tissue_outline/1', 'status': 'pass' if ok else 'fail', 'step': step.id, 'tag': tag,
+               'passes': 'redrawn', 'source': {'path': str(src), 'sha256': sha256(src)},
+               'output': {'path': str(dst), 'sha256': sha256(dst)},
+               'script': {'path': str(HERE / 'redraw_tissue.py'), 'sha256': sha256(HERE / 'redraw_tissue.py')},
+               'repo_git': {'head': git_head()}, 'time': time.strftime('%Y-%m-%dT%H:%M:%S%z')}
+        self.record(tag, step.id).parent.mkdir(parents=True, exist_ok=True)
+        self.record(tag, step.id).write_text(json.dumps(rec, indent=2) + '\n')
+        return ok
+
     def run_fit(self, tag: str, step: Step) -> bool:
         scale = self.ensure_cohort_scale()
         if scale is None:
