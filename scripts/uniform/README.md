@@ -367,7 +367,7 @@ structures run only inside Tissue.
   never put to the owner) and the Exocrine fallthrough are gone. Exocrine is a rule: E-cadherin or panCK >= 0.10. A
   cell no rule claims is placed by its highest marker (`codex_typing.TOP_MARKER_PROFILE`: lineage markers and CD45,
   scaled before the clip): CD3e T cell, CD20 B cell, CD68 or CD163 macrophage, E-cadherin or panCK Exocrine; ColIV
-  excludes it (`top_marker_ColIV`); any other marker labels it `<marker>+` (`TOP_MARKER_LABELS`, 14 labels).
+  excludes it (`top_marker_ColIV`); any other marker labels it `<marker>+` (`TOP_MARKER_LABELS`, 13 labels).
 - **Zero floor for markers most cells express** (owner: "Floor at zero"). The scale's floor is the most common
   positive value; for E-cadherin, KRT8-18, beta-catenin, beta-actin and EpCAM, whose background REDSEA already
   compensates to 0 (17-28 % of cells), that is the expressing population: E-cadherin's floor 34,035 sat above 85 % of
