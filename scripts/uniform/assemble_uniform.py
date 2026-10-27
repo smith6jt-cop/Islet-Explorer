@@ -68,7 +68,9 @@ MARKERS = ['CD31', 'CD8a', 'CD3e', 'SMA', 'CD4', 'CD34', 'HLADR', 'PDPN', 'panCK
 # Macrophages by marker profile since 2026-10-27 (codex_typing.MACROPHAGE_PROFILE): 'Macrophage' became twelve labels.
 MACROPHAGES = tuple(CT.macrophage_labels())
 LABELS = ['Beta cell', 'Alpha cell', 'Delta cell', 'CHGA+ hormone-negative', 'Endocrine', 'CD8a Tcell', 'CD4 Tcell',
-          'T cell', 'B cell', *MACROPHAGES, 'Immune', 'Exocrine']
+          'T cell', 'B cell', *MACROPHAGES, 'Immune', 'Exocrine', *CT.TOP_MARKER_LABELS]
+# Since 2026-10-27 no class is a default: a cell no rule claims and its top marker cannot place carries that marker's
+# label, '<marker>+' (codex_typing.TOP_MARKER_LABELS); Exocrine is a rule.
 ENDOCRINE = ('Beta cell', 'Alpha cell', 'Delta cell', 'CHGA+ hormone-negative', 'Endocrine')
 IMMUNE = ('CD8a Tcell', 'CD4 Tcell', 'T cell', 'B cell', *MACROPHAGES, 'Immune')
 # The `<marker>_pos` flags of cell_distance.csv cover every panel marker (owner, 2026-10-20: the distance profile
@@ -123,6 +125,8 @@ def app_labels(calls: pd.DataFrame, immune: pd.DataFrame) -> np.ndarray:
               'Excluded': 'Excluded'}
     for k, v in direct.items():
         out[cls == k] = v
+    for k in CT.TOP_MARKER_LABELS:
+        out[cls == k] = k
     imm = cls == 'Immune'
     sub = calls[['object_id']].merge(immune, on='object_id', how='left')
     ic = sub['immune_class'].fillna('').to_numpy(dtype=object)

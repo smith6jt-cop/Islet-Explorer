@@ -359,6 +359,30 @@ structures run only inside Tissue.
   are superscripts. Macrophages 72,041 -> 109,589 (25,212 from Exocrine, 12,192 from Immune, 144 formerly Excluded,
   all CD68-CD163+); `cd8_to_macro_ratio` counts all twelve. Classify onward reran (v13's calls, refine and immune in
   `superseded/typing-v13-20261027/`); root `data/development/uniform-20donor-20261027-v14`.
+- **No default class** (owner: "I don't want any more misclassified cells falling through the cracks. The established
+  cell typing should classify cells appropriately and there should be no default of any class such as exocrine or
+  immune. If typing has 'left over' cells and a check of top markers can't place them, call them by their top marker
+  e.g. CD45+"; top marker at "Any level"; "ColIV cannot be a cell type, if it is highest, it is a reason for
+  exclusion"). Senior's supporting tier (Immune when CD4, CD8a, CD163, HLADR or LGALS3 >= 0.8715 and no rule fired;
+  never put to the owner) and the Exocrine fallthrough are gone. Exocrine is a rule: E-cadherin or panCK >= 0.10. A
+  cell no rule claims is placed by its highest marker (`codex_typing.TOP_MARKER_PROFILE`: lineage markers and CD45,
+  scaled before the clip): CD3e T cell, CD20 B cell, CD68 or CD163 macrophage, E-cadherin or panCK Exocrine; ColIV
+  excludes it (`top_marker_ColIV`); any other marker labels it `<marker>+` (`TOP_MARKER_LABELS`, 14 labels).
+- **Zero floor for markers most cells express** (owner: "Floor at zero"). The scale's floor is the most common
+  positive value; for E-cadherin, KRT8-18, beta-catenin, beta-actin and EpCAM, whose background REDSEA already
+  compensates to 0 (17-28 % of cells), that is the expressing population: E-cadherin's floor 34,035 sat above 85 % of
+  cells (median 9,044), so only 18-27 % of the former Exocrine cells reached 0.10 in any image. Their floor is now 0
+  (`ZERO_FLOOR_MARKERS`); `scale.parquet` keeps the former floor as `mode_floor`. Owner, the same day: the change
+  applies only to cells the rules leave ("I thought we were addressing cells that were not already typed"): the
+  immune rules, their subtype step and the T-cell tie review read `classify.rule_scale` (the mode floor), so all
+  318,869 cells v14's rules typed keep their v14 call, immune class and subtype (checked cell by cell). A first run
+  with the zero floor everywhere moved ~26,000 rule-typed immune cells to Exocrine and was discarded.
+- The 2,878,457 cells v14 left to its defaults (Exocrine fallthrough, supporting tier, retyped ties) became:
+  Exocrine 1,876,363 (1,603,778 by the rule, 272,585 by top marker), Excluded 322,174 (319,287 ColIV), B cell by
+  CD20 62,090, macrophage 21,655, T cell 5,762, and by top marker LGALS3+ 143,349, CD34+ 135,679, VIM+ 92,949, CD31+
+  53,670, B3TUBB+ 30,452, CD4+ 28,057, SMA+ 23,698, PDPN+ 21,239, CD45+ 16,649, INS+ 14,917, GCG+ 11,983, CD8a+ 9,818,
+  SST+ 7,915. Typing reran from `align_scale.py` (v14's typing in `superseded/typing-v14-20261027/`); root
+  `data/development/uniform-20donor-20261027-v15` (2,862,676 cells analyzed, 334,650 excluded).
 
 ## App root (P4), 2026-10-16
 

@@ -14,7 +14,8 @@ Port of Islet-Explorer-Senior-v3 `core/phenocycler/scripts/celltype/run_step2.py
      usability.acquisition_group_ratio; here the groups are the original 15 and the additions) AND the shift
      leaves the background modes more than 0.10 apart in log (run_step2.REFUSED);
   4. the cohort scale per marker: floor = the aligned background mode (512-bin log1p histogram of positive
-     values), top = the cohort p99.9, over a seeded 200,000-cell sample per donor; scaled = clip((x - floor) /
+     values; 0 for codex_typing.ZERO_FLOOR_MARKERS, owner 2026-10-27), top = the cohort p99.9, over a seeded
+     200,000-cell sample per donor; scaled = clip((x - floor) /
      (top - floor), 0, 1).
 
 CODEX difference: no reference donor is pinned (Senior pinned the reference donors its scale was first measured
@@ -194,14 +195,17 @@ def build_scale(aligned: dict, markers: list[str]) -> pd.DataFrame:
             continue
         v = np.concatenate(chunks)
         pos = v[np.isfinite(v) & (v > 0)]
-        floor = 0.0
+        mode_floor = 0.0
         if len(pos) >= 1000:
             h, e = np.histogram(np.log1p(pos), bins=512)
-            floor = float(np.expm1(e[1:][int(np.argmax(h[1:])) + 1]))
+            mode_floor = float(np.expm1(e[1:][int(np.argmax(h[1:])) + 1]))
+        # owner, 2026-10-27: 0 for the markers most cells express; the mode floor is kept for the immune rules'
+        # epithelial condition (classify.rule_scale), so no rule-typed cell changes with it
+        floor = 0.0 if m in CT.ZERO_FLOOR_MARKERS else mode_floor
         fin = v[np.isfinite(v)]
         top = float(np.percentile(fin, SCALE_Q)) if len(fin) else np.nan
         rows.append({'marker': m, 'floor': floor, 'top': top, 'span': top - floor if np.isfinite(top) else np.nan,
-                     'n': int(len(fin))})
+                     'n': int(len(fin)), 'mode_floor': mode_floor})
     return pd.DataFrame(rows).set_index('marker')
 
 

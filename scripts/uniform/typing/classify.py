@@ -72,6 +72,26 @@ def apply_scale(values, markers, scale):
     return np.clip((np.asarray(values, dtype=np.float32) - lo) / span, 0.0, 1.0)
 
 
+def rule_scale(scale: pd.DataFrame) -> pd.DataFrame:
+    """The scale the immune rules read (owner, 2026-10-27: the zero floor applies only to cells the rules leave): the
+    codex_typing.ZERO_FLOOR_MARKERS keep their background-mode floor here, so rule-typed cells are as before."""
+    s = scale.copy()
+    if 'mode_floor' in s.columns:
+        for m in CT.ZERO_FLOOR_MARKERS:
+            if m in s.index:
+                s.loc[m, 'floor'] = s.loc[m, 'mode_floor']
+                s.loc[m, 'span'] = s.loc[m, 'top'] - s.loc[m, 'mode_floor']
+    return s
+
+
+def rule_value(values: pd.DataFrame, m: str) -> np.ndarray:
+    """A marker as the immune rules read it: values.attrs['rules'] (rule_scale) where it holds the marker."""
+    rv = values.attrs.get('rules')
+    if rv is not None and m in rv.columns:
+        return rv.loc[values.index, m].to_numpy(dtype=float)
+    return values[m].to_numpy(dtype=float) if m in values else np.full(len(values), np.nan)
+
+
 def scaled_markers(aligned: pd.DataFrame, wanted: set, scale: pd.DataFrame) -> pd.DataFrame:
     """Scaled values by name; an absent marker is a column of NaN. The unscaled values ride along as
     attrs['expressed'] for correction C."""
@@ -184,7 +204,7 @@ def rule_evidence(values: pd.DataFrame, rule: tuple):
     contradicted = np.zeros(n, bool)
     unknown = np.zeros(n, bool)
     for m in all_of:
-        v = values[m].to_numpy(dtype=float) if m in values else np.full(n, np.nan)
+        v = rule_value(values, m)
         measured = np.isfinite(v)
         contradicted |= measured & (v < CT.IMMUNE_REQUIRE_MIN)
         unknown |= ~measured
@@ -196,14 +216,14 @@ def rule_evidence(values: pd.DataFrame, rule: tuple):
         if not members:
             unknown[:] = True
             continue
-        v = values[members].to_numpy(dtype=float)
+        v = np.column_stack([rule_value(values, m) for m in members])
         measured = np.isfinite(v)
         witness = (measured & (v >= CT.IMMUNE_REQUIRE_MIN)).any(axis=1)
         complete = measured.all(axis=1) & (len(members) == len(group))
         contradicted |= ~witness & complete
         unknown |= ~witness & ~complete
     for m in none_of:
-        v = values[m].to_numpy(dtype=float) if m in values else np.full(n, np.nan)
+        v = rule_value(values, m)
         measured = np.isfinite(v)
         contradicted |= measured & (v >= CT.IMMUNE_REQUIRE_MIN)
         unknown |= ~measured
@@ -324,18 +344,39 @@ def tissue_chain(values, rules, cell_class, definition, resolved_by, rule_audit=
         definition[hit] = phenotype
         resolved_by[hit] = 'definition_added'
         unclaimed &= ~hit
-    tier = [m for m in CT.BOTTOM_TIER_IMMUNE if m in values.columns]
+    # No default class (owner, 2026-10-27; codex_typing.TOP_MARKER_PLACEMENT): Senior's supporting tier and the
+    # Exocrine fallthrough are gone. Exocrine is a rule (ECAD or panCK at the immune level); a cell no rule claims is
+    # placed by its top marker when that marker defines a class, otherwise labeled by it ('<marker>+').
     exocrine = [m for m in CT.SUBPANEL['exocrine'] if m in values.columns]
-    if tier:
-        clears = np.nanmax(values[tier].to_numpy(), axis=1) >= CT.SUPPORTING_LEVEL
-        speaks_exocrine = (np.nanmax(values[exocrine].to_numpy(), axis=1) >= CT.SUPPORTING_LEVEL
-                           if exocrine else np.zeros(n, bool))
-        hit = unclaimed & clears & ~speaks_exocrine
-        cell_class[hit] = 'Immune'
-        resolved_by[hit] = 'supporting'
+    if exocrine:
+        hit = unclaimed & (values[exocrine].to_numpy(dtype=float) >= CT.IMMUNE_REQUIRE_MIN).any(axis=1)
+        cell_class[hit] = 'Exocrine'
+        resolved_by[hit] = 'definition_exocrine'
         unclaimed &= ~hit
-    cell_class[unclaimed] = 'Exocrine'
-    resolved_by[unclaimed] = 'fallthrough'
+    idx = np.flatnonzero(unclaimed)
+    if len(idx):
+        scale = values.attrs['scale']
+        markers = [m for m in CT.TOP_MARKER_PROFILE if m in values.attrs['expressed'].columns and m in scale.index]
+        U = unclipped(values.iloc[idx], markers, scale)
+        if np.isnan(U).all(axis=1).any():
+            raise ValueError('a left-over cell with no measured profile marker')
+        top = np.asarray(markers, dtype=object)[np.argmax(np.where(np.isnan(U), -np.inf, U), axis=1)]
+        place = np.asarray([CT.TOP_MARKER_PLACEMENT.get(m, '') for m in top], dtype=object)
+        exo = place == 'Exocrine'
+        imm = (place != '') & ~exo
+        dropped = np.isin(top, CT.TOP_MARKER_EXCLUDE)
+        named = (place == '') & ~dropped
+        cell_class[idx[exo]] = 'Exocrine'
+        cell_class[idx[imm]] = 'Immune'
+        definition[idx[imm]] = place[imm]
+        cell_class[idx[dropped]] = 'Excluded'          # reason: top_marker_reasons()
+        cell_class[idx[named]] = np.asarray([f'{m}+' for m in top[named]], dtype=object)
+        resolved_by[idx] = 'top_marker'
+
+
+def top_marker_reasons(cell_class, resolved_by, reason):
+    """A cell the top-marker step excluded (codex_typing.TOP_MARKER_EXCLUDE) carries its reason."""
+    reason[(resolved_by == 'top_marker') & (cell_class == 'Excluded')] = CT.TOP_MARKER_EXCLUDED_REASON
 
 
 def finish(in_islet, cell_class, exocrine_measured):
@@ -349,7 +390,7 @@ def finish(in_islet, cell_class, exocrine_measured):
 
 def unclipped(values: pd.DataFrame, markers, scale: pd.DataFrame) -> np.ndarray:
     """The cohort-scaled values before the 0-1 clip, so values clipped together stay ordered."""
-    raw = values.attrs['expressed'][markers].to_numpy(dtype=float)
+    raw = values.attrs['expressed'].loc[values.index, markers].to_numpy(dtype=float)
     span = scale.loc[markers, 'span'].to_numpy(float)
     span = np.where(np.isfinite(span) & (span > 0), span, 1.0)
     return (raw - scale.loc[markers, 'floor'].to_numpy(float)) / span
@@ -363,7 +404,7 @@ def retype_tied_t_cells(values, scale, rules, cell_class, definition, resolved_b
     t_cell = (cell_class == 'Immune') & (definition == 'Imm-T-cell')
     tied = t_cell & (values[a].to_numpy(dtype=float) == values[b].to_numpy(dtype=float))
     markers = [m for m in CT.T_TIE_PROFILE_MARKERS if m in values.attrs['expressed'].columns and m in scale.index]
-    U = unclipped(values, markers, scale)
+    U = unclipped(values, markers, rule_scale(scale))      # a rule step: the rules' scale (owner, 2026-10-27)
     top = np.asarray(markers, dtype=object)[np.argmax(np.where(np.isnan(U), -np.inf, U), axis=1)]
     retype = tied & ~np.isin(top, CT.T_TIE_KEEP_MARKERS)
     idx = np.flatnonzero(retype)
@@ -373,7 +414,9 @@ def retype_tied_t_cells(values, scale, rules, cell_class, definition, resolved_b
         df = np.full(len(idx), '', dtype=object)
         rb = np.full(len(idx), '', dtype=object)
         tissue_chain(values.iloc[idx], without_t, cc, df, rb)
-        reason[idx] = finish(in_islet[idx], cc, np.asarray(exo_measured)[idx])
+        rs = finish(in_islet[idx], cc, np.asarray(exo_measured)[idx])
+        top_marker_reasons(cc, rb, rs)
+        reason[idx] = rs
         cell_class[idx], definition[idx] = cc, df
         resolved_by[idx] = np.asarray(['tie_profile_' + str(r) for r in rb], dtype=object)
     return {'tied': int(tied.sum()), 'kept_t_cell': int((tied & ~retype).sum()), 'retyped': int(len(idx)),
@@ -391,6 +434,7 @@ def run_chain(values, rules, structure_class, structure_resolved, in_islet, endo
     resolved_by[hit] = endocrine_route[hit]
     tissue_chain(values, rules, cell_class, definition, resolved_by, rule_audit, unavailable_count)
     reason = finish(in_islet, cell_class, exocrine_measured)
+    top_marker_reasons(cell_class, resolved_by, reason)
     return cell_class, definition, resolved_by, reason
 
 
@@ -438,7 +482,14 @@ def classify(tag: str, ctx: pd.DataFrame, aligned: pd.DataFrame, scale: pd.DataF
         wanted |= set(markers)
     for all_of, any_of, none_of in list(rules.values()) + list(CT.ADDED_IMMUNE_RULES.values()):
         wanted |= set(all_of) | set(none_of) | {m for g in any_of for m in g}
+    wanted |= set(CT.TOP_MARKER_PROFILE)
     values = scaled_markers(aligned, wanted, scale)
+    values.attrs['scale'] = scale
+    zero = set(CT.ZERO_FLOOR_MARKERS) & set(values.columns) & set(aligned.columns)
+    if zero:
+        rv = scaled_markers(aligned, zero, rule_scale(scale))
+        rv.attrs = {}
+        values.attrs['rules'] = rv
     n = len(ctx)
     in_islet = ctx['in_islet'].to_numpy()
     A = {'image': tag, 'n_cells': n, 'n_in_islet': int(in_islet.sum())}

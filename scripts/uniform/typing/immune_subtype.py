@@ -101,13 +101,17 @@ def main() -> int:
     (typ / 'immune').mkdir(parents=True, exist_ok=True)
     summary = {}
     for t in tags:
-        calls = pd.read_parquet(typ / 'calls' / f'{t}.parquet', columns=['object_id', 'cell_class', 'resolved_by'])
+        calls = pd.read_parquet(typ / 'calls' / f'{t}.parquet', columns=['object_id', 'cell_class', 'resolved_by',
+                                                                          'immune_definition'])
         immune = calls[calls['cell_class'] == 'Immune'][['object_id']]
         aligned = pd.read_parquet(typ / 'aligned' / f'{t}.parquet')
         markers = [m for m in scale.index if m in aligned.columns
                    and np.isfinite(aligned[m].to_numpy(float)).any()]
         values = immune.merge(aligned[['object_id'] + markers], on='object_id', how='left', validate='one_to_one')
-        scaled = pd.DataFrame(CL.apply_scale(values[markers].to_numpy(), markers, scale), columns=markers)
+        # the immune rules read classify.rule_scale (owner, 2026-10-27); CD8a, CD4 and the macrophage profile
+        # markers are the same on both scales
+        scaled = pd.DataFrame(CL.apply_scale(values[markers].to_numpy(), markers, CL.rule_scale(scale)),
+                              columns=markers)
         n = len(values)
         call2, n2, other2, undec2, skip2 = resolve(n, level2, rules, scaled, set(markers), specificity)
         # a T cell withdrawn on its whole profile (classify.retype_tied_t_cells) is never a T cell here either
@@ -118,6 +122,11 @@ def main() -> int:
                                         scaled[withdrawn].reset_index(drop=True), set(markers), specificity)
             call2, n2, other2, undec2 = call2.copy(), n2.copy(), other2.copy(), undec2.copy()
             call2[withdrawn], n2[withdrawn], other2[withdrawn], undec2[withdrawn] = c2, m2, o2, u2
+        # a cell placed by its top marker (classify.tissue_chain, owner 2026-10-27) keeps that class here
+        placed = calls.loc[calls['resolved_by'].str.endswith('top_marker')]     # also 'tie_profile_top_marker'
+        placed = placed.set_index('object_id')['immune_definition']
+        by_top = values['object_id'].map(placed).fillna('').to_numpy(dtype=object)
+        call2 = np.where(by_top != '', by_top, call2)
         out = pd.DataFrame({'object_id': values['object_id'], 'immune_class': call2, 'immune_class_matches': n2,
                             'immune_class_also': other2, 'immune_class_undecided': undec2,
                             'immune_subtype': None, 'immune_subtype_matches': 0, 'immune_subtype_also': '',

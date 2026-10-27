@@ -136,6 +136,24 @@ LINEAGE_MARKERS = {
 SUPPORTING_ONLY = ('LGALS3',)   # Senior: M2Gal3, CD11b, FOXP3, CD56, TP63
 IDENTITY_MARKERS = tuple(sorted({m for ms in LINEAGE_MARKERS.values() for m in ms}))
 T_TIE_PROFILE_MARKERS = IDENTITY_MARKERS + ('CD45',)
+# Owner, 2026-10-27: "The established cell typing should classify cells appropriately and there should be no default
+# of any class such as exocrine or immune. If typing has 'left over' cells and a check of top markers can't place
+# them, call them by their top marker e.g. CD45+". Exocrine is a rule (ECAD or panCK at IMMUNE_REQUIRE_MIN), Senior's
+# supporting tier is gone, and a cell no rule claims is placed by its highest marker among TOP_MARKER_PROFILE
+# (scaled, before the clip) when that marker is a class's defining marker, otherwise labeled '<marker>+'.
+TOP_MARKER_PROFILE = T_TIE_PROFILE_MARKERS
+# Owner, 2026-10-27 ("Floor at zero"): for markers most cells express, the most common positive value is the expressing
+# population, not background (REDSEA already compensates their background to 0, 17-28 % of cells); align_scale.py's
+# floor sat above 71-86 % of cells (ECAD 34,035 against a median of 9,044). Their cohort-scale floor is 0.
+ZERO_FLOOR_MARKERS = ('ECAD', 'KRT8-18', 'BCatenin', 'BActin', 'epCAM')
+TOP_MARKER_PLACEMENT = {'CD3e': 'Imm-T-cell', 'CD20': 'Imm-B-cell', 'CD68': 'Imm-macrophage', 'CD163': 'Imm-macrophage',
+                        'ECAD': 'Exocrine', 'panCK': 'Exocrine'}
+# The top marker is taken at any level (owner: "Any level"). ColIV is extracellular matrix: "ColIV cannot be a cell
+# type, if it is highest, it is a reason for exclusion".
+TOP_MARKER_EXCLUDE = ('ColIV',)
+TOP_MARKER_EXCLUDED_REASON = 'top_marker_ColIV'
+TOP_MARKER_LABELS = tuple(f'{m}+' for m in TOP_MARKER_PROFILE
+                          if m not in TOP_MARKER_PLACEMENT and m not in TOP_MARKER_EXCLUDE)
 
 # The hormone level, a departure (2026-10-17). Senior admits a cell inside an endocrine object when max(scaled INS,
 # GCG, SST) clears the tissue p99 of that max. Two changes:
