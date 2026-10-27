@@ -97,7 +97,7 @@ spatial_ui <- function(id) {
             tags$p(tags$strong("Composition"),
                    " shows each Leiden cluster's mean core phenotype proportions, for the checked donor statuses and",
                    " phenotypes: what each cluster is. Its Endocrine Beta, Alpha, Delta and CHGA⁺ hormone-negative bars restate",
-                   " the proportions the clusters are built from; the immune and residual bars do not."),
+                   " the proportions the clusters are built from; the other bars do not."),
             tags$p(tags$strong("Donor status"), " and ", tags$strong("Donor"),
                    " show the proportion of each cluster's objects from each donor status or each donor: which",
                    " composition states are disease-associated, and whether a cluster belongs to a few donors. The",

@@ -7,7 +7,7 @@
               "phenotype_choices_named", "extract_phenotype_from_column", "phenotype_label_html",
               "PHENOTYPE_DISPLAY_NAMES", "MACROPHAGE_MARKERS", "MACROPHAGE_KEY_PATTERN", "macrophage_signs",
               "macrophage_collapse", "phenotype_members", "macrophage_collapse_comp", "remap_macrophage_selection",
-              "macrophage_marker_checkboxes",
+              "macrophage_marker_checkboxes", "TOP_MARKER_LABELS",
               "PHENOTYPE_GROUP_ORDER", "PHENOTYPE_GROUP_AGGREGATES", "phenotype_group", "is_phenotype_aggregate",
               "phenotype_aggregate_members", "phenotype_aggregates_for", "phenotype_groups_split",
               "phenotype_grouped_choices", "phenotype_group_checkboxes", "add_phenotype_aggregate_columns")
@@ -15,6 +15,7 @@
     if (is.call(e) && identical(e[[1]], as.name("<-")) && as.character(e[[2]]) %in% wanted) eval(e, env)
   }
   env$root_has_marker_profile_labels <- function() TRUE
+  env$root_has_top_marker_labels <- function() TRUE
   env
 }
 
@@ -129,4 +130,15 @@ test_that("merged object columns sum the members and recompute the band enrichme
   expect_equal(out[["min_dist_Macrophage"]], c(5, NA))
   split <- env$macrophage_collapse_comp(comp, env$MACROPHAGE_MARKERS)
   expect_equal(split[[paste0("prop_", env$macrophage_collapse(L[1], env$MACROPHAGE_MARKERS))]], c(0.1, 0.2))
+})
+
+test_that("top-marker labels form their own group, last, with a superscript and no broad name", {
+  env <- .label_env()
+  labels <- c("Beta cell", "Exocrine", "CD45+", "VIM+", "SMA+", "CD4 Tcell")
+  groups <- env$phenotype_groups_split(labels)
+  expect_equal(names(groups), c("Endocrine", "T Cell", "Other", "Top marker only"))
+  expect_equal(groups[["Top marker only"]], c("SMA+", "VIM+", "CD45+"))   # TOP_MARKER_LABELS order
+  expect_equal(env$phenotype_text(c("CD45+", "CD8a+", "B3TUBB+")), c("CD45\u207a", "CD8a\u207a", "B3TUBB\u207a"))
+  env$root_has_top_marker_labels <- function() FALSE        # the frozen root's SMA+ is smooth muscle, not a top marker
+  expect_equal(env$phenotype_group("SMA+"), "Other")
 })

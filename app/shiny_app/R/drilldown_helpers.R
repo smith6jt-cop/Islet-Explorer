@@ -154,10 +154,30 @@ with_macrophage_family <- function(pal) {
   family <- macrophage_family(pal[["Macrophage"]])
   c(pal[seq_len(i)], family, macrophage_key_colors(pal[["Macrophage"]], family), pal[-seq_len(i)])
 }
+# Top-marker labels (root v15; TOP_MARKER_LABELS in 00_globals.R): a muted family -- low chroma, hues around the
+# wheel, two alternating lightnesses -- so they read apart from each other but not as the saturated endocrine,
+# immune or macrophage colors. On a root that assigns them, "SMA+" takes its family color (the frozen root's "SMA+",
+# smooth muscle, keeps its own).
+top_marker_family <- function() {
+  n <- length(TOP_MARKER_LABELS)
+  stats::setNames(grDevices::hcl(h = seq(15, 345, length.out = n), c = 26, l = rep(c(50, 68), length.out = n)),
+                  TOP_MARKER_LABELS)
+}
+with_top_marker_family <- function(pal) {
+  family <- top_marker_family()
+  assigned <- isTRUE(tryCatch(root_has_top_marker_labels(), error = function(e) FALSE))
+  add <- if (assigned) family else family[setdiff(names(family), names(pal))]
+  pal[names(add)] <- add
+  pal
+}
 PHENOTYPE_COLORS <- with_macrophage_family(PHENOTYPE_COLORS)
 PHENOTYPE_COLORS_HIGH_CONTRAST <- with_macrophage_family(PHENOTYPE_COLORS_HIGH_CONTRAST)
 PHENOTYPE_COLORS_COLORBLIND <- with_macrophage_family(PHENOTYPE_COLORS_COLORBLIND)
 PHENOTYPE_COLORS_MAX_DISTINCT <- with_macrophage_family(PHENOTYPE_COLORS_MAX_DISTINCT)
+PHENOTYPE_COLORS <- with_top_marker_family(PHENOTYPE_COLORS)
+PHENOTYPE_COLORS_HIGH_CONTRAST <- with_top_marker_family(PHENOTYPE_COLORS_HIGH_CONTRAST)
+PHENOTYPE_COLORS_COLORBLIND <- with_top_marker_family(PHENOTYPE_COLORS_COLORBLIND)
+PHENOTYPE_COLORS_MAX_DISTINCT <- with_top_marker_family(PHENOTYPE_COLORS_MAX_DISTINCT)
 
 # ── Palette registry and accessor ────────────────────────────────────────
 PHENOTYPE_PALETTES <- list(
