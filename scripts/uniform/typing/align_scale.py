@@ -6,6 +6,7 @@ Port of Islet-Explorer-Senior-v3 `core/phenocycler/scripts/celltype/run_step2.py
 `run_step3.build_scale` / `score.marker_scale`:
 
   1. each marker is read in its own compartment (codex_typing.COMPARTMENT) from `typing/redsea/<image>.parquet`;
+     a cytoplasm marker of a cell whose nucleus fills it is read over the whole cell (owner, 2026-10-27);
   2. UniFORM's automatic_registration aligns each marker's background mode across the 20 images (one image per
      donor) as a rigid log-shift -- one multiplicative factor per (donor, marker); the histograms are
      UniFORM's own (log of values >= 1, common range, 1024 bins) over the analysis-eligible cells;
@@ -108,6 +109,11 @@ def read_measured(out: Path, tags: list[str]) -> tuple[dict, list[str]]:
         cols = {f'{CT.COMPARTMENT[m]}__{m}': m for m in CT.COMPARTMENT
                 if f'{CT.COMPARTMENT[m]}__{m}' in src.columns and m not in CT.NOT_FOR_TYPING}
         f = src[QC_COLUMNS + list(cols)].rename(columns=cols)
+        # Owner, 2026-10-27: no cell is without cytoplasm. Where the nucleus fills the cell REDSEA leaves the
+        # Cytoplasm compartment NaN; a cytoplasm-measured marker is then read over the whole cell (REDSEA's Cell).
+        for m in cols.values():
+            if CT.COMPARTMENT[m] == 'Cytoplasm' and f'Cell__{m}' in src.columns:
+                f[m] = f[m].where(f[m].notna(), src[f'Cell__{m}'])
         frames[t] = f
         markers |= set(cols.values())
     order = [m for m in CT.COMPARTMENT if m in markers]

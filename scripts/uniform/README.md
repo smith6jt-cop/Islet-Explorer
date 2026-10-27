@@ -315,6 +315,26 @@ structures run only inside Tissue.
   per image (the cohort scale and UniFORM alignment include the five), and four of them changed by 1-6 objects.
   Checks and renders: `output/tissue_outline_check_20261026/`.
 
+## Whole-cell fallback and CD8a/CD4 double positives (owner, 2026-10-27; root v12)
+
+- **No cell is without cytoplasm** (owner: "there should be no such thing as 'no cytoplasm'. This was already
+  determined."). Where the nucleus fills the cell REDSEA leaves the Cytoplasm compartment NaN (345,328
+  analysis-eligible cells, about 10 %); every cytoplasm-measured marker of such a cell is now read over the whole cell
+  (REDSEA's `Cell__<marker>`), in `typing/align_scale.py` `read_measured`, so alignment, scale, typing and the app's
+  marker values all see it. Before, a missing panCK left Senior's T-cell rule (which forbids panCK) undecided: CD3e+
+  cells fell to the CD45 fallback or to Exocrine, and islet cells had no hormone. Only the cytoplasm markers' scale
+  moved (floor 0.80-1.15x, top 0.94-1.07x); GCG's alignment now ends just over the bar (mode SD 0.111 against 0.10).
+- **CD8a and CD4 both positive**: Senior's T-CD8 forbids CD4 and T-CD4-helper forbids CD8, so such a T cell kept no
+  subtype ("T cell"). It now takes the subtype of the higher scaled marker (`codex_typing.T_SUBTYPE_BY_HIGHER`,
+  `immune_subtype.py`, `immune_subtype_resolved_by`): 2,453 cells; 11 exact ties stay "T cell".
+- Typing reran from `align_scale.py` on the run (v11's typing kept in `superseded/typing-v11-20261027/`) and
+  `assemble_uniform.py` built `data/development/uniform-20donor-20261027-v12` (its `git_commit` field reads c3ac421;
+  these changes were in the working tree and are committed in the next commit). v11 -> v12: analyzed cells
+  3,162,613 -> 3,172,248; 34,325 cells change label: Exocrine -> Macrophage 9,898, -> Immune 7,901, -> CD8a Tcell 1,093;
+  formerly excluded -> Alpha 5,130, Beta 2,821, Delta 1,519; T cell -> CD8a Tcell 1,566, -> CD4 Tcell 705. Totals:
+  T cell 5,685 -> 3,795, CD8a Tcell 13,944 -> 16,943, CD4 Tcell 4,260 -> 5,391, Macrophage 61,140 -> 72,041.
+  Endocrine objects are unchanged (4,853 outlines); embedding objects 1,207 -> 1,278.
+
 ## App root (P4), 2026-10-16
 
 ```bash

@@ -204,6 +204,9 @@ IMMUNE_LEVEL2 = ('Imm-B-cell', 'Imm-NK-cell', 'Imm-T-cell', 'Imm-dendritic-cell'
 IMMUNE_LEVEL3 = {'Imm-T-cell': ('T-regulatory', 'T-exhausted', 'T-progenitor-memory', 'T-CD8-cytotoxic',
                                 'T-CD8', 'T-CD4-helper'),
                  'Imm-macrophage': ('Mac-M1-like', 'Mac-M2-like')}
+# Owner, 2026-10-27: Senior's T-CD8 forbids CD4 and T-CD4-helper forbids CD8, so a T cell positive for both kept
+# no subtype. Such a cell is named by the higher of the two scaled markers; an exact tie keeps no subtype.
+T_SUBTYPE_BY_HIGHER = {'T-CD8': 'CD8a', 'T-CD4-helper': 'CD4'}
 # Refinement (typing/refine.py) defining markers, in this panel's names.
 OWN_MARKERS = {
     'Nerve': ('B3TUBB',), 'Lymphatic': ('PDPN',), 'Blood vessel': ('CD31', 'CD34'),

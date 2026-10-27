@@ -7,6 +7,8 @@ Imm-T-cell and Imm-macrophage; a rule fires when every required term is at scale
 group is, and every forbidden term is below it; a cell whose value is missing on a rule's marker is undecided for
 that rule; the most specific firing rule wins (number of terms, then name), and every other match is recorded.
 cell_class is never changed.
+A T cell positive for both CD8a and CD4, which neither T-CD8 nor T-CD4-helper admits, takes the subtype of the
+higher scaled marker (owner, 2026-10-27; codex_typing.T_SUBTYPE_BY_HIGHER; immune_subtype_resolved_by).
 
 CODEX departures: the rules on this panel (codex_typing.codex_rules): a rule that needs a marker this panel never
 acquired is unavailable on every donor and is listed, never scored as negative. The per-rule term diagnostics
@@ -122,12 +124,22 @@ def main() -> int:
             out.loc[mask, 'immune_subtype_also'] = other3
             out.loc[mask, 'immune_subtype_undecided'] = undec3
             skipped.update(skip3)
+        (s8, m8), (s4, m4) = CT.T_SUBTYPE_BY_HIGHER.items()
+        v8, v4 = scaled[m8].to_numpy(), scaled[m4].to_numpy()
+        both = ((out['immune_class'] == 'Imm-T-cell') & out['immune_subtype'].isna()).to_numpy() \
+            & (v8 >= CT.IMMUNE_REQUIRE_MIN) & (v4 >= CT.IMMUNE_REQUIRE_MIN)
+        out['immune_subtype_resolved_by'] = np.where(out['immune_subtype'].notna(), 'rule', '')
+        for name, hit in ((s8, both & (v8 > v4)), (s4, both & (v4 > v8))):
+            out.loc[hit, 'immune_subtype'] = name
+            out.loc[hit, 'immune_subtype_resolved_by'] = f'higher_of_{m8}_{m4}'
         out.to_parquet(typ / 'immune' / f'{t}.parquet', index=False)
         summary[t] = {'n_immune': n,
                       'immune_class': {str(k): int(v) for k, v in out['immune_class'].fillna('(no rule fired)')
                                        .value_counts().items()},
                       'immune_subtype': {str(k): int(v) for k, v in out['immune_subtype'].dropna()
                                          .value_counts().items()},
+                      'subtype_by_higher_marker': int((out['immune_subtype_resolved_by'] == f'higher_of_{m8}_{m4}').sum()),
+                      'both_positive_tied': int((both & (v8 == v4)).sum()),
                       'unavailable_rules': {k: v for k, v in skipped.items()}}
         print(f'{t}: {summary[t]["immune_class"]} | {summary[t]["immune_subtype"]}', flush=True)
     (typ / 'immune' / 'summary.json').write_text(json.dumps({'rules_on_this_panel': record, 'images': summary},
