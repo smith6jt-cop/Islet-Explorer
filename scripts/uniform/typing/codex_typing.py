@@ -135,6 +135,7 @@ LINEAGE_MARKERS = {
 }
 SUPPORTING_ONLY = ('LGALS3',)   # Senior: M2Gal3, CD11b, FOXP3, CD56, TP63
 IDENTITY_MARKERS = tuple(sorted({m for ms in LINEAGE_MARKERS.values() for m in ms}))
+T_TIE_PROFILE_MARKERS = IDENTITY_MARKERS + ('CD45',)
 
 # The hormone level, a departure (2026-10-17). Senior admits a cell inside an endocrine object when max(scaled INS,
 # GCG, SST) clears the tissue p99 of that max. Two changes:
@@ -201,14 +202,43 @@ ADDED_IMMUNE_RULES = {'Imm-CD45-leukocyte': (['CD45'], [], ['ECAD', 'panCK'])}
 # The rule table's hierarchy for immune_subtype.py.
 IMMUNE_LEVEL2 = ('Imm-B-cell', 'Imm-NK-cell', 'Imm-T-cell', 'Imm-dendritic-cell', 'Imm-macrophage',
                  'Imm-neutrophil', 'Imm-plasma-cell')
+# Owner, 2026-10-27: no M1/M2-like labels; a macrophage is described by its marker profile instead (MACROPHAGE_PROFILE).
 IMMUNE_LEVEL3 = {'Imm-T-cell': ('T-regulatory', 'T-exhausted', 'T-progenitor-memory', 'T-CD8-cytotoxic',
-                                'T-CD8', 'T-CD4-helper'),
-                 'Imm-macrophage': ('Mac-M1-like', 'Mac-M2-like')}
+                                'T-CD8', 'T-CD4-helper')}
+# Owner, 2026-10-27: "CD68+CD163+Macrophage_LGALS3+CD4+ with each plus also able to be a minus" (LGALS3 as Senior's
+# galectin+ macrophage; CD4+ macrophages). Each marker is + at scaled >= IMMUNE_REQUIRE_MIN, else -. In text the
+# plus and minus are superscripts; the data label keeps ASCII + and -.
+MACROPHAGE_PROFILE = (('CD68', 'CD163'), ('LGALS3', 'CD4'))
+
+
+def macrophage_label(positive: dict) -> str:
+    """The macrophage label from {marker: bool}, e.g. 'CD68+CD163-Macrophage_LGALS3+CD4-'."""
+    head, tail = MACROPHAGE_PROFILE
+    sign = lambda m: m + ('+' if positive[m] else '-')
+    return ''.join(map(sign, head)) + 'Macrophage_' + ''.join(map(sign, tail))
+
+
+def macrophage_labels() -> list[str]:
+    """Every label a macrophage can take (CD68 or CD163 is positive by definition), in a fixed order."""
+    import itertools
+    head, tail = MACROPHAGE_PROFILE
+    out = []
+    for h in itertools.product((True, False), repeat=len(head)):
+        if not any(h):
+            continue
+        for t in itertools.product((True, False), repeat=len(tail)):
+            out.append(macrophage_label(dict(zip(head + tail, h + t))))
+    return out
 # Owner, 2026-10-27: Senior's T-CD8 forbids CD4 and T-CD4-helper forbids CD8, so a T cell positive for both kept
 # no subtype; and "once there is positivity for a broad defining marker, we do not need the 0.10 positivity level".
-# A T cell (CD3e+) that neither rule names takes the subtype of the higher of the two scaled markers, at any level;
-# an exact tie (both at the scale floor included) keeps no subtype.
+# A T cell (CD3e+) that neither rule names takes the subtype of the higher of the two markers, at any level, compared
+# on the scaled values before the 0-1 clip (so cells clipped together at the floor or the top are still ordered).
 T_SUBTYPE_BY_HIGHER = {'T-CD8': 'CD8a', 'T-CD4-helper': 'CD4'}
+# Owner, 2026-10-27 ("I don't believe there is biological support for exact ties ... a new review of the total marker
+# profile is indicated"): a T cell whose CD8a and CD4 are equal after the clip is reviewed on its whole profile. It stays
+# a T cell when its highest marker among T_TIE_PROFILE_MARKERS (scaled, before the clip) is one of T_TIE_KEEP_MARKERS;
+# otherwise the chain types it again without the T-cell rules (classify.py, resolved_by 'tie_profile_*').
+T_TIE_KEEP_MARKERS = ('CD3e', 'CD8a', 'CD4', 'CD45')
 # Refinement (typing/refine.py) defining markers, in this panel's names.
 OWN_MARKERS = {
     'Nerve': ('B3TUBB',), 'Lymphatic': ('PDPN',), 'Blood vessel': ('CD31', 'CD34'),
@@ -263,6 +293,12 @@ SUBSTITUTED_RULES: dict[str, tuple] = {
     'Imm-B-cell': ((['CD20', 'CD45'], [], ['CD3e', 'CD68', 'ECAD', 'panCK']),
                    'CD79a is not on this panel; CD45 is the second required positive, CD3e and CD68 must be '
                    'absent (owner, 2026-10-17)'),
+    # Senior's Imm-macrophage needs CD68 or Iba1; Iba1 is not on this panel, which left CD68 alone. Owner, 2026-10-27:
+    # a macrophage is CD68+ or CD163+ (so a CD68- CD163+ macrophage exists), with Senior's T-cell and epithelial
+    # negatives. Senior's second group (any myeloid or B lineage marker) adds nothing beyond the first here.
+    'Imm-macrophage': (([], [['CD68', 'CD163']], ['CD3e', 'ECAD', 'panCK']),
+                       'Iba1 is not on this panel; a macrophage is CD68+ or CD163+, CD3e and the epithelial markers '
+                       'absent (owner, 2026-10-27)'),
 }
 
 # Structure cell calls (owner, 2026-10-17: "Blood vessel, lymphatic, and nerve should not be cell types"). The

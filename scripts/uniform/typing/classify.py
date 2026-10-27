@@ -347,6 +347,40 @@ def finish(in_islet, cell_class, exocrine_measured):
     return reason
 
 
+def unclipped(values: pd.DataFrame, markers, scale: pd.DataFrame) -> np.ndarray:
+    """The cohort-scaled values before the 0-1 clip, so values clipped together stay ordered."""
+    raw = values.attrs['expressed'][markers].to_numpy(dtype=float)
+    span = scale.loc[markers, 'span'].to_numpy(float)
+    span = np.where(np.isfinite(span) & (span > 0), span, 1.0)
+    return (raw - scale.loc[markers, 'floor'].to_numpy(float)) / span
+
+
+def retype_tied_t_cells(values, scale, rules, cell_class, definition, resolved_by, reason, in_islet, exo_measured):
+    """codex_typing.T_TIE_KEEP_MARKERS: a T cell whose CD8a and CD4 are equal after the clip keeps its T-cell call only
+    when its highest profile marker (before the clip) is a T-cell marker or CD45; the rest are typed again by the
+    same chain without the T-cell rules. Returns the audit."""
+    a, b = CT.T_SUBTYPE_BY_HIGHER.values()
+    t_cell = (cell_class == 'Immune') & (definition == 'Imm-T-cell')
+    tied = t_cell & (values[a].to_numpy(dtype=float) == values[b].to_numpy(dtype=float))
+    markers = [m for m in CT.T_TIE_PROFILE_MARKERS if m in values.attrs['expressed'].columns and m in scale.index]
+    U = unclipped(values, markers, scale)
+    top = np.asarray(markers, dtype=object)[np.argmax(np.where(np.isnan(U), -np.inf, U), axis=1)]
+    retype = tied & ~np.isin(top, CT.T_TIE_KEEP_MARKERS)
+    idx = np.flatnonzero(retype)
+    if len(idx):
+        without_t = {k: v for k, v in rules.items() if k != 'Imm-T-cell' and not k.startswith('T-')}
+        cc = np.full(len(idx), None, dtype=object)
+        df = np.full(len(idx), '', dtype=object)
+        rb = np.full(len(idx), '', dtype=object)
+        tissue_chain(values.iloc[idx], without_t, cc, df, rb)
+        reason[idx] = finish(in_islet[idx], cc, np.asarray(exo_measured)[idx])
+        cell_class[idx], definition[idx] = cc, df
+        resolved_by[idx] = np.asarray(['tie_profile_' + str(r) for r in rb], dtype=object)
+    return {'tied': int(tied.sum()), 'kept_t_cell': int((tied & ~retype).sum()), 'retyped': int(len(idx)),
+            'retyped_top_marker': {str(k): int(v) for k, v in pd.Series(top[retype]).value_counts().items()},
+            'retyped_to': {str(k): int(v) for k, v in pd.Series(cell_class[retype]).value_counts().items()}}
+
+
 def run_chain(values, rules, structure_class, structure_resolved, in_islet, endocrine, endocrine_name,
               endocrine_route, exocrine_measured, rule_audit=None, unavailable_count=None):
     cell_class = structure_class.copy()
@@ -469,6 +503,8 @@ def classify(tag: str, ctx: pd.DataFrame, aligned: pd.DataFrame, scale: pd.DataF
         values, rules, structure_class, structure_resolved, in_islet, endocrine, endocrine_name, route,
         exo_measured, rule_audit, unavailable_count)
     A['immune_rule_evidence'] = rule_audit
+    A['t_cell_tie_review'] = retype_tied_t_cells(values, scale, rules, cell_class, definition, resolved_by, reason,
+                                                 in_islet, exo_measured)
 
     # Owner, 2026-10-18 (codex_typing.HORMONE_MARGIN / HORMONE_NEGATIVE). Within the Islets and Clusters:
     # (1) a hormone-named cell whose strongest scaled hormone is under HORMONE_MARGIN x the runner-up is Excluded;

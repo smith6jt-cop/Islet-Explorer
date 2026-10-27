@@ -341,6 +341,24 @@ structures run only inside Tissue.
   `summary.py` reran (v12's `immune/` kept in `superseded/typing-v12-immune-20261027/`); root
   `data/development/uniform-20donor-20261027-v13`. Mac-M2-like, the one other subtype on this panel, has no
   competing subtype (Mac-M1-like is unavailable) and still requires CD163 and LGALS3 at 0.10; it is not an app label.
+- **No exact ties** (owner: "I don't believe there is biological support for exact ties, for these a new review of
+  the total marker profile is indicated"). The v13 ties (485) were made by the scale's 0-1 clip (474 with CD8a and CD4
+  both below the floor, 11 both at the top). The CD8a/CD4 comparison now uses scaled values before the clip; a T cell
+  tied after the clip stays a T cell only when its highest marker (lineage markers and CD45, before the clip) is
+  CD3e, CD8a, CD4 or CD45 (`codex_typing.T_TIE_KEEP_MARKERS`), otherwise `classify.py` types it again without the
+  T-cell rules (`resolved_by` 'tie_profile_*'; `immune_subtype.py` leaves Imm-T-cell out for it): 486 ties, 423 kept
+  (310 -> CD8a Tcell, 112 -> CD4 Tcell, 1 kept another call), 63 retyped (39 Immune, 23 Exocrine, 1 Excluded). No
+  "T cell" remains. Review table and profile heatmap: `output/tcell_tie_review_20261027/`.
+- **Macrophages by marker profile** (owner: "We don't want to get into M1 and M2-like labels, but we can indicate
+  macrophages and LGALS3 as defined in the senior workflow. We can also define CD4+ macrophages", then "Use
+  CD68+CD163+Macrophage_LGALS3+CD4+ with each plus also able to be a minus", and a macrophage is CD68 or CD163). The
+  macrophage rule on this panel is `SUBSTITUTED_RULES['Imm-macrophage']`: CD68 or CD163 >= 0.10, CD3e, ECAD and panCK
+  absent (Senior's needs CD68 or Iba1, and Iba1 is not on this panel). No M1/M2 subtypes are resolved
+  (`IMMUNE_LEVEL3`); each macrophage takes `macrophage_profile` (`codex_typing.macrophage_label`, each marker + at
+  >= 0.10), which `assemble_uniform.py` uses as its label: 12 labels (CD68-CD163- cannot occur). In text the + and -
+  are superscripts. Macrophages 72,041 -> 109,589 (25,212 from Exocrine, 12,192 from Immune, 144 formerly Excluded,
+  all CD68-CD163+); `cd8_to_macro_ratio` counts all twelve. Classify onward reran (v13's calls, refine and immune in
+  `superseded/typing-v13-20261027/`); root `data/development/uniform-20donor-20261027-v14`.
 
 ## App root (P4), 2026-10-16
 

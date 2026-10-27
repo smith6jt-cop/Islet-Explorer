@@ -8,8 +8,9 @@ group is, and every forbidden term is below it; a cell whose value is missing on
 that rule; the most specific firing rule wins (number of terms, then name), and every other match is recorded.
 cell_class is never changed.
 A T cell that neither T-CD8 nor T-CD4-helper names (both markers positive, or either below 0.10) takes the subtype
-of the higher scaled marker at any level (owner, 2026-10-27; codex_typing.T_SUBTYPE_BY_HIGHER;
-immune_subtype_resolved_by); an exact tie keeps none.
+of the higher marker at any level, compared before the scale's clip (owner, 2026-10-27;
+codex_typing.T_SUBTYPE_BY_HIGHER; immune_subtype_resolved_by). A cell classify.py withdrew from the T-cell call on
+its whole profile (resolved_by 'tie_profile_*') is resolved without Imm-T-cell.
 
 CODEX departures: the rules on this panel (codex_typing.codex_rules): a rule that needs a marker this panel never
 acquired is unavailable on every donor and is listed, never scored as negative. The per-rule term diagnostics
@@ -100,7 +101,7 @@ def main() -> int:
     (typ / 'immune').mkdir(parents=True, exist_ok=True)
     summary = {}
     for t in tags:
-        calls = pd.read_parquet(typ / 'calls' / f'{t}.parquet', columns=['object_id', 'cell_class'])
+        calls = pd.read_parquet(typ / 'calls' / f'{t}.parquet', columns=['object_id', 'cell_class', 'resolved_by'])
         immune = calls[calls['cell_class'] == 'Immune'][['object_id']]
         aligned = pd.read_parquet(typ / 'aligned' / f'{t}.parquet')
         markers = [m for m in scale.index if m in aligned.columns
@@ -109,6 +110,14 @@ def main() -> int:
         scaled = pd.DataFrame(CL.apply_scale(values[markers].to_numpy(), markers, scale), columns=markers)
         n = len(values)
         call2, n2, other2, undec2, skip2 = resolve(n, level2, rules, scaled, set(markers), specificity)
+        # a T cell withdrawn on its whole profile (classify.retype_tied_t_cells) is never a T cell here either
+        withdrawn = values['object_id'].isin(set(calls.loc[calls['resolved_by'].str.startswith('tie_profile_'),
+                                                         'object_id'])).to_numpy()
+        if withdrawn.any():
+            c2, m2, o2, u2, _ = resolve(int(withdrawn.sum()), tuple(k for k in level2 if k != 'Imm-T-cell'), rules,
+                                        scaled[withdrawn].reset_index(drop=True), set(markers), specificity)
+            call2, n2, other2, undec2 = call2.copy(), n2.copy(), other2.copy(), undec2.copy()
+            call2[withdrawn], n2[withdrawn], other2[withdrawn], undec2[withdrawn] = c2, m2, o2, u2
         out = pd.DataFrame({'object_id': values['object_id'], 'immune_class': call2, 'immune_class_matches': n2,
                             'immune_class_also': other2, 'immune_class_undecided': undec2,
                             'immune_subtype': None, 'immune_subtype_matches': 0, 'immune_subtype_also': '',
@@ -126,13 +135,21 @@ def main() -> int:
             out.loc[mask, 'immune_subtype_undecided'] = undec3
             skipped.update(skip3)
         (s8, m8), (s4, m4) = CT.T_SUBTYPE_BY_HIGHER.items()
-        v8, v4 = scaled[m8].to_numpy(), scaled[m4].to_numpy()
+        before_clip = values[[m8, m4]].copy()
+        before_clip.attrs['expressed'] = values
+        v8, v4 = CL.unclipped(before_clip, [m8, m4], scale).T
         both = ((out['immune_class'] == 'Imm-T-cell') & out['immune_subtype'].isna()).to_numpy() \
             & np.isfinite(v8) & np.isfinite(v4)
         out['immune_subtype_resolved_by'] = np.where(out['immune_subtype'].notna(), 'rule', '')
         for name, hit in ((s8, both & (v8 > v4)), (s4, both & (v4 > v8))):
             out.loc[hit, 'immune_subtype'] = name
             out.loc[hit, 'immune_subtype_resolved_by'] = f'higher_of_{m8}_{m4}'
+        # the macrophage label (codex_typing.MACROPHAGE_PROFILE), on every Imm-macrophage cell
+        prof = [m for pair in CT.MACROPHAGE_PROFILE for m in pair]
+        pos = {m: scaled[m].to_numpy() >= CT.IMMUNE_REQUIRE_MIN for m in prof}
+        out['macrophage_profile'] = [CT.macrophage_label({m: bool(pos[m][i]) for m in prof})
+                                     if out['immune_class'].iat[i] == 'Imm-macrophage' else ''
+                                     for i in range(n)]
         out.to_parquet(typ / 'immune' / f'{t}.parquet', index=False)
         summary[t] = {'n_immune': n,
                       'immune_class': {str(k): int(v) for k, v in out['immune_class'].fillna('(no rule fired)')
@@ -141,6 +158,8 @@ def main() -> int:
                                          .value_counts().items()},
                       'subtype_by_higher_marker': int((out['immune_subtype_resolved_by'] == f'higher_of_{m8}_{m4}').sum()),
                       'tied': int((both & (v8 == v4)).sum()),
+                      'macrophage_profile': {str(k): int(v) for k, v in out.loc[out['macrophage_profile'] != '',
+                                             'macrophage_profile'].value_counts().items()},
                       'unavailable_rules': {k: v for k, v in skipped.items()}}
         print(f'{t}: {summary[t]["immune_class"]} | {summary[t]["immune_subtype"]}', flush=True)
     (typ / 'immune' / 'summary.json').write_text(json.dumps({'rules_on_this_panel': record, 'images': summary},

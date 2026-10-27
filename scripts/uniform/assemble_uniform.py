@@ -65,10 +65,12 @@ MARKERS = ['CD31', 'CD8a', 'CD3e', 'SMA', 'CD4', 'CD34', 'HLADR', 'PDPN', 'panCK
            'CD45', 'NaKATPase', 'BCatenin', 'CD68', 'BActin', 'CK19']          # the 31-marker panel, app order
 # No structure cell types since 2026-10-17 (codex_typing.STRUCTURE_CELL_CALLS); B cell since the same day.
 # CHGA+ hormone-negative since 2026-10-18 (codex_typing.HORMONE_NEGATIVE): an endocrine cell, in every endocrine total.
+# Macrophages by marker profile since 2026-10-27 (codex_typing.MACROPHAGE_PROFILE): 'Macrophage' became twelve labels.
+MACROPHAGES = tuple(CT.macrophage_labels())
 LABELS = ['Beta cell', 'Alpha cell', 'Delta cell', 'CHGA+ hormone-negative', 'Endocrine', 'CD8a Tcell', 'CD4 Tcell',
-          'T cell', 'B cell', 'Macrophage', 'Immune', 'Exocrine']
+          'T cell', 'B cell', *MACROPHAGES, 'Immune', 'Exocrine']
 ENDOCRINE = ('Beta cell', 'Alpha cell', 'Delta cell', 'CHGA+ hormone-negative', 'Endocrine')
-IMMUNE = ('CD8a Tcell', 'CD4 Tcell', 'T cell', 'B cell', 'Macrophage', 'Immune')
+IMMUNE = ('CD8a Tcell', 'CD4 Tcell', 'T cell', 'B cell', *MACROPHAGES, 'Immune')
 # The `<marker>_pos` flags of cell_distance.csv cover every panel marker (owner, 2026-10-20: the distance profile
 # "needs to have all markers that are common to all donors"; all 31 are measured in every image, and build_image
 # stops if one is not). Until v7 they covered 18.
@@ -131,7 +133,11 @@ def app_labels(calls: pd.DataFrame, immune: pd.DataFrame) -> np.ndarray:
     lab[use == 'Imm-T-cell'] = 'T cell'
     lab[(use == 'Imm-T-cell') & (st == 'T-CD8')] = 'CD8a Tcell'
     lab[(use == 'Imm-T-cell') & (st == 'T-CD4-helper')] = 'CD4 Tcell'
-    lab[use == 'Imm-macrophage'] = 'Macrophage'
+    prof = sub['macrophage_profile'].fillna('').to_numpy(dtype=object)
+    mac = use == 'Imm-macrophage'
+    if (prof[mac & imm] == '').any():
+        raise ValueError('a macrophage without a marker profile')
+    lab[mac] = prof[mac]
     lab[use == 'Imm-B-cell'] = 'B cell'
     out[imm] = lab[imm]
     if (out == '').any():
@@ -173,7 +179,8 @@ def build_image(run: Path, out: Path, tag: str, case: str, donors: pd.DataFrame,
     cid = str(int(case))
     scale = CL.load_scale(run)
     calls = pd.read_parquet(typ / 'calls' / f'{tag}.parquet')
-    immune = pd.read_parquet(typ / 'immune' / f'{tag}.parquet', columns=['object_id', 'immune_class', 'immune_subtype'])
+    immune = pd.read_parquet(typ / 'immune' / f'{tag}.parquet', columns=['object_id', 'immune_class', 'immune_subtype',
+                                                                       'macrophage_profile'])
     audit = json.loads((typ / 'calls' / f'{tag}.json').read_text())
     refined = pd.read_parquet(typ / 'refine' / f'{tag}.parquet', columns=['object_id', 'refined_class'])
     aligned = pd.read_parquet(typ / 'aligned' / f'{tag}.parquet')
@@ -328,8 +335,8 @@ def build_image(run: Path, out: Path, tag: str, case: str, donors: pd.DataFrame,
         ci, pi = int(np.isin(cl, IMMUNE).sum()), int(np.isin(pl, IMMUNE).sum())
         o.update(immune_count_core=ci, immune_count_peri=pi, immune_frac_core=ci / len(c), immune_frac_peri=pi / len(p),
                  immune_ratio=(pi / len(p)) / (ci / len(c)) if ci else np.nan,
-                 cd8_to_macro_ratio=np.sum(pl == 'CD8a Tcell') / np.sum(pl == 'Macrophage')
-                 if np.any(pl == 'Macrophage') else np.nan,
+                 cd8_to_macro_ratio=np.sum(pl == 'CD8a Tcell') / np.isin(pl, MACROPHAGES).sum()
+                 if np.isin(pl, MACROPHAGES).any() else np.nan,
                  tcell_density_peri=100 * np.isin(pl, ['CD8a Tcell', 'CD4 Tcell', 'T cell']).sum() / len(p))
         dist = np.linalg.norm(xy_um[p] - xy_um[c].mean(axis=0), axis=1)
         idist = dist[np.isin(pl, IMMUNE)]
@@ -442,7 +449,8 @@ def cohort_frequencies(run: Path, rows: list[dict]) -> dict:
     for r in rows:
         t = r['image_name']
         calls = pd.read_parquet(typ / 'calls' / f'{t}.parquet')
-        imm = pd.read_parquet(typ / 'immune' / f'{t}.parquet', columns=['object_id', 'immune_class', 'immune_subtype'])
+        imm = pd.read_parquet(typ / 'immune' / f'{t}.parquet', columns=['object_id', 'immune_class', 'immune_subtype',
+                                                                       'macrophage_profile'])
         lab = pd.Series(app_labels(calls, imm))
         total = total.add(lab[lab != 'Excluded'].value_counts().reindex(LABELS, fill_value=0), fill_value=0)
     return (total / total.sum()).to_dict()
