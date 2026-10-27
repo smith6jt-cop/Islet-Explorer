@@ -42,6 +42,43 @@ get_donor_metadata <- function(master) {
   NULL
 }
 
+#' The core+peri phenotype pair table of `comp` (see prep_data()); rebuilt when the macrophage columns are merged
+#' (collapse_prepared_macrophages()).
+build_combined_pairs <- function(comp) {
+  cn <- colnames(comp)
+  peri_cols <- grep("^peri_prop_", cn, value = TRUE)
+  if (length(peri_cols) == 0) return(NULL)
+  rows <- lapply(peri_cols, function(pc) {
+    safe <- sub("^peri_prop_", "", pc)
+    candidates <- unique(c(
+      gsub("plus", "+", gsub("_", " ", safe), fixed = TRUE),
+      gsub("_", " ", safe),
+      gsub("plus", "+", safe, fixed = TRUE),
+      safe
+    ))
+    core_col <- NA_character_; label <- safe
+    for (cand in candidates) {
+      guess <- paste0("prop_", cand)
+      if (guess %in% cn) { core_col <- guess; label <- cand; break }
+    }
+    data.frame(stem = safe, core_col = core_col, peri_col = pc,
+               label = label, stringsAsFactors = FALSE)
+  })
+  out <- dplyr::bind_rows(rows)
+  out <- out[!is.na(out$core_col), , drop = FALSE]
+  out <- out[order(out$label), , drop = FALSE]
+  rownames(out) <- NULL
+  out
+}
+
+#' prepared() with the macrophage labels merged for the checked markers (macrophage_collapse_comp()).
+collapse_prepared_macrophages <- function(pd, markers = character(0)) {
+  if (is.null(pd) || is.null(pd$comp) || !any(grepl(MACROPHAGE_LABEL_PATTERN, sub("^prop_", "", names(pd$comp))))) return(pd)
+  pd$comp <- macrophage_collapse_comp(pd$comp, markers)
+  pd$combined_pairs <- build_combined_pairs(pd$comp)
+  pd
+}
+
 prep_data <- function(master) {
   # Determine which autoantibody columns are available
   aab_cols_targets <- intersect(c("AAb_GADA","AAb_IA2A","AAb_ZnT8A","AAb_IAA","AAb_mIAA"), colnames(master$targets))
@@ -365,32 +402,7 @@ prep_data <- function(master) {
   # column by trying un-sanitization candidates (mirrors the Spatial tab's
   # phenotype_options() resolver). Consumed by mod_plot_server.R Cell
   # Populations selector and raw_df_base() Combined branch.
-  combined_pairs <- (function() {
-    cn <- colnames(comp)
-    peri_cols <- grep("^peri_prop_", cn, value = TRUE)
-    if (length(peri_cols) == 0) return(NULL)
-    rows <- lapply(peri_cols, function(pc) {
-      safe <- sub("^peri_prop_", "", pc)
-      candidates <- unique(c(
-        gsub("plus", "+", gsub("_", " ", safe), fixed = TRUE),
-        gsub("_", " ", safe),
-        gsub("plus", "+", safe, fixed = TRUE),
-        safe
-      ))
-      core_col <- NA_character_; label <- safe
-      for (cand in candidates) {
-        guess <- paste0("prop_", cand)
-        if (guess %in% cn) { core_col <- guess; label <- cand; break }
-      }
-      data.frame(stem = safe, core_col = core_col, peri_col = pc,
-                 label = label, stringsAsFactors = FALSE)
-    })
-    out <- dplyr::bind_rows(rows)
-    out <- out[!is.na(out$core_col), , drop = FALSE]
-    out <- out[order(out$label), , drop = FALSE]
-    rownames(out) <- NULL
-    out
-  })()
+  combined_pairs <- build_combined_pairs(comp)
   if (!is.null(combined_pairs) && nrow(combined_pairs) > 0) {
     message("[prep-data] Built combined core+peri lookup for ", nrow(combined_pairs), " phenotypes")
   }

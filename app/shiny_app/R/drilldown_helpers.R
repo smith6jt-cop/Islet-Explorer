@@ -132,9 +132,27 @@ macrophage_family <- function(base) {
   }))
   stats::setNames(cols, MACROPHAGE_LABELS)
 }
+# The merged categories of every marker choice (MACROPHAGE_MARKERS, owner 2026-10-27): with all four the twelve shades
+# above; with fewer, the choice's categories ramp from dark to light around the Macrophage color, in key order;
+# with none the one "Macrophage" keeps its color. Only one choice is shown at a time.
+macrophage_key_colors <- function(base, family) {
+  out <- character(0)
+  for (k in seq_along(MACROPHAGE_MARKERS)) {
+    for (markers in utils::combn(MACROPHAGE_MARKERS, k, simplify = FALSE)) {
+      keys <- unique(macrophage_collapse(MACROPHAGE_LABELS, markers))
+      keys <- keys[order(chartr("+-", "01", keys))]
+      cols <- if (k == length(MACROPHAGE_MARKERS)) unname(family[match(keys, macrophage_collapse(names(family), markers))])
+              else grDevices::colorRampPalette(c(family[[1]], base, family[[length(family)]]))(max(length(keys), 2))[
+                     seq_along(keys)]
+      out <- c(out, stats::setNames(cols, keys))
+    }
+  }
+  out
+}
 with_macrophage_family <- function(pal) {
   i <- match("Macrophage", names(pal))
-  c(pal[seq_len(i)], macrophage_family(pal[["Macrophage"]]), pal[-seq_len(i)])
+  family <- macrophage_family(pal[["Macrophage"]])
+  c(pal[seq_len(i)], family, macrophage_key_colors(pal[["Macrophage"]], family), pal[-seq_len(i)])
 }
 PHENOTYPE_COLORS <- with_macrophage_family(PHENOTYPE_COLORS)
 PHENOTYPE_COLORS_HIGH_CONTRAST <- with_macrophage_family(PHENOTYPE_COLORS_HIGH_CONTRAST)

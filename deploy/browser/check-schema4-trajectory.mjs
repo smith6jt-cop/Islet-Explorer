@@ -3,6 +3,15 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 import puppeteer from 'puppeteer-core';
+// Display names of phenotype labels (app/shiny_app/R/00_globals.R phenotype_text(); owner, 2026-10-27): broad name
+// first, every marker + and - a superscript. Values (data labels) are unchanged.
+const PHENOTYPE_DISPLAY = {'Beta cell': 'Endocrine Beta', 'Alpha cell': 'Endocrine Alpha', 'Delta cell': 'Endocrine Delta',
+  'CHGA+ hormone-negative': 'Endocrine CHGA+ hormone-negative', 'CD8a Tcell': 'T Cell CD8a+', 'CD4 Tcell': 'T Cell CD4+',
+  'T cell': 'T Cell', 'B cell': 'B Cell', 'CD8 T cell': 'T Cell CD8+', 'CD4 T cell': 'T Cell CD4+',
+  'All endocrine cells': 'Endocrine (all)', 'All T cells': 'T Cell (all)', 'All macrophages': 'Macrophage (all)'};
+const phenotypeText = label => (PHENOTYPE_DISPLAY[label] ?? label)
+  .replace(/^(CD68[+-]CD163[+-])Macrophage_(LGALS3[+-]CD4[+-])$/, 'Macrophage $1$2')
+  .replace(/\+/g, '⁺').replace(/([A-Za-z0-9])-(?=$|[ A-Z])/g, '$1⁻');
 const args=process.argv.slice(2), value=key=>args.includes(key)?args[args.indexOf(key)+1]:undefined;
 const url=value('--url'),root=value('--data-root'),output=value('--output'),synthetic=args.includes('--synthetic');
 assert(url&&root&&output,'--url, --data-root and --output are required');
@@ -82,7 +91,8 @@ try{
   const choices=await page.$eval('#traj-traj_ratio_type',el=>Object.keys(el.selectize.options));
   assert.deepEqual(new Set(choices),new Set([...names(catalog.base_types),...names(catalog.states||[])]));
   const labels=await page.$eval('#traj-traj_ratio_type',el=>Object.values(el.selectize.options).map(option=>option.label));
-  assert.deepEqual(new Set(labels),new Set(choices),'Catalog names, not group headings, must label selectable identities');
+  // Options are labeled with the identities' display names (phenotypeText()), not group headings.
+  assert.deepEqual(new Set(labels),new Set(choices.map(phenotypeText)),'Display names of the catalog identities, not group headings, must label selectable identities');
   assert.equal(await page.$('#traj-traj_y_mode'),null);assert.equal(await page.$('#traj-traj_feature'),null);
   const scatter=await page.$eval('#traj-traj_scatter',plot=>{
     const traces=(plot.data||[]).filter(trace=>String(trace.mode||'').includes('markers'));

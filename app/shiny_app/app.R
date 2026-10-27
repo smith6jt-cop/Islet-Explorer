@@ -571,7 +571,11 @@ server <- function(input, output, session) {
                ignoreNULL = FALSE, ignoreInit = TRUE)
   observeEvent(input$spatial_object_classes, sync_object_classes(input$spatial_object_classes, "object_classes"),
                ignoreNULL = FALSE, ignoreInit = TRUE)
-  prepared <- reactive(filter_prepared_by_object_class(.shared_prepared_data, object_classes()))
+  # How macrophages are split (owner, 2026-10-27): the markers checked in any macrophage marker checkbox group
+  # (Plot and Trajectory Data controls, every grouped phenotype list's Macrophage heading); one app-wide setting.
+  macrophage_markers <- reactiveVal(character(0))
+  prepared <- reactive(collapse_prepared_macrophages(
+    filter_prepared_by_object_class(.shared_prepared_data, object_classes()), macrophage_markers()))
   # The Trajectory tab fits every object with ten or more core cells whatever its class, so it reads the
   # unfiltered data (its merge of diameters and Leiden clusters would otherwise lose the unselected class).
   prepared_all <- reactive(.shared_prepared_data)
@@ -670,12 +674,12 @@ server <- function(input, output, session) {
   plot_returns <- plot_server("plot", prepared, selected_islet, active_tab, active_donor_colors,
                               remove_outliers = remove_outliers_global,
                               outlier_threshold = outlier_z_global,
-                              palette = active_palette)
+                              palette = active_palette, macrophage_markers = macrophage_markers)
 
   # Trajectory module
   trajectory_server("traj", prepared_all, selected_islet, forced_image, active_tab, active_donor_colors,
                     remove_outliers = remove_outliers_global,
-                    outlier_threshold = outlier_z_global)
+                    outlier_threshold = outlier_z_global, macrophage_markers = macrophage_markers)
 
   # Viewer module
   viewer_server("viewer", forced_image, reactive(input$tabs))
@@ -702,7 +706,7 @@ server <- function(input, output, session) {
   # Spatial Neighborhood module
   # Its two UMAPs are linked plots like the Plot and Trajectory tabs' (owner, 2026-10-21), so it shares the selection.
   spatial_server("spatial", prepared, active_palette, active_donor_colors,
-                 selected_islet = selected_islet, active_tab = active_tab)
+                 selected_islet = selected_islet, active_tab = active_tab, macrophage_markers = macrophage_markers)
 
   # Inflammation module — cohort-level edgeR abundance + infiltration score.
   # Reads the cell-distance artifact through spatial_helpers.R (Parquet/DuckDB
@@ -730,6 +734,7 @@ server <- function(input, output, session) {
     if (show_cells) {
       cells <- load_islet_cells(info$case_id, info$islet_key)
       if (!is.null(cells)) {
+        cells$phenotype <- macrophage_collapse(cells$phenotype, macrophage_markers())
         color_by <- input$drilldown_color_by %||% "phenotype"
         if (!islet_valid_scalar_choice(color_by, colnames(cells),
                                        "drilldown_color_invalid")) {
@@ -789,6 +794,7 @@ server <- function(input, output, session) {
     if (!show_peri && "cell_region" %in% colnames(cells)) {
       cells <- cells[cells$cell_region == "core", , drop = FALSE]
     }
+    cells$phenotype <- macrophage_collapse(cells$phenotype, macrophage_markers())
     tryCatch(render_drilldown_summary(cells, palette = active_palette()), error = function(e) NULL)
   })
   output$islet_drilldown_summary <- renderPlot({ islet_drilldown_summary_plot() }, bg = "transparent")

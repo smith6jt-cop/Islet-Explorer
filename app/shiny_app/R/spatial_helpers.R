@@ -278,6 +278,9 @@ CELL_DIST_MARKER_COLORS <- c(
   CD44 = "#FFBB78", NaKATPase = "#98DF8A", BCatenin = "#FF9896", BActin = "#C5B0D5", CK19 = "#C49C94"
 )
 
+# A merged macrophage category or a group aggregate covers its data labels (phenotype_members(), 00_globals.R).
+.cd_members <- function(labels) get0("phenotype_members", mode = "function", ifnotfound = identity)(labels)
+
 # Split `base` into the plotted subset. `mode` is "phenotype" (d$phenotype ==
 # item) or "marker" (item's `{item}_pos` == 1). "__all__" returns everything.
 .cd_subset <- function(base, mode, item) {
@@ -287,7 +290,8 @@ CELL_DIST_MARKER_COLORS <- c(
     if (!(pc %in% colnames(base))) return(base[0, , drop = FALSE])
     base[base[[pc]] == 1, , drop = FALSE]
   } else {
-    base[base$phenotype == item, , drop = FALSE]
+    # a merged macrophage category or an aggregate covers its data labels (phenotype_members())
+    base[base$phenotype %in% .cd_members(item), , drop = FALSE]
   }
 }
 
@@ -348,7 +352,7 @@ CELL_DIST_MARKER_COLORS <- c(
     if (length(pcs) == 0) return(NULL)
     sel <- base[rowSums(base[, pcs, drop = FALSE]) > 0, , drop = FALSE]
   } else {
-    sel <- base[base$phenotype %in% items, , drop = FALSE]
+    sel <- base[base$phenotype %in% .cd_members(items), , drop = FALSE]
   }
   if (nrow(sel) == 0) return(NULL)
   lo <- max(as.numeric(stats::quantile(sel$signed_dist, 0.005, na.rm = TRUE)), -100)
@@ -383,7 +387,8 @@ CELL_DIST_MARKER_COLORS <- c(
     if (!(col %in% columns)) return("FALSE")
     paste0(islet_sql_identifier(col, con), " = 1")
   } else {
-    paste0("phenotype = ", islet_sql_string(item, con))
+    members <- .cd_members(item)
+    paste0("phenotype IN (", paste(vapply(members, islet_sql_string, character(1), con = con), collapse = ", "), ")")
   }
 }
 

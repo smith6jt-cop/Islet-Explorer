@@ -6,6 +6,15 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import puppeteer from 'puppeteer-core';
 
+// Display names of phenotype labels (app/shiny_app/R/00_globals.R phenotype_text(); owner, 2026-10-27): broad name
+// first, every marker + and - a superscript. Values (data labels) are unchanged.
+const PHENOTYPE_DISPLAY = {'Beta cell': 'Endocrine Beta', 'Alpha cell': 'Endocrine Alpha', 'Delta cell': 'Endocrine Delta',
+  'CHGA+ hormone-negative': 'Endocrine CHGA+ hormone-negative', 'CD8a Tcell': 'T Cell CD8a+', 'CD4 Tcell': 'T Cell CD4+',
+  'T cell': 'T Cell', 'B cell': 'B Cell', 'CD8 T cell': 'T Cell CD8+', 'CD4 T cell': 'T Cell CD4+',
+  'All endocrine cells': 'Endocrine (all)', 'All T cells': 'T Cell (all)', 'All macrophages': 'Macrophage (all)'};
+const phenotypeText = label => (PHENOTYPE_DISPLAY[label] ?? label)
+  .replace(/^(CD68[+-]CD163[+-])Macrophage_(LGALS3[+-]CD4[+-])$/, 'Macrophage $1$2')
+  .replace(/\+/g, '⁺').replace(/([A-Za-z0-9])-(?=$|[ A-Z])/g, '$1⁻');
 const arg = name => process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] : null;
 const url = arg('--url') || 'http://127.0.0.1:3840/islet-explorer/';
 const output = arg('--output') || '/tmp/ui-review-check.json';
@@ -140,8 +149,9 @@ await check('composition_by_donor_card', async () => {
   await page.waitForFunction(() => /peri-islet band/.test(document.getElementById('plot-composition_by_donor').layout.title.text));
   const periLeftOut = await page.$$eval('input[name="plot-composition_leave_out"]:checked', els => els.map(e => e.value));
   const endocrine = ['Beta cell', 'Alpha cell', 'Delta cell', 'CHGA+ hormone-negative'];
+  // legend entries are display names; the Leave out values stay data labels
   return {passed: fig.donors >= 15 && fig.sums.every(v => Math.abs(v - 100) < 0.6) && fig.phenotypes.includes('No subtype') &&
-    !fig.phenotypes.some(n => ['Endocrine', 'T cell', 'Immune', ...endocrine].includes(n)) && csv > 100 &&
+    !fig.phenotypes.some(n => ['Endocrine', 'T cell', 'Immune', ...endocrine].map(phenotypeText).includes(n)) && csv > 100 &&
     endocrine.every(n => leftOut.includes(n)) && JSON.stringify(periLeftOut) === JSON.stringify(['Exocrine']),
     ...fig, csv_lines: csv, left_out: leftOut, peri_left_out: periLeftOut};
 });
@@ -155,7 +165,7 @@ await check('near_empty_measures_not_offered', () => page.evaluate(() => {
 }));
 await check('axis_fits_the_bulk', async () => {
   await choose('plot-which', 'peri_prop_CD4_Tcell');
-  await page.waitForFunction(() => /CD4 Tcell/.test(document.getElementById('plot-plt').layout?.title?.text || ''));
+  await page.waitForFunction(() => /T Cell CD4/.test(document.getElementById('plot-plt').layout?.title?.text || ''));
   await idle();
   const read = () => page.$eval('#plot-plt', gd => ({range: gd.layout.yaxis.range, title: gd.layout.title.text,
     pinned: gd.data.filter(t => t.marker?.symbol === 'triangle-up-open' || (t.mode === 'markers' && t.marker?.symbol === 'triangle-up-open')).length}));

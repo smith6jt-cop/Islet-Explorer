@@ -142,7 +142,11 @@ donor_distance_profile <- function() {
 }
 
 #' Each donor's tissue share of the given labels (cells outside every endocrine object and its band).
+# A merged macrophage category or a group aggregate counts its data labels (phenotype_members(), 00_globals.R).
+.phenotype_members <- function(labels) get0("phenotype_members", mode = "function", ifnotfound = identity)(labels)
+
 donor_tissue_share <- function(profile, labels) {
+  labels <- .phenotype_members(labels)
   t <- profile$tissue
   total <- tapply(t$n, t$case_id, sum)
   hit <- tapply(t$n[t$phenotype %in% labels], t$case_id[t$phenotype %in% labels], sum)
@@ -155,6 +159,7 @@ donor_tissue_share <- function(profile, labels) {
 #' donor's tissue share of them (1 = the donor's own tissue level). Donors with none in their tissue are dropped.
 immune_gradient <- function(profile, labels) {
   if (is.null(profile)) return(NULL)
+  labels <- .phenotype_members(labels)
   b <- profile$bins
   key <- paste(b$case_id, b$bin, sep = "\r")
   total <- tapply(b$n, key, sum)

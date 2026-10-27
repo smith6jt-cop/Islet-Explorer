@@ -713,7 +713,141 @@ MACROPHAGE_LABEL_PATTERN <- "^CD68[+-]CD163[+-]Macrophage_LGALS3[+-]CD4[+-]$"
 #' TRUE for a macrophage label of either root ("Macrophage" or a marker-profile label).
 is_macrophage_label <- function(x) {
   x <- as.character(x)
-  !is.na(x) & (x == "Macrophage" | grepl(MACROPHAGE_LABEL_PATTERN, x))
+  !is.na(x) & (x == "Macrophage" | grepl(MACROPHAGE_LABEL_PATTERN, x) | grepl(MACROPHAGE_KEY_PATTERN, x))
+}
+
+# ---- Macrophages split by chosen markers (owner, 2026-10-27) ----
+# "Listing all 12 macrophage types is cumbersome and takes up too much space. Better to just have checkboxes under
+# macrophage heading to show/hide each of the four markers." One app-wide setting (app.R macrophage_markers(), set by
+# every marker checkbox group, macrophage_marker_checkboxes()) decides how macrophages are shown: no marker checked,
+# one "Macrophage"; CD163 and CD4, "Macrophage CD163+CD4+" ... "Macrophage CD163-CD4-"; all four, the twelve labels.
+# A merged category ("key") sums the data labels it covers, which are mutually exclusive, so nothing is counted twice:
+# object columns by macrophage_collapse_comp(), cell labels by macrophage_collapse(), and a query or a sum over
+# cells expands a key back to its data labels with phenotype_members().
+MACROPHAGE_MARKERS <- c("CD68", "CD163", "LGALS3", "CD4")
+MACROPHAGE_KEY_PATTERN <- "^Macrophage ((CD68|CD163|LGALS3|CD4)[+-])+$"
+
+#' A label's macrophage marker signs, c(CD68 = "+", ...), from a data label or a key.
+macrophage_signs <- function(label) {
+  m <- regmatches(label, gregexpr("(CD68|CD163|LGALS3|CD4)[+-]", label))[[1]]
+  stats::setNames(substring(m, nchar(m)), substr(m, 1, nchar(m) - 1))
+}
+
+#' The marker-profile macrophage labels as their key for the checked `markers` (other labels unchanged).
+macrophage_collapse <- function(labels, markers = character(0)) {
+  labels <- as.character(labels)
+  markers <- MACROPHAGE_MARKERS[MACROPHAGE_MARKERS %in% markers]
+  hit <- !is.na(labels) & grepl(MACROPHAGE_LABEL_PATTERN, labels)
+  if (!any(hit)) return(labels)
+  u <- unique(labels[hit])
+  key <- vapply(u, function(l) {
+    if (!length(markers)) return("Macrophage")
+    s <- macrophage_signs(l)
+    paste0("Macrophage ", paste0(markers, s[markers], collapse = ""))
+  }, character(1))
+  labels[hit] <- unname(key[labels[hit]])
+  labels
+}
+
+#' The data labels behind each label: a key's macrophage labels, a group aggregate's members, else the label itself.
+phenotype_members <- function(labels) {
+  raw <- c("Beta cell", "Alpha cell", "Delta cell", "CHGA+ hormone-negative", "Endocrine", "CD8a Tcell", "CD4 Tcell",
+           "T cell", "Macrophage", MACROPHAGE_LABELS)
+  out <- character(0)
+  for (l in as.character(labels)) {
+    out <- c(out, if (is_phenotype_aggregate(l)) {
+      raw[phenotype_group(raw) == names(PHENOTYPE_GROUP_AGGREGATES)[match(l, PHENOTYPE_GROUP_AGGREGATES)]]
+    } else if (identical(l, "Macrophage")) {
+      c("Macrophage", MACROPHAGE_LABELS)
+    } else if (grepl(MACROPHAGE_KEY_PATTERN, l)) {
+      s <- macrophage_signs(l)
+      MACROPHAGE_LABELS[vapply(MACROPHAGE_LABELS, function(m) all(macrophage_signs(m)[names(s)] == s), logical(1))]
+    } else l)
+  }
+  unique(out)
+}
+
+#' Object columns with the macrophage labels merged for the checked markers: prop_, peri_prop_ and peri_count_ sum;
+#' enrich_z_ is recomputed from the summed observed and expected band counts (each member's expected count recovered
+#' from its z and count); min_dist_ is the nearest member. The member columns are dropped, and so is the
+#' "All macrophages" aggregate when no marker is checked (it is then the one "Macrophage").
+macrophage_collapse_comp <- function(comp, markers = character(0)) {
+  if (is.null(comp) || !is.data.frame(comp)) return(comp)
+  prof <- intersect(MACROPHAGE_LABELS, sub("^prop_", "", grep("^prop_", names(comp), value = TRUE)))
+  if (!length(prof)) return(comp)
+  safe <- function(l) gsub("+", "plus", gsub(" ", "_", l, fixed = TRUE), fixed = TRUE)
+  num <- function(col) if (col %in% names(comp)) suppressWarnings(as.numeric(comp[[col]])) else rep(NA_real_, nrow(comp))
+  total <- function(cols) {
+    m <- vapply(cols, num, numeric(nrow(comp)))
+    if (!is.matrix(m)) m <- matrix(m, nrow = nrow(comp))
+    out <- rowSums(m, na.rm = TRUE)
+    out[rowSums(is.finite(m)) == 0] <- NA_real_
+    out
+  }
+  keys <- macrophage_collapse(prof, markers)
+  drop <- character(0)
+  for (k in unique(keys)) {
+    mem <- prof[keys == k]
+    comp[[paste0("prop_", k)]] <- total(paste0("prop_", mem))
+    for (pre in c("peri_prop_", "peri_count_")) comp[[paste0(pre, safe(k))]] <- total(paste0(pre, safe(mem)))
+    if (any(paste0("enrich_z_", safe(mem)) %in% names(comp))) {
+      observed <- 0; expected <- 0
+      for (m in mem) {
+        z <- num(paste0("enrich_z_", safe(m))); n <- num(paste0("peri_count_", safe(m)))
+        root <- (-z + sqrt(pmax(z^2 + 4 * n, 0))) / 2
+        expected <- expected + ifelse(is.finite(root), root^2, 0)
+        observed <- observed + ifelse(is.finite(n), n, 0)
+      }
+      comp[[paste0("enrich_z_", safe(k))]] <- ifelse(expected > 0, (observed - expected) / sqrt(expected), NA_real_)
+    }
+    dist <- intersect(paste0("min_dist_", safe(mem)), names(comp))
+    if (length(dist)) {
+      d <- do.call(pmin, c(lapply(dist, num), na.rm = TRUE))
+      comp[[paste0("min_dist_", safe(k))]] <- d
+    }
+    drop <- c(drop, setdiff(c(paste0("prop_", mem), paste0(c("peri_prop_", "peri_count_", "enrich_z_", "min_dist_"),
+                                                         rep(safe(mem), each = 4))), paste0("prop_", k)))
+  }
+  if (!length(markers)) drop <- c(drop, "prop_All macrophages", "peri_prop_All_macrophages")
+  comp[, setdiff(names(comp), drop), drop = FALSE]
+}
+
+#' The four marker checkboxes that split the macrophages (shown under a Macrophage heading or in a tab's controls).
+macrophage_marker_checkboxes <- function(input_id, selected = character(0), label = NULL) {
+  shiny::tags$div(class = "pheno-mac-markers",
+    shiny::checkboxGroupInput(input_id, label, choices = MACROPHAGE_MARKERS, inline = TRUE,
+                              selected = MACROPHAGE_MARKERS[MACROPHAGE_MARKERS %in% selected]))
+}
+
+#' In a module server: the marker checkbox inputs `ids` set the app-wide setting (a reactiveVal), and follow it when
+#' another control changes it.
+bind_macrophage_marker_inputs <- function(input, session, ids, setting) {
+  for (id in ids) local({
+    id <- id
+    shiny::observeEvent(input[[id]], {
+      v <- MACROPHAGE_MARKERS[MACROPHAGE_MARKERS %in% (input[[id]] %||% character(0))]
+      if (!identical(v, setting())) setting(v)
+    }, ignoreNULL = FALSE, ignoreInit = TRUE)
+  })
+  shiny::observe({
+    v <- setting()
+    for (id in ids) {
+      cur <- shiny::isolate(input[[id]])
+      if (!is.null(cur) || length(v)) {
+        if (!setequal(cur %||% character(0), v)) shiny::updateCheckboxGroupInput(session, id, selected = v)
+      }
+    }
+  })
+}
+
+#' After the macrophage categories change, keep a selection's other labels and select every new macrophage category
+#' when any old one was selected (none otherwise).
+remap_macrophage_selection <- function(prev, choices) {
+  prev <- as.character(prev %||% character(0))
+  mac <- is_macrophage_label(choices)
+  keep <- choices[choices %in% prev]
+  if (!any(mac & choices %in% prev) && any(is_macrophage_label(prev))) keep <- c(keep, choices[mac])
+  choices[choices %in% keep]
 }
 
 # Display names (owner, 2026-10-27): "if there is a broad name e.g. T Cell, use it first followed by the subclass name
@@ -822,9 +956,12 @@ add_phenotype_aggregate_columns <- function(comp) {
 phenotype_groups_split <- function(labels) {
   labels <- as.character(labels)
   g <- phenotype_group(labels)
+  # A macrophage key's plus before its minus, marker by marker ("Macrophage CD163+CD4+" first).
+  sign_order <- chartr("+-", "01", labels)
   out <- lapply(PHENOTYPE_GROUP_ORDER, function(k) {
     i <- which(g == k)
-    i[order(!is_phenotype_aggregate(labels[i]))]
+    if (k == "Macrophage") i[order(!is_phenotype_aggregate(labels[i]), sign_order[i])]
+    else i[order(!is_phenotype_aggregate(labels[i]))]
   })
   out <- lapply(out, function(i) labels[i])
   names(out) <- PHENOTYPE_GROUP_ORDER
@@ -848,7 +985,7 @@ phenotype_grouped_choices <- function(labels, values = labels, prefix = "") {
 #' label) marks a label with no cells " (0)". The links act in the browser (www/phenotype-groups.js); a server
 #' update may change `selected` (updateCheckboxGroupInput(selected = )), not the choices: re-render instead.
 phenotype_group_checkboxes <- function(input_id, labels, selected = labels, label = NULL, counts = NULL,
-                                       choice_names = NULL) {
+                                       choice_names = NULL, marker_input_id = NULL, markers = character(0)) {
   groups <- phenotype_groups_split(labels)
   box <- function(v) {
     n <- if (is.null(counts)) NA_integer_ else suppressWarnings(as.integer(counts[v]))
@@ -875,6 +1012,8 @@ phenotype_group_checkboxes <- function(input_id, labels, selected = labels, labe
                        if (length(groups[[g]]) > 6) " pheno-group-wide"),
         shiny::tags$div(class = "pheno-group-head", shiny::tags$span(class = "pheno-group-title", g),
                         links("pheno-scope-group", g)),
+        # The four markers that split the macrophages, under the Macrophage heading (owner, 2026-10-27).
+        if (g == "Macrophage" && !is.null(marker_input_id)) macrophage_marker_checkboxes(marker_input_id, markers),
         shiny::tags$div(class = "pheno-group-boxes", lapply(groups[[g]], box))))))
 }
 
@@ -1355,6 +1494,9 @@ CONTROL_PANEL_CSS <- paste0(
   ".pheno-select-links { font-size: 12px; white-space: nowrap; } ",
   ".pheno-select-links a { color: var(--islet-link); cursor: pointer; } ",
   ".pheno-select-sep { color: var(--islet-fg-muted); margin: 0 4px; } ",
+  ".pheno-mac-markers .form-group { margin: 0 0 2px; width: auto; } ",
+  ".pheno-mac-markers .checkbox-inline { margin: 0 10px 0 0; padding-left: 18px; color: var(--islet-fg-muted); } ",
+  ".pheno-mac-markers .checkbox-inline + .checkbox-inline { margin-left: 0; } ",
   # The macrophage labels have no spaces (owner, 2026-10-27: "CD68+CD163+Macrophage_LGALS3+CD4+"), so a long label
   # wraps inside its column instead of running under the next one.
   ".control-checkbox-grid .shiny-options-group .checkbox label { overflow-wrap: anywhere; } ",

@@ -190,7 +190,7 @@ compute_barlow_pseudotime <- function(min_cells = 1, max_cells = NA, object_clas
 BARLOW_RATIO_REGIONS <- c("Core + Peri" = "both", "Core only" = "core", "Peri only" = "peri")
 
 #' Cell types available as ratio features, in a stable display order.
-barlow_ratio_types <- function() {
+barlow_ratio_types <- function(markers = character(0)) {
   d <- barlow_features()
   if (is.null(d)) return(character(0))
   all <- sub("^n_core_", "", grep("^n_core_", names(d), value = TRUE))
@@ -199,10 +199,11 @@ barlow_ratio_types <- function() {
   # quality, not biology. `phenotype_keep()` is the single gate for that
   # (00_globals.R); the CSV still carries them because `Endocrine` is the RATIO
   # DENOMINATOR even though it is not selectable as a numerator.
-  kept <- sort(phenotype_keep(all))
+  # The macrophages merged for the checked markers (macrophage_collapse(); owner, 2026-10-27).
+  kept <- sort(unique(macrophage_collapse(phenotype_keep(all), markers)))
   # The group aggregates ("All macrophages"; owner, 2026-10-27), summed from all the members' counts, general
   # classes ("T cell", "Endocrine") included.
-  c(phenotype_aggregates_for(all), kept)
+  c(phenotype_aggregates_for(unique(macrophage_collapse(all, markers))), kept)
 }
 
 #' log1p(cells of `type` / endocrine cells in the islet core), per islet.
@@ -213,8 +214,8 @@ barlow_ratio_types <- function() {
 barlow_ratio_values <- function(type, region = "both") {
   d <- barlow_features()
   if (is.null(d) || !nzchar(type %||% "")) return(NULL)
-  types <- if (is_phenotype_aggregate(type))
-    phenotype_aggregate_members(type, sub("^n_core_", "", grep("^n_core_", names(d), value = TRUE))) else type
+  # an aggregate or a merged macrophage category sums its data labels (phenotype_members())
+  types <- intersect(phenotype_members(type), sub("^n_core_", "", grep("^n_core_", names(d), value = TRUE)))
   cc <- paste0("n_core_", types); pc <- paste0("n_peri_", types)
   if (!length(types) || !all(c(cc, pc) %in% names(d))) return(NULL)
   count <- function(cols) {

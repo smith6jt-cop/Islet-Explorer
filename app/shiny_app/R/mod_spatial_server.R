@@ -39,9 +39,14 @@ spatial_umap_colour_choices <- function(comp_cols) {
 
 spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                            donor_colors_reactive = reactive(DONOR_COLORS_BRIGHT),
-                           selected_islet = reactiveVal(NULL), active_tab = reactive("Spatial")) {
+                           selected_islet = reactiveVal(NULL), active_tab = reactive("Spatial"),
+                           macrophage_markers = reactiveVal(character(0))) {
 
   moduleServer(id, function(input, output, session) {
+    # The macrophage markers (owner, 2026-10-27) sit under the Macrophage heading of each grouped phenotype list
+    # (Data controls, composition & enrichment, distance profile); they set the app-wide setting.
+    bind_macrophage_marker_inputs(input, session, c("mac_markers_filter", "mac_markers_enrich", "mac_markers_dist"),
+                                  macrophage_markers)
     output$embedding_method <- renderText({
       # Since 2026-10-19 (owner) a uniform root serves the endocrine composition of the objects with ten or
       # more core cells (scripts/uniform/composition_embedding.py); older roots serve the protein embedding.
@@ -159,7 +164,11 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
     donor_cells <- reactive({
       donor_id <- selected_donor()
       req(donor_id)
-      load_donor_tissue(donor_id)
+      cells <- load_donor_tissue(donor_id)
+      # macrophages merged for the checked markers (owner, 2026-10-27)
+      if (!is.null(cells) && "phenotype" %in% names(cells))
+        cells$phenotype <- macrophage_collapse(cells$phenotype, macrophage_markers())
+      cells
     })
 
     # ---- Donor status for selected donor ----
@@ -209,7 +218,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
     pheno_choice_info <- reactive({
       cells <- tryCatch(donor_cells(), error = function(e) NULL)
       observed <- if (is.null(cells)) character(0) else cells$phenotype
-      phenos <- canonical_phenotype_order(observed)
+      phenos <- unique(macrophage_collapse(canonical_phenotype_order(observed), macrophage_markers()))
       counts <- table(factor(observed, levels = phenos))
       list(phenos = phenos, counts = counts)
     })
@@ -226,11 +235,14 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       # newly-appearing phenotype permanently unchecked. With a donor-independent
       # list there is nothing to intersect away.
       prev <- isolate(input$pheno_filter)
-      selected_phenos <- if (!is.null(prev)) prev else setdiff(phenos, PHENO_HIDE_DEFAULT)
+      selected_phenos <- if (!is.null(prev)) remap_macrophage_selection(prev, phenos)
+                         else setdiff(phenos, PHENO_HIDE_DEFAULT)
 
       # Grouped, with All | None per group and for the list (owner, 2026-10-27). Labels carry the donor's count, so
       # a zero-cell phenotype is visibly present but empty rather than silently absent.
-      phenotype_group_checkboxes(ns("pheno_filter"), phenos, selected = selected_phenos, counts = counts)
+      phenotype_group_checkboxes(ns("pheno_filter"), phenos, selected = selected_phenos, counts = counts,
+                                 marker_input_id = if (root_has_marker_profile_labels()) ns("mac_markers_filter"),
+                                 markers = isolate(macrophage_markers()))
     })
 
     # ---- Zoom state for tissue scatter ----
@@ -426,7 +438,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
     output$tissue_scatter <- bindCache(
       shiny::renderPlot({ spatial_tissue_scatter_plot() }, height = 800, bg = "transparent"),
       selected_donor(), donor_status(), input$region_filter, input$color_by, input$pheno_filter,
-      input$color_background, palette(), has_leiden(),
+      input$color_background, palette(), has_leiden(), macrophage_markers(),
       if (identical(input$color_by, "leiden") && has_leiden()) list(input$leiden_res, islet_leiden_map()) else NULL,
       scatter_zoom$xmin, scatter_zoom$xmax, scatter_zoom$ymin, scatter_zoom$ymax, islet_theme_mode())
     output$dl_tissue_scatter <- shiny::downloadHandler(
@@ -1110,11 +1122,13 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       labels <- enrich_labels()
       if (length(labels) == 0) return(NULL)
       prev <- isolate(input$enrich_phenos)
-      selected <- if (!is.null(prev)) intersect(prev, labels) else labels
+      selected <- if (!is.null(prev)) remap_macrophage_selection(prev, labels) else labels
       # Grouped, with All | None per group and for the list (owner, 2026-10-27).
       tagList(
         tags$label("Phenotypes shown", style = "font-weight: 600; font-size: 13px; margin: 0 0 2px;"),
-        phenotype_group_checkboxes(ns("enrich_phenos"), labels, selected = selected))
+        phenotype_group_checkboxes(ns("enrich_phenos"), labels, selected = selected,
+                                   marker_input_id = if (root_has_marker_profile_labels()) ns("mac_markers_enrich"),
+                                   markers = isolate(macrophage_markers())))
     })
 
     # ---- Neighborhood cards UI (conditional on data availability) ----
@@ -1199,7 +1213,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                        " immune cells everywhere. It reads per-cell data, so the Endocrine objects selector does",
                        " not apply.")),
               div(style = ctrl_row,
-                selectInput(ns("gradient_phenotype"), "Cells", choices = GRADIENT_CHOICES, selected = "all",
+                selectInput(ns("gradient_phenotype"), "Cells", choices = isolate(gradient_choices()), selected = "all",
                             width = "100%")),
               plotlyOutput(ns("immune_gradient"), height = "480px"),
               dl_csv("dl_gradient_csv")
@@ -1353,15 +1367,18 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       # Phenotype mode lists the immune phenotypes (owner, 2026-10-20: no endocrine or exocrine classes); marker
       # mode every marker the data root flags (all 31 panel markers from v8).
       if (identical(input$dist_mode %||% "phenotype", "marker")) cell_distance_markers()
-      else setdiff(cell_distance_phenotypes(), NON_IMMUNE_LABELS)
+      else unique(macrophage_collapse(setdiff(cell_distance_phenotypes(), NON_IMMUNE_LABELS), macrophage_markers()))
     })
-    observeEvent(input$dist_mode, {
+    observeEvent(list(input$dist_mode, macrophage_markers()), {
       mode <- input$dist_mode %||% "phenotype"
       items <- dist_items()
       ch <- if (identical(mode, "marker")) c("All cells" = "__all__", stats::setNames(items, items))
             else c(list("All cells" = "__all__"), phenotype_grouped_choices(items))
       cur_g <- isolate(input$dist_group)
-      sel_g <- if (!is.null(cur_g) && cur_g %in% c("__all__", items)) cur_g else "__all__"
+      sel_g <- if (!is.null(cur_g) && cur_g %in% c("__all__", items)) cur_g
+               else if (!is.null(cur_g) && is_macrophage_label(cur_g) && any(is_macrophage_label(items)))
+                 items[is_macrophage_label(items)][1]
+               else "__all__"
       updateSelectInput(session, "dist_group", choices = ch, selected = sel_g)
     }, ignoreNULL = FALSE)
     output$dist_comp_items_ui <- renderUI({
@@ -1369,7 +1386,8 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       items <- dist_items()
       def <- if (identical(mode, "marker")) intersect(c("INS", "GCG", "CD3e", "CD8a", "CD68", "CD31"), items) else items
       cur_c <- isolate(input$dist_comp_items)
-      sel_c <- if (!is.null(cur_c) && length(cur_c) > 0 && all(cur_c %in% items)) cur_c else def
+      sel_c <- if (!is.null(cur_c) && length(cur_c) > 0) remap_macrophage_selection(cur_c, items) else def
+      if (!length(sel_c)) sel_c <- def
       if (identical(mode, "marker")) {
         return(tagList(
           div(style = "display: flex; align-items: center; gap: 6px;",
@@ -1380,7 +1398,9 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
               actionLink(ns("dist_markers_none"), "None", style = "color: var(--islet-link);"))),
           checkboxGroupInput(ns("dist_comp_items"), NULL, choices = items, selected = sel_c)))
       }
-      phenotype_group_checkboxes(ns("dist_comp_items"), items, selected = sel_c, label = "Show")
+      phenotype_group_checkboxes(ns("dist_comp_items"), items, selected = sel_c, label = "Show",
+                                 marker_input_id = if (root_has_marker_profile_labels()) ns("mac_markers_dist"),
+                                 markers = isolate(macrophage_markers()))
     })
     observeEvent(input$dist_markers_all, updateCheckboxGroupInput(session, "dist_comp_items", selected = dist_items()))
     observeEvent(input$dist_markers_none, updateCheckboxGroupInput(session, "dist_comp_items", selected = character(0)))
@@ -1518,15 +1538,26 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
     # The immune phenotypes in their groups (owner, 2026-10-27), each group's aggregate first where it has two or
     # more phenotypes ("All T cells" counts the T cells without a subtype too). The macrophages are one label on the
     # frozen root and twelve marker-profile labels from v14.
-    GRADIENT_PHENOTYPES <- local({
+    # The macrophages merged for the checked markers (owner, 2026-10-27).
+    gradient_phenotypes <- reactive({
       root <- root_phenotype_labels()
       listed <- c("CD8a Tcell", "CD4 Tcell", "B cell",
-                  if (length(root)) intersect(MACROPHAGE_LABELS, root) else character(0))
-      if (!any(grepl(MACROPHAGE_LABEL_PATTERN, listed))) listed <- c(listed, "Macrophage")
+                  unique(macrophage_collapse(if (length(root)) intersect(MACROPHAGE_LABELS, root) else character(0),
+                                             macrophage_markers())))
+      if (!any(is_macrophage_label(listed))) listed <- c(listed, "Macrophage")
       c(phenotype_aggregates_for(c(listed, "T cell")), listed)
     })
-    GRADIENT_CHOICES <- c(list("All immune cells" = "all"), phenotype_grouped_choices(GRADIENT_PHENOTYPES))
-    GRADIENT_LABELS <- c("all" = "All immune cells", stats::setNames(phenotype_text(GRADIENT_PHENOTYPES), GRADIENT_PHENOTYPES))
+    gradient_choices <- reactive(c(list("All immune cells" = "all"), phenotype_grouped_choices(gradient_phenotypes())))
+    gradient_labels <- reactive(c("all" = "All immune cells",
+                                  stats::setNames(phenotype_text(gradient_phenotypes()), gradient_phenotypes())))
+    observeEvent(gradient_choices(), {
+      cur <- isolate(input$gradient_phenotype) %||% "all"
+      vals <- unlist(gradient_choices(), use.names = FALSE)
+      sel <- if (cur %in% vals) cur
+             else if (is_macrophage_label(cur) && any(is_macrophage_label(vals))) vals[is_macrophage_label(vals)][1]
+             else "all"
+      updateSelectInput(session, "gradient_phenotype", choices = gradient_choices(), selected = sel)
+    }, ignoreInit = TRUE)
     gradient_data <- reactive({
       choice <- input$gradient_phenotype %||% "all"
       labels <- if (identical(choice, "all")) IMMUNE_LABELS
@@ -1542,7 +1573,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
 
     output$immune_gradient <- renderPlotly({
       g <- gradient_data()
-      label <- unname(GRADIENT_LABELS[input$gradient_phenotype %||% "all"])
+      label <- unname(gradient_labels()[input$gradient_phenotype %||% "all"])
       dcols <- donor_colors_reactive()
       fonts <- plotly_islet_fonts()
       p <- plot_ly()
@@ -1608,7 +1639,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                      ratio_to_own_tissue = g$value, stringsAsFactors = FALSE)
         write_islet_csv(file, out, islet_csv_header(
           "Spatial — immune gradient around endocrine objects, per donor",
-          paste("Cells:", unname(GRADIENT_LABELS[input$gradient_phenotype %||% "all"])),
+          paste("Cells:", unname(gradient_labels()[input$gradient_phenotype %||% "all"])),
           "Distance: from the nearest endocrine object's border (negative = inside, binned as Core)",
           "Own tissue: the donor's cells outside every endocrine object and its 20 um band",
           paste("Donor groups:", paste(input$groups %||% "(all)", collapse = ", "))))

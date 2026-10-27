@@ -5,7 +5,9 @@
   exprs <- parse(.find_source("R/00_globals.R"), keep.source = FALSE)
   wanted <- c("MACROPHAGE_LABELS", "MACROPHAGE_LABEL_PATTERN", "is_macrophage_label", "phenotype_text",
               "phenotype_choices_named", "extract_phenotype_from_column", "phenotype_label_html",
-              "PHENOTYPE_DISPLAY_NAMES",
+              "PHENOTYPE_DISPLAY_NAMES", "MACROPHAGE_MARKERS", "MACROPHAGE_KEY_PATTERN", "macrophage_signs",
+              "macrophage_collapse", "phenotype_members", "macrophage_collapse_comp", "remap_macrophage_selection",
+              "macrophage_marker_checkboxes",
               "PHENOTYPE_GROUP_ORDER", "PHENOTYPE_GROUP_AGGREGATES", "phenotype_group", "is_phenotype_aggregate",
               "phenotype_aggregate_members", "phenotype_aggregates_for", "phenotype_groups_split",
               "phenotype_grouped_choices", "phenotype_group_checkboxes", "add_phenotype_aggregate_columns")
@@ -84,4 +86,47 @@ test_that("aggregate columns sum the members' proportions of the same cells", {
   out <- env$add_phenotype_aggregate_columns(comp)
   expect_equal(out[["prop_All T cells"]], c(0.3, NA))
   expect_equal(out[["peri_prop_All_T_cells"]], c(0.05, 0.1))
+})
+
+test_that("macrophages merge by the checked markers; a merged category expands back to its data labels", {
+  env <- .label_env()
+  L <- env$MACROPHAGE_LABELS
+  expect_equal(unique(env$macrophage_collapse(L)), "Macrophage")
+  keys <- env$macrophage_collapse(L, c("CD4", "CD163"))
+  expect_setequal(unique(keys), c("Macrophage CD163+CD4+", "Macrophage CD163+CD4-", "Macrophage CD163-CD4+",
+                                  "Macrophage CD163-CD4-"))
+  expect_equal(length(unique(env$macrophage_collapse(L, env$MACROPHAGE_MARKERS))), 12L)
+  expect_equal(env$macrophage_collapse(c("B cell", L[1]), "CD68"), c("B cell", "Macrophage CD68+"))
+  # every data label in exactly one category, and a category's members are those that merge into it
+  for (k in unique(keys)) expect_setequal(env$phenotype_members(k), L[keys == k])
+  expect_setequal(env$phenotype_members("Macrophage"), c("Macrophage", L))
+  expect_equal(env$phenotype_text("Macrophage CD163-CD4+"), "Macrophage CD163\u207bCD4\u207a")
+  expect_equal(env$remap_macrophage_selection(c("B cell", "Macrophage"), c("B cell", "Macrophage CD4+", "Macrophage CD4-")),
+               c("B cell", "Macrophage CD4+", "Macrophage CD4-"))
+  expect_equal(env$remap_macrophage_selection("B cell", c("B cell", "Macrophage CD4+")), "B cell")
+})
+
+test_that("merged object columns sum the members and recompute the band enrichment from summed counts", {
+  env <- .label_env()
+  L <- env$MACROPHAGE_LABELS
+  safe <- function(l) gsub("+", "plus", gsub(" ", "_", l, fixed = TRUE), fixed = TRUE)
+  comp <- data.frame(total_cells_peri = c(100, 50))
+  expected <- list(c(2, 1), c(3, 0.5))           # each member's expected band count, per object
+  counts <- list(c(4, 0), c(1, 2))
+  for (i in 1:2) {
+    comp[[paste0("prop_", L[i])]] <- c(0.1, 0.2) * i
+    comp[[paste0("peri_prop_", safe(L[i]))]] <- counts[[i]] / comp$total_cells_peri
+    comp[[paste0("peri_count_", safe(L[i]))]] <- counts[[i]]
+    comp[[paste0("enrich_z_", safe(L[i]))]] <- (counts[[i]] - expected[[i]]) / sqrt(expected[[i]])
+    comp[[paste0("min_dist_", safe(L[i]))]] <- c(5, NA) * i
+  }
+  out <- env$macrophage_collapse_comp(comp)
+  expect_false(any(grepl("Macrophage_LGALS3", names(out))))
+  expect_equal(out[["prop_Macrophage"]], c(0.3, 0.6))
+  expect_equal(out[["peri_count_Macrophage"]], c(5, 2))
+  E <- expected[[1]] + expected[[2]]
+  expect_equal(out[["enrich_z_Macrophage"]], (c(5, 2) - E) / sqrt(E))
+  expect_equal(out[["min_dist_Macrophage"]], c(5, NA))
+  split <- env$macrophage_collapse_comp(comp, env$MACROPHAGE_MARKERS)
+  expect_equal(split[[paste0("prop_", env$macrophage_collapse(L[1], env$MACROPHAGE_MARKERS))]], c(0.1, 0.2))
 })

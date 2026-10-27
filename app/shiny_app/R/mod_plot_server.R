@@ -17,9 +17,12 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
                         donor_colors_reactive = reactive(DONOR_COLORS_BRIGHT),
                         remove_outliers = reactive(FALSE),
                         outlier_threshold = reactive(3.0),
-                        palette = reactive(PHENOTYPE_COLORS)) {
+                        palette = reactive(PHENOTYPE_COLORS), macrophage_markers = reactiveVal(character(0))) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
+    # The macrophage markers (owner, 2026-10-27): in the Data controls under the measure, and under the Macrophage
+    # heading of the composition card's Leave out; both set the app-wide setting, which prepared() already applies.
+    bind_macrophage_marker_inputs(input, session, c("mac_markers", "mac_markers_leave_out"), macrophage_markers)
 
     # Build each selector vocabulary once from server-owned data, then use the
     # same values for both UI construction and browser-input validation. This
@@ -81,6 +84,16 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       valid <- is.character(value) && length(value) == 1L && !is.na(value) &&
         nzchar(value) && value %in% allowed
       if (valid) return(value)
+
+      # A macrophage category that the marker choice merged or split: the same region's first macrophage category.
+      prefix <- if (is.character(value) && length(value) == 1L && !is.na(value))
+        regmatches(value, regexpr("^(combined_prop_|peri_prop_|prop_)", value)) else character(0)
+      if (length(prefix) && is_macrophage_label(extract_phenotype_from_column(value))) {
+        same <- allowed[startsWith(allowed, prefix) &
+                          is_macrophage_label(vapply(allowed, function(a) extract_phenotype_from_column(a) %||% a,
+                                                     character(1)))]
+        if (length(same)) return(same[[1]])
+      }
 
       # Dynamic selectInput replacement briefly leaves the preceding mode's
       # valid value in input$which. Fall back without treating that normal UI
@@ -167,7 +180,9 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         choices <- vocabularies$composition
         tagList(
           selectInput(ns("which"), "Population Measure", choices = choices,
-                      selected = selected)
+                      selected = selected),
+          if (root_has_marker_profile_labels())
+            macrophage_marker_checkboxes(ns("mac_markers"), isolate(macrophage_markers()), "Macrophage markers")
         )
       }
     })
@@ -858,12 +873,20 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       labels <- prepared()$combined_pairs$label
       c(labels[phenotype_is_kept(labels) & !is_phenotype_aggregate(labels)], DONOR_COMPOSITION_OTHER)
     })
-    # Only the region resets the choice (toggling an object class must not).
+    # Only the region resets the choice (toggling an object class must not); a new macrophage marker choice keeps it,
+    # with the macrophage categories left out together.
+    leave_out_region <- reactiveVal(NULL)
     output$composition_leave_out_ui <- renderUI({
       region <- input$composition_region %||% "core"
+      markers <- macrophage_markers()
       choices <- isolate(composition_leave_out_choices())
-      phenotype_group_checkboxes(ns("composition_leave_out"), choices, label = "Leave out",
-                                 selected = intersect(donor_composition_default_leave_out(region), choices))
+      selected <- if (identical(isolate(leave_out_region()), region))
+        remap_macrophage_selection(isolate(input$composition_leave_out), choices)
+      else intersect(donor_composition_default_leave_out(region), choices)
+      leave_out_region(region)
+      phenotype_group_checkboxes(ns("composition_leave_out"), choices, label = "Leave out", selected = selected,
+                                 marker_input_id = if (root_has_marker_profile_labels()) ns("mac_markers_leave_out"),
+                                 markers = markers)
     })
     composition_leave_out <- function() {
       v <- input$composition_leave_out

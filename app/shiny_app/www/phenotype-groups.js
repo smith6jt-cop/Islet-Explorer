@@ -4,7 +4,9 @@ $(document).on('click', '.pheno-select', function (event) {
   event.preventDefault();
   var link = $(this);
   var scope = link.hasClass('pheno-scope-group') ? link.closest('.pheno-group') : link.closest('.pheno-group-checkboxes');
-  var boxes = scope.find('input:checkbox');
+  // only the list's own boxes: a Macrophage heading also holds the marker checkboxes, a separate input
+  var name = link.closest('.pheno-group-checkboxes').attr('id');
+  var boxes = scope.find('input:checkbox').filter(function () { return this.name === name; });
   boxes.prop('checked', link.hasClass('pheno-select-all'));
   boxes.first().trigger('change');
 });

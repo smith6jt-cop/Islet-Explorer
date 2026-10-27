@@ -87,12 +87,13 @@ apply_pt_scale <- function(df, pt_scale) {
 trajectory_server <- function(id, prepared, selected_islet, forced_image, active_tab = reactive("Trajectory"),
                               donor_colors_reactive = reactive(DONOR_COLORS_BRIGHT),
                               remove_outliers = reactive(FALSE),
-                              outlier_threshold = reactive(3.0)) {
+                              outlier_threshold = reactive(3.0), macrophage_markers = reactiveVal(character(0))) {
   # `remove_outliers` / `outlier_threshold` are accepted but UNUSED: app.R still
   # passes them to every analysis module, and changing that signature is a wider
   # edit than this tab. The Trajectory tab no longer exposes or applies them.
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
+    bind_macrophage_marker_inputs(input, session, "mac_markers", macrophage_markers)
 
     # ---------- H5AD Path Resolution ----------
     resolve_traj_path <- function() {
@@ -306,16 +307,23 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       # versa) -- the two namespaces do not overlap and a stale value would
       # silently plot nothing.
       if (identical(input$traj_y_mode %||% "ratio", "ratio")) {
-        types <- barlow_ratio_types()
+        types <- barlow_ratio_types(macrophage_markers())
         if (!length(types)) {
           return(selectInput(ns("traj_ratio_type"), "Select cell type:",
                              choices = c("Composition features unavailable" = ""),
                              selected = ""))
         }
-        sel <- if (!is.null(input$traj_ratio_type) && input$traj_ratio_type %in% types)
-          input$traj_ratio_type else if ("Beta cell" %in% types) "Beta cell" else types[1]
-        return(selectInput(ns("traj_ratio_type"), "Select cell type:",
-                           choices = phenotype_grouped_choices(types), selected = sel))
+        prev <- isolate(input$traj_ratio_type)
+        sel <- if (!is.null(prev) && prev %in% types) prev
+               else if (!is.null(prev) && is_macrophage_label(prev) && any(is_macrophage_label(types)))
+                 types[is_macrophage_label(types)][1]
+               else if ("Beta cell" %in% types) "Beta cell" else types[1]
+        # The macrophage markers (owner, 2026-10-27) sit under the cell type; they set the app-wide setting.
+        return(tagList(
+          selectInput(ns("traj_ratio_type"), "Select cell type:",
+                      choices = phenotype_grouped_choices(types), selected = sel),
+          if (root_has_marker_profile_labels())
+            macrophage_marker_checkboxes(ns("mac_markers"), isolate(macrophage_markers()), "Macrophage markers")))
       }
 
       # Get available features from AnnData
@@ -378,7 +386,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       if (identical(y_mode, "ratio")) {
         ct <- input$traj_ratio_type
         if (is.null(ct)) return(NULL)
-        if (!islet_valid_scalar_choice(ct, barlow_ratio_types(),
+        if (!islet_valid_scalar_choice(ct, barlow_ratio_types(macrophage_markers()),
                                        "trajectory_ratio_invalid")) return(NULL)
         region <- input$traj_ratio_region %||% "core"
         if (!islet_valid_scalar_choice(region, c("both", "core", "peri"),
