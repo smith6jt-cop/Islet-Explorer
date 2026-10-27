@@ -9,6 +9,7 @@ test_that("Plot Cell Populations applies the short phenotype list to every regio
     stem <- sub("^(peri_prop_|prop_)", "", x)
     gsub("_", " ", gsub("plus", "+", stem, fixed = TRUE), fixed = TRUE)
   }
+  env$phenotype_text <- function(x) x
   sys.source(.find_source("R/plot_helpers.R"), envir = env)
 
   pairs <- data.frame(

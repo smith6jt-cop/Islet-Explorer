@@ -49,6 +49,7 @@ ui <- fluidPage(
                      "if(s==='light'||s==='dark')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();")),
     tags$style(HTML(CONTROL_PANEL_CSS)),
     tags$script(src = islet_asset("card-help.js")),
+    tags$script(src = islet_asset("phenotype-groups.js")),
     tags$script(src = islet_asset("sticky-layout.js")),
     # Favicons for browser tab, bookmarks, and mobile pinning. Browsers pick
     # the most appropriate sized PNG based on context; the ICO is the legacy

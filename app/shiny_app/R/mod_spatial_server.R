@@ -220,18 +220,6 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       if (length(phenos) == 0) return(NULL)
       counts <- info$counts
 
-      # Labels carry the donor's count so a zero-cell phenotype is visibly
-      # present-but-empty rather than silently absent. Values stay canonical.
-      choice_names <- lapply(phenos, function(p) {
-        n <- suppressWarnings(as.integer(counts[p]))
-        if (!is.finite(n)) n <- 0L
-        if (n == 0) {
-          tags$span(p, tags$span(" (0)"), style = "color: var(--islet-fg-muted);")
-        } else {
-          tags$span(p)
-        }
-      })
-
       # First render applies the hide-by-default set; afterwards the user's
       # selection is preserved verbatim. The old code did
       # `intersect(prev, phenos)` against a per-donor choice list, which left any
@@ -240,30 +228,9 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       prev <- isolate(input$pheno_filter)
       selected_phenos <- if (!is.null(prev)) prev else setdiff(phenos, PHENO_HIDE_DEFAULT)
 
-      tagList(
-        # The group's title in the Data controls names it ("Phenotypes"); the boxes sit in a three-column grid.
-        div(style = "display: flex; align-items: center; gap: 6px; margin-bottom: 2px;",
-          actionLink(ns("pheno_all"), "All", style = "font-size: 12px; color: var(--islet-link);"),
-          span("|", style = "color: var(--islet-fg-muted);"),
-          actionLink(ns("pheno_none"), "None", style = "font-size: 12px; color: var(--islet-link);")
-        ),
-        div(class = "control-checkbox-grid",
-          checkboxGroupInput(ns("pheno_filter"), NULL,
-                             choiceNames = choice_names,
-                             choiceValues = as.list(phenos),
-                             selected = selected_phenos,
-                             inline = FALSE)
-        )
-      )
-    })
-
-    observeEvent(input$pheno_all, {
-      updateCheckboxGroupInput(session, "pheno_filter",
-                               selected = pheno_choice_info()$phenos)
-    })
-
-    observeEvent(input$pheno_none, {
-      updateCheckboxGroupInput(session, "pheno_filter", selected = character(0))
+      # Grouped, with All | None per group and for the list (owner, 2026-10-27). Labels carry the donor's count, so
+      # a zero-cell phenotype is visibly present but empty rather than silently absent.
+      phenotype_group_checkboxes(ns("pheno_filter"), phenos, selected = selected_phenos, counts = counts)
     })
 
     # ---- Zoom state for tissue scatter ----
@@ -414,7 +381,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
             size = 0.4, alpha = 0.6,
             inherit.aes = FALSE
           ) +
-          ggplot2::scale_color_manual(values = pal, breaks = legend_phenos,
+          ggplot2::scale_color_manual(values = pal, breaks = legend_phenos, labels = phenotype_text,
                                         name = "Phenotype", na.value = "#CCCCCC",
                                         guide = ggplot2::guide_legend(override.aes = list(size = 4)))
         }
@@ -738,7 +705,8 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
 
       # Get phenotype proportion columns (prop_*), filtered by selected phenotypes
       prop_cols <- grep("^prop_", colnames(plot_comp), value = TRUE)
-      prop_cols <- prop_cols[phenotype_is_kept(sub("^prop_", "", prop_cols))]
+      prop_cols <- prop_cols[phenotype_is_kept(sub("^prop_", "", prop_cols)) &
+                             !is_phenotype_aggregate(sub("^prop_", "", prop_cols))]
       if (length(prop_cols) == 0) {
         return(plotly_islet_empty("No phenotype proportion data"))
       }
@@ -793,13 +761,24 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       canonical_order <- names(palette())
       ordered_phenos <- intersect(canonical_order, keep_phenos)
       ordered_phenos <- c(ordered_phenos, setdiff(keep_phenos, canonical_order))
-      bar_df$phenotype <- factor(bar_df$phenotype, levels = rev(ordered_phenos))
+      # One trace per phenotype, under its group in the legend (owner, 2026-10-27): a click on a group's title shows
+      # or hides the whole group.
+      ordered_phenos <- ordered_phenos[order(match(phenotype_group(ordered_phenos), PHENOTYPE_GROUP_ORDER))]
       bar_df$cluster <- factor(bar_df$cluster, levels = cluster_levels)
 
       fonts <- plotly_islet_fonts()
-      plot_ly(bar_df, x = ~cluster, y = ~proportion, color = ~phenotype,
-              colors = pal,
-              type = "bar") %>%
+      p <- plot_ly()
+      titled <- character(0)
+      for (ph in ordered_phenos) {
+        d <- bar_df[bar_df$phenotype == ph, , drop = FALSE]
+        g <- phenotype_group(ph)
+        p <- add_trace(p, x = d$cluster, y = d$proportion, type = "bar", name = phenotype_text(ph),
+                       marker = list(color = unname(pal[ph])), legendgroup = g,
+                       legendgrouptitle = if (!(g %in% titled)) list(text = g),
+                       hovertemplate = paste0(phenotype_text(ph), "<br>Cluster %{x}: %{y:.3f}<extra></extra>"))
+        titled <- union(titled, g)
+      }
+      p %>%
         layout(
           font = fonts$global,
           barmode = "stack",
@@ -811,7 +790,8 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           # Up to 12 reviewer-facing phenotype entries — use the dense floor directly rather than
           # a max() formula that already evaluates to it.
           legend = list(font = list(size = ISLET_FONT_SIZES$dense_min),
-                        title = list(text = "", font = fonts$legend_title))
+                        title = list(text = "", font = fonts$legend_title),
+                        groupclick = "toggleitem", tracegroupgap = 6)
         ) %>%
         plotly_islet_config("cluster_composition")
     }
@@ -1018,7 +998,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       opts <- phenotype_options()
       if (length(opts) == 0) return(character(0))
       vec <- vapply(opts, function(o) o$safe, character(1))
-      stats::setNames(vec, vapply(opts, function(o) o$label, character(1)))
+      stats::setNames(vec, phenotype_text(vapply(opts, function(o) o$label, character(1))))
     })
 
     # ---- Card B: donor-level values behind the bar chart and the donor heatmap ----
@@ -1130,33 +1110,10 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       if (length(labels) == 0) return(NULL)
       prev <- isolate(input$enrich_phenos)
       selected <- if (!is.null(prev)) intersect(prev, labels) else labels
+      # Grouped, with All | None per group and for the list (owner, 2026-10-27).
       tagList(
-        div(style = "display: flex; align-items: center; gap: 6px; margin-bottom: 4px;",
-          tags$label("Phenotypes shown", style = "font-weight: 600; font-size: 13px; margin: 0;"),
-          actionLink(ns("enrich_pheno_all"), "All", style = "font-size: 12px; color: var(--islet-link);"),
-          span("|", style = "color: var(--islet-fg-muted);"),
-          actionLink(ns("enrich_pheno_none"), "None", style = "font-size: 12px; color: var(--islet-link);")
-        ),
-        # Flow the checkboxes across the full-width card (same pattern as
-        # .cd-comp-cols for the distance-profile composition picker).
-        tags$style(HTML(paste0(
-          ".enrich-pheno-cols,.enrich-pheno-cols .shiny-input-checkboxgroup,",
-          ".enrich-pheno-cols .shiny-options-group{width:100%;max-width:none;",
-          "display:block;box-sizing:border-box;}",
-          ".enrich-pheno-cols .shiny-options-group{column-width:150px;column-gap:12px;}",
-          ".enrich-pheno-cols .checkbox{break-inside:avoid;margin:2px 0;}"))),
-        div(class = "enrich-pheno-cols",
-          checkboxGroupInput(ns("enrich_phenos"), NULL,
-                             choices = labels, selected = selected, inline = FALSE)
-        )
-      )
-    })
-
-    observeEvent(input$enrich_pheno_all, {
-      updateCheckboxGroupInput(session, "enrich_phenos", selected = enrich_labels())
-    })
-    observeEvent(input$enrich_pheno_none, {
-      updateCheckboxGroupInput(session, "enrich_phenos", selected = character(0))
+        tags$label("Phenotypes shown", style = "font-weight: 600; font-size: 13px; margin: 0 0 2px;"),
+        phenotype_group_checkboxes(ns("enrich_phenos"), labels, selected = selected))
     })
 
     # ---- Neighborhood cards UI (conditional on data availability) ----
@@ -1360,18 +1317,15 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
               ),
               conditionalPanel(
                 condition = "input.dist_ptype == 'composition'", ns = ns,
-                # Flow the (up to ~20) checkboxes into as many ~100px columns
-                # as fit, instead of one tall column. Targets the options-group
-                # so it survives the observeEvent(dist_mode) rebuild.
+                # Flow the marker checkboxes into as many ~100px columns as fit, instead of one tall column; the
+                # phenotypes are grouped (phenotype_group_checkboxes()). output$dist_comp_items_ui draws either.
                 tags$style(HTML(paste0(
                   ".cd-comp-cols,.cd-comp-cols .shiny-input-checkboxgroup,",
                   ".cd-comp-cols .shiny-options-group{width:100%;max-width:none;",
                   "display:block;box-sizing:border-box;}",
                   ".cd-comp-cols .shiny-options-group{column-width:100px;column-gap:16px;}",
                   ".cd-comp-cols .checkbox{break-inside:avoid;margin:2px 0;}"))),
-                tags$div(class = "cd-comp-cols",
-                         checkboxGroupInput(ns("dist_comp_items"), "Show",
-                                            choices = NULL))
+                tags$div(class = "cd-comp-cols", uiOutput(ns("dist_comp_items_ui")))
               )
             ),
             uiOutput(ns("distance_profile_plot"))
@@ -1392,26 +1346,44 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
            paste0(formatC(n, big.mark = ","), " objects"))
     })
 
-    # Card C-Right "cellwise": repopulate the phenotype/marker pickers when the
-    # group-by mode flips. Depends on input$dist_mode so it fires post-mount.
-    observeEvent(input$dist_mode, {
-      mode <- input$dist_mode %||% "phenotype"
+    # Card C-Right "cellwise": the phenotype/marker pickers follow the group-by mode. The density view's single
+    # choice is grouped (option groups); the composition view's checkboxes are grouped with All | None for phenotypes
+    # (owner, 2026-10-27) and keep All | None as one list for markers.
+    dist_items <- reactive({
       # Phenotype mode lists the immune phenotypes (owner, 2026-10-20: no endocrine or exocrine classes); marker
       # mode every marker the data root flags (all 31 panel markers from v8).
-      items <- if (identical(mode, "marker")) cell_distance_markers()
-               else setdiff(cell_distance_phenotypes(), NON_IMMUNE_LABELS)
-      ch <- c("All cells" = "__all__", stats::setNames(items, items))
+      if (identical(input$dist_mode %||% "phenotype", "marker")) cell_distance_markers()
+      else setdiff(cell_distance_phenotypes(), NON_IMMUNE_LABELS)
+    })
+    observeEvent(input$dist_mode, {
+      mode <- input$dist_mode %||% "phenotype"
+      items <- dist_items()
+      ch <- if (identical(mode, "marker")) c("All cells" = "__all__", stats::setNames(items, items))
+            else c(list("All cells" = "__all__"), phenotype_grouped_choices(items))
       cur_g <- isolate(input$dist_group)
-      sel_g <- if (!is.null(cur_g) && cur_g %in% ch) cur_g else "__all__"
+      sel_g <- if (!is.null(cur_g) && cur_g %in% c("__all__", items)) cur_g else "__all__"
       updateSelectInput(session, "dist_group", choices = ch, selected = sel_g)
-      def <- if (identical(mode, "marker"))
-               intersect(c("INS", "GCG", "CD3e", "CD8a", "CD68", "CD31"), items)
-             else
-               items
+    }, ignoreNULL = FALSE)
+    output$dist_comp_items_ui <- renderUI({
+      mode <- input$dist_mode %||% "phenotype"
+      items <- dist_items()
+      def <- if (identical(mode, "marker")) intersect(c("INS", "GCG", "CD3e", "CD8a", "CD68", "CD31"), items) else items
       cur_c <- isolate(input$dist_comp_items)
       sel_c <- if (!is.null(cur_c) && length(cur_c) > 0 && all(cur_c %in% items)) cur_c else def
-      updateCheckboxGroupInput(session, "dist_comp_items", choices = items, selected = sel_c)
-    }, ignoreNULL = FALSE)
+      if (identical(mode, "marker")) {
+        return(tagList(
+          div(style = "display: flex; align-items: center; gap: 6px;",
+            tags$label("Show", style = "margin: 0;"),
+            tags$span(class = "pheno-select-links",
+              actionLink(ns("dist_markers_all"), "All", style = "color: var(--islet-link);"),
+              tags$span(class = "pheno-select-sep", "|"),
+              actionLink(ns("dist_markers_none"), "None", style = "color: var(--islet-link);"))),
+          checkboxGroupInput(ns("dist_comp_items"), NULL, choices = items, selected = sel_c)))
+      }
+      phenotype_group_checkboxes(ns("dist_comp_items"), items, selected = sel_c, label = "Show")
+    })
+    observeEvent(input$dist_markers_all, updateCheckboxGroupInput(session, "dist_comp_items", selected = dist_items()))
+    observeEvent(input$dist_markers_none, updateCheckboxGroupInput(session, "dist_comp_items", selected = character(0)))
 
     # ==== Neighborhood row 1 (owner review, 2026-10-20): insulitis, insulitis by beta content, immune gradient ====
     # They replaced Peri enrichment by status (one column of the composition card), Peri vs core proportion (immune
@@ -1543,11 +1515,23 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
     )
 
     GRADIENT_MIN_CELLS <- 20
-    GRADIENT_CHOICES <- c("All immune cells" = "all", "CD8a T cell" = "CD8a Tcell", "CD4 T cell" = "CD4 Tcell",
-                          "B cell" = "B cell", "Macrophage" = "Macrophage")
+    # The immune phenotypes in their groups (owner, 2026-10-27), each group's aggregate first where it has two or
+    # more phenotypes ("All T cells" counts the T cells without a subtype too). The macrophages are one label on the
+    # frozen root and twelve marker-profile labels from v14.
+    GRADIENT_PHENOTYPES <- local({
+      root <- root_phenotype_labels()
+      listed <- c("CD8a Tcell", "CD4 Tcell", "B cell",
+                  if (length(root)) intersect(MACROPHAGE_LABELS, root) else character(0))
+      if (!any(grepl(MACROPHAGE_LABEL_PATTERN, listed))) listed <- c(listed, "Macrophage")
+      c(phenotype_aggregates_for(c(listed, "T cell")), listed)
+    })
+    GRADIENT_CHOICES <- c(list("All immune cells" = "all"), phenotype_grouped_choices(GRADIENT_PHENOTYPES))
+    GRADIENT_LABELS <- c("all" = "All immune cells", stats::setNames(phenotype_text(GRADIENT_PHENOTYPES), GRADIENT_PHENOTYPES))
     gradient_data <- reactive({
       choice <- input$gradient_phenotype %||% "all"
-      labels <- if (identical(choice, "all")) IMMUNE_LABELS else choice
+      labels <- if (identical(choice, "all")) IMMUNE_LABELS
+                else if (is_phenotype_aggregate(choice)) phenotype_aggregate_members(choice, IMMUNE_LABELS)
+                else choice
       g <- immune_gradient(donor_distance_profile(), labels)
       req(g, nrow(g) > 0)
       g <- g[as.character(g$status) %in% (input$groups %||% STATUS_ORDER), , drop = FALSE]
@@ -1558,7 +1542,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
 
     output$immune_gradient <- renderPlotly({
       g <- gradient_data()
-      label <- names(GRADIENT_CHOICES)[match(input$gradient_phenotype %||% "all", GRADIENT_CHOICES)]
+      label <- unname(GRADIENT_LABELS[input$gradient_phenotype %||% "all"])
       dcols <- donor_colors_reactive()
       fonts <- plotly_islet_fonts()
       p <- plot_ly()
@@ -1624,7 +1608,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                      ratio_to_own_tissue = g$value, stringsAsFactors = FALSE)
         write_islet_csv(file, out, islet_csv_header(
           "Spatial — immune gradient around endocrine objects, per donor",
-          paste("Cells:", names(GRADIENT_CHOICES)[match(input$gradient_phenotype %||% "all", GRADIENT_CHOICES)]),
+          paste("Cells:", unname(GRADIENT_LABELS[input$gradient_phenotype %||% "all"])),
           "Distance: from the nearest endocrine object's border (negative = inside, binned as Core)",
           "Own tissue: the donor's cells outside every endocrine object and its 20 um band",
           paste("Donor groups:", paste(input$groups %||% "(all)", collapse = ", "))))
@@ -1654,7 +1638,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         sub <- es[es$donor_status == s, , drop = FALSE]
         if (nrow(sub) == 0) next
         p <- p %>% add_trace(
-          x = sub$cell_type, y = sub$z_summary, name = s,
+          x = phenotype_text(sub$cell_type), y = sub$z_summary, name = s,
           type = "bar",
           marker = list(color = dcols[s]),
           error_y = list(
@@ -1683,7 +1667,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         xaxis = list(title = list(text = "", font = fonts$axis_title),
                      tickfont = fonts$axis_tick, tickangle = -30, automargin = TRUE,
                      categoryorder = "array",
-                     categoryarray = unique(es$cell_type)),
+                     categoryarray = phenotype_text(unique(es$cell_type))),
         yaxis = list(title = list(text = y_label, font = fonts$axis_title),
                      tickfont = fonts$axis_tick, automargin = TRUE),
         legend = list(title = list(text = "Status", font = fonts$legend_title),
@@ -1723,7 +1707,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       shapes <- lapply(breaks, function(b) list(type = "line", xref = "paper", x0 = 0, x1 = 1, yref = "y",
                                                  y0 = b - 0.5, y1 = b - 0.5, line = list(color = islet_ink(), width = 2)))
       fonts <- plotly_islet_fonts()
-      plot_ly(x = colnames(mat), y = rownames(mat), z = mat, type = "heatmap", colorscale = colorscale,
+      plot_ly(x = phenotype_text(colnames(mat)), y = rownames(mat), z = mat, type = "heatmap", colorscale = colorscale,
               zmin = zmin, zmax = zmax,
               text = if (show_vals) text_mat else NULL,
               texttemplate = if (show_vals) "%{text}" else NULL,
@@ -1793,7 +1777,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
               pp <- plot_ly() %>%
                 add_trace(x = sub$x, y = sub$val, type = "bar", marker = list(color = unname(pcols[m])),
                           showlegend = FALSE, hoverinfo = "text",
-                          hovertext = paste0(s, " · ", m, "<br>dist ≈ ", round(sub$x), " µm<br>",
+                          hovertext = paste0(s, " · ", phenotype_text(m), "<br>dist ≈ ", round(sub$x), " µm<br>",
                                              formatC(sub$n, big.mark = ","), " of ",
                                              formatC(sub$total, big.mark = ","), " cells (",
                                              sprintf("%.1f%%", 100 * sub$n / sub$total), ")")) %>%
@@ -1808,7 +1792,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                 layout(bargap = 0.1,
                        xaxis = list(title = "", tickfont = fonts$axis_tick, zeroline = FALSE,
                                     range = c(res$lo, CD_MAX_OUTSIDE_UM), dtick = 40),
-                       yaxis = list(title = list(text = if (identical(s, present[1])) m else "",
+                       yaxis = list(title = list(text = if (identical(s, present[1])) phenotype_text(m) else "",
                                                  font = fonts$legend_title),
                                     tickfont = list(size = ISLET_FONT_SIZES$dense_min), range = y_range,
                                     tickformat = if (identical(norm, "prop")) ".1%" else NULL))
@@ -1839,7 +1823,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           present <- intersect(status_order, unique(hist$donor_status))
           y_max <- max(hist$dens)
           type_label <- if (identical(group, "__all__")) "All cells"
-                        else if (identical(mode, "marker")) paste0(group, "+") else group
+                        else if (identical(mode, "marker")) paste0(group, "+") else phenotype_text(group)
           y_title <- if (identical(norm, "prop")) "Fraction of class cells per µm"
                      else "Cells per µm of distance"
           leg_title <- if (identical(norm, "prop")) "Status (proportion of class):"

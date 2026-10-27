@@ -112,6 +112,35 @@ PHENOTYPE_COLORS_MAX_DISTINCT <- c(
   "Unknown"       = "#C0C0C0"   # silver gray
 )
 
+# ── Macrophage marker-profile labels (owner, 2026-10-27; MACROPHAGE_LABELS in 00_globals.R) ──
+# Twelve shades from each palette's Macrophage color: the CD68/CD163 group turns the hue (CD68+CD163+ the base,
+# CD68+CD163- one way, CD68-CD163+ the other) and LGALS3/CD4 set the lightness (LGALS3+CD4+ darkest, LGALS3-CD4-
+# lightest), so the family reads as macrophages and each label differs from its neighbors in lightness, which survives
+# color-vision deficiency. Each palette's single "Macrophage" (the frozen root) stays as it is.
+macrophage_family <- function(base) {
+  hsv0 <- grDevices::rgb2hsv(grDevices::col2rgb(base))[, 1]
+  mix <- function(col, t) {          # t < 0 toward black, t > 0 toward white
+    rgb <- grDevices::col2rgb(col)[, 1] / 255
+    rgb <- if (t < 0) rgb * (1 + t) else rgb + (1 - rgb) * t
+    grDevices::rgb(rgb[1], rgb[2], rgb[3])
+  }
+  heads <- c(0, 0.09, -0.09)                     # hue turn, CD68+CD163+, CD68+CD163-, CD68-CD163+
+  tails <- c(-0.35, -0.08, 0.25, 0.5)            # LGALS3+CD4+, LGALS3+CD4-, LGALS3-CD4+, LGALS3-CD4-
+  cols <- unlist(lapply(heads, function(dh) {
+    hue <- grDevices::hsv((hsv0[["h"]] + dh) %% 1, max(hsv0[["s"]], 0.35), max(min(hsv0[["v"]], 0.85), 0.45))
+    vapply(tails, function(t) mix(hue, t), character(1))
+  }))
+  stats::setNames(cols, MACROPHAGE_LABELS)
+}
+with_macrophage_family <- function(pal) {
+  i <- match("Macrophage", names(pal))
+  c(pal[seq_len(i)], macrophage_family(pal[["Macrophage"]]), pal[-seq_len(i)])
+}
+PHENOTYPE_COLORS <- with_macrophage_family(PHENOTYPE_COLORS)
+PHENOTYPE_COLORS_HIGH_CONTRAST <- with_macrophage_family(PHENOTYPE_COLORS_HIGH_CONTRAST)
+PHENOTYPE_COLORS_COLORBLIND <- with_macrophage_family(PHENOTYPE_COLORS_COLORBLIND)
+PHENOTYPE_COLORS_MAX_DISTINCT <- with_macrophage_family(PHENOTYPE_COLORS_MAX_DISTINCT)
+
 # ── Palette registry and accessor ────────────────────────────────────────
 PHENOTYPE_PALETTES <- list(
   "Original"             = PHENOTYPE_COLORS,
@@ -214,7 +243,7 @@ render_islet_drilldown_plot <- function(info, cells, color_by = "phenotype", sho
         shape = 21, colour = "grey30", stroke = 0.3, size = 3.0, alpha = 0.9,
         inherit.aes = FALSE
       ) +
-      ggplot2::scale_fill_manual(values = pal, name = "Phenotype") +
+      ggplot2::scale_fill_manual(values = pal, name = "Phenotype", labels = phenotype_text) +
       ggplot2::labs(title = paste(info$islet_key, "- Single Cells"))
   } else if (color_by %in% colnames(cells)) {
     # Continuous coloring by marker expression (using fill)
@@ -299,6 +328,7 @@ render_drilldown_summary <- function(cells, palette = PHENOTYPE_COLORS) {
       ggplot2::geom_col(position = "stack", linewidth = 0.5) +
       ggplot2::scale_fill_manual(values = pal, guide = "none") +
       ggplot2::scale_colour_manual(values = c("core" = "grey20", "peri" = "white"), name = "Region") +
+      ggplot2::scale_x_discrete(labels = phenotype_text) +
       ggplot2::coord_flip() +
       ggplot2::labs(x = NULL, y = "Cell count") +
       theme_islet() +
@@ -307,6 +337,7 @@ render_drilldown_summary <- function(cells, palette = PHENOTYPE_COLORS) {
     ggplot2::ggplot(counts, ggplot2::aes(x = phenotype, y = count, fill = phenotype)) +
       ggplot2::geom_col() +
       ggplot2::scale_fill_manual(values = pal, guide = "none") +
+      ggplot2::scale_x_discrete(labels = phenotype_text) +
       ggplot2::coord_flip() +
       ggplot2::labs(x = NULL, y = "Cell count") +
       theme_islet()

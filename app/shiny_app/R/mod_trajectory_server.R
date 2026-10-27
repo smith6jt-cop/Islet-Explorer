@@ -267,7 +267,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         region <- switch(input$traj_ratio_region %||% "core",
                          core = "core", peri = "peri", "core + 20 µm peri")
         sprintf("%s — log1p(cells / endocrine cells, %s)",
-                input$traj_ratio_type %||% "(none)", region)
+                phenotype_text(input$traj_ratio_type %||% "(none)"), region)
       } else {
         sprintf("%s — normalized mean marker expression",
                 input$traj_feature %||% "(none)")
@@ -315,7 +315,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         sel <- if (!is.null(input$traj_ratio_type) && input$traj_ratio_type %in% types)
           input$traj_ratio_type else if ("Beta cell" %in% types) "Beta cell" else types[1]
         return(selectInput(ns("traj_ratio_type"), "Select cell type:",
-                           choices = types, selected = sel))
+                           choices = phenotype_grouped_choices(types), selected = sel))
       }
 
       # Get available features from AnnData
@@ -652,7 +652,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       # Labels: the y-axis names the quantity, not just the feature (a ratio and a gate-rescaled marker mean are
       # different units on the same plot slot).
       if (identical(input$traj_y_mode %||% "ratio", "ratio")) {
-        selected_feature <- input$traj_ratio_type %||% "Selected cell type"
+        selected_feature <- phenotype_text(input$traj_ratio_type %||% "Selected cell type")
         reg <- input$traj_ratio_region %||% "core"
         metric_label <- sprintf("\u2014 log(cells per endocrine cell, %s)",
                                 switch(reg, core = "core", peri = "peri", "core + 20 \u00b5m peri"))

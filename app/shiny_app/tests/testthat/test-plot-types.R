@@ -111,6 +111,7 @@ test_that("a measure nonzero in under 1% of objects is not offered", {
   env$`%||%` <- function(x, y) if (is.null(x)) y else x
   env$phenotype_is_kept <- function(x) TRUE
   env$extract_phenotype_from_column <- function(x) sub("^(peri_prop_|prop_)", "", x)
+  env$phenotype_text <- function(x) x
   sys.source(.find_source("R/plot_helpers.R"), envir = env)
   comp <- data.frame(`prop_Beta cell` = c(rep(0, 150), 0.5, 0.2), `prop_B cell` = c(rep(0, 151), 0.5),
                      peri_prop_Beta_cell = 0, check.names = FALSE)

@@ -53,10 +53,19 @@ plot_x_measure_choices <- function(comp_cols, pairs = NULL, comp = NULL) {
       vapply(cols, function(k) plot_nonzero_fraction(comp, k) >= PLOT_MIN_NONZERO_FRACTION, logical(1))
     has_core <- pairs$core_col %in% comp_cols & enough(pairs$core_col)
     has_peri <- pairs$peri_col %in% comp_cols & enough(pairs$peri_col)
-    core <- setNames(pairs$core_col[has_core], paste0(pairs$label[has_core], " (core %)"))
-    peri <- setNames(pairs$peri_col[has_peri], paste0(pairs$label[has_peri], " (peri-islet %)"))
+    core <- list(values = pairs$core_col[has_core], labels = pairs$label[has_core])
+    peri <- list(values = pairs$peri_col[has_peri], labels = pairs$label[has_peri])
   }
-  out <- list("Object" = object, "Core proportion" = core, "Peri-islet proportion" = peri)
+  # Each region's phenotypes in their groups (owner, 2026-10-27), as option groups "<region> — <group>".
+  grouped <- get0("phenotype_grouped_choices", mode = "function", ifnotfound = NULL)
+  region <- function(x, title, suffix) {
+    if (!length(x) || !length(x$values)) return(list())
+    if (is.null(grouped)) return(stats::setNames(list(setNames(x$values, paste0(phenotype_text(x$labels), suffix))), title))
+    lapply(grouped(x$labels, x$values, prefix = paste0(title, " \u2014 ")),
+           function(g) stats::setNames(g, paste0(names(g), suffix)))
+  }
+  out <- c(list("Object" = object), region(core, "Core proportion", " (core %)"),
+           region(peri, "Peri-islet proportion", " (peri-islet %)"))
   out[lengths(out) > 0]
 }
 

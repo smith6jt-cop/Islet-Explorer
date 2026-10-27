@@ -199,7 +199,10 @@ barlow_ratio_types <- function() {
   # quality, not biology. `phenotype_keep()` is the single gate for that
   # (00_globals.R); the CSV still carries them because `Endocrine` is the RATIO
   # DENOMINATOR even though it is not selectable as a numerator.
-  sort(phenotype_keep(all))
+  kept <- sort(phenotype_keep(all))
+  # The group aggregates ("All macrophages"; owner, 2026-10-27), summed from all the members' counts, general
+  # classes ("T cell", "Endocrine") included.
+  c(phenotype_aggregates_for(all), kept)
 }
 
 #' log1p(cells of `type` / endocrine cells in the islet core), per islet.
@@ -210,12 +213,17 @@ barlow_ratio_types <- function() {
 barlow_ratio_values <- function(type, region = "both") {
   d <- barlow_features()
   if (is.null(d) || !nzchar(type %||% "")) return(NULL)
-  cc <- paste0("n_core_", type); pc <- paste0("n_peri_", type)
-  if (!all(c(cc, pc) %in% names(d))) return(NULL)
-  n_core <- suppressWarnings(as.numeric(d[[cc]]))
-  n_peri <- suppressWarnings(as.numeric(d[[pc]]))
-  n_core[!is.finite(n_core)] <- 0
-  n_peri[!is.finite(n_peri)] <- 0
+  types <- if (is_phenotype_aggregate(type))
+    phenotype_aggregate_members(type, sub("^n_core_", "", grep("^n_core_", names(d), value = TRUE))) else type
+  cc <- paste0("n_core_", types); pc <- paste0("n_peri_", types)
+  if (!length(types) || !all(c(cc, pc) %in% names(d))) return(NULL)
+  count <- function(cols) {
+    m <- vapply(cols, function(k) { v <- suppressWarnings(as.numeric(d[[k]])); v[!is.finite(v)] <- 0; v },
+                numeric(nrow(d)))
+    if (is.matrix(m)) rowSums(m) else sum(m)
+  }
+  n_core <- count(cc)
+  n_peri <- count(pc)
   n <- switch(region, core = n_core, peri = n_peri, n_core + n_peri)
   # Denominator is the islet's own endocrine count, floored at 1 -- the same
   # denominator the PAGA features use, so the axis and the embedding agree.

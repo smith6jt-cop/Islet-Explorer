@@ -355,6 +355,9 @@ prep_data <- function(master) {
     }
   }
 
+  # Group aggregates ("All macrophages", owner 2026-10-27) as derived proportion columns, before the pair table.
+  comp <- add_phenotype_aggregate_columns(comp)
+
   # Combined (core+peri) phenotype pair table. peri_prop_* columns sanitize
   # the phenotype name (spaces -> _, + -> plus) but prop_* columns keep the
   # original label, so a direct stem intersection misses ~half the pairs. Build

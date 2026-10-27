@@ -35,24 +35,32 @@ plot_composition_selection_choices <- function(comp_cols, combined_pairs = NULL,
     setNames(paste0("combined_prop_", combined_pairs$stem), combined_pairs$label)[pairs_ok]
   } else character(0)
 
+  # Each region's phenotypes in their groups (owner, 2026-10-27: phenotype choices "need to be grouped"), as option
+  # groups "<region> — <group>" (phenotype_grouped_choices()); without that helper one group per region.
+  grouped <- get0("phenotype_grouped_choices", mode = "function", ifnotfound = NULL)
+  add_region <- function(choices, region, values, labels) {
+    if (is.null(grouped)) {
+      choices[[paste(region, "— Phenotype Proportions")]] <- setNames(values, phenotype_text(labels))
+      return(choices)
+    }
+    c(choices, grouped(labels, values, prefix = paste(region, "— ")))
+  }
   choices <- list()
   if (length(prop_cols)) {
     labels <- sub("^prop_", "", prop_cols)
     keep <- phenotype_is_kept(labels)
-    if (any(keep)) choices[["Core — Phenotype Proportions"]] <-
-      setNames(prop_cols[keep], labels[keep])
+    if (any(keep)) choices <- add_region(choices, "Core", prop_cols[keep], labels[keep])
   }
   if (length(peri_prop_cols)) {
     labels <- vapply(peri_prop_cols, function(col) {
       extract_phenotype_from_column(col) %||% col
     }, character(1), USE.NAMES = FALSE)
     keep <- phenotype_is_kept(labels)
-    if (any(keep)) choices[["Peri-Islet — Phenotype Proportions"]] <-
-      setNames(peri_prop_cols[keep], labels[keep])
+    if (any(keep)) choices <- add_region(choices, "Peri-Islet", peri_prop_cols[keep], labels[keep])
   }
   if (length(combined_vals)) {
     keep <- phenotype_is_kept(names(combined_vals))
-    if (any(keep)) choices[["Core+Peri — Phenotype Proportions"]] <- combined_vals[keep]
+    if (any(keep)) choices <- add_region(choices, "Core+Peri", unname(combined_vals[keep]), names(combined_vals)[keep])
   }
   choices
 }

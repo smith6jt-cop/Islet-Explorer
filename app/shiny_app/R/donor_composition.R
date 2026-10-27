@@ -40,6 +40,9 @@ donor_composition_table <- function(comp, pairs, region = c("core", "peri", "bot
   empty <- data.frame(case_id = character(0), donor_status = character(0), phenotype = character(0),
                       cells = numeric(0), total_cells = numeric(0), proportion = numeric(0), n_objects = integer(0))
   if (is.null(comp) || !nrow(comp) || is.null(pairs) || !nrow(pairs)) return(empty)
+  # A group aggregate ("All macrophages") sums other labels; stacked beside them it would count their cells twice.
+  aggregate <- get0("is_phenotype_aggregate", mode = "function", ifnotfound = function(x) rep(FALSE, length(x)))
+  pairs <- pairs[!aggregate(pairs$label), , drop = FALSE]
   num <- function(col) { v <- if (col %in% names(comp)) suppressWarnings(as.numeric(comp[[col]])) else NA_real_
                          v[!is.finite(v)] <- 0; rep_len(v, nrow(comp)) }
   core_total <- num("total_cells_core")
@@ -97,14 +100,21 @@ donor_composition_figure <- function(tab, order_ids, palette, status_cols, regio
   phenos <- unique(tab$phenotype)
   phenos <- phenos[cells_by[phenos] > 0]
   phenos <- c(setdiff(phenos, DONOR_COMPOSITION_OTHER), intersect(DONOR_COMPOSITION_OTHER, phenos))
+  # Legend entries under their phenotype group (owner, 2026-10-27): a click on a group's title shows or hides it.
+  group_of <- get0("phenotype_group", mode = "function", ifnotfound = function(x) rep("Phenotype", length(x)))
+  order_groups <- get0("PHENOTYPE_GROUP_ORDER", ifnotfound = "Phenotype")
+  phenos <- phenos[order(match(group_of(phenos), order_groups))]
+  titled <- character(0)
   p <- plotly::plot_ly()
   for (ph in phenos) {
     t <- tab[tab$phenotype == ph, , drop = FALSE]
+    g <- group_of(ph)
     col <- if (ph == DONOR_COMPOSITION_OTHER) "#8f8f8f" else unname(palette[ph]) %||% "#8f8f8f"
     if (is.na(col)) col <- "#8f8f8f"
-    p <- plotly::add_trace(p, type = "bar", x = t$x, y = t$proportion, name = ph, marker = list(color = col),
-                           hoverinfo = "text",
-                           text = paste0("Donor ", t$case_id, " (", t$donor_status, ")<br>", ph, ": ",
+    p <- plotly::add_trace(p, type = "bar", x = t$x, y = t$proportion, name = phenotype_text(ph),
+                           legendgroup = g, legendgrouptitle = if (!(g %in% titled)) list(text = g),
+                           marker = list(color = col), hoverinfo = "text",
+                           text = paste0("Donor ", t$case_id, " (", t$donor_status, ")<br>", phenotype_text(ph), ": ",
                                          sprintf("%.1f", t$proportion), "% of the cells shown (",
                                          format(round(t$cells), big.mark = ","), " of ",
                                          format(round(t$shown_cells), big.mark = ","), ")<br>",
@@ -112,6 +122,7 @@ donor_composition_figure <- function(tab, order_ids, palette, status_cols, regio
                                          format(round(t$total_cells), big.mark = ","), " cells<br>Objects: ",
                                          t$n_objects),
                            textposition = "none")
+    titled <- union(titled, g)
   }
   # A strip of donor-status squares above the bars.
   p <- plotly::add_trace(p, type = "scatter", mode = "markers", x = factor(labels, levels = labels),
@@ -124,7 +135,7 @@ donor_composition_figure <- function(tab, order_ids, palette, status_cols, regio
       barmode = "stack", font = fonts$global, bargap = 0.15,
       title = list(text = plotly_title_with_sub(paste0("Cell make-up of each donor's objects (", region_label, ")"),
                                                 if (length(leave_out)) paste0("Leaving out ",
-                                                  paste(leave_out, collapse = ", "), "; bars are proportions of the",
+                                                  paste(phenotype_text(leave_out), collapse = ", "), "; bars are proportions of the",
                                                   " remaining cells") else NULL),
                    font = fonts$title, x = 0.02, xanchor = "left"),
       xaxis = list(title = list(text = "Donor", font = fonts$axis_title), tickfont = list(size = ISLET_FONT_SIZES$dense_min),
@@ -132,7 +143,8 @@ donor_composition_figure <- function(tab, order_ids, palette, status_cols, regio
       yaxis = list(title = list(text = if (length(leave_out)) "Proportion of the cells shown (%)" else
                      "Proportion of cells (%)", font = fonts$axis_title), tickfont = fonts$axis_tick,
                    range = c(0, 108), tickvals = seq(0, 100, 25)),
-      legend = list(font = fonts$legend_text, title = list(text = "Phenotype", font = fonts$legend_title)),
+      legend = list(font = fonts$legend_text, title = list(text = "Phenotype", font = fonts$legend_title),
+                    groupclick = "toggleitem", tracegroupgap = 6),
       margin = list(t = 80, b = 80)) %>%
     plotly_islet_config("composition_by_donor")
 }
@@ -164,8 +176,8 @@ donor_composition_card_ui <- function(ns) {
           downloadButton(ns("dl_composition_csv"), "CSV", class = "btn-sm btn-outline-secondary",
                          style = "font-size: 11px; padding: 2px 8px;")))
     ),
-    div(class = "plot-type-select composition-leave-out",
-        checkboxGroupInput(ns("composition_leave_out"), "Leave out", choices = character(0), inline = TRUE)),
+    # Grouped, with All | None per group and for the list (owner, 2026-10-27); drawn by the module server.
+    div(class = "composition-leave-out", style = "margin: 4px 0 6px;", uiOutput(ns("composition_leave_out_ui"))),
     plotlyOutput(ns("composition_by_donor"), height = "520px")
   )
 }

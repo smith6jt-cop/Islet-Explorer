@@ -541,9 +541,9 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       if (identical(validated_mode(), "Microenvironment")) return(strsplit(wsel, "\\|")[[1]][1])
       # extract_phenotype_from_column() turns the sanitised peri / combined stems ("Beta_cell",
       # "CHGAplus_hormone-negative") back into the phenotype's label.
-      if (startsWith(wsel, "combined_prop_")) paste0(extract_phenotype_from_column(wsel), " core+peri proportion")
-      else if (startsWith(wsel, "peri_prop_")) paste0(extract_phenotype_from_column(wsel), " peri-islet proportion")
-      else if (startsWith(wsel, "prop_")) paste0(extract_phenotype_from_column(wsel), " proportion")
+      if (startsWith(wsel, "combined_prop_")) paste0(phenotype_text(extract_phenotype_from_column(wsel)), " core+peri proportion")
+      else if (startsWith(wsel, "peri_prop_")) paste0(phenotype_text(extract_phenotype_from_column(wsel)), " peri-islet proportion")
+      else if (startsWith(wsel, "prop_")) paste0(phenotype_text(extract_phenotype_from_column(wsel)), " proportion")
       else wsel
     }
 
@@ -856,15 +856,15 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
     # Leave out: the root's phenotypes as choices; each region's default selection when the region changes.
     composition_leave_out_choices <- reactive({
       labels <- prepared()$combined_pairs$label
-      c(labels[phenotype_is_kept(labels)], DONOR_COMPOSITION_OTHER)
+      c(labels[phenotype_is_kept(labels) & !is_phenotype_aggregate(labels)], DONOR_COMPOSITION_OTHER)
     })
     # Only the region resets the choice (toggling an object class must not).
-    observeEvent(input$composition_region, {
+    output$composition_leave_out_ui <- renderUI({
       region <- input$composition_region %||% "core"
       choices <- isolate(composition_leave_out_choices())
-      updateCheckboxGroupInput(session, "composition_leave_out", choices = choices, inline = TRUE,
-                               selected = intersect(donor_composition_default_leave_out(region), choices))
-    }, ignoreNULL = FALSE)
+      phenotype_group_checkboxes(ns("composition_leave_out"), choices, label = "Leave out",
+                                 selected = intersect(donor_composition_default_leave_out(region), choices))
+    })
     composition_leave_out <- function() {
       v <- input$composition_leave_out
       if (is.null(v)) return(character(0))

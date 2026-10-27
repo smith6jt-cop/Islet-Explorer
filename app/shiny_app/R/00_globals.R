@@ -695,6 +695,173 @@ phenotype_display_label <- function(name) {
   name
 }
 
+# Macrophages by marker profile (owner, 2026-10-27; scripts/uniform/typing/codex_typing.py macrophage_labels()):
+# "CD68+CD163+Macrophage_LGALS3+CD4+" with each plus also a minus; a macrophage is CD68+ or CD163+, so twelve labels.
+# The data, input values and column names keep ASCII + and -; "for text usage of the nomenclature, use superscripts
+# for the plus and minus", which phenotype_text() does. The frozen root keeps its single "Macrophage".
+MACROPHAGE_LABELS <- local({
+  sign <- function(m, p) paste0(m, if (p) "+" else "-")
+  out <- character(0)
+  for (head in list(c(TRUE, TRUE), c(TRUE, FALSE), c(FALSE, TRUE)))
+    for (tail in list(c(TRUE, TRUE), c(TRUE, FALSE), c(FALSE, TRUE), c(FALSE, FALSE)))
+      out <- c(out, paste0(sign("CD68", head[1]), sign("CD163", head[2]), "Macrophage_",
+                           sign("LGALS3", tail[1]), sign("CD4", tail[2])))
+  out
+})
+MACROPHAGE_LABEL_PATTERN <- "^CD68[+-]CD163[+-]Macrophage_LGALS3[+-]CD4[+-]$"
+
+#' TRUE for a macrophage label of either root ("Macrophage" or a marker-profile label).
+is_macrophage_label <- function(x) {
+  x <- as.character(x)
+  !is.na(x) & (x == "Macrophage" | grepl(MACROPHAGE_LABEL_PATTERN, x))
+}
+
+#' The display text of phenotype labels: a marker-profile macrophage label with superscript plus and minus
+#' (U+207A, U+207B); every other label unchanged. Vectorized; keeps names; NA stays NA.
+phenotype_text <- function(x) {
+  if (is.null(x) || !length(x)) return(x)
+  out <- as.character(x)
+  hit <- !is.na(out) & grepl(MACROPHAGE_LABEL_PATTERN, out)
+  out[hit] <- gsub("-", "⁻", gsub("+", "⁺", out[hit], fixed = TRUE), fixed = TRUE)
+  names(out) <- names(x)
+  out
+}
+
+#' Named choices for a selector: values stay the data labels, names are their display text.
+phenotype_choices_named <- function(labels) stats::setNames(labels, phenotype_text(labels))
+
+#' Display text as HTML for a checkbox label: a macrophage label may break after "Macrophage_" (it has no spaces).
+phenotype_label_html <- function(x) {
+  lapply(phenotype_text(x), function(t)
+    htmltools::HTML(sub("Macrophage_", "Macrophage_<wbr>", htmltools::htmlEscape(t), fixed = TRUE)))
+}
+
+# ---- Phenotype groups (owner, 2026-10-27) ----
+# "Because of this change, wherever there are choices for phenotypes to display in the app, they need to be grouped
+# with an 'all' and 'none' selection." Every phenotype choice is shown under its group: a multiple choice with All |
+# None per group and for the whole list (phenotype_group_checkboxes(), www/phenotype-groups.js), a single choice as
+# option groups (phenotype_grouped_choices()), with the group's aggregate ("All macrophages") where a selector can
+# plot one. Labels a root lacks simply do not appear.
+PHENOTYPE_GROUP_ORDER <- c("Endocrine", "T cells", "B cells", "Macrophages", "Other")
+# A group's aggregate: every cell of the group, its general class included ("Endocrine", "T cell"), which every total
+# counts. Offered only where the root names macrophages by marker profile (root_has_marker_profile_labels()).
+PHENOTYPE_GROUP_AGGREGATES <- c("Endocrine" = "All endocrine cells", "T cells" = "All T cells",
+                                "Macrophages" = "All macrophages")
+
+#' The group of each phenotype label (an aggregate belongs to its own group); "Other" for the rest.
+phenotype_group <- function(x) {
+  x <- as.character(x)
+  out <- rep("Other", length(x))
+  out[x %in% c("Beta cell", "Alpha cell", "Delta cell", "CHGA+ hormone-negative", "Endocrine",
+               "All endocrine cells")] <- "Endocrine"
+  out[x %in% c("CD8a Tcell", "CD4 Tcell", "T cell", "All T cells")] <- "T cells"
+  out[x %in% "B cell"] <- "B cells"
+  out[is_macrophage_label(x) | x %in% "All macrophages"] <- "Macrophages"
+  out
+}
+
+#' TRUE for a group aggregate ("All macrophages", ...), which is a sum of other labels and never a cell's label.
+is_phenotype_aggregate <- function(x) as.character(x) %in% PHENOTYPE_GROUP_AGGREGATES
+
+#' The labels among `labels` that an aggregate sums.
+phenotype_aggregate_members <- function(aggregate, labels) {
+  group <- names(PHENOTYPE_GROUP_AGGREGATES)[match(aggregate, PHENOTYPE_GROUP_AGGREGATES)]
+  labels[phenotype_group(labels) %in% group & !is_phenotype_aggregate(labels)]
+}
+
+#' The aggregates offered beside `labels`: each group aggregate with two or more members, on a marker-profile root.
+phenotype_aggregates_for <- function(labels) {
+  if (!root_has_marker_profile_labels()) return(character(0))
+  keep <- vapply(PHENOTYPE_GROUP_AGGREGATES, function(a) length(phenotype_aggregate_members(a, labels)) >= 2,
+                 logical(1))
+  unname(PHENOTYPE_GROUP_AGGREGATES[keep])
+}
+
+#' The group aggregates as object columns (prop_<aggregate>, peri_prop_<safe aggregate>): the sum of the members'
+#' proportions of the same cells, so the Plot tab offers "All macrophages" in every region (the core+peri pair follows
+#' from the two). A sum over mutually exclusive labels; NA where every member is NA. Nothing on other roots.
+add_phenotype_aggregate_columns <- function(comp) {
+  if (is.null(comp) || !is.data.frame(comp)) return(comp)
+  labels <- sub("^prop_", "", grep("^prop_", names(comp), value = TRUE))
+  safe <- function(l) gsub("+", "plus", gsub(" ", "_", l, fixed = TRUE), fixed = TRUE)
+  total <- function(cols) {
+    cols <- intersect(cols, names(comp))
+    if (!length(cols)) return(NULL)
+    m <- as.matrix(as.data.frame(lapply(comp[cols], function(v) suppressWarnings(as.numeric(v)))))
+    out <- rowSums(m, na.rm = TRUE)
+    out[rowSums(is.finite(m)) == 0] <- NA_real_
+    out
+  }
+  for (agg in phenotype_aggregates_for(labels)) {
+    members <- phenotype_aggregate_members(agg, labels)
+    core <- total(paste0("prop_", members))
+    peri <- total(paste0("peri_prop_", safe(members)))
+    if (!is.null(core)) comp[[paste0("prop_", agg)]] <- core
+    if (!is.null(peri)) comp[[paste0("peri_prop_", safe(agg))]] <- peri
+  }
+  comp
+}
+
+#' `labels` split by group, in PHENOTYPE_GROUP_ORDER, each group's aggregate first and the rest in the given order.
+phenotype_groups_split <- function(labels) {
+  labels <- as.character(labels)
+  g <- phenotype_group(labels)
+  out <- lapply(PHENOTYPE_GROUP_ORDER, function(k) {
+    i <- which(g == k)
+    i[order(!is_phenotype_aggregate(labels[i]))]
+  })
+  out <- lapply(out, function(i) labels[i])
+  names(out) <- PHENOTYPE_GROUP_ORDER
+  out[lengths(out) > 0]
+}
+
+#' Option groups for a single-choice selectInput: list(<prefix><group> = list(<display text> = value)). Each group
+#' is a list, so a one-label group is still an option group. `values` default to the labels.
+phenotype_grouped_choices <- function(labels, values = labels, prefix = "") {
+  labels <- as.character(labels)
+  values <- stats::setNames(as.character(values), labels)
+  out <- list()
+  for (k in names(groups <- phenotype_groups_split(labels))) {
+    out[[paste0(prefix, k)]] <- as.list(stats::setNames(unname(values[groups[[k]]]), phenotype_text(groups[[k]])))
+  }
+  out
+}
+
+#' A multiple phenotype choice, grouped: one checkbox group input (`input_id`, value = the checked labels) whose
+#' boxes sit under their group, each group with All | None, and All | None for the whole list. `counts` (named by
+#' label) marks a label with no cells " (0)". The links act in the browser (www/phenotype-groups.js); a server
+#' update may change `selected` (updateCheckboxGroupInput(selected = )), not the choices: re-render instead.
+phenotype_group_checkboxes <- function(input_id, labels, selected = labels, label = NULL, counts = NULL,
+                                       choice_names = NULL) {
+  groups <- phenotype_groups_split(labels)
+  box <- function(v) {
+    n <- if (is.null(counts)) NA_integer_ else suppressWarnings(as.integer(counts[v]))
+    empty <- !is.null(counts) && (is.na(n) || n == 0L)
+    text <- if (!is.null(choice_names) && !is.null(choice_names[[v]])) choice_names[[v]] else phenotype_label_html(v)[[1]]
+    shiny::tags$div(class = "checkbox", shiny::tags$label(
+      shiny::tags$input(type = "checkbox", name = input_id, value = v,
+                        checked = if (v %in% selected) "checked" else NULL),
+      shiny::tags$span(text, if (empty) " (0)", style = if (empty) "color: var(--islet-fg-muted);" else NULL)))
+  }
+  links <- function(scope, what) shiny::tags$span(class = "pheno-select-links",
+    shiny::tags$a(href = "#", class = paste("pheno-select pheno-select-all", scope), role = "button",
+                  `aria-label` = paste("Select all", what), "All"),
+    shiny::tags$span(class = "pheno-select-sep", "|"),
+    shiny::tags$a(href = "#", class = paste("pheno-select pheno-select-none", scope), role = "button",
+                  `aria-label` = paste("Select none of", what), "None"))
+  shiny::tags$div(id = input_id, class = "form-group shiny-input-checkboxgroup shiny-input-container pheno-group-checkboxes",
+    role = "group",
+    if (!is.null(label)) shiny::tags$label(class = "control-label", id = paste0(input_id, "-label"), label),
+    shiny::tags$div(class = "pheno-groups-overall", links("pheno-scope-all", "phenotypes")),
+    shiny::tags$div(class = "pheno-groups",
+      lapply(names(groups), function(g) shiny::tags$div(
+        class = paste0("pheno-group pheno-group-", tolower(gsub("[^A-Za-z]", "", g)),
+                       if (length(groups[[g]]) > 6) " pheno-group-wide"),
+        shiny::tags$div(class = "pheno-group-head", shiny::tags$span(class = "pheno-group-title", g),
+                        links("pheno-scope-group", g)),
+        shiny::tags$div(class = "pheno-group-boxes", lapply(groups[[g]], box))))))
+}
+
 # Phenotypes with no CSV row — residuals from the upstream pipeline.
 # Each entry: list(parent, pos, neg, anypos_groups, description).
 PHENOTYPE_RESIDUALS <- list(
@@ -873,7 +1040,7 @@ PHENOTYPE_DISPLAY_ORDER <- c(
   "Beta cell", "Alpha cell", "Delta cell", "CHGA+ hormone-negative", "Endocrine",
   "Acinar", "Ductal", "Exocrine",
   "T cell", "CD8 T cell", "CD4 T cell", "B cell",
-  "Macrophage", "Dendritic cell", "Immune", "APCs",
+  "Macrophage", MACROPHAGE_LABELS, "Dendritic cell", "Immune", "APCs",
   "Lymphatic", "Blood vessel", "Endothelial",
   "Smooth Muscle", "Neural", "ECAD+", "Structural",
   "Unknown"
@@ -925,6 +1092,7 @@ phenotype_rules_modal_ui <- function() {
   if (file.exists(protein_path)) {
     rules <- utils::read.csv(protein_path, stringsAsFactors = FALSE, na.strings = "")
     rules[is.na(rules)] <- ""
+    if ("label" %in% names(rules)) rules$label <- phenotype_text(rules$label)
     headings <- c("Parent", "Label", "All positive", "Any positive", "All negative", "Note")
     rows <- lapply(seq_len(nrow(rules)), function(i) {
       shiny::tags$tr(lapply(unname(as.list(rules[i, ])), shiny::tags$td))
@@ -942,10 +1110,17 @@ phenotype_rules_modal_ui <- function() {
           "next, otherwise the cell is excluded. A CHGA+ cell with no hormone above the image's level is CHGA+ ",
           "hormone-negative. Nerve, ",
           "capillary and lymphatic structures are areas (the Plot tab's Microenvironment layer), not cell types. ",
-          "Immune rules count a marker at 0.10 or above on the cohort scale. Every other cell is Exocrine, the ",
+          "Immune rules count a marker at 0.10 or above on the cohort scale. ",
+          if (root_has_marker_profile_labels()) paste0("A T cell is named CD8a or CD4 T cell by the higher of the two ",
+            "on the cohort scale, at any level. A macrophage (CD68+ or CD163+, no CD3e or epithelial marker) is named ",
+            "by its CD68, CD163, LGALS3 and CD4, each + at 0.10 or above and \u2212 below, as in ",
+            phenotype_text("CD68+CD163-Macrophage_LGALS3+CD4-"), ". "),
+          "Every other cell is Exocrine, the ",
           "residual class (acinar, ductal, stromal, endothelial and neural cells together); residual cells inside an ",
           "endocrine object and cells without a nucleus are left out of the analysis."),
-        shiny::tags$p("Endocrine, T cell and Immune hold the cells left without a subtype. They count in every total ",
+        shiny::tags$p("Endocrine, T cell and Immune hold the cells left without a subtype",
+          if (root_has_marker_profile_labels()) " (a T cell whose CD8a and CD4 are equal on the cohort scale)",
+          ". They count in every total ",
           "but are not offered as phenotypes beside their subtypes.")
       ) else shiny::tagList(
         shiny::tags$p("The original 15 donors retain their saved phenotype labels. ",
@@ -1033,7 +1208,9 @@ extract_phenotype_from_column <- function(col) {
                 "enrich_z_", "min_dist_", "prop_")) {
     if (startsWith(col, pre)) {
       stem <- sub(paste0("^", pre), "", col)
-      return(gsub("_", " ", gsub("plus", "+", stem, fixed = TRUE), fixed = TRUE))
+      label <- gsub("_", " ", gsub("plus", "+", stem, fixed = TRUE), fixed = TRUE)
+      # a marker-profile macrophage label keeps its own underscore ("...Macrophage_LGALS3+CD4-")
+      return(sub("^(CD68[+-]CD163[+-]Macrophage) (LGALS3[+-]CD4[+-])$", "\\1_\\2", label))
     }
   }
   col
@@ -1076,6 +1253,7 @@ feature_display_label <- function(col) {
 
   pheno <- extract_phenotype_from_column(col)
   if (is.null(pheno) || identical(pheno, col)) return(col)   # no prefix matched
+  pheno <- phenotype_text(pheno)
 
   qual <- paste(c(region, measure), collapse = ", ")
   if (nzchar(qual)) paste0(pheno, " (", qual, ")") else pheno
@@ -1143,7 +1321,27 @@ CONTROL_PANEL_CSS <- paste0(
   ".control-grid .irs--shiny.irs-with-grid { height: 40px; } ",
   ".control-checkbox-grid .shiny-options-group { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); ",
   "gap: 0 12px; } ",
-  ".control-checkbox-grid .shiny-options-group .checkbox { margin: 2px 0; } ",
+  ".control-checkbox-grid .shiny-options-group .checkbox { margin: 2px 0; min-width: 0; } ",
+  # Grouped phenotype choices (phenotype_group_checkboxes(), owner 2026-10-27): groups side by side, the long
+  # macrophage group two columns wide.
+  # Shiny gives an input container 300px (.shiny-input-container:not(.shiny-input-container-inline)).
+  ".shiny-input-container.pheno-group-checkboxes:not(.shiny-input-container-inline) { width: 100%; max-width: none; } ",
+  ".pheno-groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px 18px; } ",
+  ".pheno-group { min-width: 0; } ",
+  ".pheno-group-wide { grid-column: span 2; } ",
+  ".pheno-group-wide .pheno-group-boxes { column-count: 2; column-gap: 14px; } ",
+  ".pheno-group-boxes .checkbox { margin: 2px 0; break-inside: avoid; } ",
+  ".pheno-group-boxes .checkbox label { overflow-wrap: anywhere; } ",
+  ".pheno-group-head { display: flex; align-items: baseline; gap: 8px; border-bottom: 1px solid var(--islet-border); ",
+  "margin-bottom: 2px; } ",
+  ".pheno-group-title { font-weight: 600; color: var(--islet-fg-strong); } ",
+  ".pheno-groups-overall { margin-bottom: 4px; } ",
+  ".pheno-select-links { font-size: 12px; white-space: nowrap; } ",
+  ".pheno-select-links a { color: var(--islet-link); cursor: pointer; } ",
+  ".pheno-select-sep { color: var(--islet-fg-muted); margin: 0 4px; } ",
+  # The macrophage labels have no spaces (owner, 2026-10-27: "CD68+CD163+Macrophage_LGALS3+CD4+"), so a long label
+  # wraps inside its column instead of running under the next one.
+  ".control-checkbox-grid .shiny-options-group .checkbox label { overflow-wrap: anywhere; } ",
   # The active tab's control panels stay under the frozen page header and tab bar (www/islet-theme.css) while the
   # tab scrolls (owner, 2026-10-21: "Freeze the top panel, data and view controls when scrolling down");
   # www/sticky-layout.js measures the header and tab bar into the two variables.
@@ -1235,6 +1433,13 @@ root_phenotype_labels <- function() {
   if (is.null(labels)) NULL else as.character(labels)
 }
 
+#' TRUE when the root names macrophages by marker profile and T cells by the higher of CD8a and CD4 (from v14,
+#' owner 2026-10-27); the text describing those rules is shown only then.
+root_has_marker_profile_labels <- function() {
+  labels <- root_phenotype_labels()
+  any(grepl(MACROPHAGE_LABEL_PATTERN, labels))
+}
+
 #' The "Endocrine objects" class selector. It sits in the Data controls of the Plot tab (`object_classes`) and of
 #' the Spatial tab (`spatial_object_classes`), which app.R keeps in step; both filter prepared() (owner, 2026-10-19:
 #' "The selector for islets and clusters needs to go in the data controls").
@@ -1266,10 +1471,13 @@ cell_typing_help <- function() {
   }
   shiny::tags$p(shiny::tags$strong("Cell labels."),
     " Every cell of all 20 donors is typed by one workflow. The phenotypes listed are Beta, Alpha and Delta cell, ",
-    "CHGA+ hormone-negative (an endocrine cell with no hormone), CD8a and CD4 T cell, B cell, Macrophage and ",
+    "CHGA+ hormone-negative (an endocrine cell with no hormone), CD8a and CD4 T cell, B cell, ",
+    if (root_has_marker_profile_labels()) paste0("the macrophages (named by CD68, CD163, LGALS3 and CD4, e.g. ",
+      phenotype_text("CD68+CD163+Macrophage_LGALS3-CD4+"), ")") else "Macrophage", " and ",
     "Exocrine (the residual class). Nerve, capillary and lymphatic structures are areas, not cell types. The ",
     "hormones are mutually exclusive: a cell whose strongest hormone is under twice the next one is excluded. Cells ",
-    "left without a subtype (T cells without CD4 or CD8, other leukocytes) count in every total but are not listed. ",
+    "left without a subtype (", if (root_has_marker_profile_labels()) "T cells whose CD8a and CD4 are equal"
+    else "T cells without CD4 or CD8", ", other leukocytes) count in every total but are not listed. ",
     "Residual cells inside an endocrine object and cells without a nucleus are left out. Endocrine cells are called ",
     "inside Islets and Clusters, and Singles' cells keep their hormone type, so a peri-islet band holds endocrine ",
     "cells only where a Single lies in it.")
@@ -1424,16 +1632,30 @@ UNIFORM_PHENOTYPE_DEFINITIONS <- c(
   "Delta cell" = "as Beta cell, with somatostatin the highest hormone",
   "CHGA+ hormone-negative" = paste("inside an Islet or Cluster, CHGA at or above the image's tissue CHGA level",
                                    "and insulin, glucagon and somatostatin all below the image's hormone level"),
-  "CD8a Tcell" = "CD3e+ and CD8a+, CD4\u2212, no epithelial marker (E-cadherin, panCK)",
-  "CD4 Tcell" = "CD3e+ and CD4+, CD8a\u2212, no epithelial marker",
+  "CD8a Tcell" = paste("CD3e+, no epithelial marker (E-cadherin, panCK), and CD8a higher than CD4 on the cohort",
+                       "scale, at any level (owner, 2026-10-27)"),
+  "CD4 Tcell" = "CD3e+, no epithelial marker, and CD4 higher than CD8a on the cohort scale, at any level",
   "B cell" = "CD20+ and CD45+, CD3e\u2212, CD68\u2212, no epithelial marker",
   "Macrophage" = "CD68+, CD3e\u2212, no epithelial marker",
+  "Macrophages" = paste("CD68+ or CD163+, CD3e\u2212, no epithelial marker, named by CD68, CD163, LGALS3 (the galectin+",
+                        "macrophage of the Senior workflow) and CD4, each + at 0.10 or above and \u2212 below, as in",
+                        phenotype_text("CD68+CD163-Macrophage_LGALS3+CD4-"), "(twelve labels; owner, 2026-10-27)"),
   "Exocrine" = paste("the residual class: every other cell outside the endocrine objects (acinar, ductal, stromal,",
                      "endothelial and neural cells together)"))
+
+# The T-cell subtype rule of the uniform roots before v14 (Senior's T-CD8 / T-CD4-helper at 0.10, each forbidding the
+# other).
+UNIFORM_T_CELL_DEFINITIONS_BEFORE_V14 <- c(
+  "CD8a Tcell" = "CD3e+ and CD8a+, CD4\u2212, no epithelial marker (E-cadherin, panCK)",
+  "CD4 Tcell" = "CD3e+ and CD4+, CD8a\u2212, no epithelial marker")
 
 phenotype_marker_definitions_ui <- function() {
   if (is_uniform_root()) {
     defs <- UNIFORM_PHENOTYPE_DEFINITIONS
+    # One macrophage entry: "Macrophage" on a root before v14, "Macrophages" (the marker-profile labels) from v14.
+    profile <- root_has_marker_profile_labels()
+    defs <- defs[setdiff(names(defs), if (profile) "Macrophage" else "Macrophages")]
+    if (!profile) defs[c("CD8a Tcell", "CD4 Tcell")] <- UNIFORM_T_CELL_DEFINITIONS_BEFORE_V14
     return(shiny::tagList(
       shiny::tags$h6(style = "margin-top: 12px; font-weight: 700;", "Phenotype definitions"),
       shiny::tags$p(style = "color: var(--islet-fg-muted);",

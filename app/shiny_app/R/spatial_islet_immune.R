@@ -8,7 +8,10 @@
 
 # The immune labels of the uniform root (scripts/uniform/assemble_uniform.py IMMUNE), including the cells left
 # without a subtype ("T cell", "Immune"), which every immune total counts.
-IMMUNE_LABELS <- c("CD8a Tcell", "CD4 Tcell", "T cell", "B cell", "Macrophage", "Immune")
+# The macrophages are one "Macrophage" on the frozen root and twelve marker-profile labels on a uniform root from v14
+# (MACROPHAGE_LABELS, owner 2026-10-27); a label a root lacks matches no cell.
+IMMUNE_LABELS <- c("CD8a Tcell", "CD4 Tcell", "T cell", "B cell", "Macrophage",
+                   get0("MACROPHAGE_LABELS", ifnotfound = character(0)), "Immune")
 # The endocrine shares of the composition embedding (scripts/uniform/composition_embedding.py).
 COMPOSITION_ENDOCRINE <- c("Beta cell", "Alpha cell", "Delta cell", "CHGA+ hormone-negative")
 # Labels the composition & enrichment card and the distance profile leave out (owner, 2026-10-20: they "do not need
