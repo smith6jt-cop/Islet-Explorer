@@ -205,7 +205,9 @@ IMMUNE_LEVEL3 = {'Imm-T-cell': ('T-regulatory', 'T-exhausted', 'T-progenitor-mem
                                 'T-CD8', 'T-CD4-helper'),
                  'Imm-macrophage': ('Mac-M1-like', 'Mac-M2-like')}
 # Owner, 2026-10-27: Senior's T-CD8 forbids CD4 and T-CD4-helper forbids CD8, so a T cell positive for both kept
-# no subtype. Such a cell is named by the higher of the two scaled markers; an exact tie keeps no subtype.
+# no subtype; and "once there is positivity for a broad defining marker, we do not need the 0.10 positivity level".
+# A T cell (CD3e+) that neither rule names takes the subtype of the higher of the two scaled markers, at any level;
+# an exact tie (both at the scale floor included) keeps no subtype.
 T_SUBTYPE_BY_HIGHER = {'T-CD8': 'CD8a', 'T-CD4-helper': 'CD4'}
 # Refinement (typing/refine.py) defining markers, in this panel's names.
 OWN_MARKERS = {

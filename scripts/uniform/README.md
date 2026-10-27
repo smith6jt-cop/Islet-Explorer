@@ -334,6 +334,13 @@ structures run only inside Tissue.
   formerly excluded -> Alpha 5,130, Beta 2,821, Delta 1,519; T cell -> CD8a Tcell 1,566, -> CD4 Tcell 705. Totals:
   T cell 5,685 -> 3,795, CD8a Tcell 13,944 -> 16,943, CD4 Tcell 4,260 -> 5,391, Macrophage 61,140 -> 72,041.
   Endocrine objects are unchanged (4,853 outlines); embedding objects 1,207 -> 1,278.
+- **No 0.10 level below a broad marker** (owner, the same day: "Once there is positivity for a broad defining marker,
+  we do not need the 0.10 positivity level"). A T cell (CD3e+) that neither T-CD8 nor T-CD4-helper names now takes
+  the higher scaled of CD8a and CD4 at any level; exact ties (both at the scale floor) keep "T cell". 5,763 cells are
+  named this way, 485 tie. T-CD8 16,943 -> 17,891, T-CD4-helper 5,391 -> 7,753. Only `immune_subtype.py` and
+  `summary.py` reran (v12's `immune/` kept in `superseded/typing-v12-immune-20261027/`); root
+  `data/development/uniform-20donor-20261027-v13`. Mac-M2-like, the one other subtype on this panel, has no
+  competing subtype (Mac-M1-like is unavailable) and still requires CD163 and LGALS3 at 0.10; it is not an app label.
 
 ## App root (P4), 2026-10-16
 
