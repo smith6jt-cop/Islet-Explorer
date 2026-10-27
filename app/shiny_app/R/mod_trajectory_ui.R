@@ -141,7 +141,7 @@ trajectory_ui <- function(id) {
         div(class = "card", style = "padding: 15px; margin-bottom: 20px;",
           card_title_help("UMAPs", help = list(
             tags$p(tags$strong("UMAPs and Leiden clusters."),
-                   " Built from each fitted object's endocrine composition (the Beta, Alpha, Delta and CHGA+",
+                   " Built from each fitted object's endocrine composition (the Endocrine Beta, Alpha, Delta and CHGA⁺",
                    " hormone-negative proportions of its core endocrine cells), with one neighbor graph for UMAP and",
                    " Leiden and no donor correction; the same layout as the Spatial tab's UMAPs. The upper UMAP is",
                    " colored by donor status, the lower by the feature chosen in the Data controls."),

@@ -48,7 +48,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       comp_method <- prepared()$composition_embedding
       if (!is.null(comp_method)) {
         return(sprintf(paste0(
-          "Built from each object's endocrine composition: the Beta, Alpha, Delta and CHGA+ hormone-negative",
+          "Built from each object's endocrine composition: the Endocrine Beta, Alpha, Delta and CHGA⁺ hormone-negative",
           " proportions of its core endocrine cells, for the %s objects with %s or more core cells. UMAP and Leiden",
           " use one neighbor graph. No donor correction: the proportions are counted within each object, so staining",
           " differences between donors do not enter them. Smaller objects have too few cells to place, so they",
@@ -372,6 +372,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           }
           legend_phenos <- intersect(canonical_order, present)
           legend_phenos <- c(legend_phenos, setdiff(present, legend_phenos))
+          legend_phenos <- legend_phenos[order(match(phenotype_group(legend_phenos), PHENOTYPE_GROUP_ORDER))]
           pal <- palette()[legend_phenos]
           pal[is.na(pal)] <- "#CCCCCC"
 
@@ -919,7 +920,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           paste("Endocrine objects:", paste(sort(unique(as.character(prepared()$comp$object_class %||% "Islet"))), collapse = ", ")),
           paste("Phenotypes:", if (is.null(sel_phenos) || length(sel_phenos) == 0)
                                  "(none selected — no per-phenotype columns)"
-                               else paste(sel_phenos, collapse = ", ")),
+                               else paste(phenotype_text(sel_phenos), collapse = ", ")),
           paste("Rows:", if (is.null(out)) 0 else nrow(out), "islets"),
           "Scope: all donors in the selected groups (the tissue scatter above shows one donor at a time)."
         ))
@@ -1090,7 +1091,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                              else "lo/hi = mean -/+ SEM of donor means"),
           paste("Donor groups:", paste(input$groups %||% "(all)", collapse = ", ")),
           paste("Endocrine objects:", paste(sort(unique(as.character(prepared()$comp$object_class %||% "Islet"))), collapse = ", ")),
-          paste("Phenotypes shown:", paste(input$enrich_phenos %||% "(none)", collapse = ", ")),
+          paste("Phenotypes shown:", paste(phenotype_text(input$enrich_phenos) %||% "(none)", collapse = ", ")),
           paste("Object z outside [-5, 5] dropped before the donor mean:", if (isTRUE(input$enrich_clip)) "ON" else "OFF"),
           "Rows: level=donor is each donor's mean over its objects; the other level summarizes those donor means."
         ))
@@ -1152,8 +1153,8 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
             div(class = "card", style = card_style,
               card_title("Insulitis prevalence",
                 tags$p("Each donor's proportion of the selected endocrine objects with at least the chosen number of",
-                       " immune cells in the core and the 20 µm band. Immune cells are every T cell, B cell,",
-                       " macrophage and other leukocyte, subtyped or not. Bars are donor means ± SEM and each",
+                       " immune cells in the core and the 20 µm band. Immune cells are every T Cell, B Cell,",
+                       " Macrophage and other leukocyte, subtyped or not. Bars are donor means ± SEM and each",
                        " point is a donor, so every donor counts once; the p value is a Kruskal-Wallis test on the",
                        " donor proportions."),
                 tags$p("The threshold follows nPOD's criterion of 15 CD45+ cells around an islet. It is a cell",
@@ -1171,7 +1172,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
               card_title("Immune cells and beta-cell content",
                 tags$p("For each donor, the mean immune proportion of the 20 µm band around its Insulin-containing",
                        " Islets and around its Insulin-deficient Islets, joined by a line. An object is insulin-deficient",
-                       " when beta cells are under the chosen proportion of its core's Beta, Alpha, Delta and CHGA+",
+                       " when beta cells are under the chosen proportion of its core's Endocrine Beta, Alpha, Delta and CHGA⁺",
                        " hormone-negative cells; the two groups are the endocrine objects of the Data controls. A donor",
                        " with only one kind of object is a single point."),
                 tags$p("In T1D, insulitis is expected mostly around islets that still hold beta cells.")),
@@ -1192,8 +1193,8 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                        " IQR. Core holds the cells inside objects."),
                 tags$p("The dotted line is the donor chosen in the Data controls (the tissue scatter's donor), so",
                        " changing the donor shows where that donor sits against its status. Hover gives its cell",
-                       " counts; a point resting on fewer than 20 of the chosen cells is faded, as one donor's B or",
-                       " CD4 T cells in a bin are often only a few."),
+                       " counts; a point resting on fewer than 20 of the chosen cells is faded, as one donor's B Cell or",
+                       " T Cell CD4⁺ cells in a bin are often only a few."),
                 tags$p("Dividing by each donor's own tissue separates gathering at islets from a donor having more",
                        " immune cells everywhere. It reads per-cell data, so the Endocrine objects selector does",
                        " not apply.")),
@@ -1242,8 +1243,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
               conditionalPanel(
                 condition = paste0("input['", ns("enrich_region"), "'] == 'peri'"),
                 checkboxInput(ns("enrich_clip"), "Drop object z beyond \u00b15", value = TRUE)
-              ),
-              checkboxInput(ns("enrich_show_values"), "Show heatmap values", value = TRUE)
+              )
             ),
             uiOutput(ns("enrich_pheno_filter")),
             fluidRow(
@@ -1508,7 +1508,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         write_islet_csv(file, out, islet_csv_header(
           "Spatial — band immune proportion by beta-cell content, per donor",
           paste0("Insulin-deficient Islets: beta cells under ", 100 * (input$beta_cut %||% 0.1),
-                 "% of the core's Beta, Alpha, Delta and CHGA+ hormone-negative cells"),
+                 "% of the core's Endocrine Beta, Alpha, Delta and CHGA⁺ hormone-negative cells"),
           paste("Donor groups:", paste(input$groups %||% "(all)", collapse = ", ")),
           paste("Endocrine objects:", paste(sort(unique(as.character(prepared()$comp$object_class %||% "Islet"))), collapse = ", "))))
       }
@@ -1684,15 +1684,13 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       dv <- enrich_donor_values()
       req(dv)
       region <- input$enrich_region %||% "peri"
-      show_vals <- isTRUE(input$enrich_show_values %||% TRUE)
       cell_types <- intersect(names(phenotype_options()), unique(dv$cell_type))
       donors <- unique(dv[, c("case_id", "donor_status")])
       donors <- donors[order(match(donors$donor_status, STATUS_ORDER), suppressWarnings(as.numeric(donors$case_id))), ]
       row_lab <- paste0(donors$case_id, " (", donors$donor_status, ")")
       mat <- matrix(NA_real_, nrow = nrow(donors), ncol = length(cell_types), dimnames = list(row_lab, cell_types))
       mat[cbind(match(dv$case_id, donors$case_id), match(dv$cell_type, cell_types))] <- dv$value
-      fmt <- if (region == "peri") "%.2f" else "%.3f"
-      text_mat <- matrix(sprintf(fmt, mat), nrow = nrow(mat)); text_mat[is.na(mat)] <- ""
+      # No values in the cells (owner, 2026-10-27: "no values"); hover gives each one.
       if (region == "peri") {
         z_abs_max <- max(abs(mat), na.rm = TRUE)
         if (!is.finite(z_abs_max) || z_abs_max == 0) z_abs_max <- 1
@@ -1709,9 +1707,6 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       fonts <- plotly_islet_fonts()
       plot_ly(x = phenotype_text(colnames(mat)), y = rownames(mat), z = mat, type = "heatmap", colorscale = colorscale,
               zmin = zmin, zmax = zmax,
-              text = if (show_vals) text_mat else NULL,
-              texttemplate = if (show_vals) "%{text}" else NULL,
-              textfont = if (show_vals) list(size = ISLET_FONT_SIZES$dense_min) else NULL,
               hovertemplate = paste0("%{x}<br>Donor %{y}<br>", label, " = %{z:.4f}<extra></extra>"),
               colorbar = list(title = list(text = if (region == "peri") "z" else "Proportion",
                                            font = fonts$colorbar_title), tickfont = fonts$axis_tick)) %>%

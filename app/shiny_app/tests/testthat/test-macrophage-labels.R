@@ -5,6 +5,7 @@
   exprs <- parse(.find_source("R/00_globals.R"), keep.source = FALSE)
   wanted <- c("MACROPHAGE_LABELS", "MACROPHAGE_LABEL_PATTERN", "is_macrophage_label", "phenotype_text",
               "phenotype_choices_named", "extract_phenotype_from_column", "phenotype_label_html",
+              "PHENOTYPE_DISPLAY_NAMES",
               "PHENOTYPE_GROUP_ORDER", "PHENOTYPE_GROUP_AGGREGATES", "phenotype_group", "is_phenotype_aggregate",
               "phenotype_aggregate_members", "phenotype_aggregates_for", "phenotype_groups_split",
               "phenotype_grouped_choices", "phenotype_group_checkboxes", "add_phenotype_aggregate_columns")
@@ -27,13 +28,17 @@ test_that("the twelve macrophage labels match the uniform typing (codex_typing.m
                c(TRUE, TRUE, FALSE, FALSE))
 })
 
-test_that("only macrophage profile labels get superscripts; values stay ASCII", {
+test_that("display names put the broad name first, with every marker sign a superscript; values stay ASCII", {
   env <- .label_env()
-  expect_equal(env$phenotype_text(c("CD68+CD163-Macrophage_LGALS3+CD4-", "CHGA+ hormone-negative", "Macrophage", NA)),
-               c("CD68\u207aCD163\u207bMacrophage_LGALS3\u207aCD4\u207b", "CHGA+ hormone-negative", "Macrophage", NA))
+  expect_equal(env$phenotype_text(c("CD68+CD163-Macrophage_LGALS3+CD4-", "CHGA+ hormone-negative", "Beta cell",
+                                    "CD8a Tcell", "CD4 Tcell", "T cell", "B cell", "Macrophage", "Immune", "Exocrine",
+                                    "All macrophages", "SMA+", NA)),
+               c("Macrophage CD68\u207aCD163\u207bLGALS3\u207aCD4\u207b", "Endocrine CHGA\u207a hormone-negative",
+                 "Endocrine Beta", "T Cell CD8a\u207a", "T Cell CD4\u207a", "T Cell", "B Cell", "Macrophage",
+                 "Immune", "Exocrine", "Macrophage (all)", "SMA\u207a", NA))
   ch <- env$phenotype_choices_named(c("Beta cell", "CD68-CD163+Macrophage_LGALS3-CD4+"))
   expect_equal(unname(ch), c("Beta cell", "CD68-CD163+Macrophage_LGALS3-CD4+"))
-  expect_equal(names(ch), c("Beta cell", "CD68\u207bCD163\u207aMacrophage_LGALS3\u207bCD4\u207a"))
+  expect_equal(names(ch), c("Endocrine Beta", "Macrophage CD68\u207bCD163\u207aLGALS3\u207bCD4\u207a"))
 })
 
 test_that("a sanitized column name maps back to the macrophage label, underscore kept", {
@@ -47,15 +52,16 @@ test_that("a sanitized column name maps back to the macrophage label, underscore
 test_that("phenotypes are grouped, each group's aggregate first; one-label groups stay option groups", {
   env <- .label_env()
   labels <- c("Beta cell", "Alpha cell", "CD8a Tcell", "CD4 Tcell", "B cell", env$MACROPHAGE_LABELS[1:2], "Exocrine")
-  expect_equal(names(env$phenotype_groups_split(labels)), c("Endocrine", "T cells", "B cells", "Macrophages", "Other"))
+  expect_equal(names(env$phenotype_groups_split(labels)), c("Endocrine", "T Cell", "B Cell", "Macrophage", "Other"))
   aggs <- env$phenotype_aggregates_for(c(labels, "T cell"))
   expect_setequal(aggs, c("All endocrine cells", "All T cells", "All macrophages"))
   expect_setequal(env$phenotype_aggregate_members("All T cells", c(labels, "T cell")), c("CD8a Tcell", "CD4 Tcell", "T cell"))
   ch <- env$phenotype_grouped_choices(c(aggs, labels), prefix = "Core \u2014 ")
   expect_equal(names(ch)[1], "Core \u2014 Endocrine")
-  expect_true(is.list(ch[["Core \u2014 B cells"]]))
-  expect_equal(unname(unlist(ch[["Core \u2014 Macrophages"]]))[1], "All macrophages")
-  expect_equal(names(ch[["Core \u2014 Macrophages"]])[2], env$phenotype_text(env$MACROPHAGE_LABELS[1]))
+  expect_true(is.list(ch[["Core \u2014 B Cell"]]))
+  expect_equal(unname(unlist(ch[["Core \u2014 Macrophage"]]))[1], "All macrophages")
+  expect_equal(names(ch[["Core \u2014 Macrophage"]])[1], "Macrophage (all)")
+  expect_equal(names(ch[["Core \u2014 Macrophage"]])[2], "Macrophage CD68\u207aCD163\u207aLGALS3\u207aCD4\u207a")
 })
 
 test_that("the grouped checkbox input is one Shiny checkbox group with All | None per group and overall", {
@@ -67,7 +73,7 @@ test_that("the grouped checkbox input is one Shiny checkbox group with All | Non
   expect_equal(lengths(regmatches(html, gregexpr("pheno-select-all pheno-scope-group", html))), 3L)
   expect_equal(lengths(regmatches(html, gregexpr("pheno-scope-all", html))), 2L)
   expect_match(html, 'value="B cell" checked="checked"', fixed = TRUE)
-  expect_match(html, "Macrophage_<wbr>", fixed = TRUE)
+  expect_match(html, "Macrophage CD68", fixed = TRUE)
 })
 
 test_that("aggregate columns sum the members' proportions of the same cells", {

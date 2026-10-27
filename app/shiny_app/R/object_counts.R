@@ -64,9 +64,9 @@ object_counts_plot <- function(d, measure, colors) {
     p <- plotly::plot_ly()
     pal <- c("#1f77b4", "#d62728", "#2ca02c", "#9467bd", "#7f7f7f")
     for (i in seq_along(SINGLE_TYPE_COLUMNS)) {
-      p <- plotly::add_bars(p, x = donors, y = d[[SINGLE_TYPE_COLUMNS[i]]], name = names(SINGLE_TYPE_COLUMNS)[i],
+      p <- plotly::add_bars(p, x = donors, y = d[[SINGLE_TYPE_COLUMNS[i]]], name = phenotype_text(names(SINGLE_TYPE_COLUMNS)[i]),
                             marker = list(color = pal[i]),
-                            hovertemplate = paste0("%{x}<br>", names(SINGLE_TYPE_COLUMNS)[i], ": %{y}<extra></extra>"))
+                            hovertemplate = paste0("%{x}<br>", phenotype_text(names(SINGLE_TYPE_COLUMNS)[i]), ": %{y}<extra></extra>"))
     }
     p <- plotly::layout(p, barmode = "stack",
                         xaxis = list(title = list(text = "Donor (status)", font = fonts$axis_title),
