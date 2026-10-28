@@ -3,9 +3,13 @@
 **For:** the Codex agent in this repository and the Claude agent on HiPerGator (spleen same-slide analysis).
 Written by the Claude Code session doing the owner's typing review.
 
-**Status: paused 2026-10-28 ~10:55 (owner: stop at a convenient point).** Root v16 is assembled; the v17 typing is in the run (commits 7ef33e9, 270d000) but v17 is NOT assembled: the owner flagged its 45,596 ColIV exclusions as likely false (83 % are cells with no lineage detected, where ColIV is not even positive). Previously: The uniform typing in `scripts/uniform/typing/` is being changed today on the owner's
-instructions. Do not adopt a root, a positivity level or a label set from today until this notice says the work is
-finished.
+**Status (2026-10-28, afternoon): final typing run in progress, stopped at its positivity step for two owner
+decisions.** Plan: `docs/final_typing_plan_20261028.txt`; rulings: `docs/typing_rulings_ledger.md`; checks and the stop
+report: `output/typing_final_checks_20261028/README.md`. v17's typing was moved to the run's
+`superseded/typing-v17-20261028/` and will not be assembled; root v16 and every earlier root are superseded. Marker roles
+now come from a registry per panel and tissue (`scripts/uniform/typing/registry/`); a lane on another panel or tissue
+(the spleen same-slide lane, the IO60 PhenoCycler lane) builds its own registry rather than reusing these lists. **Do not
+adopt any root, level or label set until root v18 is assembled and this notice says so.**
 
 ## Current root and branch
 
