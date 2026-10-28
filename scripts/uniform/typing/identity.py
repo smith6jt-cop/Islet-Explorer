@@ -30,10 +30,12 @@ This module names compartments and lineages, never markers.
   needs that marker positive; T subtypes by positivity, both positive -> the higher fold over level (owner), neither ->
   the lineage label with t_subtype_status T_subtype_not_shown (interim, owner decision pending); B needs the registry's
   `requires` (CD45 positive, one hematopoietic lineage); Myeloid takes the profile label. A leukocyte without a named
-  lineage is the pan label (CD45+) when the pan marker is positive. Every other placed cell, and every cell whose only
-  positive markers are shared, is named by its top positive marker ('<marker>+'). A cell with no typing marker above its
-  level keeps its start class (status no_marker_above_background). No marker below its level names a cell; markers
-  without a typing role are never read.
+  lineage is the pan label (CD45+) when the pan marker is positive. No cell is named by a marker (owner 2026-10-28: "Get
+  rid of naming by top marker logic"): a cell its compartment and lineage do not name keeps its start class, with the
+  status saying why: no_lineage_named (a compartment without a named lineage or pan marker), <lineage>_marker_only (a
+  lineage barred where the cell is, e.g. an endocrine marker outside the endocrine objects), shared_marker_only (only
+  shared markers positive), no_marker_above_background (no typing marker above its level). No marker below its level
+  names a cell; markers without a typing role are never read.
 4 Confirmed: compartment and lineage single or resolved, and a marker that confirms the label's lineage (registry
   `confirms`) and was not used to name it is canary-positive; NaN where the lineage has no such marker.
 
@@ -61,6 +63,7 @@ STATUSES = ('none', 'single', 'resolved', 'lineage_ambiguous', 'doublet_suspecte
 ESTABLISHED = 'superseded/typing-v17-20261028'
 ESTABLISHED_REASONS = ('hormone_unresolved_margin', 'exocrine_inside_islet_border')
 ESTABLISHED_REASON_PREFIX = 'endocrine_single_'
+MARGIN_REASONS = ('hormone_unresolved_margin', 'endocrine_single_hormone_margin_below_2x')
 PLACED = ('single', 'resolved')
 
 
@@ -226,6 +229,7 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED) -> tu
     lineage = np.full(n, '', dtype=object)
     lin_basis = np.full(n, '', dtype=object)
     lin_status = np.full(n, '', dtype=object)
+    lin_runner = np.full(n, '', dtype=object)
     lin_detected = np.zeros(n, int)
     for c in comps:
         info = plan['comp'][c]
@@ -241,6 +245,7 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED) -> tu
         lineage[rows[has]] = np.asarray(lins, dtype=object)[lp['group'][has]]
         lin_basis[rows] = lp['basis']
         lin_status[rows] = np.where(has, lp['status'], '')
+        lin_runner[rows] = np.where(lp['runner'] >= 0, np.asarray(lins, dtype=object)[np.maximum(lp['runner'], 0)], '')
         lin_detected[rows] = lp['n_detected_at_basis']
 
     # identity
@@ -253,42 +258,155 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED) -> tu
     done = np.zeros(n, bool)
     names = np.asarray(markers, dtype=object)
     comp_basis = cp['basis'].copy()
+    established_label = np.full(n, '', dtype=object)
 
     # the established typing of a lineage (labels file named_by 'established'; owner 2026-10-28: "The endocrine typing
     # didn't need to change", "If the singles were already found and verified, don't undo that"): its decisions are
     # kept as they were, and this hierarchy names no other cell in that lineage
     lab = plan['labels']
+    # objects that are their endocrine cells (labels file defined_by_object; owner 2026-10-28: "the islets, clusters,
+    # and single endocrine cells were already accurately identified", "If the singles were already found and verified,
+    # don't undo that"): the object places the cell in its lineage; its markers name it, else it keeps the object class
+    by_object = np.zeros(n, bool)
+    for r in lab[lab['defined_by_object'] != ''].itertuples():
+        rows = np.flatnonzero(np.isin(start, RG.split(r.defined_by_object)))
+        for i in rows[(compartment[rows] != r.compartment) & (compartment[rows] != '')]:
+            tags[i].append(f'canary_top_{compartment[i]}')
+        compartment[rows], lineage[rows] = r.compartment, r.lineage
+        comp_basis[rows], lin_basis[rows], lin_status[rows] = 'object', 'object', ''
+        by_object[rows] = True
+    # A canary-level conflict between mutually exclusive compartments, or lineages of one compartment, that the margin
+    # does not resolve names no cell type (owner 2026-10-28: "there is no such thing as a CD8+CD163+ cell"): the cell
+    # is kept with the conflict as its class, never named as either side. Below the canary level a second group is not
+    # a credible conflict (status below_canary_*). Cells their object places (clusters, singles) are left as placed.
+    comp_runner = np.where(cp['runner'] >= 0, np.asarray(comps, dtype=object)[np.maximum(cp['runner'], 0)], '')
+    unresolved = ('lineage_ambiguous', 'doublet_suspected')
+    clash = ~by_object & np.isin(comp_status, unresolved)
+    clash_lin = ~by_object & ~clash & np.isin(lin_status, unresolved)
+    for mask, top_, run_, st in ((clash, compartment, comp_runner, comp_status), (clash_lin, lineage, lin_runner, lin_status)):
+        rows = np.flatnonzero(mask)
+        label[rows] = np.where(st[rows] == 'doublet_suspected', 'Doublet suspected',
+                               'Conflict ' + top_[rows].astype(str) + '/' + run_[rows].astype(str))
+        named_by[rows] = 'canary'
+        done[rows] = True
     for r in lab[lab['named_by'] == 'established'].itertuples():
         keep, est_label, est_reason = established(run / endocrine_from, tag, d['object_id'], reg, plan, r)
         for i in np.flatnonzero(keep & (compartment != r.compartment) & (compartment != '')):
             tags[i].append(f'canary_top_{compartment[i]}')
         label[keep], reason[keep] = est_label[keep], est_reason[keep]
+        established_label[keep] = est_label[keep]
         named_by[keep] = 'established'
         compartment[keep], lineage[keep] = r.compartment, r.lineage
         comp_basis[keep], lin_basis[keep], lin_status[keep] = 'established', 'established', ''
         done[keep] = True
+        # Which cells are endocrine stays established; which hormone names them is read again with the one measurement
+        # per marker and each hormone's per-image level (owner 2026-10-28: an SST-high cell excluded "under 2x the
+        # runner-up"; the established comparison used cohort-scaled cytoplasm values, the "two ways of typing" the
+        # 10-28 ruling ended). The subtype markers' folds over their levels are compared: the top names the cell at
+        # HORMONE_MARGIN x the runner-up, else Excluded (hormone_unresolved_margin); no hormone above its level -> the
+        # lineage label when the broad marker is positive (CHGA+ hormone-negative), else the start class.
+        info = plan['comp'][r.compartment]
+        L_ = info['lineages'][r.lineage]
+        subs = {sname: ix[m] for sname, m in L_['subtypes'].items()}
+        reread = keep & (np.isin(est_label, [label_row(plan, r.compartment, f'{r.lineage}:{x}')['label'] for x in subs]
+                                 + [r.label, r.lineage]) | np.isin(est_reason, MARGIN_REASONS))
+        rows = np.flatnonzero(reread)
+        if len(rows) and subs:
+            cols = list(subs.values())
+            Fs = F[np.ix_(rows, cols)]
+            order = np.sort(Fs, axis=1)
+            anypos = P[np.ix_(rows, cols)].any(axis=1)
+            clear = order[:, -1] - order[:, -2] >= np.log(reg.const('HORMONE_MARGIN'))
+            win = np.asarray(list(subs), dtype=object)[Fs.argmax(axis=1)]
+            new = np.full(len(rows), '', dtype=object)
+            why = np.full(len(rows), '', dtype=object)
+            for x in subs:
+                new[anypos & clear & (win == x)] = label_row(plan, r.compartment, f'{r.lineage}:{x}')['label']
+            new[anypos & ~clear] = 'Excluded'
+            why[anypos & ~clear] = 'hormone_unresolved_margin'
+            broad = P[np.ix_(rows, [ix[m] for m in L_['broad']])].any(axis=1) if L_['broad'] else np.zeros(len(rows), bool)
+            new[~anypos & broad] = r.label
+            nameless = ~anypos & ~broad
+            new[nameless] = start[rows[nameless]]
+            status[rows[nameless]] = 'no_hormone_above_level'
+            label[rows], reason[rows] = new, why
+            nb = np.asarray([markers[subs[x]] for x in win], dtype=object)
+            named_by[rows] = np.where(anypos & clear, nb, np.where(~anypos & broad, ';'.join(L_['broad']), 'established'))
+            for i, j in zip(rows, range(len(rows))):
+                if new[j] != established_label[i]:
+                    tags[i].append('hormone_reread')
 
-    def top_positive(rows: np.ndarray, cols: list[int]) -> np.ndarray:
-        """The positive marker with the highest fold over its level, among `cols`, for each row ('' if none)."""
-        if not cols or not len(rows):
-            return np.full(len(rows), '', dtype=object)
-        sub = np.where(P[np.ix_(rows, cols)], F[np.ix_(rows, cols)], -np.inf)
-        best = sub.argmax(axis=1)
-        return np.where(np.isfinite(sub.max(axis=1)), names[np.asarray(cols)[best]], '')
+    def name_lineage(rows: np.ndarray, c: str, lin: str, L_: dict, rule: dict) -> None:
+        """Name `rows` by lineage `lin` of compartment `c` (its broad marker and the registry's requires, then its
+        subtype rule); a cell that fails the requirements is left unnamed (or keeps its object's class)."""
+        broad = [ix[m] for m in L_['broad']]
+        subs = {s: ix[m] for s, m in L_['subtypes'].items()}
+        if rule.get('named_by') == 'broad':
+            ok = P[np.ix_(rows, broad)].any(axis=1) if broad else np.zeros(len(rows), bool)
+        else:                                   # broad_or_subtype
+            ok = P[np.ix_(rows, broad + list(subs.values()))].any(axis=1)
+        for m in L_['broad']:
+            for req in reg.requires(m):
+                if req == 'single_lineage':
+                    ok &= lin_detected[rows] == 1
+                elif req in ix:
+                    ok &= P[rows, ix[req]]
+        kept = rows[~ok & by_object[rows]]          # their object names them: they keep its class
+        done[kept] = True
+        status[kept] = f'no_{lin.lower()}_marker_above_level'
+        for i in rows[~ok & ~by_object[rows]]:
+            tags[i].append(f'{lin}_not_named')
+        rows = rows[ok]
+        srule = rule.get('subtype_rule', '')
+        if srule == 'exclusive_margin' and subs:
+            cols = list(subs.values())
+            Fs = F[np.ix_(rows, cols)]
+            any_pos = P[np.ix_(rows, cols)].any(axis=1)
+            order = np.sort(Fs, axis=1)
+            clear = order[:, -1] - order[:, -2] >= np.log(reg.const('HORMONE_MARGIN')) if len(cols) > 1 else \
+                np.ones(len(rows), bool)
+            win = np.asarray(list(subs), dtype=object)[Fs.argmax(axis=1)]
+            named = any_pos & clear
+            for s in subs:
+                sel = rows[named & (win == s)]
+                label[sel] = label_row(plan, c, f'{lin}:{s}')['label']
+                named_by[sel] = markers[subs[s]]
+            unresolved = rows[any_pos & ~clear]
+            label[unresolved] = 'Excluded'
+            reason[unresolved] = 'hormone_unresolved_margin'
+            neg = rows[~any_pos]
+            label[neg] = rule['label']
+            named_by[neg] = ';'.join(L_['broad'])
+        elif srule == 'higher' and subs:
+            cols = list(subs.values())
+            Fs = np.where(P[np.ix_(rows, cols)], F[np.ix_(rows, cols)], -np.inf)
+            any_pos = np.isfinite(Fs.max(axis=1))
+            win = np.asarray(list(subs), dtype=object)[Fs.argmax(axis=1)]
+            for s in subs:
+                sel = rows[any_pos & (win == s)]
+                label[sel] = label_row(plan, c, f'{lin}:{s}')['label']
+                named_by[sel] = markers[subs[s]]
+            none_ = rows[~any_pos]
+            label[none_] = rule['label']
+            named_by[none_] = ';'.join(L_['broad'])
+            t_status[none_] = f'{lin}_subtype_not_shown'
+            both = rows[P[np.ix_(rows, cols)].sum(axis=1) > 1]
+            t_status[both] = 'both_subtype_markers_higher_named'
+        elif srule == 'profile':
+            head, tail = (RG.split(x.replace(',', ';')) for x in rule['profile'].split('|'))
+            sign = lambda m: np.where(P[rows, ix[m]], f'{m}+', f'{m}-') if m in ix else np.full(len(rows), f'{m}?')
+            parts = [sign(m) for m in head] + [np.full(len(rows), f"{rule['label']}_")] + [sign(m) for m in tail]
+            label[rows] = np.asarray([''.join(p) for p in zip(*parts)], dtype=object)
+            named_by[rows] = ';'.join(head)
+        else:
+            label[rows] = rule['label']
+            named_by[rows] = ';'.join(L_['broad'])
+        done[rows] = True
 
-    def by_marker(rows: np.ndarray, cols: list[int], why: str) -> None:
-        tm = top_positive(rows, cols)
-        ok = tm != ''
-        label[rows[ok]] = np.asarray([f'{m}+' for m in tm[ok]], dtype=object)
-        named_by[rows[ok]] = tm[ok]
-        done[rows[ok]] = True
-        for i in rows[ok]:
-            tags[i].append(why) if why else None
 
     for c in comps:
         info = plan['comp'][c]
         in_c = (compartment == c) & ~done
-        defining_cols = [ix[m] for m in info['defining']]
         for lin, L_ in info['lineages'].items():
             rule = label_row(plan, c, lin)
             if not rule or rule.get('kind') == 'residual':       # the residual lineage is labeled below
@@ -298,8 +416,8 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED) -> tu
                 continue
             only_in = set(RG.split(rule.get('only_in', '')))
             # a lineage named only by its established typing, or outside its objects, names no cell here: the cell is
-            # typed by its other evidence of the compartment (the residual lineage's markers), else named by its top
-            # positive marker; tagged either way
+            # typed by its other evidence of the compartment (the residual lineage's markers), else it keeps its start
+            # class; tagged either way
             barred = np.ones(len(rows), bool) if rule.get('named_by') == 'established' else \
                 (~np.isin(start[rows], list(only_in)) if only_in else np.zeros(len(rows), bool))
             out_rows = rows[barred]
@@ -309,76 +427,14 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED) -> tu
             other = P[np.ix_(out_rows, members)].any(axis=1) if members else np.zeros(len(out_rows), bool)
             lineage[out_rows[other]] = info['residual']
             # the lineage's own markers name nothing here (tiles 2026-10-28: 2-6 of 40 INS+/GCG+/SST+ cells showed the
-            # hormone on the cell); another positive defining marker names the cell, else it keeps its start class
-            rest = out_rows[~other]
-            naming = [ix[m] for m in markers if reg.role(m) == 'defining' and m not in L_['specific']]
-            by_marker(rest, naming, '')
-            kept = rest[~done[rest]]
+            # hormone on the cell), and no marker names a cell (owner 2026-10-28): it keeps its start class
+            kept = out_rows[~other]
             done[kept] = True
             status[kept] = f'{lin.lower()}_marker_only'
             rows = rows[~barred]
             if not len(rows):
                 continue
-            broad = [ix[m] for m in L_['broad']]
-            subs = {s: ix[m] for s, m in L_['subtypes'].items()}
-            if rule.get('named_by') == 'broad':
-                ok = P[np.ix_(rows, broad)].any(axis=1) if broad else np.zeros(len(rows), bool)
-            else:                                   # broad_or_subtype
-                ok = P[np.ix_(rows, broad + list(subs.values()))].any(axis=1)
-            for m in L_['broad']:
-                for req in reg.requires(m):
-                    if req == 'single_lineage':
-                        ok &= lin_detected[rows] == 1
-                    elif req in ix:
-                        ok &= P[rows, ix[req]]
-            for i in rows[~ok]:
-                tags[i].append(f'{lin}_not_named')
-            rows = rows[ok]
-            srule = rule.get('subtype_rule', '')
-            if srule == 'exclusive_margin' and subs:
-                cols = list(subs.values())
-                Fs = F[np.ix_(rows, cols)]
-                any_pos = P[np.ix_(rows, cols)].any(axis=1)
-                order = np.sort(Fs, axis=1)
-                clear = order[:, -1] - order[:, -2] >= np.log(reg.const('HORMONE_MARGIN')) if len(cols) > 1 else \
-                    np.ones(len(rows), bool)
-                win = np.asarray(list(subs), dtype=object)[Fs.argmax(axis=1)]
-                named = any_pos & clear
-                for s in subs:
-                    sel = rows[named & (win == s)]
-                    label[sel] = label_row(plan, c, f'{lin}:{s}')['label']
-                    named_by[sel] = markers[subs[s]]
-                unresolved = rows[any_pos & ~clear]
-                label[unresolved] = 'Excluded'
-                reason[unresolved] = 'hormone_unresolved_margin'
-                neg = rows[~any_pos]
-                label[neg] = rule['label']
-                named_by[neg] = ';'.join(L_['broad'])
-            elif srule == 'higher' and subs:
-                cols = list(subs.values())
-                Fs = np.where(P[np.ix_(rows, cols)], F[np.ix_(rows, cols)], -np.inf)
-                any_pos = np.isfinite(Fs.max(axis=1))
-                win = np.asarray(list(subs), dtype=object)[Fs.argmax(axis=1)]
-                for s in subs:
-                    sel = rows[any_pos & (win == s)]
-                    label[sel] = label_row(plan, c, f'{lin}:{s}')['label']
-                    named_by[sel] = markers[subs[s]]
-                none_ = rows[~any_pos]
-                label[none_] = rule['label']
-                named_by[none_] = ';'.join(L_['broad'])
-                t_status[none_] = f'{lin}_subtype_not_shown'
-                both = rows[P[np.ix_(rows, cols)].sum(axis=1) > 1]
-                t_status[both] = 'both_subtype_markers_higher_named'
-            elif srule == 'profile':
-                head, tail = (RG.split(x.replace(',', ';')) for x in rule['profile'].split('|'))
-                sign = lambda m: np.where(P[rows, ix[m]], f'{m}+', f'{m}-') if m in ix else np.full(len(rows), f'{m}?')
-                parts = [sign(m) for m in head] + [np.full(len(rows), f"{rule['label']}_")] + [sign(m) for m in tail]
-                label[rows] = np.asarray([''.join(p) for p in zip(*parts)], dtype=object)
-                named_by[rows] = ';'.join(head)
-            else:
-                label[rows] = rule['label']
-                named_by[rows] = ';'.join(L_['broad'])
-            done[rows] = True
+            name_lineage(rows, c, lin, L_, rule)
         # the compartment's cells without a named lineage
         rows = np.flatnonzero((compartment == c) & ~done)
         if not len(rows):
@@ -398,14 +454,14 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED) -> tu
             named_by[rows[pan_pos]] = ';'.join(info['pan'])
             done[rows[pan_pos]] = True
             rows = rows[~pan_pos]
-        by_marker(rows, defining_cols, '')
-    # no compartment: a shared marker positive names the cell; else the start class stays
-    rest = np.flatnonzero(~done & (compartment == ''))
-    by_marker(rest, [ix[m] for m in markers if reg.role(m) == 'shared'], 'shared_marker_only')
+        done[rows] = True                          # no marker names a cell (owner 2026-10-28): the start class stays
+        status[rows] = 'no_lineage_named'
+    # no compartment: the start class stays, with the status saying why
     left = ~done
+    if (left & (compartment != '')).any():
+        raise ValueError(f'{tag}: {int((left & (compartment != "")).sum())} cells of a compartment were not placed')
+    status[left & P.any(axis=1)] = 'shared_marker_only'
     status[left & ~P.any(axis=1)] = 'no_marker_above_background'
-    if (left & P.any(axis=1)).any():
-        raise ValueError(f'{tag}: {int((left & P.any(axis=1)).sum())} cells with a positive marker were not named')
 
     # confirmation
     confirms = {m: RG.split(reg.table.loc[m, 'confirms']) for m in markers} if 'confirms' in reg.table.columns else {}
@@ -440,7 +496,8 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED) -> tu
             comps, dtype=object)[np.maximum(cp['runner'], 0)], ''), 'runner_up_depth': cp['runner_depth'],
         'lineage': lineage, 'lineage_basis': lin_basis, 'lineage_status': lin_status,
         'subtype_status': t_status, 'status': status, 'tags': [';'.join(t) for t in tags],
-        'confirmed': confirmed, 'confirming_markers': confirming, 'n_positive': P.sum(axis=1).astype(np.int16),
+        'confirmed': confirmed, 'confirming_markers': confirming, 'established_label': established_label,
+        'n_positive': P.sum(axis=1).astype(np.int16),
         'n_canary': C.sum(axis=1).astype(np.int16)})
     for m in state:
         x = np.log1p(np.clip(np.nan_to_num(d[d.attrs['columns'][m]].to_numpy(float), nan=0.0), 0, None))

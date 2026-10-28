@@ -73,7 +73,6 @@ from sklearn.mixture import GaussianMixture
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import registry as RG  # noqa: E402
-import identity as ID  # noqa: E402
 
 EDGES = np.linspace(0.0, 14.0, 281)            # log1p units, 0.05 wide
 CEN = (EDGES[:-1] + EDGES[1:]) / 2
@@ -198,8 +197,8 @@ def options(reg: RG.Registry, m: str) -> list[tuple[str, str]]:
 # -- per image --------------------------------------------------------------------------------------------------------
 def empty_nulls(out: Path) -> dict:
     """Empty-slide nulls of the markers most cells carry: the EMPTY_NULL_QUANTILE-th percentile of 7.2-um window means
-    at least 20 um outside the Tissue outline (raw image units; typing/empty_area_nulls.csv, written from
-    scripts/research/empty_area_background_20261028.py). Method repair 2026-10-28: the 99.9th percentile was set by single
+    at least 20 um outside the Tissue outline (typing/empty_area_nulls.csv, written by redsea_cells.py from the same
+    despeckled channels the cells are measured on). Method repair 2026-10-28: the 99.9th percentile was set by single
     debris or artifact objects off the tissue on ND_6539, ND_0112 and ND_6356 and floored those images' levels."""
     q = RG.load().const('EMPTY_NULL_QUANTILE')
     t = pd.read_csv(out / 'typing' / 'empty_area_nulls.csv')
@@ -217,13 +216,6 @@ def load(out: Path, tag: str, reg: RG.Registry) -> pd.DataFrame:
     d = rs[rs['qc_analysis_eligible']].merge(ctx, on='object_id', how='left').merge(xy, on='object_id', how='left')
     d['in_endocrine'] = d['endocrine_object_class'].notna()
     d['ordinary'] = d['context'].eq('tissue') & ~d['in_endocrine']
-    # the established endocrine typing (owner 2026-10-28: "The endocrine typing didn't need to change"): the verified
-    # endocrine cells are the reference wherever a check needs endocrine cells
-    est = out / ID.ESTABLISHED / 'calls' / f'{tag}.parquet'
-    if est.exists():
-        c = pd.read_parquet(est, columns=['object_id', 'cell_class']).rename(columns={'cell_class': 'established_class'})
-        d = d.merge(c, on='object_id', how='left', validate='one_to_one')
-    d['established_class'] = d.get('established_class', pd.Series('', index=d.index)).fillna('')
     return d.reset_index(drop=True)
 
 
@@ -310,13 +302,10 @@ def isolated_from(src: np.ndarray, ref: np.ndarray, xy: np.ndarray, cut: float) 
 
 
 def cell_sets(d: pd.DataFrame, fixed: dict, R: dict) -> tuple[np.ndarray, np.ndarray | None]:
-    """(endocrine-object hormone-positive cells, leukocytes): the established hormone-named endocrine cells (owner
-    2026-10-28: the endocrine typing is settled; by this module's hormone levels where no established typing exists);
+    """(endocrine-object hormone-positive cells, leukocytes) from the chosen positivity (whole cell, per image);
     leukocytes need the Leukocyte marker and a T or Myeloid marker (two markers), None until those are chosen."""
     n = len(d)
-    est = d['established_class'].isin(set(R['subtype_of'].values())).to_numpy()
-    hormone = (est if est.any() else any_of(fixed, [h for h in R['hormones'] if h in fixed], n)) & \
-        d['in_endocrine'].to_numpy()
+    hormone = any_of(fixed, [h for h in R['hormones'] if h in fixed], n) & d['in_endocrine'].to_numpy()
     if not all(m in fixed for m in R['core']):
         return hormone, None
     return hormone, any_of(fixed, R['leukocyte'], n) & any_of(fixed, R['t'] + R['myeloid'], n)
@@ -366,6 +355,18 @@ def populations(d: pd.DataFrame, reg: RG.Registry, m: str, fixed: dict, xy: np.n
     return pops
 
 
+def endocrine_reference(d: pd.DataFrame, xy: np.ndarray, cut: float, edge_um: float) -> tuple[np.ndarray, np.ndarray]:
+    """(level reference, gate) of the endocrine markers, from context and centroids only: ordinary-tissue cells, and
+    capillary and lymphatic cells, with no endocrine-object cell within `cut` and farther than `edge_um` from the
+    image's cell bounding box (a bright line at the acquired-image border on 17 of 20 images)."""
+    in_endo = d['in_endocrine'].to_numpy()
+    away = isolated_from(in_endo, np.ones(len(d), bool), xy, cut)
+    lo, hi = xy.min(axis=0), xy.max(axis=0)
+    inner = (np.minimum(xy - lo, hi - xy).min(axis=1) > edge_um)
+    vessel = d['context'].isin([STRUCTURE_CONTEXT['Capillary objects'], STRUCTURE_CONTEXT['Lymphatic objects']]).to_numpy()
+    return d['ordinary'].to_numpy() & away & inner, vessel & away & inner
+
+
 def overlap_free(d: pd.DataFrame, reg: RG.Registry, m: str) -> np.ndarray:
     ov = reg.table.loc[m, 'excludes_overlap'] if 'excludes_overlap' in reg.table.columns else ''
     return d[OVERLAP[ov]].fillna(0).to_numpy() == 0 if ov else np.ones(len(d), bool)
@@ -407,7 +408,10 @@ def chosen_positivity(d: pd.DataFrame, reg: RG.Registry, chosen: dict, k: float,
     fixed, lvs = {}, {}
     for m in sorted(chosen, key=lambda x: dependency_rank(reg, x)):
         meas, method = chosen[m]
-        ref = negative_reference(d, reg, m, meas, fixed, xy, k, cut, R) if negative_quantile(method) else None
+        if negative_quantile(method) and reg.positivity_class(m) == 'endocrine_object':
+            ref = endocrine_reference(d, xy, cut, reg.const('EDGE_UM'))[0]
+        else:
+            ref = negative_reference(d, reg, m, meas, fixed, xy, k, cut, R) if negative_quantile(method) else None
         bp = reg.table.loc[m, 'background_population']
         subset = any_of(fixed, reg.broad(bp), len(d)) if bp else None
         lvs[m] = level_for(d, reg, m, meas, method, k, nulls.get((tag, m), np.nan), ref, subset)
@@ -483,51 +487,57 @@ def image_pass(out: Path, tag: str, reg_name: tuple, stage: str, chosen: dict, n
         for m in [m for m in reg.measured_markers() if reg.positivity_class(m) in ('structure_object', 'endocrine_object')]:
             ref = reg.table.loc[m, 'reference']
             if reg.positivity_class(m) == 'endocrine_object':
-                # the established cells the marker names (a hormone: its subtype; the broad marker: every hormone-named
-                # cell), so the check does not presume the cells are many (two T1D images have few beta cells)
-                sub = R['subtype_of'].get(m)
-                est = d['established_class']
-                inside = ((est == sub) if sub else est.isin(set(R['subtype_of'].values()))).to_numpy() & inside_endo
-                inside = inside if inside.any() else inside_endo
-            else:
-                inside = d['context'].eq(STRUCTURE_CONTEXT[ref]).to_numpy()
+                # known-negative 99.9th percentile of ordinary tissue away from the endocrine objects and the image edge;
+                # gate: capillary and lymphatic cells away from the objects (method repair 2026-10-28; whole cell, per
+                # image; the object-enrichment check presumed many hormone cells, which two T1D images lack)
+                ref, gate = endocrine_reference(d, xy, cut, reg.const('EDGE_UM'))
+                for meas, method in options(reg, m):
+                    lv = level_for(d, reg, m, meas, method, k, np.nan, ref)
+                    g_all = rate(lv['pos'], gate, nmin)
+                    ri, ro, enr, _ = enrichment(lv['pos'], inside_endo)
+                    row(m, meas, method, lv, sensitivity=ri, out_of_place=g_all, enrichment=enr,
+                        reference_cells=int(ref.sum()), gate_cells=int(gate.sum()),
+                        passes=ok_all([le(g_all, reg.const('CD45_AMONG_HORMONE_MAX'))]))
+                continue
+            inside = d['context'].eq(STRUCTURE_CONTEXT[ref]).to_numpy()
             for meas, method in options(reg, m):
                 lv = level_for(d, reg, m, meas, method, k, np.nan)
                 ri, ro, enr, ok = enrichment(lv['pos'], inside)
                 row(m, meas, method, lv, sensitivity=ri, out_of_place=ro, enrichment=enr, passes=ok)
     elif stage == 'immune':
-        # one option per marker since the method repair (registry background_method); the background population's
-        # marker first (CD3e's background is read on CD45-positive cells)
+        # every combination of the core markers' options (measurement x method); within a combination the background
+        # population's marker comes first (CD3e's background is read on CD45-positive cells)
         core = sorted(R['core'], key=lambda x: dependency_rank(reg, x))
-        pos, lv = {}, {}
-        for m in core:
-            (meas, method), = options(reg, m)
-            bp = reg.table.loc[m, 'background_population']
-            lv[m] = level_for(d, reg, m, meas, method, k, np.nan,
-                              subset=any_of(pos, reg.broad(bp), n) if bp else None)
-            pos[m] = lv[m]['pos']
-        t, l, mye = any_of(pos, R['t'], n), any_of(pos, R['leukocyte'], n), any_of(pos, R['myeloid'], n)
-        mye_all = np.logical_and.reduce([pos[x] for x in R['myeloid']])
-        leuk_c = l & (t | mye)
-        hormone_free = isolated_from(leuk_c, hormone_cells, xy, cut)       # no leukocyte within cut, itself included
-        c45 = rate(l, t, nmin)
-        t_all, t_iso, _ = isolated_rate(t, mye_all, xy, cut, nmin)
-        checks = {'leukocyte_among_t': c45, 't_among_myeloid_all': t_all, 't_among_myeloid': t_iso,
-                  'hormone_reference_cells': int(hormone_free.sum())}
-        for m in core:
-            r_all, r_iso, _ = isolated_rate(pos[m], hormone_free, xy, cut, nmin)
-            checks[f'{m}_in_hormone_all'], checks[f'{m}_in_hormone'] = r_all, r_iso
-        ok = [(c45 >= reg.const('CD45_AMONG_CD3E_MIN')) if np.isfinite(c45) else np.nan,
-              le(t_iso, reg.const('CD3E_AMONG_MYELOID_MAX'))] + \
-             [le(checks[f'{m}_in_hormone'], reg.const('CD45_AMONG_HORMONE_MAX')) for m in core]
-        good = ok_all(ok) and all(np.isfinite(lv[m]['level_log']) for m in core)
-        oop = np.nanmax([t_iso] + [checks[f'{m}_in_hormone'] for m in core])
-        checks.update({f'level_raw_{m}': lv[m]['level_raw'] for m in core})
-        order = R['core']
-        opts = {m: options(reg, m)[0] for m in order}
-        rows.append({'image': tag, 'stage': stage, 'marker': '+'.join(order),
-                     'measurement': '|'.join(opts[m][0] for m in order), 'method': '|'.join(opts[m][1] for m in order),
-                     'out_of_place': oop, 'sensitivity': c45, 'passes': good, **checks})
+        for combo in product(*(options(reg, m) for m in core)):
+            opt = dict(zip(core, combo))
+            pos, lv = {}, {}
+            for m in core:
+                meas, method = opt[m]
+                bp = reg.table.loc[m, 'background_population']
+                lv[m] = level_for(d, reg, m, meas, method, k, np.nan,
+                                  subset=any_of(pos, reg.broad(bp), n) if bp else None)
+                pos[m] = lv[m]['pos']
+            t, l, mye = any_of(pos, R['t'], n), any_of(pos, R['leukocyte'], n), any_of(pos, R['myeloid'], n)
+            mye_all = np.logical_and.reduce([pos[x] for x in R['myeloid']])
+            leuk_c = l & (t | mye)
+            hormone_free = isolated_from(leuk_c, hormone_cells, xy, cut)       # no leukocyte within cut, itself included
+            c45 = rate(l, t, nmin)
+            t_all, t_iso, _ = isolated_rate(t, mye_all, xy, cut, nmin)
+            checks = {'leukocyte_among_t': c45, 't_among_myeloid_all': t_all, 't_among_myeloid': t_iso,
+                      'hormone_reference_cells': int(hormone_free.sum())}
+            for m in core:
+                r_all, r_iso, _ = isolated_rate(pos[m], hormone_free, xy, cut, nmin)
+                checks[f'{m}_in_hormone_all'], checks[f'{m}_in_hormone'] = r_all, r_iso
+            ok = [(c45 >= reg.const('CD45_AMONG_CD3E_MIN')) if np.isfinite(c45) else np.nan,
+                  le(t_iso, reg.const('CD3E_AMONG_MYELOID_MAX'))] + \
+                 [le(checks[f'{m}_in_hormone'], reg.const('CD45_AMONG_HORMONE_MAX')) for m in core]
+            good = ok_all(ok) and all(np.isfinite(lv[m]['level_log']) for m in core)
+            oop = np.nanmax([t_iso] + [checks[f'{m}_in_hormone'] for m in core])
+            checks.update({f'level_raw_{m}': lv[m]['level_raw'] for m in core})
+            order = R['core']
+            rows.append({'image': tag, 'stage': stage, 'marker': '+'.join(order),
+                         'measurement': '|'.join(opt[m][0] for m in order), 'method': '|'.join(opt[m][1] for m in order),
+                         'out_of_place': oop, 'sensitivity': c45, 'passes': good, **checks})
     elif stage == 'immune2':
         t = any_of(fixed, R['t'], n)
         hormone_free = isolated_from(leuk, hormone_cells, xy, cut)
@@ -629,6 +639,10 @@ def image_pass(out: Path, tag: str, reg_name: tuple, stage: str, chosen: dict, n
 
 
 # -- selection ----------------------------------------------------------------------------------------------------------
+def R_CORE(reg: RG.Registry) -> list[str]:
+    return roles(reg)['core']
+
+
 def background_based(method: pd.Series) -> np.ndarray:
     """Options whose level is read from the image's background (peak, edge, gate, tissue p99), where a level far from
     the cohort's is a misread background. Measured 2026-10-28: SMA's background peak is 0.7-2.3x its cohort median on
@@ -656,9 +670,8 @@ def select(df: pd.DataFrame, select_on: list[str]) -> pd.DataFrame:
         med = df.groupby(key)[c].transform('median')
         fold = df[c] / med
         wild |= ((fold > 10) | (fold < 0.1)).fillna(False).to_numpy()
-    wild &= background_based(df['method'])
+    wild &= False                                   # owner 2026-10-28: nothing pooled; no comparison across images
     df['wild_level'] = wild
-    df.loc[wild, 'passes'] = False
     sel = df[df['image'].isin(select_on)]
     g = sel.assign(fail=sel['passes'].eq(False)).groupby(['marker', 'measurement', 'method'])
     s = g.agg(images=('image', 'nunique'), failing_images=('fail', 'sum'),
@@ -672,8 +685,10 @@ def select(df: pd.DataFrame, select_on: list[str]) -> pd.DataFrame:
     # images and markers": an option is usable only if it passes on every image
     s['ok'] = (s['images'] == len(select_on)) & (s['failing_images'] == 0) & s['failing_other_images'].isna()
     s['sens_key'] = s['sensitivity'].fillna(-1)
-    s = s.sort_values(['marker', 'ok', 'sens_key', 'out_of_place'], ascending=[True, False, False, True])
-    return s.drop(columns='sens_key')
+    # whole cell first where it passes (owner 2026-10-28: "whole cell for everything"; "Check them both")
+    s['not_whole'] = s['measurement'].astype(str).str.split('|').apply(lambda x: sum(m != 'whole_cell' for m in x))
+    s = s.sort_values(['marker', 'ok', 'not_whole', 'sens_key', 'out_of_place'], ascending=[True, False, True, False, True])
+    return s.drop(columns=['sens_key', 'not_whole'])
 
 
 def main() -> int:
@@ -696,15 +711,18 @@ def main() -> int:
         raise SystemExit('no ND image among the images: options are chosen on the ND controls')
     chosen: dict[str, tuple[str, str]] = {}
     decisions, all_rows = [], []
-    for stage in ('objects', 'immune', 'immune2', 'epithelial', 'known_negative', 'shared', 'state'):
+
+    def run_stage(stage: str) -> tuple[pd.DataFrame, pd.DataFrame]:
         with ProcessPoolExecutor(a.workers) as ex:
             rows = [r for rs in ex.map(image_pass, repeat(out), tags, repeat(reg_name), repeat(stage), repeat(dict(chosen)),
                                        repeat(nulls)) for r in rs]
         df = pd.DataFrame(rows)
-        all_rows.append(df)
-        sel = select(df, select_on)
+        return df, select(df, select_on)
+
+    def decide(stage: str, sel: pd.DataFrame, best_rows: dict | None = None) -> list[dict]:
+        out = []
         for marker, opts in sel.groupby('marker', sort=False):
-            best = opts.iloc[0]
+            best = best_rows[marker] if best_rows and marker in best_rows else opts.iloc[0]
             names = marker.split('+') if stage == 'immune' else [marker]
             meas = best['measurement'].split('|') if stage == 'immune' else [best['measurement']]
             meth = best['method'].split('|') if stage == 'immune' else [best['method']]
@@ -712,10 +730,43 @@ def main() -> int:
                 chosen[m] = (meas[i], meth[i])      # the best option, also when it fails: later stages and the report
                 failing = ' '.join(x for x in (best['failing'], best.get('failing_other_images'))
                                    if isinstance(x, str) and x)
-                decisions.append({'marker': m, 'decision': 'use' if best['ok'] else 'stop',
-                                  'measurement': meas[i], 'method': meth[i], 'out_of_place': best['out_of_place'],
-                                  'sensitivity': best['sensitivity'],
-                                  'why': '' if best['ok'] else f'method fails on: {failing}'})
+                out.append({'marker': m, 'decision': 'use' if best['ok'] else 'stop',
+                            'measurement': meas[i], 'method': meth[i], 'out_of_place': best['out_of_place'],
+                            'sensitivity': best['sensitivity'],
+                            'why': '' if best['ok'] else f'method fails on: {failing}'})
+        return out
+
+    df, sel = run_stage('objects')
+    all_rows.append(df)
+    decisions += decide('objects', sel)
+    # The immune combination is chosen with the stages that depend on its leukocytes: a combination whose leukocytes
+    # make the epithelial check fail on some image (whole-cell CD68/CD163 turn the epithelial cells of ND_0112's diffuse-
+    # signal region into two-marker leukocytes) gives way to the next combination that passes on every image.
+    df_imm, sel_imm = run_stage('immune')
+    candidates = [r for _, r in sel_imm.iterrows() if r['ok']] or [sel_imm.iloc[0]]
+    tried = []
+    for cand in candidates:
+        saved = dict(chosen)
+        dec = decide('immune', sel_imm, {cand['marker']: cand})
+        df2, sel2 = run_stage('immune2')
+        dec2 = decide('immune2', sel2)
+        df3, sel3 = run_stage('epithelial')
+        dec3 = decide('epithelial', sel3)
+        if all(x['decision'] == 'use' for x in dec + dec2 + dec3) or cand is candidates[-1]:
+            break
+        tried.append(f"{cand['measurement']}/{cand['method']}: epithelial check fails "
+                     f"({' '.join(x['marker'] for x in dec3 if x['decision'] != 'use')})")
+        chosen.clear()
+        chosen.update(saved)
+    for x in dec:
+        x['why'] = (x['why'] + '; ' if x['why'] else '') + ('; '.join(f'not {t}' for t in tried) if tried else '')
+    all_rows += [df_imm, df2, df3]
+    decisions += dec + dec2 + dec3
+    print('[immune]', {m: chosen.get(m) for m in R_CORE(reg)}, '| combinations set aside:', tried, flush=True)
+    for stage in ('known_negative', 'shared', 'state'):
+        df, sel = run_stage(stage)
+        all_rows.append(df)
+        decisions += decide(stage, sel)
         print(f'[{stage}]', {m: chosen.get(m) for m in sel['marker'].unique()}, flush=True)
     opts = pd.concat(all_rows, ignore_index=True)
     opts.to_csv(dest / 'levels_options.csv', index=False)
@@ -727,12 +778,8 @@ def main() -> int:
     cols = ['image', 'marker', 'measurement', 'method', 'center', 'width', 'level_log', 'level_raw', 'positive_fraction',
             'zero_fraction', 'background_center', 'background_width']
     lv = pd.DataFrame(final)[cols]
-    med = lv.groupby('marker')['level_raw'].transform('median')
-    lv['fold_from_cohort_median'] = lv['level_raw'] / med
     lv.to_csv(dest / 'levels.csv', index=False)
-    used = set(dec.loc[dec['decision'] == 'use', 'marker'])
-    wild = lv[lv['marker'].isin(used) & ((lv['fold_from_cohort_median'] > 10) | (lv['fold_from_cohort_median'] < 0.1))
-              & background_based(lv['method'])]
+    wild = lv.iloc[0:0]
     pd.set_option('display.width', 250)
     print(dec.to_string(index=False))
     if len(wild):

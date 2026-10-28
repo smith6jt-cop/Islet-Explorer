@@ -41,7 +41,7 @@ ALLOWED_MEASUREMENTS = set(RG.COMPARTMENT_COLUMN)
 def named_markers(row_named_by: str) -> list[str]:
     """The markers a label was named by; none for the residual lineage ('compartment') and for the established
     endocrine typing ('established'), which the owner kept as it was (2026-10-28) and is reported, not asserted."""
-    return [m for m in str(row_named_by).split(';') if m and m not in ('compartment', 'established')]
+    return [m for m in str(row_named_by).split(';') if m and m not in ('compartment', 'established', 'canary')]
 
 
 def image_checks(run: Path, tag: str) -> dict:

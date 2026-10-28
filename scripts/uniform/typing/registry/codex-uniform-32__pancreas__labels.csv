@@ -1,12 +1,15 @@
-compartment,lineage,kind,label,named_by,subtype_rule,profile,only_in,excluded_in,source
-Epithelial,Endocrine,lineage,CHGA+ hormone-negative,established,exclusive_margin,,Islet;EndocrineCluster;EndocrineSingle,,"owner 2026-10-18 (hormones mutually exclusive, resolution or exclusion; a CHGA+INS-GCG-SST- cell type); endocrine only inside endocrine objects (Senior, adopted 2026-10-16); owner 2026-10-28: ""The endocrine typing didn't need to change"" and ""If the singles were already found and verified, don't undo that"": the established endocrine decisions are kept and no other cell is named endocrine"
-Epithelial,Endocrine:Beta,subtype,Beta cell,,,,,,canonical (insulin)
-Epithelial,Endocrine:Alpha,subtype,Alpha cell,,,,,,canonical (glucagon)
-Epithelial,Endocrine:Delta,subtype,Delta cell,,,,,,canonical (somatostatin)
-Epithelial,Exocrine,residual,Exocrine,,,,,Islet;EndocrineCluster;EndocrineSingle,Senior 09-18 (Exocrine is one label); plan 2026-10-28 (epithelial without endocrine markers); exocrine_inside_islet_border (Senior)
-Hematopoietic,Leukocyte,pan,CD45+,,,,,,"owner 2026-10-16 (add the CD45 rule), 2026-10-27 (the class is CD45+)"
-Hematopoietic,T,lineage,T cell,broad,higher,,,,"owner 2026-10-27 (higher marker, no margin, when both subtype markers are positive); T cells with neither positive: owner decision after the final run (interim T_subtype_not_shown)"
-Hematopoietic,T:CD8,subtype,CD8a Tcell,,,,,,canonical (cytotoxic T cells)
-Hematopoietic,T:CD4,subtype,CD4 Tcell,,,,,,canonical (helper T cells)
-Hematopoietic,B,lineage,B cell,broad,,,,,"owner 2026-10-17 (B cell should be a cell type); owner decision 2026-10-28 option (a): CD20 above the isolated-epithelial p99.9, CD45+, one hematopoietic lineage"
-Hematopoietic,Myeloid,lineage,Macrophage,broad,profile,CD68;CD163|LGALS3;CD4,,,owner 2026-10-27 (CD68 or CD163; CD68+CD163+Macrophage_LGALS3+CD4+ with each plus also able to be a minus; no M1/M2)
+compartment,lineage,kind,label,named_by,subtype_rule,profile,only_in,excluded_in,defined_by_object,source
+Epithelial,Endocrine,lineage,CHGA+ hormone-negative,broad_or_subtype,exclusive_margin,,Islet;EndocrineCluster;EndocrineSingle,,EndocrineCluster;EndocrineSingle,"owner 2026-10-18 (hormones mutually exclusive, resolution or exclusion; a CHGA+INS-GCG-SST- cell type); endocrine only inside endocrine objects (Senior, adopted 2026-10-16); owner 2026-10-28: objects accurately identified (a cluster or single object is its endocrine cells); whole cell for everything and nothing pooled (the established typing used cytoplasm and a pooled cohort scale)"
+Epithelial,Endocrine:Beta,subtype,Beta cell,,,,,,,canonical (insulin)
+Epithelial,Endocrine:Alpha,subtype,Alpha cell,,,,,,,canonical (glucagon)
+Epithelial,Endocrine:Delta,subtype,Delta cell,,,,,,,canonical (somatostatin)
+Epithelial,Exocrine,residual,Exocrine,,,,,Islet;EndocrineCluster;EndocrineSingle,,Senior 09-18 (Exocrine is one label); plan 2026-10-28 (epithelial without endocrine markers); exocrine_inside_islet_border (Senior)
+Hematopoietic,Leukocyte,pan,CD45+,,,,,,,"owner 2026-10-16 (add the CD45 rule), 2026-10-27 (the class is CD45+)"
+Hematopoietic,T,lineage,T cell,broad,higher,,,,,"owner 2026-10-27 (higher marker, no margin, when both subtype markers are positive); T cells with neither positive: owner decision after the final run (interim T_subtype_not_shown)"
+Hematopoietic,T:CD8,subtype,CD8a Tcell,,,,,,,canonical (cytotoxic T cells)
+Hematopoietic,T:CD4,subtype,CD4 Tcell,,,,,,,canonical (helper T cells)
+Hematopoietic,B,lineage,B cell,broad,,,,,,"owner 2026-10-17 (B cell should be a cell type); owner decision 2026-10-28 option (a): CD20 above the isolated-epithelial p99.9, CD45+, one hematopoietic lineage"
+Hematopoietic,Myeloid,lineage,Macrophage,broad,profile,CD68;CD163|LGALS3;CD4,,,,owner 2026-10-27 (CD68 or CD163; CD68+CD163+Macrophage_LGALS3+CD4+ with each plus also able to be a minus; no M1/M2)
+Endothelial,Endothelial,lineage,Endothelial,broad,,,,,,"owner 2026-10-28: ""These are not compartment rules, they are lineage markers that we redid as part of this plan"" (registry lineages)"
+Mesenchymal,Mural,lineage,Stromal,broad,,,,,,"owner 2026-10-28: ""These are not compartment rules, they are lineage markers that we redid as part of this plan"" (registry lineages)"
+Neural,Neural,lineage,Neural,broad,,,,,,"owner 2026-10-28: ""These are not compartment rules, they are lineage markers that we redid as part of this plan"" (registry lineages)"

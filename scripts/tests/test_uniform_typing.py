@@ -79,24 +79,25 @@ CELLS = [  # (expected label, start class, {marker: raw value}, established endo
     ('CD8a Tcell', None, {'CD3e': HIGH, 'CD45': HIGH, 'CD8a': HIGH}, None),
     ('CD4 Tcell', None, {'CD3e': HIGH, 'CD45': HIGH, 'CD8a': HIGH, 'CD4': 2 * HIGH}, None),   # both: the higher
     ('T cell', None, {'CD3e': HIGH, 'CD45': HIGH}, None),                                     # neither: interim status
-    ('CD20+', None, {'CD20': HIGH}, None),                                                    # CD20 alone: never a B cell
+    ('Tissue', None, {'CD20': HIGH}, None),                                                   # CD20 alone: never a B cell
     ('B cell', None, {'CD20': HIGH, 'CD45': HIGH}, None),
     ('CD68+CD163-Macrophage_LGALS3-CD4-', None, {'CD68': HIGH, 'CD45': HIGH}, None),
     ('CD45+', None, {'CD45': HIGH}, None),
+    ('Conflict T/Myeloid', None, {'CD163': HIGH, 'CD8a': 2 * HIGH}, None),                   # no CD8a+CD163+ cell type
     ('Exocrine', None, {'ECAD': HIGH, 'panCK': HIGH}, None),
     ('Excluded', 'Islet', {'ECAD': HIGH}, None),                                              # exocrine inside the border
-    ('Beta cell', 'Islet', {'INS': HIGH, 'ECAD': HIGH}, ('Beta', '')),                        # established, kept
-    ('Excluded', 'Islet', {'INS': HIGH, 'GCG': 0.8 * HIGH}, ('Excluded', 'hormone_unresolved_margin')),
-    ('CHGA+ hormone-negative', 'EndocrineCluster', {'CHGA': HIGH}, ('CHGA+ hormone-negative', '')),
-    ('Excluded', 'EndocrineSingle', {'CD31': HIGH}, ('Excluded', 'endocrine_single_no_usable_hormone')),
-    ('Alpha cell', 'EndocrineSingle', {'GCG': HIGH, 'CD31': HIGH}, ('Alpha', '')),            # a verified single stays
+    ('Beta cell', 'Islet', {'INS': HIGH, 'ECAD': HIGH}, None),                                # hormone, whole cell
+    ('Excluded', 'Islet', {'INS': HIGH, 'GCG': 0.8 * HIGH}, None),                            # under the 2x margin
+    ('CHGA+ hormone-negative', 'EndocrineCluster', {'CHGA': HIGH}, None),
+    ('EndocrineSingle', 'EndocrineSingle', {'CD31': HIGH}, None),                             # the object names the cell
+    ('Alpha cell', 'EndocrineSingle', {'GCG': HIGH, 'CD31': HIGH}, None),                     # a verified single stays
     ('Exocrine', None, {'INS': HIGH, 'ECAD': HIGH}, None),                                    # no endocrine outside objects
-    ('Islet', 'Islet', {'INS': HIGH}, ('Immune', '')),                                        # no new endocrine cell
+    ('Beta cell', 'Islet', {'INS': HIGH}, None),                                              # hormone in an islet
     ('T cell', 'Islet', {'CD3e': HIGH, 'CD45': HIGH}, ('Immune', '')),                        # a T cell inside an islet
     ('Tissue', None, {}, None),                                                               # no marker above background
     ('Tissue', None, {'ColIV': 1e6}, None),                                                   # ColIV is never read
-    ('CD31+', None, {'CD31': HIGH}, None),
-    ('BCatenin+', None, {'BCatenin': HIGH}, None),                                            # only a shared marker
+    ('Endothelial', None, {'CD31': HIGH}, None),                                              # lineage marker
+    ('Tissue', None, {'BCatenin': HIGH}, None),                                               # only a shared marker
 ]
 
 
@@ -137,12 +138,13 @@ def test_identity_rules(synthetic_run):
     want = [c[0] for c in CELLS]
     assert got == want, [(i, g, w) for i, (g, w) in enumerate(zip(got, want)) if g != w]
     assert out.iloc[2]['subtype_status'] == 'T_subtype_not_shown'
-    assert out.iloc[8]['excluded_reason'] == 'exocrine_inside_islet_border'
-    assert out.iloc[10]['excluded_reason'] == 'hormone_unresolved_margin'
-    assert out.iloc[12]['excluded_reason'] == 'endocrine_single_no_usable_hormone'
-    assert (out.iloc[9:14]['named_by'] == 'established').all()
-    assert 'endocrine_outside_object' in out.iloc[14]['tags']
-    assert 'endocrine_marker_positive' in out.iloc[15]['tags']
-    assert out.iloc[15]['status'] == 'endocrine_marker_only'
-    assert out.iloc[17]['status'] == out.iloc[18]['status'] == 'no_marker_above_background'
+    assert out.iloc[9]['excluded_reason'] == 'exocrine_inside_islet_border'
+    assert out.iloc[11]['excluded_reason'] == 'hormone_unresolved_margin'
+    assert out.iloc[13]['status'] == 'no_endocrine_marker_above_level'
+    assert out.iloc[10]['named_by'] == 'INS' and out.iloc[14]['named_by'] == 'GCG'
+    assert 'endocrine_outside_object' in out.iloc[15]['tags']
+    assert out.iloc[18]['status'] == out.iloc[19]['status'] == 'no_marker_above_background'
     assert not any(str(x).startswith('ColIV') for x in got)
+    # no cell is named by a marker (owner 2026-10-28): the start class stays, with the status saying why
+    assert out.iloc[3]['status'] == 'no_lineage_named' and out.iloc[21]['status'] == 'shared_marker_only'
+    assert not any(str(x)[-1:] in '+-' and ' ' not in str(x) and 'Macrophage_' not in str(x) and str(x) != 'CD45+' for x in got)
