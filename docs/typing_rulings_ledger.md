@@ -64,6 +64,7 @@ wrote; not the owner's words, kept or changed on evidence).
 | 10-28 | "over 45 thousand ColIV cells is too many and likely another false result" | led to 10-28 below |
 | 10-28 | "ColIV needs to be excluded from typing completely." | in force |
 | 10-28 | "Each cell needs to start with a default class based on either tissue or islet parent." / "the object's class" | in force: start class `Tissue`, `Islet`, `EndocrineCluster` or `EndocrineSingle` |
+| 10-28 | At the Step 4 stop: SMA by Barlow's known-negative 99th percentile, "1. use this"; B cells option (a) (CD20 above the 99.9th percentile of isolated epithelial cells, CD45+, single hematopoietic lineage, expected false calls reported), "2. use (a)" | in force (`docs/final_typing_handoff_20261028.md`) |
 | 09-18 [Senior] | Exocrine is one label (the Senior panel had no acinar or ductal marker) | in force for this run; premise differs here (CK19 on this panel): split is an owner decision after the final run |
 
 ## Display
