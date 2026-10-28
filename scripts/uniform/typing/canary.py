@@ -69,7 +69,9 @@ def image_levels(run: Path, tag: str) -> list[dict]:
         # leave out cells positive for a marker of a lineage mutually exclusive with m's (never the pan-leukocyte
         # marker every carrier also has, nor m's own lineage; for the pan marker itself, every lineage marker); a
         # second review (2026-10-28) found the first form still removed the carriers of every marker but CD45
-        lin_m = {lin for lin, _ in reg.lineage_entries(m)}
+        # a shared marker has no lineage of its own: its carriers (registry carrier_lineages) stand in, so cells of a
+        # carrier lineage stay in its null (third review, 2026-10-28: HLADR, CD35)
+        lin_m = {lin for lin, _ in reg.lineage_entries(m)} or set(RG.split(reg.table.loc[m, 'carrier_lineages']))
         pan = R['leukocyte']
         others = [x for x in hematopoietic if x not in pan and x != m and
                   (m in pan or not ({lin for lin, _ in reg.lineage_entries(x)} & lin_m))]
