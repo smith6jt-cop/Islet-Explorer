@@ -599,13 +599,14 @@ def image_pass(out: Path, tag: str, reg_name: tuple, stage: str, chosen: dict, n
                 if cf:
                     # each half of a 500-um checkerboard predicts the other's false-positive rate in `cf`
                     parity = ((d['x_um'] // 500).astype(int) + (d['y_um'] // 500).astype(int)).to_numpy() % 2
-                    worst = 0.0
+                    halves = []
                     for a in (0, 1):
                         half = [r_ & (parity == a) for r_ in (ref if isinstance(ref, list) else [ref])]
                         la = level_for(d, reg, m, meas, method, k, np.nan, half if isinstance(ref, list) else half[0])
                         held = pops[cf] & (parity != a)
                         _, r_iso, _ = isolated_rate(la['pos'], held, xy, cut, nmin)
-                        worst = np.nanmax([worst, r_iso])
+                        halves.append(r_iso)
+                    worst = max(halves) if all(np.isfinite(halves)) else np.nan     # an unreadable half fails
                     extra['cross_fit_out_of_place'] = worst
                     gates.append(le(worst, bar))
                 if reg.validation(m) == 'reported':
@@ -717,10 +718,14 @@ def main() -> int:
             rows = [r for rs in ex.map(image_pass, repeat(out), tags, repeat(reg_name), repeat(stage), repeat(dict(chosen)),
                                        repeat(nulls)) for r in rs]
         df = pd.DataFrame(rows)
+        if df.empty:                           # a stage with no marker (e.g. every immune marker known-negative)
+            return df, df
         return df, select(df, select_on)
 
     def decide(stage: str, sel: pd.DataFrame, best_rows: dict | None = None) -> list[dict]:
         out = []
+        if sel.empty:
+            return out
         for marker, opts in sel.groupby('marker', sort=False):
             best = best_rows[marker] if best_rows and marker in best_rows else opts.iloc[0]
             names = marker.split('+') if stage == 'immune' else [marker]
@@ -767,7 +772,7 @@ def main() -> int:
         df, sel = run_stage(stage)
         all_rows.append(df)
         decisions += decide(stage, sel)
-        print(f'[{stage}]', {m: chosen.get(m) for m in sel['marker'].unique()}, flush=True)
+        print(f'[{stage}]', {m: chosen.get(m) for m in (sel['marker'].unique() if len(sel) else [])}, flush=True)
     opts = pd.concat(all_rows, ignore_index=True)
     opts.to_csv(dest / 'levels_options.csv', index=False)
     dec = pd.DataFrame(decisions)

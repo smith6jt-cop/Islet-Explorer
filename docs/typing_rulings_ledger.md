@@ -88,4 +88,4 @@ wrote; not the owner's words, kept or changed on evidence).
 pooled background width (dropped 10-28); E-cadherin read twice (dropped 10-28); panCK dropped as an immune negative (v16;
 superseded by the canonical registry); local-FDR hormone level (10-17; one hormone definition chosen by the endocrine-object
 check); hormone 2x margin; Senior's supporting tier (removed 10-27, never approved); CD20 with CD45 for B cells (canonical);
-K = 3 background widths; the canary detection level; the positivity pass criteria (delegated 10-28).
+K = 3 background widths; the canary detection level; the positivity pass criteria (delegated 10-28); the 3x3 median despeckle (10-28, on the owner's request); CD8a and CD4 known-negative levels (10-28 method repair after the despeckle: every background-peak method called touching CD8a+ structures in 5.1-6.1 % of ND_6479's isolated hormone cells; CD4 moved with CD8a so the higher-marker comparison reads both over one kind of level).

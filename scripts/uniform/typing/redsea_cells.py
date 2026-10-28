@@ -16,7 +16,21 @@ from spillover context, as Senior's pipeline config sets it. Of Senior's other Q
 over 4x the median, solidity under 0.70, raster/reported area ratio) none excludes a cell here (owner,
 2026-10-16); they are written to `qc_flags`.
 
-Before writing, the uncorrected whole-cell mean of every channel is compared with QuPath's own
+Despeckle (owner 2026-10-28: "some images look like they need a despeckle filter prior to cell intensity
+measurements"): every channel of every image goes through a 3x3 median (ImageJ's Process > Noise > Despeckle) before
+the cells are measured. Agent determination on the images (output/typing_final_checks_20261028/despeckle): a
+fluorescence peak spreads over several pixels, so its brightest neighbor stands at >= 0.5 of its height (ND_0112:
+0-2 % of bright peaks below 0.25), while ND_6232 and Aab_6558 carry single-pixel specks (20-28 % of bright peaks below
+0.25), which a 3x3 median removes and smooth signal passes. One filter for every image and channel (owner 2026-10-28:
+fix the method, never flag images).
+
+The empty-slide null of every channel is measured from the same despeckled channels (levels.py floors the edge and
+gate levels at it): means of 19 x 19-pixel windows (7.2 um, about a cell's measurement area) wholly in the slide area at
+least 20 um outside the image's Tissue outline, 20,000 seeded windows, their p50 / p99 / p99.9 (the method of
+scripts/research/empty_area_background_20261028.py, which read the raw pixels); main() writes them to
+typing/empty_area_nulls.csv.
+
+Before writing, the uncorrected whole-cell mean of every channel (before the despeckle) is compared with QuPath's own
 `Cell: <channel>: Mean` over the cells of at least 20 um2 whose raster and polygon areas agree; a channel whose correlation falls below ALIGN_MIN_R stops the image (Senior's
 alignment_check: a key or channel mismatch invalidates every corrected value).
 
@@ -34,9 +48,11 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import scipy.sparse as sp
+import cv2
 import tifffile
 from scipy.ndimage import distance_transform_edt
 from scipy.spatial import cKDTree
+from shapely.geometry import shape
 from skimage.draw import polygon as draw_polygon
 from skimage.morphology import binary_dilation, diamond
 from skimage.segmentation import find_boundaries
@@ -46,6 +62,46 @@ import codex_typing as CT  # noqa: E402
 
 COMPARTMENTS = ('Nucleus', 'Cytoplasm', 'Membrane', 'Cell')
 ALIGN_MIN_R = 0.95
+DESPECKLE = {'filter': 'median', 'size': 3, 'implementation': 'cv2.medianBlur', 'channels': 'all'}
+
+
+EMPTY = {'window_px': 19, 'windows': 20000, 'margin_um': 20.0, 'seed': 0}
+
+
+def empty_windows(out: Path, tag: str, H: int, W: int) -> tuple[np.ndarray, np.ndarray]:
+    """Centers of EMPTY['window_px']-square windows wholly in the slide area at least EMPTY['margin_um'] outside the
+    image's Tissue outline (`inputs/tissue/<image>.geojson`, pixels), a seeded sample of EMPTY['windows']."""
+    raw = json.loads((out / 'inputs' / 'tissue' / f'{tag}.geojson').read_text())
+    geom = shape((raw['features'] if isinstance(raw, dict) else raw)[0]['geometry'])
+    mask = np.ones((H, W), np.uint8)
+    for poly in getattr(geom, 'geoms', [geom]):
+        cv2.fillPoly(mask, [np.round(np.asarray(poly.exterior.coords)).astype(np.int32)], 0)
+        for hole in poly.interiors:
+            cv2.fillPoly(mask, [np.round(np.asarray(hole.coords)).astype(np.int32)], 1)
+    r = int(round(EMPTY['margin_um'] / CT.PIXEL_UM))
+    mask = cv2.erode(mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * r + 1, 2 * r + 1)))
+    w = EMPTY['window_px']
+    ok = cv2.erode(mask, np.ones((w, w), np.uint8)).astype(bool)
+    e = w // 2 + 1
+    ok[:e], ok[-e:], ok[:, :e], ok[:, -e:] = False, False, False, False
+    ys, xs = np.nonzero(ok)
+    if len(ys):
+        pick = np.random.default_rng(EMPTY['seed']).choice(len(ys), min(EMPTY['windows'], len(ys)), replace=False)
+        ys, xs = ys[pick], xs[pick]
+    return ys, xs
+
+
+def window_means(a: np.ndarray, ys: np.ndarray, xs: np.ndarray) -> np.ndarray:
+    ii = cv2.integral(np.ascontiguousarray(a, dtype=a.dtype.newbyteorder('=')), sdepth=cv2.CV_64F)
+    h = EMPTY['window_px'] // 2
+    y0, y1, x0, x1 = ys - h, ys + h + 1, xs - h, xs + h + 1
+    return (ii[y1, x1] - ii[y0, x1] - ii[y1, x0] + ii[y0, x0]) / EMPTY['window_px'] ** 2
+
+
+def despeckle(a: np.ndarray) -> np.ndarray:
+    """ImageJ's Despeckle: the 3x3 median of each pixel (borders replicated), on the channel's own integer values."""
+    native = a.dtype.newbyteorder('=')        # OpenCV reads native byte order; some of these TIFFs are big-endian
+    return cv2.medianBlur(np.ascontiguousarray(a, dtype=native), DESPECKLE['size'])
 
 
 def log(tag, msg):
@@ -254,17 +310,21 @@ class Channels:
         self.pages = level.pages
 
     def __call__(self, k):
+        return self.native(k).astype(np.float32)
+
+    def native(self, k):
+        """Channel k as stored (the image's own integer type)."""
         if self.memmap:
-            return np.asarray(self.arr[k], dtype=np.float32)
-        return self.pages[k].asarray().astype(np.float32)
+            return np.asarray(self.arr[k])
+        return self.pages[k].asarray()
 
     def close(self):
         self.arr = None
         self.tf.close()
 
 
-def process(out: Path, tag: str, force: bool = False) -> dict:
-    dest = CT.typing_dir(out) / 'redsea' / f'{tag}.parquet'
+def process(out: Path, tag: str, force: bool = False, dest_dir: Path | None = None) -> dict:
+    dest = (dest_dir or CT.typing_dir(out) / 'redsea') / f'{tag}.parquet'
     rec_path = dest.with_suffix('.json')
     if dest.exists() and rec_path.exists() and not force:
         log(tag, 'done already')
@@ -321,9 +381,21 @@ def process(out: Path, tag: str, force: bool = False) -> dict:
     C = len(names)
     data, edge = np.zeros((n, C)), np.zeros((n, C))
     nuc, nuc_edge = np.zeros((n, C)), np.zeros((n, C))
+    data_raw = np.zeros((n, C))                       # before the despeckle, for the alignment check only
+    ey, ex = empty_windows(out, tag, H, W)
+    empty = {}
     t0 = time.time()
     for k in range(C):
-        ch = img(k).ravel()
+        raw = img.native(k)
+        data_raw[:, k] = np.bincount(mask_flat, weights=raw.ravel().astype(np.float32), minlength=n + 1)[1:]
+        clean = despeckle(raw)
+        if len(ey):
+            wm, wr = window_means(clean, ey, ex), window_means(raw, ey, ex)
+            empty[names[k]] = {'windows': len(wm), 'null_p50': float(np.percentile(wm, 50)),
+                               'null_p99': float(np.percentile(wm, 99)), 'null_p999': float(np.percentile(wm, 99.9)),
+                               'null_p99_before_despeckle': float(np.percentile(wr, 99))}
+        ch = clean.astype(np.float32).ravel()
+        del raw, clean
         data[:, k] = np.bincount(mask_flat, weights=ch, minlength=n + 1)[1:]
         edge[:, k] = np.bincount(mask_band, weights=ch[band_idx], minlength=n + 1)[1:]
         nuc[:, k] = np.bincount(nuc_flat, weights=ch, minlength=n + 1)[1:]
@@ -331,7 +403,7 @@ def process(out: Path, tag: str, force: bool = False) -> dict:
         del ch
     img.close()
     del nucm, nuc_flat, nuc_band, mask_band, band_idx
-    log(tag, f'{C} channels summed in {time.time() - t0:.0f}s')
+    log(tag, f'{C} channels despeckled and summed in {time.time() - t0:.0f}s')
 
     t0 = time.time()
     M = contact_matrix_gapbridge(mask, n, CT.REDSEA['gap_bridge'])
@@ -344,9 +416,10 @@ def process(out: Path, tag: str, force: bool = False) -> dict:
     means, counts, n_isolated = compensate_compartments(data, edge, nuc, nuc_edge, sizes, bandcount,
                                                         nuccount, nucbandcount, M, comp_mode, alpha)
 
-    # alignment check: the uncorrected whole-cell mean against QuPath's own, per channel
+    # alignment check: the uncorrected whole-cell mean (before the despeckle) against QuPath's own, per channel
     with np.errstate(invalid='ignore', divide='ignore'):
-        uncorr = data / np.where(sizes > 0, sizes, np.nan)[:, None]
+        uncorr = data_raw / np.where(sizes > 0, sizes, np.nan)[:, None]
+        despeckled = data / np.where(sizes > 0, sizes, np.nan)[:, None]
     q = cells.set_index('Object ID').reindex(oids)
     # The check catches a key or channel mismatch, so it reads the cells whose raster and polygon agree in size:
     # on cells of a few pixels the two pixel sets differ by construction (ND_6232 CD35, r 0.73 over all cells).
@@ -362,6 +435,9 @@ def process(out: Path, tag: str, force: bool = False) -> dict:
     bad = {c: v for c, v in align.items() if not v['r'] >= ALIGN_MIN_R}
     if bad:
         raise SystemExit(f'{tag}: raster means disagree with QuPath on {bad}')
+    # what the despeckle changed: per channel, the median whole-cell mean after over before (analysis cells)
+    effect = {c: float(np.nanmedian(despeckled[ok, k] / np.where(uncorr[ok, k] > 0, uncorr[ok, k], np.nan)))
+              for k, c in enumerate(names)}
 
     frame = qc.copy()
     for comp in COMPARTMENTS:
@@ -372,7 +448,9 @@ def process(out: Path, tag: str, force: bool = False) -> dict:
     dest.parent.mkdir(parents=True, exist_ok=True)
     frame.to_parquet(dest, index=False)
     rec = {'image': tag, 'image_path': entry['image_path'], 'channels': names, 'n_cells': n,
-           'redsea': CT.REDSEA, 'uncorrected_channels': [c for c in names if c in CT.NO_SPILLOVER],
+           'redsea': CT.REDSEA, 'despeckle': {**DESPECKLE, 'median_cell_mean_ratio': effect},
+           'empty_area_null': {'method': EMPTY, 'per_channel': empty},
+           'uncorrected_channels': [c for c in names if c in CT.NO_SPILLOVER],
            'isolated_cells': n_isolated, 'contacts': int(M.nnz), 'geometry_qc': qc_summary,
            'alignment_check': {'min_r': min(v['r'] for v in align.values()), 'per_channel': align},
            'seconds': round(time.time() - t_all)}
@@ -388,14 +466,18 @@ def main() -> int:
     ap.add_argument('--images', nargs='+', required=True)
     ap.add_argument('--workers', type=int, default=4)
     ap.add_argument('--force', action='store_true')
+    ap.add_argument('--dest', type=Path, default=None, help='default: $OUT/typing/redsea (trials: a scratch folder)')
     a = ap.parse_args()
+    if a.dest:
+        a.dest.mkdir(parents=True, exist_ok=True)
     tags = [r['image_name'] for r in CT.cohort_rows()] if a.images == ['all'] else a.images
     if a.workers <= 1 or len(tags) == 1:
         for t in tags:
-            process(a.out, t, a.force)
+            process(a.out, t, a.force, a.dest)
+        write_empty_nulls(a.dest or CT.typing_dir(a.out) / 'redsea')
         return 0
     with ProcessPoolExecutor(a.workers) as pool:
-        futures = {t: pool.submit(process, a.out, t, a.force) for t in tags}
+        futures = {t: pool.submit(process, a.out, t, a.force, a.dest) for t in tags}
         failed = []
         for t, f in futures.items():
             try:
@@ -404,7 +486,20 @@ def main() -> int:
                 print(f'[{t}] FAILED: {e}', flush=True)
                 failed.append(t)
     print(f'{len(tags) - len(failed)} of {len(tags)} images done' + (f'; failed: {failed}' if failed else ''))
+    write_empty_nulls(a.dest or CT.typing_dir(a.out) / 'redsea')
     return 1 if failed else 0
+
+
+def write_empty_nulls(redsea_dir: Path) -> None:
+    """typing/empty_area_nulls.csv (levels.empty_nulls), from every image's record in `redsea_dir`."""
+    rows = []
+    for t in [r['image_name'] for r in CT.cohort_rows()]:
+        f = redsea_dir / f'{t}.json'
+        if f.exists():
+            per = json.loads(f.read_text()).get('empty_area_null', {}).get('per_channel', {})
+            rows += [{'image': t, 'marker': c, **v} for c, v in per.items()]
+    if rows:
+        pd.DataFrame(rows).to_csv(redsea_dir.parent / 'empty_area_nulls.csv', index=False)
 
 
 if __name__ == '__main__':
