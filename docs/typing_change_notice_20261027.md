@@ -3,13 +3,13 @@
 **For:** the Codex agent in this repository and the Claude agent on HiPerGator (spleen same-slide analysis).
 Written by the Claude Code session doing the owner's typing review.
 
-**Status: in progress.** The uniform typing in `scripts/uniform/typing/` is being changed today on the owner's
+**Status: paused 2026-10-28 ~10:55 (owner: stop at a convenient point).** Root v16 is assembled; the v17 typing is in the run (commits 7ef33e9, 270d000) but v17 is NOT assembled: the owner flagged its 45,596 ColIV exclusions as likely false (83 % are cells with no lineage detected, where ColIV is not even positive). Previously: The uniform typing in `scripts/uniform/typing/` is being changed today on the owner's
 instructions. Do not adopt a root, a positivity level or a label set from today until this notice says the work is
 finished.
 
 ## Current root and branch
 
-- **Root:** `data/development/uniform-20donor-20261027-v15`. v16 is being built.
+- **Root:** `data/development/uniform-20donor-20261027-v16` (assembled 2026-10-28). v17 is paused, not assembled.
 - **Run:** `data/development/uniform-20donor-20261027`. Earlier typing is kept under `superseded/`.
 - **Branch:** `spatial-review-20261020`.
 - **Served app and production:** still on v10; nothing is deployed.
