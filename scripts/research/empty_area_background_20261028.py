@@ -38,7 +38,7 @@ import codex_typing as CT  # noqa: E402
 
 RUN = REPO / 'data' / 'development' / 'uniform-20donor-20261027'
 OUT = REPO / 'output' / 'empty_area_background_20261028'
-MARKERS = ['CD3e', 'CD8a', 'CD4', 'CD20', 'CD45', 'CD68', 'CD163', 'ECAD', 'panCK', 'SMA', 'B3TUBB', 'CD31', 'VIM']
+MARKERS = ['CD3e', 'CD8a', 'CD4', 'CD20', 'CD45', 'CD68', 'CD163', 'ECAD', 'panCK', 'BCatenin', 'SMA', 'B3TUBB', 'CD31', 'VIM']
 WINDOW = 19            # px at 0.3774 um: 7.2 um square, about a cell's measurement area
 N_WINDOWS = 20000
 MARGIN_UM = 20.0

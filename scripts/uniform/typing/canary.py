@@ -16,9 +16,9 @@ E-cadherin on 2, CD68 on 2: the background is a plateau), and leukocytes farther
 the known-negative rule the owner approved for SMA (Barlow et al. eLife 2024), applied to the canary step. Compartments
 that can carry a marker: its registry compartment and shared_by. Reference cells (not isolated: a neighbor's
 spillover is what the canary level must discount): Epithelial = endocrine-object hormone-positive cells and ordinary-
-tissue cells positive for an Epithelial majority marker that are not leukocytes; Hematopoietic = leukocytes (the
-Leukocyte marker with a T or Myeloid marker). A marker carried by both has its registry check reference instead (e.g.
-T cells). A reference needs KNOWN_NEGATIVE_MIN_ABOVE cells above the percentile, or the run stops.
+tissue cells positive for an Epithelial majority marker that are not leukocytes (levels.populations 'hormone' and
+'exocrine'); Hematopoietic = leukocytes (the Leukocyte marker with a T or Myeloid marker). A marker carried by both has
+its registry check population instead (LGALS3: endocrine-object hormone-positive cells). A reference needs KNOWN_NEGATIVE_MIN_ABOVE cells above the percentile, or the run stops.
 
 Writes typing/canary_levels.csv: image, marker, level_log, canary_log, canary_fold_over_level, null_reference,
 null_cells, null_rate_at_level (the plain level's rate in the null).
@@ -49,33 +49,28 @@ def image_levels(run: Path, tag: str) -> list[dict]:
     markers = ID.used_markers(run, reg)
     lv = pd.read_csv(run / 'typing' / 'levels.csv')
     lv = lv[lv['image'] == tag].set_index('marker')
-    d = ID.load_values(run, tag, reg, markers, lv)
-    n = len(d)
-    x = {m: np.clip(np.nan_to_num(d[d.attrs['columns'][m]].to_numpy(float), nan=0.0), 0, None) for m in markers}
+    d = LV.load(run, tag, reg)
+    xy = d[['x_um', 'y_um']].to_numpy(float)
+    x = {m: np.clip(np.nan_to_num(d[reg.column(m, lv.loc[m, 'measurement'])].to_numpy(float), nan=0.0), 0, None)
+         for m in markers}
     pos = {m: np.log1p(x[m]) > lv.loc[m, 'level_log'] for m in markers}
-    in_endo = d['endocrine_object_class'].notna().to_numpy()
-    ordinary = d['context'].eq('tissue').to_numpy() & ~in_endo
-    hormone = LV.any_of(pos, R['hormones'], n) & in_endo
-    leuk = LV.any_of(pos, R['leukocyte'], n) & LV.any_of(pos, R['t'] + R['myeloid'], n)
-    refs = {'Epithelial': hormone | (ordinary & LV.any_of(pos, R['epithelial'], n) & ~leuk), 'Hematopoietic': leuk}
-    named = {'T cells': LV.any_of(pos, R['t'], n) & LV.any_of(pos, R['leukocyte'], n),
-             'endocrine-object hormone-positive cells': hormone}
     q = reg.const('CANARY_NULL_QUANTILE')
     need = reg.const('KNOWN_NEGATIVE_MIN_ABOVE')
+    cut = reg.const('ISOLATION_UM')
     rows = []
     for m in markers:
+        pops = LV.populations(d, reg, m, pos, xy, cut, R)       # the same populations as the levels' references
+        refs = {'Epithelial': pops['hormone'] | pops['exocrine'], 'Hematopoietic': pops['leukocyte']}
         carriers = {reg.table.loc[m, 'compartment']} | set(RG.split(reg.table.loc[m, 'shared_by']))
         nulls = [c for c in REFERENCE_COMPARTMENTS if c not in carriers]
         if nulls:
-            ref = np.zeros(n, bool)
-            for c in nulls:
-                ref |= refs[c]
+            ref = np.logical_or.reduce([refs[c] for c in nulls])
             name = ' + '.join(nulls)
-        else:
-            name = next((r for r in RG.split(reg.table.loc[m, 'reference']) if r.strip() in named), '').strip()
+        else:                                  # carried by both: the marker's own check population (registry)
+            name = reg.table.loc[m, 'check_reference']
             if not name:
-                raise SystemExit(f'{m}: no reference compartment cannot carry it and no named check reference')
-            ref = named[name]
+                raise SystemExit(f'{m}: carried by every reference compartment and no check_reference in the registry')
+            ref = pops[name]
         o = x[m][ref]
         if len(o) * (1 - q / 100) < need:
             raise SystemExit(f'{tag} {m}: {len(o)} reference cells are too few for the {q:g}th percentile')
