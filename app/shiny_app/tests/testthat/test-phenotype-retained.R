@@ -15,10 +15,23 @@
   env$PHENOTYPE_COLORS <- c("Beta cell" = 1, "Endocrine" = 1, "Ductal" = 1,
                             "Macrophage" = 1, "CD8a Tcell" = 1, "T cell" = 1,
                             "Immune" = 1, "Acinar" = 1)
-  .load_defs("R/00_globals.R", c("PHENOTYPE_RETIRED", "phenotype_keep",
+  .load_defs("R/00_globals.R", c("PHENOTYPE_RETIRED", "phenotype_keep", "phenotype_retired",
                                  "phenotype_is_kept", "phenotype_marker_definitions"), env)
   .load_defs("R/spatial_helpers.R", "canonical_phenotype_order", env)
 }
+
+test_that("a top-marker root keeps ECAD+ (v17), other roots keep it retired", {
+  env <- .retained_env()
+  env$TOP_MARKER_BASE <- c("ECAD+", "CD3e+")
+  env$root_has_top_marker_labels <- function() FALSE
+  expect_false("ECAD+" %in% env$phenotype_keep(c("ECAD+", "Beta cell")))
+  expect_false(env$phenotype_is_kept("ECAD+"))
+  env$root_has_top_marker_labels <- function() TRUE
+  expect_identical(env$phenotype_keep(c("ECAD+", "Beta cell", "Acinar")), c("ECAD+", "Beta cell"))
+  expect_true(env$phenotype_is_kept("ECAD+"))
+  env$root_has_top_marker_labels <- function() stop("no root")
+  expect_false(env$phenotype_is_kept("ECAD+"))
+})
 
 test_that("observed retired labels do not re-enter the canonical order", {
   env <- .retained_env()

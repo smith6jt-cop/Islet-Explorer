@@ -5,7 +5,7 @@ test_that("destiny uses the app's retained phenotype policy without changing rat
   definitions <- parse(.find_source("R/00_globals.R"))
   for (expr in definitions) {
     if (is.call(expr) && identical(expr[[1]], as.name("<-")) &&
-        as.character(expr[[2]]) %in% c("PHENOTYPE_RETIRED", "phenotype_keep")) {
+        as.character(expr[[2]]) %in% c("PHENOTYPE_RETIRED", "phenotype_keep", "phenotype_retired")) {
       eval(expr, envir = env)
     }
   }

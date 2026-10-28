@@ -1284,7 +1284,8 @@ phenotype_rules_modal_ui <- function() {
             if (root_cd45_is_rule_label()) paste0("the CD45 rule's class is ", phenotype_text(CD45_RULE_LABEL),
               " (CD45 positive, E-cadherin below the epithelial edge, no other immune rule)") else "Immune is the CD45 rule",
             ". No class is a default: a cell no rule claims is named by ",
-            if (root_has_background_positivity()) "the marker furthest above its own level, in background widths"
+            if (root_has_canary_top_marker()) CANARY_TOP_MARKER_TEXT
+            else if (root_has_background_positivity()) "the marker furthest above its own level, in background widths"
             else "its highest marker on the cohort scale",
             " (", phenotype_text(if (root_cd45_is_rule_label()) CD45_TOP_MARKER_LABEL else "CD45+"), ", ",
             phenotype_text("VIM+"), ", ...; the Top marker only ",
@@ -1635,8 +1636,11 @@ root_has_marker_profile_labels <- function() {
 # CD45+"): a cell no typing rule claims is named by its highest marker, "<marker>+" (scripts/uniform/typing/
 # codex_typing.py TOP_MARKER_LABELS; ASCII in the data, "CD45⁺" in text, no broad name). They form the group "Top
 # marker only", after the others, on a root that assigns them; the frozen root's "SMA+" (smooth muscle) is not one.
-TOP_MARKER_BASE <- c("B3TUBB+", "CD31+", "CD34+", "CD4+", "CD8a+", "GCG+", "INS+", "LGALS3+", "PDPN+", "SMA+",
-                     "SST+", "VIM+")
+TOP_MARKER_BASE <- c("B3TUBB+", "CD163+", "CD20+", "CD31+", "CD34+", "CD3e+", "CD4+", "CD68+", "CD8a+", "ECAD+",
+                     "GCG+", "INS+", "LGALS3+", "PDPN+", "SMA+", "SST+", "VIM+", "panCK+")
+# Root v17 (owner, 2026-10-28: "The top marker needs to use the canary marker logic that the Xenium processing uses")
+# adds CD163+, CD20+, CD3e+, CD68+, ECAD+ and panCK+: a lineage's defining marker no longer places a cell on its own
+# (two of the lineage's markers must be detected), so a cell can be named by it.
 # Root v16 (owner, 2026-10-27, "Keep them separate"): the CD45 rule's class is the label "CD45+" (it was "Immune",
 # which that root no longer assigns; codex_typing.CD45_RULE_LABEL), in the Immune group and every immune total, and
 # the leftover cell whose top marker is CD45 is "CD45+ (top marker)". v15 named that leftover cell "CD45+".
@@ -1659,6 +1663,32 @@ root_cd45_is_rule_label <- function() {
 top_marker_labels <- function() {
   c(TOP_MARKER_BASE, if (root_cd45_is_rule_label()) CD45_TOP_MARKER_LABEL else CD45_RULE_LABEL)
 }
+
+#' How the root's typing names the cells no rule claims (uniform_release.json `top_marker_method`): "canary" from v17
+#' (the Xenium pipeline's canary-marker logic), "" before it.
+root_top_marker_method <- local({
+  cache <- new.env(parent = emptyenv())
+  function() {
+    path <- data_path("uniform_release.json")
+    if (!file.exists(path)) return("")
+    stamp <- paste(path, file.mtime(path))
+    if (!identical(cache$stamp, stamp)) {
+      m <- tryCatch(jsonlite::fromJSON(path)$top_marker_method, error = function(e) NULL)
+      cache$method <- if (is.null(m)) "" else as.character(m)
+      cache$stamp <- stamp
+    }
+    cache$method
+  }
+})
+root_has_canary_top_marker <- function() identical(root_top_marker_method(), "canary")
+CANARY_TOP_MARKER_TEXT <- paste0(
+  "the canary-marker logic of the Xenium pipeline: for each lineage (Senior's lineage markers on this panel, E-cadherin ",
+  "uncompensated, CD45 in the lymphoid ones) the number of its markers positive; one lineage group detected gives that ",
+  "lineage, two give the dominant one when it has two or more markers and two more than the runner-up, otherwise the ",
+  "cell is tagged lineage-ambiguous, and three or more tag it as a suspected doublet (both kept). A lineage names an ",
+  "approved class (T Cell, B Cell, Macrophage, Exocrine) only with two of its markers including the class's defining ",
+  "one; otherwise the cell is named by its top detected marker, and a cell with no lineage detected by its top marker ",
+  "at any level")
 
 #' The root's positivity rule. From v16 (owner, 2026-10-28; scripts/uniform/typing/positivity.py) a marker is positive
 #' against the image's own background on the log scale; v15 and earlier used 0.10 on the cohort scale. v16 brought the
@@ -1714,7 +1744,8 @@ cell_typing_help <- function() {
     if (root_has_top_marker_labels()) paste0("Exocrine (",
       if (root_has_background_positivity()) "E-cadherin at the epithelial level" else "E-cadherin or panCK",
       "); a cell no rule claims is named by ",
-      if (root_has_background_positivity()) "the marker furthest above its own level" else "its highest marker",
+      if (root_has_canary_top_marker()) "the Xenium pipeline's canary-marker logic"
+      else if (root_has_background_positivity()) "the marker furthest above its own level" else "its highest marker",
       " (", phenotype_text(if (root_cd45_is_rule_label()) CD45_TOP_MARKER_LABEL else "CD45+"), ", ",
       phenotype_text("VIM+"), ", ...; Top marker only)")
     else "Exocrine (the residual class)", ". Nerve, capillary and lymphatic structures are areas, not cell types. The ",
@@ -1819,10 +1850,20 @@ object_class_arg <- function(object_classes) {
 }
 
 #' Drop retired phenotypes from a character vector of labels.
-phenotype_keep <- function(x) setdiff(x, PHENOTYPE_RETIRED)
+phenotype_keep <- function(x) setdiff(x, phenotype_retired())
 
 #' TRUE for rows whose phenotype is still in use. NA-safe.
-phenotype_is_kept <- function(x) !(as.character(x) %in% PHENOTYPE_RETIRED)
+phenotype_is_kept <- function(x) !(as.character(x) %in% phenotype_retired())
+
+#' The retired labels for the current root: on a root that names cells by their top marker, "ECAD+" is one of those
+#' labels (v17), not the frozen typing's retired E-cadherin-positive class.
+phenotype_retired <- function() {
+  if (isTRUE(tryCatch(root_has_top_marker_labels(), error = function(e) FALSE))) {
+    setdiff(PHENOTYPE_RETIRED, TOP_MARKER_BASE)
+  } else {
+    PHENOTYPE_RETIRED
+  }
+}
 
 #' Marker definition text for each retained phenotype, for help popovers.
 #'
@@ -1919,6 +1960,18 @@ UNIFORM_PHENOTYPE_DEFINITIONS_V16 <- c(
                             "(in background widths, at any level; e.g.", phenotype_text("CD45+ (top marker)"), "); a",
                             "cell whose top marker is ColIV is left out (owner, 2026-10-27: no default class)"))
 
+# Root v17: E-cadherin read on either measurement for Exocrine, and the canary-marker logic for the cells no rule claims
+# (owner, 2026-10-28; scripts/uniform/typing/codex_typing.py CANARY_*, UNCOMPENSATED_COPIES).
+UNIFORM_PHENOTYPE_DEFINITIONS_V17 <- c(
+  "Exocrine (rule)" = paste0("E-cadherin at the epithelial level (", EPITHELIAL_EDGE_TEXT, ", or above) on either ",
+                             "measurement: REDSEA-compensated, or QuPath's uncompensated membrane mean, since REDSEA ",
+                             "subtracts a junction two epithelial cells share. A cell no rule claims becomes Exocrine when ",
+                             "the canary logic finds two epithelial markers. Inside an endocrine object it is left out ",
+                             "(owner, 2026-10-27/28)"),
+  "Top marker only" = paste0("a cell no typing rule claims, named by ", CANARY_TOP_MARKER_TEXT, " (e.g. ",
+                             phenotype_text("CD45+ (top marker)"), "); a cell named by ColIV is left out (owner, ",
+                             "2026-10-27/28)"))
+
 # The T-cell subtype rule of the uniform roots before v14 (Senior's T-CD8 / T-CD4-helper at 0.10, each forbidding the
 # other).
 UNIFORM_T_CELL_DEFINITIONS_BEFORE_V14 <- c(
@@ -1931,6 +1984,7 @@ phenotype_marker_definitions_ui <- function() {
     # From v16 positivity is the image's own background and the CD45 rule's class is listed as "CD45+" (applied before
     # the macrophage entry is renamed below).
     if (root_has_background_positivity()) defs[names(UNIFORM_PHENOTYPE_DEFINITIONS_V16)] <- UNIFORM_PHENOTYPE_DEFINITIONS_V16
+    if (root_has_canary_top_marker()) defs[names(UNIFORM_PHENOTYPE_DEFINITIONS_V17)] <- UNIFORM_PHENOTYPE_DEFINITIONS_V17
     if (!root_cd45_is_rule_label()) defs <- defs[setdiff(names(defs), CD45_RULE_LABEL)]
     # One macrophage entry: "Macrophage" on a root before v14, "Macrophages" (the marker-profile labels) from v14.
     profile <- root_has_marker_profile_labels()
