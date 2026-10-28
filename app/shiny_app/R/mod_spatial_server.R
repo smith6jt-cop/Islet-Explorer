@@ -1285,8 +1285,9 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                        " Phenotype lists the immune phenotypes (the endocrine and exocrine classes are left out);",
                        " Marker+ lists every panel marker, all 31 being measured in every donor, a cell counting as",
                        if (root_has_background_positivity()) paste0(" positive when its log value exceeds the image's",
-                         " own background peak by three background widths (E-cadherin and panCK above the image's",
-                         " empty-slide null).")
+                         " own background peak by three background widths; E-cadherin when at the epithelial edge or",
+                         " above (the lower edge of the image's E-cadherin-expressing population) and panCK above a",
+                         " two-component mixture gate on its log values, both floored at the image's empty-slide null.")
                        else " positive at 0.10 or above on the cohort marker scale."),
                 tags$p(tags$strong("Y-axis Proportion."),
                        " In composition bars it is the proportion of all cells at that distance that are of the phenotype",

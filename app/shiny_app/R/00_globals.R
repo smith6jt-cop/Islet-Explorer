@@ -1270,17 +1270,21 @@ phenotype_rules_modal_ui <- function() {
           "CHGA⁺ hormone-negative. Nerve, ",
           "capillary and lymphatic structures are areas (the Plot tab's Microenvironment layer), not cell types. ",
           positivity_text("Immune rules count a marker at 0.10 or above on the cohort scale."), " ",
-          if (root_has_marker_profile_labels()) paste0("A T Cell is named T Cell CD8a⁺ or T Cell CD4⁺ by the higher of ",
-            "the two on the cohort scale, at any level. A macrophage (CD68+ or CD163+, no CD3e or epithelial marker) is named ",
+          if (root_has_marker_profile_labels()) paste0("A T Cell is named T Cell CD8a⁺ or T Cell CD4⁺ by ",
+            if (root_has_background_positivity()) "which of the two stands further above its own level"
+            else "the higher of the two on the cohort scale", ", at any level. A macrophage (",
+            if (root_has_background_positivity()) "CD68 or CD163 positive, no CD3e, E-cadherin below the epithelial edge"
+            else "CD68+ or CD163+, no CD3e or epithelial marker", ") is named ",
             "by its CD68, CD163, LGALS3 and CD4, each + ",
             if (root_has_background_positivity()) "when positive and \u2212 otherwise" else "at 0.10 or above and \u2212 below",
             ", as in ", phenotype_text("CD68+CD163-Macrophage_LGALS3+CD4-"), ". "),
-          if (root_has_top_marker_labels()) paste0("Exocrine is a rule (E-cadherin or panCK ",
-            if (root_has_background_positivity()) "positive" else "at 0.10 or above", "); ",
+          if (root_has_top_marker_labels()) paste0("Exocrine is a rule (",
+            if (root_has_background_positivity()) "E-cadherin at the epithelial level" else "E-cadherin or panCK at 0.10 or above",
+            "); ",
             if (root_cd45_is_rule_label()) paste0("the CD45 rule's class is ", phenotype_text(CD45_RULE_LABEL),
-              " (CD45 positive, no epithelial marker, no other immune rule)") else "Immune is the CD45 rule",
+              " (CD45 positive, E-cadherin below the epithelial edge, no other immune rule)") else "Immune is the CD45 rule",
             ". No class is a default: a cell no rule claims is named by ",
-            if (root_has_background_positivity()) "the marker farthest above its image level, in background widths"
+            if (root_has_background_positivity()) "the marker furthest above its own level, in background widths"
             else "its highest marker on the cohort scale",
             " (", phenotype_text(if (root_cd45_is_rule_label()) CD45_TOP_MARKER_LABEL else "CD45+"), ", ",
             phenotype_text("VIM+"), ", ...; the Top marker only ",
@@ -1291,7 +1295,9 @@ phenotype_rules_modal_ui <- function() {
             "out of the analysis.")),
         shiny::tags$p(if (root_cd45_is_rule_label()) "Endocrine and T Cell hold" else "Endocrine, T Cell and Immune hold",
           " the cells left without a subtype",
-          if (root_has_marker_profile_labels()) " (a T Cell whose CD8a and CD4 are equal on the cohort scale)",
+          if (root_has_marker_profile_labels()) paste0(" (a T Cell whose CD8a and CD4 ",
+            if (root_has_background_positivity()) "stand equally far above their own levels"
+            else "are equal on the cohort scale", ")"),
           ". They count in every total ",
           "but are not offered as phenotypes beside their subtypes.",
           if (root_cd45_is_rule_label()) paste0(" The CD45 rule's leukocytes are listed as ",
@@ -1658,10 +1664,15 @@ top_marker_labels <- function() {
 #' against the image's own background on the log scale; v15 and earlier used 0.10 on the cohort scale. v16 brought the
 #' rule in with the CD45 labels, which is what the root is recognized by. `before_v16` is the older roots' wording.
 root_has_background_positivity <- function() root_cd45_is_rule_label()
+EPITHELIAL_EDGE_TEXT <- paste0("the lower edge of the image's E-cadherin-expressing population, its peak minus three ",
+                               "right-side widths on the log scale, floored at the empty-slide null (its background)")
 POSITIVITY_BACKGROUND_TEXT <- paste0(
   "A marker is positive when its log value exceeds the image's own background peak by three background widths, per ",
-  "image and per marker (typing/positivity.py); E-cadherin and panCK, which most cells carry, are positive above the ",
-  "empty-slide null of that image.")
+  "image and per marker (typing/positivity.py). E-cadherin, which most cells carry, has no background peak in tissue; ",
+  "its level is the epithelial edge, ", EPITHELIAL_EDGE_TEXT, ": the immune rules need E-cadherin below that edge and ",
+  "the Exocrine rule at it or above. panCK is in no rule, as at the cell level it separates epithelial from immune ",
+  "cells poorly; its level (a two-component mixture gate on its log values, floored at the null) serves only the ",
+  "top-marker step and the Marker+ flags.")
 positivity_text <- function(before_v16) if (root_has_background_positivity()) POSITIVITY_BACKGROUND_TEXT else before_v16
 
 #' The "Endocrine objects" class selector. It sits in the Data controls of the Plot tab (`object_classes`) and of
@@ -1700,8 +1711,11 @@ cell_typing_help <- function() {
       phenotype_text("CD68+CD163+Macrophage_LGALS3-CD4+"), ")") else "Macrophage",
     if (root_cd45_is_rule_label()) paste0(", ", phenotype_text(CD45_RULE_LABEL), " (the CD45 rule's other leukocytes)"),
     " and ",
-    if (root_has_top_marker_labels()) paste0("Exocrine (E-cadherin or panCK); a cell no rule claims is named by its ",
-      "highest marker (", phenotype_text(if (root_cd45_is_rule_label()) CD45_TOP_MARKER_LABEL else "CD45+"), ", ",
+    if (root_has_top_marker_labels()) paste0("Exocrine (",
+      if (root_has_background_positivity()) "E-cadherin at the epithelial level" else "E-cadherin or panCK",
+      "); a cell no rule claims is named by ",
+      if (root_has_background_positivity()) "the marker furthest above its own level" else "its highest marker",
+      " (", phenotype_text(if (root_cd45_is_rule_label()) CD45_TOP_MARKER_LABEL else "CD45+"), ", ",
       phenotype_text("VIM+"), ", ...; Top marker only)")
     else "Exocrine (the residual class)", ". Nerve, capillary and lymphatic structures are areas, not cell types. The ",
     "hormones are mutually exclusive: a cell whose strongest hormone is under twice the next one is excluded. Cells ",
@@ -1881,17 +1895,29 @@ UNIFORM_PHENOTYPE_DEFINITIONS <- c(
                             "(e.g.", phenotype_text("CD45+"), "); a cell whose highest marker is ColIV is left out",
                             "(owner, 2026-10-27: no default class)"))
 
-# From v16 (root_has_background_positivity()) positivity is against the image's own background, so the entries that
-# named the 0.10 level read "positive" instead.
+# From v16 (root_has_background_positivity()) positivity is against the image's own background, the immune rules'
+# epithelial negative is E-cadherin below the epithelial edge (EPITHELIAL_EDGE_TEXT) and panCK is in no rule, so the
+# entries that named the 0.10 level or panCK read differently (owner, 2026-10-28; the root's
+# protein_phenotype_rules.csv carries the full notes).
 UNIFORM_PHENOTYPE_DEFINITIONS_V16 <- c(
-  "Macrophages" = paste("CD68 or CD163 positive, CD3e\u2212, no epithelial marker, named by CD68, CD163, LGALS3 (the",
-                        "galectin+ macrophage of the Senior workflow) and CD4, each + when positive and \u2212 otherwise,",
-                        "as in", phenotype_text("CD68+CD163-Macrophage_LGALS3+CD4-"), "(twelve labels; owner, 2026-10-27)"),
-  "Exocrine (rule)" = paste("E-cadherin or panCK positive, or the top marker of a cell no other rule claims; inside an",
-                            "endocrine object it is left out (owner, 2026-10-27)"),
-  "Top marker only" = paste("a cell no typing rule claims, named by the marker farthest above its image level (in",
-                            "background widths, at any level; e.g.", phenotype_text("CD45+ (top marker)"), "); a cell",
-                            "whose highest marker is ColIV is left out (owner, 2026-10-27: no default class)"))
+  "CD8a Tcell" = paste("CD3e positive, E-cadherin below the epithelial edge, and CD8a further above its own level than",
+                       "CD4, at any level (owner, 2026-10-27)"),
+  "CD4 Tcell" = paste("CD3e positive, E-cadherin below the epithelial edge, and CD4 further above its own level than",
+                      "CD8a, at any level"),
+  "B cell" = "CD20 and CD45 positive, CD3e\u2212, CD68\u2212, E-cadherin below the epithelial edge",
+  "Macrophages" = paste("CD68 or CD163 positive, CD3e\u2212, E-cadherin below the epithelial edge, named by CD68, CD163,",
+                        "LGALS3 (the galectin+ macrophage of the Senior workflow) and CD4, each + when positive and",
+                        "\u2212 otherwise, as in", phenotype_text("CD68+CD163-Macrophage_LGALS3+CD4-"),
+                        "(twelve labels; owner, 2026-10-27)"),
+  "CD45+" = paste("CD45 positive, E-cadherin below the epithelial edge, and no other immune rule names the cell (the",
+                  "CD45 rule's class, listed instead of Immune from v16; owner, 2026-10-27)"),
+  "Exocrine (rule)" = paste0("E-cadherin at the epithelial level (", EPITHELIAL_EDGE_TEXT, ", or above), or, for a cell ",
+                             "no rule claims, E-cadherin or panCK the marker furthest above its own level; panCK alone ",
+                             "makes no cell Exocrine by rule. Inside an endocrine object it is left out (owner, ",
+                             "2026-10-27/28)"),
+  "Top marker only" = paste("a cell no typing rule claims, named by the marker furthest above its own positivity level",
+                            "(in background widths, at any level; e.g.", phenotype_text("CD45+ (top marker)"), "); a",
+                            "cell whose top marker is ColIV is left out (owner, 2026-10-27: no default class)"))
 
 # The T-cell subtype rule of the uniform roots before v14 (Senior's T-CD8 / T-CD4-helper at 0.10, each forbidding the
 # other).
@@ -1902,14 +1928,15 @@ UNIFORM_T_CELL_DEFINITIONS_BEFORE_V14 <- c(
 phenotype_marker_definitions_ui <- function() {
   if (is_uniform_root()) {
     defs <- UNIFORM_PHENOTYPE_DEFINITIONS
+    # From v16 positivity is the image's own background and the CD45 rule's class is listed as "CD45+" (applied before
+    # the macrophage entry is renamed below).
+    if (root_has_background_positivity()) defs[names(UNIFORM_PHENOTYPE_DEFINITIONS_V16)] <- UNIFORM_PHENOTYPE_DEFINITIONS_V16
+    if (!root_cd45_is_rule_label()) defs <- defs[setdiff(names(defs), CD45_RULE_LABEL)]
     # One macrophage entry: "Macrophage" on a root before v14, "Macrophages" (the marker-profile labels) from v14.
     profile <- root_has_marker_profile_labels()
     defs <- defs[setdiff(names(defs), if (profile) "Macrophage" else "Macrophages")]
     names(defs)[names(defs) == "Macrophages"] <- "Macrophage"
     if (!profile) defs[c("CD8a Tcell", "CD4 Tcell")] <- UNIFORM_T_CELL_DEFINITIONS_BEFORE_V14
-    # From v16 positivity is the image's own background and the CD45 rule's class is listed as "CD45+".
-    if (root_has_background_positivity()) defs[names(UNIFORM_PHENOTYPE_DEFINITIONS_V16)] <- UNIFORM_PHENOTYPE_DEFINITIONS_V16
-    if (!root_cd45_is_rule_label()) defs <- defs[setdiff(names(defs), CD45_RULE_LABEL)]
     # From v15 Exocrine is a rule and unclaimed cells carry their top marker.
     if (root_has_top_marker_labels()) {
       defs[["Exocrine"]] <- defs[["Exocrine (rule)"]]
