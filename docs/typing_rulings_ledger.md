@@ -29,6 +29,7 @@ wrote; not the owner's words, kept or changed on evidence).
 | 10-28 | "We can't have two ways of typing. We need to use whole cell and/or membrane and/or nucleus for all measurements." | in force |
 | 10-28 | "Don't use markers that are not in the panel for every image." | in force |
 | 10-28 | "You have faster processing of information and access to more data so you can make the determinations." (about the positivity pass criteria) | in force: validation criteria are the agent's, recorded with sources and reported with results |
+| 10-28 | "Don't flag the images or markers, flag the methods you are using so they will work with the images and markers" (on reading the Step 4 flags: Aab+/T1D failures listed, CD34/CK19/PGP9.5/VIM dropped, CD68 without a level on two images) | in force: a method that fails on an image or marker is revised, for every image, until it works on all of them; reports name the method and how it fails, not the image or marker. Supersedes the plan's "left out of typing in all 20 images" and the Step 4 "flagged for review" |
 
 ## Marker roles and method
 
@@ -65,6 +66,7 @@ wrote; not the owner's words, kept or changed on evidence).
 | 10-28 | "ColIV needs to be excluded from typing completely." | in force |
 | 10-28 | "Each cell needs to start with a default class based on either tissue or islet parent." / "the object's class" | in force: start class `Tissue`, `Islet`, `EndocrineCluster` or `EndocrineSingle` |
 | 10-28 | At the Step 4 stop: SMA by Barlow's known-negative 99th percentile, "1. use this"; B cells option (a) (CD20 above the 99.9th percentile of isolated epithelial cells, CD45+, single hematopoietic lineage, expected false calls reported), "2. use (a)" | in force (`docs/final_typing_handoff_20261028.md`) |
+| 10-28 | "I thought the islets, clusters, and single endocrine cells were already accurately identified for all images." / "If the singles were already found and verified, don't undo that.  The endocrine typing didn't need to change" (during the final run's Step 6, on a draft that re-derived hormone names and moved single cells to other classes) | in force: the endocrine objects are used as given, and the established endocrine typing (v17's calls, unchanged method since v15) is kept decision for decision: Beta / Alpha / Delta, CHGA+ hormone-negative, unresolved subtype and its exclusions (hormone margin, exocrine inside the islet border, singles); the final run names no other cell endocrine (`identity.py`, labels file named_by `established`) |
 | 09-18 [Senior] | Exocrine is one label (the Senior panel had no acinar or ductal marker) | in force for this run; premise differs here (CK19 on this panel): split is an owner decision after the final run |
 
 ## Display
