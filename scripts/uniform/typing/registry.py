@@ -18,6 +18,12 @@ Roles (canonical marker biology for the tissue, owner 2026-10-28):
                for every image")
 Measurement: one REDSEA compartment per marker for every cell, whole cell, membrane or nucleus (owner, 2026-10-28:
 "We can't have two ways of typing. We need to use whole cell and/or membrane and/or nucleus for all measurements.").
+Lineage: 'Lineage' for a marker that identifies the lineage by itself (CD3e: T), 'Lineage:subtype' for a subtype marker
+(INS: Endocrine:Beta, CD8a: T:CD8), several entries for a marker on several lineages (CD4: T:CD4;Myeloid). Typing code
+names lineages, never markers; the markers come from these entries.
+Level method: `background_method` fixes a marker's level method where the owner decided it (2026-10-28: SMA
+negative_p99, CD20 negative_p999); `validation` names the check of such a level ('reported' = shown, not a gate);
+`requires` lists markers that must also be positive before the marker's lineage names a cell (CD20 needs CD45).
 """
 from __future__ import annotations
 
@@ -74,6 +80,29 @@ class Registry:
 
     def lineages(self, marker: str) -> list[str]:
         return split(self.table.loc[marker, 'lineage'])
+
+    def lineage_entries(self, marker: str) -> list[tuple[str, str]]:
+        """(lineage, subtype) pairs of a marker, e.g. 'T:CD4;Myeloid' -> [('T', 'CD4'), ('Myeloid', '')]."""
+        return [tuple((e.split(':', 1) + [''])[:2]) for e in self.lineages(marker)]
+
+    def broad(self, lineage: str) -> list[str]:
+        """Defining markers that identify `lineage` by themselves: their only lineage entry is the bare lineage."""
+        return [m for m in self.markers('defining') if self.lineage_entries(m) == [(lineage, '')]]
+
+    def subtypes(self, lineage: str) -> dict[str, str]:
+        """{marker: subtype} for the defining markers with an entry 'lineage:subtype', in registry order."""
+        return {m: s for m in self.markers('defining') for lin, s in self.lineage_entries(m) if lin == lineage and s}
+
+    def requires(self, marker: str) -> list[str]:
+        """Markers that must also be positive before this marker's lineage names a cell (e.g. CD20 needs CD45)."""
+        return split(self.table.loc[marker, 'requires']) if 'requires' in self.table.columns else []
+
+    def background_method(self, marker: str) -> str:
+        """The level method an owner decision fixed for this marker ('' = chosen among its class's methods)."""
+        return self.table.loc[marker, 'background_method'] if 'background_method' in self.table.columns else ''
+
+    def validation(self, marker: str) -> str:
+        return self.table.loc[marker, 'validation'] if 'validation' in self.table.columns else ''
 
     def positivity_class(self, marker: str) -> str:
         return self.table.loc[marker, 'positivity_class']
