@@ -13,7 +13,8 @@ Every value is regenerated from the uniform workflow (`$OUT`, see README.md): th
   A6  nerve, blood-vessel and lymphatic cells come only from the structure objects (the typing).
   D3  cell types are Senior's classes, shown under the app's labels (APP_LABEL below).
   D4  hormone positivity is the image's hormone level on the scaled hormone (Senior's endocrine admission);
-      regional immune positivity and the `<marker>_pos` flags are scaled >= 0.10 (Senior's rule level).
+      regional immune positivity and the `<marker>_pos` flags are each marker above its image's own positivity level
+      (typing/positivity.py, owner 2026-10-28; until v15 scaled >= 0.10).
   D5  marker values are the typing's: compartment REDSEA, UniFORM-aligned, cohort floor/top scale to [0, 1].
 
 Regions: an object's core is the cells whose centroid lies in it; its peri band is the 20 um ring around it,
@@ -68,11 +69,11 @@ MARKERS = ['CD31', 'CD8a', 'CD3e', 'SMA', 'CD4', 'CD34', 'HLADR', 'PDPN', 'panCK
 # Macrophages by marker profile since 2026-10-27 (codex_typing.MACROPHAGE_PROFILE): 'Macrophage' became twelve labels.
 MACROPHAGES = tuple(CT.macrophage_labels())
 LABELS = ['Beta cell', 'Alpha cell', 'Delta cell', 'CHGA+ hormone-negative', 'Endocrine', 'CD8a Tcell', 'CD4 Tcell',
-          'T cell', 'B cell', *MACROPHAGES, 'Immune', 'Exocrine', *CT.TOP_MARKER_LABELS]
+          'T cell', 'B cell', *MACROPHAGES, CT.CD45_RULE_LABEL, 'Exocrine', *CT.TOP_MARKER_LABELS]
 # Since 2026-10-27 no class is a default: a cell no rule claims and its top marker cannot place carries that marker's
 # label, '<marker>+' (codex_typing.TOP_MARKER_LABELS); Exocrine is a rule.
 ENDOCRINE = ('Beta cell', 'Alpha cell', 'Delta cell', 'CHGA+ hormone-negative', 'Endocrine')
-IMMUNE = ('CD8a Tcell', 'CD4 Tcell', 'T cell', 'B cell', *MACROPHAGES, 'Immune')
+IMMUNE = ('CD8a Tcell', 'CD4 Tcell', 'T cell', 'B cell', *MACROPHAGES, CT.CD45_RULE_LABEL)
 # The `<marker>_pos` flags of cell_distance.csv cover every panel marker (owner, 2026-10-20: the distance profile
 # "needs to have all markers that are common to all donors"; all 31 are measured in every image, and build_image
 # stops if one is not). Until v7 they covered 18.
@@ -133,7 +134,8 @@ def app_labels(calls: pd.DataFrame, immune: pd.DataFrame) -> np.ndarray:
     st = sub['immune_subtype'].fillna('').to_numpy(dtype=object)
     definition = calls['immune_definition'].fillna('').to_numpy(dtype=object)
     use = np.where(ic != '', ic, definition)                 # most specific rule; else the chain's definition
-    lab = np.full(len(cls), 'Immune', dtype=object)          # CD45-only, supporting tier, no rule fired
+    lab = np.full(len(cls), '', dtype=object)                # every immune cell has a rule (no default, 2026-10-27)
+    lab[use == 'Imm-CD45-leukocyte'] = CT.CD45_RULE_LABEL     # owner, 2026-10-27: "Instead of Immune, ... CD45+"
     lab[use == 'Imm-T-cell'] = 'T cell'
     lab[(use == 'Imm-T-cell') & (st == 'T-CD8')] = 'CD8a Tcell'
     lab[(use == 'Imm-T-cell') & (st == 'T-CD4-helper')] = 'CD4 Tcell'
@@ -144,6 +146,8 @@ def app_labels(calls: pd.DataFrame, immune: pd.DataFrame) -> np.ndarray:
     lab[mac] = prof[mac]
     lab[use == 'Imm-B-cell'] = 'B cell'
     out[imm] = lab[imm]
+    if (lab[imm] == '').any():
+        raise ValueError('an Immune cell without an immune rule')
     if (out == '').any():
         raise ValueError(f'unmapped classes: {sorted(set(cls[out == ""]))}')
     return out
@@ -205,6 +209,8 @@ def build_image(run: Path, out: Path, tag: str, case: str, donors: pd.DataFrame,
     cells = cells.merge(raw.rename(columns={'Object ID': 'object_id'}), on='object_id', how='left', validate='one_to_one')
     vals = cells[['object_id']].merge(aligned[['object_id'] + MARKERS], on='object_id', how='left')
     X = CL.apply_scale(vals[MARKERS].to_numpy(), MARKERS, scale)       # cells x 31, [0, 1], NaN where unmeasured
+    levels = CL.load_levels(run, tag)                                     # positivity: above the image's own level
+    E = CL.excess(vals, MARKERS, levels).to_numpy()                       # > 0 positive (typing/positivity.py)
     labels = cells['phenotype'].to_numpy(dtype=object)
     xy_um = cells[['Centroid X µm', 'Centroid Y µm']].to_numpy(float)
     pts = shapely.points(xy_um / PX)
@@ -306,13 +312,15 @@ def build_image(run: Path, out: Path, tag: str, case: str, donors: pd.DataFrame,
                                     _islet_name=name, _region_type=rtype))
             for m in REGION_MARKERS:
                 v = X[ids, MARKERS.index(m)]
-                v = v[np.isfinite(v)]
+                e = E[ids, MARKERS.index(m)]
+                v, e = v[np.isfinite(v)], e[np.isfinite(e)]
                 n = len(v)
-                k = int(np.sum(v >= CT.IMMUNE_REQUIRE_MIN))
+                k = int(np.sum(e > 0))
                 markers_rows.append(dict(meta, source_file='uniform_20donor', region=region, region_type=rtype,
                                          marker=m, n_cells=n, mean=float(v.mean()) if n else np.nan,
                                          SD=float(v.std(ddof=1)) if n > 1 else np.nan, k=np.nan,
-                                         threshold=CT.IMMUNE_REQUIRE_MIN, pos_count=k, pos_frac=k / n if n else np.nan,
+                                         threshold=float(levels.loc[m, 'level_raw']) if m in levels.index else np.nan,
+                                         pos_count=k, pos_frac=k / n if n else np.nan,
                                          _islet_name=name, _region_type=rtype))
         cen = core.centroid
         lookup.append(dict(case_id=int(cid), imageid=int(cid), islet_key=name, combined_islet_id=identity,
@@ -395,7 +403,7 @@ def build_image(run: Path, out: Path, tag: str, case: str, donors: pd.DataFrame,
     if unmeasured:
         raise ValueError(f'{tag}: {unmeasured} not measured, so not common to all donors; drop them from POS_MARKERS')
     for m in POS_MARKERS:
-        distance[m + '_pos'] = (X[:, MARKERS.index(m)] >= CT.IMMUNE_REQUIRE_MIN).astype(np.int8)
+        distance[m + '_pos'] = (E[:, MARKERS.index(m)] > 0).astype(np.int8)
     kde = distance.loc[display_region != 'tissue', ['case_id', 'donor_status', 'cell_region', 'phenotype',
                                                     'signed_dist']].copy()
     kde['is_immune'] = kde['phenotype'].isin(IMMUNE)

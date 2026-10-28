@@ -384,6 +384,52 @@ structures run only inside Tissue.
   SST+ 7,915. Typing reran from `align_scale.py` (v14's typing in `superseded/typing-v14-20261027/`); root
   `data/development/uniform-20donor-20261027-v15` (2,862,676 cells analyzed, 334,650 excluded).
 
+## Positivity on the log scale, per image (owner, 2026-10-28; root v16)
+
+- **Why** (owner: "Why is it that almost every other pipeline uses normalization and scaling but you think it not
+  necessary?"). The level every rule read until v15, scaled >= 0.10 on the linear cohort scale, is 0.10 of the range
+  from the floor to the brightest 0.1 % of cells: a different multiple of the background for every marker (CD68 and
+  CD20 7x, CD3e 15x, CD45 18x, CD8a 20x, CD163 28x, B3TUBB 64x, SMA 170x the image's background peak) and for every
+  image of one marker (CD68 2.6-19x), because a linear range is set by its tail. The published CODEX / MIBI pipelines
+  log- or arcsinh-transform and standardize per sample; the owner's standing rule is a threshold from each sample's
+  own background. Comparison and per-image histograms with every level drawn:
+  `output/positivity_method_comparison_20261028/` (`scripts/research/log_background_positivity_20261028.py`).
+- **Method** (`typing/positivity.py`, after `align_scale.py`; `codex_typing.POSITIVITY_K`, `POSITIVITY_WIDTH_POOLED`,
+  `MAJORITY_MARKERS`, `EMPTY_*`): per image and marker, on log1p of the aligned own-compartment value, the
+  background peak (the mode over x > 0) plus 3 background widths, the width being the peak's left half-width at
+  half-maximum / 1.1774 pooled over the 20 images as the median per marker. The per-image width is unreadable in the
+  8 images where REDSEA's clamp at 0 removed 25-46 % of the cells (the remaining background is a plateau or bimodal,
+  e.g. T1D_6550's CD20; levels 18-196x background), and the readable widths agree (CD68 0.47-0.71). The pooled
+  widths are 0.60-0.77 log units for the immune markers, so each is positive at 6-10x its own image's background
+  (CD3e 7.2x, CD8a 6.0x, CD4 7.7x, CD20 7.7x, CD45 10.2x, CD68 8.5x, CD163 7.4x), the same in all 20 images; CD34
+  and VIM have broad peaks (widths 1.2, levels 38-40x). E-cadherin, panCK and the other markers most cells carry
+  have no background peak in tissue. Their background is the empty-slide null, the p99.9 of the mean of a cell-sized
+  (19 px) window of image pixels at least 20 um outside the Tissue outline, times the image's UniFORM factor (owner:
+  "the background outside the tissue [helps] with the high expressers like ECAD"), and their level comes from their
+  own expressing population, floored at that null (`MAJORITY_LEVEL`): E-cadherin's is the population's lower edge,
+  its peak minus 3 right-side widths (the side with no non-epithelial cell); panCK, bimodal, takes the two-component
+  mixture gate. Measured on v15's populations (`epithelial_level_candidates*.csv` in the comparison folder),
+  E-cadherin's edge keeps 97 % of the rule-typed Exocrine cells and 12 % of the rule-typed immune cells above it
+  (the null: 99 % and 31 %; a first v16 run with the null as the level moved 54,160 macrophages, 42,185 B cells,
+  24,439 CD45+ cells and 14,857 T cells to Exocrine on neighbor E-cadherin), while panCK separates the two poorly at
+  any level (null 87 % / 37 %, gate 52 % / 8 %): E-cadherin alone is the epithelial negative of the immune rules and
+  the Exocrine rule's marker (`NEGATIVES_NOT_ASKED`, `EXOCRINE_RULE_MARKERS`); panCK keeps its level for the
+  top-marker step and the positivity flags. `typing/positivity_levels.csv`
+  holds the levels; `classify.excess` gives each marker as (log1p(x) - level) / width, > 0 positive, which the rules
+  (`rule_evidence`, `immune_subtype.evaluate`), the macrophage profile, the Exocrine rule, the top-marker step (the
+  marker furthest above its own level, in background widths) and assembly's `<marker>_pos` / `pos_frac` fields read.
+  The cohort scale stays for display, refinement and the app's marker values.
+- **Measured and rejected on these values**: scimap's two-component mixture gate (the original 15-donor method)
+  splits the background, with or without the clamped zeros (20-90 % of cells positive) except on bimodal markers such
+  as CD31; the mirrored lower-half spread is inflated by the subtraction tail (20-50x); the empty-slide null is far
+  below tissue background for immune markers (44 % CD20+); another lineage's p99 as the reference is too clean for
+  the typed cells (immune markers) or contaminated by neighbors (E-cadherin in immune cells). Under every method
+  CD20+ cells are rarely CD45+ (1-7 %): CD20 alone does not identify a B cell on this panel, so the B-cell rule's
+  CD45 requirement stands.
+- Label-free co-expression checks (median over images), v15 against this method at z > 3: CD45+ among CD3e+ cells
+  0.92 vs 0.88, CD3e+ among CD8a+ 0.72 vs 0.63, CD20+ among CD3e+ 0.08 vs 0.09, CD68+ among CD3e+ 0.07 vs 0.08,
+  CD45+ among CD68+ 0.51 vs 0.66.
+
 ## App root (P4), 2026-10-16
 
 ```bash

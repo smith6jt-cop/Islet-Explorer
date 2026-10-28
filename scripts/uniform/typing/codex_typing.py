@@ -152,7 +152,16 @@ TOP_MARKER_PLACEMENT = {'CD3e': 'Imm-T-cell', 'CD20': 'Imm-B-cell', 'CD68': 'Imm
 # type, if it is highest, it is a reason for exclusion".
 TOP_MARKER_EXCLUDE = ('ColIV',)
 TOP_MARKER_EXCLUDED_REASON = 'top_marker_ColIV'
-TOP_MARKER_LABELS = tuple(f'{m}+' for m in TOP_MARKER_PROFILE
+# Owner, 2026-10-27: the CD45 rule's class is "CD45+" (not "Immune"); a left-over cell whose top marker is CD45 is kept
+# apart from it ("Keep them separate") as "CD45+ (top marker)".
+CD45_RULE_LABEL = 'CD45+'
+
+
+def top_marker_label(m: str) -> str:
+    return f'{m}+ (top marker)' if f'{m}+' == CD45_RULE_LABEL else f'{m}+'
+
+
+TOP_MARKER_LABELS = tuple(top_marker_label(m) for m in TOP_MARKER_PROFILE
                           if m not in TOP_MARKER_PLACEMENT and m not in TOP_MARKER_EXCLUDE)
 
 # The hormone level, a departure (2026-10-17). Senior admits a cell inside an endocrine object when max(scaled INS,
@@ -181,7 +190,34 @@ ENDOCRINE_QUANTILE = 1.0
 MIN_REFERENCE_CELLS = 500
 LARGE_ISLET_MIN_CELLS = 10
 SIZE_STRATA = ('1', '2-3', '4-10', '>10')
-IMMUNE_REQUIRE_MIN = 0.10
+IMMUNE_REQUIRE_MIN = 0.10      # the former single positivity level (v15 and before); refine.py's immune leaf still reads it
+# Owner, 2026-10-28 (approved plan; output/positivity_method_comparison_20261028/): positivity is per image on the log
+# scale, as the published pipelines do. A marker is positive when log1p(value) exceeds the image's background peak by
+# POSITIVITY_K background widths (typing/positivity.py); the width is pooled over the images (the median) because
+# REDSEA's clamp at 0 makes it unreadable in a third of them. The former level, scaled >= 0.10 on the linear cohort
+# scale, sat at 3-170x the image background depending on the marker.
+POSITIVITY_K = 3.0
+POSITIVITY_WIDTH_POOLED = True
+# Markers most cells carry have no background peak in tissue; their level is the empty-slide null (owner, 2026-10-28:
+# "the background outside the tissue [helps] with the high expressers like ECAD").
+MAJORITY_MARKERS = ('ECAD', 'panCK', 'KRT8-18', 'BCatenin', 'BActin', 'epCAM', 'NaKATPase')
+# How a majority marker's level is read from its own expressing population, floored at the empty-slide null
+# (positivity.py): 'edge' = the population's lower edge, its peak minus 3 right-side widths (unimodal, E-cadherin);
+# 'gate' = the two-component mixture gate on the nonzero log values (bimodal, panCK). Measured on v15's populations
+# (output/positivity_method_comparison_20261028/epithelial_level_candidates*.csv): E-cadherin's edge keeps 97 % of
+# the rule-typed Exocrine cells and 12 % of the rule-typed immune cells above it (the null: 99 % and 31 %), while
+# panCK separates the two poorly at any level (an acinar cell's cytoplasm spills into its neighbor's cytoplasm
+# compartment): null 87 % / 37 %, gate 52 % / 8 %.
+MAJORITY_LEVEL = {'ECAD': 'edge', 'panCK': 'gate'}
+# So E-cadherin alone is the epithelial negative of every immune rule and the Exocrine rule's marker; panCK keeps
+# its level for the top-marker step and the positivity flags only.
+NEGATIVES_NOT_ASKED = ('Pan_Cytokeratin',)
+EXOCRINE_RULE_MARKERS = ('ECAD',)
+EMPTY_MARGIN_UM = 20.0
+EMPTY_WINDOW_PX = 19           # 7.2 um square at 0.3774 um/px, about a cell's measurement area
+EMPTY_WINDOWS = 20000
+EMPTY_QUANTILE = 99.9
+EMPTY_SEED = 0
 SUPPORTING_LEVEL = 0.8715
 MAJORITY_AREA = 0.5
 CONFIRMED_MIN = 0.35            # islet_identity.REFERENCE_MIN
@@ -216,7 +252,7 @@ SENIOR_IMMUNE_RULES = {
 # Senior's epithelial negatives -- so a CD3e+ or CD68+ cell keeps its Senior definition, and a leukocyte the panel
 # cannot name further (Senior's B, NK, dendritic, neutrophil and plasma rules are unavailable here) is Immune
 # rather than falling through to Exocrine.
-ADDED_IMMUNE_RULES = {'Imm-CD45-leukocyte': (['CD45'], [], ['ECAD', 'panCK'])}
+ADDED_IMMUNE_RULES = {'Imm-CD45-leukocyte': (['CD45'], [], ['ECAD'])}
 # The rule table's hierarchy for immune_subtype.py.
 IMMUNE_LEVEL2 = ('Imm-B-cell', 'Imm-NK-cell', 'Imm-T-cell', 'Imm-dendritic-cell', 'Imm-macrophage',
                  'Imm-neutrophil', 'Imm-plasma-cell')
@@ -289,7 +325,7 @@ def codex_rule(rule: tuple) -> tuple[tuple, dict]:
             removed['any_of'].append('<whole group>')
     keep_none = []
     for m in none_of:
-        (removed['none_of'] if m in drop else keep_none).append(m)
+        (removed['none_of'] if m in drop or m in NEGATIVES_NOT_ASKED else keep_none).append(m)
     unavailable = bool(removed['all_of']) or '<whole group>' in removed['any_of']
     out = ([SENIOR_TO_CODEX[m] for m in keep_all], [[SENIOR_TO_CODEX[m] for m in g] for g in keep_any],
            [SENIOR_TO_CODEX[m] for m in keep_none])
@@ -308,13 +344,13 @@ ACCEPTED_REDUCTIONS: dict[str, str] = {}
 # T1D_6534 815, T1D_6520 394), close to the earlier typing's 0-1,182 (651, 1,182, 357). Reading CD20 over each
 # image's own epithelial background (p99) instead left 0-10 on 11 of the original 15.
 SUBSTITUTED_RULES: dict[str, tuple] = {
-    'Imm-B-cell': ((['CD20', 'CD45'], [], ['CD3e', 'CD68', 'ECAD', 'panCK']),
+    'Imm-B-cell': ((['CD20', 'CD45'], [], ['CD3e', 'CD68', 'ECAD']),
                    'CD79a is not on this panel; CD45 is the second required positive, CD3e and CD68 must be '
                    'absent (owner, 2026-10-17)'),
     # Senior's Imm-macrophage needs CD68 or Iba1; Iba1 is not on this panel, which left CD68 alone. Owner, 2026-10-27:
     # a macrophage is CD68+ or CD163+ (so a CD68- CD163+ macrophage exists), with Senior's T-cell and epithelial
     # negatives. Senior's second group (any myeloid or B lineage marker) adds nothing beyond the first here.
-    'Imm-macrophage': (([], [['CD68', 'CD163']], ['CD3e', 'ECAD', 'panCK']),
+    'Imm-macrophage': (([], [['CD68', 'CD163']], ['CD3e', 'ECAD']),
                        'Iba1 is not on this panel; a macrophage is CD68+ or CD163+, CD3e and the epithelial markers '
                        'absent (owner, 2026-10-27)'),
 }

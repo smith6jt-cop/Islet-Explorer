@@ -72,24 +72,30 @@ def apply_scale(values, markers, scale):
     return np.clip((np.asarray(values, dtype=np.float32) - lo) / span, 0.0, 1.0)
 
 
-def rule_scale(scale: pd.DataFrame) -> pd.DataFrame:
-    """The scale the immune rules read (owner, 2026-10-27: the zero floor applies only to cells the rules leave): the
-    codex_typing.ZERO_FLOOR_MARKERS keep their background-mode floor here, so rule-typed cells are as before."""
-    s = scale.copy()
-    if 'mode_floor' in s.columns:
-        for m in CT.ZERO_FLOOR_MARKERS:
-            if m in s.index:
-                s.loc[m, 'floor'] = s.loc[m, 'mode_floor']
-                s.loc[m, 'span'] = s.loc[m, 'top'] - s.loc[m, 'mode_floor']
-    return s
+def load_levels(out: Path, tag: str) -> pd.DataFrame:
+    """The image's positivity levels (typing/positivity.py), indexed by marker: center, width, level_log, level_raw."""
+    lv = pd.read_csv(CT.typing_dir(out) / 'positivity_levels.csv')
+    lv = lv[lv['image'] == tag].set_index('marker')
+    if lv.empty:
+        raise SystemExit(f'{tag}: no positivity levels; run positivity.py first')
+    return lv
+
+
+def excess(raw: pd.DataFrame, markers, levels: pd.DataFrame) -> pd.DataFrame:
+    """Each marker above its image's positivity level, in background widths: (log1p(x) - level) / width. > 0 is
+    positive; NaN where the value or the level is missing."""
+    lv = levels.reindex(markers)
+    v = np.log1p(np.clip(raw[markers].to_numpy(dtype=float), 0, None))
+    return pd.DataFrame((v - lv['level_log'].to_numpy(float)) / lv['width'].to_numpy(float),
+                        columns=markers, index=raw.index)
 
 
 def rule_value(values: pd.DataFrame, m: str) -> np.ndarray:
-    """A marker as the immune rules read it: values.attrs['rules'] (rule_scale) where it holds the marker."""
-    rv = values.attrs.get('rules')
-    if rv is not None and m in rv.columns:
-        return rv.loc[values.index, m].to_numpy(dtype=float)
-    return values[m].to_numpy(dtype=float) if m in values else np.full(len(values), np.nan)
+    """A marker as the rules read it: its excess over the image's positivity level (values.attrs['excess'])."""
+    ex = values.attrs['excess']
+    if m in ex.columns:
+        return ex.loc[values.index, m].to_numpy(dtype=float)
+    return np.full(len(values), np.nan)
 
 
 def scaled_markers(aligned: pd.DataFrame, wanted: set, scale: pd.DataFrame) -> pd.DataFrame:
@@ -206,7 +212,7 @@ def rule_evidence(values: pd.DataFrame, rule: tuple):
     for m in all_of:
         v = rule_value(values, m)
         measured = np.isfinite(v)
-        contradicted |= measured & (v < CT.IMMUNE_REQUIRE_MIN)
+        contradicted |= measured & ~(v > 0)
         unknown |= ~measured
     for group in any_of:
         if not group:
@@ -218,14 +224,14 @@ def rule_evidence(values: pd.DataFrame, rule: tuple):
             continue
         v = np.column_stack([rule_value(values, m) for m in members])
         measured = np.isfinite(v)
-        witness = (measured & (v >= CT.IMMUNE_REQUIRE_MIN)).any(axis=1)
+        witness = (measured & (v > 0)).any(axis=1)
         complete = measured.all(axis=1) & (len(members) == len(group))
         contradicted |= ~witness & complete
         unknown |= ~witness & ~complete
     for m in none_of:
         v = rule_value(values, m)
         measured = np.isfinite(v)
-        contradicted |= measured & (v >= CT.IMMUNE_REQUIRE_MIN)
+        contradicted |= measured & (v > 0)
         unknown |= ~measured
     return ~contradicted & ~unknown, ~contradicted & unknown
 
@@ -345,19 +351,19 @@ def tissue_chain(values, rules, cell_class, definition, resolved_by, rule_audit=
         resolved_by[hit] = 'definition_added'
         unclaimed &= ~hit
     # No default class (owner, 2026-10-27; codex_typing.TOP_MARKER_PLACEMENT): Senior's supporting tier and the
-    # Exocrine fallthrough are gone. Exocrine is a rule (ECAD or panCK at the immune level); a cell no rule claims is
-    # placed by its top marker when that marker defines a class, otherwise labeled by it ('<marker>+').
-    exocrine = [m for m in CT.SUBPANEL['exocrine'] if m in values.columns]
+    # Exocrine fallthrough are gone. Exocrine is a rule (E-cadherin or panCK positive); a cell no rule claims is placed
+    # by its top marker -- the marker furthest above its own positivity level -- when that marker defines a class,
+    # otherwise labeled by it ('<marker>+').
+    exocrine = [m for m in CT.EXOCRINE_RULE_MARKERS if m in values.columns]
     if exocrine:
-        hit = unclaimed & (values[exocrine].to_numpy(dtype=float) >= CT.IMMUNE_REQUIRE_MIN).any(axis=1)
+        hit = unclaimed & (np.column_stack([rule_value(values, m) for m in exocrine]) > 0).any(axis=1)
         cell_class[hit] = 'Exocrine'
         resolved_by[hit] = 'definition_exocrine'
         unclaimed &= ~hit
     idx = np.flatnonzero(unclaimed)
     if len(idx):
-        scale = values.attrs['scale']
-        markers = [m for m in CT.TOP_MARKER_PROFILE if m in values.attrs['expressed'].columns and m in scale.index]
-        U = unclipped(values.iloc[idx], markers, scale)
+        markers = [m for m in CT.TOP_MARKER_PROFILE if m in values.attrs['excess'].columns]
+        U = np.column_stack([rule_value(values.iloc[idx], m) for m in markers])
         if np.isnan(U).all(axis=1).any():
             raise ValueError('a left-over cell with no measured profile marker')
         top = np.asarray(markers, dtype=object)[np.argmax(np.where(np.isnan(U), -np.inf, U), axis=1)]
@@ -370,7 +376,7 @@ def tissue_chain(values, rules, cell_class, definition, resolved_by, rule_audit=
         cell_class[idx[imm]] = 'Immune'
         definition[idx[imm]] = place[imm]
         cell_class[idx[dropped]] = 'Excluded'          # reason: top_marker_reasons()
-        cell_class[idx[named]] = np.asarray([f'{m}+' for m in top[named]], dtype=object)
+        cell_class[idx[named]] = np.asarray([CT.top_marker_label(m) for m in top[named]], dtype=object)
         resolved_by[idx] = 'top_marker'
 
 
@@ -388,23 +394,15 @@ def finish(in_islet, cell_class, exocrine_measured):
     return reason
 
 
-def unclipped(values: pd.DataFrame, markers, scale: pd.DataFrame) -> np.ndarray:
-    """The cohort-scaled values before the 0-1 clip, so values clipped together stay ordered."""
-    raw = values.attrs['expressed'].loc[values.index, markers].to_numpy(dtype=float)
-    span = scale.loc[markers, 'span'].to_numpy(float)
-    span = np.where(np.isfinite(span) & (span > 0), span, 1.0)
-    return (raw - scale.loc[markers, 'floor'].to_numpy(float)) / span
-
-
 def retype_tied_t_cells(values, scale, rules, cell_class, definition, resolved_by, reason, in_islet, exo_measured):
-    """codex_typing.T_TIE_KEEP_MARKERS: a T cell whose CD8a and CD4 are equal after the clip keeps its T-cell call only
-    when its highest profile marker (before the clip) is a T-cell marker or CD45; the rest are typed again by the
-    same chain without the T-cell rules. Returns the audit."""
+    """codex_typing.T_TIE_KEEP_MARKERS: a T cell whose CD8a and CD4 stand equally far above their own positivity levels
+    keeps its T-cell call only when its highest profile marker (furthest above its own level) is a T-cell marker or
+    CD45; the rest are typed again by the same chain without the T-cell rules. Returns the audit."""
     a, b = CT.T_SUBTYPE_BY_HIGHER.values()
     t_cell = (cell_class == 'Immune') & (definition == 'Imm-T-cell')
-    tied = t_cell & (values[a].to_numpy(dtype=float) == values[b].to_numpy(dtype=float))
-    markers = [m for m in CT.T_TIE_PROFILE_MARKERS if m in values.attrs['expressed'].columns and m in scale.index]
-    U = unclipped(values, markers, rule_scale(scale))      # a rule step: the rules' scale (owner, 2026-10-27)
+    tied = t_cell & (rule_value(values, a) == rule_value(values, b))
+    markers = [m for m in CT.T_TIE_PROFILE_MARKERS if m in values.attrs['excess'].columns]
+    U = np.column_stack([rule_value(values, m) for m in markers])      # above each marker's own level
     top = np.asarray(markers, dtype=object)[np.argmax(np.where(np.isnan(U), -np.inf, U), axis=1)]
     retype = tied & ~np.isin(top, CT.T_TIE_KEEP_MARKERS)
     idx = np.flatnonzero(retype)
@@ -475,7 +473,8 @@ def ordinary_endocrine_identity(evidence):
 
 
 # --------------------------------------------------------------------------------------------- classify
-def classify(tag: str, ctx: pd.DataFrame, aligned: pd.DataFrame, scale: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
+def classify(tag: str, ctx: pd.DataFrame, aligned: pd.DataFrame, scale: pd.DataFrame,
+             levels: pd.Series) -> tuple[pd.DataFrame, dict]:
     rules = immune_rules()
     wanted = set(CT.HORMONES) | {CT.LEVEL_MARKER} | set(CT.IDENTITY_MARKERS) | set(CT.BOTTOM_TIER_IMMUNE)
     for markers in CT.SUBPANEL.values():
@@ -485,11 +484,8 @@ def classify(tag: str, ctx: pd.DataFrame, aligned: pd.DataFrame, scale: pd.DataF
     wanted |= set(CT.TOP_MARKER_PROFILE)
     values = scaled_markers(aligned, wanted, scale)
     values.attrs['scale'] = scale
-    zero = set(CT.ZERO_FLOOR_MARKERS) & set(values.columns) & set(aligned.columns)
-    if zero:
-        rv = scaled_markers(aligned, zero, rule_scale(scale))
-        rv.attrs = {}
-        values.attrs['rules'] = rv
+    present = sorted(m for m in wanted if m in aligned.columns and m in levels.index)
+    values.attrs['excess'] = excess(aligned, present, levels)
     n = len(ctx)
     in_islet = ctx['in_islet'].to_numpy()
     A = {'image': tag, 'n_cells': n, 'n_in_islet': int(in_islet.sum())}
@@ -639,7 +635,7 @@ def process(out: Path, tag: str) -> dict:
     keep = ctx['qc_analysis_eligible'].to_numpy(bool)
     ctx = ctx[keep].reset_index(drop=True)
     aligned = aligned[keep].reset_index(drop=True)
-    frame, audit = classify(tag, ctx, aligned, scale)
+    frame, audit = classify(tag, ctx, aligned, scale, load_levels(out, tag))
     audit['n_not_analysis_eligible'] = int((~keep).sum())
     dest = typ / 'calls' / f'{tag}.parquet'
     dest.parent.mkdir(parents=True, exist_ok=True)

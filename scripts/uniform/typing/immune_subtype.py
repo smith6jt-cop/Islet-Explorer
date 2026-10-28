@@ -7,8 +7,9 @@ Imm-T-cell and Imm-macrophage; a rule fires when every required term is at scale
 group is, and every forbidden term is below it; a cell whose value is missing on a rule's marker is undecided for
 that rule; the most specific firing rule wins (number of terms, then name), and every other match is recorded.
 cell_class is never changed.
-A T cell that neither T-CD8 nor T-CD4-helper names (both markers positive, or either below 0.10) takes the subtype
-of the higher marker at any level, compared before the scale's clip (owner, 2026-10-27;
+Positivity is each marker above its image's own level (typing/positivity.py, owner 2026-10-28), not scaled >= 0.10.
+A T cell that neither T-CD8 nor T-CD4-helper names (both markers positive, or neither) takes the subtype of the
+marker further above its own level (owner, 2026-10-27;
 codex_typing.T_SUBTYPE_BY_HIGHER; immune_subtype_resolved_by). A cell classify.py withdrew from the T-cell call on
 its whole profile (resolved_by 'tie_profile_*') is resolved without Imm-T-cell.
 
@@ -39,6 +40,7 @@ def rule_markers(rule):
 
 
 def evaluate(scaled: pd.DataFrame, rule, available: set):
+    """`scaled` holds each marker's excess over its image's positivity level (classify.excess): > 0 is positive."""
     all_of, any_of, none_of = rule
     needed = set(rule_markers(rule))
     if not needed <= available:
@@ -47,14 +49,14 @@ def evaluate(scaled: pd.DataFrame, rule, available: set):
     undecided = ~np.isfinite(block).all(axis=1)
     fires = np.ones(len(scaled), bool)
     for m in all_of:
-        fires &= scaled[m].to_numpy() >= CT.IMMUNE_REQUIRE_MIN
+        fires &= scaled[m].to_numpy() > 0
     for g in any_of:
         hit = np.zeros(len(scaled), bool)
         for m in g:
-            hit |= scaled[m].to_numpy() >= CT.IMMUNE_REQUIRE_MIN
+            hit |= scaled[m].to_numpy() > 0
         fires &= hit
     for m in none_of:
-        fires &= scaled[m].to_numpy() < CT.IMMUNE_REQUIRE_MIN
+        fires &= ~(scaled[m].to_numpy() > 0)
     return fires & ~undecided, undecided, []
 
 
@@ -108,10 +110,8 @@ def main() -> int:
         markers = [m for m in scale.index if m in aligned.columns
                    and np.isfinite(aligned[m].to_numpy(float)).any()]
         values = immune.merge(aligned[['object_id'] + markers], on='object_id', how='left', validate='one_to_one')
-        # the immune rules read classify.rule_scale (owner, 2026-10-27); CD8a, CD4 and the macrophage profile
-        # markers are the same on both scales
-        scaled = pd.DataFrame(CL.apply_scale(values[markers].to_numpy(), markers, CL.rule_scale(scale)),
-                              columns=markers)
+        # every marker as its excess over the image's positivity level (typing/positivity.py; > 0 is positive)
+        scaled = CL.excess(values, markers, CL.load_levels(a.out, t)).reset_index(drop=True)
         n = len(values)
         call2, n2, other2, undec2, skip2 = resolve(n, level2, rules, scaled, set(markers), specificity)
         # a T cell withdrawn on its whole profile (classify.retype_tied_t_cells) is never a T cell here either
@@ -144,9 +144,7 @@ def main() -> int:
             out.loc[mask, 'immune_subtype_undecided'] = undec3
             skipped.update(skip3)
         (s8, m8), (s4, m4) = CT.T_SUBTYPE_BY_HIGHER.items()
-        before_clip = values[[m8, m4]].copy()
-        before_clip.attrs['expressed'] = values
-        v8, v4 = CL.unclipped(before_clip, [m8, m4], scale).T
+        v8, v4 = scaled[m8].to_numpy(), scaled[m4].to_numpy()          # each above its own level
         both = ((out['immune_class'] == 'Imm-T-cell') & out['immune_subtype'].isna()).to_numpy() \
             & np.isfinite(v8) & np.isfinite(v4)
         out['immune_subtype_resolved_by'] = np.where(out['immune_subtype'].notna(), 'rule', '')
@@ -155,7 +153,7 @@ def main() -> int:
             out.loc[hit, 'immune_subtype_resolved_by'] = f'higher_of_{m8}_{m4}'
         # the macrophage label (codex_typing.MACROPHAGE_PROFILE), on every Imm-macrophage cell
         prof = [m for pair in CT.MACROPHAGE_PROFILE for m in pair]
-        pos = {m: scaled[m].to_numpy() >= CT.IMMUNE_REQUIRE_MIN for m in prof}
+        pos = {m: scaled[m].to_numpy() > 0 for m in prof}
         out['macrophage_profile'] = [CT.macrophage_label({m: bool(pos[m][i]) for m in prof})
                                      if out['immune_class'].iat[i] == 'Imm-macrophage' else ''
                                      for i in range(n)]

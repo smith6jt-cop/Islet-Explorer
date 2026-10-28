@@ -199,8 +199,8 @@ def build_scale(aligned: dict, markers: list[str]) -> pd.DataFrame:
         if len(pos) >= 1000:
             h, e = np.histogram(np.log1p(pos), bins=512)
             mode_floor = float(np.expm1(e[1:][int(np.argmax(h[1:])) + 1]))
-        # owner, 2026-10-27: 0 for the markers most cells express; the mode floor is kept for the immune rules'
-        # epithelial condition (classify.rule_scale), so no rule-typed cell changes with it
+        # owner, 2026-10-27: 0 for the markers most cells express (the mode floor is recorded); positivity no longer
+        # reads the floor (typing/positivity.py levels are on this scale before the clip, so any floor gives them)
         floor = 0.0 if m in CT.ZERO_FLOOR_MARKERS else mode_floor
         fin = v[np.isfinite(v)]
         top = float(np.percentile(fin, SCALE_Q)) if len(fin) else np.nan
