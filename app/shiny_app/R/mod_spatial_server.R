@@ -1284,7 +1284,10 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                 tags$p(tags$strong("Group by"),
                        " Phenotype lists the immune phenotypes (the endocrine and exocrine classes are left out);",
                        " Marker+ lists every panel marker, all 31 being measured in every donor, a cell counting as",
-                       " positive at 0.10 or above on the cohort marker scale."),
+                       if (root_has_background_positivity()) paste0(" positive when its log value exceeds the image's",
+                         " own background peak by three background widths (E-cadherin and panCK above the image's",
+                         " empty-slide null).")
+                       else " positive at 0.10 or above on the cohort marker scale."),
                 tags$p(tags$strong("Y-axis Proportion."),
                        " In composition bars it is the proportion of all cells at that distance that are of the phenotype",
                        " or positive for the marker, so a flat profile means an even mix and a peak means the cells",
@@ -1545,6 +1548,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                   unique(macrophage_collapse(if (length(root)) intersect(MACROPHAGE_LABELS, root) else character(0),
                                              macrophage_markers())))
       if (!any(is_macrophage_label(listed))) listed <- c(listed, "Macrophage")
+      if (root_cd45_is_rule_label()) listed <- c(listed, CD45_RULE_LABEL)     # the CD45 rule's class (v16)
       c(phenotype_aggregates_for(c(listed, "T cell")), listed)
     })
     gradient_choices <- reactive(c(list("All immune cells" = "all"), phenotype_grouped_choices(gradient_phenotypes())))

@@ -11,7 +11,9 @@
 # The macrophages are one "Macrophage" on the frozen root and twelve marker-profile labels on a uniform root from v14
 # (MACROPHAGE_LABELS, owner 2026-10-27); a label a root lacks matches no cell.
 IMMUNE_LABELS <- c("CD8a Tcell", "CD4 Tcell", "T cell", "B cell", "Macrophage",
-                   get0("MACROPHAGE_LABELS", ifnotfound = character(0)), "Immune")
+                   get0("MACROPHAGE_LABELS", ifnotfound = character(0)), "Immune",
+                   # from v16 the CD45 rule's class is "CD45+" (on v15 "CD45+" is a top-marker label, not immune)
+                   if (isTRUE(tryCatch(root_cd45_is_rule_label(), error = function(e) FALSE))) "CD45+")
 # The endocrine shares of the composition embedding (scripts/uniform/composition_embedding.py).
 COMPOSITION_ENDOCRINE <- c("Beta cell", "Alpha cell", "Delta cell", "CHGA+ hormone-negative")
 # Labels the composition & enrichment card and the distance profile leave out (owner, 2026-10-20: they "do not need

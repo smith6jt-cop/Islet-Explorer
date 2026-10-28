@@ -7,7 +7,8 @@
               "phenotype_choices_named", "extract_phenotype_from_column", "phenotype_label_html",
               "PHENOTYPE_DISPLAY_NAMES", "MACROPHAGE_MARKERS", "MACROPHAGE_KEY_PATTERN", "macrophage_signs",
               "macrophage_collapse", "phenotype_members", "macrophage_collapse_comp", "remap_macrophage_selection",
-              "macrophage_marker_checkboxes", "TOP_MARKER_LABELS",
+              "macrophage_marker_checkboxes", "TOP_MARKER_LABELS", "TOP_MARKER_BASE", "CD45_RULE_LABEL",
+              "CD45_TOP_MARKER_LABEL", "TOP_MARKER_ORDER", "top_marker_labels",
               "PHENOTYPE_GROUP_ORDER", "PHENOTYPE_GROUP_AGGREGATES", "phenotype_group", "is_phenotype_aggregate",
               "phenotype_aggregate_members", "phenotype_aggregates_for", "phenotype_groups_split",
               "phenotype_grouped_choices", "phenotype_group_checkboxes", "add_phenotype_aggregate_columns")
@@ -16,6 +17,7 @@
   }
   env$root_has_marker_profile_labels <- function() TRUE
   env$root_has_top_marker_labels <- function() TRUE
+  env$root_cd45_is_rule_label <- function() FALSE        # v15: "CD45+" is a top-marker label
   env
 }
 
@@ -141,4 +143,20 @@ test_that("top-marker labels form their own group, last, with a superscript and 
   expect_equal(env$phenotype_text(c("CD45+", "CD8a+", "B3TUBB+")), c("CD45\u207a", "CD8a\u207a", "B3TUBB\u207a"))
   env$root_has_top_marker_labels <- function() FALSE        # the frozen root's SMA+ is smooth muscle, not a top marker
   expect_equal(env$phenotype_group("SMA+"), "Other")
+})
+
+test_that("v16: CD45+ is the CD45 rule's class in the Immune group; CD45+ (top marker) stays a top marker", {
+  env <- .label_env()
+  expect_equal(env$TOP_MARKER_LABELS, c(env$TOP_MARKER_BASE, "CD45+ (top marker)"))
+  expect_equal(env$phenotype_group(c("CD45+", "Immune")), c("Top marker only", "Immune"))     # v15
+  env$root_cd45_is_rule_label <- function() TRUE                                              # v16
+  expect_equal(env$phenotype_group(c("CD45+", "CD45+ (top marker)", "VIM+")),
+               c("Immune", "Top marker only", "Top marker only"))
+  expect_equal(env$top_marker_labels(), c(env$TOP_MARKER_BASE, "CD45+ (top marker)"))
+  groups <- env$phenotype_groups_split(c("CD45+ (top marker)", "CD45+", "B cell", "VIM+"))
+  expect_equal(names(groups), c("B Cell", "Immune", "Top marker only"))
+  expect_equal(groups[["Top marker only"]], c("VIM+", "CD45+ (top marker)"))
+  expect_equal(env$phenotype_text(c("CD45+", "CD45+ (top marker)")), c("CD45\u207a", "CD45\u207a (top marker)"))
+  expect_equal(env$extract_phenotype_from_column("enrich_z_CD45plus_(top_marker)"), "CD45+ (top marker)")
+  expect_equal(env$extract_phenotype_from_column("prop_CD45+ (top marker)"), "CD45+ (top marker)")
 })

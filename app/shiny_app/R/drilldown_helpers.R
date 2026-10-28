@@ -166,6 +166,10 @@ top_marker_family <- function() {
 with_top_marker_family <- function(pal) {
   family <- top_marker_family()
   assigned <- isTRUE(tryCatch(root_has_top_marker_labels(), error = function(e) FALSE))
+  rule <- isTRUE(tryCatch(root_cd45_is_rule_label(), error = function(e) FALSE))
+  # "CD45+": from v16 the CD45 rule's class, in the palette's Immune color (that root has no "Immune"); on v15 the
+  # leftover CD45 cell, in the family color of "CD45+ (top marker)".
+  family[[CD45_RULE_LABEL]] <- if (rule) pal[["Immune"]] else family[[CD45_TOP_MARKER_LABEL]]
   add <- if (assigned) family else family[setdiff(names(family), names(pal))]
   pal[names(add)] <- add
   pal
