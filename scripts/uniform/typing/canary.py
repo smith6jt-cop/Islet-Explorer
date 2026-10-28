@@ -66,7 +66,13 @@ def image_levels(run: Path, tag: str) -> list[dict]:
         # Epithelial null: endocrine cells and ordinary-tissue epithelial cells, not isolated (the canary level must
         # discount a neighbor's spillover), leaving out cells positive for a hematopoietic marker other than m, so a
         # hematopoietic marker's null is never defined by its own negativity (review 2026-10-28)
-        others = [x for x in hematopoietic if x != m]
+        # leave out cells positive for a marker of a lineage mutually exclusive with m's (never the pan-leukocyte
+        # marker every carrier also has, nor m's own lineage; for the pan marker itself, every lineage marker); a
+        # second review (2026-10-28) found the first form still removed the carriers of every marker but CD45
+        lin_m = {lin for lin, _ in reg.lineage_entries(m)}
+        pan = R['leukocyte']
+        others = [x for x in hematopoietic if x not in pan and x != m and
+                  (m in pan or not ({lin for lin, _ in reg.lineage_entries(x)} & lin_m))]
         refs = {'Epithelial': (hormone | epithelial_any) & ~LV.any_of(pos, others, len(d)),
                 'Hematopoietic': pops[reg.table.loc[m, 'check_reference']]
                 if reg.table.loc[m, 'check_reference'] in ('t_cells', 'leukocyte') else pops['leukocyte']}
