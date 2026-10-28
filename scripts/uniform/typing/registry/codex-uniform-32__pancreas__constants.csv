@@ -1,0 +1,14 @@
+name,value,source,reason
+POSITIVITY_K,3,"agent determination (owner delegated, 2026-10-28)","background peak + K background widths: three widths, the usual convention for a background distribution"
+CANARY_MARGIN,2,Islet-Explorer-Senior Xenium notebook 02 cell 22 (DOMINANCE_MARGIN),a two-compartment conflict resolves only when the top compartment has at least this many more positive markers
+CANARY_MIN_DEPTH,2,Islet-Explorer-Senior Xenium notebook 02 cell 22 (top depth >= 2),the resolving compartment needs at least this many positive markers
+CANARY_EXTRA_WIDTHS,pending,set in Step 5 on the 7 ND images against a null (plan 2026-10-28),a marker counts toward canary depth only this many background widths above its positivity level
+HORMONE_MARGIN,2,agent constant (Senior islet_identity.REFERENCE_MARGIN); owner 2026-10-18 asked for resolution or exclusion,the top hormone names an endocrine cell only at this multiple of the runner-up
+MIN_CELLS_FOR_RATE,20,"agent determination (owner delegated, 2026-10-28)",a check rate is computed only when its denominator holds at least this many cells
+OBJECT_ENRICHMENT_MIN,5,"agent determination (owner delegated, 2026-10-28)",a structure or endocrine marker must be positive at least this many times as often inside its objects as in ordinary tissue
+CD45_AMONG_CD3E_MIN,0.80,"agent determination (owner delegated, 2026-10-28)",canonically every T cell is CD45+; tolerance for dim CD45 and segmentation
+CD3E_AMONG_MYELOID_MAX,0.05,"agent determination (owner delegated, 2026-10-28)",canonically 0: T and myeloid markers do not co-occur; tolerance for touching cells
+CD45_AMONG_HORMONE_MAX,0.05,"agent determination (owner delegated, 2026-10-28)",canonically 0: endocrine cells are CD45-; tolerance for touching cells
+B_PAIR_OTHER_LINEAGE_MAX,0.05,"agent determination (owner delegated, 2026-10-28)","among CD20+CD45+ cells, CD3e+ and CD68+/CD163+ each at most this proportion"
+EPITHELIAL_IN_IMMUNE_MAX,0.10,"agent determination (owner delegated, 2026-10-28)",markers most cells carry: positive in at most this proportion of CD3e+ or CD68+/CD163+ cells
+SHARED_OUT_OF_PLACE_MAX,0.10,"agent determination (owner delegated, 2026-10-28)",a shared marker positive in at most this proportion of cells of a compartment that cannot carry it

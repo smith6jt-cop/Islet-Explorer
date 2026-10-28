@@ -1,0 +1,69 @@
+FINAL CELL TYPING RUN - PLAN (2026-10-28)
+
+SCOPE
+- 20 CODEX pancreas images, run uniform-20donor-20261027, 3,197,326 analysis-eligible cells.
+- Typing only: no re-segmentation, no REDSEA rerun, no islet-object rerun, no app or deployment work.
+
+FIXED RULES (owner)
+- Only the 32 markers acquired on every image; KRT8-18, epCAM and Ghrelin are never used.
+- Marker roles come from a registry per panel and tissue (this run: codex-uniform-32__pancreas.csv),
+  written from canonical marker biology; no marker lists in the code.
+- One measurement per marker for every cell: REDSEA whole cell or membrane (nucleus for Ki67),
+  chosen per marker by the references; no cytoplasm compartment, no fallback, no second reading.
+- One hierarchical method: compartment first (epithelial, hematopoietic, endothelial, mesenchymal,
+  neural), then lineage and subtype by the owner's rulings.
+- Canary check on every cell: a conflict is resolved when one compartment wins by 2 markers,
+  otherwise the cell is kept and tagged; never excluded.
+- Every cell starts with its parent object's class (Tissue, Islet, EndocrineCluster or
+  EndocrineSingle); typing refines it; a cell no marker identifies keeps it. No cell-type default
+  (no Exocrine or Immune fallthrough).
+- No cell named after a marker below background. ColIV is not used in typing at all.
+- Positivity set per marker class against its own reference (objects, endocrine objects,
+  canonical co-expression, empty-slide null), per image. The checks count false positives (a
+  marker positive where it cannot be), e.g. a vessel marker must be positive at least 5x as often
+  inside vessel objects as in ordinary tissue; CD45+ in at least 80 % of CD3e+ cells.
+- A marker that fails its check in any image is left out of typing in all 20 images; if a class
+  cannot do without it, the run stops and the agent shows it with images.
+- Kept as ruled: cells without a nucleus excluded;
+  macrophage = CD68 or CD163, labeled by CD68/CD163/LGALS3/CD4; CD45+ class; hormones exclusive
+  with CHGA+ hormone-negative; vessels, nerves and lymphatics are objects, not cell types;
+  ColIV is never a cell type.
+- Kept, recorded as canonical or Senior method (not owner words): B cell = CD20 with CD45;
+  endocrine only inside endocrine objects; hormone 2x margin.
+- Decided by the owner after step 7: T cells with neither CD8a nor CD4 positive; splitting Exocrine
+  by CK19.
+
+ORDER OF WORK
+1. Save v17's typing under superseded/typing-v17-20261028.
+2. Check the islet objects of the 9 images that changed on 10-27 against the image; report first.
+3. Write the marker registry and the rulings ledger.
+4. Positivity: one REDSEA measurement per marker (whole cell or membrane), background method per
+   marker class, each scored against objects and canonical co-expression on all 20 images; a
+   marker failing in an image is reported with histogram and tiles.
+5. Canary level chosen once from the 7 ND images against a null.
+6. Canary and identity on all 20 images; checks table; tiles inspected by the agent.
+7. STOP: report what is left (cells with no marker above background), confirmation rates and
+   changes against v16 and v17.
+
+OWNER ACTIONS
+- None before step 7 unless a marker a class cannot do without fails its check (the run stops and
+  shows it).
+- After step 7: T cells with neither CD8a nor CD4 positive; whether to split Exocrine by CK19.
+- Then: one root (v18), QuPath review copy and review app refreshed once, other agents notified.
+
+WHERE THINGS ARE
+- Registry: scripts/uniform/typing/registry/codex-uniform-32__pancreas.csv
+- Rulings ledger: docs/typing_rulings_ledger.md
+- Typing outputs: data/development/uniform-20donor-20261027/typing/
+- Checks and tiles: output/typing_final_checks_20261028/, output/typing_review_tiles_20261028/
+
+WORDS USED
+- Background peak: the most common value of a marker among the image's cells that do not carry it.
+- Level: the cutoff above which a cell counts as positive for a marker, set per image from that
+  marker's background by the method its marker class passes (e.g. background peak + 3 widths).
+- Check: a test of a marker's level against something known without it (its objects, or biology
+  such as "every T cell carries CD45"); a marker is used only if it passes in every image.
+- Defining marker: places a cell in a compartment by itself (e.g. CD45 -> hematopoietic).
+- Shared marker: carried by several compartments, so it only adds evidence (e.g. VIM).
+- Canary check: do a cell's positive markers point to one compartment? Two = ambiguous unless one wins
+  by 2 markers; three or more = suspected doublet.

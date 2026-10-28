@@ -1,0 +1,36 @@
+marker,channel,on_every_image,role,compartment,lineage,shared_by,measurement,measurement_candidates,positivity_class,reference,canonical_expression,source
+INS,INS,yes,defining,Epithelial,Endocrine:Beta,,whole_cell,whole_cell,endocrine_object,endocrine objects,insulin: beta cells,canonical; Barlow 2024 Table 2; Mereu 2026
+GCG,GCG,yes,defining,Epithelial,Endocrine:Alpha,,whole_cell,whole_cell,endocrine_object,endocrine objects,glucagon: alpha cells,canonical; Barlow 2024 Table 2; Mereu 2026
+SST,SST,yes,defining,Epithelial,Endocrine:Delta,,whole_cell,whole_cell,endocrine_object,endocrine objects,somatostatin: delta cells,canonical; Barlow 2024 Table 2; Mereu 2026
+CHGA,CHGA,yes,defining,Epithelial,Endocrine,,whole_cell,whole_cell,endocrine_object,endocrine objects,chromogranin A: secretory granules of every islet endocrine cell,canonical; Barlow 2024 Table 2; Mereu 2026
+ECAD,ECAD,yes,defining,Epithelial,Endocrine;Exocrine,,whole_cell,whole_cell;membrane,majority_epithelial,off-tissue null; hematopoietic cells,"E-cadherin: adherens junctions of all pancreatic epithelium (acinar, ductal, islet)",canonical; Mereu 2026
+panCK,panCK,yes,defining,Epithelial,Endocrine;Exocrine,,whole_cell,whole_cell,majority_epithelial,off-tissue null; hematopoietic cells,"pan-cytokeratin: all pancreatic epithelium (ducts strongest, islets weakest)",canonical; Barlow 2024 Table 2; Mereu 2026
+CK19,CK19,yes,defining,Epithelial,Exocrine:Ductal,,whole_cell,whole_cell,shared_negative,hematopoietic cells; endocrine-object hormone-positive cells,keratin 19: ductal and centroacinar cells; absent from acinar and adult islet cells,canonical
+CD45,CD45,yes,defining,Hematopoietic,Leukocyte,,whole_cell,whole_cell;membrane,immune_coexpression,canonical co-expression,PTPRC: every leukocyte,canonical; Barlow 2024 Table 2; Mereu 2026
+CD3e,CD3e,yes,defining,Hematopoietic,T,,whole_cell,whole_cell;membrane,immune_coexpression,canonical co-expression,CD3 epsilon: T cells,canonical; Barlow 2024 Table 2
+CD8a,CD8a,yes,defining,Hematopoietic,T:CD8,,whole_cell,whole_cell;membrane,immune_coexpression,canonical co-expression,CD8 alpha: cytotoxic T cells and NK cells; leukocyte-only in pancreas,canonical; Barlow 2024 Table 2
+CD4,CD4,yes,defining,Hematopoietic,T:CD4;Myeloid,,whole_cell,whole_cell;membrane,immune_coexpression,canonical co-expression,CD4: helper T cells and monocytes/macrophages; leukocyte-only in pancreas,canonical; Barlow 2024 Table 2
+CD20,CD20,yes,defining,Hematopoietic,B,,whole_cell,whole_cell;membrane,immune_coexpression,canonical co-expression (only with CD45),"MS4A1: B cells; measured non-specific on this panel (positive in 10-31 % of all cells under every option tried), so used only with CD45",canonical; Barlow 2024 Table 2; measured 2026-10-28
+CD68,CD68,yes,defining,Hematopoietic,Myeloid,,whole_cell,whole_cell;membrane,immune_coexpression,canonical co-expression,CD68: monocytes and macrophages (weak on some fibroblasts),canonical; Barlow 2024 Table 2
+CD163,CD163,yes,defining,Hematopoietic,Myeloid,,whole_cell,whole_cell;membrane,immune_coexpression,canonical co-expression,CD163: monocytes and macrophages only,canonical; Barlow 2024 Table 2
+CD31,CD31,yes,defining,Endothelial,Endothelial,,whole_cell,whole_cell;membrane,structure_object,Capillary objects,PECAM1: all endothelium (blood and lymphatic); lower on platelets and leukocytes,canonical; Barlow 2024 Table 2; Mereu 2026
+SMA,SMA,yes,defining,Mesenchymal,Mural,,whole_cell,whole_cell,structure_object,Capillary objects (mural cells),"alpha smooth muscle actin: vascular smooth muscle, pericytes, myofibroblasts, activated stellate cells",canonical; Barlow 2024 Table 2; Mereu 2026
+B3TUBB,B3TUBB,yes,defining,Neural,Neural,,whole_cell,whole_cell,structure_object,Nerve objects,beta-III tubulin: axons,canonical
+GAP43,GAP43,yes,defining,Neural,Neural,,whole_cell,whole_cell;membrane,structure_object,Nerve objects,GAP43: axons and non-myelinating Schwann cells,canonical
+VIM,VIM,yes,shared,,,Hematopoietic;Endothelial;Mesenchymal;Neural,whole_cell,whole_cell,shared_negative,endocrine-object hormone-positive cells,vimentin: every non-epithelial cell type,canonical; Mereu 2026
+CD34,CD34,yes,shared,,,Endothelial;Mesenchymal,whole_cell,whole_cell;membrane,structure_object,Capillary objects,CD34: blood-vessel endothelium and interstitial fibroblasts,canonical
+PDPN,PDPN,yes,shared,,,Endothelial;Mesenchymal,whole_cell,whole_cell;membrane,structure_object,Lymphatic objects,podoplanin: lymphatic endothelium and fibroblasts,canonical; Barlow 2024 Table 2
+HLADR,HLADR,yes,shared,,,Hematopoietic;Endothelial,whole_cell,whole_cell;membrane,shared_negative,endocrine-object hormone-positive cells,"HLA-DR: B cells, macrophages, activated T cells; human microvascular endothelium",canonical; Barlow 2024 Table 2
+CD35,CD35,yes,shared,,,Hematopoietic,whole_cell,whole_cell;membrane,shared_negative,endocrine-object hormone-positive cells,"CR1: B cells, monocytes, neutrophils, follicular dendritic cells",canonical
+LGALS3,LGALS3,yes,shared,,,Hematopoietic;Epithelial,whole_cell,whole_cell,shared_negative,T cells,galectin-3: macrophages and ductal epithelium,canonical; Barlow 2024 Table 2
+BCatenin,BCatenin,yes,shared,,,Epithelial;Endothelial,whole_cell,whole_cell;membrane,majority_epithelial,off-tissue null; hematopoietic cells,beta-catenin: adherens junctions of epithelium and endothelium,canonical
+PGP9.5,PGP9_5,yes,shared,,,Neural;Epithelial,whole_cell,whole_cell,shared_negative,T cells and macrophages,UCHL1: neurons and islet endocrine cells (positive in 93 % of Beta cells here),canonical; measured 2026-10-28
+Ki67,Ki67,yes,state,,,,nucleus,nucleus;whole_cell,state,,"proliferation antigen: nucleus of cycling cells, any lineage",canonical; Barlow 2024 Table 2 (left out of typing)
+CD44,CD44,yes,none,,,,whole_cell,,none,,hyaluronan receptor: most cell types,Barlow 2024 Table 2 (left out of typing)
+ColIV,ColIV,yes,none,,,,whole_cell,,none,,"collagen IV: basement-membrane matrix, not a cell marker",owner 2026-10-28 (excluded from typing completely); Barlow 2024 Table 2 (left out)
+NaKATPase,NaKATPase,yes,none,,,,membrane,,none,,Na/K-ATPase: plasma membrane of every cell,canonical
+BActin,BActin,yes,none,,,,whole_cell,,none,,beta-actin: every cell,canonical
+KRT14,KRT14,yes,none,,,,whole_cell,,none,,keratin 14: basal epithelium; not expected in adult pancreas,canonical
+KRT8-18,KRT8_18,no,never_used,,,,,,,,keratins 8/18: all pancreatic epithelium,owner 2026-10-28 (not on every image)
+epCAM,epCAM,no,never_used,,,,,,,,EpCAM: all pancreatic epithelium,owner 2026-10-28 (not on every image)
+Ghrelin,Ghrelin,no,never_used,,,,,,,,ghrelin: epsilon cells,owner 2026-10-28 (not on every image)

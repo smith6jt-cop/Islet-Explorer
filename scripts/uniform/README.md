@@ -483,6 +483,25 @@ structures run only inside Tissue.
   _top_marker`. ND_6232: of 32,251 leftover cells, 16,975 none, 9,441 single, 4,699 ambiguous, 876 doublet, 260
   resolved; none met the class-placement evidence.
 
+## Marker registry and the final typing run (owner, 2026-10-28)
+
+Owner: "The lineage and shared lists are not static and will be panel and tissue specific which needs to be clear for
+the pipeline as a whole." Marker roles are data, not code: `typing/registry/<panel>__<tissue>.csv`, chosen by the run's
+`panel` and `tissue` columns in `cohort.csv` (this run: `codex-uniform-32__pancreas`), with its constants in
+`<panel>__<tissue>__constants.csv` (each with its source). `typing/registry.py` loads them; typing modules ask it which
+markers to use and how, and hold no marker lists of their own. Another panel or tissue (the IO60 PhenoCycler lane, Xenium,
+the spleen lane) gets its own pair of files.
+
+- Roles follow canonical marker biology for the tissue: *defining* markers place a cell in a compartment (Epithelial,
+  Hematopoietic, Endothelial, Mesenchymal, Neural) and a lineage inside it; *shared* markers sit on several compartments
+  and only add evidence inside one a defining marker found; *state* markers (Ki67) are flagged; *none* (ColIV, CD44,
+  NaKATPase, beta-actin, KRT14) are not used; *never_used* markers are not acquired on every image (KRT8-18, epCAM,
+  Ghrelin; owner: "Don't use markers that are not in the panel for every image").
+- One measurement per marker for every cell, REDSEA whole cell, membrane or nucleus (owner: "We can't have two ways of
+  typing"); no cytoplasm compartment, no fallback.
+- The owner's typing rulings, verbatim with dates and status, are in `docs/typing_rulings_ledger.md`; the run's plan is
+  `docs/final_typing_plan_20261028.txt`. v17's typing was moved to `$OUT/superseded/typing-v17-20261028/` (README there).
+
 ## App root (P4), 2026-10-16
 
 ```bash
