@@ -149,9 +149,11 @@ def placed(P, C, F, detect, count, margin, min_depth):
     det, dep, sc = groups_matrix(C, F, detect, count)
     status, top, runner, td, rd, ng = group_status(det, dep, sc, margin, min_depth)
     detp, depp, scp = groups_matrix(P, F, detect, count)
-    _, topp, _, _, _, ngp = group_status(detp, depp, scp, margin, min_depth)
+    statusp, topp, _, _, _, ngp = group_status(detp, depp, scp, margin, min_depth)
     group = np.where(ng > 0, top, np.where(ngp > 0, topp, -1))
     basis = np.where(ng > 0, 'canary', np.where(ngp > 0, 'plain', '')).astype(object)
+    # a cell placed below the canary level keeps its plain-level conflict visible (review 2026-10-28)
+    status = np.where(ng > 0, status, np.where(ngp > 1, 'below_canary_' + statusp.astype(str), 'none')).astype(object)
     return {'group': group, 'basis': basis, 'status': status, 'n': ng, 'n_plain': ngp, 'depth': td,
             'runner': runner, 'runner_depth': rd, 'n_detected_at_basis': np.where(ng > 0, ng, ngp)}
 
@@ -218,7 +220,7 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED) -> tu
     count = [[ix[m] for m in plan['comp'][c]['defining'] + plan['comp'][c]['carried']] for c in comps]
     cp = placed(P, C, F, detect, count, margin, min_depth)
     compartment = np.where(cp['group'] >= 0, np.asarray(comps, dtype=object)[np.maximum(cp['group'], 0)], '')
-    comp_status = np.where(cp['basis'] == 'canary', cp['status'], 'none').astype(object)
+    comp_status = cp['status'].astype(object)
 
     # lineages inside the cell's compartment
     lineage = np.full(n, '', dtype=object)
@@ -238,7 +240,7 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED) -> tu
         has = lp['group'] >= 0
         lineage[rows[has]] = np.asarray(lins, dtype=object)[lp['group'][has]]
         lin_basis[rows] = lp['basis']
-        lin_status[rows] = np.where(lp['basis'] == 'canary', lp['status'], np.where(has, 'none', ''))
+        lin_status[rows] = np.where(has, lp['status'], '')
         lin_detected[rows] = lp['n_detected_at_basis']
 
     # identity
@@ -306,7 +308,14 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED) -> tu
             members = [ix[m] for m in info['residual_members']]
             other = P[np.ix_(out_rows, members)].any(axis=1) if members else np.zeros(len(out_rows), bool)
             lineage[out_rows[other]] = info['residual']
-            by_marker(out_rows[~other], defining_cols, '')
+            # the lineage's own markers name nothing here (tiles 2026-10-28: 2-6 of 40 INS+/GCG+/SST+ cells showed the
+            # hormone on the cell); another positive defining marker names the cell, else it keeps its start class
+            rest = out_rows[~other]
+            naming = [ix[m] for m in markers if reg.role(m) == 'defining' and m not in L_['specific']]
+            by_marker(rest, naming, '')
+            kept = rest[~done[rest]]
+            done[kept] = True
+            status[kept] = f'{lin.lower()}_marker_only'
             rows = rows[~barred]
             if not len(rows):
                 continue

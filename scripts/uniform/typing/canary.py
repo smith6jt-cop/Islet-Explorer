@@ -58,9 +58,18 @@ def image_levels(run: Path, tag: str) -> list[dict]:
     need = reg.const('KNOWN_NEGATIVE_MIN_ABOVE')
     cut = reg.const('ISOLATION_UM')
     rows = []
+    hormone, _ = LV.cell_sets(d, pos, R)
+    epithelial_any = LV.any_of(pos, [x for x in R['epithelial'] if x in pos], len(d)) & d['ordinary'].to_numpy()
+    hematopoietic = [x for x in markers if reg.role(x) == 'defining' and reg.table.loc[x, 'compartment'] == 'Hematopoietic']
     for m in markers:
         pops = LV.populations(d, reg, m, pos, xy, cut, R)       # the same populations as the levels' references
-        refs = {'Epithelial': pops['hormone'] | pops['exocrine'], 'Hematopoietic': pops['leukocyte']}
+        # Epithelial null: endocrine cells and ordinary-tissue epithelial cells, not isolated (the canary level must
+        # discount a neighbor's spillover), leaving out cells positive for a hematopoietic marker other than m, so a
+        # hematopoietic marker's null is never defined by its own negativity (review 2026-10-28)
+        others = [x for x in hematopoietic if x != m]
+        refs = {'Epithelial': (hormone | epithelial_any) & ~LV.any_of(pos, others, len(d)),
+                'Hematopoietic': pops[reg.table.loc[m, 'check_reference']]
+                if reg.table.loc[m, 'check_reference'] in ('t_cells', 'leukocyte') else pops['leukocyte']}
         carriers = {reg.table.loc[m, 'compartment']} | set(RG.split(reg.table.loc[m, 'shared_by']))
         nulls = [c for c in REFERENCE_COMPARTMENTS if c not in carriers]
         if nulls:

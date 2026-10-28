@@ -67,3 +67,11 @@ WORDS USED
 - Shared marker: carried by several compartments, so it only adds evidence (e.g. VIM).
 - Canary check: do a cell's positive markers point to one compartment? Two = ambiguous unless one wins
   by 2 markers; three or more = suspected doublet.
+
+EXECUTION LOG
+- 2026-10-28: Steps 1-4 done; Step 4 stopped on SMA and CD20; owner: "1. use this", "2. use (a)".
+- 2026-10-28 afternoon: owner, "Don't flag the images or markers, flag the methods you are using so they will work
+  with the images and markers": every failing positivity method repaired for all 20 images (commit 9e6bd6f); owner,
+  "The endocrine typing didn't need to change": established endocrine decisions kept. Canary level: known-negative
+  99th percentile (the width-based level cannot be read on every image). Steps 5-6 run; STOP at Step 7 with the report
+  (output/typing_final_checks_20261028/README.md). Nothing assembled.

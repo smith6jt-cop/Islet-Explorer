@@ -3,13 +3,13 @@
 **For:** the Codex agent in this repository and the Claude agent on HiPerGator (spleen same-slide analysis).
 Written by the Claude Code session doing the owner's typing review.
 
-**Status (2026-10-28, afternoon): final typing run in progress, stopped at its positivity step for two owner
-decisions.** Plan: `docs/final_typing_plan_20261028.txt`; rulings: `docs/typing_rulings_ledger.md`; checks and the stop
-report: `output/typing_final_checks_20261028/README.md`. v17's typing was moved to the run's
-`superseded/typing-v17-20261028/` and will not be assembled; root v16 and every earlier root are superseded. Marker roles
-now come from a registry per panel and tissue (`scripts/uniform/typing/registry/`); a lane on another panel or tissue
-(the spleen same-slide lane, the IO60 PhenoCycler lane) builds its own registry rather than reusing these lists. **Do not
-adopt any root, level or label set until root v18 is assembled and this notice says so.**
+**Status (2026-10-28, evening): final typing run stopped at Step 7, before assembly, for the owner's decisions.**
+Every typing marker now has a positivity method that passes its check on all 20 images (owner: "flag the methods you
+are using so they will work with the images and markers"); the endocrine typing is kept as established (owner: "The
+endocrine typing didn't need to change"). Report: `output/typing_final_checks_20261028/README.md` (last section);
+rulings: `docs/typing_rulings_ledger.md`; code: `scripts/uniform/typing/` (levels.py, canary.py, identity.py,
+acceptance_checks.py; registry/). The typing is in the run (`typing/identity/`) but not assembled. **Do not adopt any
+root, level or label set until root v18 is assembled and this notice says so.**
 
 ## Current root and branch
 

@@ -91,7 +91,7 @@ CELLS = [  # (expected label, start class, {marker: raw value}, established endo
     ('Excluded', 'EndocrineSingle', {'CD31': HIGH}, ('Excluded', 'endocrine_single_no_usable_hormone')),
     ('Alpha cell', 'EndocrineSingle', {'GCG': HIGH, 'CD31': HIGH}, ('Alpha', '')),            # a verified single stays
     ('Exocrine', None, {'INS': HIGH, 'ECAD': HIGH}, None),                                    # no endocrine outside objects
-    ('INS+', 'Islet', {'INS': HIGH}, ('Immune', '')),                                         # no new endocrine cell
+    ('Islet', 'Islet', {'INS': HIGH}, ('Immune', '')),                                        # no new endocrine cell
     ('T cell', 'Islet', {'CD3e': HIGH, 'CD45': HIGH}, ('Immune', '')),                        # a T cell inside an islet
     ('Tissue', None, {}, None),                                                               # no marker above background
     ('Tissue', None, {'ColIV': 1e6}, None),                                                   # ColIV is never read
@@ -143,5 +143,6 @@ def test_identity_rules(synthetic_run):
     assert (out.iloc[9:14]['named_by'] == 'established').all()
     assert 'endocrine_outside_object' in out.iloc[14]['tags']
     assert 'endocrine_marker_positive' in out.iloc[15]['tags']
+    assert out.iloc[15]['status'] == 'endocrine_marker_only'
     assert out.iloc[17]['status'] == out.iloc[18]['status'] == 'no_marker_above_background'
     assert not any(str(x).startswith('ColIV') for x in got)

@@ -20,7 +20,8 @@ Candidate levels, on log1p of the REDSEA value (exact zeros set aside when readi
                (p99 = 99, p999 = 99.9) of the marker among reference cells that cannot carry it (Barlow et al. eLife
                2024: positive above the 99th percentile of cells known not to express the marker), per image. SMA:
                p99 of endocrine-object hormone-positive cells and leukocytes with no cell positive at SMA's background
-               peak within ISOLATION_UM; its check is the Capillary-object enrichment. CD20: p99.9 of epithelial cells
+               peak within ISOLATION_UM; since the method repair its gate is exocrine epithelium and the Capillary-object
+               enrichment is reported (owner decision pending: the owner's decision named the Capillary check). CD20: p99.9 of epithelial cells
                (E-cadherin or panCK positive, CD45 negative) farther than ISOLATION_UM from any leukocyte; its check is
                reported, not a gate: CD45+ among CD20+ cells, the B-cell calls at plain positivity (CD45+, no other
                hematopoietic lineage), and the expected false calls, 0.1 % of the CD45+ cells that are not B cells.
@@ -465,7 +466,9 @@ def image_pass(out: Path, tag: str, reg_name: tuple, stage: str, chosen: dict, n
         return (v <= bar) if np.isfinite(v) else np.nan
 
     def ok_all(xs):
-        return all(True if (isinstance(x, float) and np.isnan(x)) else bool(x) for x in xs)
+        # a gate that cannot be read on this image (fewer than MIN_CELLS_FOR_RATE reference cells) is not a pass:
+        # the method is not shown to work there (review of 2026-10-28)
+        return all(False if (isinstance(x, float) and np.isnan(x)) else bool(x) for x in xs)
 
     def enrichment(p, inside, base=None):
         base = ordinary if base is None else base
@@ -514,7 +517,7 @@ def image_pass(out: Path, tag: str, reg_name: tuple, stage: str, chosen: dict, n
         for m in core:
             r_all, r_iso, _ = isolated_rate(pos[m], hormone_free, xy, cut, nmin)
             checks[f'{m}_in_hormone_all'], checks[f'{m}_in_hormone'] = r_all, r_iso
-        ok = [(c45 >= reg.const('CD45_AMONG_CD3E_MIN')) if np.isfinite(c45) else True,
+        ok = [(c45 >= reg.const('CD45_AMONG_CD3E_MIN')) if np.isfinite(c45) else np.nan,
               le(t_iso, reg.const('CD3E_AMONG_MYELOID_MAX'))] + \
              [le(checks[f'{m}_in_hormone'], reg.const('CD45_AMONG_HORMONE_MAX')) for m in core]
         good = ok_all(ok) and all(np.isfinite(lv[m]['level_log']) for m in core)
@@ -547,7 +550,7 @@ def image_pass(out: Path, tag: str, reg_name: tuple, stage: str, chosen: dict, n
                 _, t_iso, _ = isolated_rate(lv['pos'], pops['t_cells'], xy, cut, nmin)
                 row(m, meas, method, lv, out_of_place=r_iso, out_of_place_all=r_all, isolated_cells=n_iso,
                     in_leukocytes=l_iso, in_t_cells=t_iso, sensitivity=rate(lv['pos'], ordinary, nmin),
-                    passes=le(r_iso, reg.const('EPITHELIAL_IN_IMMUNE_MAX')))
+                    passes=ok_all([le(r_iso, reg.const('EPITHELIAL_IN_IMMUNE_MAX'))]))
     elif stage == 'known_negative':
         local = dict(fixed)                 # earlier known-negative markers feed later references (dependency_rank)
         for m in sorted([m for m in reg.measured_markers() if reg.positivity_class(m) == 'known_negative'],

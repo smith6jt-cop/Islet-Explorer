@@ -46,7 +46,7 @@ def sheet_key(row) -> str:
     lab = str(row['label'])
     if 'Macrophage_' in lab:
         return 'Macrophage (all profiles)'
-    return lab
+    return f"{lab} ({row['status']})" if row['status'] else lab
 
 
 def pick(tag: str) -> pd.DataFrame:
@@ -76,9 +76,12 @@ def pick(tag: str) -> pd.DataFrame:
 
 def colors(reg: RG.Registry, r: pd.Series, markers: list[str]) -> tuple[str, str]:
     """(green, magenta) markers for one cell."""
-    nb = [m for m in str(r['named_by']).split(';') if m in markers]
     folds = {m: r.get(f'fold__{m}', np.nan) for m in markers}
+    nb = [m for m in str(r['named_by']).split(';') if m in markers]
+    nb = sorted(nb, key=lambda m: (not r.get(f'pos__{m}', 0), -folds[m]))   # the naming marker that is positive
     green = nb[0] if nb else max((m for m in markers if r.get(f'pos__{m}', 0)), key=lambda m: folds[m], default='')
+    if not green:          # no marker above its level: the marker closest to its level (fold below 0)
+        green = max(markers, key=lambda m: folds[m] if np.isfinite(folds[m]) else -np.inf)
     comp = reg.table.loc[green, 'compartment'] if green in reg.table.index else ''
     other = [m for m in markers if r.get(f'pos__{m}', 0) and reg.role(m) == 'defining'
              and reg.table.loc[m, 'compartment'] != comp]
