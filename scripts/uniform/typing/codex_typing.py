@@ -76,6 +76,24 @@ COMPARTMENT: dict[str, str] = {
 }
 # Senior's marker registry: channels REDSEA passes through uncorrected (spillover_policy != redsea_corrected).
 NO_SPILLOVER = ('DAPI', 'ColIV', 'Ki67')
+# E-cadherin is measured twice (owner's acceptance criterion, 2026-10-26: a measurement is judged by its effect on
+# positivity; measured 2026-10-28, output/positivity_method_comparison_20261028/redsea_zeroing_by_marker.csv).
+# E-cadherin is a junction shared by adjacent epithelial cells, so REDSEA's spillover compensation subtracts a cell's
+# own junction: it sets E-cadherin to exactly 0 in 28 % of cells, 6.4 % of all cells (13 % in ND_6232 and Aab_6090)
+# being at the epithelial level uncompensated, and those acinar cells fell to the top-marker step (no other rule
+# marker loses more than 0.3 % of cells to zeroing). Read uncompensated everywhere, the same junction becomes the
+# neighbor's signal in an immune cell pressed against acinar cells: 17,884 of v16's rule-typed immune cells (9,479
+# macrophages, 5,927 CD45+, 1,707 T, 730 B) failed the epithelial condition. So:
+#   'ECAD'               REDSEA-compensated (Senior's ruling): the immune rules' epithelial condition, where the
+#                        question is whether epithelial signal belongs to the cell rather than its neighbor;
+#   'ECAD_uncompensated' QuPath's own membrane mean (`$OUT/cells/<image>.parquet`): the Exocrine rule and the top-marker
+#                        step, where the question is whether an unclaimed cell has an E-cadherin junction at all.
+UNCOMPENSATED_COPIES = {'ECAD': 'ECAD_uncompensated'}
+
+
+def channel_of(marker: str) -> str:
+    """The image channel a typing marker is measured on ('ECAD_uncompensated' -> 'ECAD')."""
+    return next((m for m, c in UNCOMPENSATED_COPIES.items() if c == marker), marker)
 NOT_FOR_TYPING = ('DAPI',)
 
 # REDSEA parameters of the 2026-10-08 run (phenocycler/config.py).
@@ -141,13 +159,14 @@ T_TIE_PROFILE_MARKERS = IDENTITY_MARKERS + ('CD45',)
 # them, call them by their top marker e.g. CD45+". Exocrine is a rule (ECAD or panCK at IMMUNE_REQUIRE_MIN), Senior's
 # supporting tier is gone, and a cell no rule claims is placed by its highest marker among TOP_MARKER_PROFILE
 # (scaled, before the clip) when that marker is a class's defining marker, otherwise labeled '<marker>+'.
-TOP_MARKER_PROFILE = T_TIE_PROFILE_MARKERS
+# the top-marker step asks whether an unclaimed cell has the marker at all: E-cadherin uncompensated (UNCOMPENSATED_COPIES)
+TOP_MARKER_PROFILE = tuple(UNCOMPENSATED_COPIES.get(m, m) for m in T_TIE_PROFILE_MARKERS)
 # Owner, 2026-10-27 ("Floor at zero"): for markers most cells express, the most common positive value is the expressing
 # population, not background (REDSEA already compensates their background to 0, 17-28 % of cells); align_scale.py's
 # floor sat above 71-86 % of cells (ECAD 34,035 against a median of 9,044). Their cohort-scale floor is 0.
 ZERO_FLOOR_MARKERS = ('ECAD', 'KRT8-18', 'BCatenin', 'BActin', 'epCAM')
 TOP_MARKER_PLACEMENT = {'CD3e': 'Imm-T-cell', 'CD20': 'Imm-B-cell', 'CD68': 'Imm-macrophage', 'CD163': 'Imm-macrophage',
-                        'ECAD': 'Exocrine', 'panCK': 'Exocrine'}
+                        'ECAD_uncompensated': 'Exocrine', 'panCK': 'Exocrine'}
 # The top marker is taken at any level (owner: "Any level"). ColIV is extracellular matrix: "ColIV cannot be a cell
 # type, if it is highest, it is a reason for exclusion".
 TOP_MARKER_EXCLUDE = ('ColIV',)
@@ -158,11 +177,46 @@ CD45_RULE_LABEL = 'CD45+'
 
 
 def top_marker_label(m: str) -> str:
-    return f'{m}+ (top marker)' if f'{m}+' == CD45_RULE_LABEL else f'{m}+'
+    base = channel_of(m)                         # 'ECAD_uncompensated' is named by its channel
+    return f'{base}+ (top marker)' if f'{base}+' == CD45_RULE_LABEL else f'{base}+'
 
 
-TOP_MARKER_LABELS = tuple(top_marker_label(m) for m in TOP_MARKER_PROFILE
-                          if m not in TOP_MARKER_PLACEMENT and m not in TOP_MARKER_EXCLUDE)
+# The top-marker step uses the Xenium pipeline's canary-marker logic (owner, 2026-10-28: "The top marker needs to use
+# the canary marker logic that the Xenium processing uses for canary genes"; Islet-Explorer-Senior
+# analysis/xenium/notebooks/02_phenotyping.ipynb cell 22, scripts/tissue_markers/pancreas.py LINEAGE_CANARY_PANELS /
+# LINEAGE_EXCLUSIVE_GROUP). For a cell no rule claims:
+#   depth     per lineage panel, the number of its markers positive (above the image's own level; Xenium: distinct
+#             panel genes at lognorm >= log1p(3)); sum = the panel markers' excess over their levels (Xenium: the
+#             summed lognorm); lineages rank by depth x 1000 + sum
+#   groups    lineages map to mutually exclusive groups; the number of groups with a detected lineage decides:
+#             1 group: that group's top lineage; 2 groups: the top lineage when its depth is >= CANARY_MIN_DEPTH and
+#             >= CANARY_MARGIN more than the runner-up's, else 'lineage_ambiguous'; >= 3 groups: 'doublet_suspected'
+#             (Xenium tags both and keeps the cell's call; here both are kept, named by their top detected marker and
+#             never placed in a class, with the status in resolved_by)
+#   naming    the lineage names an approved class (CANARY_PLACEMENT) when its depth is >= CANARY_MIN_DEPTH (Xenium's
+#             two-distinct-marker evidence; its thin-panel lesson) and the class's defining marker is among the
+#             detected ones; otherwise the cell is called by its top detected marker in that lineage ('<marker>+')
+#   none      a cell with no lineage detected is called by its top marker at any level (owner, 2026-10-27: "Any
+#             level"; the marker furthest above its own level), never placed in a class
+#   ColIV     a cell called by ColIV is Excluded (owner, 2026-10-27)
+# The panels are Senior's LINEAGE_MARKERS on this panel, E-cadherin read uncompensated, with CD45 in the lymphoid
+# panels (Xenium's T panel carries PTPRC; the approved B-cell rule takes CD45 for CD79a).
+CANARY_PANELS = {lin: tuple(UNCOMPENSATED_COPIES.get(m, m) for m in ms) for lin, ms in LINEAGE_MARKERS.items()}
+CANARY_PANELS['T_NK'] = CANARY_PANELS['T_NK'] + ('CD45',)
+CANARY_PANELS['B_Plasma'] = CANARY_PANELS['B_Plasma'] + ('CD45',)
+CANARY_EXCLUSIVE_GROUP = {'Endocrine': 'Endocrine_islet', 'Exocrine': 'Exocrine_epi', 'Vascular': 'Endothelial',
+                          'Stromal': 'Stromal', 'T_NK': 'Lymphoid', 'B_Plasma': 'Lymphoid', 'Myeloid': 'Myeloid',
+                          'Neural': 'Neural'}
+CANARY_PLACEMENT = {'T_NK': ('Imm-T-cell', ('CD3e',)), 'B_Plasma': ('Imm-B-cell', ('CD20',)),
+                    'Myeloid': ('Imm-macrophage', ('CD68', 'CD163')),
+                    'Exocrine': ('Exocrine', ('ECAD_uncompensated', 'panCK'))}
+CANARY_MARGIN = 2          # Xenium DOMINANCE_MARGIN
+CANARY_MIN_DEPTH = 2       # Xenium top_depth >= 2
+
+# every label a cell no rule claims can carry: any canary panel marker or profile marker except ColIV
+TOP_MARKER_LABELS = tuple(dict.fromkeys(
+    top_marker_label(m) for m in list(TOP_MARKER_PROFILE) + [m for ms in CANARY_PANELS.values() for m in ms]
+    if m not in TOP_MARKER_EXCLUDE))
 
 # The hormone level, a departure (2026-10-17). Senior admits a cell inside an endocrine object when max(scaled INS,
 # GCG, SST) clears the tissue p99 of that max. Two changes:
@@ -200,7 +254,7 @@ POSITIVITY_K = 3.0
 POSITIVITY_WIDTH_POOLED = True
 # Markers most cells carry have no background peak in tissue; their level is the empty-slide null (owner, 2026-10-28:
 # "the background outside the tissue [helps] with the high expressers like ECAD").
-MAJORITY_MARKERS = ('ECAD', 'panCK', 'KRT8-18', 'BCatenin', 'BActin', 'epCAM', 'NaKATPase')
+MAJORITY_MARKERS = ('ECAD', 'ECAD_uncompensated', 'panCK', 'KRT8-18', 'BCatenin', 'BActin', 'epCAM', 'NaKATPase')
 # How a majority marker's level is read from its own expressing population, floored at the empty-slide null
 # (positivity.py): 'edge' = the population's lower edge, its peak minus 3 right-side widths (unimodal, E-cadherin);
 # 'gate' = the two-component mixture gate on the nonzero log values (bimodal, panCK). Measured on v15's populations
@@ -208,11 +262,15 @@ MAJORITY_MARKERS = ('ECAD', 'panCK', 'KRT8-18', 'BCatenin', 'BActin', 'epCAM', '
 # the rule-typed Exocrine cells and 12 % of the rule-typed immune cells above it (the null: 99 % and 31 %), while
 # panCK separates the two poorly at any level (an acinar cell's cytoplasm spills into its neighbor's cytoplasm
 # compartment): null 87 % / 37 %, gate 52 % / 8 %.
-MAJORITY_LEVEL = {'ECAD': 'edge', 'panCK': 'gate'}
-# So E-cadherin alone is the epithelial negative of every immune rule and the Exocrine rule's marker; panCK keeps
-# its level for the top-marker step and the positivity flags only.
+MAJORITY_LEVEL = {'ECAD': 'edge', 'ECAD_uncompensated': 'edge', 'panCK': 'gate'}
+# So E-cadherin alone is the epithelial negative of every immune rule (compensated, 'ECAD') and the Exocrine rule's
+# marker (uncompensated, UNCOMPENSATED_COPIES); panCK keeps its level for the top-marker step and the positivity
+# flags only.
 NEGATIVES_NOT_ASKED = ('Pan_Cytokeratin',)
-EXOCRINE_RULE_MARKERS = ('ECAD',)
+# Either measurement at its epithelial level makes a cell Exocrine: REDSEA errs one way on a junction (it zeroes a
+# real one, never invents one), so a compensated positive stands and the uncompensated value adds the cells it zeroed.
+# With the uncompensated value alone, 57,052 of v16's rule-typed Exocrine cells fell to the top-marker step.
+EXOCRINE_RULE_MARKERS = ('ECAD', 'ECAD_uncompensated')
 EMPTY_MARGIN_UM = 20.0
 EMPTY_WINDOW_PX = 19           # 7.2 um square at 0.3774 um/px, about a cell's measurement area
 EMPTY_WINDOWS = 20000

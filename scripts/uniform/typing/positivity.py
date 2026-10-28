@@ -131,10 +131,11 @@ def empty_null(out: Path, tag: str, markers: list[str]) -> tuple[str, dict]:
         h = w // 2
         null = {}
         for m in markers:
-            if m not in names:
+            ch = CT.channel_of(m)                       # 'ECAD_uncompensated' is measured on the ECAD channel
+            if ch not in names:
                 null[m] = np.nan
                 continue
-            a = lev.pages[names.index(m)].asarray().astype(np.float64)
+            a = lev.pages[names.index(ch)].asarray().astype(np.float64)
             ii = cv2.integral(a)
             s = ii[ys + h + 1, xs + h + 1] - ii[ys - h, xs + h + 1] - ii[ys + h + 1, xs - h] + ii[ys - h, xs - h]
             null[m] = float(np.percentile(s / w ** 2, CT.EMPTY_QUANTILE))

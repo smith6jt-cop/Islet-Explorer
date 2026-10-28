@@ -211,6 +211,11 @@ def build_image(run: Path, out: Path, tag: str, case: str, donors: pd.DataFrame,
     X = CL.apply_scale(vals[MARKERS].to_numpy(), MARKERS, scale)       # cells x 31, [0, 1], NaN where unmeasured
     levels = CL.load_levels(run, tag)                                     # positivity: above the image's own level
     E = CL.excess(vals, MARKERS, levels).to_numpy()                       # > 0 positive (typing/positivity.py)
+    # E-cadherin's positivity flag follows the Exocrine rule's measurement (codex_typing.UNCOMPENSATED_COPIES)
+    for m, c in CT.UNCOMPENSATED_COPIES.items():
+        if m in MARKERS and c in aligned.columns and c in levels.index:
+            u = cells[['object_id']].merge(aligned[['object_id', c]], on='object_id', how='left')
+            E[:, MARKERS.index(m)] = CL.excess(u, [c], levels).to_numpy()[:, 0]
     labels = cells['phenotype'].to_numpy(dtype=object)
     xy_um = cells[['Centroid X µm', 'Centroid Y µm']].to_numpy(float)
     pts = shapely.points(xy_um / PX)
@@ -579,7 +584,10 @@ def main() -> int:
     rel = {'status': 'assembled_pending_owner_review', 'donors': len(rows), 'objects': int(combined.n_obs),
            'by_object_class': {str(k): int(v) for k, v in combined.obs.object_class.value_counts().items()},
            'singles_counted_not_analysed': int(census.singles.sum()),
-           'labels': LABELS, 'embedding': 'endocrine_composition', 'embedding_min_core_cells': MIN_CORE_CELLS,
+           'labels': LABELS, 'top_marker_method': 'canary', 'positivity': 'log_background_per_image',
+           'ecad_measurements': {'immune_rules': 'ECAD (REDSEA)',
+                                 'exocrine_rule': 'ECAD (REDSEA) or ECAD_uncompensated (QuPath membrane mean)'},
+           'embedding': 'endocrine_composition', 'embedding_min_core_cells': MIN_CORE_CELLS,
            'embedding_objects': cdiag['objects'], 'donor_correction': 'none',
            'protein_embedding_donor_correction': 'harmony', 'scvi_required': False, 'git_commit': head,
            'run': str(a.run.resolve()), 'scale_sha256': sha256(CT.typing_dir(a.run) / 'scale.parquet'),

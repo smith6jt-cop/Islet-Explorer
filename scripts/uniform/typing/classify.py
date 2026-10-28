@@ -362,27 +362,70 @@ def tissue_chain(values, rules, cell_class, definition, resolved_by, rule_audit=
         unclaimed &= ~hit
     idx = np.flatnonzero(unclaimed)
     if len(idx):
-        markers = [m for m in CT.TOP_MARKER_PROFILE if m in values.attrs['excess'].columns]
-        U = np.column_stack([rule_value(values.iloc[idx], m) for m in markers])
-        if np.isnan(U).all(axis=1).any():
-            raise ValueError('a left-over cell with no measured profile marker')
-        top = np.asarray(markers, dtype=object)[np.argmax(np.where(np.isnan(U), -np.inf, U), axis=1)]
-        place = np.asarray([CT.TOP_MARKER_PLACEMENT.get(m, '') for m in top], dtype=object)
-        exo = place == 'Exocrine'
-        imm = (place != '') & ~exo
-        dropped = np.isin(top, CT.TOP_MARKER_EXCLUDE)
-        named = (place == '') & ~dropped
-        cell_class[idx[exo]] = 'Exocrine'
-        cell_class[idx[imm]] = 'Immune'
-        definition[idx[imm]] = place[imm]
-        cell_class[idx[dropped]] = 'Excluded'          # reason: top_marker_reasons()
-        cell_class[idx[named]] = np.asarray([CT.top_marker_label(m) for m in top[named]], dtype=object)
-        resolved_by[idx] = 'top_marker'
+        canary_step(values.iloc[idx], idx, cell_class, definition, resolved_by)
+
+
+def canary_step(values: pd.DataFrame, idx: np.ndarray, cell_class, definition, resolved_by) -> None:
+    """The top-marker step with the Xenium canary-marker logic (codex_typing.CANARY_*): lineage depth, mutually
+    exclusive groups, dominance margin; resolved_by records the outcome ('canary_<status>_top_marker')."""
+    n = len(idx)
+    ex = values.attrs['excess']
+    lineages = [lin for lin, ms in CT.CANARY_PANELS.items() if any(m in ex.columns for m in ms)]
+    depth = np.zeros((n, len(lineages)), dtype=np.int16)
+    total = np.zeros((n, len(lineages)))
+    for j, lin in enumerate(lineages):
+        E = np.column_stack([rule_value(values, m) for m in CT.CANARY_PANELS[lin] if m in ex.columns])
+        depth[:, j] = (E > 0).sum(axis=1)
+        total[:, j] = np.nansum(E, axis=1)
+    groups = sorted({CT.CANARY_EXCLUSIVE_GROUP[lin] for lin in lineages})
+    member = np.array([[CT.CANARY_EXCLUSIVE_GROUP[lin] == g for lin in lineages] for g in groups])
+    n_groups = sum(((depth > 0) & member[k]).any(axis=1) for k in range(len(groups)))
+    composite = depth * 1000.0 + total
+    rows = np.arange(n)
+    top = composite.argmax(axis=1)
+    second = np.where(np.arange(len(lineages))[None, :] == top[:, None], -np.inf, composite).argmax(axis=1)
+    td, sd = depth[rows, top], depth[rows, second]
+    status = np.where(n_groups == 0, 'none', np.where(n_groups == 1, 'single', np.where(
+        n_groups >= 3, 'doublet_suspected',
+        np.where((td - sd >= CT.CANARY_MARGIN) & (td >= CT.CANARY_MIN_DEPTH), 'resolved', 'lineage_ambiguous'))))
+    # the profile, for naming: a cell's top marker within its lineage (detected), or at any level when none is
+    prof = [m for m in CT.TOP_MARKER_PROFILE if m in ex.columns]
+    P = np.column_stack([rule_value(values, m) for m in prof])
+    if np.isnan(P).all(axis=1).any():
+        raise ValueError('a left-over cell with no measured profile marker')
+    any_top = np.asarray(prof, dtype=object)[np.argmax(np.where(np.isnan(P), -np.inf, P), axis=1)]
+    for i in range(n):
+        k = idx[i]
+        s = status[i]
+        resolved_by[k] = f'canary_{s}_top_marker'
+        if s == 'none':
+            marker = any_top[i]
+        else:
+            lin = lineages[top[i]]
+            panel = [m for m in CT.CANARY_PANELS[lin] if m in ex.columns]
+            vals = np.array([P[i, prof.index(m)] if m in prof else rule_value(values.iloc[[i]], m)[0] for m in panel])
+            detected = [m for m, v in zip(panel, vals) if v > 0]
+            place = CT.CANARY_PLACEMENT.get(lin)
+            # an ambiguous or suspected-doublet cell is kept and tagged, as Xenium's cell 22 keeps them (no placement)
+            if (s in ('single', 'resolved') and place and td[i] >= CT.CANARY_MIN_DEPTH
+                    and any(m in detected for m in place[1])):
+                if place[0] == 'Exocrine':
+                    cell_class[k] = 'Exocrine'
+                else:
+                    cell_class[k] = 'Immune'
+                    definition[k] = place[0]
+                continue
+            marker = panel[int(np.nanargmax(np.where(np.isnan(vals), -np.inf, vals)))]
+        if marker in CT.TOP_MARKER_EXCLUDE:
+            cell_class[k] = 'Excluded'
+        else:
+            cell_class[k] = CT.top_marker_label(marker)
 
 
 def top_marker_reasons(cell_class, resolved_by, reason):
-    """A cell the top-marker step excluded (codex_typing.TOP_MARKER_EXCLUDE) carries its reason."""
-    reason[(resolved_by == 'top_marker') & (cell_class == 'Excluded')] = CT.TOP_MARKER_EXCLUDED_REASON
+    """A cell the top-marker step excluded carries its reason: ColIV as its name (codex_typing.TOP_MARKER_EXCLUDE)."""
+    rb = np.asarray(resolved_by, dtype=object)
+    reason[np.char.endswith(rb.astype(str), 'top_marker') & (cell_class == 'Excluded')] = CT.TOP_MARKER_EXCLUDED_REASON
 
 
 def finish(in_islet, cell_class, exocrine_measured):

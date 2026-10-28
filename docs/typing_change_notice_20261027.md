@@ -57,8 +57,23 @@ Methods measured and rejected on these values: scimap's GMM(2) gate (splits the 
 (unreadable with the zeros), the mirrored lower-half spread (inflated by the subtraction tail), the empty-slide null
 for immune markers (far below tissue background), another lineage's p99 as the reference (too clean or contaminated).
 
-**Expect rule-typed cells to change in v16.** The v15 → v16 transitions and the label-free co-expression checks
-will be in `output/typing_accuracy_checks_20261028/`.
+- **E-cadherin is measured twice (v17).** Review tiles of v16 showed acinar cells named by a top marker with
+  E-cadherin at exactly 0: REDSEA subtracts a junctional marker's own signal (6.4 % of all cells are epithelial-level
+  on QuPath's membrane mean yet zero after REDSEA; no other rule marker loses more than 0.3 % this way). Read
+  uncompensated everywhere, the junction became neighbor signal in immune cells (17,884 rule immune cells lost). So
+  `ECAD` (REDSEA) stays the immune rules' epithelial condition, and `ECAD_uncompensated` (QuPath membrane mean) joins
+  it in the Exocrine rule (either measurement at its level) and stands for E-cadherin in the top-marker step
+  (`codex_typing.UNCOMPENSATED_COPIES`). For the spleen lane: check junctional markers for REDSEA zeroing.
+- **Top marker by the Xenium canary logic (v17; owner, 2026-10-28).** Cells no rule claims are resolved like
+  notebook 02 cell 22: lineage depth (markers positive per panel), mutually exclusive groups, dominance margin 2 with
+  top depth >= 2; ambiguous and suspected-doublet cells are kept and tagged (as cell 22 does), named by their top
+  detected marker; a lineage names an approved class only with two of its markers including the defining one;
+  otherwise, or with no lineage detected, the cell is named by its top marker (`classify.canary_step`,
+  `codex_typing.CANARY_*`; the status is in `typing/calls` `resolved_by`). New labels: `CD3e+`, `CD20+`, `CD68+`,
+  `CD163+`, `ECAD+`, `panCK+`. The release record carries `top_marker_method: canary`.
+
+**Expect rule-typed cells to change in v16 and v17.** The transitions and the label-free co-expression checks are
+in `output/typing_accuracy_checks_20261028/`.
 
 ## For downstream use (e.g. spleen)
 

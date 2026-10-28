@@ -429,6 +429,59 @@ structures run only inside Tissue.
 - Label-free co-expression checks (median over images), v15 against this method at z > 3: CD45+ among CD3e+ cells
   0.92 vs 0.88, CD3e+ among CD8a+ 0.72 vs 0.63, CD20+ among CD3e+ 0.08 vs 0.09, CD68+ among CD3e+ 0.07 vs 0.08,
   CD45+ among CD68+ 0.51 vs 0.66.
+- **v15 -> v16** (`output/typing_accuracy_checks_20261028/`; the chain from `classify.py`, v15's typing in
+  `superseded/typing-v15-20261027/`): cells typed by a rule 1,907,326 -> 1,999,683, by the top-marker step
+  1,274,637 -> 1,181,726; Excluded 334,650 -> 95,044 (ColIV's level is now 8.9x its background, so most of v15's
+  319,287 ColIV exclusions end elsewhere). Labels: Exocrine 1,876,363 -> 1,993,475; macrophages 131,244 -> 147,704;
+  T cells 31,828 -> 36,647; B cells 66,385 -> 54,359 (every rule B cell CD45+, none CD3e+ or CD68+); CD45+ (rule)
+  58,120 -> 63,834 and CD45+ (top marker) 20,965; by top marker SMA+ 23,698 -> 180,878, CD31+ 53,670 -> 133,483,
+  B3TUBB+ 30,452 -> 86,315, INS+ 14,917 -> 39,537, LGALS3+ 143,349 -> 35,513, CD34+ 135,679 -> 22,350; 785,251 cells
+  change label. On the rule-typed cells, positivity read at v16's levels for both: T cells CD45+ 0.97 -> 0.91, CD20+
+  0.09 -> 0.08, CD68+ 0.08 -> 0.10; macrophages CD45+ 0.65 -> 0.59; B cells CD45+ 1.00 -> 1.00. The endocrine cells
+  are unchanged. The CD45 rule's class is `CD45+` (owner: "Instead of Immune, the class should be CD45+"), the
+  left-over cell whose top marker is CD45 `CD45+ (top marker)` ("Keep them separate"). Root
+  `data/development/uniform-20donor-20261027-v16` (commit edfd2df): 3,102,282 cells analyzed, 95,044 excluded,
+  4,821 endocrine objects, 1,300 embedding objects.
+- **E-cadherin measured twice (root v17).** The v16 review tiles (`scripts/research/typing_review_tiles_20261028.py`,
+  `output/typing_review_tiles_20261028/`) showed cells named SMA+ sitting inside a mesh of E-cadherin-bright acinar
+  membranes with their own E-cadherin at exactly 0. REDSEA sets E-cadherin to 0 in 28 % of cells; 6.4 % of all cells
+  (13 % in ND_6232 and Aab_6090) are at the epithelial level on QuPath's uncompensated membrane mean yet zero after
+  REDSEA, and a fifth of the epithelial-level cells lose E-cadherin positivity; 95 % of the zeroed epithelial-level
+  cells ended as top-marker labels. No other rule marker loses more than 0.3 % of cells to zeroing
+  (`output/positivity_method_comparison_20261028/redsea_zeroing_by_marker.csv`). E-cadherin is a junction shared by
+  adjacent epithelial cells, so spillover compensation subtracts the cell's own junction. Read uncompensated
+  everywhere (a discarded trial, `superseded/typing-ecad-uncompensated-trial-20261028/`), the same junction becomes
+  the neighbor's signal in an immune cell pressed against acinar cells: 17,884 of v16's rule-typed immune cells (9,479
+  macrophages, 5,927 CD45+, 1,707 T, 730 B) failed the epithelial condition. By the owner's acceptance criterion
+  (2026-10-26: a measurement is judged by its effect on positivity) E-cadherin is now two typing markers
+  (`codex_typing.UNCOMPENSATED_COPIES`, `align_scale.read_measured`): `ECAD`, REDSEA-compensated (Senior's ruling), is
+  the immune rules' epithelial condition (does epithelial signal belong to this cell rather than its neighbor?);
+  `ECAD_uncompensated`, QuPath's own membrane mean, joins it in the Exocrine rule (either at its epithelial level makes
+  a cell Exocrine: REDSEA zeroes a real junction but never invents one; with the uncompensated value alone 57,052 of
+  v16's rule Exocrine cells fell to the top-marker step) and stands for E-cadherin in the top-marker step and the
+  `ECAD_pos` flag. Against v16 no rule-typed immune cell changes and 314,140 cells v16 left to the top-marker step
+  become Exocrine by the rule (`scripts/research/compare_typing_runs_20261028.py`).
+- **Top marker by the Xenium canary logic (root v17).** Owner, 2026-10-28: "The top marker needs to use the canary
+  marker logic that the Xenium processing uses for canary genes" (Islet-Explorer-Senior
+  `analysis/xenium/notebooks/02_phenotyping.ipynb` cell 22; `scripts/tissue_markers/pancreas.py`
+  `LINEAGE_CANARY_PANELS`, `LINEAGE_EXCLUSIVE_GROUP`). A top marker at any level had placed cells on background:
+  v16's 49,637 B cells placed by CD20 as top marker were 0 % CD45+ (and 44 % CD20+), against 100 % for the 4,722 rule
+  B cells, and the Barlow comparison put 94 % of v16's B cells in non-immune clusters. `classify.canary_step`,
+  `codex_typing.CANARY_*`: per lineage panel (Senior's `LINEAGE_MARKERS` on this panel, E-cadherin uncompensated, CD45
+  in the T/NK and B panels as Xenium's T panel carries PTPRC and the approved B rule takes CD45 for CD79a) the depth
+  = number of panel markers positive and the sum of their excess; lineages rank by depth x 1000 + sum; lineages map to
+  mutually exclusive groups (Endocrine_islet, Exocrine_epi, Endothelial, Stromal, Lymphoid, Myeloid, Neural). One
+  group detected: that group's top lineage. Two groups: the top lineage when its depth >= 2 and >= 2 more than the
+  runner-up's, else `lineage_ambiguous`. Three or more: `doublet_suspected`. As Xenium's cell 22 does, both are kept
+  and tagged (`resolved_by`), named by their top detected marker and never placed in a class (a first run that
+  Excluded them took out 168,396 cells, 4-6 % of each image, and was discarded as unfaithful). A lineage names
+  an approved class (T cell, B cell, Macrophage, Exocrine) only at depth >= 2 with the class's defining marker
+  detected (Xenium's two-marker evidence and its thin-panel lesson); otherwise the cell is named by its top detected
+  marker in that lineage. A cell with no lineage detected is named by its top marker at any level (owner, 2026-10-27),
+  never placed. ColIV as the name still Excludes. Labels add `CD3e+`, `CD20+`, `CD68+`, `CD163+`, `ECAD+`, `panCK+`
+  (`TOP_MARKER_LABELS`); `resolved_by` records `canary_<none|single|resolved|lineage_ambiguous|doublet_suspected>
+  _top_marker`. ND_6232: of 32,251 leftover cells, 16,975 none, 9,441 single, 4,699 ambiguous, 876 doublet, 260
+  resolved; none met the class-placement evidence.
 
 ## App root (P4), 2026-10-16
 

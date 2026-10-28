@@ -7,6 +7,9 @@ Port of Islet-Explorer-Senior-v3 `core/phenocycler/scripts/celltype/run_step2.py
 
   1. each marker is read in its own compartment (codex_typing.COMPARTMENT) from `typing/redsea/<image>.parquet`;
      a cytoplasm marker of a cell whose nucleus fills it is read over the whole cell (owner, 2026-10-27);
+     codex_typing.UNCOMPENSATED_COPIES (E-cadherin, 2026-10-28) are also read as QuPath's own compartment mean from
+     `cells/<image>.parquet`, as a marker of their own ('ECAD_uncompensated'), since REDSEA subtracts a junctional
+     marker's own signal (6.4 % of cells zeroed at the epithelial level);
   2. UniFORM's automatic_registration aligns each marker's background mode across the 20 images (one image per
      donor) as a rigid log-shift -- one multiplicative factor per (donor, marker); the histograms are
      UniFORM's own (log of values >= 1, common range, 1024 bins) over the analysis-eligible cells;
@@ -115,9 +118,18 @@ def read_measured(out: Path, tags: list[str]) -> tuple[dict, list[str]]:
         for m in cols.values():
             if CT.COMPARTMENT[m] == 'Cytoplasm' and f'Cell__{m}' in src.columns:
                 f[m] = f[m].where(f[m].notna(), src[f'Cell__{m}'])
+        # codex_typing.UNCOMPENSATED_COPIES (E-cadherin, 2026-10-28): beside the REDSEA value, QuPath's own compartment
+        # mean as a marker of its own, since REDSEA subtracts a junctional marker's own signal
+        raw = {m: c for m, c in CT.UNCOMPENSATED_COPIES.items() if m in cols.values()}
+        if raw:
+            qp = pd.read_parquet(out / 'cells' / f'{t}.parquet',
+                                 columns=['Object ID'] + [f'{CT.COMPARTMENT[m]}: {m}: Mean' for m in raw])
+            qp = qp.set_index('Object ID').reindex(f['object_id'])
+            for m, c in raw.items():
+                f[c] = qp[f'{CT.COMPARTMENT[m]}: {m}: Mean'].to_numpy(np.float32)
         frames[t] = f
-        markers |= set(cols.values())
-    order = [m for m in CT.COMPARTMENT if m in markers]
+        markers |= set(cols.values()) | set(raw.values())
+    order = [m for m in CT.COMPARTMENT if m in markers] + [c for c in CT.UNCOMPENSATED_COPIES.values() if c in markers]
     return frames, order
 
 
@@ -240,7 +252,8 @@ def main() -> int:
     (typ / 'shifts.json').write_text(json.dumps({
         'uniform_commit': UNIFORM_COMMIT, 'num_bins': NUM_BINS, 'bar_mode_sd': BAR_MODE_SD,
         'acq_ratio_flag': ACQ_RATIO_FLAG, 'acquisition_groups': groups,
-        'compartments': {m: CT.COMPARTMENT[m] for m in markers}, 'shifts': shifts}, indent=1, default=float))
+        'compartments': {m: CT.COMPARTMENT.get(m, f'{CT.COMPARTMENT[CT.channel_of(m)]} (QuPath, uncompensated)')
+                         for m in markers}, 'shifts': shifts}, indent=1, default=float))
     print(scale.round(2).to_string(), flush=True)
     return 0
 
