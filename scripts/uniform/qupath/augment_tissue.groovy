@@ -1,4 +1,8 @@
-/* Add cells in new Tissue minus old Tissue; never run the destructive full detection step.
+/* Add cells with centroids in new Tissue minus old Tissue; never run the destructive full detection step.
+ * Detection uses a recorded 30 um context buffer around that delta, clipped only to image bounds.
+ * InstanSeg clips output to its parent ROI: detecting directly in narrow added strips creates tiny
+ * cell/nucleus fragments. Retain complete contextual detections, then apply the exact unbuffered
+ * delta-centroid, final-Tissue cell/nucleus containment and original-cell-wins overlap checks.
  * The runner appends the usual footer, which saves only after V3_RESULT passes.
  * args[0]: augmentation config JSON. All original objects are checked before the footer saves.
  */
@@ -10,6 +14,30 @@ import qupath.lib.roi.GeometryTools
 import qupath.lib.analysis.features.ObjectMeasurements
 import org.locationtech.jts.index.strtree.STRtree
 import org.locationtech.jts.geom.prep.PreparedGeometryFactory
+
+// Kept in the production script so synthetic QuPath tests exercise these exact geometry operations
+// without loading an image, model or GPU. The context parameter is technical, never donor-specific.
+class AugmentationDetectionGeometry {
+    static def detectionRegion(delta, double contextUm, double pixelUm, int width, int height) {
+        if (!Double.isFinite(contextUm) || contextUm <= 0 || !Double.isFinite(pixelUm) || pixelUm <= 0)
+            throw new IllegalArgumentException('Detection context and pixel size must be finite and positive')
+        def bounds = delta.getFactory().toGeometry(new org.locationtech.jts.geom.Envelope(0, width, 0, height))
+        def region = delta.buffer(contextUm / pixelUm).intersection(bounds)
+        if (!region.isValid() || region.isEmpty())
+            throw new IllegalStateException('Invalid/empty padded detection ROI')
+        return region
+    }
+
+    static String rejectionReason(candidate, addedPrepared, finalPrepared) {
+        def roi = candidate.getROI(), geom = roi.getGeometry()
+        def point = geom.getFactory().createPoint(new org.locationtech.jts.geom.Coordinate(roi.getCentroidX(), roi.getCentroidY()))
+        if (!addedPrepared.covers(point)) return 'outside_added'
+        if (!finalPrepared.covers(geom)) return 'cell_outside_final'
+        def nucleus = candidate.isCell() ? candidate.getNucleusROI()?.getGeometry() : null
+        if (nucleus != null && nucleus.getArea() > 0 && !finalPrepared.covers(nucleus)) return 'nucleus_outside_final'
+        return null
+    }
+}
 
 def cfg = new Gson().fromJson(new File(args[0]).getText('UTF-8'), Map)
 def invariant = evaluate(new File(cfg.invariants_script))
@@ -49,16 +77,25 @@ if (inventory.exists() && invariant.readJSON(inventory) != saved)
 invariant.writeJSON(inventory, saved)
 def delta = target.difference(previous)
 if (!delta.isValid()) throw new IllegalStateException('New-minus-old Tissue is invalid')
+double contextUm = cfg.detection_context_um as double
+if (!Double.isFinite(contextUm) || contextUm <= 0)
+    throw new IllegalStateException('Missing/invalid detection_context_um; use the augmentation driver')
 def oldIDs = saved.cells.keySet() as Set
 def index = new STRtree()
 oldCells.each { index.insert(it.getROI().getGeometry().getEnvelopeInternal(), it) }
 index.build()
-def accepted = [], rejected = [outside_added: 0, overlap_old: 0, overlap_new: 0, duplicate_old: 0, duplicate_new: 0]
+def accepted = [], rejected = [outside_added: 0, cell_outside_final: 0, nucleus_outside_final: 0,
+                              overlap_old: 0, overlap_new: 0, duplicate_old: 0, duplicate_new: 0]
+def clipping = [candidates_touching_context_boundary: 0, accepted_touching_context_boundary: 0,
+                accepted_touching_image_boundary: 0]
 def result = null
 def temporary = null
+def detectionRegion = null
 try {
     if (!delta.isEmpty() && delta.getArea() > 0) {
-        temporary = PathObjects.createAnnotationObject(GeometryTools.geometryToROI(delta, tissue[0].getROI().getImagePlane()),
+        detectionRegion = AugmentationDetectionGeometry.detectionRegion(delta, contextUm, 0.3774,
+            getCurrentServer().getWidth(), getCurrentServer().getHeight())
+        temporary = PathObjects.createAnnotationObject(GeometryTools.geometryToROI(detectionRegion, tissue[0].getROI().getImagePlane()),
             getPathClass('Augmentation temporary'))
         // Add directly under root; never resolve the hierarchy around the temporary parent.
         hierarchy.getRootObject().addChildObject(temporary)
@@ -81,7 +118,10 @@ try {
         // Deterministic preference for larger new candidates; existing cells always win.
         candidates.sort { a, b -> b.getROI().getArea() <=> a.getROI().getArea() ?: a.getID().toString() <=> b.getID().toString() }
         def deltaPrepared = PreparedGeometryFactory.prepare(delta)
-        def factory = GeometryTools.getDefaultFactory()
+        def contextBoundary = PreparedGeometryFactory.prepare(detectionRegion.getBoundary())
+        def imageBounds = GeometryTools.getDefaultFactory().toGeometry(new org.locationtech.jts.geom.Envelope(
+            0, getCurrentServer().getWidth(), 0, getCurrentServer().getHeight()))
+        def imageBoundary = PreparedGeometryFactory.prepare(imageBounds.getBoundary())
         def newIndex = new org.locationtech.jts.index.quadtree.Quadtree()
         double radius = 1.0 / 0.3774
         def duplicate = { a, b ->
@@ -93,8 +133,10 @@ try {
         }
         for (candidate in candidates) {
             def roi = candidate.getROI(), geom = roi.getGeometry()
-            def point = factory.createPoint(new org.locationtech.jts.geom.Coordinate(roi.getCentroidX(), roi.getCentroidY()))
-            if (!deltaPrepared.covers(point) || !prepared.covers(geom)) { rejected.outside_added++; continue }
+            boolean touchesContext = contextBoundary.intersects(geom)
+            if (touchesContext) clipping.candidates_touching_context_boundary++
+            def reason = AugmentationDetectionGeometry.rejectionReason(candidate, deltaPrepared, prepared)
+            if (reason != null) { rejected[reason]++; continue }
             def envelope = new org.locationtech.jts.geom.Envelope(geom.getEnvelopeInternal())
             envelope.expandBy(radius)
             def neighbors = index.query(envelope)
@@ -104,6 +146,8 @@ try {
             if (nearbyNew.any { geom.intersection(it.getROI().getGeometry()).getArea() > 0 }) { rejected.overlap_new++; continue }
             if (nearbyNew.any { duplicate(candidate, it) }) { rejected.duplicate_new++; continue }
             accepted << candidate
+            if (touchesContext) clipping.accepted_touching_context_boundary++
+            if (imageBoundary.intersects(geom)) clipping.accepted_touching_image_boundary++
             newIndex.insert(geom.getEnvelopeInternal(), candidate)
         }
         // Detach all candidates with the temporary annotation; retain only accepted objects.
@@ -126,6 +170,11 @@ invariant.writeJSON(new File(cfg.new_ids), accepted.collect { it.getID().toStrin
 invariant.requireSaveWindow(cfg)
 V3_RESULT = [ok: true, changed: true, message: "Preserved ${oldCells.size()} cells; added ${accepted.size()}",
     details: [preservation: checks, added_area_um2: delta.getArea() * 0.3774 * 0.3774, new_cells: accepted.size(),
+              detection_context_um: contextUm,
+              detection_roi_area_um2: detectionRegion == null ? 0.0 : detectionRegion.getArea() * 0.3774 * 0.3774,
+              detection_roi_clipping: 'buffered_added_tissue_intersect_image_bounds_only',
+              acceptance_roi: 'unbuffered_added_tissue_centroid_and_full_final_tissue_cell_and_positive_area_nucleus',
+              output_roi_clipping_diagnostics: clipping,
               preserved_zero_area_nuclei: zeroAreaNuclei,
               rejected: rejected, instanseg: result == null ? null : [objects: result.nObjectsDetected(),
               tiles: result.nTilesProcessed(), failed_tiles: result.nTilesFailed()],

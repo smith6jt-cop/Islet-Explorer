@@ -19,6 +19,7 @@ from dataclasses import replace
 import fcntl
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import shutil
@@ -34,6 +35,7 @@ STAGES = ('detect', 'measure', 'export', 'verify')
 EXPORT_STEPS = ('3', '8', 'C_cells', 'C_geojson', 'J_cells', 'J_context', 'J_annotations', 'J_islets')
 QUANTITATIVE_PREFIXES = ('Cell:', 'Nucleus:', 'Cytoplasm:', 'Membrane:')
 GPU_STAGE_LOCK = threading.Lock()
+DETECTION_CONTEXT_UM = 30.0
 
 
 def read_json(path: Path):
@@ -159,14 +161,18 @@ def verify_exports(source: Path, out: Path, tag: str, expected_new: set[str]) ->
             'raw_columns_preserved': len(columns), 'endocrine_objects_preserved': len(old_endo)}
 
 
-def process(runner: RU.Runner, source: Path, outlines: Path, tag: str, stages: list[str]) -> dict:
+def process(runner: RU.Runner, source: Path, outlines: Path, tag: str, stages: list[str],
+            detection_context_um: float = DETECTION_CONTEXT_UM) -> dict:
+    if not math.isfinite(detection_context_um) or detection_context_um <= 0:
+        raise ValueError('detection_context_um must be finite and positive')
     area = runner.out / 'augmentation' / tag
     state_path, config_path = area / 'state.json', area / 'config.json'
     src_qp, dst_qp = qpdata(source, tag), qpdata(runner.out, tag)
     check_independent(src_qp, dst_qp)
     outline = outlines / f'{tag}.geojson'
     signature = {'source_run': str(source), 'source_qpdata_sha256': RU.sha256(src_qp),
-                 'outline': str(outline), 'outline_sha256': RU.sha256(outline)}
+                 'outline': str(outline), 'outline_sha256': RU.sha256(outline),
+                 'detection_context_um': float(detection_context_um)}
     current = RU.sha256(dst_qp)
     if state_path.exists():
         state = read_json(state_path)
@@ -180,6 +186,7 @@ def process(runner: RU.Runner, source: Path, outlines: Path, tag: str, stages: l
         atomic_json(state_path, state)
     config = {'outline': str(outline), 'inventory': str(area / 'original_inventory.json'),
               'new_ids': str(area / 'new_object_ids.json'),
+              'detection_context_um': float(detection_context_um),
               'invariants_script': str(HERE / 'qupath' / 'augmentation_invariants.groovy')}
     atomic_json(config_path, config)
     all_steps = [step for stage in STAGES for step in stage_steps(stage)]
@@ -263,9 +270,14 @@ def main() -> int:
     ap.add_argument('--images', nargs='+', required=True)
     ap.add_argument('--stages', nargs='+', choices=STAGES, default=list(STAGES))
     ap.add_argument('--dry-run', action='store_true')
+    ap.add_argument('--detection-context-um', type=float, default=DETECTION_CONTEXT_UM,
+                    help='technical detection-ROI context buffer, clipped only to image bounds (default: 30 um); '
+                         'acceptance still uses the unbuffered added-Tissue centroid and full final-Tissue containment')
     ap.add_argument('--workers', type=int, choices=(1, 2, 3), default=1,
                     help='independent images in parallel; GPU stages remain serialized; at most three 128-GB JVMs')
     a = ap.parse_args()
+    if not math.isfinite(a.detection_context_um) or a.detection_context_um <= 0:
+        ap.error('--detection-context-um must be finite and positive')
     source, out, outlines = a.source_run.resolve(), a.out.resolve(), a.outlines.resolve()
     if source == out:
         ap.error('--out must be a separate copy of --source-run')
@@ -283,6 +295,7 @@ def main() -> int:
             if not (outlines / f'{tag}.geojson').is_file():
                 raise ValueError(f'{tag}: missing outline')
         print(json.dumps({'source_run': str(source), 'out': str(out), 'outlines': str(outlines), 'images': tags,
+                          'detection_context_um': a.detection_context_um,
                           'steps': [s.id for stage in a.stages for s in stage_steps(stage)]}, indent=2))
         return 0
     lock_path = out / 'augmentation' / 'driver.lock'
@@ -290,7 +303,7 @@ def main() -> int:
     with lock_path.open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         with ThreadPoolExecutor(a.workers) as pool:
-            list(pool.map(lambda tag: process(runner, source, outlines, tag, a.stages), tags))
+            list(pool.map(lambda tag: process(runner, source, outlines, tag, a.stages, a.detection_context_um), tags))
     return 0
 
 
