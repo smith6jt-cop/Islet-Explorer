@@ -65,6 +65,9 @@ ESTABLISHED_REASONS = ('hormone_unresolved_margin', 'exocrine_inside_islet_borde
 ESTABLISHED_REASON_PREFIX = 'endocrine_single_'
 MARGIN_REASONS = ('hormone_unresolved_margin', 'endocrine_single_hormone_margin_below_2x')
 PLACED = ('single', 'resolved')
+# the cell context's columns for each structure class (cell_context.py): centroid in an object, area fraction inside
+STRUCTURE_COLUMNS = {'Blood vessel': ('in_Blood vessel', 'crossed_frac_vessel'), 'Nerve': ('in_Nerve', 'crossed_frac_nerve'),
+                     'Lymphatic': ('in_Lymphatic', 'crossed_frac_lymphatic')}
 
 
 # -- the plan of one run: compartments, lineages and label rules from the registry ------------------------------------
@@ -115,7 +118,7 @@ def build_plan(reg: RG.Registry, markers: list[str]) -> dict:
 
 def label_row(plan: dict, compartment: str, lineage: str) -> dict:
     lab = plan['labels']
-    r = lab[(lab['compartment'] == compartment) & (lab['lineage'] == lineage)]
+    r = lab[(lab['compartment'] == compartment) & (lab['lineage'] == lineage) & (lab['kind'] != 'structure')]
     return r.iloc[0].to_dict() if len(r) else {}
 
 
@@ -167,7 +170,8 @@ def load_values(run: Path, tag: str, reg: RG.Registry, markers: list[str], lv: p
     rs = pd.read_parquet(run / 'typing' / 'redsea' / f'{tag}.parquet',
                          columns=['object_id', 'qc_analysis_eligible'] + sorted(set(cols.values())))
     ctx = pd.read_parquet(run / 'typing' / 'context' / f'{tag}.parquet',
-                          columns=['object_id', 'x_um', 'y_um', 'context', 'endocrine_object_class'])
+                          columns=['object_id', 'x_um', 'y_um', 'context', 'endocrine_object_class']
+                          + [c for cols in STRUCTURE_COLUMNS.values() for c in cols])
     d = rs[rs['qc_analysis_eligible']].merge(ctx, on='object_id', how='left', validate='one_to_one')
     d.attrs['columns'] = cols
     return d.reset_index(drop=True)
@@ -282,14 +286,42 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED) -> tu
         compartment[rows], lineage[rows] = r.compartment, r.lineage
         comp_basis[rows], lin_basis[rows], lin_status[rows] = 'object', 'object', ''
         by_object[rows] = True
+    # Structure objects (owner 2026-10-29, Senior's subpanel structure step): a cell whose centroid is in a vessel, nerve or
+    # lymphatic object, with more than STRUCTURE_MAJORITY_AREA of its area inside that class's objects, the object's
+    # marker positive and the highest fold over level among its positive typing markers, is that structure's cell type.
+    # Asked weakest class first so a later class overrides (Blood vessel > Nerve > Lymphatic); before the canary
+    # conflicts, which a structure call resolves. Object-defined endocrine cells (clusters, singles) are left as placed.
+    # A cell in an object that is not called carries passed_through_<class>.
+    Fpos = np.where(P, F, -np.inf)
+    top_any = np.where(P.any(axis=1), Fpos.argmax(axis=1), -1)
+    majority = reg.const('STRUCTURE_MAJORITY_AREA')
+    structure_hit = np.zeros(n, bool)
+    for r in list(lab[lab['kind'] == 'structure'].itertuples())[::-1]:
+        inside_col, frac_col = STRUCTURE_COLUMNS[r.structure]
+        inside = d[inside_col].fillna(False).to_numpy(bool)
+        frac = d[frac_col].to_numpy(float)
+        j = ix.get(r.named_by)
+        if j is None:
+            raise SystemExit(f'{tag}: structure marker {r.named_by} has no level')
+        hit = inside & (np.nan_to_num(frac) > majority) & P[:, j] & (top_any == j) & ~by_object
+        label[hit], named_by[hit] = r.label, r.named_by
+        compartment[hit], lineage[hit] = r.compartment, r.lineage
+        comp_basis[hit] = lin_basis[hit] = 'structure'
+        lin_status[hit] = ''
+        structure_hit |= hit
+        for i in np.flatnonzero(inside & ~hit):
+            tags[i].append(f"passed_through_{r.structure.replace(' ', '_')}")
+    for i in np.flatnonzero(structure_hit):
+        tags[i] = [t for t in tags[i] if not t.startswith('passed_through_')]
+    done |= structure_hit
     # A canary-level conflict between mutually exclusive compartments, or lineages of one compartment, that the margin
     # does not resolve names no cell type (owner 2026-10-28: "there is no such thing as a CD8+CD163+ cell"): the cell
     # is kept with the conflict as its class, never named as either side. Below the canary level a second group is not
     # a credible conflict (status below_canary_*). Cells their object places (clusters, singles) are left as placed.
     comp_runner = np.where(cp['runner'] >= 0, np.asarray(comps, dtype=object)[np.maximum(cp['runner'], 0)], '')
     unresolved = ('lineage_ambiguous', 'doublet_suspected')
-    clash = ~by_object & np.isin(comp_status, unresolved)
-    clash_lin = ~by_object & ~clash & np.isin(lin_status, unresolved)
+    clash = ~by_object & ~done & np.isin(comp_status, unresolved)
+    clash_lin = ~by_object & ~done & ~clash & np.isin(lin_status, unresolved)
     for mask, top_, run_, st in ((clash, compartment, comp_runner, comp_status), (clash_lin, lineage, lin_runner, lin_status)):
         rows = np.flatnonzero(mask)
         label[rows] = np.where(st[rows] == 'doublet_suspected', 'Doublet suspected',

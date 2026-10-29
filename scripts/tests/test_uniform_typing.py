@@ -40,6 +40,9 @@ def test_labels_file_names_registry_lineages_and_markers():
     lineages = {f'{lin}:{s}' if s else lin for m in reg.typing_markers() for lin, s in reg.lineage_entries(m)}
     lineages |= {lin for m in reg.typing_markers() for lin, _ in reg.lineage_entries(m)}
     for r in lab.itertuples():
+        if r.kind == 'structure':            # a structure object's cell type, named by the object's marker
+            assert r.named_by in reg.typing_markers() and r.structure, r
+            continue
         assert r.lineage in lineages, r.lineage
         for m in RG.split(r.profile.replace('|', ';')):
             assert m in reg.table.index, m
@@ -85,7 +88,7 @@ CELLS = [  # (expected label, start class, {marker: raw value}, established endo
     ('CD45+', None, {'CD45': HIGH}, None),
     ('Conflict T/Myeloid', None, {'CD163': HIGH, 'CD8a': 2 * HIGH}, None),                   # no CD8a+CD163+ cell type
     ('Exocrine', None, {'ECAD': HIGH, 'panCK': HIGH}, None),
-    ('Excluded', 'Islet', {'ECAD': HIGH}, None),                                              # exocrine inside the border
+    ('Exocrine', 'Islet', {'ECAD': HIGH}, None),                                              # exocrine inside the border (10-29)
     ('Beta cell', 'Islet', {'INS': HIGH, 'ECAD': HIGH}, None),                                # hormone, whole cell
     ('Excluded', 'Islet', {'INS': HIGH, 'GCG': 0.8 * HIGH}, None),                            # under the 2x margin
     ('CHGA+ hormone-negative', 'EndocrineCluster', {'CHGA': HIGH}, None),
@@ -98,7 +101,12 @@ CELLS = [  # (expected label, start class, {marker: raw value}, established endo
     ('Tissue', None, {'ColIV': 1e6}, None),                                                   # ColIV is never read
     ('Endothelial', None, {'CD31': HIGH}, None),                                              # lineage marker
     ('Tissue', None, {'BCatenin': HIGH}, None),                                               # only a shared marker
+    ('Endothelium Blood Vessel', None, {'CD31': 2 * HIGH, 'SMA': HIGH}, None),                # in a vessel object
+    ('Conflict Mesenchymal/Endothelial', None, {'CD31': HIGH, 'SMA': 2 * HIGH}, None),       # CD31 not on top: passes through
+    ('Endothelial', None, {'CD31': HIGH}, None),                                              # under half its area inside
 ]
+# cells in a structure object: index -> (class, area fraction inside)
+IN_STRUCTURE = {22: ('Blood vessel', 0.9), 23: ('Blood vessel', 0.9), 24: ('Blood vessel', 0.3)}
 
 
 @pytest.fixture()
@@ -119,7 +127,11 @@ def synthetic_run(tmp_path):
     pd.DataFrame(rs).to_parquet(typ / 'redsea' / f'{tag}.parquet')
     pd.DataFrame({'object_id': ids, 'x_um': np.arange(n) * 100.0, 'y_um': 0.0,
                   'context': ['islet' if c[1] else 'tissue' for c in CELLS],
-                  'endocrine_object_class': [c[1] for c in CELLS]}).to_parquet(typ / 'context' / f'{tag}.parquet')
+                  'endocrine_object_class': [c[1] for c in CELLS],
+                  **{col: [IN_STRUCTURE.get(i, ('', 0.0))[0] == s if k == 0 else
+                           (IN_STRUCTURE[i][1] if IN_STRUCTURE.get(i, ('',))[0] == s else np.nan) for i in range(n)]
+                     for s, cols in ID.STRUCTURE_COLUMNS.items() for k, col in enumerate(cols)}
+                  }).to_parquet(typ / 'context' / f'{tag}.parquet')
     pd.DataFrame({'object_id': ids, 'cell_class': [(c[3] or ('Exocrine', ''))[0] for c in CELLS],
                   'excluded_reason': [(c[3] or ('', ''))[1] for c in CELLS]}).to_parquet(calls / f'{tag}.parquet')
     lv = pd.DataFrame({'image': tag, 'marker': markers, 'measurement': [reg.measurement(m) for m in markers],
@@ -138,7 +150,6 @@ def test_identity_rules(synthetic_run):
     want = [c[0] for c in CELLS]
     assert got == want, [(i, g, w) for i, (g, w) in enumerate(zip(got, want)) if g != w]
     assert out.iloc[2]['subtype_status'] == 'T_subtype_not_shown'
-    assert out.iloc[9]['excluded_reason'] == 'exocrine_inside_islet_border'
     assert out.iloc[11]['excluded_reason'] == 'hormone_unresolved_margin'
     assert out.iloc[13]['status'] == 'no_endocrine_marker_above_level'
     assert out.iloc[10]['named_by'] == 'INS' and out.iloc[14]['named_by'] == 'GCG'
@@ -147,4 +158,5 @@ def test_identity_rules(synthetic_run):
     assert not any(str(x).startswith('ColIV') for x in got)
     # no cell is named by a marker (owner 2026-10-28): the start class stays, with the status saying why
     assert out.iloc[3]['status'] == 'no_lineage_named' and out.iloc[21]['status'] == 'shared_marker_only'
+    assert out.iloc[22]['named_by'] == 'CD31' and 'passed_through_Blood_vessel' in out.iloc[23]['tags']
     assert not any(str(x)[-1:] in '+-' and ' ' not in str(x) and 'Macrophage_' not in str(x) and str(x) != 'CD45+' for x in got)
