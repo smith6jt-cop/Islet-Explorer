@@ -2,6 +2,7 @@
  * args[0]: config JSON. modes apply (remove/save if nonempty) and verify (fresh reload, read-only).
  */
 import com.google.gson.Gson
+import qupath.lib.gui.measure.ObservableMeasurementTableData
 
 def cfg = new Gson().fromJson(new File(args[0]).getText('UTF-8'), Map)
 def helper = evaluate(new File(cfg.helper))
@@ -27,6 +28,15 @@ if (cfg.mode == 'apply') {
     details = helper.verify(hierarchy, before, rejected)
     details.saved = false
 } else throw new IllegalArgumentException('Expected apply or verify mode')
+// Match saveAnnotationMeasurements exactly. QuPath's exported dynamic count uses
+// spatial membership, which may differ from preserved parent/ancestor membership.
+def annotationTable = new ObservableMeasurementTableData()
+annotationTable.setImageData(getCurrentImageData(), hierarchy.getAnnotationObjects())
+details.annotation_export_detection_counts = new TreeMap()
+hierarchy.getAnnotationObjects().each { annotation ->
+    details.annotation_export_detection_counts[annotation.getID().toString()] =
+        annotationTable.getNumericValue(annotation, 'Num Detections')
+}
 details.mode = cfg.mode
 details.image = getProjectEntry().getImageName()
 details.ok = true

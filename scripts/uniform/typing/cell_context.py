@@ -77,6 +77,21 @@ def import_structures(out: Path, rows: list[dict]) -> dict:
     record = {}
     for r in rows:
         case, tag = r['case_id'], r['image_name']
+        if (out / 'filter/generation.json').is_file():
+            # This generation reuses masks with certified unchanged inference inputs.
+            # Never relabel those masks as an inherited baseline export or silently copy one.
+            sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+            import new_detection_filter as NF
+            reuse = NF.structure_reuse_current(out, tag)
+            if reuse is None:
+                raise ValueError(f'{tag}: filtered generation lacks a current structure-reuse certificate')
+            record[tag] = {cls: {'source': reuse['certificate'],
+                                'reuse_certificate_sha256': reuse['certificate_sha256'],
+                                'sha256': item['sha256'], 'raw_source': item['source']}
+                           for cls, item in reuse['outputs'].items()}
+            if set(record[tag]) != set(CT.OBJECT_CLASS[name] for name in CT.STRUCTURES):
+                raise ValueError(f'{tag}: incomplete certified structure inventory')
+            continue
         audit = json.loads((STRUCTURAL / f'{case}.json').read_text())['masks']
         record[tag] = {}
         for name in CT.STRUCTURES:

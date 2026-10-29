@@ -276,7 +276,11 @@ def verify_annotations(source: Path, stage: Path, tag: str, rejected: set[str], 
         old = pd.to_numeric(src['Num Detections']); new = pd.to_numeric(dst.loc[src.index, 'Num Detections'])
         if ((old-new) < 0).any() or ((old-new) > len(rejected)).any():
             raise ValueError('Dynamic annotation detection counts changed inconsistently')
-        expected=native['annotation_detection_counts']
+        # Parent ancestry is separately fingerprinted. QuPath's exported dynamic
+        # count follows its measurement table's spatial-membership semantics.
+        expected=native['annotation_export_detection_counts']
+        if set(expected) != set(new.index):
+            raise ValueError('Native annotation export-count inventory differs')
         if any(float(new.loc[oid]) != expected[oid] for oid in new.index):
             raise ValueError('Annotation export dynamic counts differ from reloaded native hierarchy')
 

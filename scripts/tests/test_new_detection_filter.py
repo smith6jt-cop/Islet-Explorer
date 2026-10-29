@@ -62,7 +62,8 @@ def fake_native(stage,tag,original,raw_new,excluded):
     area=stage/'filter'/tag
     count=len(original|raw_new)-len(excluded)
     result={'ok':True,'retained_full_signatures_match':True,'annotation_full_signatures_match':True,
-            'excluded_cells':len(excluded),'retained_cells':count,'annotation_detection_counts':{'tissue':count}}
+            'excluded_cells':len(excluded),'retained_cells':count,'annotation_detection_counts':{'tissue':count},
+            'annotation_export_detection_counts':{'tissue':count}}
     write(area/'native_before.json',{'fixture':'full native behavior independently exercised below'})
     write(area/'native_apply.json',result);write(area/'native_verify.json',result)
     if excluded:
@@ -106,6 +107,19 @@ def test_noop_is_byte_identical_and_readiness_rejects_changed_output(raw,monkeyp
         assert F.sha(Path(result['source_seal']['files'][key]['path']))==result['outputs'][key]['sha256']
     (out/'cell_geojson/image.geojson').write_text('{}')
     with pytest.raises(ValueError,match='filtered output changed'):F.accepted_inputs(out,'image')
+
+
+def test_annotation_export_counts_follow_spatial_measurements_not_ancestry(raw,monkeypatch):
+    source,out,path=raw
+    def spatial_native(*args):
+        report=fake_native(*args)
+        report['annotation_detection_counts']['tissue']=0
+        return report
+    monkeypatch.setattr(F,'run_native',spatial_native)
+    F.process(source,out,path,'image')
+    report={'annotation_detection_counts':{'tissue':0},'annotation_export_detection_counts':{'tissue':1}}
+    with pytest.raises(ValueError,match='dynamic counts differ'):
+        F.verify_annotations(source,out,'image',{'reject','defer'},report)
 
 
 def test_failed_native_attempt_never_releases_and_retry_uses_raw_source(raw,monkeypatch):
@@ -193,18 +207,21 @@ islet.setName('Islet_1');islet.getMeasurementList().put('Whole cells',7)
 def old=PathObjects.createCellObject(rect(1,1,5,5),rect(2,2,2,2),null,null)
 def keep=PathObjects.createCellObject(rect(10,10,5,5),rect(11,11,2,2),null,null)
 def removed=PathObjects.createCellObject(rect(20,20,5,5),rect(21,21,2,2),null,null)
+def rootCell=PathObjects.createCellObject(rect(70,70,5,5),rect(71,71,2,2),null,null)
 old.getMeasurementList().put('Cell: DAPI: Mean',12.25)
 old.getMeasurementList().put('Signed distance to annotation with Islet µm',-3.0)
 old.getMetadata().put('raw','preserve');old.setColor(0xFF00FF)
 h.addObject(t);t.addChildObject(islet);islet.addChildObjects([old,keep,removed])
+h.getRootObject().addChildObject(rootCell)
 def ids={objects -> objects.collect{it.getID().toString()} as Set}
-def originals=ids([old]), rawNew=ids([keep,removed]), excluded=ids([removed])
+def originals=ids([old,rootCell]), rawNew=ids([keep,removed]), excluded=ids([removed])
 boolean caught=false
 try {helper.remove(h,originals,rawNew,originals)} catch(IllegalStateException e) {caught=true}
 assert caught
 def before=helper.remove(h,originals,rawNew,excluded)
-assert h.getDetectionObjects().size()==2
+assert h.getDetectionObjects().size()==3
 assert helper.verify(h,before,excluded).annotation_detection_counts[islet.getID().toString()]==2
+assert helper.verify(h,before,excluded).annotation_detection_counts[t.getID().toString()]==2
 old.getMeasurementList().put('Signed distance to annotation with Islet µm',-4.0)
 caught=false
 try {helper.verify(h,before,excluded)} catch(IllegalStateException e){caught=true}
@@ -219,7 +236,7 @@ def server=new WrappedBufferedImageServer('fixture',new BufferedImage(100,100,Bu
 def imageData=new ImageData(server,h,ImageData.ImageType.FLUORESCENCE)
 def saved=new File(args[2]);PathIO.writeImageData(saved,imageData)
 def reloaded=PathIO.readImageData(saved,server)
-assert helper.verify(reloaded.getHierarchy(),before,excluded).retained_cells==2
+assert helper.verify(reloaded.getHierarchy(),before,excluded).retained_cells==3
 assert reloaded.getHierarchy().getAnnotationObjects().find{it.getName()=='Islet_1'}.getMeasurementList().get('Whole cells')==7
 // Exercise the actual apply and verify script using a fresh independent ImageData and a native save.
 def reportDir=new File(args[3]);reportDir.mkdirs()
@@ -233,12 +250,21 @@ def local=new Binding([args:[config.getPath()] as String[],getCurrentHierarchy:{
  getCurrentImageData:{->reloaded},getProjectEntry:{->entry},saveAnnotationMeasurements:{String path->new File(path).text='export invoked'}])
 new GroovyShell(local).evaluate(new File(args[1]))
 assert new File(cfg.annotation_output).text=='export invoked'
+def applied=new Gson().fromJson(new File(cfg.report).text,Map)
+assert applied.annotation_detection_counts[t.getID().toString()]==1
+assert applied.annotation_export_detection_counts[t.getID().toString()]==2
+assert applied.annotation_export_detection_counts[islet.getID().toString()]==1
 def finalData=PathIO.readImageData(destination,server)
 cfg.mode='verify';cfg.report=new File(reportDir,'verify.json').getPath();config.text=new Gson().toJson(cfg)
 local.setVariable('getCurrentHierarchy',{->finalData.getHierarchy()});local.setVariable('getCurrentImageData',{->finalData})
 new GroovyShell(local).evaluate(new File(args[1]))
-assert finalData.getHierarchy().getDetectionObjects().size()==1
-assert new Gson().fromJson(new File(cfg.report).text,Map).ok
+assert finalData.getHierarchy().getDetectionObjects().size()==2
+def verified=new Gson().fromJson(new File(cfg.report).text,Map)
+assert verified.ok
+assert verified.annotation_detection_counts[t.getID().toString()]==1
+assert verified.annotation_export_detection_counts[t.getID().toString()]==2
+assert verified.annotation_export_detection_counts==applied.annotation_export_detection_counts
+assert finalData.getHierarchy().getDetectionObjects().find{it.getID()==rootCell.getID()}.getParent().isRootObject()
 println('native retained raw/geometry/parent/annotation signatures survive deletion and reload')
 ''')
     command=[str(F.QUPATH),'script','-a',str(F.HELPER),'-a',str(F.SCRIPT),'-a',str(tmp_path/'saved.qpdata'),'-a',str(tmp_path/'reports'),str(fixture)]
