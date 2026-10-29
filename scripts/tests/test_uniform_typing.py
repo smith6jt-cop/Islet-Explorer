@@ -69,11 +69,16 @@ def test_no_module_of_the_chain_names_a_marker():
 
 # -- the canary status (Xenium notebook 02 cell 22, margin between groups) ------------------------------------------------
 def test_group_status():
-    det = np.array([[0, 0, 0], [1, 0, 0], [1, 1, 0], [1, 1, 0], [1, 1, 1]], bool)
-    depth = np.array([[0, 0, 0], [2, 0, 0], [3, 1, 0], [2, 1, 0], [3, 1, 1]])
-    status, top, runner, td, rd, ng = ID.group_status(det, depth, np.zeros(det.shape), 2, 2)
-    assert list(status) == ['none', 'single', 'resolved', 'lineage_ambiguous', 'doublet_suspected']
-    assert list(ng) == [0, 1, 2, 2, 3] and top[2] == 0 and runner[2] == 1
+    det = np.array([[0, 0, 0], [1, 0, 0], [1, 1, 0], [1, 1, 0], [1, 1, 1], [1, 1, 0], [1, 1, 0], [1, 1, 0]], bool)
+    depth = np.array([[0, 0, 0], [2, 0, 0], [3, 1, 0], [2, 2, 0], [3, 1, 1], [2, 2, 0], [2, 2, 0], [1, 1, 0]])
+    # equal depth: the group both brighter and covering more of the cell is placed (owner 2026-10-29)
+    bright = np.array([[0, 0, 0]] * 5 + [[1, 2, 0], [2, 1, 0], [1, 2, 0]], float)
+    cover = np.array([[0, 0, 0]] * 5 + [[.2, .9, 0], [.2, .9, 0], [.2, .9, 0]], float)
+    status, top, runner, td, rd, ng, settled = ID.group_status(det, depth, np.zeros(det.shape), 1, 2, bright, cover)
+    assert list(status) == ['none', 'single', 'resolved', 'lineage_ambiguous', 'doublet_suspected', 'resolved',
+                            'lineage_ambiguous', 'lineage_ambiguous']   # brighter and covers more / split / under depth 2
+    assert list(ng) == [0, 1, 2, 2, 3, 2, 2, 2] and top[2] == 0 and runner[2] == 1
+    assert top[5] == 1 and runner[5] == 0 and list(settled) == [False] * 5 + [True, False, False]
 
 
 # -- identity on a synthetic image --------------------------------------------------------------------------------------
@@ -106,7 +111,11 @@ CELLS = [  # (expected label, start class, {marker: raw value}, established endo
     ('Endothelial', None, {'CD31': HIGH}, None),                                              # under half its area inside
     ('Islet', 'Islet', {'INS': HIGH, 'GCG': HIGH}, None),                                     # exact tie: no subtype
     ('CD8a Tcell', None, {'CD3e': HIGH, 'CD45': HIGH, 'CD8a': HIGH, 'CD163': HIGH}, None),     # T leads Myeloid by one
+    ('T cell', None, {'CD3e': 2 * HIGH, 'CD45': HIGH, 'CD163': HIGH}, None),                  # tie: brighter, covers more
+    ('Conflict T/Myeloid', None, {'CD3e': 2 * HIGH, 'CD45': HIGH, 'CD163': HIGH}, None),      # tie: brighter, covers less
 ]
+# area coverage (area_coverage.py): a positive marker covers 0.8 of the cell unless given here; index -> {marker: coverage}
+COVERAGE = {27: {'CD3e': 0.9, 'CD163': 0.2}, 28: {'CD3e': 0.2, 'CD163': 0.9}}
 # cells in a structure object: index -> (class, area fraction inside)
 IN_STRUCTURE = {22: ('Blood vessel', 0.9), 23: ('Blood vessel', 0.9), 24: ('Blood vessel', 0.3)}
 
@@ -127,6 +136,11 @@ def synthetic_run(tmp_path):
         for meas in RG.COMPARTMENT_COLUMN:
             rs[reg.column(m, meas)] = [cell[2].get(m, 0.0) for cell in CELLS]
     pd.DataFrame(rs).to_parquet(typ / 'redsea' / f'{tag}.parquet')
+    (typ / 'coverage').mkdir()
+    pd.DataFrame({'object_id': ids, **{ID.COV_PREFIX + m: [COVERAGE.get(i, {}).get(m, 0.8 if c[2].get(m, 0.0) > LEVEL_RAW
+                                                                                    else 0.0)
+                                                           for i, c in enumerate(CELLS)] for m in reg.table.index}}
+                 ).to_parquet(typ / 'coverage' / f'{tag}.parquet')
     pd.DataFrame({'object_id': ids, 'x_um': np.arange(n) * 100.0, 'y_um': 0.0,
                   'context': ['islet' if c[1] else 'tissue' for c in CELLS],
                   'endocrine_object_class': [c[1] for c in CELLS],
