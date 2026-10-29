@@ -4,6 +4,8 @@ chain names a marker in code (owner 2026-10-28: marker roles are data, panel- an
 from __future__ import annotations
 
 import ast
+import importlib.util
+import json
 import sys
 from pathlib import Path
 
@@ -16,6 +18,7 @@ sys.path.insert(0, str(TYPING))
 import registry as RG  # noqa: E402
 import identity as ID  # noqa: E402
 import levels as LV  # noqa: E402
+import area_coverage as AC  # noqa: E402
 
 CHAIN = ('registry.py', 'levels.py', 'canary.py', 'identity.py', 'acceptance_checks.py')
 
@@ -74,11 +77,22 @@ def test_group_status():
     # equal depth: the group both brighter and covering more of the cell is placed (owner 2026-10-29)
     bright = np.array([[0, 0, 0]] * 5 + [[1, 2, 0], [2, 1, 0], [1, 2, 0]], float)
     cover = np.array([[0, 0, 0]] * 5 + [[.2, .9, 0], [.2, .9, 0], [.2, .9, 0]], float)
-    status, top, runner, td, rd, ng, settled = ID.group_status(det, depth, np.zeros(det.shape), 1, 2, bright, cover)
+    status, top, runner, td, rd, ng, settled = ID.group_status(det, depth, np.zeros(det.shape), 1, 2, bright, cover, 0.15)
     assert list(status) == ['none', 'single', 'resolved', 'lineage_ambiguous', 'doublet_suspected', 'resolved',
                             'lineage_ambiguous', 'lineage_ambiguous']   # brighter and covers more / split / under depth 2
     assert list(ng) == [0, 1, 2, 2, 3, 2, 2, 2] and top[2] == 0 and runner[2] == 1
     assert top[5] == 1 and runner[5] == 0 and list(settled) == [False] * 5 + [True, False, False]
+
+
+@pytest.mark.parametrize('lead,brighter,has_interior,expected', [
+    (0.149999, True, True, False), (0.15, True, True, True), (0.150001, True, True, True),
+    (0.20, False, True, False), (0.20, True, False, False)])
+def test_interior_tie_boundary_and_required_evidence(lead, brighter, has_interior, expected):
+    bright = np.array([[2., 1.]]) if brighter else np.array([[1., 2.]])
+    result = ID.group_status(np.ones((1, 2), bool), np.full((1, 2), 2), np.zeros((1, 2)), 1, 2,
+                             bright, np.array([[0.20 + lead, 0.20]]), 0.15, np.array([has_interior]))
+    assert bool(result[-1][0]) is expected
+    assert result[0][0] == ('resolved' if expected else 'lineage_ambiguous')
 
 
 # -- identity on a synthetic image --------------------------------------------------------------------------------------
@@ -138,10 +152,11 @@ def synthetic_run(tmp_path):
             rs[reg.column(m, meas)] = [cell[2].get(m, 0.0) for cell in CELLS]
     pd.DataFrame(rs).to_parquet(typ / 'redsea' / f'{tag}.parquet')
     (typ / 'coverage').mkdir()
-    pd.DataFrame({'object_id': ids, **{ID.COV_PREFIX + m: [COVERAGE.get(i, {}).get(m, 0.8 if c[2].get(m, 0.0) > LEVEL_RAW
-                                                                                    else 0.0)
-                                                           for i, c in enumerate(CELLS)] for m in reg.table.index}}
-                 ).to_parquet(typ / 'coverage' / f'{tag}.parquet')
+    cover = {m: [COVERAGE.get(i, {}).get(m, 0.8 if c[2].get(m, 0.0) > LEVEL_RAW else 0.0) for i, c in enumerate(CELLS)]
+             for m in reg.table.index}
+    coverage = pd.DataFrame({'object_id': ids, AC.INTERIOR_COUNT: 10,
+                            **{ID.COV_PREFIX + m: v for m, v in cover.items()},
+                            **{ID.COV_INTERIOR_PREFIX + m: v for m, v in cover.items()}})
     pd.DataFrame({'object_id': ids, 'x_um': np.arange(n) * 100.0, 'y_um': 0.0,
                   'context': ['islet' if c[1] else 'tissue' for c in CELLS],
                   'endocrine_object_class': [c[1] for c in CELLS],
@@ -157,6 +172,17 @@ def synthetic_run(tmp_path):
     pd.DataFrame({'marker': markers, 'decision': 'use'}).to_csv(typ / 'levels_selection.csv', index=False)
     lv.assign(canary_log=np.log1p(CANARY_RAW))[['image', 'marker', 'canary_log']].to_csv(
         typ / 'canary_levels.csv', index=False)
+    # Tiny provenance sources; identity tests do not render pixels from this synthetic image.
+    image = tmp_path / 'image.tiff'
+    image.write_bytes(b'synthetic-image')
+    (tmp_path / 'project_manifest.json').write_text(json.dumps({'entries': [
+        {'image_name': tag, 'entry_id': 1, 'image_path': str(image)}]}))
+    server = tmp_path / 'qupath' / 'data' / '1'
+    server.mkdir(parents=True)
+    (server / 'server.json').write_text(json.dumps({'metadata': {'channels': [{'name': m} for m in markers]}}))
+    (tmp_path / 'cell_geojson').mkdir()
+    (tmp_path / 'cell_geojson' / f'{tag}.geojson').write_text('{}')
+    AC.write_coverage(tmp_path, tag, coverage)
     return tmp_path, tag
 
 
@@ -177,3 +203,113 @@ def test_identity_rules(synthetic_run):
     assert out.iloc[3]['status'] == 'no_lineage_named' and out.iloc[21]['status'] == 'shared_marker_only'
     assert out.iloc[22]['named_by'] == 'CD31' and 'passed_through_Blood_vessel' in out.iloc[23]['tags']
     assert not any(str(x)[-1:] in '+-' and ' ' not in str(x) and 'Macrophage_' not in str(x) for x in got)
+
+
+@pytest.mark.parametrize('damage', ['missing_column', 'missing_id', 'extra_id', 'duplicate_id'])
+def test_coverage_rejects_incomplete_or_nonunique_data(synthetic_run, damage):
+    run, tag = synthetic_run
+    frame = pd.read_parquet(run / 'typing' / 'coverage' / f'{tag}.parquet')
+    ids = frame['object_id'].copy()
+    markers = ID.used_markers(run, RG.load())
+    if damage == 'missing_column':
+        frame = frame.drop(columns=[AC.INTERIOR_PREFIX + markers[0]])
+    elif damage == 'missing_id':
+        frame = frame.iloc[1:]
+    elif damage == 'extra_id':
+        frame.loc[0, 'object_id'] = 'not-a-source-cell'
+    else:
+        frame.loc[0, 'object_id'] = frame.loc[1, 'object_id']
+    with pytest.raises(ValueError, match='missing columns|object IDs'):
+        AC.validate_frame(frame, ids, markers, tag)
+
+
+@pytest.mark.parametrize('source', ['levels', 'geometry', 'image', 'provenance', 'parquet'])
+def test_identity_rejects_missing_or_stale_coverage(synthetic_run, source):
+    run, tag = synthetic_run
+    if source == 'levels':
+        path = run / 'typing' / 'levels.csv'
+        frame = pd.read_csv(path)
+        frame.loc[0, 'level_log'] += 0.1
+        frame.to_csv(path, index=False)
+    elif source == 'geometry':
+        (run / 'cell_geojson' / f'{tag}.geojson').write_text('{"changed":true}')
+    elif source == 'image':
+        (run / 'image.tiff').write_bytes(b'changed-source-image')
+    elif source == 'provenance':
+        (run / 'typing' / 'coverage' / f'{tag}.json').unlink()
+    else:
+        path = run / 'typing' / 'coverage' / f'{tag}.parquet'
+        frame = pd.read_parquet(path)
+        frame.loc[0, AC.INTERIOR_COUNT] = 11
+        frame.to_parquet(path, index=False)
+    with pytest.raises(ValueError, match='stale coverage|provenance'):
+        ID.classify_image(run, tag)
+
+
+def test_no_interior_is_explicit_and_cannot_settle_identity_tie(synthetic_run):
+    run, tag = synthetic_run
+    path = run / 'typing' / 'coverage' / f'{tag}.parquet'
+    frame = pd.read_parquet(path)
+    before, _ = ID.classify_image(run, tag)
+    resolved = before['tags'].str.contains('tie_brightness_coverage')
+    assert resolved.any()
+    frame.loc[resolved, AC.INTERIOR_COUNT] = 0
+    frame.loc[resolved, frame.columns.str.startswith(AC.INTERIOR_PREFIX)] = np.nan
+    AC.write_coverage(run, tag, frame)
+    after, audit = ID.classify_image(run, tag)
+    assert not after.loc[resolved, 'tags'].str.contains('tie_brightness_coverage').any()
+    assert (after.loc[resolved, AC.INTERIOR_COUNT] == 0).all()
+    assert audit['cells_without_interior'] == int(resolved.sum())
+
+
+def test_coverage_reorders_by_exact_ids(synthetic_run):
+    run, tag = synthetic_run
+    frame = pd.read_parquet(run / 'typing' / 'coverage' / f'{tag}.parquet')
+    AC.write_coverage(run, tag, frame.iloc[::-1])
+    out, _ = ID.classify_image(run, tag)
+    assert out['label'].tolist() == [c[0] for c in CELLS]
+
+
+@pytest.fixture()
+def accuracy_tiles():
+    path = TYPING.parents[1] / 'research' / 'typing_accuracy_tiles_20261029.py'
+    spec = importlib.util.spec_from_file_location('accuracy_tiles_test', path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_fresh_review_is_seeded_nonoverlapping_and_unique(accuracy_tiles, tmp_path):
+    candidates = pd.DataFrame({'image': 'SYN', 'object_id': [f'c{i}' for i in range(60)],
+                               'group': 'compartment_tie', 'pair': 'a over b'})
+    # A cell can qualify for both a compartment and a lineage review; show it only once.
+    candidates = pd.concat([candidates, candidates.assign(group='lineage_tie')], ignore_index=True)
+    previous = tmp_path / 'old.csv'
+    candidates.iloc[:10].to_csv(previous, index=False)
+    fresh = accuracy_tiles.exclude_reviewed(candidates, [previous])
+    first = accuracy_tiles.sample(fresh, seed=19)
+    repeat = accuracy_tiles.sample(fresh, seed=19)
+    assert first.equals(repeat)
+    assert not first.duplicated(['image', 'object_id']).any()
+    assert not set(first['object_id']) & set(candidates.iloc[:10]['object_id'])
+    assert set(first['object_id']) != set(accuracy_tiles.sample(fresh, seed=20)['object_id'])
+
+
+def test_blinded_review_hides_calls_and_keeps_separate_key(accuracy_tiles, tmp_path, monkeypatch):
+    text = []
+    class CaptureDraw:
+        def text(self, position, value, **kwargs):
+            text.append(value)
+    monkeypatch.setattr(accuracy_tiles.ImageDraw, 'Draw', lambda image: CaptureDraw())
+    record = {k: 'secret-value' for k in ('group', 'pair', 'image', 'object_id', 'label', 'status', 'tags',
+                                         'compartment', 'runner_up_compartment', 'lineage')}
+    record.update({'review_id': 'R0001', 'blind_color_swap': True, 'green': 'A', 'magenta': 'B',
+                   'panel_names': ['composite', 'A', 'B', 'DAPI'],
+                   'tiles': [np.zeros((16, 16, 3), np.uint8) for _ in range(4)], 'markers': {}})
+    accuracy_tiles.sheets([record], tmp_path, blind=True)
+    reviewer = pd.read_csv(tmp_path / 'blinded' / 'manifest.csv')
+    key = pd.read_csv(tmp_path / 'key' / 'manifest.csv')
+    assert set(reviewer.columns) == {'sheet', 'row', 'review_id', 'green', 'magenta', 'verdict', 'notes'}
+    assert key.loc[0, 'label'] == 'secret-value'
+    assert all('secret-value' not in label and 'call:' not in label for label in text)
+    assert (tmp_path / 'blinded' / 'review_01.png').exists()

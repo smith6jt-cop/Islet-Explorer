@@ -61,6 +61,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import registry as RG  # noqa: E402
+import area_coverage as AC  # noqa: E402
 
 STATUSES = ('none', 'single', 'resolved', 'lineage_ambiguous', 'doublet_suspected')
 # the established endocrine typing: the run's typing state before the final run (v17's calls, never assembled; its
@@ -71,6 +72,7 @@ ESTABLISHED_REASON_PREFIX = 'endocrine_single_'
 MARGIN_REASONS = ('hormone_unresolved_margin', 'endocrine_single_hormone_margin_below_2x')
 PLACED = ('single', 'resolved')
 COV_PREFIX = 'cov__'        # area_coverage.py
+COV_INTERIOR_PREFIX = 'covint__'    # area_coverage.py, the cell's interior
 # the cell context's columns for each structure class (cell_context.py): centroid in an object, area fraction inside
 STRUCTURE_COLUMNS = {'Blood vessel': ('in_Blood vessel', 'crossed_frac_vessel'), 'Nerve': ('in_Nerve', 'crossed_frac_nerve'),
                      'Lymphatic': ('in_Lymphatic', 'crossed_frac_lymphatic')}
@@ -131,11 +133,13 @@ def label_row(plan: dict, compartment: str, lineage: str) -> dict:
 
 # -- canary status (Xenium cell 22) --------------------------------------------------------------------------------------
 def group_status(detected: np.ndarray, depth: np.ndarray, score: np.ndarray, margin: float, min_depth: float,
-                 bright: np.ndarray, cover: np.ndarray):
+                 bright: np.ndarray, cover: np.ndarray, lead: float = 0.0,
+                 interior_valid: np.ndarray | None = None):
     """Per row: status, top group, runner-up group, their depths, the number of groups detected, and whether a tie in
-    depth was settled. Two groups of equal depth (at least min_depth): the group whose detecting markers are both
-    brighter (mean fold over level) and cover more of the cell (mean area coverage, area_coverage.py) is placed, resolved;
-    otherwise the cell stays lineage_ambiguous (owner 2026-10-29: "both are brighter and cover more cell area")."""
+    depth was settled. Two groups of equal depth (at least min_depth): the group whose detecting markers are brighter
+    (mean fold over level) and cover at least `lead` more of the cell's interior (mean interior coverage,
+    area_coverage.py) is placed, resolved; otherwise the cell stays lineage_ambiguous (owner 2026-10-29: "both are
+    brighter and cover more cell area"; later the same day "Interior coverage, clear lead", CANARY_TIE_INTERIOR_LEAD)."""
     n = len(detected)
     rows = np.arange(n)
     ng = detected.sum(axis=1)
@@ -147,9 +151,12 @@ def group_status(detected: np.ndarray, depth: np.ndarray, score: np.ndarray, mar
     td = np.where(ng > 0, depth[rows, top], 0)
     rd = np.where(ng > 1, depth[rows, runner], 0)
     tie = (ng == 2) & (td == rd) & (td >= min_depth)
+    if interior_valid is not None:
+        tie &= interior_valid
     b_top, b_run, c_top, c_run = bright[rows, top], bright[rows, runner], cover[rows, top], cover[rows, runner]
-    keep = tie & (b_top > b_run) & (c_top > c_run)
-    swap = tie & (b_run > b_top) & (c_run > c_top)
+    # A subtraction such as 0.35 - 0.20 can round just below an exact 0.15 lead.
+    keep = tie & (b_top > b_run) & (c_top - c_run + 1e-12 >= lead) & (c_top > c_run)
+    swap = tie & (b_run > b_top) & (c_run - c_top + 1e-12 >= lead) & (c_run > c_top)
     top, runner = np.where(swap, runner, top), np.where(swap, top, runner)
     settled = keep | swap
     status = np.select([ng == 0, ng == 1, ng >= 3, ((td - rd >= margin) & (td >= min_depth)) | settled],
@@ -172,12 +179,12 @@ def groups_matrix(X: np.ndarray, F: np.ndarray, COV: np.ndarray, detect: list[li
     return det, dep, sc, mean_positive(F), mean_positive(COV)
 
 
-def placed(P, C, F, COV, detect, count, margin, min_depth):
+def placed(P, C, F, COV, detect, count, margin, min_depth, lead=0.0, interior_valid=None):
     """Canary status, and the group a cell is placed in: by the canary level, else (status none) by plain positivity."""
     det, dep, sc, br, cv = groups_matrix(C, F, COV, detect, count)
-    status, top, runner, td, rd, ng, settled = group_status(det, dep, sc, margin, min_depth, br, cv)
+    status, top, runner, td, rd, ng, settled = group_status(det, dep, sc, margin, min_depth, br, cv, lead, interior_valid)
     detp, depp, scp, brp, cvp = groups_matrix(P, F, COV, detect, count)
-    statusp, topp, _, _, _, ngp, settledp = group_status(detp, depp, scp, margin, min_depth, brp, cvp)
+    statusp, topp, _, _, _, ngp, settledp = group_status(detp, depp, scp, margin, min_depth, brp, cvp, lead, interior_valid)
     group = np.where(ng > 0, top, np.where(ngp > 0, topp, -1))
     basis = np.where(ng > 0, 'canary', np.where(ngp > 0, 'plain', '')).astype(object)
     # a cell placed below the canary level keeps its plain-level conflict visible (review 2026-10-28)
@@ -242,10 +249,12 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED) -> tu
     Lc = np.maximum(cl.loc[markers, 'canary_log'].to_numpy(float), L)
     P, C, F = V > L, V > Lc, V - L
     # area coverage (area_coverage.py): proportion of the cell's pixels at or above the level, per marker
-    cov = pd.read_parquet(run / 'typing' / 'coverage' / f'{tag}.parquet')
-    cov = d[['object_id']].merge(cov, on='object_id', how='left', validate='one_to_one')
-    COV = np.column_stack([np.nan_to_num(cov[COV_PREFIX + m].to_numpy(float), nan=0.0) if COV_PREFIX + m in cov
-                           else np.zeros(n) for m in markers])
+    cov = AC.read_validated(run, tag, d['object_id'], markers)
+    # the tie rule reads the interior coverage (owner 2026-10-29, "Interior coverage, clear lead")
+    COV = cov[[COV_INTERIOR_PREFIX + m for m in markers]].to_numpy(float)
+    interior_count = cov[AC.INTERIOR_COUNT].to_numpy(np.int64)
+    interior_valid = interior_count > 0
+    lead = reg.const('CANARY_TIE_INTERIOR_LEAD')
     # the typing scale the hormone margin is read on (Senior islet_identity: top >= REFERENCE_MARGIN x runner-up on
     # scaled hormones), per image: (x - level) / (p99.9 - level), floored at 0 and not clipped above. Owner 2026-10-29:
     # ND_6232 ddb348e9 (GCG 2,054 / SST 118) was excluded when the folds over the levels were compared, because SST's
@@ -269,7 +278,7 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED) -> tu
     comps = plan['compartments']
     detect = [[ix[m] for m in plan['comp'][c]['defining']] for c in comps]
     count = [[ix[m] for m in plan['comp'][c]['defining'] + plan['comp'][c]['carried']] for c in comps]
-    cp = placed(P, C, F, COV, detect, count, margin, min_depth)
+    cp = placed(P, C, F, COV, detect, count, margin, min_depth, lead, interior_valid)
     compartment = np.where(cp['group'] >= 0, np.asarray(comps, dtype=object)[np.maximum(cp['group'], 0)], '')
     comp_status = cp['status'].astype(object)
 
@@ -289,7 +298,8 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED) -> tu
         extra = info['pan'] + info['carried']
         det_cols = [[ix[m] for m in info['lineages'][lin]['specific']] for lin in lins]
         cnt_cols = [[ix[m] for m in dict.fromkeys(info['lineages'][lin]['members'] + extra)] for lin in lins]
-        lp = placed(P[rows], C[rows], F[rows], COV[rows], det_cols, cnt_cols, margin, min_depth)
+        lp = placed(P[rows], C[rows], F[rows], COV[rows], det_cols, cnt_cols, margin, min_depth, lead,
+                    interior_valid[rows])
         lin_settled[rows] = lp['settled']
         has = lp['group'] >= 0
         lineage[rows[has]] = np.asarray(lins, dtype=object)[lp['group'][has]]
@@ -575,6 +585,7 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED) -> tu
         'subtype_status': t_status, 'status': status, 'tags': [';'.join(t) for t in tags],
         'confirmed': confirmed, 'confirming_markers': confirming, 'established_label': established_label,
         'n_positive': P.sum(axis=1).astype(np.int16),
+        AC.INTERIOR_COUNT: interior_count,
         'n_canary': C.sum(axis=1).astype(np.int16)})
     for m in state:
         x = np.log1p(np.clip(np.nan_to_num(d[d.attrs['columns'][m]].to_numpy(float), nan=0.0), 0, None))
@@ -584,6 +595,7 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED) -> tu
         out[f'canary__{m}'] = C[:, j].astype(np.int8)
         out[f'fold__{m}'] = F[:, j].astype(np.float32)
     audit = {'image': tag, 'cells': n, 'markers': markers,
+             'cells_without_interior': int((~interior_valid).sum()),
              'label': {str(k): int(v) for k, v in out['label'].value_counts().items()},
              'compartment_status': {str(k): int(v) for k, v in out['compartment_status'].value_counts().items()},
              'lineage_status': {str(k): int(v) for k, v in out['lineage_status'].value_counts().items()},
