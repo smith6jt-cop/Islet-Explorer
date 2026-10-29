@@ -10,6 +10,22 @@ a ruling given in the Islet-Explorer-Senior project, which applies here as a pri
 Status: **in force**, **superseded** (by the ruling named), or **agent choice** (an agent's decision or an option the agent
 wrote; not the owner's words, kept or changed on evidence).
 
+## Continuation decisions — 2026-10-29 afternoon
+
+Recovered from Claude session `8ce4ae92-f09a-4a34-b446-fc296c96b58e` and confirmed by the owner's request to implement
+the continuation plan. These later decisions supersede the earlier rules on the same point.
+
+| Source | Ruling | Status |
+|---|---|---|
+| Claude transcript, 19:21 UTC | "Detect cells there (Recommended)" | in force: detect newly included Tissue only; preserve existing cells and accepted endocrine objects |
+| Claude transcript, 19:21 UTC | "Keep edge-touching structures (Recommended)" | in force: no entire Capillary/Nerve/Lymphatic component is discarded merely for touching the image edge |
+| Claude transcript, 20:01 UTC | "Content rule, all 20 (Recommended)" | in force: nuclei or stroma, holes below 1,000 µm² filled, larger empty gaps/lumens outside, preserve existing cell/endocrine footprints; supersedes filling every hole |
+| Claude transcript, 20:01 UTC | "Interior coverage, clear lead (Recommended)" | in force: two-pixel cell interior; equal-depth tie requires brighter signal and at least 0.15 more interior coverage; supersedes whole-cell coverage for settling ties |
+| Codex continuation | "All tissue collagen IV (Recommended)" | in force: acinar mesh and vessel collagen inside Tissue contribute to structural area/proportion and distance endpoints; the acinar mesh is not a negative reference. ColIV remains excluded from cell identity |
+| Codex continuation | "Implement the plan." | in force: complete geometry review, additive detection/measurement, structures, refreshed typing, new assembled candidate and full/blinded QuPath review artifacts; production remains unchanged |
+
+Implementation and evidence: `docs/typing_resume_20261029.md`, `output/typing_resume_20261029/`.
+
 ## Measurement and positivity
 
 | Date | Ruling (verbatim) | Status |
