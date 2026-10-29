@@ -73,7 +73,7 @@ def stage_steps(stage: str) -> list[RU.Step]:
                         'footer-saves', 96, 12, 240, 'v3_result', gpu=True)]
     if stage == 'measure':
         return [RU.Step('augment_measure', 'qupath', 'qupath/measure_augmented_cells.groovy', (cfg,),
-                        'footer-saves', 160, 24, 240, 'v3_result')]
+                        'footer-saves', 128, 24, 240, 'v3_result')]
     if stage == 'verify':
         return [RU.Step('augment_verify', 'qupath', 'qupath/verify_tissue_augmentation.groovy', (cfg,),
                         'never', 96, 8, 90, 'v3_result')]
@@ -263,8 +263,8 @@ def main() -> int:
     ap.add_argument('--images', nargs='+', required=True)
     ap.add_argument('--stages', nargs='+', choices=STAGES, default=list(STAGES))
     ap.add_argument('--dry-run', action='store_true')
-    ap.add_argument('--workers', type=int, choices=(1, 2), default=1,
-                    help='independent images in parallel; GPU stages remain serialized; at most two JVMs')
+    ap.add_argument('--workers', type=int, choices=(1, 2, 3), default=1,
+                    help='independent images in parallel; GPU stages remain serialized; at most three 128-GB JVMs')
     a = ap.parse_args()
     source, out, outlines = a.source_run.resolve(), a.out.resolve(), a.outlines.resolve()
     if source == out:
