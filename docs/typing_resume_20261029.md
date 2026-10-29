@@ -171,3 +171,32 @@ Task-local drivers and logs reside under `output/typing_resume_20261029/`: `laun
 `final_reconciliation.py` will check every final inventory and review hash; `blind_diagnostic_protocol/` freezes
 the six evidence-only verdicts and prediction-key separation before the fresh difficult-case sample is viewed.
 These diagnostics will not be presented as an external accuracy estimate.
+
+## Quality hold checkpoint (19:20 Eastern)
+
+The raw augmentation and established-structure generation continue. Downstream REDSEA, final Collagen IV,
+typing, metrics and assembly are held by `output/typing_resume_20261029/segmentation_quality_hold.json`.
+The first completed Aab_6505 REDSEA and Collagen IV outputs and their original review records are preserved
+as provisional evidence. No final candidate or production release has been published.
+
+A targeted Aab_6450 view found a positive-area added nucleus over a dark lumen. It was also present in the
+second pilot but was not the selected review object. Production-style normalized model replay reproduces
+the solid raw label before geometry conversion, so changing polygon hole filling would not fix it.
+Analogous unsupported predictions occur in other images. A DAPI-only model trial rejects the first ghost
+but misses a convincing bright nucleus and varies with tile context; it is unsuitable as an automatic gate.
+
+The correction will use a separate filtered generation, preserving the entire unfiltered augmentation and
+every original cell. A common native-image review policy applies to newly added positive nuclei: retain
+coherent bright or dim DAPI nuclear profiles; reject polygons supported only by dark lumen/background,
+diffuse haze or isolated noise/debris lacking a coherent nuclear profile; leave genuinely uncertain cases
+unresolved. Small size or dim brightness alone is not a rejection criterion. Zero signal above the image's
+log-DAPI Otsu threshold in the eroded interior is a review trigger only, never an automatic rejection.
+All remaining additions also receive image review. Missing-nucleus additions remain in the raw inventory
+and are excluded from analysis and spillover by existing cell QC. Decisions must identify every addition
+and pin reviewed image evidence and immutable source hashes.
+
+Filtering must preserve retained geometry, raw and signed-distance measurements, parenting and endocrine
+objects exactly; re-export dynamic annotation counts; and recompute REDSEA and Collagen IV for affected
+images. Established masks may be reused only with an explicit unchanged-input lineage certificate.
+Original augmentation checkpoints and detector ID lists will not be rewritten. Holds require separate
+hash-linked resolution records before any final downstream consumer can run.
