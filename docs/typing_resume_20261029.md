@@ -112,7 +112,7 @@ The 35 focused tissue, structure-metric and augmentation-review tests pass. Full
 fresh coverage provenance, union-area metrics and independent Collagen IV distances are implemented; completing code
 does not substitute for the remaining cohort execution and image review.
 
-## Implementation checkpoint (18:25 Eastern)
+## Implementation checkpoint (18:21 Eastern)
 
 The corrected augmentation pilot is verified and reviewed: 166,000 original cells, their 574 raw measurement
 columns and all 578 endocrine objects are preserved; 25 intact additions were accepted. None of the additions
@@ -149,3 +149,25 @@ distances are required and validated before candidate assembly.
 The three-worker augmentation, three-worker REDSEA refresh and single-worker established-structure redraw
 watchers are prepared. Derived typing, final structure review, fresh independent diagnostic samples, assembly
 and full/blinded native review projects remain required before completion.
+
+## Cohort execution checkpoint (18:25 Eastern launch)
+
+All 20 corrected-union Tissue reviews and exact preservation checks passed at 22:25:31 UTC. The authoritative
+launch record is `output/typing_resume_20261029/tissue_final_v3_acceptance.json`; one subsequent ND_6232 wording
+correction (empty footprint is a nucleus) has an archived original review and an explicit amendment linking both
+hashes. Exact Tissue totals are 287.2654 mm² before and 288.8261 mm² after, comprising 6.5644 mm² added and
+5.0038 mm² removed. These vector totals are distinct from coarse raster coverage diagnostics.
+
+The three-worker augmentation is running on the fresh v19 work root. REDSEA refresh is gated per image on actual
+whole/native augmentation review, matching review/render/input hashes and a root-recorded outlier-report checkpoint
+in `augmentation_review_release.json`. The former verification-only idle watcher was stopped before any image
+finished. Established structures use the already reviewed Tissue; their final actual image reviews are required
+before typing context/metrics. Final ColIV uses only reviewed current augmented nuclei and current structure
+outputs. An isolated original-nucleus ColIV precompute is diagnostic evidence and cannot pass final freshness checks.
+
+Task-local drivers and logs reside under `output/typing_resume_20261029/`: `launch_cohort.py`,
+`render_augmentation_when_ready.py`, `refresh_reviewed_cells.py`, `refresh_structures_when_ready.py`, and
+`refresh_collagen_when_reviewed.py`. `geometry_review_gate.py` checks the reviewed augmentation contract.
+`final_reconciliation.py` will check every final inventory and review hash; `blind_diagnostic_protocol/` freezes
+the six evidence-only verdicts and prediction-key separation before the fresh difficult-case sample is viewed.
+These diagnostics will not be presented as an external accuracy estimate.
