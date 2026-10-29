@@ -62,6 +62,9 @@ import codex_typing as CT  # noqa: E402
 
 COMPARTMENTS = ('Nucleus', 'Cytoplasm', 'Membrane', 'Cell')
 ALIGN_MIN_R = 0.95
+# Owner 2026-10-29: test keeping the cells without a nucleus in REDSEA's cell map (spillover context) while they stay
+# out of analysis; Senior's config leaves them out of both, so their borders read as background to their neighbors.
+SPILLOVER_KEEPS_NO_NUCLEUS = False
 DESPECKLE = {'filter': 'median', 'size': 3, 'implementation': 'cv2.medianBlur', 'channels': 'all'}
 
 
@@ -283,7 +286,8 @@ def geometry_qc(oids, has_nucleus, cells, sizes_px, nuc_px, cfg=CT.GEOMETRY_QC):
             reasons[f] = np.where(reasons[f] == '', name, reasons[f] + ';' + name)
     analysis = reasons == ''
     no_cyto = analysis & np.isfinite(nc_ratio) & (nc_ratio >= cfg['no_cytoplasm_nc_ratio'])
-    spill = ~missing_nucleus & ~(has_nucleus & ~valid_nuc_raster) & valid_raster & ~duplicate
+    spill = (np.ones(len(oids), bool) if SPILLOVER_KEEPS_NO_NUCLEUS else ~missing_nucleus) \
+        & ~(has_nucleus & ~valid_nuc_raster) & valid_raster & ~duplicate
     frame = pd.DataFrame({'object_id': oids, 'qc_analysis_eligible': analysis,
                           'qc_estimation_eligible': analysis & ~no_cyto,
                           'qc_spillover_context_eligible': spill, 'qc_reasons': reasons, 'qc_flags': noted,
@@ -413,6 +417,11 @@ def process(out: Path, tag: str, force: bool = False, dest_dir: Path | None = No
     corrected = np.array([c not in CT.NO_SPILLOVER for c in names])
     alpha = np.where(corrected, CT.REDSEA['alpha'], 0.0)
     comp_mode = np.where(corrected, CT.REDSEA['comp_mode'], 0)
+    # analysis cells whose border touches a cell that is in the map but out of analysis (no nucleus)
+    outside = ~qc['qc_analysis_eligible'].to_numpy() & qc['qc_spillover_context_eligible'].to_numpy()
+    touching_outside = int((qc['qc_analysis_eligible'].to_numpy()
+                            & (np.asarray(M[:, np.flatnonzero(outside)].sum(axis=1)).ravel() > 0)).sum()) \
+        if outside.any() else 0
     means, counts, n_isolated = compensate_compartments(data, edge, nuc, nuc_edge, sizes, bandcount,
                                                         nuccount, nucbandcount, M, comp_mode, alpha)
 
@@ -451,7 +460,8 @@ def process(out: Path, tag: str, force: bool = False, dest_dir: Path | None = No
            'redsea': CT.REDSEA, 'despeckle': {**DESPECKLE, 'median_cell_mean_ratio': effect},
            'empty_area_null': {'method': EMPTY, 'per_channel': empty},
            'uncorrected_channels': [c for c in names if c in CT.NO_SPILLOVER],
-           'isolated_cells': n_isolated, 'contacts': int(M.nnz), 'geometry_qc': qc_summary,
+           'isolated_cells': n_isolated, 'spillover_keeps_no_nucleus': SPILLOVER_KEEPS_NO_NUCLEUS,
+           'analysis_cells_touching_no_nucleus': touching_outside, 'contacts': int(M.nnz), 'geometry_qc': qc_summary,
            'alignment_check': {'min_r': min(v['r'] for v in align.values()), 'per_channel': align},
            'seconds': round(time.time() - t_all)}
     rec_path.write_text(json.dumps(rec, indent=1))
