@@ -200,3 +200,17 @@ objects exactly; re-export dynamic annotation counts; and recompute REDSEA and C
 images. Established masks may be reused only with an explicit unchanged-input lineage certificate.
 Original augmentation checkpoints and detector ID lists will not be rewritten. Holds require separate
 hash-linked resolution records before any final downstream consumer can run.
+
+The separate generation is `data/development/uniform-20donor-20261029-v19-qc-work`. Its admission manifest
+distinguishes accept, reject and defer: deferred additions remain scientifically unresolved in the unfiltered
+source and evidence, and do not enter this candidate's cell inventory or nuclear reference. Per-image counts
+must distinguish supported additions, retained missing-nucleus detections, clear artifacts and unresolved
+additions; variation in staining can affect the last category. Preserved baseline nuclei are not validated by
+this added-detection review. The first native filter pilot is Aab_6450: 25 raw additions become 22 retained
+(18 supported nuclei and four existing-QC exclusions), two rejected artifacts and one deferred addition.
+
+`new_detection_filter.py` and its dedicated QuPath helpers implement the independent generation, native
+save/reload invariants and established-structure reuse certificates. Nine focused tests pass. The separate
+`refresh_filtered_cells.py` adapter uses the unchanged REDSEA computation and output checks with the new
+ancestry resolver, leaving live raw readers frozen; 33 combined raw/filtered refresh tests pass. Final filtered
+whole/native renders, reviews and release records are required in addition to the manual per-object decisions.
