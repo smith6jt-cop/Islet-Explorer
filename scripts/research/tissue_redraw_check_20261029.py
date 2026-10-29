@@ -62,9 +62,19 @@ def mask_from(path: Path, shape, downsample: int = RT.DOWNSAMPLE) -> np.ndarray:
         for poly in (g['coordinates'] if g['type'] == 'MultiPolygon' else [g['coordinates']]):
             rings = [np.round(np.asarray(r, float) / downsample * 16).astype(np.int32) for r in poly if len(r) >= 3]
             if rings:
-                cv2.fillPoly(m, [rings[0]], 1, lineType=cv2.LINE_8, shift=4)
+                # Rasterize each polygon separately before union. A hole in one
+                # polygon must not erase a disjoint island drawn earlier inside it.
+                x0, y0 = np.maximum(rings[0].min(axis=0) // 16 - 1, 0)
+                x1, y1 = np.minimum((rings[0].max(axis=0) + 15) // 16 + 2,
+                                    [shape[1], shape[0]])
+                if x1 <= x0 or y1 <= y0:
+                    continue
+                local = np.zeros((y1 - y0, x1 - x0), np.uint8)
+                shifted = [r - [x0 * 16, y0 * 16] for r in rings]
+                cv2.fillPoly(local, [shifted[0]], 1, lineType=cv2.LINE_8, shift=4)
                 if len(rings) > 1:
-                    cv2.fillPoly(m, rings[1:], 0, lineType=cv2.LINE_8, shift=4)
+                    cv2.fillPoly(local, shifted[1:], 0, lineType=cv2.LINE_8, shift=4)
+                m[y0:y1, x0:x1] |= local
     return m.astype(bool)
 
 

@@ -148,3 +148,19 @@ def test_corner_touching_contours_keep_shell_hole_hierarchy(monkeypatch):
     assert diagnostics['pre_crop_added_pixel_centers'] == 0
     assert diagnostics['pre_crop_removed_pixel_centers'] == 0
     assert diagnostics['shapely_version'] == shapely.__version__
+
+
+def test_review_raster_union_retains_island_inside_another_polygon_hole(tmp_path):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'research'))
+    import tissue_redraw_check_20261029 as review
+    shell = box(2, 2, 36, 36).difference(box(8, 8, 30, 30))
+    island = box(15, 15, 22, 22)
+    masks = []
+    for i, parts in enumerate(([island, shell], [shell, island])):
+        p = tmp_path / f'{i}.geojson'
+        p.write_text(json.dumps({'features': [{'geometry': mapping(MultiPolygon(parts)),
+                                              'properties': {'classification': {'name': 'Tissue'}}}]}))
+        masks.append(review.mask_from(p, (40, 40), downsample=1))
+    np.testing.assert_array_equal(*masks)
+    assert masks[0][18, 18]
+    assert not masks[0][12, 12]

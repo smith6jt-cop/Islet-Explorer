@@ -72,6 +72,8 @@ def import_structures(out: Path, rows: list[dict]) -> dict:
     dest_root = out / 'structures'
     made = dest_root / 'thresholded.json'
     thresholded = json.loads(made.read_text())['images'] if made.exists() else {}
+    refreshed_path = dest_root / 'redrawn.json'
+    refreshed = json.loads(refreshed_path.read_text()).get('images', {}) if refreshed_path.exists() else {}
     record = {}
     for r in rows:
         case, tag = r['case_id'], r['image_name']
@@ -81,6 +83,15 @@ def import_structures(out: Path, rows: list[dict]) -> dict:
             cls = CT.OBJECT_CLASS[name]
             src = STRUCTURAL / case / f'{cls}_inherited.geojson.gz'
             dest = dest_root / cls / f'{cls}__{tag}.geojson'
+            if tag in refreshed and cls in refreshed[tag].get('classes', {}):
+                entry = refreshed[tag]['classes'][cls]
+                if not dest.exists() or sha256(dest) != entry['sha256']:
+                    raise ValueError(f'{tag} {cls}: redrawn structure file missing or stale')
+                tissue = out / 'inputs' / 'tissue' / f'{tag}.geojson'
+                if sha256(tissue) != refreshed[tag]['tissue_sha256']:
+                    raise ValueError(f'{tag} {cls}: structures were drawn against different Tissue')
+                record[tag][cls] = {'source': str(refreshed_path), **entry}
+                continue
             if not dest.exists():
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 with gzip.open(src, 'rb') as fi, open(dest, 'wb') as fo:

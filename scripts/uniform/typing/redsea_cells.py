@@ -75,12 +75,24 @@ def empty_windows(out: Path, tag: str, H: int, W: int) -> tuple[np.ndarray, np.n
     """Centers of EMPTY['window_px']-square windows wholly in the slide area at least EMPTY['margin_um'] outside the
     image's Tissue outline (`inputs/tissue/<image>.geojson`, pixels), a seeded sample of EMPTY['windows']."""
     raw = json.loads((out / 'inputs' / 'tissue' / f'{tag}.geojson').read_text())
-    geom = shape((raw['features'] if isinstance(raw, dict) else raw)[0]['geometry'])
     mask = np.ones((H, W), np.uint8)
-    for poly in getattr(geom, 'geoms', [geom]):
-        cv2.fillPoly(mask, [np.round(np.asarray(poly.exterior.coords)).astype(np.int32)], 0)
-        for hole in poly.interiors:
-            cv2.fillPoly(mask, [np.round(np.asarray(hole.coords)).astype(np.int32)], 1)
+    for feature in raw['features'] if isinstance(raw, dict) else raw:
+        geom = shape(feature['geometry'])
+        for poly in getattr(geom, 'geoms', [geom]):
+            exterior = np.round(np.asarray(poly.exterior.coords)).astype(np.int32)
+            x0, y0 = np.maximum(exterior.min(axis=0), 0)
+            x1, y1 = np.minimum(exterior.max(axis=0) + 1, (W, H))
+            if x1 <= x0 or y1 <= y0:
+                continue
+            # A hole belongs only to its own polygon. Painting holes into the
+            # shared empty mask can erase a Tissue island already drawn there.
+            local = np.zeros((y1 - y0, x1 - x0), np.uint8)
+            origin = np.asarray((x0, y0), dtype=np.int32)
+            cv2.fillPoly(local, [exterior - origin], 1)
+            for hole in poly.interiors:
+                ring = np.round(np.asarray(hole.coords)).astype(np.int32)
+                cv2.fillPoly(local, [ring - origin], 0)
+            mask[y0:y1, x0:x1] &= 1 - local
     r = int(round(EMPTY['margin_um'] / CT.PIXEL_UM))
     mask = cv2.erode(mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * r + 1, 2 * r + 1)))
     w = EMPTY['window_px']

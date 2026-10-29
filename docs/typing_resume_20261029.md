@@ -47,7 +47,7 @@ Every stage records its inputs and completion. Existing endocrine objects and ra
 derived measurements can change with new neighbors and corrected structures. All detections must reconcile across
 geometry, measurements, typing, assignments and assembly. No partial review is reported as completed.
 
-## Implementation checkpoint (17:06 Eastern)
+## Historical implementation checkpoint (17:06 Eastern; superseded below)
 
 The first exact all-image check preserves all 3,522,872 original cells and every nonempty nucleus/endocrine footprint.
 Eighty-five centroids remain outside the outline because they already lay outside their own concave geometry;
@@ -77,3 +77,75 @@ not an accuracy result. The historical v17 comparison was repaired after the ass
 Established structure contours are clipped to the exact reviewed Tissue boundary, retaining edge-touching objects.
 All-tissue collagen calibration remains preliminary: the initial peak-width method failed on Aab_6549 and is under
 investigation before any final cohort result is accepted.
+
+## Implementation checkpoint (17:55 Eastern)
+
+The first augmentation pilot passed exact preservation but failed image review: detecting inside narrow added-tissue
+slivers clipped predictions into tiny fragments. Its 2,242 new detections are not accepted. That independent run is
+archived at `data/development/uniform-20donor-20261029-v19-pilot1-work`; historical absolute checkpoint paths are not
+resumable after the archive move. The fresh candidate was copied independently from the original baseline.
+
+The corrected detector uses 30 µm of image context around added tissue, then accepts only intact cells whose exact
+centroids lie in the unbuffered addition and whose cell and positive-area nucleus lie fully within final Tissue.
+Existing cells win overlap conflicts. The second Aab_6450 pilot accepted 25 additions; none touch the context or
+image boundary. Measurement and all exports have completed; native and export preservation verification and actual
+new-cell image review are still required before the cohort run.
+
+An OpenCV contour corner contact exposed another defect: default polygon repair could convert a real mask hole into
+filled Tissue. Repair now uses the known shell/hole hierarchy, with an exhaustive pixel-center roundtrip check before
+edge cropping. All 20 outlines at `output/typing_resume_20261029/tissue_final_v2/` pass that check with zero additions
+or losses, and preserve all 3,522,872 original cells plus every nonempty nucleus/endocrine footprint exactly.
+All 20 whole images and six native fields per image have been inspected, with additional changed-region views.
+Nineteen have acceptable-with-notes records; ND_6516 remains flagged. Its large empty lumen survives the first
+1,000 µm² cleanup, but footprint padding reduces the residual hole below that cutoff and a second cleanup fills it.
+An isolated operation-order correction is being compared; `tissue_final_v2` is not a fully accepted final cohort.
+Faint fibrous septa and smooth diffuse stromal signal remain explicit limitations in the review records.
+
+The established Nerve, Capillary and Lymphatic redraw method completed a pilot and actual whole/six-field review.
+It preserves visible bright structures and remains close to baseline (pixel Dice 0.995–0.997); weak profiles omitted
+by the inherited classifiers remain a limitation. Those pilot masks use superseded Tissue and need regeneration.
+All-tissue Collagen IV remains under calibration. Global intensity peaks and nuclear high percentiles failed to
+retain dim visible mesh in some images. Local robust nuclear-background references are now being compared, without
+changing cell-typing levels or using predicted cell identities as a reference. No cohort collagen method is accepted yet.
+
+The 35 focused tissue, structure-metric and augmentation-review tests pass. Full and blinded review generators,
+fresh coverage provenance, union-area metrics and independent Collagen IV distances are implemented; completing code
+does not substitute for the remaining cohort execution and image review.
+
+## Implementation checkpoint (18:25 Eastern)
+
+The corrected augmentation pilot is verified and reviewed: 166,000 original cells, their 574 raw measurement
+columns and all 578 endocrine objects are preserved; 25 intact additions were accepted. None of the additions
+are below 5 µm² or touch the detection-context/image boundary. Four additions have zero-area nuclei and remain
+subject to the existing cell-QC rules. Whole and all six native views were actually inspected. The pilot is
+archived at `data/development/uniform-20donor-20261029-v19-pilot2-work`; the final candidate is a fresh independent
+baseline copy because the pilot used superseded Tissue.
+
+Final vector outlines are at `output/typing_resume_20261029/tissue_final_v3/`. Large bounded holes that survive
+first content cleanup are restored after footprint padding and the second small-hole fill, except occupied
+footprint pixels. All 20 outlines preserve all 3,522,872 original cells and every nonempty nucleus/endocrine
+footprint, with zero added/lost mask centers during contour conversion. There are 86 pre-existing concave
+centroid exceptions and four retained zero-area nucleus sentinels; no new outside centroid is introduced.
+Final v3 is a subset of v2 on every image, removing 1.248 mm² in total. Faint septal strands and initially
+subthreshold residual lumens remain documented limitations.
+
+Final overlay comparison exposed a separate raster union bug: a later polygon hole could erase an earlier
+island in the accumulated mask. Vector outlines are unchanged. Tissue review, structural measurement and
+REDSEA empty-slide raster helpers now union each polygon independently. The REDSEA correction also reads
+all Tissue features; its window, margin, rounding and seeded sampling rules are unchanged. The raw cell-label
+raster contract is unchanged. Corrected review views are in `tissue_final_v3_review_union`; earlier views are
+reused only with byte-identity evidence, and changed views receive a fresh visual review. The cohort launch
+waits for all 20 reviewed records and exact checks. All 79 focused tests pass.
+
+The all-tissue Collagen IV candidate is a common local nuclear-reference rule: log1p median plus one
+lower-side robust scale, with a two-native-pixel nuclear erosion and 200 µm blocks. Missing/degenerate block
+references borrow within the same image; no donor pooling or phenotype labels are used. A bounded two-scale
+comparison lost visible mesh and walls without removing all weak fringe in T1D_6563, so one scale is retained
+with explicit reference-contamination/unsupported-block diagnostics, not a specificity claim. Final masks
+and all-image visual acceptance are still pending. Freshness checks cover current Tissue, nucleus geometry,
+method source, outputs and imported-code stability. Structural region union areas and independent collagen
+distances are required and validated before candidate assembly.
+
+The three-worker augmentation, three-worker REDSEA refresh and single-worker established-structure redraw
+watchers are prepared. Derived typing, final structure review, fresh independent diagnostic samples, assembly
+and full/blinded native review projects remain required before completion.

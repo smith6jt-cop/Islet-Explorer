@@ -48,6 +48,7 @@ import argparse
 import gzip
 import hashlib
 import json
+import shutil
 import subprocess
 import sys
 import time
@@ -174,7 +175,9 @@ def donor_fields(donors: pd.DataFrame, case: str) -> dict:
             'AAb_GADA': float(r.GADA), 'AAb_IA2A': float(r.IA2A), 'AAb_ZnT8A': float(r.ZnT8A), 'AAb_mIAA': float(r.mIAA)}
 
 
-def build_image(run: Path, out: Path, tag: str, case: str, donors: pd.DataFrame, groups: dict) -> dict:
+def build_image(run: Path, out: Path, tag: str, case: str, donors: pd.DataFrame, groups: dict,
+                include_collagen_iv: bool = False) -> dict:
+    structure_classes = STRUCTURE_CLASSES + (('Collagen IV',) if include_collagen_iv else ())
     t0 = time.time()
     typ = CT.typing_dir(run)
     meta = donor_fields(donors, case)
@@ -254,7 +257,7 @@ def build_image(run: Path, out: Path, tag: str, case: str, donors: pd.DataFrame,
                                 if ((f.get('properties') or {}).get('classification') or {}).get('name') == 'Tissue'])
     shapely.prepare(tissue)
     structures = {}
-    for cls in STRUCTURE_CLASSES:
+    for cls in structure_classes:
         g = [valid(shape(f['geometry'])) for f in features(run / 'structures' / cls / f'{cls}__{tag}.geojson')
              if f.get('geometry')]
         structures[cls] = (np.asarray(g, dtype=object), STRtree(g)) if g else None
@@ -323,14 +326,15 @@ def build_image(run: Path, out: Path, tag: str, case: str, donors: pd.DataFrame,
                               ('islet_union', core.union(band), np.union1d(c, p))]:
             region = name + {'islet_core': '', 'islet_band': '_exp20um', 'islet_union': '_union'}[rtype]
             area_region = g.area * PX ** 2
-            for cls in STRUCTURE_CLASSES:
+            for cls in structure_classes:
                 s = structures[cls]
                 area, count = 0.0, 0
                 if s is not None and not g.is_empty:
                     near = s[1].query(g, predicate='intersects')
                     if len(near):
-                        inter = shapely.area(shapely.intersection(s[0][near], g))
-                        area, count = float(inter.sum() * PX ** 2), int((inter > 0).sum())
+                        intersections = shapely.intersection(s[0][near], g)
+                        inter = shapely.area(intersections)
+                        area, count = float(shapely.union_all(intersections).area * PX ** 2), int((inter > 0).sum())
                 targets.append(dict(meta, source_file='uniform_20donor', region=region, type=rtype, **{'class': cls},
                                     area_um2=area, region_um2=area_region,
                                     area_density=area / area_region if area_region else np.nan, count=count,
@@ -407,7 +411,7 @@ def build_image(run: Path, out: Path, tag: str, case: str, donors: pd.DataFrame,
 
     if not obs:
         raise ValueError(f'{tag}: no object with analysed core and band cells')
-    for cls in STRUCTURE_CLASSES:
+    for cls in structure_classes:
         for f in features(run / 'structures' / cls / f'{cls}__{tag}.geojson'):
             if f.get('geometry'):
                 gfeatures.append({'type': 'Feature', 'geometry': f['geometry'], 'properties': {'classification': {'name': cls}}})
@@ -490,11 +494,18 @@ def main() -> int:
     ap.add_argument('--output', type=Path, required=True)
     ap.add_argument('--report-root', type=Path, required=True)
     ap.add_argument('--workers', type=int, default=6)
+    ap.add_argument('--include-collagen-iv', action='store_true',
+                    help='include current all-tissue Collagen IV geometry and independent structural endpoints')
     a = ap.parse_args()
     out, reports = a.output.resolve(), a.report_root.resolve()
     if out.exists() or reports.exists():
         raise FileExistsError('use fresh output and report roots')
     rows = CT.cohort_rows()
+    if a.include_collagen_iv:
+        import structure_metrics
+        # Includes current Tissue/nucleus geometry, image/channel source and ColIV code/output validation.
+        # This runs before creating either output root; a newly augmented nucleus invalidates an old mask.
+        structure_metrics.validate_manifest(a.run, [r['image_name'] for r in rows])
     assert_no_excluded([r['case_id'] for r in rows], 'Cohort manifest')
     donors = ad.read_h5ad(a.donor_source / 'islet_explorer.h5ad', backed='r').obs.drop_duplicates('imageid')[
         ['imageid', 'age', 'gender', 'donor_status', 'GADA', 'ZnT8A', 'IA2A', 'mIAA']].copy()
@@ -512,7 +523,8 @@ def main() -> int:
     LABELS, ENDOCRINE, freqs = groups['labels'], groups['endocrine'], groups['frequencies']
     results = {}
     with ProcessPoolExecutor(a.workers) as pool:
-        futs = {r['image_name']: pool.submit(build_image, a.run, out, r['image_name'], r['case_id'], donors, groups)
+        futs = {r['image_name']: pool.submit(build_image, a.run, out, r['image_name'], r['case_id'], donors, groups,
+                                             a.include_collagen_iv)
                 for r in rows}
         for t, f in futs.items():
             results[t] = f.result()
@@ -590,6 +602,13 @@ def main() -> int:
         images.append({'image': img.name, 'source': str(target), 'bytes': target.stat().st_size})
     (out / 'image_sources.json').write_text(json.dumps(images, indent=2) + '\n')
     (out / 'protein_phenotype_rules.csv').write_text((HERE / 'app_phenotype_rules.csv').read_text())
+    if a.include_collagen_iv:
+        # Recheck before publication as assembly can take long enough for inputs to change in another process.
+        structure_metrics.validate_manifest(a.run, [r['image_name'] for r in rows])
+        shutil.copy2(a.run / 'structure_region_metrics.csv', out / 'structure_region_metrics.csv')
+        shutil.copytree(a.run / 'cell_structure_distances', out / 'cell_structure_distances')
+        shutil.copy2(a.run / 'structures' / 'collagen_iv.json', out / 'collagen_iv_provenance.json')
+        shutil.copy2(a.run / structure_metrics.MANIFEST, out / structure_metrics.MANIFEST)
     rel = {'status': 'assembled_pending_owner_review', 'donors': len(rows), 'objects': int(combined.n_obs),
            'by_object_class': {str(k): int(v) for k, v in combined.obs.object_class.value_counts().items()},
            'singles_counted_not_analysed': int(census.singles.sum()),
@@ -601,6 +620,9 @@ def main() -> int:
            'display_only_level_markers': sorted(census['display_only_levels'].iloc[0]),
            'display_levels': 'typing/display_levels.csv (E-cadherin method, owner 2026-10-29)',
            'structure_markers_without_cell_flag': list(STRUCTURE_MARKERS),
+           'structure_classes': list(STRUCTURE_CLASSES) + (['Collagen IV'] if a.include_collagen_iv else []),
+           'collagen_iv_endpoints': ('all tissue collagen; union area/proportion and centroid-to-area distance; '
+                                    'no contribution to cell identity') if a.include_collagen_iv else None,
            'marker_values': 'despeckled REDSEA, per-image (x - level) / (p99.9 - level) clipped to [0, 1]',
            'embedding': 'endocrine_composition', 'embedding_min_core_cells': MIN_CORE_CELLS,
            'embedding_objects': cdiag['objects'], 'donor_correction': 'none',

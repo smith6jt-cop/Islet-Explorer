@@ -18,7 +18,9 @@ fit   On each ORIGINAL image, for each class, the threshold on the Gaussian-smoo
 make  Each ADDITION takes the median raw threshold of the 15, unscaled, and its objects are drawn as the original
       script drew them:
       smoothed >= t inside Tissue, 8-connected components split into separate objects, the class's minimum area,
-      no object touching the 10 um edge ring. The additions' earlier objects (the same classifiers applied to
+      clipped to exact Tissue. Since the owner's 2026-10-29 correction, edge-touching objects are retained;
+      the 10 um edge ring remains part of the historical threshold-fitting reference only.
+      The additions' earlier objects (the same classifiers applied to
       their own raw intensities) are kept in `$OUT/structures/superseded_additions/` and compared.
 
 Why unscaled (2026-10-17; the 2026-10-16 make moved the threshold by the ratio of UniFORM factors, which drew
@@ -78,16 +80,29 @@ NBINS = 4000
 
 
 def fill(mask: np.ndarray, geom: dict) -> None:
-    """Scanline fill of a GeoJSON (Multi)Polygon into mask (1 inside, holes back to 0), at 1/16 px precision.
-    skimage.draw.polygon tests every pixel of the bounding box against every vertex: hours for a Tissue outline."""
+    """Union a GeoJSON (Multi)Polygon into a binary mask at 1/16 px precision.
+
+    Holes belong to their own polygon, never to the accumulated mask. Drawing each
+    polygon into a bounded temporary tile preserves another component inside its hole
+    and makes the result independent of polygon/feature order.
+    """
     polys = geom['coordinates'] if geom['type'] == 'MultiPolygon' else [geom['coordinates']]
     for poly in polys:
-        rings = [np.round(np.asarray(r, dtype=np.float64) * 16).astype(np.int32) for r in poly if len(r) >= 3]
+        rings = [np.asarray(r, dtype=np.float64) for r in poly if len(r) >= 3]
         if not rings:
             continue
-        cv2.fillPoly(mask, [rings[0]], 1, lineType=cv2.LINE_8, shift=4)
+        if any(r.ndim != 2 or r.shape[1] != 2 or not np.isfinite(r).all() for r in rings):
+            raise ValueError('Invalid nonfinite polygon coordinates')
+        x0,y0 = np.maximum(np.floor(rings[0].min(axis=0)).astype(int)-1,0)
+        x1,y1 = np.minimum(np.ceil(rings[0].max(axis=0)).astype(int)+2,[mask.shape[1],mask.shape[0]])
+        if x1 <= x0 or y1 <= y0:
+            continue
+        tile = np.zeros((y1-y0,x1-x0),np.uint8)
+        coords = [np.round((r-[x0,y0])*16).astype(np.int32) for r in rings]
+        cv2.fillPoly(tile, [coords[0]], 1, lineType=cv2.LINE_8, shift=4)
         if len(rings) > 1:
-            cv2.fillPoly(mask, rings[1:], 0, lineType=cv2.LINE_8, shift=4)
+            cv2.fillPoly(tile, coords[1:], 0, lineType=cv2.LINE_8, shift=4)
+        mask[y0:y1,x0:x1] = mask[y0:y1,x0:x1] | tile
 
 
 def tissue_mask(out: Path, tag: str, shape_):
@@ -106,6 +121,21 @@ def edge_ring(shape_):
     ring = np.ones(shape_, bool)
     ring[p:H - p, p:W - p] = False
     return ring
+
+
+def clip_to_tissue(geoms, tissue, minimum_area):
+    """Retain polygonal parts inside the exact outline after raster contour conversion."""
+    shapely.prepare(tissue)
+    pending = [g if tissue.covers(g) else g.intersection(tissue) for g in geoms]
+    result = []
+    while pending:
+        g = pending.pop()
+        if g.geom_type == 'Polygon':
+            if g.area >= minimum_area:
+                result.append(g)
+        elif hasattr(g, 'geoms'):
+            pending.extend(g.geoms)
+    return result
 
 
 def object_mask(path: Path, shape_):
@@ -185,8 +215,12 @@ def polygons(binary: np.ndarray, min_area_px: float) -> list:
     return out
 
 
-def make_one(out: Path, tag: str, thresholds: dict, sigma: float) -> dict:
+def make_one(out: Path, tag: str, thresholds: dict, sigma: float, retain_edge: bool = True) -> dict:
     rec = {}
+    raw = json.loads((out / 'inputs' / 'tissue' / f'{tag}.geojson').read_text())
+    feats = raw['features'] if isinstance(raw, dict) else raw
+    exact_tissue = shapely.union_all([shape(f['geometry']) for f in feats
+        if ((f.get('properties') or {}).get('classification') or {}).get('name') == 'Tissue'])
     for cls, marker in CLASSES.items():
         ch, shp = channel(out, tag, marker)
         tissue = tissue_mask(out, tag, shp)
@@ -196,7 +230,9 @@ def make_one(out: Path, tag: str, thresholds: dict, sigma: float) -> dict:
         H, W = shp
         p = EDGE_MARGIN_UM / CT.PIXEL_UM
         inner = shapely.box(p, p, W - p, H - p)
-        geoms = [g for g in geoms if inner.contains(g)]
+        if not retain_edge:
+            geoms = [g for g in geoms if inner.contains(g)]
+        geoms = clip_to_tissue(geoms, exact_tissue, MIN_AREA_UM2[cls] / CT.PIXEL_UM ** 2)
         feats = [{'type': 'Feature', 'geometry': mapping(g),
                   'properties': {'objectType': 'annotation', 'classification': {'name': cls}}} for g in geoms]
         dest = out / 'structures' / cls / f'{cls}__{tag}.geojson'
@@ -210,7 +246,7 @@ def make_one(out: Path, tag: str, thresholds: dict, sigma: float) -> dict:
         new_mask = draw_mask.astype(bool)
         old_mask = object_mask(old, shp)
         inter = (new_mask & old_mask).sum()
-        drawn = {'threshold_raw': thresholds[cls], 'objects': len(feats),
+        drawn = {'threshold_raw': thresholds[cls], 'edge_touching_retained': retain_edge, 'objects': len(feats),
                  'objects_before': len(json.loads(old.read_text())['features']),
                  'area_um2': float(new_mask.sum() * CT.PIXEL_UM ** 2),
                  'area_um2_before': float(old_mask.sum() * CT.PIXEL_UM ** 2),
@@ -281,6 +317,7 @@ def main() -> int:
             made[t] = fu.result()
     (root / 'thresholded.json').write_text(json.dumps({
         'sigma_px': float(sigma), 'min_area_um2': MIN_AREA_UM2, 'edge_margin_um': EDGE_MARGIN_UM,
+        'edge_margin_scope': 'historical fitting reference only', 'edge_touching_retained': True,
         'reference_raw_threshold': common, 'thresholds': per_image, 'images': made}, indent=1))
     return 0
 
