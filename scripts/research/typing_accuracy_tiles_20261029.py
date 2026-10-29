@@ -50,6 +50,50 @@ PANELS = 6                       # composite + up to four markers + DAPI
 SEED = 0
 
 
+def polygon_components(geometry: dict) -> list[list[np.ndarray]]:
+    """Retain every exterior and hole for diagnostic outlines and own-cell masks."""
+    coordinates = geometry.get('coordinates') or []
+    if not coordinates:
+        return []
+    if geometry['type'] not in ('Polygon', 'MultiPolygon'):
+        raise ValueError(f"Unsupported cell geometry: {geometry['type']}")
+    polygons = coordinates if geometry['type'] == 'MultiPolygon' else [coordinates]
+    result = []
+    for polygon in polygons:
+        rings = [np.asarray(ring, dtype=float) for ring in polygon]
+        if any(ring.ndim != 2 or ring.shape[1] != 2 or len(ring) < 3 or
+               not np.isfinite(ring).all() for ring in rings):
+            raise ValueError('Invalid cell polygon ring in diagnostic renderer')
+        if rings:
+            result.append(rings)
+    return result
+
+
+def polygon_bounds(components: list[list[np.ndarray]]) -> tuple[float, float, float, float]:
+    exteriors = np.concatenate([rings[0] for rings in components])
+    return (*exteriors.min(axis=0), *exteriors.max(axis=0))
+
+
+def draw_cell_outline(image: np.ndarray, components: list[list[np.ndarray]], origin, color) -> None:
+    for rings in components:
+        for ring in rings:
+            cv2.polylines(image, [np.round(ring - origin).astype(np.int32)], True, color, 1)
+
+
+def cell_masks(components: list[list[np.ndarray]], shape: tuple[int, int], origin) -> tuple[np.ndarray, np.ndarray]:
+    """Rasterize the cell union, keeping holes local, then erode the whole cell by two pixels."""
+    own = np.zeros(shape, np.uint8)
+    for rings in components:
+        part = np.zeros(shape, np.uint8)
+        local = [np.round(ring - origin).astype(np.int32) for ring in rings]
+        cv2.fillPoly(part, [local[0]], 1)
+        if len(local) > 1:
+            cv2.fillPoly(part, local[1:], 0)
+        own |= part
+    interior = cv2.erode(own, np.ones((3, 3), np.uint8), iterations=2).astype(bool)
+    return own, interior
+
+
 def plan_and_markers(run: Path = RUN):
     reg = RG.load()
     markers = ID.used_markers(run, reg)
@@ -169,13 +213,11 @@ def render_image(tag: str, rows: pd.DataFrame, run: Path = RUN) -> list[dict]:
     # polygons of every cell, with bounding boxes, to draw the sampled cells and their neighbors
     polys, boxes, ids = [], [], []
     for f in feats:
-        g = f.get('geometry') or {}
-        cs = g.get('coordinates') or []
-        if not cs:
+        components = polygon_components(f.get('geometry') or {})
+        if not components:
             continue
-        ring = np.asarray(cs[0][0] if g['type'] == 'MultiPolygon' else cs[0], dtype=float)
-        polys.append(ring)
-        boxes.append((ring[:, 0].min(), ring[:, 1].min(), ring[:, 0].max(), ring[:, 1].max()))
+        polys.append(components)
+        boxes.append(polygon_bounds(components))
         ids.append(f['id'])
     boxes = np.asarray(boxes)
     by_id = {o: i for i, o in enumerate(ids)}
@@ -208,10 +250,8 @@ def render_image(tag: str, rows: pd.DataFrame, run: Path = RUN) -> list[dict]:
         x0, y0 = windows[k]
         near = np.flatnonzero((boxes[:, 2] >= x0) & (boxes[:, 0] <= x0 + 2 * half) &
                               (boxes[:, 3] >= y0) & (boxes[:, 1] <= y0 + 2 * half))
-        own = np.zeros((2 * half, 2 * half), np.uint8)
-        if oid in by_id:
-            cv2.fillPoly(own, [np.round(polys[by_id[oid]] - [x0, y0]).astype(np.int32)], 1)
-        interior = cv2.erode(own, np.ones((3, 3), np.uint8), iterations=2).astype(bool)
+        _, interior = cell_masks(polys[by_id[oid]] if oid in by_id else [],
+                                 (2 * half, 2 * half), (x0, y0))
         panels, info = [], {}
         for m in list(r['green']) + list(r['magenta']):
             a = crops[k, m]
@@ -233,12 +273,12 @@ def render_image(tag: str, rows: pd.DataFrame, run: Path = RUN) -> list[dict]:
         comp = (np.clip(comp, 0, 1) * 255).astype(np.uint8)
         for i in near:
             if ids[i] != oid:
-                cv2.polylines(comp, [np.round(polys[i] - [x0, y0]).astype(np.int32)], True, (90, 90, 90), 1)
+                draw_cell_outline(comp, polys[i], (x0, y0), (90, 90, 90))
         tiles = [comp] + [np.dstack([(p * 255).astype(np.uint8)] * 3) for _, p in panels] + \
                 [np.dstack([(dapi * 255).astype(np.uint8)] * 3)]
         if oid in by_id:
             for t in tiles:
-                cv2.polylines(t, [np.round(polys[by_id[oid]] - [x0, y0]).astype(np.int32)], True, (255, 255, 255), 1)
+                draw_cell_outline(t, polys[by_id[oid]], (x0, y0), (255, 255, 255))
         out.append({**{k: r[k] for k in ('group', 'pair', 'image', 'object_id', 'label', 'status', 'tags', 'compartment',
                                         'runner_up_compartment', 'lineage')},
                     'review_id': r.get('review_id', ''), 'blind_color_swap': bool(r.get('blind_color_swap', False)),
