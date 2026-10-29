@@ -87,10 +87,10 @@ CELLS = [  # (expected label, start class, {marker: raw value}, established endo
     ('CD8a Tcell', None, {'CD3e': HIGH, 'CD45': HIGH, 'CD8a': HIGH}, None),
     ('CD4 Tcell', None, {'CD3e': HIGH, 'CD45': HIGH, 'CD8a': HIGH, 'CD4': 2 * HIGH}, None),   # both: the higher
     ('T cell', None, {'CD3e': HIGH, 'CD45': HIGH}, None),                                     # neither: interim status
-    ('Tissue', None, {'CD20': HIGH}, None),                                                   # CD20 alone: never a B cell
+    ('Hematopoietic CD45-', None, {'CD20': HIGH}, None),                                      # CD20 alone: never a B cell
     ('B cell', None, {'CD20': HIGH, 'CD45': HIGH}, None),
     ('CD68+CD163-Macrophage_LGALS3-CD4-', None, {'CD68': HIGH, 'CD45': HIGH}, None),
-    ('CD45+', None, {'CD45': HIGH}, None),
+    ('Hematopoietic CD45+', None, {'CD45': HIGH}, None),
     ('Conflict T/Myeloid', None, {'CD163': HIGH, 'CD8a': 2 * HIGH}, None),                   # no CD8a+CD163+ cell type
     ('Exocrine', None, {'ECAD': HIGH, 'panCK': HIGH}, None),
     ('Exocrine', 'Islet', {'ECAD': HIGH}, None),                                              # exocrine inside the border (10-29)
@@ -113,6 +113,7 @@ CELLS = [  # (expected label, start class, {marker: raw value}, established endo
     ('CD8a Tcell', None, {'CD3e': HIGH, 'CD45': HIGH, 'CD8a': HIGH, 'CD163': HIGH}, None),     # T leads Myeloid by one
     ('T cell', None, {'CD3e': 2 * HIGH, 'CD45': HIGH, 'CD163': HIGH}, None),                  # tie: brighter, covers more
     ('Conflict T/Myeloid', None, {'CD3e': 2 * HIGH, 'CD45': HIGH, 'CD163': HIGH}, None),      # tie: brighter, covers less
+    ('Hematopoietic CD45-', None, {'CD4': HIGH, 'CD8a': HIGH}, None),                         # no lineage, CD45 negative
 ]
 # area coverage (area_coverage.py): a positive marker covers 0.8 of the cell unless given here; index -> {marker: coverage}
 COVERAGE = {27: {'CD3e': 0.9, 'CD163': 0.2}, 28: {'CD3e': 0.2, 'CD163': 0.9}}
@@ -175,4 +176,4 @@ def test_identity_rules(synthetic_run):
     # no cell is named by a marker (owner 2026-10-28): the start class stays, with the status saying why
     assert out.iloc[3]['status'] == 'no_lineage_named' and out.iloc[21]['status'] == 'shared_marker_only'
     assert out.iloc[22]['named_by'] == 'CD31' and 'passed_through_Blood_vessel' in out.iloc[23]['tags']
-    assert not any(str(x)[-1:] in '+-' and ' ' not in str(x) and 'Macrophage_' not in str(x) and str(x) != 'CD45+' for x in got)
+    assert not any(str(x)[-1:] in '+-' and ' ' not in str(x) and 'Macrophage_' not in str(x) for x in got)

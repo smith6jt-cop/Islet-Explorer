@@ -34,7 +34,8 @@ This module names compartments and lineages, never markers.
   needs that marker positive; T subtypes by positivity, both positive -> the higher fold over level (owner), neither ->
   the lineage label with t_subtype_status T_subtype_not_shown (interim, owner decision pending); B needs the registry's
   `requires` (CD45 positive, one hematopoietic lineage); Myeloid takes the profile label. A leukocyte without a named
-  lineage is the pan label (CD45+) when the pan marker is positive. No cell is named by a marker (owner 2026-10-28: "Get
+  lineage is the pan label (Hematopoietic CD45+) when the pan marker is positive, else the pan-negative label
+  (Hematopoietic CD45-; owner 2026-10-29). No cell is named by a marker (owner 2026-10-28: "Get
   rid of naming by top marker logic"): a cell its compartment and lineage do not name keeps its start class, with the
   status saying why: no_lineage_named (a compartment without a named lineage or pan marker), <lineage>_marker_only (a
   lineage barred where the cell is, e.g. an endocrine marker outside the endocrine objects), shared_marker_only (only
@@ -115,6 +116,7 @@ def build_plan(reg: RG.Registry, markers: list[str]) -> dict:
         residual = next(iter(rows.loc[rows['kind'] == 'residual', 'lineage']), '')
         plan['comp'][c] = {'defining': defining, 'carried': carried, 'pan': pan, 'lineages': lineages,
                            'pan_label': next(iter(rows.loc[rows['kind'] == 'pan', 'label']), ''),
+                           'pan_negative_label': next(iter(rows.loc[rows['kind'] == 'pan_negative', 'label']), ''),
                            'residual': residual,
                            'residual_members': [m for m in defining
                                                 if residual in {lin for lin, _ in reg.lineage_entries(m)}]}
@@ -123,7 +125,7 @@ def build_plan(reg: RG.Registry, markers: list[str]) -> dict:
 
 def label_row(plan: dict, compartment: str, lineage: str) -> dict:
     lab = plan['labels']
-    r = lab[(lab['compartment'] == compartment) & (lab['lineage'] == lineage) & (lab['kind'] != 'structure')]
+    r = lab[(lab['compartment'] == compartment) & (lab['lineage'] == lineage) & ~lab['kind'].isin(['structure', 'pan_negative'])]
     return r.iloc[0].to_dict() if len(r) else {}
 
 
@@ -525,8 +527,12 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED) -> tu
             named_by[rows[pan_pos]] = ';'.join(info['pan'])
             done[rows[pan_pos]] = True
             rows = rows[~pan_pos]
-        done[rows] = True                          # no marker names a cell (owner 2026-10-28): the start class stays
-        status[rows] = 'no_lineage_named'
+        done[rows] = True                          # no marker names a cell (owner 2026-10-28): the start class stays,
+        status[rows] = 'no_lineage_named'          # or the compartment's pan-negative label (owner 2026-10-29)
+        if info['pan_negative_label']:
+            named = rows[~by_object[rows]]
+            label[named] = info['pan_negative_label']
+            named_by[named] = 'compartment'
     # no compartment: the start class stays, with the status saying why
     left = ~done
     if (left & (compartment != '')).any():
