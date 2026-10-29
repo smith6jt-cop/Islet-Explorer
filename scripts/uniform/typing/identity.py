@@ -214,6 +214,13 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED) -> tu
     L = lv.loc[markers, 'level_log'].to_numpy(float)
     Lc = np.maximum(cl.loc[markers, 'canary_log'].to_numpy(float), L)
     P, C, F = V > L, V > Lc, V - L
+    # the typing scale the hormone margin is read on (Senior islet_identity: top >= REFERENCE_MARGIN x runner-up on
+    # scaled hormones), per image: (x - level) / (p99.9 - level), floored at 0 and not clipped above. Owner 2026-10-29:
+    # ND_6232 ddb348e9 (GCG 2,054 / SST 118) was excluded when the folds over the levels were compared, because SST's
+    # level is a ninth of GCG's; on the scale GCG is 3.5x SST, and ND_6232 af2ee599 (SST over INS) stays resolved.
+    raw, Lraw = np.expm1(V), np.expm1(L)
+    top = np.percentile(raw, reg.const('HORMONE_SCALE_TOP_QUANTILE'), axis=0)
+    SC = np.clip((raw - Lraw) / np.where(top > Lraw, top - Lraw, np.nan), 0, None)
     start = d['endocrine_object_class'].fillna('Tissue').to_numpy(dtype=object)
     margin, min_depth = reg.const('CANARY_MARGIN'), reg.const('CANARY_MIN_DEPTH')
 
@@ -360,10 +367,10 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED) -> tu
         srule = rule.get('subtype_rule', '')
         if srule == 'exclusive_margin' and subs:
             cols = list(subs.values())
-            Fs = F[np.ix_(rows, cols)]
+            Fs = np.nan_to_num(SC[np.ix_(rows, cols)], nan=0.0)
             any_pos = P[np.ix_(rows, cols)].any(axis=1)
             order = np.sort(Fs, axis=1)
-            clear = order[:, -1] - order[:, -2] >= np.log(reg.const('HORMONE_MARGIN')) if len(cols) > 1 else \
+            clear = order[:, -1] >= reg.const('HORMONE_MARGIN') * np.maximum(order[:, -2], 1e-6) if len(cols) > 1 else \
                 np.ones(len(rows), bool)
             win = np.asarray(list(subs), dtype=object)[Fs.argmax(axis=1)]
             named = any_pos & clear
