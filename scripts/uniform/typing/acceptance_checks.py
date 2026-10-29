@@ -31,11 +31,52 @@ REPO = HERE.parents[2]
 sys.path.insert(0, str(HERE))
 import registry as RG  # noqa: E402
 import identity as ID  # noqa: E402
+import codex_typing as CT  # noqa: E402
 
 BARLOW = REPO / 'output' / 'barlow_typing_comparison_20261027' / 'work' / 'barlow_labels.parquet'
 V16 = REPO / 'data' / 'development' / 'uniform-20donor-20261027-v16' / 'cell_types'
 V17 = 'superseded/typing-v17-20261028'
 ALLOWED_MEASUREMENTS = set(RG.COMPARTMENT_COLUMN)
+
+
+def legacy_v17_labels(calls: pd.DataFrame, immune: pd.DataFrame) -> np.ndarray:
+    """Frozen v17 app-label mapping for comparisons only (assemble_uniform.py before 9b6d4a9).
+
+    The current assembler consumes final identity directly and no longer exposes app_labels.
+    Keep the historical translation here, outside the current cell-identity path.
+    """
+    cls = calls['cell_class'].to_numpy(dtype=object)
+    out = np.full(len(cls), '', dtype=object)
+    direct = {'Beta': 'Beta cell', 'Alpha': 'Alpha cell', 'Delta': 'Delta cell',
+              CT.HORMONE_NEGATIVE: 'CHGA+ hormone-negative',
+              'Endocrine (unresolved subtype)': 'Endocrine', 'Endocrine (ambiguous subtype)': 'Endocrine',
+              'Blood vessel': 'Blood Vessel', 'Nerve': 'Neural', 'Lymphatic': 'Lymphatic', 'Exocrine': 'Exocrine',
+              'Excluded': 'Excluded'}
+    for k, v in direct.items():
+        out[cls == k] = v
+    for k in CT.TOP_MARKER_LABELS:
+        out[cls == k] = k
+    imm = cls == 'Immune'
+    sub = calls[['object_id']].merge(immune, on='object_id', how='left', validate='one_to_one')
+    ic = sub['immune_class'].fillna('').to_numpy(dtype=object)
+    st = sub['immune_subtype'].fillna('').to_numpy(dtype=object)
+    definition = calls['immune_definition'].fillna('').to_numpy(dtype=object)
+    use = np.where(ic != '', ic, definition)
+    lab = np.full(len(cls), '', dtype=object)
+    lab[use == 'Imm-CD45-leukocyte'] = CT.CD45_RULE_LABEL
+    lab[use == 'Imm-T-cell'] = 'T cell'
+    lab[(use == 'Imm-T-cell') & (st == 'T-CD8')] = 'CD8a Tcell'
+    lab[(use == 'Imm-T-cell') & (st == 'T-CD4-helper')] = 'CD4 Tcell'
+    prof = sub['macrophage_profile'].fillna('').to_numpy(dtype=object)
+    mac = use == 'Imm-macrophage'
+    if (prof[mac & imm] == '').any():
+        raise ValueError('a historical macrophage without a marker profile')
+    lab[mac] = prof[mac]
+    lab[use == 'Imm-B-cell'] = 'B cell'
+    out[imm] = lab[imm]
+    if (out == '').any():
+        raise ValueError(f'unmapped historical classes: {sorted(set(cls[out == ""]))}')
+    return out
 
 
 def named_markers(row_named_by: str) -> list[str]:
@@ -147,12 +188,10 @@ def image_checks(run: Path, tag: str) -> dict:
             .groupby(['label', 'phenotype']).size().rename('cells').reset_index().to_dict('records')
     calls = run / V17 / 'calls' / f'{tag}.parquet'
     if calls.exists():
-        sys.path.insert(0, str(HERE.parent))
-        import assemble_uniform as AU  # the v17 labels as v17's own code maps them
         c17 = pd.read_parquet(calls)
         imm = pd.read_parquet(run / V17 / 'immune' / f'{tag}.parquet',
                               columns=['object_id', 'immune_class', 'immune_subtype', 'macrophage_profile'])
-        v = pd.DataFrame({'object_id': c17['object_id'], 'v17': AU.app_labels(c17, imm)})
+        v = pd.DataFrame({'object_id': c17['object_id'], 'v17': legacy_v17_labels(c17, imm)})
         out['v17'] = ids.merge(v, on='object_id', how='left').fillna({'v17': 'absent'}) \
             .groupby(['label', 'v17']).size().rename('cells').reset_index().to_dict('records')
     return out
