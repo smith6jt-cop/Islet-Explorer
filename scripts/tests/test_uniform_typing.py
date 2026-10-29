@@ -105,6 +105,7 @@ CELLS = [  # (expected label, start class, {marker: raw value}, established endo
     ('Conflict Mesenchymal/Endothelial', None, {'CD31': HIGH, 'SMA': 2 * HIGH}, None),       # CD31 not on top: passes through
     ('Endothelial', None, {'CD31': HIGH}, None),                                              # under half its area inside
     ('Islet', 'Islet', {'INS': HIGH, 'GCG': HIGH}, None),                                     # exact tie: no subtype
+    ('CD8a Tcell', None, {'CD3e': HIGH, 'CD45': HIGH, 'CD8a': HIGH, 'CD163': HIGH}, None),     # T leads Myeloid by one
 ]
 # cells in a structure object: index -> (class, area fraction inside)
 IN_STRUCTURE = {22: ('Blood vessel', 0.9), 23: ('Blood vessel', 0.9), 24: ('Blood vessel', 0.3)}

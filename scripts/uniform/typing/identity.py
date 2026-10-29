@@ -14,7 +14,8 @@ This module names compartments and lineages, never markers.
   defining marker; status none / single / resolved (2 groups, top depth >= CANARY_MIN_DEPTH and >= CANARY_MARGIN above
   the runner-up) / lineage_ambiguous (2 otherwise) / doublet_suspected (>= 3). Groups rank by depth x 1000 + the summed
   log fold over level of their canary-positive markers; the margin is taken between compartments (plan: fixes Xenium's
-  margin between lineages of one group). The same rule runs between the lineages of the cell's compartment: lineage-
+  margin between lineages of one group). The same rule runs between the lineages of the cell's compartment, with
+  CANARY_LINEAGE_MARGIN (1; owner 2026-10-29, Aab_6450 1b2c9da1: only 1-2 lineage-specific markers separate them): lineage-
   specific markers detect a lineage; markers on several lineages, the compartment's pan marker and its shared markers add
   depth to every detected lineage. A cell with no canary-positive defining marker is placed the same way by its positive
   markers (plain level) with status none: agent determination, recorded in the ledger (the plan does not cover a
@@ -262,7 +263,7 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED) -> tu
         extra = info['pan'] + info['carried']
         det_cols = [[ix[m] for m in info['lineages'][lin]['specific']] for lin in lins]
         cnt_cols = [[ix[m] for m in dict.fromkeys(info['lineages'][lin]['members'] + extra)] for lin in lins]
-        lp = placed(P[rows], C[rows], F[rows], det_cols, cnt_cols, margin, min_depth)
+        lp = placed(P[rows], C[rows], F[rows], det_cols, cnt_cols, reg.const('CANARY_LINEAGE_MARGIN'), min_depth)
         has = lp['group'] >= 0
         lineage[rows[has]] = np.asarray(lins, dtype=object)[lp['group'][has]]
         lin_basis[rows] = lp['basis']
