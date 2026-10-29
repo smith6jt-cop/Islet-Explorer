@@ -11,16 +11,26 @@ Every value is regenerated from the uniform workflow (`$OUT`, see README.md): th
       analysis except for quantifying or showing how many there are"): no row, no core or band, no signed
       distance to them, and their cell is an ordinary tissue cell, which may lie in an islet's or cluster's band.
   A6  nerve, blood-vessel and lymphatic cells come only from the structure objects (the typing).
-  D3  cell types are Senior's classes, shown under the app's labels (APP_LABEL below).
-  D4  hormone positivity is the image's hormone level on the scaled hormone (Senior's endocrine admission);
-      regional immune positivity and the `<marker>_pos` flags are each marker above its image's own positivity level
-      (typing/positivity.py, owner 2026-10-28; until v15 scaled >= 0.10).
-  D5  marker values are the typing's: compartment REDSEA, UniFORM-aligned, cohort floor/top scale to [0, 1].
+  D3  cell types are the final typing's labels (typing/identity, identity.py; owner 2026-10-29: "replace the old
+      chain with what we have so far"); until v17 Senior's classes from the old chain (classify.py), shown under
+      the app's labels.
+  D4  positivity, hormones included, is each marker above its image's own level on its one measurement
+      (typing/levels.csv; identity.py's pos__ columns). KRT14, CD44, NaKATPase and BActin, which the typing does not
+      read, take display-only levels by E-cadherin's method (typing/display_levels.csv, display_levels.py; owner
+      2026-10-29 "just use the ecad methods"). ColIV becomes structure objects (owner 2026-10-29), so it has no cell
+      positivity flag; its value scale's floor is the image's empty-slide null.
+  D5  marker values are the typing's: despeckled REDSEA on each marker's measurement (whole cell, or membrane where
+      the level selection picked it), on the image's own scale (x - level) / (p99.9 - level) clipped to [0, 1]
+      (identity.py's hormone typing scale); nothing pooled (owner 2026-10-28). Until v17: UniFORM-aligned values on
+      a cohort floor/top scale.
 
 Regions: an object's core is the cells whose centroid lies in it; its peri band is the 20 um ring around it,
 inside Tissue, minus every endocrine object; a cell may sit in several bands. Cells ruled out of analysis (no
-nucleus) and Excluded cells (exocrine inside an object, or a Single without a unique hormone) are counted in
-`census.csv` and kept out of every composition, neighbourhood and display table.
+nucleus) and Excluded cells are counted in `census.csv` and kept out of every composition, neighbourhood and display
+table. Label groups (agent choice 2026-10-29, recorded in uniform_release.json): endocrine = the Endocrine lineage's
+labels plus unnamed cells of the objects that are their endocrine cells (EndocrineCluster, EndocrineSingle); immune =
+the labels the Hematopoietic compartment names (T, B, macrophage profiles, Hematopoietic CD45+), not Hematopoietic
+CD45-, conflicts or doublets.
 
 The UMAP and Leiden clusters are the endocrine composition of the objects with ten or more core cells
 (composition_embedding.py, owner 2026-10-19); the Harmony protein embedding stays in the H5AD for the record.
@@ -56,7 +66,9 @@ REPO = HERE.parents[1]
 sys.path.insert(0, str(HERE / 'typing'))
 sys.path.insert(0, str(REPO / 'scripts'))
 import codex_typing as CT  # noqa: E402
-import classify as CL  # noqa: E402
+import identity as ID  # noqa: E402
+import levels as LV  # noqa: E402
+import registry as RG  # noqa: E402
 from excluded_donors import assert_no_excluded  # noqa: E402
 
 PX = CT.PIXEL_UM
@@ -64,20 +76,16 @@ PERI_UM = 20.0
 MARKERS = ['CD31', 'CD8a', 'CD3e', 'SMA', 'CD4', 'CD34', 'HLADR', 'PDPN', 'panCK', 'ECAD', 'CD163', 'SST', 'ColIV',
            'VIM', 'CD20', 'LGALS3', 'B3TUBB', 'GCG', 'KRT14', 'GAP43', 'CD35', 'CHGA', 'PGP9.5', 'INS', 'CD44',
            'CD45', 'NaKATPase', 'BCatenin', 'CD68', 'BActin', 'CK19']          # the 31-marker panel, app order
-# No structure cell types since 2026-10-17 (codex_typing.STRUCTURE_CELL_CALLS); B cell since the same day.
-# CHGA+ hormone-negative since 2026-10-18 (codex_typing.HORMONE_NEGATIVE): an endocrine cell, in every endocrine total.
-# Macrophages by marker profile since 2026-10-27 (codex_typing.MACROPHAGE_PROFILE): 'Macrophage' became twelve labels.
-MACROPHAGES = tuple(CT.macrophage_labels())
-LABELS = ['Beta cell', 'Alpha cell', 'Delta cell', 'CHGA+ hormone-negative', 'Endocrine', 'CD8a Tcell', 'CD4 Tcell',
-          'T cell', 'B cell', *MACROPHAGES, CT.CD45_RULE_LABEL, 'Exocrine', *CT.TOP_MARKER_LABELS]
-# Since 2026-10-27 no class is a default: a cell no rule claims and its top marker cannot place carries that marker's
-# label, '<marker>+' (codex_typing.TOP_MARKER_LABELS); Exocrine is a rule.
-ENDOCRINE = ('Beta cell', 'Alpha cell', 'Delta cell', 'CHGA+ hormone-negative', 'Endocrine')
-IMMUNE = ('CD8a Tcell', 'CD4 Tcell', 'T cell', 'B cell', *MACROPHAGES, CT.CD45_RULE_LABEL)
+# The labels are the final typing's (typing/identity), read from the run (label_groups); until v17 a fixed list of the
+# old chain's classes.
+ENDOCRINE_STARTS = ('EndocrineCluster', 'EndocrineSingle')     # an unnamed cell of an object that is its endocrine cells
+IDENTITY_COLUMNS = ['object_id', 'label', 'excluded_reason', 'compartment', 'lineage', 'status', 'named_by', 'tags']
 # The `<marker>_pos` flags of cell_distance.csv cover every panel marker (owner, 2026-10-20: the distance profile
 # "needs to have all markers that are common to all donors"; all 31 are measured in every image, and build_image
 # stops if one is not). Until v7 they covered 18.
-POS_MARKERS = list(MARKERS)
+# ColIV is left out since 2026-10-29: it becomes structure objects (owner), not a cell call.
+STRUCTURE_MARKERS = ('ColIV',)
+POS_MARKERS = [m for m in MARKERS if m not in STRUCTURE_MARKERS]
 REGION_MARKERS = ['CD3e', 'CD163', 'CD68', 'LGALS3']
 MORPHOLOGY = {'Nucleus Area': 'Nucleus: Area µm^2', 'Nucleus Length': 'Nucleus: Length µm',
               'Nucleus Circularity': 'Nucleus: Circularity', 'Nucleus Solidity': 'Nucleus: Solidity',
@@ -92,7 +100,7 @@ SINGLE = 'EndocrineSingle'
 
 
 def safe(label: str) -> str:
-    return label.replace(' ', '_').replace('+', 'plus')
+    return label.replace(' ', '_').replace('+', 'plus').replace('/', '_')
 
 
 def sha256(path) -> str:
@@ -115,42 +123,28 @@ def valid(g):
 
 
 # ------------------------------------------------------------------------------------------- the label
-def app_labels(calls: pd.DataFrame, immune: pd.DataFrame) -> np.ndarray:
-    """Senior's classes under the app's labels (D3)."""
-    cls = calls['cell_class'].to_numpy(dtype=object)
-    out = np.full(len(cls), '', dtype=object)
-    direct = {'Beta': 'Beta cell', 'Alpha': 'Alpha cell', 'Delta': 'Delta cell',
-              CT.HORMONE_NEGATIVE: 'CHGA+ hormone-negative',
-              'Endocrine (unresolved subtype)': 'Endocrine', 'Endocrine (ambiguous subtype)': 'Endocrine',
-              'Blood vessel': 'Blood Vessel', 'Nerve': 'Neural', 'Lymphatic': 'Lymphatic', 'Exocrine': 'Exocrine',
-              'Excluded': 'Excluded'}
-    for k, v in direct.items():
-        out[cls == k] = v
-    for k in CT.TOP_MARKER_LABELS:
-        out[cls == k] = k
-    imm = cls == 'Immune'
-    sub = calls[['object_id']].merge(immune, on='object_id', how='left')
-    ic = sub['immune_class'].fillna('').to_numpy(dtype=object)
-    st = sub['immune_subtype'].fillna('').to_numpy(dtype=object)
-    definition = calls['immune_definition'].fillna('').to_numpy(dtype=object)
-    use = np.where(ic != '', ic, definition)                 # most specific rule; else the chain's definition
-    lab = np.full(len(cls), '', dtype=object)                # every immune cell has a rule (no default, 2026-10-27)
-    lab[use == 'Imm-CD45-leukocyte'] = CT.CD45_RULE_LABEL     # owner, 2026-10-27: "Instead of Immune, ... CD45+"
-    lab[use == 'Imm-T-cell'] = 'T cell'
-    lab[(use == 'Imm-T-cell') & (st == 'T-CD8')] = 'CD8a Tcell'
-    lab[(use == 'Imm-T-cell') & (st == 'T-CD4-helper')] = 'CD4 Tcell'
-    prof = sub['macrophage_profile'].fillna('').to_numpy(dtype=object)
-    mac = use == 'Imm-macrophage'
-    if (prof[mac & imm] == '').any():
-        raise ValueError('a macrophage without a marker profile')
-    lab[mac] = prof[mac]
-    lab[use == 'Imm-B-cell'] = 'B cell'
-    out[imm] = lab[imm]
-    if (lab[imm] == '').any():
-        raise ValueError('an Immune cell without an immune rule')
-    if (out == '').any():
-        raise ValueError(f'unmapped classes: {sorted(set(cls[out == ""]))}')
-    return out
+def label_groups(run: Path, rows: list[dict]) -> dict:
+    """The cohort's labels (labels-file order first, then the rest sorted), their tissue-wide frequencies over every
+    analysed cell (enrich_z's expectation) and the endocrine, immune and macrophage groups."""
+    reg = RG.load()
+    lab = ID.labels_table(reg)
+    total, comp = pd.Series(dtype=float), {}
+    for r in rows:
+        d = pd.read_parquet(run / 'typing' / 'identity' / f"{r['image_name']}.parquet",
+                            columns=['label', 'compartment', 'lineage', 'named_by', 'status'])
+        d = d[d['label'] != 'Excluded']
+        total = total.add(d['label'].value_counts(), fill_value=0)
+        named = (d['status'] == '') & (d['named_by'] != '') & ~d['label'].str.startswith(('Conflict ', 'Doublet'))
+        for (lbl, c, lin), _ in d[named].groupby(['label', 'compartment', 'lineage']).size().items():
+            comp.setdefault(lbl, set()).add((c, lin))
+    first = [x for x in dict.fromkeys(lab['label']) if x in total.index]
+    labels = first + sorted(x for x in total.index if x not in first)
+    pan_neg = set(lab.loc[lab['kind'] == 'pan_negative', 'label'])
+    endocrine = [x for x in labels if any(lin == 'Endocrine' for _, lin in comp.get(x, ())) or x in ENDOCRINE_STARTS]
+    immune = [x for x in labels if x not in pan_neg and comp.get(x) and all(c == 'Hematopoietic' for c, _ in comp[x])]
+    macrophages = [x for x in immune if any(lin == 'Myeloid' for _, lin in comp[x])]
+    return {'labels': labels, 'frequencies': (total / total.sum()).reindex(labels).to_dict(),
+            'endocrine': endocrine, 'immune': immune, 'macrophages': macrophages}
 
 
 # ------------------------------------------------------------------------------------------- one image
@@ -180,25 +174,29 @@ def donor_fields(donors: pd.DataFrame, case: str) -> dict:
             'AAb_GADA': float(r.GADA), 'AAb_IA2A': float(r.IA2A), 'AAb_ZnT8A': float(r.ZnT8A), 'AAb_mIAA': float(r.mIAA)}
 
 
-def build_image(run: Path, out: Path, tag: str, case: str, donors: pd.DataFrame, frequencies: dict) -> dict:
+def build_image(run: Path, out: Path, tag: str, case: str, donors: pd.DataFrame, groups: dict) -> dict:
     t0 = time.time()
     typ = CT.typing_dir(run)
     meta = donor_fields(donors, case)
     cid = str(int(case))
-    scale = CL.load_scale(run)
-    calls = pd.read_parquet(typ / 'calls' / f'{tag}.parquet')
-    immune = pd.read_parquet(typ / 'immune' / f'{tag}.parquet', columns=['object_id', 'immune_class', 'immune_subtype',
-                                                                       'macrophage_profile'])
-    audit = json.loads((typ / 'calls' / f'{tag}.json').read_text())
-    refined = pd.read_parquet(typ / 'refine' / f'{tag}.parquet', columns=['object_id', 'refined_class'])
-    aligned = pd.read_parquet(typ / 'aligned' / f'{tag}.parquet')
+    LABELS, ENDOCRINE, IMMUNE, MACROPHAGES = groups['labels'], groups['endocrine'], groups['immune'], groups['macrophages']
+    frequencies = groups['frequencies']
+    reg = RG.load()
+    ident = pd.read_parquet(typ / 'identity' / f'{tag}.parquet')
+    context = pd.read_parquet(typ / 'context' / f'{tag}.parquet', columns=['object_id', 'qc_analysis_eligible', 'islet_num'])
+    lv = pd.read_csv(typ / 'levels.csv')
+    lv = lv[lv['image'] == tag].set_index('marker')
+    shown = pd.read_csv(typ / 'display_levels.csv')
+    shown = shown[shown['image'] == tag].set_index('marker')
+    nulls = LV.empty_nulls(run)
     raw = pd.read_parquet(run / 'cells' / f'{tag}.parquet',
                           columns=['Object ID', 'Centroid X µm', 'Centroid Y µm'] + list(MORPHOLOGY.values()))
-    census = {'image': tag, 'case_id': cid, 'objects_detected': int(len(aligned)),
-              'not_analysis_eligible': int((~aligned['qc_analysis_eligible']).sum())}
+    census = {'image': tag, 'case_id': cid, 'objects_detected': int(len(context)),
+              'not_analysis_eligible': int((~context['qc_analysis_eligible']).sum())}
 
-    cells = calls.merge(refined, on='object_id', how='left', validate='one_to_one')
-    cells['phenotype'] = app_labels(cells, immune)
+    cells = ident[IDENTITY_COLUMNS].merge(context[['object_id', 'islet_num']], on='object_id', how='left',
+                                          validate='one_to_one')
+    cells['phenotype'] = cells['label']
     census['excluded'] = int((cells['phenotype'] == 'Excluded').sum())
     # Singles are counted from the typed cells before Excluded cells are dropped (one cell per Single).
     single_labels = cells.loc[cells['islet_num'].astype(str).str.startswith('Single_'), 'phenotype'].value_counts()
@@ -207,15 +205,37 @@ def build_image(run: Path, out: Path, tag: str, case: str, donors: pd.DataFrame,
                                   cells.loc[cells.phenotype == 'Excluded', 'excluded_reason'].value_counts().items()}
     cells = cells[cells['phenotype'] != 'Excluded'].reset_index(drop=True)
     cells = cells.merge(raw.rename(columns={'Object ID': 'object_id'}), on='object_id', how='left', validate='one_to_one')
-    vals = cells[['object_id']].merge(aligned[['object_id'] + MARKERS], on='object_id', how='left')
-    X = CL.apply_scale(vals[MARKERS].to_numpy(), MARKERS, scale)       # cells x 31, [0, 1], NaN where unmeasured
-    levels = CL.load_levels(run, tag)                                     # positivity: above the image's own level
-    E = CL.excess(vals, MARKERS, levels).to_numpy()                       # > 0 positive (typing/positivity.py)
-    # E-cadherin's positivity flag follows the Exocrine rule's measurement (codex_typing.UNCOMPENSATED_COPIES)
-    for m, c in CT.UNCOMPENSATED_COPIES.items():
-        if m in MARKERS and c in aligned.columns and c in levels.index:
-            u = cells[['object_id']].merge(aligned[['object_id', c]], on='object_id', how='left')
-            E[:, MARKERS.index(m)] = CL.excess(u, [c], levels).to_numpy()[:, 0]
+    # D4/D5: each marker on its measurement, above / scaled to the image's own level (display-only level for the
+    # markers the typing does not read); the scale's top is the 99.9th percentile over the image's analysed cells
+    meas = {m: (lv.loc[m, 'measurement'] if m in lv.index else shown.loc[m, 'measurement'] if m in shown.index
+                else 'whole_cell') for m in MARKERS}
+    rs = pd.read_parquet(typ / 'redsea' / f'{tag}.parquet', columns=['object_id', 'qc_analysis_eligible']
+                         + sorted({reg.column(m, meas[m]) for m in MARKERS}))
+    rs = rs[rs['qc_analysis_eligible']].reset_index(drop=True)
+    level_log = {m: float(lv.loc[m, 'level_log']) if m in lv.index else float(shown.loc[m, 'level_log'])
+                 if m in shown.index else float(np.log1p(nulls[(tag, m)])) for m in MARKERS}
+    missing = [m for m in MARKERS if not np.isfinite(level_log[m])]
+    if missing:
+        raise ValueError(f'{tag}: no level for {missing}')
+    levels = pd.DataFrame({'level_raw': {m: float(np.expm1(v)) for m, v in level_log.items()},
+                           'display_only': {m: m not in lv.index for m in MARKERS}})
+    analysed = rs[[reg.column(m, meas[m]) for m in MARKERS]].clip(lower=0).to_numpy(float)
+    Lr = levels.loc[MARKERS, 'level_raw'].to_numpy(float)
+    top = np.nanpercentile(analysed, reg.const('HORMONE_SCALE_TOP_QUANTILE'), axis=0)
+    # fewer than 0.1 % of the cells above the level (CD20 in an image with few B cells): the top is the highest value;
+    # no cell above the level: every value is 0 on the scale
+    top = np.where(top > Lr, top, np.nanmax(analysed, axis=0))
+    vals = cells[['object_id']].merge(rs, on='object_id', how='left', validate='one_to_one')
+    V = np.column_stack([vals[reg.column(m, meas[m])].clip(lower=0).to_numpy(float) for m in MARKERS])
+    with np.errstate(invalid='ignore', divide='ignore'):
+        X = np.clip((V - Lr) / np.where(top > Lr, top - Lr, np.inf), 0, 1)   # cells x 31, [0, 1], NaN where unmeasured
+    E = np.where(np.isfinite(V), np.log1p(V) - np.log1p(Lr), np.nan)        # > 0 positive (above the image's level)
+    pos = ident.set_index('object_id').reindex(cells['object_id'])
+    for m in MARKERS:                                                       # the typing's own calls where it has them
+        if f'pos__{m}' in pos.columns:
+            agree = (E[:, MARKERS.index(m)] > 0) == pos[f'pos__{m}'].to_numpy(bool)
+            if not agree[np.isfinite(E[:, MARKERS.index(m)])].all():
+                raise ValueError(f'{tag}: {m} positivity differs from the typing (identity pos__{m})')
     labels = cells['phenotype'].to_numpy(dtype=object)
     xy_um = cells[['Centroid X µm', 'Centroid Y µm']].to_numpy(float)
     pts = shapely.points(xy_um / PX)
@@ -242,12 +262,12 @@ def build_image(run: Path, out: Path, tag: str, case: str, donors: pd.DataFrame,
     names = [o[0] for o in objs]
     geoms = np.asarray([o[2] for o in objs], dtype=object)
     otree = STRtree(geoms)
-    in_obj = calls.set_index('object_id').reindex(cells['object_id'])['islet_num'].to_numpy(dtype=object)
+    in_obj = cells['islet_num'].to_numpy(dtype=object)
     index = {n: i for i, n in enumerate(names)}
     core_owner = np.array([index.get(k, -1) if isinstance(k, str) else -1 for k in in_obj])
     ptree = STRtree(pts)
     hormones = ('INS', 'GCG', 'SST')
-    hormone_level = np.array([audit['levels']['hormone_scaled'][h] for h in hormones])
+    hormone_level = levels.loc[list(hormones), 'level_raw'].to_numpy(float)
     hi = [MARKERS.index(h) for h in hormones]
 
     # signed distance to the nearest object boundary (negative inside one)
@@ -286,11 +306,11 @@ def build_image(run: Path, out: Path, tag: str, case: str, donors: pd.DataFrame,
         gfeatures.append({'type': 'Feature', 'geometry': mapping(core.union(band)),
                           'properties': {'name': name + '_exp20um', 'object_class': ocls,
                                          'classification': {'name': 'IsletExpanded'}}})
-        # hormone positivity (D4): each scaled hormone at or above the image's hormone level on that hormone
-        # (classify.hormone_scaled_levels: the level times the hormone's own tissue p99, on the cohort scale)
-        h = X[c][:, hi]
+        # hormone positivity (D4): each hormone above the image's level of that hormone (the typing's call);
+        # *_thr is that level on the measured value
+        h = E[c][:, hi]
         hv = np.isfinite(h).all(axis=1)
-        pos = h >= hormone_level[None, :]
+        pos = h > 0
         npos = pos.sum(axis=1)
         rec = dict(meta, source_file='uniform_20donor', islet_id=name, name=name, object_class=ocls,
                    cells_total=len(c), Multi_Pos=int(np.sum(hv & (npos > 1))), Triple_Neg=int(np.sum(hv & (npos == 0))))
@@ -404,7 +424,7 @@ def build_image(run: Path, out: Path, tag: str, case: str, donors: pd.DataFrame,
     distance = pd.DataFrame({'case_id': int(cid), 'donor_status': meta['Donor Status'], 'cell_region': display_region,
                              'phenotype': labels, 'signed_dist': signed.astype(np.float32),
                              'signed_dist_islet': signed_islet.astype(np.float32)})
-    unmeasured = [m for m in POS_MARKERS if np.isnan(X[:, MARKERS.index(m)]).all()]
+    unmeasured = [m for m in POS_MARKERS if np.isnan(V[:, MARKERS.index(m)]).all()]
     if unmeasured:
         raise ValueError(f'{tag}: {unmeasured} not measured, so not common to all donors; drop them from POS_MARKERS')
     for m in POS_MARKERS:
@@ -414,8 +434,7 @@ def build_image(run: Path, out: Path, tag: str, case: str, donors: pd.DataFrame,
     kde['is_immune'] = kde['phenotype'].isin(IMMUNE)
     kde['phenotype'] = kde['phenotype'].map(safe)
     membership = pd.DataFrame({'object_id': cells['object_id'], 'case_id': cid, 'phenotype': labels,
-                               'cell_class': cells['cell_class'], 'refined_class': cells['refined_class'],
-                               'immune_definition': cells['immune_definition'], 'cell_region': display_region,
+                               **{c: cells[c].to_numpy() for c in IDENTITY_COLUMNS[3:]}, 'cell_region': display_region,
                                'islet_name': display_name, 'x_um': xy_um[:, 0], 'y_um': xy_um[:, 1]})
     membership.to_parquet(out / 'cell_types' / f'{cid}.parquet', index=False)
     in_single = cells['islet_num'].astype(str).str.startswith('Single_').to_numpy()
@@ -431,6 +450,7 @@ def build_image(run: Path, out: Path, tag: str, case: str, donors: pd.DataFrame,
     a.obsm['phenotype_counts'] = np.asarray(counts, dtype=np.float32)
     a.obsm['phenotype_proportions'] = a.obsm['phenotype_counts'] / a.obs.total_cells.to_numpy()[:, None]
     a.obsm['morphology'] = np.asarray(morph, dtype=np.float32)
+    census['display_only_levels'] = {m: float(levels.loc[m, 'level_raw']) for m in MARKERS if levels.loc[m, 'display_only']}
     print(f'{tag}: {len(obs)} of {len(objs)} objects, {len(cells):,} analysed cells, {census["seconds"]}s', flush=True)
     return dict(adata=a, comp=comp, targets=targets, markers=markers_rows, features=feats, lookup=lookup,
                 unpaired=unpaired, distance=distance, kde=kde, census=census)
@@ -457,20 +477,6 @@ TARGET_COLS = ['Case ID', 'source_file', 'region', 'type', 'class', 'area_um2', 
 MARKER_COLS = ['Case ID', 'source_file', 'region', 'region_type', 'marker', 'n_cells', 'mean', 'SD', 'k', 'threshold',
                'pos_count', 'pos_frac', 'Donor Status', 'Age', 'Gender', 'AAb_GADA', 'AAb_ZnT8A', 'AAb_IA2A',
                'AAb_mIAA', '_islet_name', '_region_type']
-
-
-def cohort_frequencies(run: Path, rows: list[dict]) -> dict:
-    """Tissue-wide label frequencies over every analysed cell of the cohort (enrich_z's expectation)."""
-    typ = CT.typing_dir(run)
-    total = pd.Series(0, index=LABELS, dtype=float)
-    for r in rows:
-        t = r['image_name']
-        calls = pd.read_parquet(typ / 'calls' / f'{t}.parquet')
-        imm = pd.read_parquet(typ / 'immune' / f'{t}.parquet', columns=['object_id', 'immune_class', 'immune_subtype',
-                                                                       'macrophage_profile'])
-        lab = pd.Series(app_labels(calls, imm))
-        total = total.add(lab[lab != 'Excluded'].value_counts().reindex(LABELS, fill_value=0), fill_value=0)
-    return (total / total.sum()).to_dict()
 
 
 def main() -> int:
@@ -502,10 +508,11 @@ def main() -> int:
     for d in ('cells', 'donors', 'gson', 'cell_types', 'images'):
         (out / d).mkdir(parents=True)
     reports.mkdir(parents=True)
-    freqs = cohort_frequencies(a.run, rows)
+    groups = label_groups(a.run, rows)
+    LABELS, ENDOCRINE, freqs = groups['labels'], groups['endocrine'], groups['frequencies']
     results = {}
     with ProcessPoolExecutor(a.workers) as pool:
-        futs = {r['image_name']: pool.submit(build_image, a.run, out, r['image_name'], r['case_id'], donors, freqs)
+        futs = {r['image_name']: pool.submit(build_image, a.run, out, r['image_name'], r['case_id'], donors, groups)
                 for r in rows}
         for t, f in futs.items():
             results[t] = f.result()
@@ -516,6 +523,7 @@ def main() -> int:
         if combined.obs[col].dtype == object:
             combined.obs[col] = pd.Categorical(combined.obs[col])
     combined.uns['phenotype_names'] = np.asarray(LABELS, dtype=object)
+    combined.uns['endocrine_labels'] = np.asarray(ENDOCRINE, dtype=object)      # composition_embedding.endocrine_shares
     combined.uns['morphology_names'] = np.asarray(list(MORPHOLOGY), dtype=object)
     combined.uns['case_to_imageid'] = {r['case_id']: int(r['case_id']) for r in rows}
     combined.uns['reference_frequencies'] = freqs
@@ -551,7 +559,8 @@ def main() -> int:
         groovy(combined, kind, [r for t in order for r in results[t][{'composition': 'comp'}.get(kind, kind)]], cols)
     head = subprocess.run(['git', '-C', str(REPO), 'rev-parse', 'HEAD'], capture_output=True, text=True).stdout.strip()
     combined.uns['data_provenance'] = {'builder': 'scripts/uniform/assemble_uniform.py', 'git_commit': head,
-                                      'run': str(a.run.resolve()), 'cell_typing': 'Islet-Explorer-Senior port',
+                                      'run': str(a.run.resolve()),
+                                      'cell_typing': 'final typing run (typing/identity, identity.py)',
                                       'donor_source': str(a.donor_source.resolve()),
                                       'donor_metadata': str(md_path.resolve())}
     combined.write_h5ad(out / 'islet_explorer.h5ad', compression='gzip')
@@ -584,14 +593,21 @@ def main() -> int:
     rel = {'status': 'assembled_pending_owner_review', 'donors': len(rows), 'objects': int(combined.n_obs),
            'by_object_class': {str(k): int(v) for k, v in combined.obs.object_class.value_counts().items()},
            'singles_counted_not_analysed': int(census.singles.sum()),
-           'labels': LABELS, 'top_marker_method': 'canary', 'positivity': 'log_background_per_image',
-           'ecad_measurements': {'immune_rules': 'ECAD (REDSEA)',
-                                 'exocrine_rule': 'ECAD (REDSEA) or ECAD_uncompensated (QuPath membrane mean)'},
+           'labels': LABELS, 'label_groups': {k: groups[k] for k in ('endocrine', 'immune', 'macrophages')},
+           'label_groups_basis': 'agent choice 2026-10-29 (module docstring); owner review pending',
+           'cell_typing': 'typing/identity (identity.py)', 'positivity': 'per-image level, typing/levels.csv',
+           'measurements': {m: str(v) for m, v in pd.read_csv(CT.typing_dir(a.run) / 'levels.csv')
+                            .groupby('marker')['measurement'].agg(lambda x: '/'.join(sorted(set(x)))).items()},
+           'display_only_level_markers': sorted(census['display_only_levels'].iloc[0]),
+           'display_levels': 'typing/display_levels.csv (E-cadherin method, owner 2026-10-29)',
+           'structure_markers_without_cell_flag': list(STRUCTURE_MARKERS),
+           'marker_values': 'despeckled REDSEA, per-image (x - level) / (p99.9 - level) clipped to [0, 1]',
            'embedding': 'endocrine_composition', 'embedding_min_core_cells': MIN_CORE_CELLS,
            'embedding_objects': cdiag['objects'], 'donor_correction': 'none',
            'protein_embedding_donor_correction': 'harmony', 'scvi_required': False, 'git_commit': head,
-           'run': str(a.run.resolve()), 'scale_sha256': sha256(CT.typing_dir(a.run) / 'scale.parquet'),
-           'shifts_sha256': sha256(CT.typing_dir(a.run) / 'shifts.json'),
+           'run': str(a.run.resolve()), 'levels_sha256': sha256(CT.typing_dir(a.run) / 'levels.csv'),
+           'identity_sha256': {r['image_name']: sha256(CT.typing_dir(a.run) / 'identity' / f"{r['image_name']}.parquet")
+                               for r in rows},
            'cells_analysed': int(census.analysed.sum()), 'cells_excluded': int(census.excluded.sum()),
            'cells_not_analysis_eligible': int(census.not_analysis_eligible.sum()),
            'donor_metadata': str(md_path.resolve()), 'donor_metadata_sha256': sha256(md_path)}

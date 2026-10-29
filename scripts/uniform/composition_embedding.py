@@ -67,10 +67,17 @@ def one_thread():
         numba.set_num_threads(before)
 
 
+def endocrine_labels(adata) -> list[str]:
+    return list(adata.uns['endocrine_labels']) if 'endocrine_labels' in adata.uns else list(ENDOCRINE)
+
+
 def endocrine_shares(adata) -> np.ndarray:
-    """Each endocrine label's share of the object's core endocrine cells; NaN where the core has none."""
+    """Each endocrine label's share of the object's core endocrine cells; NaN where the core has none. The labels are the
+    root's own endocrine group (uns['endocrine_labels'], written by assemble_uniform.py since v18: the final typing's
+    Beta, Alpha, Delta, CHGA+ hormone-negative and the unnamed cells of the endocrine objects), else ENDOCRINE."""
     names = list(adata.uns['phenotype_names'])
-    counts = np.asarray(adata.obsm['phenotype_counts'], dtype=float)[:, [names.index(n) for n in ENDOCRINE]]
+    labels = endocrine_labels(adata)
+    counts = np.asarray(adata.obsm['phenotype_counts'], dtype=float)[:, [names.index(n) for n in labels]]
     total = counts.sum(axis=1, keepdims=True)
     return np.divide(counts, total, out=np.full_like(counts, np.nan), where=total > 0)
 
@@ -133,8 +140,8 @@ def fit_composition_embedding(source, min_core_cells=MIN_CORE_CELLS, seed=0, sta
         result.obs[f'leiden_{r}'] = pd.Categorical(labels, categories=levels)
     result.uns['composition_embedding'] = dict(
         method='endocrine_composition_neighbors_Leiden_UMAP',
-        features=np.asarray([f'{n} share of core endocrine cells' for n, k in zip(ENDOCRINE, active) if k], dtype=object),
-        excluded_constant_features=np.asarray([n for n, k in zip(ENDOCRINE, active) if not k], dtype=object),
+        features=np.asarray([f'{n} share of core endocrine cells' for n, k in zip(endocrine_labels(source), active) if k], dtype=object),
+        excluded_constant_features=np.asarray([n for n, k in zip(endocrine_labels(source), active) if not k], dtype=object),
         min_core_cells=min_core_cells, objects=int(fit.sum()), objects_left_out=int((~fit).sum()),
         scaling_mean=mean, scaling_std=scale, n_neighbors=NEIGHBOURS, metric='euclidean', seed=seed,
         min_dist=UMAP_MIN_DIST, spread=UMAP_SPREAD, threads=1, resolutions=np.array(RESOLUTIONS), leiden_flavor='igraph', leiden_iterations=2,
