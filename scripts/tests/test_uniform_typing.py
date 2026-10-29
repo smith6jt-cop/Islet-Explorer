@@ -90,7 +90,7 @@ CELLS = [  # (expected label, start class, {marker: raw value}, established endo
     ('Exocrine', None, {'ECAD': HIGH, 'panCK': HIGH}, None),
     ('Exocrine', 'Islet', {'ECAD': HIGH}, None),                                              # exocrine inside the border (10-29)
     ('Beta cell', 'Islet', {'INS': HIGH, 'ECAD': HIGH}, None),                                # hormone, whole cell
-    ('Excluded', 'Islet', {'INS': HIGH, 'GCG': 0.8 * HIGH}, None),                            # under the 2x margin
+    ('Beta cell', 'Islet', {'INS': HIGH, 'GCG': 0.8 * HIGH}, None),                           # the highest scaled hormone
     ('CHGA+ hormone-negative', 'EndocrineCluster', {'CHGA': HIGH}, None),
     ('EndocrineSingle', 'EndocrineSingle', {'CD31': HIGH}, None),                             # the object names the cell
     ('Alpha cell', 'EndocrineSingle', {'GCG': HIGH, 'CD31': HIGH}, None),                     # a verified single stays
@@ -104,6 +104,7 @@ CELLS = [  # (expected label, start class, {marker: raw value}, established endo
     ('Endothelium Blood Vessel', None, {'CD31': 2 * HIGH, 'SMA': HIGH}, None),                # in a vessel object
     ('Conflict Mesenchymal/Endothelial', None, {'CD31': HIGH, 'SMA': 2 * HIGH}, None),       # CD31 not on top: passes through
     ('Endothelial', None, {'CD31': HIGH}, None),                                              # under half its area inside
+    ('Islet', 'Islet', {'INS': HIGH, 'GCG': HIGH}, None),                                     # exact tie: no subtype
 ]
 # cells in a structure object: index -> (class, area fraction inside)
 IN_STRUCTURE = {22: ('Blood vessel', 0.9), 23: ('Blood vessel', 0.9), 24: ('Blood vessel', 0.3)}
@@ -150,7 +151,7 @@ def test_identity_rules(synthetic_run):
     want = [c[0] for c in CELLS]
     assert got == want, [(i, g, w) for i, (g, w) in enumerate(zip(got, want)) if g != w]
     assert out.iloc[2]['subtype_status'] == 'T_subtype_not_shown'
-    assert out.iloc[11]['excluded_reason'] == 'hormone_unresolved_margin'
+    assert out.iloc[11]['named_by'] == 'INS' and out.iloc[25]['status'] == 'tied_highest_hormones'
     assert out.iloc[13]['status'] == 'no_endocrine_marker_above_level'
     assert out.iloc[10]['named_by'] == 'INS' and out.iloc[14]['named_by'] == 'GCG'
     assert 'endocrine_outside_object' in out.iloc[15]['tags']

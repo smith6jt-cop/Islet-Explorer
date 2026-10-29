@@ -20,7 +20,9 @@ This module names compartments and lineages, never markers.
   markers (plain level) with status none: agent determination, recorded in the ledger (the plan does not cover a
   defining marker positive below its canary level; the owner's rule admits names from positive markers; Xenium types
   cells before its canary step and uses the canary only for conflicts).
-3 Identity by the labels file: Endocrine is the established endocrine typing (labels file named_by 'established'; owner
+3 Identity by the labels file. Endocrine (owner 2026-10-29): inside the endocrine objects the unique highest scaled hormone
+  above its level names the cell, as Senior (subpanel step 5), no margin; an exact tie keeps the start class
+  (tied_highest_hormones). The established path below is kept for a labels row named_by 'established' (none now): owner
   2026-10-28: "The endocrine typing didn't need to change", "If the singles were already found and verified, don't undo
   that"): its decisions inside the islets, clusters and singles (Beta / Alpha / Delta, CHGA+ hormone-negative, unresolved
   subtype, and its exclusions hormone_unresolved_margin, exocrine_inside_islet_border, endocrine_single_*) are kept as
@@ -225,6 +227,15 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED) -> tu
     raw, Lraw = np.expm1(V), np.expm1(L)
     top = np.percentile(raw, reg.const('HORMONE_SCALE_TOP_QUANTILE'), axis=0)
     SC = np.clip((raw - Lraw) / np.where(top > Lraw, top - Lraw, np.nan), 0, None)
+
+    def highest_hormone(rows: np.ndarray, cols: list) -> tuple:
+        """Senior subpanel step 5: the unique highest scaled hormone among those above their levels names the cell
+        (owner 2026-10-29, no margin); an exact tie names no subtype. Returns (any positive, unique, winner index)."""
+        Fs = np.where(P[np.ix_(rows, cols)], np.nan_to_num(SC[np.ix_(rows, cols)], nan=0.0), -np.inf)
+        order = np.sort(Fs, axis=1)
+        any_pos = np.isfinite(order[:, -1])
+        unique = any_pos & (order[:, -1] > order[:, -2]) if len(cols) > 1 else any_pos
+        return any_pos, unique, Fs.argmax(axis=1)
     start = d['endocrine_object_class'].fillna('Tissue').to_numpy(dtype=object)
     margin, min_depth = reg.const('CANARY_MARGIN'), reg.const('CANARY_MIN_DEPTH')
 
@@ -341,9 +352,9 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED) -> tu
         # Which cells are endocrine stays established; which hormone names them is read again with the one measurement
         # per marker and each hormone's per-image level (owner 2026-10-28: an SST-high cell excluded "under 2x the
         # runner-up"; the established comparison used cohort-scaled cytoplasm values, the "two ways of typing" the
-        # 10-28 ruling ended). The subtype markers' folds over their levels are compared: the top names the cell at
-        # HORMONE_MARGIN x the runner-up, else Excluded (hormone_unresolved_margin); no hormone above its level -> the
-        # lineage label when the broad marker is positive (CHGA+ hormone-negative), else the start class.
+        # 10-28 ruling ended). The unique highest scaled hormone names the cell (highest_hormone; owner 2026-10-29), an
+        # exact tie keeps the start class (tied_highest_hormones); no hormone above its level -> the lineage label when
+        # the broad marker is positive (CHGA+ hormone-negative), else the start class.
         info = plan['comp'][r.compartment]
         L_ = info['lineages'][r.lineage]
         subs = {sname: ix[m] for sname, m in L_['subtypes'].items()}
@@ -352,17 +363,14 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED) -> tu
         rows = np.flatnonzero(reread)
         if len(rows) and subs:
             cols = list(subs.values())
-            Fs = F[np.ix_(rows, cols)]
-            order = np.sort(Fs, axis=1)
-            anypos = P[np.ix_(rows, cols)].any(axis=1)
-            clear = order[:, -1] - order[:, -2] >= np.log(reg.const('HORMONE_MARGIN'))
-            win = np.asarray(list(subs), dtype=object)[Fs.argmax(axis=1)]
+            anypos, clear, w = highest_hormone(rows, cols)
+            win = np.asarray(list(subs), dtype=object)[w]
             new = np.full(len(rows), '', dtype=object)
             why = np.full(len(rows), '', dtype=object)
             for x in subs:
                 new[anypos & clear & (win == x)] = label_row(plan, r.compartment, f'{r.lineage}:{x}')['label']
-            new[anypos & ~clear] = 'Excluded'
-            why[anypos & ~clear] = 'hormone_unresolved_margin'
+            new[anypos & ~clear] = start[rows[anypos & ~clear]]
+            status[rows[anypos & ~clear]] = 'tied_highest_hormones'
             broad = P[np.ix_(rows, [ix[m] for m in L_['broad']])].any(axis=1) if L_['broad'] else np.zeros(len(rows), bool)
             new[~anypos & broad] = r.label
             nameless = ~anypos & ~broad
@@ -397,22 +405,16 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED) -> tu
             tags[i].append(f'{lin}_not_named')
         rows = rows[ok]
         srule = rule.get('subtype_rule', '')
-        if srule == 'exclusive_margin' and subs:
-            cols = list(subs.values())
-            Fs = np.nan_to_num(SC[np.ix_(rows, cols)], nan=0.0)
-            any_pos = P[np.ix_(rows, cols)].any(axis=1)
-            order = np.sort(Fs, axis=1)
-            clear = order[:, -1] >= reg.const('HORMONE_MARGIN') * np.maximum(order[:, -2], 1e-6) if len(cols) > 1 else \
-                np.ones(len(rows), bool)
-            win = np.asarray(list(subs), dtype=object)[Fs.argmax(axis=1)]
-            named = any_pos & clear
+        if srule == 'unique_highest' and subs:
+            any_pos, named, w = highest_hormone(rows, list(subs.values()))
+            win = np.asarray(list(subs), dtype=object)[w]
             for s in subs:
                 sel = rows[named & (win == s)]
                 label[sel] = label_row(plan, c, f'{lin}:{s}')['label']
                 named_by[sel] = markers[subs[s]]
-            unresolved = rows[any_pos & ~clear]
-            label[unresolved] = 'Excluded'
-            reason[unresolved] = 'hormone_unresolved_margin'
+            tied = rows[any_pos & ~named]
+            label[tied] = start[tied]
+            status[tied] = 'tied_highest_hormones'
             neg = rows[~any_pos]
             label[neg] = rule['label']
             named_by[neg] = ';'.join(L_['broad'])
