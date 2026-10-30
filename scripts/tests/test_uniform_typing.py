@@ -118,11 +118,11 @@ CELLS = [  # (expected label, start class, {marker: raw value}, established endo
     ('T cell', 'Islet', {'CD3e': HIGH, 'CD45': HIGH}, ('Immune', '')),                        # a T cell inside an islet
     ('Tissue', None, {}, None),                                                               # no marker above background
     ('Tissue', None, {'ColIV': 1e6}, None),                                                   # ColIV is never read
-    ('Endothelial', None, {'CD31': HIGH}, None),                                              # lineage marker
+    ('Tissue', None, {'CD31': HIGH}, None),                                                   # no vessel: CD31 names nothing (10-30)
     ('Tissue', None, {'BCatenin': HIGH}, None),                                               # only a shared marker
     ('Endothelium Blood Vessel', None, {'CD31': 2 * HIGH, 'SMA': HIGH}, None),                # in a vessel object
-    ('Conflict Mesenchymal/Endothelial', None, {'CD31': HIGH, 'SMA': 2 * HIGH}, None),       # CD31 not on top: passes through
-    ('Endothelial', None, {'CD31': HIGH}, None),                                              # under half its area inside
+    ('Stromal', None, {'CD31': HIGH, 'SMA': 2 * HIGH}, None),                                 # CD31 not on top: passes through
+    ('Tissue', None, {'CD31': HIGH}, None),                                                   # under half its area inside
     ('Islet', 'Islet', {'INS': HIGH, 'GCG': HIGH}, None),                                     # exact tie: no subtype
     ('CD8a Tcell', None, {'CD3e': HIGH, 'CD45': HIGH, 'CD8a': HIGH, 'CD163': HIGH}, None),     # T leads Myeloid by one
     ('T cell', None, {'CD3e': 2 * HIGH, 'CD45': HIGH, 'CD163': HIGH}, None),                  # tie: brighter, covers more
@@ -169,6 +169,10 @@ def synthetic_run(tmp_path):
     lv = pd.DataFrame({'image': tag, 'marker': markers, 'measurement': [reg.measurement(m) for m in markers],
                        'level_log': np.log1p(LEVEL_RAW)})
     lv.to_csv(typ / 'levels.csv', index=False)
+    # the reading competing groups are compared on (owner 2026-10-30): same values in every compartment here
+    diff = [m for m in markers if reg.differentiation(m)]
+    pd.DataFrame({'image': tag, 'marker': diff, 'measurement': [reg.differentiation(m) for m in diff],
+                  'level_log': np.log1p(LEVEL_RAW)}).to_csv(typ / 'levels_differentiation.csv', index=False)
     pd.DataFrame({'marker': markers, 'decision': 'use'}).to_csv(typ / 'levels_selection.csv', index=False)
     lv.assign(canary_log=np.log1p(CANARY_RAW))[['image', 'marker', 'canary_log']].to_csv(
         typ / 'canary_levels.csv', index=False)

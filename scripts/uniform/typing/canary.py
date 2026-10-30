@@ -19,6 +19,10 @@ spillover is what the canary level must discount): Epithelial = endocrine-object
 tissue cells positive for an Epithelial majority marker that are not leukocytes (levels.populations 'hormone' and
 'exocrine'); Hematopoietic = leukocytes (the Leukocyte marker with a T or Myeloid marker). A marker carried by both has
 its registry check population instead (LGALS3: endocrine-object hormone-positive cells). A reference needs KNOWN_NEGATIVE_MIN_ABOVE cells above the percentile, or the run stops.
+Which cells are leukocytes or epithelial cells is read on each marker's differentiation reading (typing/
+levels_differentiation.csv; owner 2026-10-30: "Use membrane for differentiating, but then the whole cell still needs
+to be used for positivity"), as levels.py defines its reference cells; the percentile itself is read on the marker's
+positivity measurement (typing/levels.csv).
 
 Writes typing/canary_levels.csv: image, marker, level_log, canary_log, canary_fold_over_level, null_reference,
 null_cells, null_rate_at_level (the plain level's rate in the null).
@@ -54,15 +58,25 @@ def image_levels(run: Path, tag: str) -> list[dict]:
     x = {m: np.clip(np.nan_to_num(d[reg.column(m, lv.loc[m, 'measurement'])].to_numpy(float), nan=0.0), 0, None)
          for m in markers}
     pos = {m: np.log1p(x[m]) > lv.loc[m, 'level_log'] for m in markers}
+    # reference cells on the differentiation readings (levels.py)
+    ld = pd.read_csv(run / 'typing' / 'levels_differentiation.csv')
+    ld = ld[ld['image'] == tag].set_index('marker')
+    ref_pos = dict(pos)
+    for m in markers:
+        if reg.differentiation(m):
+            if m not in ld.index or ld.loc[m, 'measurement'] != reg.differentiation(m):
+                raise SystemExit(f'{tag} {m}: no level on its differentiation measurement')
+            v = np.clip(np.nan_to_num(d[reg.column(m, ld.loc[m, 'measurement'])].to_numpy(float), nan=0.0), 0, None)
+            ref_pos[m] = np.log1p(v) > ld.loc[m, 'level_log']
     q = reg.const('CANARY_NULL_QUANTILE')
     need = reg.const('KNOWN_NEGATIVE_MIN_ABOVE')
     cut = reg.const('ISOLATION_UM')
     rows = []
-    hormone, _ = LV.cell_sets(d, pos, R)
-    epithelial_any = LV.any_of(pos, [x for x in R['epithelial'] if x in pos], len(d)) & d['ordinary'].to_numpy()
+    hormone, _ = LV.cell_sets(d, ref_pos, R)
+    epithelial_any = LV.any_of(ref_pos, [x for x in R['epithelial'] if x in ref_pos], len(d)) & d['ordinary'].to_numpy()
     hematopoietic = [x for x in markers if reg.role(x) == 'defining' and reg.table.loc[x, 'compartment'] == 'Hematopoietic']
     for m in markers:
-        pops = LV.populations(d, reg, m, pos, xy, cut, R)       # the same populations as the levels' references
+        pops = LV.populations(d, reg, m, ref_pos, xy, cut, R)   # the same populations as the levels' references
         # Epithelial null: endocrine cells and ordinary-tissue epithelial cells, not isolated (the canary level must
         # discount a neighbor's spillover), leaving out cells positive for a hematopoietic marker other than m, so a
         # hematopoietic marker's null is never defined by its own negativity (review 2026-10-28)
@@ -75,7 +89,7 @@ def image_levels(run: Path, tag: str) -> list[dict]:
         pan = R['leukocyte']
         others = [x for x in hematopoietic if x not in pan and x != m and
                   (m in pan or not ({lin for lin, _ in reg.lineage_entries(x)} & lin_m))]
-        refs = {'Epithelial': (hormone | epithelial_any) & ~LV.any_of(pos, others, len(d)),
+        refs = {'Epithelial': (hormone | epithelial_any) & ~LV.any_of(ref_pos, others, len(d)),
                 'Hematopoietic': pops[reg.table.loc[m, 'check_reference']]
                 if reg.table.loc[m, 'check_reference'] in ('t_cells', 'leukocyte') else pops['leukocyte']}
         carriers = {reg.table.loc[m, 'compartment']} | set(RG.split(reg.table.loc[m, 'shared_by']))

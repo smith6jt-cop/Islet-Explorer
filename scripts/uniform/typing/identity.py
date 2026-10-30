@@ -44,6 +44,18 @@ This module names compartments and lineages, never markers.
 4 Confirmed: compartment and lineage single or resolved, and a marker that confirms the label's lineage (registry
   `confirms`) and was not used to name it is canary-positive; NaN where the lineage has no such marker.
 
+Readings (owner 2026-10-30: "Use membrane for differentiating, but then the whole cell still needs to be used for
+positivity"): positivity and canary positivity are read on each marker's positivity measurement (whole cell; Ki67 the
+nucleus); the fold over level that ranks and compares groups competing for a cell (groups' scores and brightness, the
+conflict order, the tie rule's brightness, the structure step's top marker; fold__<marker> in the output) is read on the
+marker's differentiation measurement where the registry gives one (typing/levels_differentiation.csv). The tie rule's
+coverage stays the whole cell's interior pixels against the whole-cell level (area_coverage.py reads typing/levels.csv).
+Structure-defined compartments (owner 2026-10-30): a compartment whose labels are all structure rows (Neural; Endothelial,
+whose blood-vessel and lymphatic cells come from their objects) is reached only through the structure step. Outside a
+structure call its markers place no cell (they still add depth where the registry has another compartment carry them);
+the overlap stays a feature (crossed_frac_*). A cell they would have placed is typed by its other evidence, else keeps
+its start class with status structure_marker_only; tag <compartment>_marker_outside_structure.
+
 Writes typing/identity/<image>.parquet (one row per analysis-eligible cell) and <image>.json (counts).
 
     python scripts/uniform/typing/identity.py --run $OUT --workers 20 [--images ND_0112 ...]
@@ -116,7 +128,9 @@ def build_plan(reg: RG.Registry, markers: list[str]) -> dict:
                     L['subtypes'][sub] = m
         lineages = {k: v for k, v in lineages.items() if v['specific']}
         residual = next(iter(rows.loc[rows['kind'] == 'residual', 'lineage']), '')
+        kinds = set(rows['kind'])
         plan['comp'][c] = {'defining': defining, 'carried': carried, 'pan': pan, 'lineages': lineages,
+                           'structure_only': bool(kinds) and kinds <= {'structure'},
                            'pan_label': next(iter(rows.loc[rows['kind'] == 'pan', 'label']), ''),
                            'pan_negative_label': next(iter(rows.loc[rows['kind'] == 'pan_negative', 'label']), ''),
                            'residual': residual,
@@ -195,15 +209,18 @@ def placed(P, C, F, COV, detect, count, margin, min_depth, lead=0.0, interior_va
 
 
 # -- one image -------------------------------------------------------------------------------------------------------------
-def load_values(run: Path, tag: str, reg: RG.Registry, markers: list[str], lv: pd.DataFrame) -> pd.DataFrame:
+def load_values(run: Path, tag: str, reg: RG.Registry, markers: list[str], lv: pd.DataFrame,
+                ld: pd.DataFrame | None = None) -> pd.DataFrame:
     cols = {m: reg.column(m, lv.loc[m, 'measurement']) for m in markers}
+    diff_cols = {m: reg.column(m, ld.loc[m, 'measurement']) for m in markers if ld is not None and m in ld.index}
     rs = pd.read_parquet(run / 'typing' / 'redsea' / f'{tag}.parquet',
-                         columns=['object_id', 'qc_analysis_eligible'] + sorted(set(cols.values())))
+                         columns=['object_id', 'qc_analysis_eligible'] + sorted(set(cols.values()) | set(diff_cols.values())))
     ctx = pd.read_parquet(run / 'typing' / 'context' / f'{tag}.parquet',
                           columns=['object_id', 'x_um', 'y_um', 'context', 'endocrine_object_class']
                           + [c for cols in STRUCTURE_COLUMNS.values() for c in cols])
     d = rs[rs['qc_analysis_eligible']].merge(ctx, on='object_id', how='left', validate='one_to_one')
     d.attrs['columns'] = cols
+    d.attrs['diff_columns'] = diff_cols
     return d.reset_index(drop=True)
 
 
@@ -237,17 +254,28 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED) -> tu
     cl = cl[cl['image'] == tag].set_index('marker')
     missing = [m for m in markers + state if not np.isfinite(lv.loc[m, 'level_log'])]
     missing += [m for m in markers if m not in cl.index or not np.isfinite(cl.loc[m, 'canary_log'])]
+    # the differentiation readings (levels.py): the level of each marker compared on another measurement
+    diff = [m for m in markers if reg.differentiation(m)]
+    ld = None
+    if diff:
+        ld_all = pd.read_csv(run / 'typing' / 'levels_differentiation.csv')
+        ld = ld_all[ld_all['image'] == tag].set_index('marker')
+        missing += [m for m in diff if m not in ld.index or ld.loc[m, 'measurement'] != reg.differentiation(m)
+                    or not np.isfinite(ld.loc[m, 'level_log'])]
     if missing:
         raise SystemExit(f'{tag}: no level or canary level for {sorted(set(missing))}: the method must be fixed first')
     plan = build_plan(reg, markers)
     ix = plan['ix']
-    d = load_values(run, tag, reg, markers + state, lv)
+    d = load_values(run, tag, reg, markers + state, lv, ld)
     n = len(d)
     V = np.column_stack([np.log1p(np.clip(np.nan_to_num(d[d.attrs['columns'][m]].to_numpy(float), nan=0.0), 0, None))
                          for m in markers])
     L = lv.loc[markers, 'level_log'].to_numpy(float)
     Lc = np.maximum(cl.loc[markers, 'canary_log'].to_numpy(float), L)
     P, C, F = V > L, V > Lc, V - L
+    for m in diff:          # the fold competing groups are compared on: the differentiation reading
+        vd = np.log1p(np.clip(np.nan_to_num(d[d.attrs['diff_columns'][m]].to_numpy(float), nan=0.0), 0, None))
+        F[:, ix[m]] = vd - float(ld.loc[m, 'level_log'])
     # area coverage (area_coverage.py): proportion of the cell's pixels at or above the level, per marker
     cov = AC.read_validated(run, tag, d['object_id'], markers)
     # the tie rule reads the interior coverage (owner 2026-10-29, "Interior coverage, clear lead")
@@ -276,7 +304,8 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED) -> tu
 
     # compartments
     comps = plan['compartments']
-    detect = [[ix[m] for m in plan['comp'][c]['defining']] for c in comps]
+    # a structure-defined compartment is reached only through the structure step: its markers detect nothing here
+    detect = [[] if plan['comp'][c]['structure_only'] else [ix[m] for m in plan['comp'][c]['defining']] for c in comps]
     count = [[ix[m] for m in plan['comp'][c]['defining'] + plan['comp'][c]['carried']] for c in comps]
     cp = placed(P, C, F, COV, detect, count, margin, min_depth, lead, interior_valid)
     compartment = np.where(cp['group'] >= 0, np.asarray(comps, dtype=object)[np.maximum(cp['group'], 0)], '')
@@ -367,6 +396,15 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED) -> tu
     for i in np.flatnonzero(structure_hit):
         tags[i] = [t for t in tags[i] if not t.startswith('passed_through_')]
     done |= structure_hit
+    # a structure-defined compartment's marker positive without that compartment's structure call names nothing
+    # (owner 2026-10-30): the overlap stays a feature; tagged
+    struct_cols = []
+    for c in comps:
+        if plan['comp'][c]['structure_only']:
+            cols_c = [ix[m] for m in plan['comp'][c]['defining']]
+            struct_cols += cols_c
+            for i in np.flatnonzero(P[:, cols_c].any(axis=1) & ~(structure_hit & (compartment == c))):
+                tags[i].append(f'{c.lower()}_marker_outside_structure')
     # A canary-level conflict between mutually exclusive compartments, or lineages of one compartment, that the margin
     # does not resolve names no cell type (owner 2026-10-28: "there is no such thing as a CD8+CD163+ cell"): the cell
     # is kept with the conflict as its class, never named as either side. Below the canary level a second group is not
@@ -547,7 +585,9 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED) -> tu
     left = ~done
     if (left & (compartment != '')).any():
         raise ValueError(f'{tag}: {int((left & (compartment != "")).sum())} cells of a compartment were not placed')
-    status[left & P.any(axis=1)] = 'shared_marker_only'
+    structure_marker = P[:, struct_cols].any(axis=1) if struct_cols else np.zeros(n, bool)
+    status[left & structure_marker] = 'structure_marker_only'
+    status[left & ~structure_marker & P.any(axis=1)] = 'shared_marker_only'
     status[left & ~P.any(axis=1)] = 'no_marker_above_background'
 
     # confirmation
@@ -595,6 +635,10 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED) -> tu
         out[f'canary__{m}'] = C[:, j].astype(np.int8)
         out[f'fold__{m}'] = F[:, j].astype(np.float32)
     audit = {'image': tag, 'cells': n, 'markers': markers,
+             'readings': {m: {'positivity': str(lv.loc[m, 'measurement']),
+                              **({'differentiation': str(ld.loc[m, 'measurement'])} if m in diff else {})}
+                          for m in markers + state},
+             'structure_only_compartments': [c for c in comps if plan['comp'][c]['structure_only']],
              'cells_without_interior': int((~interior_valid).sum()),
              'label': {str(k): int(v) for k, v in out['label'].value_counts().items()},
              'compartment_status': {str(k): int(v) for k, v in out['compartment_status'].value_counts().items()},

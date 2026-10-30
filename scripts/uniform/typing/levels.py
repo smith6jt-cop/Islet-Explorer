@@ -28,6 +28,17 @@ Candidate levels, on log1p of the REDSEA value (exact zeros set aside when readi
 The marker sets the checks use come from the registry's lineages (hormones = the Endocrine subtypes, leukocytes = the
 Leukocyte marker with a T or Myeloid marker, and so on); this module names lineages, never markers.
 
+Two readings (owner 2026-10-30: "Use membrane for differentiating, but then the whole cell still needs to be used for
+positivity"). The stages below choose each marker's level on the measurement it is compared on (registry
+`differentiation`: the membrane for CD3e, CD68, CD163 and E-cadherin; the positivity measurement for every other
+marker), and those readings define every reference population. A last stage, positivity, then chooses the whole-cell
+level of the markers compared on another measurement, against the same reference cells: gated by the marker's own
+background check (an immune marker in isolated hormone-positive endocrine cells; E-cadherin's level is floored at the
+empty-slide null), the checks between lineages (CD45 among CD3e+ cells, CD3e among myeloid cells, E-cadherin among
+leukocytes) reported, since they gate the differentiation level. Whole-cell CD3e at its background peak passes the
+hormone check on all 20 images but not CD45 among CD3e+ >= 0.80 on 5 (0.58-0.73), nor did any other level method
+tried (output/typing_20261030); the membrane comparison decides those cells.
+
 Checks (constants in `registry/<panel>__<tissue>__constants.csv`, the agent's determination delegated by the owner on
 2026-10-28; each counts how often a marker is positive where it cannot be), in dependency order. Every out-of-place rate
 is read on reference cells with no cell positive for the marker within ISOLATION_UM (centroids): measured on the 7 ND
@@ -50,8 +61,10 @@ stops the run (a known-negative level is judged by its own check; background_bas
 A marker with no passing option is left out of typing on all images, unless the registry marks it required (a class
 cannot do without it): then the run stops.
 
-Writes typing/levels.csv (chosen level per image and marker), typing/levels_options.csv (every option, image and
-check), typing/levels_selection.csv (per marker: chosen option, or dropped / stop, and why).
+Writes typing/levels.csv (the positivity level per image and marker), typing/levels_differentiation.csv (the level
+of the markers compared on another measurement, on that measurement), typing/levels_options.csv (every option, image
+and check), typing/levels_selection.csv and typing/levels_differentiation_selection.csv (per marker: chosen option,
+or dropped / stop, and why).
 
     python scripts/uniform/typing/levels.py --out $OUT --workers 20 [--images ND_0112 ...]
 """
@@ -191,7 +204,8 @@ def methods_for(reg: RG.Registry, m: str) -> list[str]:
 
 
 def options(reg: RG.Registry, m: str) -> list[tuple[str, str]]:
-    return list(product(reg.candidates(m), methods_for(reg, m)))
+    """A marker's options on the measurement it is compared on (its differentiation measurement, else its candidates)."""
+    return list(product([reg.differentiation(m)] if reg.differentiation(m) else reg.candidates(m), methods_for(reg, m)))
 
 
 # -- per image --------------------------------------------------------------------------------------------------------
@@ -207,7 +221,8 @@ def empty_nulls(out: Path) -> dict:
 
 
 def load(out: Path, tag: str, reg: RG.Registry) -> pd.DataFrame:
-    cols = sorted({reg.column(m, meas) for m in reg.measured_markers() for meas in reg.candidates(m)})
+    cols = sorted({reg.column(m, meas) for m in reg.measured_markers()
+                   for meas in reg.candidates(m) + ([reg.differentiation(m)] if reg.differentiation(m) else [])})
     rs = pd.read_parquet(out / 'typing' / 'redsea' / f'{tag}.parquet', columns=['object_id', 'qc_analysis_eligible'] + cols)
     ctx = pd.read_parquet(out / 'typing' / 'context' / f'{tag}.parquet',
                           columns=['object_id', 'context', 'endocrine_object_class'] + list(OVERLAP.values()))
@@ -442,8 +457,10 @@ def lineage_report(reg: RG.Registry, m: str, p: np.ndarray, fixed: dict, q: floa
             'expected_false_proportion': false / calls.sum() if calls.sum() else np.nan}
 
 
-def image_pass(out: Path, tag: str, reg_name: tuple, stage: str, chosen: dict, nulls: dict) -> list[dict]:
-    """Every option of the stage's markers on one image, with its checks; `chosen` holds earlier stages' choices.
+def image_pass(out: Path, tag: str, reg_name: tuple, stage: str, chosen: dict, nulls: dict,
+               positivity: dict | None = None) -> list[dict]:
+    """Every option of the stage's markers on one image, with its checks; `chosen` holds earlier stages' choices (each
+    marker on the measurement it is compared on), `positivity` the whole-cell choices of the positivity stage.
     Out-of-place rates are read on isolated reference cells (ISOLATION_UM); the all-cell rate is reported beside."""
     reg = RG.load(*reg_name)
     R = roles(reg)
@@ -631,11 +648,46 @@ def image_pass(out: Path, tag: str, reg_name: tuple, stage: str, chosen: dict, n
             meas = reg.measurement(m)
             lv = level_for(d, reg, m, meas, 'peak_dense', k, np.nan)
             row(m, meas, 'peak_dense', lv, passes=True)
+    elif stage == 'positivity':
+        # whole-cell positivity of the markers compared on another measurement (owner 2026-10-30), against the reference
+        # cells of the differentiation readings (fixed): gated by the marker's own background check; the checks between
+        # lineages are reported, since they gate the differentiation level
+        pops = populations(d, reg, '', fixed, xy, cut, R)
+        hormone_free = isolated_from(leuk, hormone_cells, xy, cut)
+        lk = any_of(fixed, R['leukocyte'], n)
+        mye_all = np.logical_and.reduce([fixed[x] for x in R['myeloid']])
+        for m in [m for m in reg.measured_markers() if reg.differentiation(m)]:
+            bp = reg.table.loc[m, 'background_population']
+            subset = any_of(fixed, reg.broad(bp), n) if bp else None
+            for meas, method in product(reg.candidates(m), methods_for(reg, m)):
+                lv = level_for(d, reg, m, meas, method, k, nulls.get((tag, m), np.nan), subset=subset)
+                p = lv['pos']
+                if reg.positivity_class(m) == 'majority_epithelial':
+                    r_all, r_iso, n_iso = isolated_rate(p, pops['leukocyte'], xy, cut, nmin)
+                    row(m, meas, method, lv, sensitivity=rate(p, ordinary, nmin), in_leukocytes=r_iso,
+                        in_leukocytes_all=r_all, isolated_cells=n_iso, passes=True)
+                else:
+                    inh_all, inh, _ = isolated_rate(p, hormone_free, xy, cut, nmin)
+                    _, among_mye, _ = isolated_rate(p, mye_all, xy, cut, nmin)
+                    row(m, meas, method, lv, out_of_place=inh, in_hormone_all=inh_all, in_hormone=inh,
+                        sensitivity=rate(p, lk, nmin), leukocyte_among_positive=rate(lk, p, nmin),
+                        positive_among_myeloid=among_mye,
+                        passes=ok_all([le(inh, reg.const('CD45_AMONG_HORMONE_MAX'))]))
     elif stage == 'final':                              # the chosen level of every marker kept
         for m, (meas, method) in chosen.items():
             x = d[reg.column(m, meas)].to_numpy(float)
             bc, bw, _ = peak_level(np.log1p(x[np.isfinite(x) & (x > 0)]), k, lowest=False)
-            row(m, meas, method, chosen_levels[m], passes=True, background_center=bc, background_width=bw)
+            reading = 'differentiation' if positivity and m in positivity else 'positivity'
+            row(m, meas, method, chosen_levels[m], passes=True, background_center=bc, background_width=bw,
+                reading=reading)
+            if reading == 'differentiation':           # its whole-cell positivity level, as the positivity stage read it
+                pmeas, pmethod = positivity[m]
+                bp = reg.table.loc[m, 'background_population']
+                lv = level_for(d, reg, m, pmeas, pmethod, k, nulls.get((tag, m), np.nan),
+                               subset=any_of(fixed, reg.broad(bp), n) if bp else None)
+                x = d[reg.column(m, pmeas)].to_numpy(float)
+                bc, bw, _ = peak_level(np.log1p(x[np.isfinite(x) & (x > 0)]), k, lowest=False)
+                row(m, pmeas, pmethod, lv, passes=True, background_center=bc, background_width=bw, reading='positivity')
     return rows
 
 
@@ -710,20 +762,22 @@ def main() -> int:
     select_on = [t for t in tags if status.get(t) == 'ND']
     if not select_on:
         raise SystemExit('no ND image among the images: options are chosen on the ND controls')
-    chosen: dict[str, tuple[str, str]] = {}
+    chosen: dict[str, tuple[str, str]] = {}            # each marker on the measurement it is compared on
+    positivity: dict[str, tuple[str, str]] = {}        # whole-cell levels of the markers compared on another one
     decisions, all_rows = [], []
 
     def run_stage(stage: str) -> tuple[pd.DataFrame, pd.DataFrame]:
         with ProcessPoolExecutor(a.workers) as ex:
             rows = [r for rs in ex.map(image_pass, repeat(out), tags, repeat(reg_name), repeat(stage), repeat(dict(chosen)),
-                                       repeat(nulls)) for r in rs]
+                                       repeat(nulls), repeat(dict(positivity))) for r in rs]
         df = pd.DataFrame(rows)
         if df.empty:                           # a stage with no marker (e.g. every immune marker known-negative)
             return df, df
         return df, select(df, select_on)
 
-    def decide(stage: str, sel: pd.DataFrame, best_rows: dict | None = None) -> list[dict]:
+    def decide(stage: str, sel: pd.DataFrame, best_rows: dict | None = None, target: dict | None = None) -> list[dict]:
         out = []
+        target = chosen if target is None else target
         if sel.empty:
             return out
         for marker, opts in sel.groupby('marker', sort=False):
@@ -732,7 +786,7 @@ def main() -> int:
             meas = best['measurement'].split('|') if stage == 'immune' else [best['measurement']]
             meth = best['method'].split('|') if stage == 'immune' else [best['method']]
             for i, m in enumerate(names):
-                chosen[m] = (meas[i], meth[i])      # the best option, also when it fails: later stages and the report
+                target[m] = (meas[i], meth[i])      # the best option, also when it fails: later stages and the report
                 failing = ' '.join(x for x in (best['failing'], best.get('failing_other_images'))
                                    if isinstance(x, str) and x)
                 out.append({'marker': m, 'decision': 'use' if best['ok'] else 'stop',
@@ -773,24 +827,36 @@ def main() -> int:
         all_rows.append(df)
         decisions += decide(stage, sel)
         print(f'[{stage}]', {m: chosen.get(m) for m in (sel['marker'].unique() if len(sel) else [])}, flush=True)
+    # the whole-cell positivity of the markers compared on another measurement (owner 2026-10-30)
+    df, sel = run_stage('positivity')
+    all_rows.append(df)
+    decided = decide('positivity', sel, target=positivity)
+    print('[positivity]', positivity, flush=True)
     opts = pd.concat(all_rows, ignore_index=True)
     opts.to_csv(dest / 'levels_options.csv', index=False)
-    dec = pd.DataFrame(decisions)
+    dec = pd.DataFrame([x for x in decisions if x['marker'] not in positivity] + decided)
     dec.to_csv(dest / 'levels_selection.csv', index=False)
+    dec_diff = pd.DataFrame([x for x in decisions if x['marker'] in positivity])
+    dec_diff.to_csv(dest / 'levels_differentiation_selection.csv', index=False)
     with ProcessPoolExecutor(a.workers) as ex:
         final = [r for rs in ex.map(image_pass, repeat(out), tags, repeat(reg_name), repeat('final'), repeat(dict(chosen)),
-                                    repeat(nulls)) for r in rs]
+                                    repeat(nulls), repeat(dict(positivity))) for r in rs]
     cols = ['image', 'marker', 'measurement', 'method', 'center', 'width', 'level_log', 'level_raw', 'positive_fraction',
             'zero_fraction', 'background_center', 'background_width']
-    lv = pd.DataFrame(final)[cols]
+    final = pd.DataFrame(final)
+    lv = final[final['reading'] == 'positivity'][cols]
     lv.to_csv(dest / 'levels.csv', index=False)
+    final[final['reading'] == 'differentiation'][cols].to_csv(dest / 'levels_differentiation.csv', index=False)
     wild = lv.iloc[0:0]
     pd.set_option('display.width', 250)
     print(dec.to_string(index=False))
+    print('differentiation:')
+    print(dec_diff.to_string(index=False))
     if len(wild):
         print('LEVELS MORE THAN 10x FROM THEIR COHORT MEDIAN:')
         print(wild.to_string(index=False))
-    stops = dec[dec['decision'] == 'stop']
+    stops = pd.concat([dec, dec_diff])
+    stops = stops[stops['decision'] == 'stop']
     if len(wild):
         return 3
     if len(stops):

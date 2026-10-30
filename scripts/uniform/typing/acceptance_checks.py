@@ -145,6 +145,12 @@ def image_checks(run: Path, tag: str) -> dict:
     A['start_class_without_status'] = int((kept & (d['status'] == '').to_numpy()).sum())
     A['start_class_with_positive_marker_not_object_defined'] = int(
         (kept & (d['status'] == 'no_marker_above_background').to_numpy() & (d['n_positive'] > 0).to_numpy()).sum())
+    # 5 structure-defined compartments (owner 2026-10-30): their cells come only from the structure step
+    basis = d['compartment_basis'].to_numpy(dtype=object)
+    only = [c for c, info in plan['comp'].items() if info['structure_only']]
+    A['structure_compartment_without_structure_call'] = int((d['compartment'].isin(only).to_numpy() & (basis != 'structure')).sum())
+    structure_labels = plan['labels'].loc[plan['labels']['kind'] == 'structure', 'label'].tolist()
+    A['structure_label_without_structure_call'] = int((np.isin(lab, structure_labels) & (basis != 'structure')).sum())
 
     # tables
     rows = []
@@ -219,7 +225,16 @@ def main() -> int:
                       ALLOWED_MEASUREMENTS)).sum()),
                   'typing_marker_not_on_every_image': int(sum(reg.table.loc[m, 'on_every_image'] != 'yes'
                                                                for m in used)),
-                  'typing_marker_without_level': int(lv[lv['marker'].isin(used)]['level_log'].isna().sum())}
+                  'typing_marker_without_level': int(lv[lv['marker'].isin(used)]['level_log'].isna().sum()),
+                  # owner 2026-10-30: positivity on the registry's measurement (whole cell; Ki67 the nucleus)
+                  'positivity_measurement_not_registry': int((lv['measurement'] != lv['marker'].map(reg.measurement)).sum())}
+    diff = [m for m in used if reg.differentiation(m)]
+    if diff:
+        ld = pd.read_csv(run / 'typing' / 'levels_differentiation.csv')
+        run_assert['differentiation_measurement_not_registry'] = int(
+            (ld['measurement'] != ld['marker'].map(reg.differentiation)).sum())
+        run_assert['differentiation_level_missing'] = int(sum(len(tags) - int((ld['marker'] == m).sum()) for m in diff)
+                                                           + ld['level_log'].isna().sum())
     assertions = {'run': run_assert, 'images': {r['image']: r['assert'] for r in res}}
     (dest / 'assertions.json').write_text(json.dumps(assertions, indent=1))
     pd.DataFrame([x for r in res for x in r['per_label']]).to_csv(dest / 'per_label.csv', index=False)

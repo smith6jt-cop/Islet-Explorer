@@ -18,6 +18,9 @@ Roles (canonical marker biology for the tissue, owner 2026-10-28):
                for every image")
 Measurement: one REDSEA compartment per marker for every cell, whole cell, membrane or nucleus (owner, 2026-10-28:
 "We can't have two ways of typing. We need to use whole cell and/or membrane and/or nucleus for all measurements.").
+Positivity is read on the whole cell for every marker, Ki67 on the nucleus; `differentiation` names the measurement a
+marker is compared on when groups compete for a cell (owner, 2026-10-30: "Use membrane for differentiating, but then
+the whole cell still needs to be used for positivity").
 Lineage: 'Lineage' for a marker that identifies the lineage by itself (CD3e: T), 'Lineage:subtype' for a subtype marker
 (INS: Endocrine:Beta, CD8a: T:CD8), several entries for a marker on several lineages (CD4: T:CD4;Myeloid). Typing code
 names lineages, never markers; the markers come from these entries.
@@ -112,6 +115,15 @@ class Registry:
 
     def candidates(self, marker: str) -> list[str]:
         return split(self.table.loc[marker, 'measurement_candidates']) or [self.measurement(marker)]
+
+    def differentiation(self, marker: str) -> str:
+        """The measurement that decides between groups competing for a cell, where it is not the positivity one;
+        '' otherwise (owner 2026-10-30)."""
+        return self.table.loc[marker, 'differentiation'] if 'differentiation' in self.table.columns else ''
+
+    def reading(self, marker: str) -> str:
+        """The measurement a marker is compared on: its differentiation measurement, else its positivity one."""
+        return self.differentiation(marker) or self.measurement(marker)
 
     def column(self, marker: str, measurement: str | None = None) -> str:
         """The REDSEA column holding this marker's measurement, e.g. 'Cell__INS'."""
