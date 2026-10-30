@@ -26,6 +26,15 @@ the continuation plan. These later decisions supersede the earlier rules on the 
 
 Implementation and evidence: `docs/typing_resume_20261029.md`, `output/typing_resume_20261029/`.
 
+## Decisions — 2026-10-30 (Claude session; not yet implemented)
+
+| Date | Ruling (verbatim) | Status |
+|---|---|---|
+| 10-30 | "it was still using membrane measurements when I thought we were using whole cell only except for Ki67" then "Use membrane for differentiating, but then the whole cell still needs to be used for positivity." | to implement: positivity (levels, canary) on the whole cell for every marker, Ki67 on the nucleus; the membrane reading of CD3e, CD68, CD163 and ECAD only decides between groups competing for a cell (ranking, conflicts, ties) -- the agent's reading, stated to the owner and not objected to. Supersedes the 10-28 level selection's membrane positivity for those four (chosen because their whole-cell options failed the epithelial check, BCatenin/ECAD) and Ki67's whole-cell setting. Both v18 and v19 carry the old setting |
+| 10-30 | "Object ID 494269d7-bae4-4787-bb91-de1cd173a5e5 in Aab_6450 is classified as neural but has no part of the cell overlapping with the neural object so at most it would get a passthrough percentage as a feature." Then, on CD31: "Then yes the same rule should apply. The endothelial cells without a centroid in a blood vessel object are likely just cells that have interactions with endothelium rather than being an endothelial cell." | to implement: Neural and Endothelial cell types only from the structure objects (Nerve; Capillary = blood vessel; the 10-29 structure step: centroid inside, more than half the area inside, the object's marker the cell's top marker). B3TUBB/GAP43 or CD31 positivity outside the objects names no cell; the overlap stays a passthrough feature (crossed_frac_nerve / crossed_frac_vessel). The example was named by the marker route (named_by B3TUBB;GAP43), centroid outside every nerve object (nearest 0.5 um), crossed_frac_nerve 0.26, also ECAD, BCatenin, PGP9.5 positive. Marker-route labels affected (v18): Neural 86,141, Endothelial about 126,000. Lymphatic is already structure-only (PDPN names no lineage) |
+| 10-30 | "It didn't type cells by object starting with cell centroid excluding cells whose centroid didn't fall within the annotation bounds" | checked, no fault found in the membership rule: v18 and v19 assign objects by centroid (cell_context.py, smallest containing outline; QuPath parents agree for all but 4 of 3.5 million cells); no endocrine label outside endocrine objects; no structure type outside its object. The fault the owner saw is the marker-route Neural label (row above) |
+| 10-30 (to the Codex agent) | "put the lymphatic objects on pause, it is taking far too long to do. use the previous lymphatic objects and give me the new qupath project" | in force; see `docs/typing_resume_20261029.md` |
+
 ## Measurement and positivity
 
 | Date | Ruling (verbatim) | Status |
