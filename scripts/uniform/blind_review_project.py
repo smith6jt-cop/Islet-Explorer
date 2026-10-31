@@ -113,7 +113,10 @@ def minimal_project(source: dict, destination: Path, image_names: dict[str, str]
                            'serverBuilder': copy.deepcopy(entry['serverBuilder'])})
     if len(images) != len(image_names):
         raise ValueError('Some sampled images are missing from the source project')
-    return {'version': source['version'], 'uri': destination.as_uri(), 'images': images,
+    # QuPath 0.7 requires both scalar timestamps while loading the project. They
+    # carry no prediction metadata; omitting them prevents the sanitizer running.
+    return {'version': source['version'], 'createTimestamp': source['createTimestamp'],
+            'modifyTimestamp': source['modifyTimestamp'], 'uri': destination.as_uri(), 'images': images,
             'lastID': max(int(e['entryID']) for e in images)}
 
 

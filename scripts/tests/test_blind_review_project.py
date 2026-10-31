@@ -64,15 +64,46 @@ def test_public_table_has_no_predictions_native_ids_or_weights(population):
 def test_project_copies_only_selected_raw_server_definitions(tmp_path):
     raw = {'builderType': 'uri', 'uri': 'file:///raw-image.tif'}
     source = {'version': '0.7.0', 'uri': 'file:///original/project.qpproj',
+              'createTimestamp': 1000, 'modifyTimestamp': 2000,
               'metadata': {'prediction': 'should disappear'}, 'images': [
                   {'entryID': 5, 'imageName': 'original', 'serverBuilder': raw,
                    'metadata': {'prediction': 'Beta cell'}, 'description': 'Beta cell'},
                   {'entryID': 6, 'imageName': 'unused', 'serverBuilder': raw}]}
     result = B.minimal_project(source, tmp_path / 'project.qpproj', {'original': 'Review image 001'})
     assert result['images'] == [{'entryID': 5, 'imageName': 'Review image 001', 'serverBuilder': raw}]
+    assert result['createTimestamp'] == 1000 and result['modifyTimestamp'] == 2000
     assert 'prediction' not in json.dumps(result)
     result['images'][0]['serverBuilder']['uri'] = 'changed'
     assert raw['uri'] == 'file:///raw-image.tif'
+
+
+def test_minimal_project_loads_in_installed_native_qupath(tmp_path):
+    qupath = Path(B.QUPATH)
+    if not qupath.is_file():
+        pytest.skip('QuPath is unavailable')
+    raw = {'builderType': 'uri', 'providerClassName': 'qupath.imagej.images.servers.ImageJServerBuilder',
+           'uri': (tmp_path / 'not_opened_image.tif').as_uri(), 'args': []}
+    source = {'version': '0.7.0', 'createTimestamp': 1234567890000, 'modifyTimestamp': 1234567891000,
+              'images': [{'entryID': 1, 'imageName': 'fixture', 'serverBuilder': raw,
+                          'metadata': {'prediction': 'SECRET_PREDICTION'}}]}
+    destination = tmp_path / 'project.qpproj'
+    destination.write_text(json.dumps(B.minimal_project(source, destination, {'fixture': 'Review image 001'})))
+    script = tmp_path / 'load_minimal_project.groovy'
+    script.write_text(r'''
+import qupath.lib.projects.ProjectIO
+import java.awt.image.BufferedImage
+def project = ProjectIO.loadProject(new File(args[0]), BufferedImage.class)
+assert project.getImageList().size() == 1
+assert project.getImageList()[0].getImageName() == 'Review image 001'
+assert project.getImageList()[0].getMetadataMap().isEmpty()
+assert !new File(args[0]).text.contains('SECRET_')
+println('minimal blinded project loads without opening source pixels')
+''')
+    result = subprocess.run([str(qupath), 'script', '-a', str(destination), str(script)],
+                            capture_output=True, text=True, timeout=60,
+                            env={**os.environ, 'JAVA_TOOL_OPTIONS': '-Xmx1g -XX:ActiveProcessorCount=2'})
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert 'minimal blinded project loads without opening source pixels' in result.stdout
 
 
 def test_exclusion_manifest_deduplicates_and_requires_ids(tmp_path):
