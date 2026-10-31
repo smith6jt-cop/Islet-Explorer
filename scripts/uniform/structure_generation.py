@@ -273,6 +273,58 @@ def _validate_previous(inv, run, manifest, selection, tags):
     return paths
 
 
+def _validate_pdpn_gate(inv, run, manifest, gate, tags):
+    """Owner 2026-10-30 (option 1): the reviewed re-run Lymphatic objects whose mean PDPN reaches the image's own
+    PDPN level. The gate record proves the subset; the agent's actual review pins the gated geometry and views."""
+    import collagen_structures as C
+    if gate.get('source_run') != str(run) or set(gate.get('images', {})) != set(tags):
+        raise ValueError('PDPN-gated Lymphatic selection has a different cell run/cohort')
+    instruction = inv.json(inv.pointer(gate['owner_instruction']))
+    if instruction.get('decision') != 'pdpn_level_object_gate' or instruction.get('cell_run') != str(run):
+        raise ValueError('PDPN-gated Lymphatic selection lacks the owner decision')
+    method = gate['method']
+    inv.add(Path(method['code_path']), method['code_sha256'])
+    inv.pointer(gate['levels'])
+    paths = {}
+    for tag in tags:
+        item = manifest['images'][tag]; chosen = gate['images'][tag]
+        current = _lineage(inv, run, tag, item['cell_inputs'])
+        inv.records(chosen)
+        if (Path(chosen['tissue']['path']).resolve() != (run / 'inputs/tissue' / f'{tag}.geojson').resolve()
+                or chosen['tissue']['sha256'] != current['files']['tissue']['sha256']):
+            raise ValueError(f'{tag}: PDPN-gated Lymphatic uses another Tissue lineage')
+        if Path(chosen['source_objects']['path']).resolve() != (run / 'structures/Lymphatic' / f'Lymphatic__{tag}.geojson').resolve():
+            raise ValueError(f'{tag}: PDPN gate source is not this run\'s re-run objects')
+        if item.get('quantitative') != chosen['record']:
+            raise ValueError(f'{tag}: PDPN gate record pointer differs')
+        q = inv.json(inv.pointer(item['quantitative']))
+        if q.get('image') != tag or q.get('method') != method['name'] or q.get('checks', {}).get('passed') is not True:
+            raise ValueError(f'{tag}: PDPN gate record is missing or failed')
+        if any(q['inputs'].get(k) != chosen[k] for k in ('tissue', 'source_objects', 'previous_objects')):
+            raise ValueError(f'{tag}: PDPN gate record has different inputs')
+        if set(item['classes']) != set(CLASSES): raise ValueError(f'{tag}: incomplete selected structure inventory')
+        paths[tag] = {}
+        for cls in CLASSES:
+            selected = item['classes'][cls]; selected_path = inv.pointer(selected)
+            paths[tag][cls] = str(selected_path)
+            if cls == 'Lymphatic':
+                if (selected != chosen['classes'][cls] or q.get('output_sha256') != selected['sha256']
+                        or Path(q['output_path']).resolve() != selected_path.resolve()):
+                    raise ValueError(f'{tag}: PDPN gate output differs from selected Lymphatic')
+            else:
+                inv.add(run / 'structures' / cls / f'{cls}__{tag}.geojson', selected['sha256'])
+            if cls != 'Collagen IV':
+                _review(inv, item['reviews'][cls], tag, cls, selected['sha256'], current['files']['tissue']['sha256'],
+                        item['quantitative']['sha256'] if cls == 'Lymphatic' else None)
+        sidecar = inv.json(inv.pointer(item['collagen_sidecar']))
+        inv.add(C.checkpoint_path(run, tag), item['collagen_sidecar']['sha256'])
+        C.validate_record(run, tag, sidecar)
+        inv.records(sidecar); inv.directory(run / 'structures' / C.PREVIOUS)
+        for source in (Path(C.__file__), Path(C.ST.__file__), Path(C.RS.__file__), Path(CT.__file__)):
+            inv.add(source.resolve())
+    return paths
+
+
 def _result(inv, run, binding_path, binding, manifest_path, manifest, paths, extra=None):
     if not inv.unchanged(): raise ValueError('Structure generation inputs changed during cohort validation')
     provenance = {'schema': 'uniform.structure_generation_provenance/1', 'cell_run': str(run),
@@ -304,6 +356,11 @@ def _validate(run):
         return _result(inv, run, binding_path, binding, manifest_path, manifest, paths,
                        {'lymphatic_selection': 'exact_previous_objects',
                         'user_instruction_sha256': restoration['user_instruction']['sha256']})
+    if restoration.get('schema') == 'lymphatic_pdpn_level_gate/1':
+        paths = _validate_pdpn_gate(inv, run, manifest, restoration, tags)
+        return _result(inv, run, binding_path, binding, manifest_path, manifest, paths,
+                       {'lymphatic_selection': 'pdpn_level_gate',
+                        'owner_instruction_sha256': restoration['owner_instruction']['sha256']})
     if restoration.get('schema') != 'lymphatic_bounded_restoration/1' or restoration.get('source_run') != str(run):
         raise ValueError('Unsupported or misplaced Lymphatic restoration')
     if set(restoration.get('images', {})) != set(tags): raise ValueError('Restoration cohort differs')
