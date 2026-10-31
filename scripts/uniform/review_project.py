@@ -19,10 +19,13 @@ import shutil
 import hashlib
 import subprocess
 import sys
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pandas as pd
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import structure_generation as SG
 
 REPO = Path(__file__).resolve().parents[2]
 HERE = Path(__file__).resolve().parent
@@ -147,10 +150,20 @@ def main() -> int:
     ap.add_argument('--project',type=Path,required=True)
     ap.add_argument('--assignments',type=Path,required=True)
     ap.add_argument('--workers',type=int,default=2)
+    ap.add_argument('--java-heap-gb',type=int,default=64)
+    ap.add_argument('--java-processors',type=int,default=12)
     a=ap.parse_args();run=a.run.resolve();project=a.project.resolve();out=a.assignments.resolve()
+    if min(a.workers,a.java_heap_gb,a.java_processors)<1:
+        ap.error('workers, Java heap and Java processors must be positive')
     if project.exists() or out.exists():
         raise FileExistsError('Use fresh project and assignment paths; existing review projects are never overwritten')
     rows=list(csv.DictReader((REPO/'scripts/uniform/cohort.csv').open()))
+    generation = SG.provenance(run)
+    if generation is not None:
+        for row in rows:
+            context = json.loads((run/'typing/context'/f"{row['image_name']}.json").read_text())
+            if context.get('structure_generation') != generation:
+                raise ValueError(row['image_name']+': typing context uses a different structure generation')
     # Build and reconcile every assignment before making the native project copy.
     tables={}; all_classes=set(); summary=[]
     for row in rows:
@@ -176,23 +189,28 @@ def main() -> int:
     for tag,(typed,excluded) in tables.items():
         typed.to_csv(out/f'{tag}.csv',index=False);excluded.to_csv(out/f'{tag}.excluded.csv',index=False)
         for cls,rgb in structure_colors.items():
-            src=run/'structures'/cls/f'{cls}__{tag}.geojson';obj=json.loads(src.read_text())
+            src=SG.path(run,tag,cls);obj=json.loads(src.read_text())
             for f in obj['features']:
                 p=f.setdefault('properties',{});p['classification']={'name':cls,'color':rgb};p['isLocked']=True
-            (out/'structures'/src.name).write_text(json.dumps(obj))
+            (out/'structures'/f'{cls}__{tag}.geojson').write_text(json.dumps(obj))
     pd.DataFrame(summary).to_csv(out/'summary_by_image.csv',index=False)
     script=Path(__file__).parent/'qupath'/'import_final_review.groovy'
     def import_one(tag):
         log=out/'logs'/f'{tag}.log'
+        started=time.monotonic()
         with log.open('w') as fh:
             rc=subprocess.run([QUPATH,'script','-p',str(project/'project.qpproj'),'-i',tag,'-a',str(out),str(script)],
                 stdout=fh,stderr=subprocess.STDOUT,stdin=subprocess.DEVNULL,
-                env={**os.environ,'JAVA_TOOL_OPTIONS':'-Xmx64g -XX:ActiveProcessorCount=12'}).returncode
+                env={**os.environ,'JAVA_TOOL_OPTIONS':f'-Xmx{a.java_heap_gb}g -XX:ActiveProcessorCount={a.java_processors}'}).returncode
         text=log.read_text();ok=rc==0 and 'in neither 0' in text and f'saved {tag}' in text
         print(tag,'review imported' if ok else 'REVIEW FAILED',flush=True)
-        return {'image':tag,'pass':ok,'log':str(log)}
+        return {'image':tag,'pass':ok,'log':str(log),'elapsed_seconds':time.monotonic()-started}
     with ThreadPoolExecutor(a.workers) as pool:results=list(pool.map(import_one,tables))
-    record={'run':str(run),'project':str(project),'images':results,'status':'complete' if all(r['pass'] for r in results) else 'failed'}
+    if SG.provenance(run) != generation:
+        raise ValueError('Structure generation changed during native review project build')
+    record={'run':str(run),'project':str(project),'images':results,'structure_generation':generation,
+            'resources':{'workers':a.workers,'java_heap_gb':a.java_heap_gb,'java_processors':a.java_processors},
+            'status':'complete' if all(r['pass'] for r in results) else 'failed'}
     (out/'review_manifest.json').write_text(json.dumps(record,indent=2)+'\n')
     (project/'REVIEW.txt').write_text('Current final cell typing, all detections accounted for; Tissue/endocrine objects and four structure classes.\nSource run: '+str(run)+'\nAssignments: '+str(out)+'\n')
     return 0 if record['status']=='complete' else 1

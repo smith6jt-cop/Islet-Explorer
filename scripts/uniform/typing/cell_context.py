@@ -42,6 +42,8 @@ from shapely.geometry import shape
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import codex_typing as CT  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import structure_generation as SG  # noqa: E402
 
 STRUCTURAL = CT.REPO / 'data/development/all-donor-20260920/structural'
 CROSSED_COLUMN = {'Blood vessel': 'crossed_frac_vessel', 'Nerve': 'crossed_frac_nerve',
@@ -69,6 +71,11 @@ def valid(g):
 
 def import_structures(out: Path, rows: list[dict]) -> dict:
     """Copy each image's three structure classes into the run, with provenance. Idempotent."""
+    selected = SG.validate(out, [r['image_name'] for r in rows])
+    if selected is not None:
+        # The explicit bundle supersedes masks for consumption, not the frozen
+        # native annotations or their original structure-reuse certificate.
+        return {tag: item['classes'] for tag, item in selected['manifest']['images'].items()}
     dest_root = out / 'structures'
     made = dest_root / 'thresholded.json'
     thresholded = json.loads(made.read_text())['images'] if made.exists() else {}
@@ -140,6 +147,7 @@ def contain_smallest(geoms: list, keys: list, pts) -> tuple[np.ndarray, np.ndarr
 
 
 def process(out: Path, tag: str) -> dict:
+    generation = SG.provenance(out)
     typ = CT.typing_dir(out)
     cells = pd.read_parquet(out / 'cells' / f'{tag}.parquet',
                             columns=['Object ID', 'Centroid X µm', 'Centroid Y µm', 'Nucleus: Max diameter µm',
@@ -179,7 +187,7 @@ def process(out: Path, tag: str) -> dict:
     rec = {'image': tag, 'cells': len(frame), 'endocrine_objects': len(objs), 'cells_in_two_objects': multi}
     for name in CT.STRUCTURES:
         cls = CT.OBJECT_CLASS[name]
-        geoms = [valid(shape(f['geometry'])) for f in features(out / 'structures' / cls / f'{cls}__{tag}.geojson')
+        geoms = [valid(shape(f['geometry'])) for f in features(SG.path(out, tag, cls))
                  if f.get('geometry')]
         inside = np.zeros(len(frame), bool)
         frac = np.zeros(len(frame))
@@ -209,6 +217,9 @@ def process(out: Path, tag: str) -> dict:
                                           'centroid_in_parent_not': int((frame['in_islet'] & ~q_in).sum()),
                                           'parent_in_centroid_not': int((~frame['in_islet'] & q_in).sum())}
     rec['in_islet'] = int(frame['in_islet'].sum())
+    if SG.provenance(out) != generation:
+        raise ValueError(f'{tag}: structure generation changed during cell context')
+    rec['structure_generation'] = generation
     dest = typ / 'context' / f'{tag}.parquet'
     dest.parent.mkdir(parents=True, exist_ok=True)
     frame.to_parquet(dest, index=False)
@@ -224,10 +235,13 @@ def main() -> int:
     ap.add_argument('--workers', type=int, default=6)
     a = ap.parse_args()
     rows = CT.cohort_rows()
+    generation = SG.provenance(a.out)
     import_structures(a.out, rows)
     tags = [r['image_name'] for r in rows] if a.images == ['all'] else a.images
     with ProcessPoolExecutor(a.workers) as pool:
         list(pool.map(process, [a.out] * len(tags), tags))
+    if SG.provenance(a.out) != generation:
+        raise ValueError('Structure generation changed during cell context cohort')
     return 0
 
 

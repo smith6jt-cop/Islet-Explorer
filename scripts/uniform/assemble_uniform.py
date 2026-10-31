@@ -70,6 +70,8 @@ import codex_typing as CT  # noqa: E402
 import identity as ID  # noqa: E402
 import levels as LV  # noqa: E402
 import registry as RG  # noqa: E402
+sys.path.insert(0, str(HERE))
+import structure_generation as SG  # noqa: E402
 from excluded_donors import assert_no_excluded  # noqa: E402
 
 PX = CT.PIXEL_UM
@@ -258,7 +260,7 @@ def build_image(run: Path, out: Path, tag: str, case: str, donors: pd.DataFrame,
     shapely.prepare(tissue)
     structures = {}
     for cls in structure_classes:
-        g = [valid(shape(f['geometry'])) for f in features(run / 'structures' / cls / f'{cls}__{tag}.geojson')
+        g = [valid(shape(f['geometry'])) for f in features(SG.path(run, tag, cls))
              if f.get('geometry')]
         structures[cls] = (np.asarray(g, dtype=object), STRtree(g)) if g else None
 
@@ -412,7 +414,7 @@ def build_image(run: Path, out: Path, tag: str, case: str, donors: pd.DataFrame,
     if not obs:
         raise ValueError(f'{tag}: no object with analysed core and band cells')
     for cls in structure_classes:
-        for f in features(run / 'structures' / cls / f'{cls}__{tag}.geojson'):
+        for f in features(SG.path(run, tag, cls)):
             if f.get('geometry'):
                 gfeatures.append({'type': 'Feature', 'geometry': f['geometry'], 'properties': {'classification': {'name': cls}}})
     for name, g in singles:
@@ -501,6 +503,13 @@ def main() -> int:
     if out.exists() or reports.exists():
         raise FileExistsError('use fresh output and report roots')
     rows = CT.cohort_rows()
+    generation = SG.provenance(a.run)
+    if generation is not None:
+        for row in rows:
+            tag = row['image_name']
+            context = json.loads((CT.typing_dir(a.run) / 'context' / f'{tag}.json').read_text())
+            if context.get('structure_generation') != generation:
+                raise ValueError(f'{tag}: typing context uses a different structure generation')
     if a.include_collagen_iv:
         import structure_metrics
         # Includes current Tissue/nucleus geometry, image/channel source and ColIV code/output validation.
@@ -609,7 +618,10 @@ def main() -> int:
         shutil.copytree(a.run / 'cell_structure_distances', out / 'cell_structure_distances')
         shutil.copy2(a.run / 'structures' / 'collagen_iv.json', out / 'collagen_iv_provenance.json')
         shutil.copy2(a.run / structure_metrics.MANIFEST, out / structure_metrics.MANIFEST)
+    if SG.provenance(a.run) != generation:
+        raise ValueError('Structure generation changed during assembly')
     rel = {'status': 'assembled_pending_owner_review', 'donors': len(rows), 'objects': int(combined.n_obs),
+           'structure_generation': generation,
            'by_object_class': {str(k): int(v) for k, v in combined.obs.object_class.value_counts().items()},
            'singles_counted_not_analysed': int(census.singles.sum()),
            'labels': LABELS, 'label_groups': {k: groups[k] for k in ('endocrine', 'immune', 'macrophages')},

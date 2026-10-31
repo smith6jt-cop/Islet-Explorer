@@ -22,6 +22,8 @@ from shapely.geometry import shape
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import codex_typing as CT
 import collagen_structures as C
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import structure_generation as SG
 
 CLASSES = ('Capillary', 'Nerve', 'Lymphatic', 'Collagen IV')
 MANIFEST = 'structure_metrics_manifest.json'
@@ -41,7 +43,16 @@ def output_paths(tag):
     return [f'cell_structure_distances/{tag}.parquet', f'cell_structure_distances/{tag}.json']
 
 def file_hashes(run, paths):
-    return {path: sha256(run / path) for path in paths}
+    return {path: sha256(input_target(run, path)) for path in paths}
+
+def input_target(run, relative):
+    """Keep logical manifest keys stable while resolving the selected geometry."""
+    p = Path(relative)
+    if len(p.parts) == 3 and p.parts[0] == 'structures' and p.parts[1] in CLASSES:
+        cls = p.parts[1]
+        if p.name.startswith(cls + '__') and p.suffix == '.geojson':
+            return SG.path(run, p.stem[len(cls) + 2:], cls)
+    return Path(run) / p
 
 def validate_manifest(run, expected_images=None):
     """Fail before assembly writes anything if geometry, cells, code or endpoint outputs are stale."""
@@ -50,6 +61,8 @@ def validate_manifest(run, expected_images=None):
     if not path.is_file():
         raise ValueError('Missing structure metrics manifest; run typing/structure_metrics.py first')
     manifest = json.loads(path.read_text())
+    if manifest.get('structure_generation') != SG.provenance(run):
+        raise ValueError('Structure metrics generation changed; rebuild endpoints')
     if manifest.get('schema') != 'uniform.structure_metrics/1':
         raise ValueError('Unsupported structure metrics manifest')
     if manifest.get('metric_code_sha256') != sha256(__file__):
@@ -66,7 +79,7 @@ def validate_manifest(run, expected_images=None):
         if set(recorded) != expected:
             raise ValueError(f'Structure metrics {kind} inventory is incomplete')
         for relative, digest in recorded.items():
-            target = run / relative
+            target = input_target(run, relative)
             if not target.is_file() or sha256(target) != digest:
                 raise ValueError(f'Stale structure metrics {kind}: {relative}')
     C.validate_current(run,tags)
@@ -75,19 +88,25 @@ def validate_manifest(run, expected_images=None):
 def write_manifest(run, results, global_inputs):
     """Publish only after every result and every input has been checked again for concurrent changes."""
     tags = [item['image'] for item in results]
+    generation = SG.provenance(run)
+    if any(item.get('structure_generation') != generation for item in results):
+        raise ValueError('Structure generation changed while measuring structures')
     inputs = dict(global_inputs)
     for item in results:
         inputs.update(item['inputs'])
     for relative, digest in inputs.items():
-        if sha256(run / relative) != digest:
+        if sha256(input_target(run, relative)) != digest:
             raise ValueError(f'Input changed while measuring structures: {relative}')
     C.validate_current(run,tags)
     outputs = ['structure_region_metrics.csv'] + [p for tag in tags for p in output_paths(tag)]
     manifest = {'schema': 'uniform.structure_metrics/1', 'source_run': str(run.resolve()),
                 'metric_code_sha256': sha256(__file__), 'pixel_um': CT.PIXEL_UM,
                 'classes': list(CLASSES), 'images': tags, 'inputs': inputs,
+                'structure_generation': generation,
                 'outputs': file_hashes(run, outputs), 'rows': sum(len(item['records']) for item in results)}
     part = run / (MANIFEST + '.part')
+    if SG.provenance(run) != generation:
+        raise ValueError('Structure generation changed before endpoint publication')
     part.write_text(json.dumps(manifest, indent=2) + '\n')
     os.replace(part, run / MANIFEST)
     return manifest
@@ -121,6 +140,7 @@ def distances(xy_um, geoms):
     return result
 
 def one(run, row):
+    generation = SG.provenance(run)
     tag=row['image_name']; tissue_path=run/'inputs'/'tissue'/f'{tag}.geojson'
     inputs=file_hashes(run,input_paths(tag))
     tissue=shapely.union_all([valid(shape(f['geometry'])) for f in features(tissue_path)])
@@ -131,8 +151,8 @@ def one(run, row):
             regions.append((p.get('name',f.get('id')),'endocrine_object',cls,valid(shape(f['geometry'])).intersection(tissue)))
     records=[]; hashes={}
     for cls in CLASSES:
-        path=run/'structures'/cls/f'{cls}__{tag}.geojson'
-        hashes[cls]=inputs[str(path.relative_to(run))]
+        path=SG.path(run,tag,cls)
+        hashes[cls]=inputs[f'structures/{cls}/{cls}__{tag}.geojson']
         geoms=np.asarray([valid(shape(f['geometry'])).intersection(tissue) for f in features(path) if f.get('geometry')],dtype=object)
         geoms=geoms[~shapely.is_empty(geoms)]
         tree=shapely.STRtree(geoms)
@@ -149,14 +169,18 @@ def one(run, row):
             dest.with_suffix('.json').write_text(json.dumps({'image':tag,'objects':len(geoms),'cells':len(cells),
                 'definition':'centroid to nearest Collagen IV area, um; zero inside; NA if no objects',
                 'structure_sha256':hashes[cls],'tissue_sha256':inputs[str(tissue_path.relative_to(run))],
-                'cells_sha256':inputs[f'cells/{tag}.parquet']},indent=2)+'\n')
+                'cells_sha256':inputs[f'cells/{tag}.parquet'],
+                'structure_generation':generation},indent=2)+'\n')
+    if SG.provenance(run) != generation:
+        raise ValueError(f'{tag}: structure generation changed during endpoints')
     print(tag,len(records),'structure regions',flush=True)
-    return {'image':tag,'records':records,'inputs':inputs}
+    return {'image':tag,'records':records,'inputs':inputs,'structure_generation':generation}
 
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--run',type=Path,required=True)
     p.add_argument('--workers',type=int,default=3)
     a=p.parse_args();a.run=a.run.resolve();rows=CT.cohort_rows()
+    SG.validate(a.run,[r['image_name'] for r in rows])
     C.validate_current(a.run,[r['image_name'] for r in rows])
     global_inputs=file_hashes(a.run,['structures/collagen_iv.json'])
     with ProcessPoolExecutor(a.workers) as pool:
