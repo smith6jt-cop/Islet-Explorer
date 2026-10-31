@@ -52,6 +52,14 @@ CLASSES = {
     'B3TUBB+ (top marker)': (('top', 'B3TUBB+'), 'B3TUBB', ['DAPI', 'B3TUBB', 'ECAD', 'CD45']),
     'INS+ (top marker)': (('top', 'INS+'), 'INS', ['DAPI', 'INS', 'CHGA', 'ECAD']),
     'CD45+ (top marker)': (('top', 'CD45+ (top marker)'), 'CD45', ['DAPI', 'CD45', 'ECAD', 'CD3e']),
+    # root v17 (the canary logic): the new top-marker names and the tagged statuses
+    'CD20+ (top marker)': (('top', 'CD20+'), 'CD20', ['DAPI', 'CD20', 'CD45', 'ECAD']),
+    'ECAD+ (top marker)': (('top', 'ECAD+'), 'ECAD_uncompensated', ['DAPI', 'ECAD', 'panCK', 'CD45']),
+    'panCK+ (top marker)': (('top', 'panCK+'), 'panCK', ['DAPI', 'panCK', 'ECAD', 'CK19']),
+    'Lineage ambiguous (canary)': (('route', 'canary_lineage_ambiguous_top_marker'), 'ECAD_uncompensated',
+                                   ['DAPI', 'ECAD', 'CD45', 'CD31', 'SMA']),
+    'Doublet suspected (canary)': (('route', 'canary_doublet_suspected_top_marker'), 'ECAD_uncompensated',
+                                   ['DAPI', 'ECAD', 'CD45', 'CD31', 'SMA']),
 }
 
 
@@ -80,11 +88,17 @@ def select(d: pd.DataFrame, spec, marker: str, rng) -> tuple[pd.DataFrame, pd.Da
             m &= d['immune_subtype'] == spec[2]
     elif kind == 'exocrine':
         m = d['resolved_by'] == 'definition_exocrine'
+    elif kind == 'route':
+        m = d['resolved_by'] == spec[1]
     else:
         m = (d['cell_class'] == spec[1]) & d['resolved_by'].str.endswith('top_marker')
     g = d[m]
     e = g[f'ex_{marker}']
-    if kind == 'top':
+    if kind == 'route':
+        half = len(g) // 2
+        a, b = g.iloc[:half], g.iloc[half:]
+        la = lb = f'{spec[1].replace("canary_", "").replace("_top_marker", "")} (random)'
+    elif kind == 'top':
         a, b = g[e > 0], g[e <= 0]
         la, lb = f'{marker} above its level', f'{marker} below its level (still the top marker)'
     else:
@@ -97,6 +111,7 @@ def select(d: pd.DataFrame, spec, marker: str, rng) -> tuple[pd.DataFrame, pd.Da
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--images', nargs='+', required=True)
+    ap.add_argument('--label', default='v17', help='subfolder named for the root this typing becomes')
     a = ap.parse_args()
     typ = CT.typing_dir(RUN)
     scale = CL.load_scale(RUN)
