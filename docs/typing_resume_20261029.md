@@ -214,3 +214,174 @@ save/reload invariants and established-structure reuse certificates. Nine focuse
 `refresh_filtered_cells.py` adapter uses the unchanged REDSEA computation and output checks with the new
 ancestry resolver, leaving live raw readers frozen; 33 combined raw/filtered refresh tests pass. Final filtered
 whole/native renders, reviews and release records are required in addition to the manual per-object decisions.
+
+## Filtered cohort checkpoint (21:40 Eastern)
+
+All 20 donors have complete per-object review decisions, verified native filtering, exact original-object
+preservation and established-structure reuse certificates. The 3,300 new positive-nucleus proposals comprise
+2,279 accepted supported profiles, 420 rejected artifacts and 601 uncertain profiles deferred from this
+candidate. Another 826 missing-nucleus additions remain in the raw inventory under the existing exclusion
+from analysis and spillover. Thus 3,105 additions join the unchanged 3,522,872 original cells, giving a filtered
+raw census of 3,525,977. The native source/display equality certificates cover all 20 donors and all three
+review channels exactly, across 7,121,654,784 pixels.
+
+All 20 filtered whole/native cell reviews are recorded. Seventeen have been explicitly released and have
+completed refreshed REDSEA and actual whole/native Collagen IV review. T1D_6563 release is withheld by a
+validator schema mismatch: 303 source-review decisions are stored in a mapping while the reader expects a
+list. The source records contain their object IDs, verdicts and evidence; the correction must preserve these
+records and the filter lineage. No unsuccessful release was published.
+
+The ND_6548 and T1D_6534 Lymphatic masks remain under scientific review. The unchanged common classifier
+produces substantially more PDPN-positive area than the historical masks, including interior puncta. The
+investigation found no implementation defect that explains this as a technical error, and the historical
+inference provenance does not establish a validated correction. A historical-interior/current-extension
+sensitivity comparison is preserved separately and has not been adopted. A user choice is pending between
+retaining the uniform candidate with these two masks explicitly provisional and recalibrating the classifier.
+Final typing may not consume these held masks until that choice is resolved.
+
+Some accepted technical structure reviews explicitly record biological-specificity limitations: granular
+PDPN-positive foci and saturated amorphous ColIV foci are not established as lymphatic vessels or collagen by
+this visual review. Two directional wording corrections for ND_6232 Nerve and ND_6539 Capillary are stored
+as hash-linked amendments alongside unchanged primary reviews. The ND_6232 Nerve profile loss is largely
+outside final Tissue; the cited ND_6539 Capillary crop is unchanged. Final reporting must include amendments.
+
+The v18 baseline comparison preflight has passed for all 20 donors, including published identity hashes,
+assembled labels and original census. Final typing, current coverage/structure metrics, the descriptive v18
+transition audit, fresh 256-case prediction-blind diagnostic, v19 assembly and both native review projects
+remain outstanding. A separate native blinded-project audit is prepared and tested; its private key cannot
+be read until the fresh diagnostic first verdicts have been locked. No v19 candidate or production release
+has been published.
+
+## Cohort measurements and remaining scientific decision
+
+The T1D_6563 reader mismatch is resolved by an explicit, minimal validator correction. The previous
+`final_reconciliation.py` is archived in `validator_schema_correction_v1/`; the new reader accepts lists
+and keyed records while rejecting malformed entries, duplicate object IDs and mismatched keys. All
+existing geometry, verdict, viewed-evidence and hash checks remain. Twelve self-tests, the real 701-row
+T1D_6563 preflight and all 17 previously published donor gates passed. All 836 checked prior evidence
+files and canonical/filter seals are unchanged. Root reviewed the diff and recorded a provenance
+amendment after stopping both orchestration watchers while idle.
+
+All 20 filtered cell inventories are now explicitly released for measurement. The restarted REDSEA
+driver completed all 20 current caches and published the verified cohort null table; its success log is
+`reviewed_filtered_redsea.restart1.log`. This cell-only release does not resolve the two Lymphatic holds.
+The independent display-settings phase passed after this publication: all 80 image/marker rows have
+finite levels and both positive/negative populations. Fitting took 5.497 seconds; the complete guarded
+phase took 130.727 seconds including source checks and cohort-null publication. Its journal is
+`remaining_pipeline_runs/20261030T015942.657044Z/execution.json`. Final typing has not started.
+
+All 20 current Collagen IV outputs, whole/native reviews and view hashes pass verification. Eighteen
+reviews are accepted. The fully inspected ND_6548 and T1D_6534 evidence is pending the full structure
+gate, with independent dependency certificates demonstrating that these calculations do not consume
+Lymphatic masks. Their accepted-status reviews have not been written. The handoff index is
+`filtered_collagen_independent_preparation/all20_actual_review_handoff.json`. The original Collagen IV
+watcher remains stopped with its 17-entry state unchanged; the standalone T1D_6563 and two independently
+prepared outputs can be adopted through its normal resume validation after the scientific holds resolve.
+
+`pending_lymphatic_scientific_choice.json` records the unanswered choice and pins both held reviews.
+Do not infer an answer from elapsed time. Preserve those reviews and write an explicit hash-linked
+resolution if the user chooses a provisional uniform candidate; a recalibration choice requires new
+scientific work. No replacement of historical interiors has been adopted.
+
+`run_remaining_qc_pipeline.py` and `remaining_qc_pipeline_instructions.txt` contain the checked CLI
+sequence, current-input gates, execution lock and stage provenance for final typing, metrics, assembly
+and both review projects. The default invocation only prints the plan. The full execution phase refuses
+unresolved structure reviews. `report_locked_diagnostic.py` passed eight synthetic tests and requires
+explicitly unlocked, hash-verified first verdicts before reading a fresh prediction key. No fresh
+diagnostic or native private key has been read, and no final v19 candidate or production release exists.
+
+## Scope clarification after the owner's regeneration question
+
+The earlier proposal to accept the uniform lymphatic outputs by flagging two donors, and the associated
+request for a new scientific choice, are withdrawn. The recovered owner instruction is explicit:
+"Don't flag the images or markers, flag the methods you are using so they will work with the images and
+markers" (transcript line 584, October 28). The unresolved issue is method work under existing instructions.
+
+Classifier rerunning itself was disclosed in the October 29 edge-retention question (transcript lines
+6183–6184): restoring dropped edge objects "means re-running those classifiers", and the owner selected
+"Keep edge-touching structures". Full-field replacement was the implementation choice. The intended
+edge recovery does not establish acceptance of the unexplained interior changes in ND_6548 and T1D_6534.
+Original baseline objects remain preserved. The current candidate masks and their scientific review
+holds are unchanged; no final typing was started by this clarification.
+
+`pending_lymphatic_scientific_choice.json` now records the corrected status and pins the archived original
+pending-choice record, transcript and held reviews. Its status is
+`method_resolution_required_under_existing_owner_instructions`, not a wait for new user approval.
+The next work is to resolve the regeneration discrepancy and validate the intended edge-retention method.
+
+## Owner override: pause Lymphatic work and deliver the updated QuPath project
+
+On October 30 the owner instructed: "put the lymphatic objects on pause, it is taking far too long to do.
+use the previous lymphatic objects and give me the new qupath project". This supersedes the reconstruction
+gate for this delivery. All Lymphatic reconstruction and source-border correction work is paused; its
+immutable candidate masks, pilot evidence and unresolved reviews are preserved without promotion.
+
+The active QC selection now reuses the exact baseline Lymphatic files from
+`data/development/uniform-20donor-20261027/structures/Lymphatic`. Independent comparison confirmed all
+182,404 object UUIDs and exact normalized geometries against the previous native QuPath project, and all
+20 geometry multisets against v18. No clipping, reconstruction or new Lymphatic inference is selected.
+Prior display-color/locking and polygon-ring serialization differences are recorded explicitly.
+
+The owner instruction, immutable selection and successful activation are recorded under
+`output/typing_resume_20261029/previous_lymphatic_reuse_v1/`; the identity audit is
+`previous_lymphatic_identity_audit/identity_conclusion.json`. The resolver pins the owner override,
+baseline files and unchanged current cell lineage. Current Nerve, Capillary and Collagen IV proofs are
+retained. The two previously inspected Collagen IV reviews are now accepted, making all 20 complete.
+
+The final parallel pipeline is running with the previous Lymphatic selection. Its initial invocation
+passed cell readiness but reached the Collagen IV gate before those two review records were written;
+no downstream outputs started. The restart uses the identical readiness proofs across 20 isolated
+workers, then dependency-ordered typing and assembly. Full QuPath import is prioritized after current
+identity, acceptance and display calculations, with 20 Java workers capped at 16 GiB and three processors
+each. Inspection readiness must be reported only after the new project's native imports are verified.
+
+## Updated QuPath project available for inspection
+
+The full project is now built at `data/development/qupath-review-20261029-v19/project.qpproj`.
+All 20 native imports passed in 211.575 seconds. The assignments manifest is
+`output/typing_resume_20261029/full_qupath_assignments_v19/review_manifest.json`: 3,525,977 detections,
+3,199,606 typed cells, 326,371 excluded cells, and zero unassigned or unmatched detections. Every import
+verified unchanged detection parents. The selected Lymphatic inventory is the exact previous 182,404
+objects; all reconstruction remains paused. Native `.qpdata` files contain the new assignments even
+though the copied project descriptor retains its template timestamp.
+
+The independent read-only native reload audit passed all 20 images at 2026-10-30 14:58:17 UTC.
+Its authoritative record is `output/typing_resume_20261029/final_native_output_audit/completion.json`,
+with the v4 manifest at `final_native_output_audit/comprehensive_verified20_v4/manifest.json`
+(SHA256 `c6300de79e31705f8706ec05b7e7f9647df31d63b30af3b5bfb59fea1a61ad54`). It verified
+3,525,977 detection UUIDs, cell and nucleus geometry, raw measurement bit patterns, parents, display
+classes and typing metadata; 10,100 protected annotations; and all four selected structure classes.
+Explicit source structure UUIDs were preserved. Collagen IV source features lack UUIDs, so that class
+was checked by exact geometry/property multiset and unique native UUIDs. Every pinned input remained
+unchanged during the reload. Early attempts exposed comparator bugs in the audit code (Groovy set
+equality performance and metadata-map content equality); those attempts did not modify the project.
+This is a technical preservation audit, not external biological validation.
+
+The remaining assembly and diagnostic artifacts are independent of this inspection-ready project.
+The original ancillary run stopped because the minimal blind-project descriptor omitted timestamps
+required by QuPath 0.7. The corrected constructor preserves the source timestamps; 12 tests passed,
+including actual native loading. The archived source and explicit code amendment are recorded in
+`blind_project_timestamp_fix_20261030/`. The checked ancillary resumer adopts the ten completed stages
+and verifies 6,649 protected input/output identities, rerunning only unfinished artifacts with a fresh
+private blind-key directory. Neither the partial old key nor the fresh keys have been read.
+
+## Assembly completed; computation stopped for interactive QuPath
+
+The ancillary assembly process completed with return code 0 in 623.363 seconds, producing
+`data/development/uniform-20donor-20261029-v19` and `output/typing_resume_20261029/assembly_v19`.
+The subsequent orchestration guard failed after the owner opened the delivered QuPath project.
+A read-only comparison found only new `data/<entry>/thumbnail.jpg` files, their parent-directory
+timestamps/entry digests, and `classifiers/classes.json` mtime/ctime changes with unchanged size and
+inode. At that check, thumbnails existed for entries 1, 2, 4, 6, 8, 12, 14 and 16. All 20 `.qpdata`
+files, assignments, scientific protected inputs and frozen source hashes were unchanged. The earlier
+guard did not hash the class-palette file, so its before/after byte identity is not claimed.
+
+An explicit GUI-side-effect adoption supervisor was prepared at
+`output/typing_resume_20261029/adopt_assembly_after_gui_open.py`, but has not been executed or accepted
+as a completed adoption certificate. Final assembled-dataset reconciliation has not been launched.
+The owner's request to preserve interactive QuPath responsiveness overrides the earlier request to
+use all hardware: no further heavy computation is authorized by this status update. The delivered
+project remains unchanged by the preparation. Resume only after the owner releases that resource
+constraint, with the narrow presentation-write amendment, current source/output guards, and a fresh
+`final_reconciliation_v19` output. The assembly remains pending this final reconciliation and owner
+review; the full native project's completed 20-image audit stands independently.
