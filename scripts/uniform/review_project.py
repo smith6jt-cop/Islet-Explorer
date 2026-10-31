@@ -65,7 +65,9 @@ START_STATUS = {'no_marker_above_background': 'no marker above level', 'endocrin
                 # no cell is named by a marker (owner 2026-10-28, "Get rid of naming by top marker logic")
                 'no_lineage_named': 'no lineage named', 'shared_marker_only': 'shared marker only',
                 'no_endocrine_marker_above_level': 'no endocrine marker above level',
-                'tied_highest_hormones': 'tied highest hormones'}
+                'tied_highest_hormones': 'tied highest hormones',
+                # owner 2026-10-30: Neural/Endothelial only from structure objects; their markers elsewhere name nothing
+                'structure_marker_only': 'structure marker only'}
 for _start in ('Tissue', 'Islet', 'EndocrineCluster', 'EndocrineSingle'):
     for _st, _col in (('no lineage named', '#6B5B3A'), ('shared marker only', '#4A5A4A'),
                       ('no endocrine marker above level', '#6E8FA6')):
