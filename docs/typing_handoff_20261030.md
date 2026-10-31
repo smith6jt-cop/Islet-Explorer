@@ -1,5 +1,8 @@
 # Typing handoff — 2026-10-30
 
+**Superseded by `docs/typing_handoff_20261031.md`.** Items 1 and 2 below were implemented in `2075d31`. The
+Lymphatic pause was lifted by the owner on 10-30.
+
 Written before a context clear. Read with `docs/typing_rulings_ledger.md` (section "Decisions — 2026-10-30") and
 `docs/typing_resume_20261029.md` (the Codex agent's record of the v19 rebuild).
 
