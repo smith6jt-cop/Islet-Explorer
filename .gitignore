@@ -91,6 +91,15 @@ scripts/Shell_scripts/
 notebooks/*_executed.ipynb
 notebooks/*.png
 
+# Generated slide decks (outputs/, e.g. Explorer_T1D_Revised_Data_Flow.pptx) and the
+# Codex agent's build artifacts for them (renders, layout dumps, candidate decks).
+/outputs/
+/.codex-artifacts/
+
+# testthat failure snapshots, rewritten on every failing run.
+app/shiny_app/tests/testthat/_problems/
+app/shiny_app/tests/testthat/testthat-problems.rds
+
 # App runtime flags
 app/shiny_app/APP_LOADED_FLAG
 app/shiny_app/R/APP_LOADED_FLAG
