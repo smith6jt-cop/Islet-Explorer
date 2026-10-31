@@ -148,21 +148,25 @@ carries the Plan A Level 2 responsiveness work and two owner requests of the day
 | **Production activation** | **activated 2026-10-26 20:51 UTC** by the owner ("Push what is complete so far to the live app"), run in the session with the `!` prefix because the auto-mode classifier refuses production deployments from the assistant: the release worktree on `0b55429`, then `RELEASE_NAME=pubapps-2026-10-uniform-v10-perf2 PUBLISH_ADDRESS=10.13.41.21 deploy-vm.sh --skip-stage` (`islet-explorer` on `10.13.41.21:3838`, 9 GiB, `--docroot prod/html`, `--local-data /local/maigan/releases`): `verify-release.sh` re-hashed the release on the VM, the local data copies verified against `MANIFEST.sha256`, `verify-deployment.sh` passed (health healthy, backend bound to the private address only, OME-TIFF Range response verified), `prod/html` image aliases moved to the perf2 release; app loaded 20:50:52, release data loaded 20:51:00, trajectory warm-up ok 20:51:19 UTC. The previous release `pubapps-2026-10-uniform-v10` (`d55680a`, image `ae95fd23…`) stays on the VM for `rollback-release.sh`; the staging instance is unchanged on the same release. |
 | Production checks through the proxy | `check-app.mjs --auth-file` against `islet-explorer.rc.ufl.edu` with the production account, 2026-10-26 20:54 UTC: passed, every check (36), no errors, no accessibility rule violations (`evidence/browser-production-0b55429/`). `bench-app.mjs`, three cold runs from campus against the 2026-10-24 production baseline: first screen 3.6 → 2.6 s, Plot change 1.2 → 0.75 s, Spatial tab 2.2 → 1.3 s, Spatial donor change 1.9 → 0.44 s, warm revisit 3.5 → 1.8 s, socket bytes to the first screen 3.5 → 1.2 MB, `permessage-deflate` on every connection (`evidence/performance-baseline-20261024/level2-production/`). |
 
-### Candidate 080714b on the staging instance (2026-10-26, American spelling and the warm-up's first PNG draw)
+### Candidate cc5cf8f on the staging instance (2026-10-26: American spelling, the warm-up's first PNG draw, three owner requests)
 
-Third candidate of the day for the staging instance, on top of the Level 2 candidate
-below: the owner's spelling rule ("American English throughout") applied to every label,
-help text, comment and record, and the process warm-up's first PNG draw (the
-4 s font-cache cost seen on the first Trajectory open of the Level 2 process). Production
-runs the Level 2 release since 20:51 UTC; this candidate goes to staging first.
+Third candidate of the day for the staging instance, on top of the Level 2 release now in
+production: the owner's spelling rule ("American English throughout") applied to every
+label, help text, comment and record, the process warm-up's first PNG draw (the 4 s
+font-cache cost seen on the first Trajectory open of the Level 2 process), and three owner
+requests (the Spatial card's groups "Insulin-deficient Islets" / "Insulin-containing
+Islets", one IAA autoantibody box covering IAA and micro-IAA, readable hover labels on the
+dark theme). Commit `080714b` (spelling and warm-up only) was built and gated the same way
+(image `52057049…`, gate passed 20:07 UTC, bundle verified) but superseded by `cc5cf8f`
+before it was staged. This candidate goes to staging first.
 
 | Item | Result |
 |---|---|
-| Source commit | `080714b321c75fb5c3bf5e559ffa2243d683005d` (branch `spatial-review-20261020`): American spelling in UI text, comments and documentation (code identifiers and API names unchanged); `app.R` warm-up draws one 64 px PNG before the health check. 437 tests pass; `check-app.mjs` (36) and the UI review suite (18) pass against the in-house service. |
-| Container image, SBOM and High/Critical gate | **gate passed 2026-10-26 20:07 UTC** at `080714b`: image `sha256:52057049b29e9f41048b654325218ac6d4aa6cb766621d2a41e0dbf06bcc1ae5`, 0 High / 0 Critical (4,305 Medium, 189 Low, 196 Negligible; the same dependency set as the two builds of the Level 2 candidate), Syft 1.51.1 / Grype 0.118.0 (`evidence/image-scan-080714b/`). |
-| Data bundle | built 2026-10-26 19:47–20:38 UTC from the worktree at `080714b` by the unchanged builder (51 min, in parallel with the image build); full hashes, parity and inventory running at the time of this record. |
-| Release manifest and `verify-release.sh` | pending the bundle verification. |
-| Staging on the VM | the unchanged 145 GB image tree copied on the VM from the perf2 release (`cp -a`) into `releases/pubapps-2026-10-uniform-v10-perf3/data/images` before the build finished; deploy tooling synced to `080714b`. Upload pending the manifest. |
+| Source commit | `cc5cf8f` (branch `spatial-review-20261020`): `080714b` American spelling in UI text, comments and documentation (code identifiers and API names unchanged) and the warm-up's 64 px PNG draw before the health check; `cc5cf8f` the Spatial card's group names, the merged IAA box (`apply_plot_filters()` expands it to the IAA and mIAA columns; the root's nPOD `n_aab` already counts the assay once) and dark-theme hover labels as a dark box with white text (measured: the text was `#6b6b6b` on the donor blue, now white). 437 tests pass; `check-app.mjs` (36) and the UI review suite (18) pass against the in-house service on each commit. |
+| Container image, SBOM and High/Critical gate | **gate passed 2026-10-26 21:28 UTC** at `cc5cf8f`: image `sha256:695dae399c0f7c50134afd22c71717ba538020299142191fa0c904d19ad6e1ef`, 0 High / 0 Critical (4,305 Medium, 189 Low, 196 Negligible, the same dependency set as the day's earlier builds), Syft 1.51.1 / Grype 0.118.0, 21 min (`evidence/image-scan-cc5cf8f/`). |
+| Data bundle | built 2026-10-26 21:07–21:39 UTC from the worktree at `cc5cf8f` by the unchanged builder (32 min, in parallel with the image build); full hashes passed 21:50 UTC, scientific parity against the v10 root passed 22:18 UTC (`evidence/release-parity-cc5cf8f.{json,md}`), privacy-safe inventory written 22:18 UTC (`evidence/release-inventory-cc5cf8f.{json,md}`). |
+| Release manifest and `verify-release.sh` | passed 2026-10-26 22:21 UTC: release `pubapps-2026-10-uniform-v10-perf3` bound to image `695dae39…` and commit `cc5cf8f` (`DATA_SCHEMA=5`, 20 OME-TIFFs, 4,819 data files, 918 MB), manifest `574ac1bc381b9b76df9b0f37376540e78500b1953440ce98a35c45756a4941b9`. Deploy tooling on the VM synced to `18981c5` (the unit template's `SuccessExitStatus=143`) before the activation. |
+| Staging on the VM | the unchanged 145 GB image tree copied on the VM from the perf2 release (`cp -a`) into `releases/pubapps-2026-10-uniform-v10-perf3/data/images` before the build finished; deploy tooling synced to `cc5cf8f`. Upload pending the manifest. |
 | Activation (staging instance only) | pending. |
 | Responsiveness through the proxy | pending. |
 | Browser acceptance suite through the proxy | pending. |
