@@ -179,3 +179,34 @@ Results:
 - 3,199,606 cells, of which 509,408 have a label different from the v19 typing (option 1 on 10-30: 508,972).
 - Endothelium Lymphatic: 2,705 cells (option 1: 3,033). Every other label differs from option 1 by fewer than
   150 cells.
+
+**v20 delivery on HPG** (owner's go-ahead; job 48777105; clive, 24 cores, 300 GB; 28 min):
+- **Command.** `run_v20.py --phase deliver` (`runs/20261101T165721.675277Z`), with
+  `RUN_V20_FULL_QUPATH_WORKERS=8`. The variable, added for HPG allocations, defaults to 20; each image is imported
+  independently.
+- **Timings.** Assembly 691 s, giving `data/development/uniform-20donor-20261030-v20`, with `git_commit` 9b1da13
+  recorded in `uniform_release.json`. The full QuPath project took 268 s
+  (`data/development/qupath-review-20261030-v20`, `output/typing_20261030/full_qupath_assignments_v20`). The final
+  reconciliation took 435 s (`output/typing_20261030/final_reconciliation_v20`).
+- **Reconciliation.** Status `pass` with no errors, 20 of 20 images `pass`. Of 3,525,977 raw detections, 3,199,606
+  are QC-eligible, typed, assembled and in the review project; 326,371 are excluded.
+- **`raw_review_status`.** This is carried from the v19 QC reviews of the raw augmentation geometry
+  (`final_reconciliation.py:407-412`):
+  - 16 images: `not_reviewed_superseded_before_consumption`;
+  - Aab_6450 and T1D_6533: `needs_review`;
+  - ND_0112: `quality_hold`;
+  - Aab_6505: `acceptable_with_notes`.
+
+**Return to the workstation** (`output/hpg_transfer_20261031/return.sh`):
+- Brought back, after confirming that none of these existed on the workstation:
+  - the v20 root;
+  - the v20 QuPath project;
+  - `assembly_v20`, `full_qupath_assignments_v20`, `final_reconciliation_v20`;
+  - `typing_report_dg`, `lymphatic_despeckle_gate_v1`;
+  - the five 11-01 run journals;
+  - `output/hpg_equivalence_20261031`;
+  - the seal and the HPG gate dump.
+- `output/hpg_return_20261101/SHA256SUMS`: 5,532 files, made on HPG (job 48780847) and verified on the workstation.
+- All 20 image URIs of the v20 QuPath project and all 20 image links of the v20 root resolve on the workstation.
+- HPG remains the site of record for the working run `uniform-20donor-20261029-v19-qc-work`: its DG binding, its
+  structures and typing outputs, and its journals. The workstation copy is the state captured before the move.

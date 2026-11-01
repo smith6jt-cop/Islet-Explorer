@@ -1,5 +1,21 @@
 # Typing handoff — 2026-10-31
 
+> **Status 2026-11-01:** steps 1–5 below are done. The rest of this file is the 10-31 state.
+>
+> - **DG installed.** The owner chose **DG**, the despeckled detection plus the PDPN level gate. All processing
+>   from the install onward ran on HiPerGator from a sealed copy; see
+>   [the HPG processing record](hpg_processing_20261031.md) and memory `hpg-processing-site`.
+> - **Validation.** The validator branch is `lymphatic_despeckled_level_gate/1` (`structure_generation.py`,
+>   c010ad4). HPG reproduced the workstation's 10-30 outputs byte-for-byte before anything new ran.
+> - **Typing.** No acceptance assertion was broken. Endothelium Lymphatic has 2,705 cells (option 1: 3,033).
+> - **v20 delivered and returned to the workstation:**
+>   - root `data/development/uniform-20donor-20261030-v20`;
+>   - QuPath project `data/development/qupath-review-20261030-v20`;
+>   - the final reconciliation passed on all 20 images.
+> - **Open:**
+>   - the owner's review of v20 in QuPath;
+>   - step 6, whether Nerve and Capillary also need the despeckle (asked 2026-11-01).
+
 Written before a context clear. Read with `docs/typing_rulings_ledger.md` (sections "Decisions — 2026-10-30" and
 "Decisions — 2026-10-30/31"), the previous handoff `docs/typing_handoff_20261030.md`, and the approved plan
 `/home/smith6jt/.claude/plans/make-a-plan-to-virtual-church.md`. Task-local scripts and records live in
