@@ -325,6 +325,95 @@ def _validate_pdpn_gate(inv, run, manifest, gate, tags):
     return paths
 
 
+
+
+def _normalized_polygons(path):
+    """Geometry of a QuPath export independent of object order and IDs (lymphatic_despeckle_run.normalized)."""
+    import shapely
+    from shapely.geometry import shape
+    return sorted(shapely.to_wkb(shapely.normalize(shape(f['geometry']))) for f in json.loads(Path(path).read_text())['features'])
+
+def _validate_despeckled_gate(inv, run, manifest, gate, tags):
+    """Owner 2026-11-01 ("Do dg"): the stored Lymphatics classifier run on despeckled PDPN (owner 2026-10-31, "the
+    lymphatic object detection needs the despeckle"), then option 1's PDPN level gate. Each image's detection result
+    pins the run's server, the classifier, the current Tissue and the despeckled PDPN, whose record names the source
+    image; the original-mode reproduction of the reviewed re-run objects validates the detection script; the gate
+    record proves the subset; the agent's review pins the gated geometry and views."""
+    import collagen_structures as C
+    if gate.get('source_run') != str(run) or set(gate.get('images', {})) != set(tags):
+        raise ValueError('Despeckled Lymphatic selection has a different cell run/cohort')
+    instruction = inv.json(inv.pointer(gate['owner_instruction']))
+    if instruction.get('decision') != 'despeckled_detection_level_gate' or instruction.get('cell_run') != str(run):
+        raise ValueError('Despeckled Lymphatic selection lacks the owner decision')
+    method = gate['method']; detection = method['detection']
+    inv.add(Path(method['code_path']), method['code_sha256'])
+    inv.records(detection)
+    if not detection.get('validation'): raise ValueError('Despeckled detection lacks its original-mode validation')
+    for tag, v in detection['validation'].items():
+        result = inv.json(inv.pointer(v['result']))
+        produced = inv.pointer(result['output']); reviewed = inv.pointer(v['reviewed_rerun_objects'])
+        if (result.get('mode') != 'original' or result.get('image') != tag
+                or reviewed.resolve() != (run / 'structures/Lymphatic' / f'Lymphatic__{tag}.geojson').resolve()
+                or _normalized_polygons(produced) != _normalized_polygons(reviewed)):
+            raise ValueError(f'{tag}: the detection script does not reproduce the reviewed re-run objects')
+    inv.pointer(gate['levels'])
+    classifier = detection['classifier']
+    sources = {e['image_name']: e['image_path'] for e in inv.json(run / 'project_manifest.json')['entries']}
+    paths = {}
+    for tag in tags:
+        item = manifest['images'][tag]; chosen = gate['images'][tag]
+        current = _lineage(inv, run, tag, item['cell_inputs'])
+        inv.records(chosen)
+        tissue_sha = current['files']['tissue']['sha256']
+        if (Path(chosen['tissue']['path']).resolve() != (run / 'inputs/tissue' / f'{tag}.geojson').resolve()
+                or chosen['tissue']['sha256'] != tissue_sha):
+            raise ValueError(f'{tag}: despeckled Lymphatic uses another Tissue lineage')
+        det = chosen['detection']
+        result = inv.json(inv.pointer(det['result'])); pdpn = inv.json(inv.pointer(det['pdpn_record']))
+        if (result.get('schema') != 'uniform.lymphatics_despeckled_result/1' or result.get('image') != tag
+                or result.get('mode') != 'despeckled' or result.get('output') != chosen['source_objects']):
+            raise ValueError(f'{tag}: the despeckled detection result does not produce the gate source')
+        read = result.get('inputs', {})
+        servers = [k for k in read if k.endswith('/server.json')]
+        if (read.get(chosen['tissue']['path']) != tissue_sha or read.get(classifier['path']) != classifier['sha256']
+                or read.get(det['pdpn_raw']['path']) != det['pdpn_raw']['sha256'] or len(servers) != 1
+                or Path(servers[0]).resolve().parents[2] != (run / 'qupath').resolve()):
+            raise ValueError(f'{tag}: the despeckled detection read another Tissue, classifier, PDPN or project')
+        if (pdpn.get('image') != tag or pdpn.get('channel') != 'PDPN' or pdpn.get('path') != det['pdpn_raw']['path']
+                or pdpn.get('sha256') != det['pdpn_raw']['sha256']
+                or pdpn.get('despeckle_code_sha256') != detection['despeckle_code_sha256']
+                or pdpn.get('source', {}).get('path') != sources.get(tag)):
+            raise ValueError(f'{tag}: despeckled PDPN is not this image\'s despeckled source channel')
+        inv.records(result); inv.records(pdpn)
+        if item.get('quantitative') != chosen['record']:
+            raise ValueError(f'{tag}: despeckled Lymphatic gate record pointer differs')
+        q = inv.json(inv.pointer(item['quantitative']))
+        if q.get('image') != tag or q.get('method') != method['name'] or q.get('checks', {}).get('passed') is not True:
+            raise ValueError(f'{tag}: despeckled Lymphatic gate record is missing or failed')
+        if any(q['inputs'].get(k) != chosen[k] for k in ('tissue', 'source_objects', 'previous_objects', 'detection')):
+            raise ValueError(f'{tag}: despeckled Lymphatic gate record has different inputs')
+        if set(item['classes']) != set(CLASSES): raise ValueError(f'{tag}: incomplete selected structure inventory')
+        paths[tag] = {}
+        for cls in CLASSES:
+            selected = item['classes'][cls]; selected_path = inv.pointer(selected)
+            paths[tag][cls] = str(selected_path)
+            if cls == 'Lymphatic':
+                if (selected != chosen['classes'][cls] or q.get('output_sha256') != selected['sha256']
+                        or Path(q['output_path']).resolve() != selected_path.resolve()):
+                    raise ValueError(f'{tag}: despeckled Lymphatic gate output differs from selected Lymphatic')
+            else:
+                inv.add(run / 'structures' / cls / f'{cls}__{tag}.geojson', selected['sha256'])
+            if cls != 'Collagen IV':
+                _review(inv, item['reviews'][cls], tag, cls, selected['sha256'], tissue_sha,
+                        item['quantitative']['sha256'] if cls == 'Lymphatic' else None)
+        sidecar = inv.json(inv.pointer(item['collagen_sidecar']))
+        inv.add(C.checkpoint_path(run, tag), item['collagen_sidecar']['sha256'])
+        C.validate_record(run, tag, sidecar)
+        inv.records(sidecar); inv.directory(run / 'structures' / C.PREVIOUS)
+        for source in (Path(C.__file__), Path(C.ST.__file__), Path(C.RS.__file__), Path(CT.__file__)):
+            inv.add(source.resolve())
+    return paths
+
 def _result(inv, run, binding_path, binding, manifest_path, manifest, paths, extra=None):
     if not inv.unchanged(): raise ValueError('Structure generation inputs changed during cohort validation')
     provenance = {'schema': 'uniform.structure_generation_provenance/1', 'cell_run': str(run),
@@ -360,6 +449,11 @@ def _validate(run):
         paths = _validate_pdpn_gate(inv, run, manifest, restoration, tags)
         return _result(inv, run, binding_path, binding, manifest_path, manifest, paths,
                        {'lymphatic_selection': 'pdpn_level_gate',
+                        'owner_instruction_sha256': restoration['owner_instruction']['sha256']})
+    if restoration.get('schema') == 'lymphatic_despeckled_level_gate/1':
+        paths = _validate_despeckled_gate(inv, run, manifest, restoration, tags)
+        return _result(inv, run, binding_path, binding, manifest_path, manifest, paths,
+                       {'lymphatic_selection': 'despeckled_level_gate',
                         'owner_instruction_sha256': restoration['owner_instruction']['sha256']})
     if restoration.get('schema') != 'lymphatic_bounded_restoration/1' or restoration.get('source_run') != str(run):
         raise ValueError('Unsupported or misplaced Lymphatic restoration')

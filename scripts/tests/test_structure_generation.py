@@ -354,3 +354,150 @@ def test_previous_original_and_instruction_bytes_remain_guarded(previous_bound):
     p = Path(selection['images']['one']['classes']['Lymphatic']['path'])
     p.write_text('changed baseline bytes')
     with pytest.raises(ValueError, match='hash mismatch'): S.validate(run)
+
+
+DG_METHOD = 'despeckled_detection_mean_despeckled_pdpn_at_or_above_image_level/1'
+
+
+def polygons_geojson(order):
+    squares = [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]], [[2, 0], [3, 0], [3, 1], [2, 1], [2, 0]]]
+    return {'type': 'FeatureCollection', 'features': [
+        {'type': 'Feature', 'id': f'uuid-{order}-{i}', 'geometry': {'type': 'Polygon', 'coordinates': [squares[i]]}}
+        for i in (order if isinstance(order, list) else [0, 1])]}
+
+
+@pytest.fixture
+def despeckled_bound(bound):
+    """bound, turned into the owner's DG selection (2026-11-01): despeckled detection, then the PDPN level gate."""
+    run, wrapper, selection, publish, calls = bound
+    base = run.parent / 'typing_20261030'
+    classifier = write(run.parent / 'qpi/classifiers/pixel_classifiers/Lymphatics.json', {'classifier': 'Lymphatics'})
+    detection = {'driver': write(base / 'lymphatic_despeckle_run.py', 'driver'),
+                 'groovy': write(base / 'lymphatics_despeckled.groovy', 'groovy'),
+                 'despeckle_driver': write(base / 'despeckle_pdpn.py', 'despeckle'), 'classifier': classifier,
+                 'despeckle_code_sha256': 'a' * 64}
+    reviewed = write(run / 'structures/Lymphatic/Lymphatic__one.geojson', polygons_geojson([0, 1]))
+    original = write(base / 'runs/original/one/Lymphatic.geojson', polygons_geojson([1, 0]))
+    detection['validation'] = {'one': {'result': write(base / 'runs/original/one/result.json',
+                                                       {'mode': 'original', 'image': 'one', 'output': original}),
+                                       'reviewed_rerun_objects': reviewed}}
+    entries = []
+    instruction = write(base / 'gate/owner_instruction.json', {'decision': 'despeckled_detection_level_gate',
+                                                               'cell_run': str(run)})
+    images = {}
+    for i, (tag, item) in enumerate(wrapper['images'].items(), start=1):
+        source = run.parent / 'images' / f'{tag}.tif'
+        source.parent.mkdir(parents=True, exist_ok=True); source.write_bytes(b'tif ' + tag.encode())
+        entries.append({'entry_id': i, 'image_name': tag, 'image_path': str(source)})
+        server = write(run / 'qupath/data' / str(i) / 'server.json', {'uri': str(source)})
+        raw = write(base / 'lymphatic_despeckle/pdpn' / f'{tag}.u16', 'despeckled ' + tag)
+        st = source.stat()
+        pdpn = write(base / 'lymphatic_despeckle/pdpn' / f'{tag}.json', {
+            'image': tag, 'channel': 'PDPN', 'path': raw['path'], 'sha256': raw['sha256'],
+            'despeckle_code_sha256': 'a' * 64, 'source': {'path': str(source), 'size': st.st_size, 'mtime_ns': st.st_mtime_ns}})
+        tissue = item['cell_inputs']['files']['tissue']
+        objects = write(base / 'lymphatic_despeckle/runs/despeckled' / tag / 'Lymphatic.geojson', polygons_geojson([0, 1]))
+        config = write(base / 'lymphatic_despeckle/runs/despeckled' / f'{tag}.config.json', {'image': tag})
+        result = write(base / 'lymphatic_despeckle/runs/despeckled' / tag / 'result.json', {
+            'schema': 'uniform.lymphatics_despeckled_result/1', 'image': tag, 'mode': 'despeckled',
+            'inputs': {server['path']: server['sha256'], classifier['path']: classifier['sha256'],
+                       tissue['path']: tissue['sha256'], raw['path']: raw['sha256']},
+            'output': objects, 'config': config})
+        det = {'result': result, 'config': config, 'pdpn_record': pdpn, 'pdpn_raw': raw}
+        previous = write(run.parent / 'previous' / f'Lymphatic__{tag}.geojson', {'previous': tag})
+        selected = item['classes']['Lymphatic']
+        item['quantitative'] = write(base / 'gate/records' / f'{tag}.json', {
+            'image': tag, 'method': DG_METHOD, 'output_path': selected['path'], 'output_sha256': selected['sha256'],
+            'inputs': {'tissue': tissue, 'source_objects': objects, 'previous_objects': previous, 'detection': det},
+            'checks': {'passed': True}})
+        review_path = Path(item['reviews']['Lymphatic']['path'])
+        review = json.loads(review_path.read_text()); review['quantitative_sha256'] = item['quantitative']['sha256']
+        item['reviews']['Lymphatic'] = write(review_path, review)
+        images[tag] = {'tissue': tissue, 'source_objects': objects, 'previous_objects': previous, 'detection': det,
+                       'pdpn_level_raw': 1.0, 'classes': {'Lymphatic': selected}, 'record': item['quantitative'],
+                       'review': item['reviews']['Lymphatic']}
+    write(run / 'project_manifest.json', {'entries': entries})
+    baseline = selection['baseline_run']
+    selection.clear()
+    selection.update({'schema': 'lymphatic_despeckled_level_gate/1', 'source_run': str(run), 'baseline_run': baseline,
+                      'method': {'name': DG_METHOD, **{k: v for k, v in zip(('code_path', 'code_sha256'),
+                                 write(base / 'lymphatic_despeckle_gate.py', 'builder').values())},
+                                 'detection': detection},
+                      'owner_instruction': instruction, 'levels': write(base / 'gate/levels_v19.csv', 'levels'),
+                      'images': images})
+    publish()
+    return run, wrapper, selection, publish, calls
+
+
+def test_despeckled_gate_validates_and_names_the_selection(despeckled_bound):
+    run, wrapper, selection, _, calls = despeckled_bound
+    result = S.validate(run)
+    assert result['provenance']['lymphatic_selection'] == 'despeckled_level_gate'
+    assert result['provenance']['owner_instruction_sha256'] == selection['owner_instruction']['sha256']
+    one = selection['images']['one']['detection']
+    for pointer in (one['result'], one['pdpn_record'], one['pdpn_raw'], selection['method']['detection']['groovy'],
+                    selection['method']['detection']['classifier']):
+        assert pointer['path'] in result['files']
+    assert any(p.endswith('images/one.tif') for p in result['identities'])
+    assert S.path(run, 'one', 'Lymphatic') == Path(wrapper['images']['one']['classes']['Lymphatic']['path'])
+    assert calls == ['one', 'two']
+
+
+def rewrite(pointer, change):
+    p = Path(pointer['path']); value = json.loads(p.read_text()); change(value)
+    return write(p, value)
+
+
+DG_DEFECTS = {'decision': 'lacks the owner decision', 'mode': 'does not produce the gate source',
+              'output': 'does not produce the gate source', 'tissue': 'read another Tissue',
+              'classifier': 'read another Tissue', 'pdpn': 'not this image', 'source_image': 'not this image',
+              'validation': 'does not reproduce the reviewed re-run objects', 'record_inputs': 'different inputs',
+              'server': 'read another Tissue'}
+
+
+@pytest.mark.parametrize('defect', sorted(DG_DEFECTS))
+def test_despeckled_gate_is_fail_closed(despeckled_bound, defect):
+    run, wrapper, selection, publish, _ = despeckled_bound
+    one = selection['images']['one']; det = one['detection']
+    if defect == 'decision':
+        selection['owner_instruction'] = rewrite(selection['owner_instruction'], lambda v: v.update(decision='pdpn_level_object_gate'))
+    elif defect == 'mode':
+        det['result'] = rewrite(det['result'], lambda v: v.update(mode='original'))
+    elif defect == 'output':
+        det['result'] = rewrite(det['result'], lambda v: v.update(output=selection['images']['two']['source_objects']))
+    elif defect == 'tissue':
+        det['result'] = rewrite(det['result'], lambda v: v['inputs'].update({one['tissue']['path']: 'b' * 64}))
+    elif defect == 'classifier':
+        path = selection['method']['detection']['classifier']['path']
+        det['result'] = rewrite(det['result'], lambda v: v['inputs'].update({path: 'c' * 64}))
+    elif defect == 'pdpn':
+        det['pdpn_record'] = rewrite(det['pdpn_record'], lambda v: v.update(sha256='d' * 64))
+    elif defect == 'source_image':
+        det['pdpn_record'] = rewrite(det['pdpn_record'], lambda v: v['source'].update(path=str(run / 'other.tif')))
+    elif defect == 'validation':
+        v = selection['method']['detection']['validation']['one']
+        out = json.loads(Path(v['result']['path']).read_text())['output']
+        changed = polygons_geojson([0]); write(Path(out['path']), changed)
+        v['result'] = rewrite(v['result'], lambda r: r.update(output=write(Path(out['path']), changed)))
+    elif defect == 'record_inputs':
+        wrapper['images']['one']['quantitative'] = rewrite(
+            wrapper['images']['one']['quantitative'], lambda q: q['inputs'].update(detection={**det, 'config': det['result']}))
+        one['record'] = wrapper['images']['one']['quantitative']
+    elif defect == 'server':
+        det['result'] = rewrite(det['result'], lambda v: v['inputs'].update({str(run.parent / 'x/qupath/data/9/server.json'): 'e' * 64}))
+    if defect in ('mode', 'output', 'tissue', 'classifier', 'pdpn', 'source_image', 'server', 'record_inputs'):
+        q = wrapper['images']['one']['quantitative']
+        if defect != 'record_inputs':
+            wrapper['images']['one']['quantitative'] = rewrite(q, lambda value: value['inputs'].update(detection=det))
+            one['record'] = wrapper['images']['one']['quantitative']
+    publish()
+    with pytest.raises(ValueError, match=DG_DEFECTS[defect]): S.validate(run)
+
+
+def test_despeckled_source_image_identity_is_guarded(despeckled_bound):
+    run, _, _, _, _ = despeckled_bound
+    S.validate(run)
+    source = run.parent / 'images/one.tif'
+    source.write_bytes(b'changed acquisition bytes')
+    S._CACHE.clear()
+    with pytest.raises(ValueError, match='identity changed'): S.validate(run)
