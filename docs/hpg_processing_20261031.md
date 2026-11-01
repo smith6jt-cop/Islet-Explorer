@@ -101,3 +101,81 @@ cd /blue/maigan/smith6jt/islet-explorer-hpg/root
 The steps, their outcomes and the measured equivalence with the workstation are recorded below as they run.
 
 ## Record
+
+### 2026-11-01
+
+**Before the copy.**
+- The despeckled Lymphatic detection D finished on the workstation on 10-31 (20 of 20).
+- The evaluation and the D/DG renders (`output/typing_20261030/lymphatic_despeckle/renders_v2`, six tiles per image,
+  every image viewed, notes in `review.md`) were reported. The owner chose **DG** ("Do dg").
+
+**Workstation no-op check.** `scripts/hpg/gate_dump.py` was run before and after the hook commit `0ca1dfd`: code
+inventory, REDSEA readiness (all 20 current), `structure_generation.validate` and the `run_v20` plans were
+byte-identical.
+
+**Capture and copy.**
+- The capture (`output/hpg_transfer_20261031/capture`) holds 21,421 files (570.7 GB) and 57 symlinks.
+  `workstation_identities.json` has sha256 434295bf46895ced7783607414b881fce8f67a3eeac15365c1f5323516a00ecd.
+- The list was built by `build_transfer_list.py` from three sources: the folders the steps read, every existing file
+  named in the run records, and the files the read-only gates opened (`audit_opens.py`). It excludes:
+  - the nPOD spreadsheet;
+  - donor 78;
+  - the private blind keys;
+  - `filter/.staging`;
+  - the raw run's `tmp`/`work`;
+  - bytecode caches;
+  - other `output/` folders.
+- Copied with `rsync -aH` (`transfer.sh`) at about 111 MB/s, 1 Gb/s line rate: the QuPath folder (60 files,
+  163.4 GB) and the repository part (21,361 files, 407.4 GB, 57 symlinks), both exit 0.
+
+**Container.** Apptainer refused the host root as a sandbox (smoke job 48752194). The site runs in a Rocky Linux 9
+image with the host `/usr` bound read-only. Smoke job 48753532 passed on hpg-turin:
+- Python 3.13.9 with the same package versions;
+- git at the copied commit;
+- QuPath 0.7.0 with its OpenCV natives;
+- `flock` blocking a second process;
+- renames across `data/` and `output/`;
+- the QuPath folder read-only.
+
+**Seal.** Job 48766607 verified all 21,421 files (sha256, size, mtime to the second) and 57 symlinks in 69 s. Seal
+`output/hpg_transfer_20261031/hpg_site_seal.json`, sha256
+54cad8c3c38e80eaf2405c3df34e4fac3168901b9fe892959691e56955f52ef0 (pinned in `hpg_env.sh`, commit `4afd6f9`).
+
+**Gate checks on HPG** (on the copied code, before any code delivery):
+- **With the hook** (job 48766676): REDSEA readiness for all 20, the code inventory, the `run_v20` plans, and
+  `structure_generation.validate`'s binding, manifest, provenance, paths and 6,246 hash-pinned files are identical
+  to the workstation dump.
+- **The one difference** is the stat values of 62 directories, which the hook leaves untranslated. Their entry lists
+  are identical, and directories are never compared with recorded values. The 20 source-image identities match
+  through the hook.
+- **Without the hook** (job 48766677): fails at `new_detection_filter.py:412`, "Aab_6450: immutable raw source
+  changed".
+
+**Reproduction on HPG** (equivalence check `scripts/hpg/equivalence.py`, job 48771468, output
+`output/hpg_equivalence_20261031/equivalence.json`):
+- **Despeckled PDPN:** unmodified copies of `despeckle_pdpn.py` (job 48767362) gave 20 of 20 rasters
+  byte-identical to the workstation's recorded sha256.
+- **Detection:** `lymphatic_despeckle_run.py` gave D for Aab_6505 and ND_6356 and original mode for Aab_6505, all
+  three equal in normalized geometry. The original-mode Aab_6505 objects equal the reviewed re-run objects.
+- **Phases:** `run_v20.py --phase structures` then `--phase typing` on the installed option-1 selection (job
+  48767711; clive, 24 cores, 300 GB; 31 min) gave 82 of 82 structures outputs and 95 of 95 typing outputs
+  byte-identical to the 10-30 workstation journals (`runs/20261030T210113.520762Z`, `runs/20261030T212756.342638Z`).
+  The HPG journals are `runs/20261101T154028.006372Z` and `runs/20261101T160406.566411Z`.
+
+**QOS.** The owner noted that the investment allocations (clive, maigan) have room, and jobs were sized to fit them
+rather than using burst.
+
+**DG install and rerun on HPG** (job 48771552; clive, 24 cores, 300 GB; 36 min):
+1. `lymphatic_despeckle_gate.py` wrote `output/typing_20261030/lymphatic_despeckle_gate_v1`. All 20 gate records
+   passed, and every render was byte-identical to the renders viewed before the owner's decision.
+2. `activate_despeckle_gate_selection.py --activate` validated it as `despeckled_level_gate` (`active_validated`;
+   6,353 selected inputs; 82 identities). Option 1's binding is kept as `selection/previous_binding.json`.
+3. `run_v20.py --phase structures` (`runs/20261101T161722.560230Z`), then `--phase typing`
+   (`runs/20261101T164221.481579Z`).
+4. `typing_report.py` wrote `output/typing_20261030/typing_report_dg`.
+
+Results:
+- No acceptance assertion was broken.
+- 3,199,606 cells, of which 509,408 have a label different from the v19 typing (option 1 on 10-30: 508,972).
+- Endothelium Lymphatic: 2,705 cells (option 1: 3,033). Every other label differs from option 1 by fewer than
+  150 cells.
