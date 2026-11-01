@@ -11,7 +11,7 @@ mkdir "$work"
 trap 'rm -rf "$work" "$WS_ROOT/data/.hpg_smoke_$tag"' EXIT
 
 echo "== binds"
-findmnt -n -o TARGET,SOURCE,OPTIONS "$WS_ROOT" "$WS_QPI" || true
+grep -E " ($WS_ROOT|$WS_QPI|/usr) " /proc/self/mountinfo | cut -d" " -f4-6
 test -d "$WS_ROOT/scripts/uniform" && test -d "$WS_QPI"
 touch "$WS_QPI/.write_test" 2>/dev/null && { rm -f "$WS_QPI/.write_test"; echo "QuPath folder is writable" >&2; exit 1; } || true
 
@@ -30,7 +30,7 @@ git -C "$WS_ROOT" rev-parse HEAD
 echo "== QuPath and OpenCV"
 cat > "$work/smoke.groovy" <<'EOF'
 import org.bytedeco.opencv.global.opencv_core
-println("QuPath " + qupath.lib.common.GeneralTools.getVersion() + ", OpenCV " + opencv_core.getVersionString())
+println("QuPath " + qupath.lib.common.GeneralTools.getVersion() + ", OpenCV " + opencv_core.getVersionString().getString())
 EOF
 /home/smith6jt/QuPath/bin/QuPath script "$work/smoke.groovy"
 

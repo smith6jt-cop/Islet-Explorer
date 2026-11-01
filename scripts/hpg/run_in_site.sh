@@ -12,7 +12,7 @@ seal=1
 if [[ ${1:-} == --no-seal ]]; then seal=0; shift; fi
 (($#)) || { echo "usage: run_in_site.sh [--no-seal] CMD [ARGS...]" >&2; exit 2; }
 
-env=(--env "HOME=$HOME" --env "TMPDIR=${TMPDIR:-$SITE/tmp}" --env "LD_LIBRARY_PATH=$SITE_LIBSTDCXX"
+env=(--env "TMPDIR=${TMPDIR:-$SITE/tmp}" --env "LD_LIBRARY_PATH=$SITE_LIBSTDCXX"
      --env "PYTHONPATH=$WS_ROOT/scripts/hpg" --env "PYTHONDONTWRITEBYTECODE=1"
      --env "PATH=$(dirname "$SITE_PYTHON"):/usr/local/bin:/usr/bin:/bin")
 for v in SLURM_JOB_ID SLURM_JOB_NAME SLURM_CPUS_PER_TASK SLURM_MEM_PER_NODE SLURM_JOB_NODELIST JAVA_TOOL_OPTIONS; do
@@ -24,5 +24,5 @@ if ((seal)); then
 fi
 
 exec apptainer exec --cleanenv "${env[@]}" \
-    --bind "$SITE_ROOT:$WS_ROOT" --bind "$SITE_QPI:$WS_QPI:ro" \
+    --bind "$SITE_ROOT:$WS_ROOT" --bind "$SITE_QPI:$WS_QPI:ro" --bind /usr:/usr:ro \
     --pwd "$WS_ROOT" "$SITE_CONTAINER" "$@"

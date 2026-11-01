@@ -12,12 +12,17 @@ export WS_ROOT=/data/panc_CODEX/Islet-Explorer
 export WS_QPI=/data/QuPath_Projects/QuPath_project_IsletExplorer
 export SITE_TRANSFER=$WS_ROOT/output/hpg_transfer_20261031       # capture and seal, as seen inside the container
 export CODEX_SITE_SEAL=$SITE_TRANSFER/hpg_site_seal.json
-# Pinned after the seal job (step E1); run_in_site.sh refuses to run with the hook while it is empty.
-export CODEX_SITE_SEAL_SHA256=${CODEX_SITE_SEAL_SHA256:-}
+# The seal of 2026-11-01 (job 48766607: 21,421 files and 57 symlinks verified against capture/workstation_identities.json
+# 434295bf...). run_in_site.sh refuses to run with the hook if this is empty; a reseal pins its own sha256 here.
+export CODEX_SITE_SEAL_SHA256=${CODEX_SITE_SEAL_SHA256:-54cad8c3c38e80eaf2405c3df34e4fac3168901b9fe892959691e56955f52ef0}
 # QuPath 0.7's OpenCV natives need GLIBCXX_3.4.30; RHEL 9 stops at 3.4.29. One symlink, as in IO60's hpg_env.sh:
 # $SITE/lib_stdcxx/libstdc++.so.6 -> /blue/maigan/smith6jt/miniforge3/lib/libstdc++.so.6.0.34
 export SITE_LIBSTDCXX=$SITE/lib_stdcxx
 # /home/smith6jt/miniconda3/envs/scvi-env on HPG is a symlink to the HPG scvi-env (same package versions), so the
 # interpreter path hard-coded in run_remaining_qc_pipeline.py works inside and outside the container.
 export SITE_PYTHON=/home/smith6jt/miniconda3/envs/scvi-env/bin/python
-export SITE_CONTAINER=${SITE_CONTAINER:-/}     # the host root as a directory container; a Rocky Linux 9 image if refused
+# Apptainer refuses the host root as a sandbox ("/ as sandbox is not authorized", job 48752194), so the container is a
+# Rocky Linux 9 image (apptainer pull docker://rockylinux/rockylinux:9 on 2026-11-01: sif sha256 5d8efaca..., base digest
+# sha256:8101994123cf...) with the host's /usr bound read-only (run_in_site.sh): git and the system libraries are the
+# host's, as for IO60's QuPath runs on these nodes.
+export SITE_CONTAINER=${SITE_CONTAINER:-$SITE/site/rocky9.sif}
