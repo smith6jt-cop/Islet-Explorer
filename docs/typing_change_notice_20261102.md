@@ -27,9 +27,12 @@ source members, source `2150edd93ea379acd60cc36db3eb0b18eeb207d4`, with incremen
 history from `29f45b3`. The `SHA256SUMS` file hashes to
 `7e091cea244305ceef160c4a2d83a7b519c20604f0ca46ede40481c84223b388`.
 See the [supplemental delivery receipt](evidence/component_build_agent_delivery_20261102.json).
-The recipient acknowledged package arrival and assigned an independent receipt
-review. Its read/verification acknowledgement is recorded separately from
-verified file delivery and from any future port; the active cohort is unchanged.
+Senior/MultiPlex5000 independently verified the local package's 17 payloads and
+214 source files and acknowledged reading the component/Ki67 guidance and the
+retained data failures. Its status is **received, verified and read; not applied**.
+Senior did not independently check the HPG copy or rerun the supplied scientific
+results. Its active 25-section protein run is unchanged. The linked receipt
+binds the recipient-owned acknowledgement and these verification limits.
 
 Review these additional implementation changes for the shared workflow:
 

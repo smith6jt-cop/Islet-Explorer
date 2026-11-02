@@ -9,7 +9,7 @@
   "credentials_included": false,
   "full_raw_scans_included": false,
   "scientific_data_modified": false,
-  "agent_read_acknowledged": false,
+  "agent_read_acknowledged": true,
   "recipient_port_applied": false,
   "scientific_acceptance": false,
   "service_actions_performed": false,
@@ -48,5 +48,48 @@
     "source": "Senior agent commentary observed through read_thread",
     "text": "The separate CODEX package has now arrived with a checksum; its receipt review will remain separate from this run and will not change the protein method.",
     "scope": "Arrival acknowledged; independent verification/read acknowledgement still pending"
+  },
+  "read_acknowledgement": {
+    "recorded_utc": "2026-11-02T22:50:01.404437+00:00",
+    "checked_utc": "2026-11-02T22:48:17.056442+00:00",
+    "source": "Explicit cross-session acknowledgement and recipient-owned receipt",
+    "recipient": "Senior / monorepo / HPG / MultiPlex5000 agent",
+    "status": "received_verified_read_not_applied",
+    "receipt": {
+      "path": "/home/smith6jt/IO60panc2nd/Islet-Explorer-Senior/docs/evaluations/blocker_remediation_20261102/codex_received_component_handoff.json",
+      "sha256": "ff41b611cdb805e2519ee4be26494b306ed0d7ddc6667215b87c8627f5e499de"
+    },
+    "independently_verified": {
+      "payload_files": 17,
+      "payload_bytes": 2056899,
+      "regular_archive_source_files": 214,
+      "archive_directory_entries": 24,
+      "total_tar_entries": 238,
+      "all_payload_checksums_match": true,
+      "all_manifest_source_hashes_match": true,
+      "source_roster_exact": true,
+      "bundle_head_and_prerequisite_header_match_manifest": true,
+      "supplied_summary_arithmetic": "20 images / 3199606 cells / 78680 Ki67-positive / 4848 object files / 357658 object rows"
+    },
+    "guidance_read": [
+      "component_selection",
+      "Ki67",
+      "calibration_and_live_geometry",
+      "future_recipient_adaptation"
+    ],
+    "verification_limits": [
+      "No scientific processing, source-data replay, image review or biological acceptance was performed for this package.",
+      "Supplied scientific summaries were read and their arithmetic checked; raw scientific data are not included in the package.",
+      "The Git bundle was hashed and its head/prerequisite header inspected; prerequisite history was not imported or verified in Senior.",
+      "HiPerGator delivery was reported by the sender and not independently checked in this receipt."
+    ],
+    "current_run_effects": {
+      "current_protein_run_changed": false,
+      "external_port_or_current_producer_modified": false,
+      "prior_handoff_overwritten": false,
+      "scientific_approval_added": false,
+      "production_release_activated": false,
+      "package_applied": false
+    }
   }
 }
