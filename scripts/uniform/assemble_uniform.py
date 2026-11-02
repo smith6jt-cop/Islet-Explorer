@@ -23,6 +23,8 @@ Every value is regenerated from the uniform workflow (`$OUT`, see README.md): th
       the level selection picked it), on the image's own scale (x - level) / (p99.9 - level) clipped to [0, 1]
       (identity.py's hormone typing scale); nothing pooled (owner 2026-10-28). Until v17: UniFORM-aligned values on
       a cohort floor/top scale.
+  D6  state flags (currently Ki67_pos) retain the identity table's numeric 0/1 value in cell-level exports. Their
+      per-image measurement and level are recorded separately; states do not enter the 31-marker embedding.
 
 Regions: an object's core is the cells whose centroid lies in it; its peri band is the 20 um ring around it,
 inside Tissue, minus every endocrine object; a cell may sit in several bands. Cells ruled out of analysis (no
@@ -83,6 +85,9 @@ MARKERS = ['CD31', 'CD8a', 'CD3e', 'SMA', 'CD4', 'CD34', 'HLADR', 'PDPN', 'panCK
 # old chain's classes.
 ENDOCRINE_STARTS = ('EndocrineCluster', 'EndocrineSingle')     # an unnamed cell of an object that is its endocrine cells
 IDENTITY_COLUMNS = ['object_id', 'label', 'excluded_reason', 'compartment', 'lineage', 'status', 'named_by', 'tags']
+# Registry state flags (currently Ki67_pos) are cell attributes, not additional
+# phenotype labels or columns of the 31-marker embedding input.
+STATE_COMPARISON = 'log1p(clip(nan_to_num(REDSEA, nan=0), 0, None)) > level_log'
 # The `<marker>_pos` flags of cell_distance.csv cover every panel marker (owner, 2026-10-20: the distance profile
 # "needs to have all markers that are common to all donors"; all 31 are measured in every image, and build_image
 # stops if one is not). Until v7 they covered 18.
@@ -123,6 +128,79 @@ def features(path: Path) -> list:
 
 def valid(g):
     return g if g.is_valid else shapely.make_valid(g)
+
+
+def cell_states(ident: pd.DataFrame, rs: pd.DataFrame, lv: pd.DataFrame,
+                reg: RG.Registry, tag: str) -> tuple[pd.DataFrame, dict]:
+    """Preserve identity's binary state flags and verify their selected readings.
+
+    The strict comparison and missing-value handling match identity.py. Levels
+    name the actual measurement; historical whole-cell Ki67 is not silently
+    described as nuclear Ki67. Alignment is by eligible object UUID, never row
+    position. The returned state columns retain identity's 0/1 values as int8.
+    """
+    for name, frame in (('identity', ident), ('REDSEA', rs)):
+        if frame['object_id'].isna().any() or frame['object_id'].duplicated().any():
+            raise ValueError(f'{tag}: invalid {name} UUIDs for cell states')
+    if set(ident['object_id']) != set(rs['object_id']):
+        raise ValueError(f'{tag}: identity and eligible REDSEA UUIDs differ for cell states')
+    readings = rs.set_index('object_id').reindex(ident['object_id'])
+    result = ident[['object_id']].copy()
+    provenance = {}
+    for marker in reg.markers('state'):
+        flag = f'{marker}_pos'
+        if marker not in lv.index or not np.isfinite(lv.loc[marker, 'level_log']):
+            raise ValueError(f'{tag}: no finite cell-state level for {marker}')
+        measurement = str(lv.loc[marker, 'measurement'])
+        column = reg.column(marker, measurement)
+        if flag not in ident or not pd.api.types.is_numeric_dtype(ident[flag]) or not ident[flag].isin([0, 1]).all():
+            raise ValueError(f'{tag}: missing or nonbinary identity cell state {flag}')
+        if column not in readings:
+            raise ValueError(f'{tag}: missing cell-state measurement {column}')
+        values = readings[column].to_numpy(float)
+        positive = np.log1p(np.clip(np.nan_to_num(values, nan=0.0), 0, None)) > float(lv.loc[marker, 'level_log'])
+        if not np.array_equal(positive, ident[flag].to_numpy(bool)):
+            raise ValueError(f'{tag}: {flag} differs from identity measurement/level')
+        result[flag] = ident[flag].to_numpy(np.int8)
+        provenance[flag] = {'marker': marker, 'measurement': measurement, 'redsea_column': column,
+                            'level_log': float(lv.loc[marker, 'level_log'])}
+    return result, provenance
+
+
+def cell_state_metadata(results: dict) -> dict:
+    """Explicit availability contract; states never enter identity or embeddings."""
+    first = next(iter(results.values()))['cell_states']
+    if any(set(result['cell_states']) != set(first) for result in results.values()):
+        raise ValueError('Cell-state fields differ between cohort images')
+    return {'schema': 'uniform.cell_states/1',
+            'flags': {flag: {'marker': info['marker'], 'role': 'state', 'values': [0, 1],
+                             'comparison': STATE_COMPARISON,
+                             'by_image': {tag: result['cell_states'][flag] for tag, result in results.items()}}
+                      for flag, info in first.items()},
+            'assembly_exports': ['cell_types/*.parquet', 'cells/*.csv', 'donors/*.csv', 'cell_distance.csv'],
+            'release_exports': ['cells/*.csv', 'spatial/tissue/case_id=*/*.parquet',
+                                'spatial/cell_distance.parquet'],
+            'identity_and_embedding_inputs': False}
+
+
+def component_selection_metadata(run: Path) -> dict | None:
+    """Validate and describe an explicit component run without granting acceptance."""
+    manifest = CT.typing_dir(run) / 'component_selection.json'
+    audit_path = CT.typing_dir(run) / 'component_selection_audit.json'
+    if not manifest.exists():
+        if audit_path.exists():
+            raise ValueError('Component identity audit has no selection manifest')
+        return None
+    import component_selection as CS
+    audit = CS.validate_audit(run)
+    selection = json.loads(manifest.read_text())
+    counts = ('preserved_named_endocrine_cells', 'preserved_unresolved_endocrine_cells',
+              'unresolved_endocrine_cells', 'boundary_conflicts')
+    return {'schema': selection['schema'], 'status': selection['status'],
+            'release_ready': selection['release_ready'],
+            'manifest_file': 'component_selection.json', 'manifest_sha256': sha256(manifest),
+            'audit_file': 'component_selection_audit.json', 'audit_sha256': sha256(audit_path),
+            **{key: int(audit[key]) for key in counts}}
 
 
 # ------------------------------------------------------------------------------------------- the label
@@ -214,9 +292,14 @@ def build_image(run: Path, out: Path, tag: str, case: str, donors: pd.DataFrame,
     # markers the typing does not read); the scale's top is the 99.9th percentile over the image's analysed cells
     meas = {m: (lv.loc[m, 'measurement'] if m in lv.index else shown.loc[m, 'measurement'] if m in shown.index
                 else 'whole_cell') for m in MARKERS}
+    state_markers = reg.markers('state')
+    state_columns = [reg.column(m, str(lv.loc[m, 'measurement'])) for m in state_markers]
     rs = pd.read_parquet(typ / 'redsea' / f'{tag}.parquet', columns=['object_id', 'qc_analysis_eligible']
-                         + sorted({reg.column(m, meas[m]) for m in MARKERS}))
+                         + sorted({reg.column(m, meas[m]) for m in MARKERS} | set(state_columns)))
     rs = rs[rs['qc_analysis_eligible']].reset_index(drop=True)
+    state_values, state_provenance = cell_states(ident, rs, lv, reg, tag)
+    state_fields = list(state_provenance)
+    cells = cells.merge(state_values, on='object_id', how='left', validate='one_to_one')
     level_log = {m: float(lv.loc[m, 'level_log']) if m in lv.index else float(shown.loc[m, 'level_log'])
                  if m in shown.index else float(np.log1p(nulls[(tag, m)])) for m in MARKERS}
     missing = [m for m in MARKERS if not np.isfinite(level_log[m])]
@@ -407,7 +490,8 @@ def build_image(run: Path, out: Path, tag: str, case: str, donors: pd.DataFrame,
         d = pd.DataFrame({'X_centroid': xy_um[ids, 0], 'Y_centroid': xy_um[ids, 1], 'phenotype': labels[ids],
                           'cell_region': np.r_[np.repeat('core', len(c)), np.repeat('peri', len(p))],
                           'Cell Area': cells['Cell: Area µm^2'].to_numpy()[ids],
-                          'Nucleus Area': cells['Nucleus: Area µm^2'].to_numpy()[ids]})
+                          'Nucleus Area': cells['Nucleus: Area µm^2'].to_numpy()[ids],
+                          **{flag: cells[flag].to_numpy()[ids] for flag in state_fields}})
         d = pd.concat([d, pd.DataFrame(X[ids], columns=MARKERS)], axis=1)
         d.to_csv(cell_dir / f'{identity}.csv', index=False)
 
@@ -425,11 +509,13 @@ def build_image(run: Path, out: Path, tag: str, case: str, donors: pd.DataFrame,
         json.dump({'type': 'FeatureCollection', 'features': gfeatures}, fh)
 
     tissue_tab = pd.DataFrame({'X_centroid': xy_um[:, 0], 'Y_centroid': xy_um[:, 1], 'phenotype': labels,
-                               'cell_region': display_region, 'islet_name': display_name})
+                               'cell_region': display_region, 'islet_name': display_name,
+                               **{flag: cells[flag].to_numpy() for flag in state_fields}})
     tissue_tab.to_csv(out / 'donors' / f'{cid}.csv', index=False)
     distance = pd.DataFrame({'case_id': int(cid), 'donor_status': meta['Donor Status'], 'cell_region': display_region,
                              'phenotype': labels, 'signed_dist': signed.astype(np.float32),
-                             'signed_dist_islet': signed_islet.astype(np.float32)})
+                             'signed_dist_islet': signed_islet.astype(np.float32),
+                             **{flag: cells[flag].to_numpy() for flag in state_fields}})
     unmeasured = [m for m in POS_MARKERS if np.isnan(V[:, MARKERS.index(m)]).all()]
     if unmeasured:
         raise ValueError(f'{tag}: {unmeasured} not measured, so not common to all donors; drop them from POS_MARKERS')
@@ -441,7 +527,8 @@ def build_image(run: Path, out: Path, tag: str, case: str, donors: pd.DataFrame,
     kde['phenotype'] = kde['phenotype'].map(safe)
     membership = pd.DataFrame({'object_id': cells['object_id'], 'case_id': cid, 'phenotype': labels,
                                **{c: cells[c].to_numpy() for c in IDENTITY_COLUMNS[3:]}, 'cell_region': display_region,
-                               'islet_name': display_name, 'x_um': xy_um[:, 0], 'y_um': xy_um[:, 1]})
+                               'islet_name': display_name, 'x_um': xy_um[:, 0], 'y_um': xy_um[:, 1],
+                               **{flag: cells[flag].to_numpy() for flag in state_fields}})
     membership.to_parquet(out / 'cell_types' / f'{cid}.parquet', index=False)
     in_single = cells['islet_num'].astype(str).str.startswith('Single_').to_numpy()
     census.update(objects=len(objs), objects_paired=len(obs), tissue_area_mm2=tissue.area * PX ** 2 / 1e6,
@@ -459,7 +546,7 @@ def build_image(run: Path, out: Path, tag: str, case: str, donors: pd.DataFrame,
     census['display_only_levels'] = {m: float(levels.loc[m, 'level_raw']) for m in MARKERS if levels.loc[m, 'display_only']}
     print(f'{tag}: {len(obs)} of {len(objs)} objects, {len(cells):,} analysed cells, {census["seconds"]}s', flush=True)
     return dict(adata=a, comp=comp, targets=targets, markers=markers_rows, features=feats, lookup=lookup,
-                unpaired=unpaired, distance=distance, kde=kde, census=census)
+                unpaired=unpaired, distance=distance, kde=kde, census=census, cell_states=state_provenance)
 
 
 def groovy(adata, kind, rows, columns):
@@ -503,6 +590,7 @@ def main() -> int:
     if out.exists() or reports.exists():
         raise FileExistsError('use fresh output and report roots')
     rows = CT.cohort_rows()
+    component_selection = component_selection_metadata(a.run)
     generation = SG.provenance(a.run)
     if generation is not None:
         for row in rows:
@@ -620,6 +708,14 @@ def main() -> int:
         shutil.copy2(a.run / structure_metrics.MANIFEST, out / structure_metrics.MANIFEST)
     if SG.provenance(a.run) != generation:
         raise ValueError('Structure generation changed during assembly')
+    if component_selection_metadata(a.run) != component_selection:
+        raise ValueError('Component selection or identity audit changed during assembly')
+    if component_selection is not None:
+        for kind in ('manifest', 'audit'):
+            name = component_selection[f'{kind}_file']
+            shutil.copy2(CT.typing_dir(a.run) / name, out / name)
+            if sha256(out / name) != component_selection[f'{kind}_sha256']:
+                raise ValueError(f'Component {kind} changed while copying')
     rel = {'status': 'assembled_pending_owner_review', 'donors': len(rows), 'objects': int(combined.n_obs),
            'structure_generation': generation,
            'by_object_class': {str(k): int(v) for k, v in combined.obs.object_class.value_counts().items()},
@@ -627,6 +723,7 @@ def main() -> int:
            'labels': LABELS, 'label_groups': {k: groups[k] for k in ('endocrine', 'immune', 'macrophages')},
            'label_groups_basis': 'agent choice 2026-10-29 (module docstring); owner review pending',
            'cell_typing': 'typing/identity (identity.py)', 'positivity': 'per-image level, typing/levels.csv',
+           'cell_states': cell_state_metadata(results),
            'measurements': {m: str(v) for m, v in pd.read_csv(CT.typing_dir(a.run) / 'levels.csv')
                             .groupby('marker')['measurement'].agg(lambda x: '/'.join(sorted(set(x)))).items()},
            'display_only_level_markers': sorted(census['display_only_levels'].iloc[0]),
@@ -645,6 +742,12 @@ def main() -> int:
            'cells_analysed': int(census.analysed.sum()), 'cells_excluded': int(census.excluded.sum()),
            'cells_not_analysis_eligible': int(census.not_analysis_eligible.sum()),
            'donor_metadata': str(md_path.resolve()), 'donor_metadata_sha256': sha256(md_path)}
+    if component_selection is not None:
+        rel['status'] = component_selection['status']
+        rel['release_ready'] = False
+        rel['component_selection'] = component_selection
+        rel['unresolved_endocrine_cells'] = component_selection['unresolved_endocrine_cells']
+        rel['component_boundary_conflicts'] = component_selection['boundary_conflicts']
     (out / 'uniform_release.json').write_text(json.dumps(rel, indent=2) + '\n')
     print(json.dumps(rel, indent=2))
     return 0

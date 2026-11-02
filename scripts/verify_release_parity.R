@@ -82,6 +82,79 @@ parity_compare_frames <- function(expected, actual, keys, tolerance = 1e-12) {
        max_absolute_difference = if (length(differences)) max(differences) else 0)
 }
 
+# State flags are independent of phenotype and the protein embedding. Historical
+# roots without this export contract remain historical; a declared state must
+# survive every declared cell-level runtime export, including the full distance
+# table rather than only its aggregate queries.
+parity_cell_state_values <- function(frame, fields) {
+  if (!all(fields %in% names(frame))) parity_fail("cell_state_field_missing")
+  for (field in fields) {
+    value <- frame[[field]]
+    if (!is.numeric(value) || anyNA(value) || any(!value %in% c(0, 1))) {
+      parity_fail("cell_state_not_binary")
+    }
+  }
+  invisible(TRUE)
+}
+
+parity_cell_states <- function(source_root, release_root, release_env) {
+  path <- file.path(source_root, "uniform_release.json")
+  if (!file.exists(path)) return(list(applicable = FALSE))
+  contract <- jsonlite::read_json(path, simplifyVector = TRUE)$cell_states
+  if (is.null(contract)) return(list(applicable = FALSE))
+  if (!identical(contract$schema, "uniform.cell_states/1") ||
+      !identical(contract$identity_and_embedding_inputs, FALSE)) {
+    parity_fail("cell_state_contract_invalid")
+  }
+  fields <- names(contract$flags)
+  if (!length(fields) || anyNA(fields) || anyDuplicated(fields)) parity_fail("cell_state_contract_invalid")
+  for (field in fields) {
+    flag <- contract$flags[[field]]
+    if (!identical(flag$role, "state") || !identical(field, paste0(flag$marker, "_pos")) ||
+        !identical(as.numeric(flag$values), c(0, 1)) || !length(flag$by_image)) {
+      parity_fail("cell_state_contract_invalid")
+    }
+  }
+  # These keys also retain duplicate-row multiplicity; _pos columns are exact
+  # count fields in parity_compare_frames, irrespective of numeric storage type.
+  keys <- c("case_id", "donor_status", "cell_region", "phenotype", "signed_dist")
+  expected <- data.table::fread(file.path(source_root, "cell_distance.csv"),
+    select = c(keys, fields), colClasses = c(case_id = "character"), data.table = FALSE)
+  actual <- release_env$islet_read_parquet(file.path(release_root, "spatial", "cell_distance.parquet"),
+                                          columns = c(keys, fields))
+  parity_cell_state_values(expected, fields)
+  parity_cell_state_values(actual, fields)
+  distance <- parity_compare_frames(expected, actual, keys)
+
+  donors <- sort(list.files(file.path(source_root, "donors"), pattern = "[.]csv$", full.names = TRUE))
+  objects <- sort(list.files(file.path(source_root, "cells"), pattern = "[.]csv$", full.names = TRUE))
+  if (!length(donors) || !length(objects)) parity_fail("cell_state_export_missing")
+  donor_rows <- 0L; object_rows <- 0L
+  for (file in donors) {
+    donor <- sub("[.]csv$", "", basename(file))
+    expected <- data.table::fread(file, select = fields, data.table = FALSE)
+    actual <- release_env$islet_read_parquet(file.path(release_root, "spatial", "tissue",
+      paste0("case_id=", donor), paste0(donor, ".parquet")), columns = fields)
+    parity_cell_state_values(expected, fields)
+    parity_cell_state_values(actual, fields)
+    # The complete donor table comparison separately checks row associations.
+    parity_compare_frames(expected, actual, fields)
+    donor_rows <- donor_rows + nrow(expected)
+  }
+  for (file in objects) {
+    expected <- data.table::fread(file, select = fields, data.table = FALSE)
+    actual <- data.table::fread(file.path(release_root, "cells", basename(file)),
+                                select = fields, data.table = FALSE)
+    parity_cell_state_values(expected, fields)
+    parity_cell_state_values(actual, fields)
+    for (field in fields) parity_compare_vectors(expected[[field]], actual[[field]], exact = TRUE)
+    object_rows <- object_rows + nrow(expected)
+  }
+  list(applicable = TRUE, fields = as.list(fields), distance_rows = distance$rows,
+       donor_files = length(donors), donor_rows = donor_rows,
+       object_files = length(objects), object_rows = object_rows)
+}
+
 # The builder's own file lists and digests (passthrough files by schema, the image bundle with its
 # resolved sidecars, the JSON form of the embedding metadata), so the check cannot drift from the build.
 parity_builder <- function(repo) {
@@ -304,6 +377,7 @@ parity_run <- function(options, repo) {
     }
     list(files = length(files), rows = rows)
   })
+  record("cell_state_exports", parity_cell_states(source_root, release_root, release_env))
 
   cells <- record("spatial_source_load", {
     frame <- source_env$load_cell_distance()
