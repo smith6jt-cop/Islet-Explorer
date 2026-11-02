@@ -385,8 +385,10 @@ def script1_objects(mask: np.ndarray, px_um: float = CLASSIFIER_UM) -> np.ndarra
     """What 1_panc_objects.groovy makes of a classifier's mask, on the classifier's own grid (a label image).
 
     50 um^2 minimum at creation; erosion by 1 / 2 / 3 um by the object's area, then dilation by 0.85 x that;
-    fragments under 50 um^2 removed. QuPath does this on vector outlines; on a 1 um grid it is an approximation
-    good to about half a pixel, which is what the counts in the report are worth.
+    fragments under 50 um^2 removed, then all holes filled. The initial pixel-classifier API's maxHoleSize=-1
+    leaves holes intact; the final RefineAnnotationsPlugin maps -1 to infinity and fills them after filtering
+    fragments. QuPath uses vector outlines; this classifier-grid raster is an approximation. A single label
+    image cannot represent overlapping annotations, so a nested object's label is retained within a filled hole.
     """
     lab, n = ndi.label(mask)
     out = np.zeros(mask.shape, dtype=np.int32)
@@ -420,6 +422,14 @@ def script1_objects(mask: np.ndarray, px_um: float = CLASSIFIER_UM) -> np.ndarra
         target = out[y0:y1, x0:x1]
         write = grown & keep[part_of]
         target[write] = new_id[part_of[write]]
+    # RefineAnnotationsPlugin(maxHoleSizeMicrons=-1): fill all holes only after fragment removal.
+    # Do this per object, not on the union: neighboring objects must not jointly enclose a filled region.
+    for object_id, sl in enumerate(ndi.find_objects(out), start=1):
+        if sl is None:
+            continue
+        target = out[sl]
+        filled = ndi.binary_fill_holes(target == object_id)
+        target[filled & (target == 0)] = object_id
     return out
 
 
