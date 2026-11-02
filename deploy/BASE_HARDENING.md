@@ -93,6 +93,91 @@ optional `debug` peer unchanged), so its lock entry changes only in version, URL
 integrity; the tarball's SHA-512 and SHA-1 matched the registry, and `npm ci --dry-run`
 accepted the lock. Nothing else in the graph changes.
 
+## 2026-11-02: bundled Brotli in Pillow and DuckDB; services stopped
+
+The UFRC alert still identified CVE-2026-111497 in the v20 image even after its
+Node and Ubuntu packages had been patched. Inspection found Pillow 13.0.0's
+wheel bundles a separate Brotli 1.2.0 decoder, reached through its FreeType
+library. The package SBOM did not catalog that copy: rescanning the image with
+the November 2 Grype database still reported zero High/Critical findings.
+
+The Python lock now forces Pillow to build from source against Ubuntu's patched
+FreeType/Brotli libraries; Pillow's Python API version remains 13.0.0. The
+Containerfile installs the required development headers and bounds compilation
+to two workers. Updating the system Brotli package cannot repair a wheel's
+private decoder, so the image gate rejects that layout and checks Pillow's
+actual shared-library linkage to the Ubuntu-managed decoder.
+See [Ubuntu's package fix](https://ubuntu.com/security/CVE-2026-111497),
+[Pillow's dependency update](https://github.com/python-pillow/Pillow/pull/10340),
+and [the remediation record](../docs/container_security_20261102.md).
+
+DuckDB 1.5.2 also compiles a private Brotli 1.1.0 decoder into `duckdb.so`.
+The original pinned source lacks the fix, and the inspected installed library
+returned the vulnerable error (-9) on the upstream regression vector, instead
+of the patched -17. A Pillow-only replacement cannot pass the complete gate.
+
+**The owner's later direction supersedes the local backport:** implement the
+released fixes and defer DuckDB until its upstream PR merges. The
+[DuckDB port proposal](https://github.com/duckdb/duckdb/pull/27791) was
+**open and unmerged when reviewed on 2026-11-02**. Active build instructions
+therefore retain the original CRAN R package **1.5.2**, its existing R API and
+SHA-256 pin `55f98a336513a94354f328791c8b94521b9f2e918a57d7e9fe6c0cb6b9a38db6`,
+without applying the proposed decoder patch. The known decoder vulnerability
+remains an explicit release blocker; released Pillow, Node, and system-library
+fixes do not resolve it.
+
+The stopped combined-backport attempt is retained on local branch
+`security/deferred-duckdb-brotli-20261102` at `3a12daa`, with its source helper, patch,
+receipt checks, and the [dated remediation record](../docs/container_security_20261102.md).
+Its historical port was `2b942af6319783a5cc3c21d76a8e560e191978b2`, carrying
+upstream Brotli fix `0ed4268a4401abcb4472096340477cf4af7d1a2b`; patch SHA-256
+was `d00033af815fcb214daa9630d9da11b39a191dfab17b0f8cff367157af5806ca`.
+Those are archived review details, not active installation instructions or an
+accepted image. The attempt identified an installation pitfall: CRAN configuration
+extracts `duckdb/src/duckdb.tar.xz`, so editing only an extracted directory can
+be undone. Its helper patched the nested archive and package `MD5`, preserving
+unrelated members. The helper and patch are removed from the active build path.
+
+The scan feeds the current checkout's `verify-brotli.py` into the exact immutable
+image with networking disabled and no data mounts. The required
+`islet.brotli_verification/2` report combines Ubuntu/Node patch checks, Pillow
+linkage, DuckDB runtime package version and installed-library hash, and a
+bounded subprocess calling the installed
+DuckDB decoder. The malformed upstream stream must return decoder result 0
+and error -17; timeout, crash, missing symbols, or a vulnerable decoder fail.
+The active gate does not require the deferred unmerged patch's source receipt.
+Removing that receipt requirement does not waive the actual decoder check.
+
+`scan-image.sh` then runs the SBOM/Grype High/Critical gate and binds the Brotli
+report hash in `.scan.txt`. Every **new** release manifest requires that passing
+v2 report and its DuckDB binary-check fields. An old scan without the report, or
+an earlier Pillow-only report, cannot authorize a new manifest. No CVE
+suppression was added. Existing historical manifests remain historical records,
+not evidence that an old image satisfies the new gate.
+
+The optional future valid-data check is `tests/check-duckdb-brotli.R`: it reads a real
+release Parquet, round-trips all its rows through BROTLI compression in temporary
+storage, checks the actual compression metadata, schema/values/missingness,
+duplicate multiplicities, numeric and grouped aggregates, and unchanged source
+SHA-256. The [deployment guide](README.md#brotli-source-and-runtime-verification)
+gives the read-only container invocation for a future eligible candidate. Local
+script-development checks do not demonstrate a fixed image, and a successful
+valid-data check cannot waive malformed-stream rejection.
+
+**Build status:** the combined `3a12daa` backport build was stopped following
+the owner's direction. No completed patched image or patched-image compatibility
+result is claimed. An offline candidate containing the released fixes can be
+built for inspection, but the original DuckDB decoder is expected to fail the
+strict gate. It must not receive a passing attestation or be released. Revisit
+the DuckDB change after the upstream condition is met and its implementation
+and compatibility have been reviewed.
+
+At the owner's request dev was stopped. Both PubApps services are persistently
+masked; replacement-image preparation does not authorize restarting either one.
+Old releases are not eligible rollback targets until rebuilt and reverified.
+
+## Original base review
+
 The inspected `rocker/shiny:4.5.1` base contained Shiny Server 1.5.24.1034,
 Node 20.17.0, and npm 10.8.2. Its registry SBOM/Grype report recorded **33 High
 and 3 Critical matches**. These were real package findings; none is suppressed.

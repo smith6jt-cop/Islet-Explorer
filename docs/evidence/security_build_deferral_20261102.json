@@ -1,0 +1,53 @@
+{
+  "source_commit": "3a12daa5670806e264f703d97911d1f0340df530",
+  "result": "stopped_owner_deferred_unmerged_duckdb_patch",
+  "exit_code": 130,
+  "stopped_at_utc": "2026-11-02T20:39:51.035835+00:00",
+  "completed_image": false,
+  "image_exported": false,
+  "services_restarted": false,
+  "preserved_branch": "security/deferred-duckdb-brotli-20261102",
+  "preserved_worktree": "/data/panc_CODEX/Islet-Explorer-security-combined-20261102",
+  "direction_source": "User instruction relayed by parallel Patch vulnerable containers session 01a19dc6-aab3-7382-8e98-7bb7e0012a20",
+  "active_source_commit": "23bd2fdd223d090f4c5ff438167245c459dbeb16",
+  "active_changes": "Released Node/system/Pillow fixes; original CRAN DuckDB1.5.2; no unmerged backport",
+  "full_security_status": "blocked_by_deferred_duckdb",
+  "offline_builder_thread": "01a19dc6-aab3-7382-8e98-7bb7e0012a20",
+  "offline_build_evidence": "tmp/security-available-fixes-20261102",
+  "evidence": {
+    "stopped.json": {
+      "path": "tmp/security-build-current-20261102/stopped.json",
+      "sha256": "7bcba79abf0c668e4d8fdcd0c55ba7852d8f92cc788f81077a737dfe95cf227a"
+    },
+    "build.exit": {
+      "path": "tmp/security-build-current-20261102/build.exit",
+      "sha256": "f5bde7eb9f6c71611dc5726e8aca3eb4eba3e386da49e0a4ed5c295a90a73a0d"
+    },
+    "source-identity.txt": {
+      "path": "tmp/security-build-current-20261102/source-identity.txt",
+      "sha256": "722dc495908bc190c14125027657f2a8cee1331c538309b7570e23803ce8dab1"
+    },
+    "build-inputs.sha256": {
+      "path": "tmp/security-build-current-20261102/build-inputs.sha256",
+      "sha256": "3cffee9da4add19b0c1bad01df100715afc3eaf775442bc3b74ec8f4ca03ec78"
+    },
+    "test-image-evidence-deferred.log": {
+      "path": "tmp/security-build-current-20261102/test-image-evidence-deferred.log",
+      "sha256": "bbc4117942362cf92e015fbe05a6a33a3e903d04830b1a14b50447d9fc56675b"
+    },
+    "old-dev-rejected-deferred.json": {
+      "path": "tmp/security-build-current-20261102/old-dev-rejected-deferred.json",
+      "sha256": "1abf64897c63fb61284a542901a25e29a1d08619fe8ef36b5a9f51a1830fd3c7"
+    },
+    "host-status-readonly.txt": {
+      "path": "tmp/security-build-current-20261102/host-status-readonly.txt",
+      "sha256": "4e57939559ce6235925f95ba0069bb6422f9e0419d2cfa367f81d4e983745148"
+    }
+  },
+  "old_dev_gate_result": {
+    "result": "fail",
+    "duckdb_error_code": -9,
+    "pillow_vendored_decoder": true
+  },
+  "contract_suite": "pass (mocked image/scanner fixtures, not a real candidate security pass)"
+}

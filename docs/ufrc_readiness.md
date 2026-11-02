@@ -7,6 +7,14 @@ and [workflow guide](workflow_user_guide.md) govern the correction. Successful
 deployment/browser checks do not establish scientific acceptance. The staged
 whole-v19 reference image was never activated; no corrected mixed release exists.
 
+**Security build status, 2026-11-02:** released fixes are active at `23bd2fd`;
+the owner deferred the unmerged DuckDB backport. Its `3a12daa` build was stopped,
+with the work preserved separately. The parallel security session owns one
+current-app offline candidate and separate package-scan evidence. DuckDB's
+binary check still blocks a passing full-security attestation and restart.
+The [dated security record](container_security_20261102.md) owns image/build status;
+historical zero-High/Critical package scans below do not satisfy this new gate.
+
 Updated 2026-10-22 for the uniform 20-donor release candidate (data schema 5); the 2026-10-16 update covered UFRC comment 13 and the owner-directed processing reset. This is the review index for the supplied
 [`UFIT_PubApps_Instance_Request.docx`](../UFIT_PubApps_Instance_Request.docx),
 including its hosting policy, project plan, and development standards. It records

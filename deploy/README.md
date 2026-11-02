@@ -136,6 +136,8 @@ must not be used for reviewer hosting.
 | `containerignore` | Whitelist build context; excludes data, images, Git history, credentials, and caches |
 | `requirements-python.lock` | Exact tested Python/PAGA environment |
 | `install-production-r-deps.R` | Mandatory, exact `destiny` and `duckdb` gates over the app's R manifest |
+| `verify-brotli.py` | Required actual decoder regression, package/library evidence, and system/Pillow linkage gate |
+| `tests/check-duckdb-brotli.R` | Optional future real release Parquet BROTLI round-trip and query compatibility check with read-only input |
 | `shiny-server.conf` | Sanitized `/islet-explorer/` Shiny service |
 | `islet-explorer.container.in` | Hardened Quadlet template |
 | `build-image.sh` / `scan-image.sh` | Clean build, dependency probes, SBOM, and High/Critical scan gate |
@@ -148,15 +150,96 @@ must not be used for reviewer hosting.
 Core R packages are resolved by `scripts/install_shiny_deps.R` against the
 base-image repository configuration. That inherited snapshot predates the tested
 DuckDB 1.5.2 release, so the production installer obtains that exact CRAN source
-archive and checks its pinned SHA-256 before installation. It bounds DuckDB
-compilation to two jobs; `destiny` remains pinned to 3.22.0 through Bioconductor
-3.21. The image build records every resolved R
+archive and checks its pinned SHA-256 before installation, with compilation
+bounded to two jobs. The owner deferred the unmerged DuckDB Brotli backport;
+the current original 1.5.2 decoder remains a release blocker described below.
+`destiny` remains pinned to 3.22.0 through Bioconductor 3.21.
+The image build records every resolved R
 package and version at `/opt/islet-explorer-build/R-packages.tsv`; the required
 release scan writes ID-derived CycloneDX, Grype, R-package, Python-package, and
-`.scan.txt` evidence plus `published-image.txt`. The scan attestation hashes the
-four required per-image artifacts, and `published-image.txt` binds the local image
+supplementary Brotli JSON evidence, plus `.scan.txt` and `published-image.txt`.
+The scan attestation hashes the required evidence artifacts, and
+`published-image.txt` binds the local image
 ID or registry digest to the source commit and base image. Changing the base digest
 or any R dependency requires a new image and scientific parity run.
+
+### Brotli source and runtime verification
+
+The 2026-11-02 security review found copies of the affected decoder outside the
+system package inventory: Pillow's wheel bundles a private library, and DuckDB
+statically includes one in `duckdb.so`. Updating Ubuntu packages and obtaining
+a zero-High/Critical package scan did not fix or detect both copies. The Python
+lock keeps Pillow **13.0.0** but builds it from source against the patched
+Ubuntu-managed FreeType/Brotli libraries, with two compilation workers.
+
+**Current owner direction: implement released fixes; defer DuckDB until the
+upstream PR merges.** DuckDB therefore retains the original CRAN **1.5.2**
+R package/API version without the proposed backport. Its known vulnerable
+decoder remains a release blocker, as recorded in
+[BASE_HARDENING.md](BASE_HARDENING.md#2026-11-02-bundled-brotli-in-pillow-and-duckdb-services-stopped).
+The CRAN archive is pinned to SHA-256
+`55f98a336513a94354f328791c8b94521b9f2e918a57d7e9fe6c0cb6b9a38db6`.
+The [DuckDB port](https://github.com/duckdb/duckdb/pull/27791), reviewed as
+**open/unmerged on 2026-11-02**, is not part of the active installation path.
+The stopped backport attempt and exact pins are preserved on local branch
+`security/deferred-duckdb-brotli-20261102` at `3a12daa`, described in the
+[remediation record](../docs/container_security_20261102.md). Do not copy its
+helper, patch, or source-receipt requirement back into current build instructions
+before the owner's upstream condition is satisfied. The archived attempt also
+records the nested `duckdb/src/duckdb.tar.xz` configure/installation pitfall.
+
+`scan-image.sh` runs the current checkout's `verify-brotli.py` inside the exact
+immutable image, with no network or data mounts. It requires:
+
+* Verified Ubuntu and Node patch versions and Pillow linkage to the managed
+  system decoder, with no vendored Brotli library in the Python environment.
+* DuckDB runtime version 1.5.2 and the actual installed `duckdb.so` hash. The
+  deferred unmerged patch's source receipt is not required by the active gate.
+* The installed decoder's rejection of the upstream malformed-stream regression
+  with result 0/error -17. A version number or clean package scan cannot pass;
+  missing symbols, crashes and timeouts fail.
+* The normal Syft/Grype scan with no High or Critical finding. There is no new
+  CVE suppression.
+
+Every newly generated release manifest requires the hashed
+`islet.brotli_verification/2` report, passing DuckDB decoder/library fields,
+and the matching immutable image evidence. Missing reports/hashes and older
+Pillow-only reports are rejected. An old successful scan cannot authorize a new
+release manifest; rescan the actual candidate with the current gate. Historical
+manifests are retained as records, not upgraded acceptance evidence.
+
+For a future eligible candidate, the optional valid-data check below is available.
+It has not been run on a completed patched image. Set `IMAGE_ID` to its immutable
+`sha256:` ID, `REAL_PARQUET` to an absolute path for a representative nonempty
+release Parquet containing text and numeric columns, and `PARQUET_REPORT` to a
+fresh report path outside the release. From the repository root:
+
+```bash
+podman run --rm --pull=never --network none --read-only \
+  --cap-drop=ALL --security-opt=no-new-privileges \
+  --tmpfs /tmp:rw,size=1g,mode=1777 \
+  --volume "${REAL_PARQUET}:/input/islets.parquet:ro" \
+  --volume "${PWD}/deploy/tests/check-duckdb-brotli.R:/checks/check-duckdb-brotli.R:ro" \
+  --entrypoint Rscript "${IMAGE_ID}" \
+  --vanilla /checks/check-duckdb-brotli.R /input/islets.parquet \
+  > "${PARQUET_REPORT}"
+```
+
+The script verifies BROTLI compression in every generated column chunk, exact
+schema and ordered values, missingness, duplicate counts using bidirectional
+`EXCEPT ALL`, numeric and grouped aggregates, and an unchanged input SHA-256.
+Only the container's temporary filesystem receives the round-trip file; the
+scientific input is mounted read-only. Check the command exit status and report
+before recording success. This is separate from the malformed-stream probe
+and does not replace full release scientific parity or browser checks.
+
+The combined backport build at `3a12daa` was stopped following the owner's
+newer direction. No completed patched image, passing final scan, or patched-image
+compatibility result is claimed. An offline candidate with the released
+Pillow/Node/system fixes is expected to fail the strict DuckDB decoder gate
+until that dependency is resolved; it must not receive a passing attestation.
+Both services remain stopped and masked. Building or testing an image does not
+authorize a restart or accept a scientific data candidate.
 
 ## 1. Project build, test, scan, and OCI export
 
@@ -223,8 +306,8 @@ deploy/export-image.sh "${IMAGE_ID}" "${OCI_ARCHIVE}"
 
 Release builds require `podman`, `syft`, `grype`, and `python3`. The build performs Python
 dependency consistency checks and imports, verifies exact `destiny`/`duckdb`
-versions, parses all application R files, creates the SBOM and resolved dependency
-manifests, and fails on a High
+versions, runs the required Brotli binary/linkage gate, parses all application R
+files, creates the SBOM and resolved dependency manifests, and fails on a High
 or Critical vulnerability. `export-image.sh` creates an OCI archive, metadata,
 and a SHA-256 file covering both from the resolved immutable image ID. The
 mutable build tag is never placed in release metadata.
@@ -657,9 +740,13 @@ Also retain the project's reproducibility and recovery record:
 - Base-image digest.
 - `release.env`, `MANIFEST.sha256`, and verification record.
 - The ID-derived CycloneDX SBOM, Grype JSON report, resolved R package TSV,
-  resolved Python package list, `.scan.txt` attestation, and
+  resolved Python package list, v2 Brotli verification JSON with the DuckDB
+  binary regression and installed-library hash, `.scan.txt` attestation, and
   `published-image.txt`; retain the optional Grype database-status JSON when
   generated.
+- Any future candidate's real Parquet compatibility report and input file hash, plus
+  its command record identifying the immutable image, alongside the separate
+  decoder regression result.
 - Application/unit/scientific-parity and Range results, plus representative
   concurrency, restart, and rollback notes.
 - Project log-minimization checks and the recorded UFRC answers about log access and
