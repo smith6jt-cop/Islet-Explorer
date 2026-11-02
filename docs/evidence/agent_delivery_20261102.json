@@ -16,10 +16,24 @@
   },
   "active_recipient_checkouts_modified": false,
   "scientific_data_modified": false,
-  "agent_read_acknowledged": false,
+  "agent_read_acknowledged": true,
   "recipient_port_applied": false,
   "notice": "docs/typing_change_notice_20261102.md",
   "guide": "docs/workflow_user_guide.md",
   "code_history_base": "307bc1b",
-  "supplemental_security_document": "Separately hashed concurrent working-tree document; not part of source commit"
+  "supplemental_security_document": "Separately hashed concurrent working-tree document; not part of source commit",
+  "acknowledgement": {
+    "recorded_utc": "2026-11-02T20:47:25.725908+00:00",
+    "thread_id": "01a19ca5-0cff-7d81-8027-4868ab012b79",
+    "recipient": "Senior / monorepo / HPG / MultiPlex5000 agent",
+    "source": "Explicit cross-session agent acknowledgement",
+    "sha256sums_sha256": "67a56038efea9e03fa10f7ead0e5f620bf5d18cdcd6a425232fbe1077dbb47dc",
+    "verified_payload_count": 17,
+    "notice_and_reference_context_workflow_read": true,
+    "disposition": "received/read; adaptation specification to retain source pin a425c05 and package29f45b3; port not applied",
+    "separate_from": "frozen20-image parity/v20 provenance and active25-section protein run",
+    "scientific_acceptance": false,
+    "service_changes": false,
+    "live_source_overwrite": false
+  }
 }

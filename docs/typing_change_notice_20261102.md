@@ -105,6 +105,20 @@ this notice and the complete workflow guide, with `SHA256SUMS` and a source-comm
 record. `docs/evidence/agent_delivery_20261102.json` records the verified delivery;
 file delivery is distinct from an agent reading it or completing a port.
 
+The active Senior/MultiPlex5000 agent has now explicitly acknowledged reading
+the notice and structure-only reference-context workflow, and independently
+verified the `SHA256SUMS` hash and all 17 payload files. It records the package
+as **received/read, not applied**, separately from its frozen 20-image parity
+and active 25-section protein run. Its adaptation specification will retain
+`a425c05` / package `29f45b3` and the invariant requirements. The acknowledgement
+is recorded in the delivery receipt; no port or scientific acceptance is implied.
+
+The later security update is separate: current CODEX source `23bd2fd` contains
+released container fixes, while the owner deferred the unmerged DuckDB backport.
+Both PubApps services remain stopped/masked. See
+[the security record](container_security_20261102.md); the old supplemental
+security document inside the immutable handoff package is historical.
+
 Verified recipients/contexts at discovery:
 
 | Workspace | State |
