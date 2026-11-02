@@ -93,6 +93,11 @@ release_geometry_dsn <- function(path) {
   path <- normalizePath(path, mustWork = TRUE)
   if (grepl("[.]gz$", path)) paste0("/vsigzip/", path) else path
 }
+# The sources are read whole, and one feature can exceed GDAL's default single-feature limit for GeoJSON
+# (OGR_GEOJSON_MAX_OBJ_SIZE): the v20 root's largest Collagen IV polygon (Aab_6505) is about 25 MB of GeoJSON, and
+# the read failed with "GeoJSON object too complex/large". Lift the limit for this process (the parity check
+# loads this file too).
+Sys.setenv(OGR_GEOJSON_MAX_OBJ_SIZE = "0")
 
 #' The H5AD bridge returns one-dimensional arrays; JSON has plain vectors. Applied before writing and before
 #' comparing, so the release's metadata equals the source's after one round trip.
