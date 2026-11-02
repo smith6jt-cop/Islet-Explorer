@@ -97,10 +97,6 @@ parity_runtime <- function(repo, root) {
   env$master_path <- env$data_path("master_results.xlsx")
   env$h5ad_path <- env$data_path("islet_explorer.h5ad")
   env$project_root <- repo
-  for (file in c("00_audit.R", "utils_safe_join.R", "01_runtime_data_backend.R",
-                  "data_loading.R", "drilldown_helpers.R")) {
-    sys.source(file.path(repo, "app", "shiny_app", "R", file), envir = env)
-  }
   # Read only the canonical phenotype policy, the pixel constant and the definitions prep_data() needs for the
   # phenotype group aggregates (app commit 82ce23e), without running the UI/credential/package startup code in
   # 00_globals.R.
@@ -123,6 +119,11 @@ parity_runtime <- function(repo, root) {
   }
   if (!all(vapply(policy_names, exists, logical(1), envir = env, inherits = FALSE))) {
     parity_fail("runtime_policy_missing")
+  }
+  # The app files after the definitions: drilldown_helpers.R uses some of them while it loads.
+  for (file in c("00_audit.R", "utils_safe_join.R", "01_runtime_data_backend.R",
+                  "data_loading.R", "drilldown_helpers.R")) {
+    sys.source(file.path(repo, "app", "shiny_app", "R", file), envir = env)
   }
   env$SF_AVAILABLE <- TRUE
   sys.source(file.path(repo, "app", "shiny_app", "R", "spatial_helpers.R"), envir = env)
