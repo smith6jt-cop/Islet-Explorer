@@ -49,8 +49,16 @@ The first two rows above were implemented on 2026-10-30 in `2075d31`. See the ne
 | 10-30 | "One method for all 20" (answer: what should resolving them mean) | in force |
 | 10-30 | "There is typically a minimum fragment and holes parameter that is run with object creation via a pixel classifier" | evaluated: minimum fragments of 4-80 um2 and hole fills up to 1,000 um2 do not separate ND_6548/T1D_6534 from the other 18 images without removing most objects everywhere (`output/typing_20261030/lymphatic_candidates/candidates.csv`) |
 | 10-30 | "1" (the PDPN level gate: keep the re-run objects whose mean despeckled PDPN reaches the image's own PDPN level) | implemented and installed (`output/typing_20261030/lymphatic_pdpn_gate_v1`; validator `20b0285`); the typing rerun on it is in `output/typing_20261030/typing_report/` |
-| 10-31 | "the lymphatic object detection needs the despeckle" | in progress: the classifier on despeckled PDPN (`docs/typing_handoff_20261031.md`); the gate on top of it is the owner's choice after the evaluation |
+| 10-31 | "the lymphatic object detection needs the despeckle" | implemented: the classifier on despeckled PDPN, with the PDPN level gate on top (the owner chose DG on 11-01, below) |
 | 10-31 | "Put together a series of commits that have logical grouping of changes. Update gitignore as needed." | done: `222cd5d` … `578767e` (including the Codex agent's v19 work) |
+
+## Decisions — 2026-11-01/02 (Claude session)
+
+| Date | Ruling (verbatim) | Status |
+|---|---|---|
+| 11-01 | "Do dg" (DG: the despeckled Lymphatic detection plus the PDPN level gate, chosen after the D/DG evaluation and renders) | implemented: validator branch `lymphatic_despeckled_level_gate/1` (`c010ad4`), run on HiPerGator from the sealed copy (`docs/hpg_processing_20261031.md`); Endothelium Lymphatic 2,705 cells |
+| 11-01 | "go ahead" (structures and typing reruns, then the v20 delivery) | done: root `data/development/uniform-20donor-20261030-v20`, QuPath project `data/development/qupath-review-20261030-v20`, final reconciliation passed on all 20 images |
+| 11-02 | "They don't need despeckle" (answer: whether the Nerve and Capillary detection also needs the despeckle) | in force: Nerve and Capillary detection stays on raw pixels; v20 stands as delivered |
 
 ## Measurement and positivity
 

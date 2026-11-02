@@ -1,6 +1,6 @@
 # Typing handoff — 2026-10-31
 
-> **Status 2026-11-01:** steps 1–5 below are done. The rest of this file is the 10-31 state.
+> **Status 2026-11-02:** steps 1–6 below are done. The rest of this file is the 10-31 state.
 >
 > - **DG installed.** The owner chose **DG**, the despeckled detection plus the PDPN level gate. All processing
 >   from the install onward ran on HiPerGator from a sealed copy; see
@@ -15,12 +15,13 @@
 > - **v20 on the dev site (2026-11-02 06:07 UTC):** release `pubapps-2026-11-uniform-v20` (commit c974946) runs on
 >   the staging instance at `https://devislet-explorer.rc.ufl.edu/islet-explorer/`; production is unchanged and
 >   stopped. Record: `docs/ufrc_readiness.md`, "Candidate c974946 with the v20 root".
+> - **Step 6 answered (2026-11-02):** "They don't need despeckle"; Nerve and Capillary detection stays on raw
+>   pixels (`docs/typing_rulings_ledger.md`, 2026-11-01/02).
 > - **Open:**
->   - the owner's review of v20 in QuPath;
->   - step 6, whether Nerve and Capillary also need the despeckle (asked 2026-11-01).
+>   - the owner's review of v20 in QuPath.
 
-Written before a context clear. Read with `docs/typing_rulings_ledger.md` (sections "Decisions — 2026-10-30" and
-"Decisions — 2026-10-30/31"), the previous handoff `docs/typing_handoff_20261030.md`, and the approved plan
+Written before a context clear. Read with `docs/typing_rulings_ledger.md` (sections "Decisions — 2026-10-30",
+"Decisions — 2026-10-30/31" and "Decisions — 2026-11-01/02"), the previous handoff `docs/typing_handoff_20261030.md`, and the approved plan
 `/home/smith6jt/.claude/plans/make-a-plan-to-virtual-church.md`. Task-local scripts and records live in
 `output/typing_20261030/` (never committed). Run: `data/development/uniform-20donor-20261029-v19-qc-work` (`$RUN`).
 
