@@ -2,14 +2,20 @@
 
 Developer- and maintainer-facing reference for rebuilding the app data, deploying the Shiny app, and troubleshooting. End-user feature documentation lives in [user_guide.md](user_guide.md).
 
-**Current workflow, 2026-11-02:** use [the complete workflow user guide](workflow_user_guide.md)
-and [current handoff](handoff_20261102.md) for processing, component selection and release state.
-The Lymphatic correction freezes calibration and automatically audits all components; the old
-all-marker rerun is not a structure-only procedure. Dev last served unaccepted v20; dev and
-production are now stopped and persistently masked during
-[security remediation](container_security_20261102.md). The staged whole-v19 reference was
-never activated. V19 endocrine is selected within the
-[component comparison](v19_v20_component_comparison_20261102.md); no corrected mixed root exists.
+**Current workflow, 2026-11-02:** use [the complete workflow guide](workflow_user_guide.md),
+[component build record](component_build_20261102.md), and [current handoff](handoff_20261102.md).
+HPG job `49141854`, source `b15f0fc`, completed the selected component app and all-20 export
+QA. It preserves all 110,721 named v19 endocrine cells. Its control-to-DG comparison passes
+with 351 Lymphatic-related label changes and no unrelated changes. The completed root is
+`data/development/uniform-20donor-20261102-component-app-v1` on HPG and the workstation; the complete returned
+QuPath project is `data/development/qupath-review-20261102-components-v1/project.qpproj`.
+
+The build retains 8,629 unresolved endocrine cells and 2,472 component boundary conflicts.
+The corrected-cell object audit fails on 953 populated objects (915 singles, 38 clusters,
+no islets) without a positive eligible INS/GCG/SST/CHGA member, plus three single-membership
+anomalies. This test is distinct from the original pixel masks, whose replay passes.
+These data checks remain unresolved; no service was restarted. The staged whole-v19
+reference was never activated.
 
 **Provisioned reviewer URL (production currently stopped)**:
 `https://islet-explorer.rc.ufl.edu/islet-explorer/`
@@ -20,17 +26,18 @@ never activated. V19 endocrine is selected within the
 > historical notes is not a production procedure.
 
 The provisioned endpoints do not imply an active service. The owner stopped dev on
-2026-11-02; production has been stopped since 10-26. Preserve both service masks during
-the current remediation. A security replacement image is not an accepted scientific
-release or an instruction to restart. Earlier October provisioning notes are historical;
-use the current [security record](container_security_20261102.md) and
-[readiness record](ufrc_readiness.md).
+2026-11-02; production has been stopped since 10-26. Both remain masked. The later owner
+direction authorizes the current build for production once actual data/release/runtime
+checks pass; no repeated permission request follows from the older diagnostic status.
+Use the [security record](container_security_20261102.md) and
+[readiness record](ufrc_readiness.md) for current evidence.
 
-The current security direction applies the released fixes and defers DuckDB's
-unmerged backport. Source `23bd2fd` builds Pillow against the patched system
-libraries while retaining the original CRAN DuckDB 1.5.2. An offline candidate
-may be built and inspected, but the strict decoder gate still fails on DuckDB;
-a zero-High/Critical package scan does not make that artifact deployable.
+The matching released-fixes image `41e62a97…` is built from `b15f0fc`. Package, dependency
+and installed Shiny/R runtime checks pass. It retains original CRAN DuckDB 1.5.2, with the
+known finding explicitly nonblocking through **2026-11-10 UTC** under the
+[dated release decision](duckdb_remediation_window_20261102.md). Develop and test the DuckDB
+fix separately for dev. This dated deferral does not waive the unresolved data checks or
+other release checks; historical failed security reports remain unchanged.
 
 ---
 
@@ -51,8 +58,9 @@ root's `uniform_release.json` and label groups. Donor 78 must remain absent.
 A coherent candidate needs one identity per UUID and explicit component provenance.
 The owner selected v19 endocrine; v20 implements later measurement and structure rules
 but also contains the demonstrated Lymphatic calibration regression. Do not copy v20
-labels wholesale or mix already aggregated v19/v20 summaries. No corrected mixed
-candidate has been assembled or accepted.
+labels wholesale or mix already aggregated v19/v20 summaries. The component builder has
+now regenerated the app from those selected inputs; its unresolved assignments and object
+audit failures remain explicit.
 
 For a **Lymphatic-only update**:
 
@@ -70,10 +78,11 @@ For a **Lymphatic-only update**:
 5. Review image evidence and reconcile selected components. Passing the isolation audit
    establishes consistency, not scientific acceptance.
 
-Use the workflow guide for commands and prerequisites. The successful diagnostic in
-[the component comparison](v19_v20_component_comparison_20261102.md) uses initial-v20
-calibration to test isolation; it does not implement the selected v19 endocrine component.
-Do not rerun the historical all-marker v20 driver for a structure-only revision.
+Use the workflow guide for commands and prerequisites. The earlier diagnostic in
+[the component comparison](v19_v20_component_comparison_20261102.md) used initial-v20
+calibration to test isolation. The later [component build](component_build_20261102.md)
+preserves the selected v19 endocrine contract and tests the DG change against its matched
+control. Do not rerun the historical all-marker v20 driver for a structure-only revision.
 
 After reconciliation, rebuild summaries, marker scales, embeddings, spatial tables and
 geometry mappings from the coherent candidate. Endocrine-object and release guards must
@@ -168,10 +177,11 @@ immutable Shiny container 0.0.0.0:3838
 
 ### Updating the App
 
-Neither service is authorized to restart during remediation. Preserve its mask; an older
-activation or rollback command does not authorize unmasking or restarting it.
+The owner authorized production once the actual data/release/runtime checks pass, with
+DuckDB deferred through the dated November 10 deadline. The current data failures still
+prevent activation, so both services remain stopped and masked.
 
-For a future authorized release, never edit or `git pull` into an active release. Build and scan a clean,
+For the authorized release, never edit or `git pull` into an active release. Build and scan a clean,
 digest-pinned OCI image; build and fully checksum-verify a new data release; then use
 `deploy/activate-release.sh`. It health-checks the new Quadlet service and restores the
 prior unit on failure. Use `deploy/rollback-release.sh` for an explicit rollback. See the
@@ -215,7 +225,8 @@ frozen v19/v20 manifests explicitly record `scvi_required: false`.
 ### Production app fails to load
 
 1. Confirm whether a service is expected to be running. Both are currently stopped and
-   masked; do not restart them to troubleshoot. For a future active release, run
+   masked while the data checks are unresolved; do not restart them merely to troubleshoot.
+   Once the authorized release passes its checks and is active, run
    `deploy/verify-deployment.sh` with its release root and expected image reference.
 2. Inspect the sanitized service journal and Shiny log; do not print environment values or
    reviewer request URLs containing query strings.

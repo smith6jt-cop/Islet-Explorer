@@ -5,7 +5,12 @@ with v19/v20 compared by component. Both roots share 3,199,606 eligible UUIDs an
 the same Tissue/cell/endocrine geometry. The DG Lymphatic-only rerun unintentionally
 changed shared calibration; corrected code now binds calibration independently
 and verifies all markers and identities. Diagnostic replays are evidence, not
-assembled app roots. No corrected mixed candidate has been accepted or deployed.
+assembled app roots. The subsequent mixed-component build at `b15f0fc` completed
+on HPG: 110,721 named v19 endocrine cells preserved, 351 Lymphatic-only label
+changes, and all 20 donors' exported Ki67/UUID/label associations verified.
+It has not been released: 8,629 unresolved object-class labels, 2,472 component
+boundary conflicts and the strict object-audit failures remain. See the
+[build record](../docs/component_build_20261102.md).
 See [the component comparison](../docs/v19_v20_component_comparison_20261102.md),
 [workflow guide](../docs/workflow_user_guide.md), and [handoff](../docs/handoff_20261102.md).
 Older lineage sections below are retained as historical records.

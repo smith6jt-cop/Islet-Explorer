@@ -2,7 +2,7 @@
 
 Owner: “I meant use v19 for the endocrine cells since they were done properly. compare v19 with v20 to see which has the better of each component.”
 
-The task is to evaluate components separately, using v19 as the selected endocrine source. A wholesale rollback to v19 was the assistant's mistaken interpretation. The prepared whole-v19 release is retained as reference evidence only; no new scientific release was activated. Dev last served v20; dev and production are now stopped and masked under the owner's parallel [security direction](container_security_20261102.md). No mixed candidate has been built. The main-tree exception that allowed unresolved v19 identities into a new release has been withdrawn.
+The task is to evaluate components separately, using v19 as the selected endocrine source. A wholesale rollback to v19 was the assistant's mistaken interpretation. The prepared whole-v19 release is retained as reference evidence only; no new scientific release was activated. Dev last served v20; dev and production are now stopped and masked under the owner's parallel [security direction](container_security_20261102.md). The mixed candidate is now built at `b15f0fc`; its actual endocrine consistency checks still fail. See [the completed build record](component_build_20261102.md). The main-tree exception that allowed unresolved v19 identities into a new release has been withdrawn.
 
 ## Comparison contract
 
@@ -79,3 +79,22 @@ The paired review retains unchanged native image pixels and cell boundaries, wit
 The final verified REDSEA values reproduce both versions' stored endocrine positivity and float32 folds exactly. Replacing only reference membership reproduces all 80 endocrine thresholds. There is no evidence here that DG changed the underlying endocrine measurements.
 
 Selecting v19 does not erase the inherited unresolved-object problem: its 915 singles and 38 clusters still lack a positive eligible member under its corrected-cell thresholds. No subtype is invented from a negative corrected mean. No new release may hide those cells by broadening endocrine totals or reuse inconsistent summaries. A coherent candidate must preserve the chosen v19 endocrine decisions, reconcile remaining component boundaries by UUID, carry required state fields, rebuild downstream outputs, and pass the existing object and release checks. No scientific release was activated; both services are stopped and masked under the separate security-remediation direction.
+
+## Completed selected-component build
+
+The fresh mixed-calibration control and DG candidate preserve all **110,721 named
+v19 endocrine cells**. Their all-20 invariance audit passes: **351** Lymphatic-only
+label changes within changed geometry, zero unrelated changes, all marker/state
+and non-Lymphatic context fields preserved. This count belongs to the new mixed
+component comparison, not the earlier 352-change initial-v20 diagnostic.
+
+The app root `data/development/uniform-20donor-20261102-component-app-v1` and its
+20-image QuPath review project are built. All UUID/label/Ki67 export checks pass
+for 3,199,606 cells; summaries, scales, spatial outputs and embeddings were rebuilt.
+The completed artifact still has 8,629 unnamed object-class labels and 2,472
+boundary conflicts outside the exact selected v19 endocrine membership. Its
+corrected-cell object audit retains the 953 fully negative populated objects and
+three Single membership anomalies. The release checks reject those actual
+failures. See [the build record](component_build_20261102.md) for paths, source
+hashes, image/security results and verified return evidence. No new release was
+activated; production activation is already authorized once actual checks pass.

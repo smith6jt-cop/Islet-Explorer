@@ -9,6 +9,24 @@ The chronological methods below preserve earlier generations; they do not overri
 Current cell measurements use despeckling and REDSEA. V19 is selected for endocrine cells;
 v20 DG is the instructed Lymphatic geometry, with common non-Lymphatic geometry retained.
 
+The [component build](../../docs/component_build_20261102.md) is complete on HPG: job
+`49141854`, source `b15f0fc`, app root
+`data/development/uniform-20donor-20261102-component-app-v1`. All 110,721 named v19
+endocrine cells are preserved across 20 donors and 3,199,606 eligible cells. The control-to-DG
+audit passes with 351 Lymphatic-related label changes and no unrelated changes. Existing-output
+QA passes for Ki67 in all cell, donor, object and distance exports; its measurement/level
+provenance is retained and it remains outside the 31-marker embedding panel.
+
+The diagnostic root retains 8,629 unresolved endocrine cells and 2,472 boundary conflicts.
+Its corrected-cell object audit fails on 953 populated objects (915 singles and 38 clusters,
+no islets) lacking a positive eligible member, plus three single-membership anomalies.
+These failures do not contradict the exact replay of the original pixel masks. The complete
+QuPath review is `data/development/qupath-review-20261102-components-v1/project.qpproj`.
+Image `41e62a97…` is built from the same source. The owner authorized production after actual
+data/release/runtime checks; DuckDB is deferred through 2026-11-10 UTC, while these data
+failures remain unresolved. No service restart occurred. Use the [workflow guide](../../docs/workflow_user_guide.md)
+for review and release steps.
+
 For a **structure-only** revision, prepare fresh inputs, explicitly pin the baseline with
 `typing/structure_update.py`, regenerate live context/endpoints, and run identity plus its automatic
 `audit_structure_update.py` gate. All marker calibration, REDSEA, QC and endocrine decisions remain fixed.

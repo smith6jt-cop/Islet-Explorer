@@ -6,20 +6,28 @@ Interactive R Shiny application for exploring pancreatic islet CODEX multiplexed
 
 Start with the [complete workflow user guide](docs/workflow_user_guide.md),
 [app user guide](docs/user_guide.md), and [current component comparison](docs/v19_v20_component_comparison_20261102.md).
-The owner selected **v19 endocrine cells**, with the remaining components compared against v20.
-The Lymphatic-only update had unintentionally recalibrated unrelated markers; the correction separates
-calibration from live structure membership and checks every component on the real 20-donor data.
-Dev last served the unaccepted v20 candidate; dev and production are now stopped and masked during
-[container security remediation](docs/container_security_20261102.md). The in-house app remains stopped.
-Released security fixes are active in source `23bd2fd`. The owner directed the current build
-to live production after its real data/release checks, within the DuckDB patch window ending
-**2026-11-10 UTC**, with our DuckDB fix in a separate dev build. Its known finding remains
-visible and is nonblocking during that window; other checks remain required. See the
-[dated release decision](docs/duckdb_remediation_window_20261102.md).
-No corrected mixed candidate has been assembled or promoted. The older cohort and release sections below
-describe historical artifacts, not the current selection.
-The [component build record](docs/component_build_20261102.md) describes the new explicit
-review builder, preserved v19 endocrine contract, Ki67 export checks and HPG execution.
+The selected component app has now been assembled on HPG from `b15f0fc` (job `49141854`).
+It preserves all **110,721 named v19 endocrine cells**, uses the isolated v20 methods for
+other components, and contains 20 donors, 3,199,606 analysed cells and 4,848 paired objects.
+The all-component audit passes: the DG update changes 351 Lymphatic-related labels within
+the old/new Lymphatic footprint, with unrelated calibration, measurements and identities preserved.
+All exported Ki67 states and row associations pass; Ki67 remains outside the 31-marker embedding panel.
+
+The build still exposes **8,629 unresolved endocrine cells and 2,472 component boundary conflicts**.
+The corrected-cell endocrine-object audit fails: 953 populated objects (915 singles and
+38 clusters; no islets) have no INS/GCG/SST/CHGA-positive eligible member, and three singles
+have invalid membership. This is distinct from the original pixel-classifier masks, which replay
+correctly. The complete 20-image QuPath review is
+`data/development/qupath-review-20261102-components-v1/project.qpproj`.
+See the [component build record](docs/component_build_20261102.md) for exact roots and evidence.
+
+The matching released-fixes image `41e62a97…` is built from `b15f0fc`; package, dependency
+and installed Shiny/R runtime checks pass. The owner authorized live production once the actual
+data/release/runtime checks pass. The known DuckDB finding remains visible and nonblocking
+through **2026-11-10 UTC** under the [dated release decision](docs/duckdb_remediation_window_20261102.md),
+with the DuckDB fix developed separately for dev. The unresolved data checks still prevent release.
+No service was restarted: dev and production remain stopped and masked, and the in-house app is stopped.
+The older cohort and release sections below describe historical artifacts.
 
 <div align="center">
 
@@ -35,8 +43,8 @@ The `data/development/all-donor-20260917/` candidate was a 21-donor experiment
 permanently removed that donor from the app and all analysis. This candidate and
 its recorded preview at `http://127.0.0.1:3839/islet-explorer/` are historical;
 the preview URL is not a current service endpoint and must not be started or
-used as a launch candidate. The local app is offline while the remaining 20
-donors await uniform reprocessing. See the [owner directive](docs/owner_directive_20261015.md),
+used as a launch candidate. The local app remains offline; the completed 20-donor
+component build and its outstanding checks are recorded above. See the [owner directive](docs/owner_directive_20261015.md),
 [uniform reprocessing plan](docs/uniform_reprocessing_plan_20261015.md), and
 [current UFRC launch-preparation note](docs/ufrc_launch_preparation_20261015.md).
 
@@ -49,7 +57,7 @@ are not scientific or UFRC deployment acceptance.
 ## Frozen publication-review baseline
 
 This 15-donor artifact is retained as historical evidence and is not the selected
-launch candidate while the owner-directed 20-donor reprocessing is pending.
+launch candidate; the current 20-donor component build is described above.
 
 Islet Explorer is a non-mutating R Shiny research application for exploring
 pancreatic-islet measurements from **15 nPOD donors** across three disease

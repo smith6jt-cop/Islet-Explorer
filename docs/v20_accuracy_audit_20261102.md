@@ -2,6 +2,12 @@
 
 **Status: not ready for production.** The audit found an app immune-list defect and an unresolved upstream typing issue. Production remains stopped. Neither a passing reconciliation nor a passing browser suite is scientific acceptance.
 
+This records the frozen v20 audit. The subsequent selected-v19 component app,
+QuPath and matching container builds are complete; their passing export checks
+and remaining endocrine failures are recorded in the
+[November 2 build record](component_build_20261102.md). Those newer results do
+not rewrite this audit or establish replacement identities.
+
 **Latest follow-up:** [the classifier-to-cell discrepancy trace](endocrine_classifier_discrepancy_20261102.md) establishes where original pixel detection diverges from corrected whole-cell typing. All 20 classifier masks replay exactly; 7,413 of the 7,800 unresolved cells contain original above-threshold pixels. All 1,468 islets contain positive cells; 910 single objects and 38 clusters have no positive eligible member. The new level-selection gate rejects this inconsistency. The earlier retype/exclude question is superseded by the owner's instruction to resolve the classifier discrepancy.
 
 ## Verified evidence

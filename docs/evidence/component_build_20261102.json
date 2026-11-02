@@ -1,0 +1,258 @@
+{
+  "schema": "islet.component_build_evidence/1",
+  "recorded_utc": "2026-11-02T22:38:13.056742+00:00",
+  "scientific_source_commit": "b15f0fcb4566dcfaf8f7a02fcaa88c550e3f3beb",
+  "release_preflight_source_commit": "92ea92c62675f958ae29499b48f16882bca41921",
+  "build": {
+    "status": "diagnostic_app_assembled",
+    "started_utc": "2026-11-02T21:55:59.757482+00:00",
+    "finished_utc": "2026-11-02T22:33:26.075904+00:00",
+    "slurm_job_id": "49141854",
+    "host": "c0610a-s12.ufhpc",
+    "site_seal_sha256": "54cad8c3c38e80eaf2405c3df34e4fac3168901b9fe892959691e56955f52ef0",
+    "config_sha256": "03f4794bead07f10ed4aae2a8842ce8e0e9abaf80f98190f17b807f8ab785af1"
+  },
+  "jobs": {
+    "return-object-audit.receipt.json": {
+      "job_id": "49146295",
+      "job_name": "component-objects",
+      "state": "FAILED",
+      "exit_code": "4:0",
+      "elapsed": "00:00:32",
+      "nodes": "c1105a-s4"
+    },
+    "return-qupath.receipt.json": {
+      "job_id": "49145767",
+      "job_name": "component-qupath",
+      "state": "COMPLETED",
+      "exit_code": "0:0",
+      "elapsed": "00:08:10",
+      "nodes": "c0605a-s6"
+    },
+    "return-app.receipt.json": {
+      "job_id": "49141854",
+      "job_name": "component-build",
+      "state": "COMPLETED",
+      "exit_code": "0:0",
+      "elapsed": "00:37:28",
+      "nodes": "c0610a-s12"
+    }
+  },
+  "app_root": "data/development/uniform-20donor-20261102-component-app-v1",
+  "qupath_project": "data/development/qupath-review-20261102-components-v1/project.qpproj",
+  "counts": {
+    "donors": 20,
+    "cells_analysed": 3199606,
+    "cells_excluded": 0,
+    "cells_not_analysis_eligible": 326371,
+    "embedding_objects": 1392
+  },
+  "component_selection": {
+    "schema": "uniform.component_selection/1",
+    "status": "diagnostic_pending_review",
+    "release_ready": false,
+    "manifest_file": "component_selection.json",
+    "manifest_sha256": "1122420ff98381c7080baae113c908dd2df1159b88b7a20b933a0ce30d6d62bf",
+    "audit_file": "component_selection_audit.json",
+    "audit_sha256": "f048e5c88faa4f10079dcf7d63d9ba08e16eb438c246d4ab7750c568c3f57171",
+    "preserved_named_endocrine_cells": 110721,
+    "preserved_unresolved_endocrine_cells": 7151,
+    "unresolved_endocrine_cells": 8629,
+    "boundary_conflicts": 2472
+  },
+  "lymphatic_invariance": {
+    "passed": true,
+    "label_changes": 351,
+    "all_changes_involve_lymphatic_and_changed_geometry": true,
+    "totals": {
+      "context_baseline": 3525977,
+      "context_candidate": 3525977,
+      "identity_baseline": 3199606,
+      "identity_candidate": 3199606,
+      "redsea_baseline": 3525977,
+      "redsea_candidate": 3525977,
+      "lymphatic_footprint_union": 131983,
+      "lymphatic_membership_or_overlap_changed": 124427,
+      "baseline_named_endocrine": 110721,
+      "context_changed_cells": 124427,
+      "context_unexpected_cells": 0,
+      "label_changes_neither_lymphatic": 0,
+      "label_changes_with_unchanged_lymphatic_geometry": 0,
+      "natural__label_changes_neither_lymphatic": 0,
+      "natural__label_changes_with_unchanged_lymphatic_geometry": 0,
+      "identity_changed_cells": 5765,
+      "identity_unexpected_cells": 0,
+      "redsea_changed_cells": 0,
+      "redsea_unexpected_cells": 0
+    },
+    "calibration_tables_byte_identical": 9,
+    "named_v19_endocrine_preserved": 110721
+  },
+  "state_exports": {
+    "result": "pass",
+    "cells": 3199606,
+    "object_files": 4848,
+    "object_rows": 357658,
+    "fields": [
+      "Ki67_pos"
+    ],
+    "measurement_and_level_metadata_exact": true,
+    "embedding_marker_count": 31,
+    "distance_row_contract": "Within each donor, cell_types UUID order; phenotype/region/state matched exactly",
+    "Ki67_positive_cells": 78680
+  },
+  "object_audit": {
+    "passes": false,
+    "totals": {
+      "objects": 10080,
+      "objects_with_analysis_cells": 10078,
+      "objects_without_context_cells": 2,
+      "objects_without_analysis_cells": 2,
+      "single_membership_anomalies": 3,
+      "membership_anomalies": 3,
+      "objects_with_any_endocrine_positive_cell": 9125,
+      "objects_with_all_analysis_cells_negative": 953,
+      "context_cells": 141800,
+      "analysis_cells": 134488,
+      "any_endocrine_positive_cells": 118713,
+      "all_endocrine_negative_cells": 15775,
+      "analysis_cells_in_fully_negative_objects": 1006
+    },
+    "definition": "Corrected whole-cell positivity and centroid membership; distinct from original pixel-classifier positivity"
+  },
+  "release_preflight": {
+    "schema": "islet.component_release_preflight/1",
+    "source_root": "/data/panc_CODEX/Islet-Explorer/data/development/uniform-20donor-20261102-component-app-v1",
+    "checked_utc": "2026-11-02T22:37:16Z",
+    "result": "fail",
+    "failure": "Unresolved component assignments prevent release: 8629 unresolved object-class cell labels; 2472 endocrine component boundary conflicts. Resolve the assignments upstream and regenerate the data.",
+    "uniform_release_sha256": "209841c101281b1cb546408362e8f919e87541f0d3f843d3ed2f5a6b2ab9a966",
+    "checker_sha256": "9ba7fbd821967194371b0a33b31412f4aa76b70f67f617f28ad9e9887f1be0cd",
+    "component_manifest_sha256": "1122420ff98381c7080baae113c908dd2df1159b88b7a20b933a0ce30d6d62bf",
+    "component_audit_sha256": "f048e5c88faa4f10079dcf7d63d9ba08e16eb438c246d4ab7750c568c3f57171",
+    "packaging_started": false,
+    "service_actions_performed": false
+  },
+  "matching_image": {
+    "image_id": "sha256:41e62a979b7ebb88ee97048d63cebae9f87d8202660a4767217861bdc4330162",
+    "image_git_commit": "b15f0fcb4566dcfaf8f7a02fcaa88c550e3f3beb",
+    "base_image": "docker.io/rocker/shiny@sha256:dd10b638e2e7e6b73cfbfef2bbed51d5a97b624f8122e9379f1c3395bf660ef8",
+    "gate_source_commit": "7941df13ac3ff6c58a747b0fd2e54bdbc19a67da",
+    "security_result": "pass-with-duckdb-remediation-window",
+    "raw_decoder_result": "fail",
+    "duckdb_error_code": -9,
+    "patch_by": "2026-11-10",
+    "strict_baseline_preserved": true
+  },
+  "artifact_return": {
+    "totals": {
+      "regular_files": 5277,
+      "regular_bytes": 16087730502,
+      "symlinks": 20
+    },
+    "all_regular_file_sha256_verified": true,
+    "image_links_resolve": true
+  },
+  "verification": {
+    "R_release_parity_tests": "passed",
+    "independent_release_guard_review": "passed after identity-evidence and count-consistency corrections",
+    "protected_local_source_hash_inode_and_timestamps_unchanged": true
+  },
+  "service_actions_performed": false,
+  "image_exported_or_staged": false,
+  "data_release_packaged": false,
+  "scientific_accuracy_established": false,
+  "pending_scientific_definition": "Whether exact v19 endocrine membership is fixed or additional cells satisfying v19 hormone thresholds may enter; no replacement identity invented",
+  "artifacts": [
+    {
+      "path": "output/component_candidate_build_20261102_v1/build_journal.json",
+      "sha256": "6fb8354000940cc34844314572b1dec03e34c5276d0f38bd98e93c769881893a",
+      "bytes": 7464
+    },
+    {
+      "path": "output/component_candidate_build_20261102_v1/config.json",
+      "sha256": "03f4794bead07f10ed4aae2a8842ce8e0e9abaf80f98190f17b807f8ab785af1",
+      "bytes": 1388
+    },
+    {
+      "path": "output/component_candidate_build_20261102_v1/cell_state_exports/summary.json",
+      "sha256": "85e7ada0aa84463da39fc35b6f297a78de42218e6891792f1892183ad6b1908a",
+      "bytes": 6497
+    },
+    {
+      "path": "output/component_candidate_build_20261102_v1/lymphatic_invariance/summary.json",
+      "sha256": "25648fffc6015a811592ddce83a3491ab06962303935fca71a26f88c248743ed",
+      "bytes": 113806
+    },
+    {
+      "path": "output/component_candidate_build_20261102_v1/lymphatic_invariance/field_changes_totals.csv",
+      "sha256": "0ddfd02f9d7e77ee98b07c463234f325266c2f436ccc34da340f53614189035b",
+      "bytes": 13641
+    },
+    {
+      "path": "data/development/uniform-20donor-20261102-component-app-v1/uniform_release.json",
+      "sha256": "209841c101281b1cb546408362e8f919e87541f0d3f843d3ed2f5a6b2ab9a966",
+      "bytes": 13152
+    },
+    {
+      "path": "data/development/uniform-20donor-20261102-component-app-v1/component_selection.json",
+      "sha256": "1122420ff98381c7080baae113c908dd2df1159b88b7a20b933a0ce30d6d62bf",
+      "bytes": 114751
+    },
+    {
+      "path": "data/development/uniform-20donor-20261102-component-app-v1/component_selection_audit.json",
+      "sha256": "f048e5c88faa4f10079dcf7d63d9ba08e16eb438c246d4ab7750c568c3f57171",
+      "bytes": 19342
+    },
+    {
+      "path": "output/component_candidate_object_audit_20261102_v1/summary.json",
+      "sha256": "67dff685c408fad8175c5be6948bdbb01733a5d91096c05c4789ca9196399c1a",
+      "bytes": 57733
+    },
+    {
+      "path": "tmp/component-build-20261102-v1/artifact-return-summary.json",
+      "sha256": "a5f96ad40b1593533ff70dce0ed057de8d9a136c514cc9eb2b4ea07eece8d0ef",
+      "bytes": 2476
+    },
+    {
+      "path": "tmp/component-build-20261102-v1/release-preflight.json",
+      "sha256": "7a0260568aed117b72e46bac60f9de54f6225cb543cf5dafe5b3165c712d0c18",
+      "bytes": 884
+    },
+    {
+      "path": "tmp/security-component-build-20261102/verification-receipt.json",
+      "sha256": "5cb132c80cbbe933675b15254689d9997b076991ee531a6ec61c1f3ab2992b18",
+      "bytes": 2828
+    },
+    {
+      "path": "tmp/security-component-build-20261102/remediation-window-verification-receipt.json",
+      "sha256": "93be54791fd59c991f1527d8530b3ec0faa1641c6192453fca9ea13d02c499d9",
+      "bytes": 2911
+    },
+    {
+      "path": "tmp/component-build-20261102-v1/protected-local-after.json",
+      "sha256": "8800005584a8d8c833aea4d0ea22dd069d3d98c177bf8264882ffe1f75021b8f",
+      "bytes": 1521
+    },
+    {
+      "path": "tmp/component-build-20261102-v1/return-object-audit.receipt.json",
+      "sha256": "37accb392ee20a67049b34cae337139b17d6525a4adea33d5c98eb3e38105215",
+      "bytes": 3818
+    },
+    {
+      "path": "tmp/component-build-20261102-v1/return-qupath.receipt.json",
+      "sha256": "d81cba5a104b88ff02f34fd056e741c32307884450c30b43e4eb35632a3d7658",
+      "bytes": 2064
+    },
+    {
+      "path": "tmp/component-build-20261102-v1/return-app.receipt.json",
+      "sha256": "c94c1ac0df010cc770fc01320f22a0dc52734fbfdae2a36e271cc8045c925c66",
+      "bytes": 9554
+    },
+    {
+      "path": "tmp/component-build-20261102-v1/return-typing-audits.receipt.json",
+      "sha256": "2eb5dfad21840bfca758cbd6614e0737748b1c5719a5dee7a71c2e2286255937",
+      "bytes": 1178
+    }
+  ]
+}

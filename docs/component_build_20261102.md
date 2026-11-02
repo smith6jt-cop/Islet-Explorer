@@ -40,14 +40,19 @@ Ki67 remains a state; it is not added to the 31-marker embedding panel or used
 to create an identity.
 
 `component_selection.json` and `component_selection_audit.json` accompany the
-review root and are hash-bound in `uniform_release.json`. Diagnostic component
-roots are rejected by the release builder and parity gate, even if someone
-changes their displayed label-group definitions. There is no acceptance override
-for this diagnostic protocol.
+review root and are hash-bound in `uniform_release.json`. The release builder
+checks their hashes, donor inventory, per-image sums, preservation of the selected
+source and assembly census. Nonzero unresolved assignments or boundary conflicts
+fail even if someone changes the displayed group list. The owner has authorized
+the current live build: an older `diagnostic_pending_review` status by itself is
+not a new approval requirement. Actual data and runtime checks still apply.
 
-The [released-fixes security image](container_security_20261102.md) is already
-built and staged offline. DuckDB remains deferred at the owner's direction and
-fails the full image gate. Both PubApps services remain stopped and masked.
+The matching released-fixes image is `41e62a97…`, built from `b15f0fc`. Its package
+scan has zero High/Critical findings and its dependency and installed Shiny/R
+runtime checks pass. The known DuckDB finding remains visible and is nonblocking
+under the owner's [dated remediation window](duckdb_remediation_window_20261102.md)
+through 2026-11-10 UTC. The separate dev build will test the local DuckDB fix.
+Both PubApps services remain stopped while the current data checks are resolved.
 
 The executable entry point is `scripts/hpg/build_component_candidate.py --config
 CONFIG.json`, run through `scripts/hpg/jobs/site_job.sbatch`. The exact config and
@@ -68,6 +73,59 @@ and pins 303 shared files (44,081,533,658 bytes). Package manifest SHA256:
 The copied package is verified on HPG. Shared-file verification runs on the
 allocated compute node before any source links are created.
 
-Execution results and artifact identities will be recorded here after the
-builds finish. Source inputs and historical outputs are preserved; new scientific
-computation runs through the sealed HPG SLURM environment.
+## Completed builds
+
+The scientific build used source `b15f0fcb4566dcfaf8f7a02fcaa88c550e3f3beb`
+through the sealed HPG environment. Job `49141854` completed all eight stages:
+source materialization, control preparation and identity, DG preparation and
+identity, Lymphatic invariance, app assembly, and export-state verification.
+
+| Artifact | New path relative to the repository |
+|---|---|
+| Mixed-calibration control | `data/development/uniform-20donor-20261102-component-control-v1` |
+| DG candidate processing | `data/development/uniform-20donor-20261102-component-candidate-v1` |
+| App data | `data/development/uniform-20donor-20261102-component-app-v1` |
+| Build and export checks | `output/component_candidate_build_20261102_v1` |
+| QuPath project | `data/development/qupath-review-20261102-components-v1` |
+| QuPath assignment reports | `output/component_candidate_qupath_20261102_v1` |
+| Strict object audit | `output/component_candidate_object_audit_20261102_v1` |
+
+The control and candidate retain all 3,199,606 eligible UUIDs and the exact
+110,721 selected named v19 endocrine calls. The mixed-control→DG comparison
+passes for all 20 donors: **351 label changes**, all involving Lymphatic identity
+inside the changed Lymphatic footprint; zero unrelated label changes. All nine
+calibration tables, marker positivity/canary/fold fields, Ki67, raw/REDSEA inputs,
+QC and non-Lymphatic context are unchanged. This is distinct from the earlier
+initial-v20 diagnostic's 352 changes and 113,134 named endocrine cells.
+
+App export checks pass for all 20 donors, 3,199,606 cells, 4,848 object CSVs
+(357,658 rows), and 78,680 Ki67-positive cells. UUID/label/state associations,
+donor-coordinate exports, distance exports and measurement/level provenance
+agree with the candidate. The embedding input remains 31 markers. Five geometry
+lookup objects without paired analysis observations correctly have no object
+CSV; the inventory follows the H5AD's analysis-object IDs.
+
+QuPath job `49145767` completed all 20 images. The separate strict object audit,
+job `49146295`, exited 4: **953 populated objects** (915 Singles, 38 Clusters,
+zero Islets) lack a positive eligible cell under the selected corrected-cell
+thresholds. Two Singles have no eligible member, and one has two. This does not
+mean the original pixel classifier detected signal-free objects: its saved
+masks replay exactly. See the [classifier discrepancy](endocrine_classifier_discrepancy_20261102.md)
+for the differing measurements and polygon-centroid effects.
+
+The assembled candidate contains **8,629 unresolved object-class cell labels**
+and **2,472 component boundary conflicts**, including all 7,151 archived unresolved
+v19 labels. The latter conflicts identify natural endocrine calls outside the
+exact selected v19 membership. They remain explicit pending a consistent
+component-boundary rule; they are not exported as invented biological subtypes.
+These actual data failures prevent release packaging. Successful assembly and
+state preservation do not resolve them.
+
+The matching offline image is
+`sha256:41e62a979b7ebb88ee97048d63cebae9f87d8202660a4767217861bdc4330162`,
+tagged `localhost/islet-explorer:component-review-duckdb-deferred-20261102`.
+It passes the installed Shiny/R/JavaScript/static-image runtime smoke and
+the security policy at `7941df1` with the dated DuckDB exception. It has not been
+exported, staged on PubApps or activated. Source inputs and historical outputs
+are preserved. The compact [build evidence](evidence/component_build_20261102.json)
+records artifact hashes, completed checks and the separate failed data checks.

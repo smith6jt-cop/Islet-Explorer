@@ -2,23 +2,30 @@
 
 **Latest owner direction, 2026-11-02:** the current build is intended for the live production PubApp once its actual data/release/runtime checks pass. The known DuckDB finding is nonblocking through the notice's **2026-11-10 UTC** patch deadline; develop/test our DuckDB fix separately for the dev PubApp. See [the dated release decision](duckdb_remediation_window_20261102.md). This supersedes the earlier strict DuckDB hold and no-activation directions below. Historical failed reports remain unchanged; data checks and other security findings still apply.
 
-**Scientific status, 2026-11-02:** dev v20 was stopped at the owner's request;
-both services are masked during [container security remediation](container_security_20261102.md).
-Production remains stopped. The [component comparison](v19_v20_component_comparison_20261102.md)
-and [workflow guide](workflow_user_guide.md) govern the correction. Successful
-deployment/browser checks do not establish scientific acceptance. The staged
-whole-v19 reference image was never activated; no corrected mixed release exists.
+**Completed build, 2026-11-02:** HPG job `49141854`, source `b15f0fc`, assembled
+`data/development/uniform-20donor-20261102-component-app-v1`: 20 donors, 3,199,606
+analysed cells and 4,848 paired objects. All 110,721 named v19 endocrine cells are preserved;
+the control-to-DG audit passes with 351 Lymphatic-related label changes and no unrelated
+changes. All-20 Ki67 export and row-association QA passes. The complete QuPath review is
+`data/development/qupath-review-20261102-components-v1/project.qpproj`.
 
-**Security build status, 2026-11-02:** released fixes are active at `23bd2fd`;
-the owner deferred the unmerged DuckDB backport. Its `3a12daa` build was stopped,
-with the work preserved separately. The parallel security session owns one
-current-app offline candidate and separate package-scan evidence. Image
-`2bbb928db9760c86d7a1bb9adf9002bb1a27d88da96b02a600baca93c090d733` is
-built and staged offline: 0 High/Critical package findings, dependency/rendering smoke pass.
-DuckDB alone still fails the binary check, blocking a passing full-security
-attestation and restart; the artifact is marked `remediation-incomplete`.
-The [dated security record](container_security_20261102.md) owns image/build status;
-historical zero-High/Critical package scans below do not satisfy this new gate.
+**Outstanding data checks:** 8,629 unresolved endocrine cells and 2,472 component boundary
+conflicts remain. The corrected-cell object audit fails on 953 populated objects without
+a positive eligible INS/GCG/SST/CHGA member (915 singles, 38 clusters, no islets), plus
+three single-membership anomalies. Original pixel-classifier replay still passes; these
+are different tests. See the [component build record](component_build_20261102.md),
+[component comparison](v19_v20_component_comparison_20261102.md), and
+[workflow guide](workflow_user_guide.md) for evidence and next steps. The whole-v19 reference
+was never activated; the completed component root has not been deployed.
+
+**Matching security image:** `41e62a97…` was built from `b15f0fc`; the package scan has
+zero High/Critical findings, and dependency plus installed Shiny/R runtime checks pass.
+The earlier `2bbb928d…` image and its failed strict DuckDB report remain historical evidence.
+The known DuckDB finding is visible and nonblocking through 2026-11-10 UTC under the
+[dated release decision](duckdb_remediation_window_20261102.md); it is not the current
+release blocker. Actual data, release and runtime checks remain required. No service
+restart occurred; dev and production remain stopped and masked. The
+[security record](container_security_20261102.md) owns the full image/build evidence.
 
 Updated 2026-10-22 for the uniform 20-donor release candidate (data schema 5); the 2026-10-16 update covered UFRC comment 13 and the owner-directed processing reset. This is the review index for the supplied
 [`UFIT_PubApps_Instance_Request.docx`](../UFIT_PubApps_Instance_Request.docx),
@@ -26,7 +33,10 @@ including its hosting policy, project plan, and development standards. It record
 implementation separately from acceptance. It is not a signed attestation or
 production approval.
 
-## Current status
+## UFRC records and provisioning history
+
+The ticket and allocation records below remain relevant. Service activations and checks
+are dated historical observations; the November 2 status above governs current operation.
 
 UFRC support request `83810` and configuration reference `SYSCONFIG-8173` remain
 the active project records. The owner confirms that the instance request form was
@@ -42,26 +52,26 @@ recorded for 2026-08-31 through 2026-11-30.
 UFRC provisioned the VM `pubmaigan1` on 2026-10-22 and the DNS aliases on
 2026-10-23: `islet-explorer.rc.ufl.edu` and `devislet-explorer.rc.ufl.edu`, the
 production/development pair UFRC's deployment guide sets up for every
-application; since 2026-10-23 a staging instance (`islet-explorer-dev`,
-`pubmaigan1:3839`, 4 GiB cap, 6 GiB for the v20 candidate) runs beside production (9 GiB cap) for the
+application. From 2026-10-23 a staging instance (`islet-explorer-dev`,
+`pubmaigan1:3839`, 4 GiB cap, 6 GiB for the v20 candidate) ran beside the production configuration (9 GiB cap) for the
 development name, so a candidate can be exercised through the real proxy and
-Basic Auth before it replaces what reviewers use (since 2026-11-02 06:07 UTC it
-runs the v20 candidate `c974946`, release `pubapps-2026-11-uniform-v20`, with a 6 GiB cap;
+Basic Auth before promotion. At 2026-11-02 06:07 UTC it
+started the v20 candidate `c974946`, release `pubapps-2026-11-uniform-v20`, with a 6 GiB cap;
 before that the Plan A Level 2 candidate `0b55429`, release `pubapps-2026-10-uniform-v10-perf2`,
 from 2026-10-26 19:23 UTC, and the Level 1 candidate `e10b2ee` of 2026-10-25; all recorded
-below). Production was promoted to perf2 on 2026-10-26 20:51 UTC by the owner ("Push what
+below. Dev was subsequently stopped and both services masked on November 2. Production was promoted to perf2 on 2026-10-26 20:51 UTC by the owner ("Push what
 is complete so far to the live app"); **both instances were stopped at 21:31 UTC that day,
 and production has stayed stopped** (the staging instance was started again only by the v20
 activation). `pubapps-2026-10-uniform-v10` (`d55680a`) stays on the VM for
 `rollback-release.sh`. The
-schema-5 release is active on the VM with its backend published on the VM's
+schema-5 production release was published on the VM's
 private address `10.13.41.21:3838`, the host:port target UFRC's proxy needs
 (`vpubweb.rc.ufl.edu` cannot reach the VM loopback). UFRC configured both
 vhosts with whole-site Basic Auth on 2026-10-23: the proxy mounts the project's
 `/pubapps` tree, reads the project-maintained `htpasswd` files `prod/auth` and
 `dev/auth`, serves a landing page from `prod/html` and `dev/html`, and serves
 the three image aliases itself from symlinks there into the active release
-(`deploy/README.md` § 4). Both public URLs answer; from the campus network the
+(`deploy/README.md` § 4). At the recorded acceptance check, both public URLs answered; from the campus network the
 reviewer-access verifier passed all 15 checks on each hostname with UFRC's
 temporary test account. The project manages the credential files itself
 (bcrypt entries hashed locally; UFRC's guide calls Public Restricted Basic Auth
@@ -75,13 +85,13 @@ or production external API. The URL is
 `https://islet-explorer.rc.ufl.edu/islet-explorer/`; the UFRC project name is
 Panc Floyd.
 
-### Current local app and release candidate (2026-10-22)
+### Historical local app and release candidate (2026-10-22)
 
-The only intended local development URL is
+At that date, the intended local development URL was
 `http://10.15.152.7:8080/islet-explorer/`, proxied to loopback port 3840. It
 was offline at the owner's direction from 2026-10-15, served a frozen copy of
 the app (tag `frozen-app-20261020`) from 2026-10-20 for the owner's review of
-the reprocessed data, and since 2026-10-22 serves the main tree on the uniform
+the reprocessed data, and from 2026-10-22 served the main tree on the uniform
 root `data/development/uniform-20donor-20261022-v10/` (20 donors, 4,763
 endocrine objects: 1,487 Islets and 3,276 Clusters, with 5,207 Singles counted
 but not analyzed). Donor 78 (HDL078 / HPAP-078) stays permanently removed from
@@ -91,11 +101,11 @@ and every donor field comes from the nPOD export. See the
 [owner directive](owner_directive_20261015.md) and the
 [uniform reprocessing plan](uniform_reprocessing_plan_20261015.md).
 
-The launch candidate is the **data-schema-5 release of that root built from
+The October 22 launch candidate was the **data-schema-5 release of that root built from
 commit `d55680a`**, staged on the workstation under
 `tmp/ufrc-release-20261022/` (data bundle `artifacts/release-d55680a/data/`,
-built from a clean linked worktree of the commit), and since 2026-10-22 18:33 UTC
-**the active release on the PubApps VM** `pubmaigan1` (Quadlet
+built from a clean linked worktree of the commit), and from 2026-10-22 18:33 UTC
+**was the active release on the PubApps VM** `pubmaigan1` (Quadlet
 `islet-explorer.service`, published on the VM's private address
 `10.13.41.21:3838` for UFRC's proxy since 21:16 UTC). UFRC's reverse proxy with
 Basic Auth to that backend, UFRC's security and availability approval and the

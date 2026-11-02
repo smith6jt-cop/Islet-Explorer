@@ -6,7 +6,9 @@ Interactive web application for exploring pancreatic islet CODEX multiplexed ima
 [the workflow user guide](workflow_user_guide.md). Dev last served unaccepted v20; dev and
 production are now stopped and masked during [security remediation](container_security_20261102.md).
 V19 endocrine is selected within a [component comparison](v19_v20_component_comparison_20261102.md), and the
-Lymphatic isolation fix is verified diagnostically; no corrected mixed app root is available yet.
+Lymphatic isolation fix passes in the completed mixed-component build. Its app
+exports and QuPath project are available, but unresolved endocrine assignments
+still prevent release; see the [build record](component_build_20261102.md).
 
 **Provisioned reviewer URL (production currently stopped)**:
 `https://islet-explorer.rc.ufl.edu/islet-explorer/`
@@ -97,7 +99,9 @@ using a newer registry. Group choices such as **Endocrine (all)**, **T Cell (all
 `+` and `−` describe positivity against the image's recorded marker level. Final v20
 uses whole-cell positivity; CD3e, CD68, CD163 and ECAD use separate membrane measurements
 when comparing competing identities. Ki67 uses the nucleus upstream, but neither frozen
-v19 nor v20 exports that state to the app yet.
+v19 nor v20 exports that state. The new component build carries `Ki67_pos` through
+cell, donor and distance exports with its nuclear measurement/threshold provenance;
+it remains separate from identity and the 31-marker embedding panel.
 
 Endocrine names require endocrine-object membership and marker evidence. The final v20
 method names a hormone-positive cell by its unique highest scaled INS, GCG or SST value;
@@ -106,8 +110,10 @@ label. Pixel-classifier positivity and corrected whole-cell positivity are diffe
 measurements. Retained `Islet`, `EndocrineCluster` or `EndocrineSingle` labels must not be
 presented as resolved endocrine types. The unresolved Cluster/Single definitions and
 inconsistent endocrine aggregates remain release-blocking discrepancies.
-The owner selected v19 endocrine decisions for the eventual combined candidate, which has
-not yet been assembled. See [the discrepancy trace](endocrine_classifier_discrepancy_20261102.md).
+The owner selected v19 endocrine decisions for the combined candidate. Its app and
+QuPath builds are complete, with unresolved assignments retained visibly. See
+[the build record](component_build_20261102.md) and
+[discrepancy trace](endocrine_classifier_discrepancy_20261102.md).
 
 Under the v20 structure-only rule, **Endothelium Blood Vessel**, **Endothelium Lymphatic**
 and **Neural** require the corresponding structure membership, more than half of the cell's

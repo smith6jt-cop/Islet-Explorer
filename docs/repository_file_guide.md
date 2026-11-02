@@ -8,13 +8,24 @@ The [component comparison](v19_v20_component_comparison_20261102.md) and
 [cross-repository change notice](typing_change_notice_20261102.md) describe the selected sources,
 fixes, evidence and remaining work. The file count below belongs to its stated September revision.
 
+The completed [component build](component_build_20261102.md) adds
+`scripts/hpg/build_component_candidate.py` and `stage_component_build.py` for
+fresh sealed HPG runs, `typing/component_selection.py` for explicit source and
+UUID selection, and `scripts/tests/check_uniform_cell_states.py` for full app
+state-export verification. `assemble_uniform.py` carries Ki67 and component
+provenance; the R release builder validates actual component evidence and
+rejects unresolved assignments. Generated per-run bindings remain ignored.
+
 Security additions are `deploy/verify-brotli.py` (actual installed decoder and
 library checks) and `deploy/tests/check-duckdb-brotli.R` (temporary real-Parquet
 compatibility checks). The active source has no unmerged DuckDB patch/helper;
 that work is preserved separately at `3a12daa`. See
 [the security record](container_security_20261102.md) and
-[deployment guide](../deploy/README.md) for the released fixes, strict gate,
-offline artifact status and service masks.
+[deployment guide](../deploy/README.md) for the released fixes, offline artifacts
+and service masks. `deploy/duckdb-remediation-window.json`,
+`evaluate-brotli-report.py` and `verify-release-security.py` implement the owner's
+dated exception through 2026-11-10 UTC while preserving the failed raw decoder
+report and enforcing all other checks. Dev tests the separate DuckDB fix.
 
 Inspected 2026-09-10 at Git `000e970cac91220f71200b5240f4729a3d32d44e`. This catalog explicitly describes all **225 tracked entries** at that revision, including the submodule reference. It supplements [the maintainer walkthrough](maintainer_walkthrough.md).
 

@@ -6,8 +6,10 @@ development modules or certify a scientific data release.
 **Current status, 2026-11-02:** production and dev are stopped and persistently masked
 during [security remediation](container_security_20261102.md). Dev last served unaccepted
 v20. The owner selected v19 endocrine within a
-[component comparison](v19_v20_component_comparison_20261102.md); no corrected mixed root
-has been assembled or accepted. A staged whole-v19 reference was never activated. Use
+[component comparison](v19_v20_component_comparison_20261102.md). The new mixed root
+has been assembled and its export checks pass, but unresolved endocrine definitions
+and component conflicts prevent release. See the [build record](component_build_20261102.md).
+A staged whole-v19 reference was never activated. Use
 the release/access notice supplied with a future review round rather than assuming that
 the provisioned address below is currently available.
 

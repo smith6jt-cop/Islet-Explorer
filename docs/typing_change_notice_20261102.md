@@ -7,6 +7,42 @@ and a named immutable package, with the Senior agent owning any port into
 `core/multiplex5000`. Neither active Senior checkout nor its scientific data is
 overwritten by this delivery.
 
+## Completed component build and supplemental delivery
+
+The selected-v19 component build is now complete at `b15f0fc` (HPG job
+`49141854`). All eight stages and the all-20 app export checks pass. It preserves
+110,721 named v19 endocrine cells; its matched control→DG audit has **351**
+Lymphatic-only label changes and zero unrelated changes. This is separate from
+the earlier initial-v20 replay's 352 changes and 113,134 endocrine cells.
+
+The fresh supplemental package is named
+`CODEX-handoff-20261102-component-build`, beside the prior package on the
+workstation and HPG. It contains committed source/history, the full workflow
+guide and compact evidence. Its delivery receipt records transfer verification
+and recipient acknowledgement separately. Do not overwrite the first package
+or port CODEX's biological selections into Senior's active 25-section run.
+
+Review these additional implementation changes for the shared workflow:
+
+| Commit | Change |
+|---|---|
+| `7f86fa2` | Explicit component-source binding and audited UUID selection, independent hormone-evidence replay, and visible unresolved boundary records. |
+| `1266fb3` | Preserve original binary Ki67 through app exports and CSV→Parquet parity checks without adding state to identity or embedding inputs. |
+| `cc47a0f` | Fresh source materialization and derived geometry binding; validate original ancestry and hash-identical inputs without rewriting historical generation records. |
+| `da0eba1` | Sealed HPG control/candidate/app driver and full cell-state export verification. |
+| `05af42e` | Full workflow guide and generated component-binding ignore rules. |
+| `b15f0fc` | Match per-object export inventory to paired analysis-object IDs, preserving unpaired geometry records. |
+| `92ea92c` | Validate actual component manifest/audit/identity hashes and counts at release preflight; reject unresolved assignments independently of historical review-status flags. |
+
+The complete app and QuPath artifacts are available, but release preflight
+fails on 8,629 unresolved object-class cell labels and 2,472 component conflicts.
+The corrected-cell object audit fails for 953 populated objects and three Single
+membership anomalies. No scientific acceptance or service activation follows
+from these builds. See [the build record](component_build_20261102.md) and
+[compact evidence](evidence/component_build_20261102.json). Original classifier
+masks replay exactly; their pixel-positivity test differs from the later
+corrected-cell mean test.
+
 ## What is ready
 
 The **Lymphatic isolation correction** is implemented in CODEX commit `a425c05`.
@@ -77,18 +113,21 @@ endocrine, Nerve, Capillary and Collagen IV geometries match. V20 implements the
 later whole-cell/membrane separation and structure-only rules; DG is the instructed
 Lymphatic method. Counts alone do not establish better cell accuracy.
 
-No corrected mixed candidate has been assembled or accepted. V19 itself retains
+The subsequent mixed build above is complete but has unresolved assignments.
+V19 itself retains
 7,151 unnamed endocrine-object cell labels and 953 populated objects with no
 positive eligible member under its corrected-cell levels; v20 has 7,800 such
 cell labels and 948 such objects. All 1,468 islets in both versions have positive
 member cells. The original classifier masks replay correctly: positive pixels
 and a positive corrected whole-cell mean are different tests. Do not invent
 subtypes, lower thresholds to meet expected counts, or suppress those discrepancies.
-Both frozen app roots also omit the upstream Ki67 state in examined cell exports.
+Both frozen app roots also omit the upstream Ki67 state in examined cell exports;
+the new component build repairs that export omission and verifies all rows.
 
 Dev last served v20 (`c974946`); dev and production are now stopped and masked
-under the owner's parallel security-remediation direction. No restart is part of this handoff. No new app root,
-scientific acceptance or deployment is delivered by this notice. Fresh
+under the owner's parallel security-remediation direction. No restart is part of this handoff.
+The new app root is recorded above; scientific acceptance and deployment are not
+delivered by this notice. Fresh
 authoritative processing belongs on HPG and must rebuild all dependent outputs
 from one coherent identity set. The four inode-pinned measurement/refresh modules
 have not been edited.
@@ -113,9 +152,11 @@ and active 25-section protein run. Its adaptation specification will retain
 `a425c05` / package `29f45b3` and the invariant requirements. The acknowledgement
 is recorded in the delivery receipt; no port or scientific acceptance is implied.
 
-The later security update is separate: current CODEX source `23bd2fd` contains
-released container fixes, while the owner deferred the unmerged DuckDB backport.
-Both PubApps services remain stopped/masked. See
+The later security update is separate: image `41e62a97…` from `b15f0fc` contains
+the released fixes and passes the policy at `7941df1` with the owner's dated
+DuckDB deferral through 2026-11-10 UTC. The raw DuckDB decoder failure remains
+visible; a separate dev build tests the fix. Production is authorized once
+actual data/release/runtime checks pass. Both PubApps services remain stopped/masked. See
 [the security record](container_security_20261102.md); the old supplemental
 security document inside the immutable handoff package is historical.
 

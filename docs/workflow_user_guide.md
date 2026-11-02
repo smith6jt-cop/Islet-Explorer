@@ -4,7 +4,7 @@ This guide follows the data from the source images to the reviewed app and its r
 
 ## Current state — 2026-11-02
 
-**A corrected app candidate has not yet been assembled or accepted. Both dev and production are stopped and persistently masked.** The owner selected **v19 for endocrine cells**, with the other components evaluated separately. This is not approval to replace the entire app with v19.
+**The mixed-component app and QuPath builds are complete; actual endocrine consistency checks still fail. Both dev and production remain stopped and persistently masked.** The owner selected **v19 for endocrine cells**, with the other components evaluated separately. This is not approval to replace the entire app with v19.
 
 | Item | Current status |
 |---|---|
@@ -12,6 +12,9 @@ This guide follows the data from the source images to the reviewed app and its r
 | Lymphatic component | The instructed v20 DG method uses despeckled PDPN detection plus the PDPN level gate. Its geometry must not recalibrate other components. |
 | Other components | Keep the common geometry and the instructed v20 measurement/structure rules, with component boundaries reconciled by cell UUID. Frozen v20 labels cannot simply be copied because they include unintended calibration changes. |
 | Isolation fix | The all-20-image diagnostic replay passes: 352 label changes, all involving Lymphatic identity inside the old/new Lymphatic footprint; no unexpected changes to other markers, identities, QC, or non-Lymphatic context. It uses initial-v20 calibration and preserves 113,134 initial-v20 named endocrine cells. It is **not** the selected v19-endocrine candidate. |
+| Completed component build | HPG job `49141854`, source `b15f0fc`: all eight stages pass. The selected 110,721 named v19 endocrine cells are preserved; the mixed-control→DG audit finds 351 Lymphatic-only changes and zero unexpected changes. Export checks pass for all 3,199,606 cells, including Ki67. |
+| Remaining data failures | 8,629 unresolved object-class cell labels, 2,472 component boundary conflicts; the strict corrected-cell object audit fails for 953 populated objects and three Single membership anomalies. These are actual failures, independent of the old diagnostic status flag. |
+| Current matching image | `41e62a97…` from `b15f0fc` passes package, dependency, installed Shiny/R/static-image and dated security-policy checks. Built offline; not exported or staged. See the [build record](component_build_20261102.md). |
 | Dev site | `https://devislet-explorer.rc.ufl.edu/islet-explorer/` last served `pubapps-2026-11-uniform-v20`. The owner stopped dev during container security remediation on 2026-11-02; it is now masked. |
 | Production | `https://islet-explorer.rc.ufl.edu/islet-explorer/` has been stopped since 2026-10-26 and is now also masked. Its recorded release is `pubapps-2026-10-uniform-v10-perf2`. |
 | Local app service | `islet-explorer-local.service`, port 3840, is inactive/disabled. |
@@ -207,18 +210,31 @@ cell states. Its `build_journal.json` records commands, host, source commit,
 seal, stages and exit codes. A failed stage stops the remaining stages and
 retains the failed output; select fresh destinations for another attempt.
 
+The completed November 2 run uses
+`tmp/component-build-20261102-v1/build-config-r2.json`; its copied config and
+journal are under `output/component_candidate_build_20261102_v1`. The app root is
+`data/development/uniform-20donor-20261102-component-app-v1`. Open
+`data/development/qupath-review-20261102-components-v1/project.qpproj` for its
+20-image review project. Keep these completed outputs immutable; a corrected run
+needs new output names and a newly recorded config.
+
 The control preserves the old context as a classification comparison and does
 not claim a new geometry acceptance. The DG candidate uses a fresh derivation
 binding that fully validates the original accepted geometry and exact shared
 input bytes. Historical generation metadata remains unchanged; the new
 validator proof is recorded separately. Neither a passing control nor a
-completed app assembly grants release acceptance. The diagnostic component
-protocol preserves inherited unresolved cells and records additional boundary
-conflicts, so the release builder rejects it.
+completed app assembly proves biological accuracy. The component protocol
+preserves inherited unresolved cells and records additional boundary conflicts.
+The release builder verifies the evidence and rejects actual unresolved
+assignments, conflicting definitions or broken provenance; a historical review
+status alone does not add an approval requirement to the owner's live-build
+authorization.
 
 The paired evidence for review is under `output/v19_v20_component_comparison_20261102/endocrine/` and `visual/paired_v2/`. It includes exact changed UUIDs, all 14 named subtype switches, and 39 representative gains/losses with both versions' labels, thresholds, and corrected values. Eight subtype switches cross a positivity boundary; six retain the same binary flags but change the normalized winning hormone. Image brightness or a larger named-cell count alone cannot establish a better call.
 
-Build a new native QuPath review only after the candidate identities and selected geometry are coherent:
+Build a separate native QuPath project to inspect the candidate identities and
+selected geometry, retaining unresolved labels visibly. Its creation is not
+scientific acceptance:
 
 ```bash
 "$PY" scripts/uniform/review_project.py \
@@ -357,17 +373,22 @@ Related Senior, monorepo, HPG, and multiplex5000 workspaces/agents receive the [
 
 The immutable handoff package locations are `/home/smith6jt/IO60panc2nd/CODEX-handoff-20261102-lymphatic-isolation` and HPG `/blue/maigan/smith6jt/CODEX-handoff-20261102-lymphatic-isolation`. Consult `docs/evidence/agent_delivery_20261102.json` for the checksum receipts and the Senior/MultiPlex5000 agent's explicit acknowledgement: it read the notice/workflow and independently verified all 17 payload files. The package is received/read; the port remains unapplied. This delivery must not edit active recipient checkouts. The Senior agent owns adapting and testing a port into `core/multiplex5000`; CODEX retains its candidate and app ownership. CODEX's own HPG source synchronization has its separate explicit changed-file receipt.
 
+A supplemental package, `CODEX-handoff-20261102-component-build`, carries the
+completed component/Ki67/build fixes, release preflight correction and outcome
+evidence to the same workstation/HPG sibling locations. The
+[change notice](typing_change_notice_20261102.md) lists its commit groups and
+receipt. Keep it distinct from the initial 17-file isolation package.
+
 The handoff carries the actual commit range, changed-file list, evidence receipt, guide, and blockers: separate calibration reference context from mutable structure context; bind all marker/canary calibration and baseline identity; protect named islet endocrine cells; run the all-component invariant audit; preserve the selected v19 endocrine component; do not infer that this diagnostic is a deployable root. File delivery is not an agent read acknowledgement or a completed port. Record those later outcomes separately and preserve workspace-specific changes. Do not transplant CODEX thresholds or data into another modality merely because its pipeline shares code ancestry.
 
 ## 11. What remains before the app can return online
 
-1. Build and verify a coherent candidate using the selected v19 endocrine component, the instructed other-component rules, and isolated DG geometry. No such mixed root currently exists.
-2. Resolve the inherited endocrine discrepancy without inventing cutoffs, assigning unsupported labels, or excluding cells to hide it. V19 has 7,151 unresolved cells and 953 populated objects with no positive eligible member: 915 singles and 38 clusters. Final v20 has 7,800 unresolved cells and 948 such objects: 910 singles and 38 clusters. All 1,468 islets have positive members in both versions. Both retain two empty singles and one single with two eligible members.
-3. Pass both object-level consistency and release-label/aggregate checks, preserving explicit membership and denominator definitions. A positive islet does not resolve an unnamed member's typing.
-4. Include Ki67/proliferation in the export, carry the corrected immune population through the app, and rebuild summaries, scales, spatial outputs, embeddings, and review artifacts from the selected cells.
-5. Complete the required image/geometry and owner review of the candidate; reconcile the exact final QuPath and app outputs. Retain reviewed exceptions and all failed evidence.
-6. Build and fully verify a matching patched image/data release, including the current security checks, and smoke-test the production runtime. With explicit restart authorization and the dev mask handled deliberately, activate dev and verify the actual proxy/browser/download/image paths. A security-only replacement image is not scientific acceptance of its data.
-7. Record the owner's production selection and restart authorization, activate that exact patched release, verify service and image aliases, and finish the outstanding outside-network and reboot acceptance work. Keep both service masks in place until their respective restart conditions are met.
+1. Resolve the mixed candidate's 2,472 component boundary conflicts: preserve the exact v19 endocrine membership or explicitly allow additional calls under its hormone thresholds. Keep the unresolved decisions visible until the rule is defined.
+2. Resolve the inherited endocrine discrepancy without inventing cutoffs, assigning unsupported labels, or excluding cells to hide it. The completed candidate has 8,629 unresolved cell labels and 953 populated objects with no positive eligible member under corrected-cell thresholds: 915 Singles and 38 Clusters. All 1,468 Islets have positive members. Two Singles are empty and one has two eligible members. Original pixel-classifier positivity is a different test; see the classifier trace before changing membership or thresholds.
+3. Rebuild into fresh paths after the evidence-supported correction. The current app, QuPath, Ki67 and invariant checks are complete, but changed identities require regenerated summaries, scales, spatial outputs and embeddings. Pass actual component provenance, object consistency and release-label/aggregate checks. A positive islet does not resolve an unnamed member's typing.
+4. Reconcile the final QuPath and app outputs with the required image/geometry checks. Retain reviewed exceptions and failed evidence; do not create a new permission requirement solely from an old diagnostic metadata flag.
+5. Package and verify the matching schema-5 data release and image. The current image's installed-runtime smoke and dated security check pass. Bind the final payload to that image and validate the actual runtime queries, downloads and image routes. DuckDB's known raw failure is nonblocking only within the recorded deadline; the other data/security checks remain mandatory.
+6. The owner has already directed the validated current build to live production. Once the actual checks pass, activate that exact release with the production mask handled deliberately, verify service/proxy/image aliases, and finish the outstanding outside-network and reboot acceptance work. Coordinate the separate patched-DuckDB dev build and its service changes with the security owner; do not require a new production permission prompt.
 
 Hypothesis work remains a separate analysis stream. Retain its approved definitions and historical outputs under `output/app_hypotheses_20261026/`; the typing correction is not permission to rerun or reinterpret it against a new data root automatically. CODEX INS intensity is not an approved quantitative between-donor hypothesis endpoint under the owner's acquisition clarification. Report measurements and technical evidence without adding biological interpretations beyond the approved plan.
 
