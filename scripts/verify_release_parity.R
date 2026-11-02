@@ -103,7 +103,7 @@ parity_runtime <- function(repo, root) {
   policy_names <- c("PHENOTYPE_RETIRED", "phenotype_keep", "phenotype_is_kept",
                     "phenotype_filter_rows", "PIXEL_SIZE_UM",
                     "MACROPHAGE_LABEL_PATTERN", "MACROPHAGE_KEY_PATTERN", "is_macrophage_label",
-                    "root_phenotype_labels", "root_historical_endocrine_contract", "root_has_marker_profile_labels", "TOP_MARKER_BASE",
+                    "root_phenotype_labels", "root_has_marker_profile_labels", "TOP_MARKER_BASE",
                     "CD45_RULE_LABEL", "CD45_TOP_MARKER_LABEL", "root_has_top_marker_labels",
                     "root_cd45_is_rule_label", "top_marker_labels", "PHENOTYPE_GROUP_AGGREGATES",
                     "phenotype_group", "is_phenotype_aggregate", "phenotype_aggregate_members",

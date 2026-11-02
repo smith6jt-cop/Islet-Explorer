@@ -36,43 +36,6 @@ test_that("releases reject unresolved endocrine calls and inconsistent aggregate
   expect_error(builder$validate_release_label_groups(root, app_members), "Invalid declared endocrine group")
 })
 
-test_that("the exact frozen v19 contract is preserved while real v20 remains rejected", {
-  repo <- normalizePath(".")
-  v19 <- file.path(repo, "data/development/uniform-20donor-20261029-v19")
-  v20 <- file.path(repo, "data/development/uniform-20donor-20261030-v20")
-  skip_if_not(file.exists(file.path(v19, "uniform_release.json")) &&
-                file.exists(file.path(v20, "uniform_release.json")), "frozen real-data roots are not present")
-  builder <- parity_builder(repo)
-  old <- parity_runtime(repo, v19)
-  current <- parity_runtime(repo, v20)
-  uniform <- jsonlite::read_json(file.path(v19, "uniform_release.json"), simplifyVector = TRUE)
-  expected <- uniform$label_groups$endocrine
-  expect_length(expected, 6L)
-  expect_setequal(old$phenotype_aggregate_members("All endocrine cells", uniform$labels), expected)
-  contract <- builder$validate_release_label_groups(v19, old$phenotype_aggregate_members)
-  expect_true(contract$historical_selection)
-  expect_identical(contract$selected_version, "v19")
-  expect_identical(contract$uniform_release_sha256,
-                   "13d44b679c8f07a6b2789655a6bd8bb811b426cbf3d4697f9e92f3529de6b49d")
-  expect_setequal(unlist(contract$unresolved_labels), c("EndocrineCluster", "EndocrineSingle"))
-  expect_identical(contract$scientific_acceptance, "not asserted by this compatibility check")
-  expect_error(builder$validate_release_label_groups(v19, current$phenotype_aggregate_members),
-                "Endocrine group mismatch")
-  expect_null(current$root_historical_endocrine_contract())
-  expect_error(builder$validate_release_label_groups(v20, current$phenotype_aggregate_members),
-                "Unresolved endocrine identities")
-
-  # The builder copies these exact metadata bytes into production's differently named mount.
-  # Exercise that path with the real file, without creating or changing scientific records.
-  released <- tempfile("released-v19-contract-")
-  dir.create(released)
-  on.exit(unlink(released, recursive = TRUE), add = TRUE)
-  expect_true(file.copy(file.path(v19, "uniform_release.json"), released))
-  runtime <- parity_runtime(repo, released)
-  expect_identical(runtime$root_historical_endocrine_contract(), old$root_historical_endocrine_contract())
-  expect_setequal(runtime$phenotype_aggregate_members("All endocrine cells", uniform$labels), expected)
-})
-
 test_that("donor Parquet preserves blank identifiers and numeric missingness", {
   # These are required CI dependencies: missing packages must fail, not skip.
   builder <- new.env(parent = globalenv())

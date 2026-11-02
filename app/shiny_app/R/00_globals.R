@@ -935,10 +935,6 @@ is_phenotype_aggregate <- function(x) as.character(x) %in% PHENOTYPE_GROUP_AGGRE
 
 #' The labels among `labels` that an aggregate sums.
 phenotype_aggregate_members <- function(aggregate, labels) {
-  if (identical(aggregate, "All endocrine cells")) {
-    historical <- root_historical_endocrine_contract()
-    if (!is.null(historical)) return(labels[labels %in% historical$endocrine])
-  }
   group <- names(PHENOTYPE_GROUP_AGGREGATES)[match(aggregate, PHENOTYPE_GROUP_AGGREGATES)]
   labels[phenotype_group(labels) %in% group & !is_phenotype_aggregate(labels)]
 }
@@ -1629,19 +1625,6 @@ clear_selection_button <- function(ns) {
 
 #' TRUE when the served root is the uniform 20-donor build (one typing workflow for every donor).
 is_uniform_root <- function() file.exists(data_path("uniform_release.json"))
-
-#' Owner-selected frozen v19 contract (2026-11-02). This preserves its declared aggregate without renaming
-#' cells or asserting scientific acceptance. The exact metadata bytes, not a directory name, select it.
-#' Keep the digest aligned with validate_release_label_groups() and the real v19/v20 regression check.
-root_historical_endocrine_contract <- function() {
-  path <- data_path("uniform_release.json")
-  if (!file.exists(path)) return(NULL)
-  sha <- digest::digest(file = path, algo = "sha256", serialize = FALSE)
-  if (!identical(sha, "13d44b679c8f07a6b2789655a6bd8bb811b426cbf3d4697f9e92f3529de6b49d")) return(NULL)
-  uniform <- jsonlite::read_json(path, simplifyVector = TRUE)
-  list(version = "v19", uniform_release_sha256 = sha,
-       endocrine = as.character(uniform$label_groups$endocrine))
-}
 
 #' The cell labels a uniform root assigns (uniform_release.json "labels"); NULL for other roots.
 root_phenotype_labels <- local({
