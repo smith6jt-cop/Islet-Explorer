@@ -38,10 +38,10 @@ def features(path):
     return raw['features'] if isinstance(raw, dict) else raw
 
 
-def sampling_mask(geometry, grid_shape):
-    """Sample cell polygon on the original classifier's downsample-2 grid."""
+def sampling_mask(geometry, grid_shape, center_offset=.5):
+    """Sample at pixel centers; also report integer-grid sensitivity for small cells."""
     components = geometry['coordinates'] if geometry['type'] == 'MultiPolygon' else [geometry['coordinates']]
-    rings = [np.asarray(p[0]) / 2 for p in components]
+    rings = [np.asarray(p[0]) / 2 - center_offset for p in components]
     vertices = np.concatenate(rings)
     x0, y0 = np.maximum(np.floor(vertices.min(axis=0)).astype(int), 0)
     x1, y1 = np.minimum(np.ceil(vertices.max(axis=0)).astype(int) + 1, grid_shape[::-1])
@@ -51,7 +51,7 @@ def sampling_mask(geometry, grid_shape):
     for component in components:
         local = np.zeros_like(mask)
         for i, ring in enumerate(component):
-            ring = np.asarray(ring) / 2 - (x0, y0)
+            ring = np.asarray(ring) / 2 - center_offset - (x0, y0)
             rr, cc = polygon(ring[:, 1], ring[:, 0], shape=mask.shape)
             local[rr, cc] = i == 0
         mask |= local
@@ -90,6 +90,8 @@ def one(tag, run, base, out):
     script1_path = base / 'script1_outlines' / f'{tag}.geojson'
     objects = [shapely.make_valid(shape(f['geometry'])) for f in features(script1_path)
                if f.get('properties', {}).get('classification', {}).get('name') == 'Islet']
+    if not objects:
+        raise ValueError(f'{tag}: no original script1 objects')
     tree = shapely.STRtree(objects)
     wanted = set(d.object_id)
     cell_path = run / 'cell_geojson' / f'{tag}.geojson'
@@ -102,12 +104,19 @@ def one(tag, run, base, out):
         window, mask = sampling_mask(geo, classifier.shape)
         record = row._asdict()
         record['classifier_grid_cell_pixels'] = int(mask.sum())
-        cx, cy = int(row.x_um / .7548), int(row.y_um / .7548)
+        cx = int(np.clip(row.x_um / .7548, 0, classifier.shape[1] - 1))
+        cy = int(np.clip(row.y_um / .7548, 0, classifier.shape[0] - 1))
         for name, stage in stages.items():
             record[name + '_pixels'] = int(stage[window][mask].sum())
             record[name + '_fraction'] = float(stage[window][mask].mean()) if mask.any() else None
             record[name + '_at_centroid'] = bool(stage[cy, cx])
+        integer_window, integer_mask = sampling_mask(geo, classifier.shape, center_offset=0)
+        record['integer_grid_cell_pixels'] = int(integer_mask.sum())
+        for name in ('direct_any', 'direct_hormone', 'seeded', 'classifier'):
+            record[name + '_integer_grid_pixels'] = int(stages[name][integer_window][integer_mask].sum())
         cell = shapely.make_valid(shape(geo))
+        if cell.area <= 0:
+            raise ValueError(f'{tag}/{row.object_id}: zero cell polygon area')
         hits = tree.query(cell, predicate='intersects')
         overlaps = [cell.intersection(objects[i]) for i in hits]
         record['script1_max_cell_overlap_fraction'] = max((g.area for g in overlaps), default=0) / cell.area
@@ -118,13 +127,16 @@ def one(tag, run, base, out):
     result['image'] = tag
     result.to_parquet(out / f'{tag}.parquet', index=False)
     hashes = {str(p): sha(p) for p in [identity_path, params_path, plane_path, script1_path, cell_path,
-                                     base / 'fit' / f'{tag}.mask.npy']}
+                                     base / 'fit' / f'{tag}.mask.npy', plane_path.with_suffix('.json'),
+                                     run / 'typing/context' / f'{tag}.parquet']}
     return {'image': tag, 'cells': len(result), 'classifier_replay': 'exact', 'source_sha256': hashes}
 
 
 def summarize(frame):
     return {'cells': len(frame),
             'no_direct_any_marker_pixels': int(frame.direct_any_pixels.eq(0).sum()),
+            'no_direct_any_marker_pixels_both_grid_offsets': int((frame.direct_any_pixels.eq(0) & frame.direct_any_integer_grid_pixels.eq(0)).sum()),
+            'empty_cell_sampling_mask': int(frame.classifier_grid_cell_pixels.eq(0).sum()),
             'no_direct_hormone_pixels': int(frame.direct_hormone_pixels.eq(0).sum()),
             'no_seeded_pixels': int(frame.seeded_pixels.eq(0).sum()),
             'no_classifier_pixels': int(frame.classifier_pixels.eq(0).sum()),
