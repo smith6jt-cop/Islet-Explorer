@@ -14,7 +14,8 @@ import pandas as pd
 
 MARKERS = ('INS', 'GCG', 'SST', 'CHGA')
 UNRESOLVED = ('Islet', 'EndocrineCluster', 'EndocrineSingle')
-NAMED = ('Alpha', 'Beta', 'Delta', 'CHGA+ hormone-negative')
+PREVIOUS_NAMED = ('Alpha', 'Beta', 'Delta', 'CHGA+ hormone-negative')
+CURRENT_NAMED = ('Alpha cell', 'Beta cell', 'Delta cell', 'CHGA+ hormone-negative')
 
 
 def describe(frame):
@@ -22,7 +23,7 @@ def describe(frame):
         'cells': len(frame),
         'raw_above_current_corrected_level': int(frame.raw_any_above_level.sum()),
         'corrected_above_current_level': int(frame.corrected_any_above_level.sum()),
-        'previous_named_endocrine': int(frame.previous_label.isin(NAMED).sum()),
+        'previous_named_endocrine': int(frame.previous_label.isin(PREVIOUS_NAMED).sum()),
         'cell_area_um2_median': float(frame.cell_area_um2.median()),
         'nucleus_cell_fraction_median': float(frame.nucleus_cell_fraction.median()),
         'nucleus_cell_fraction_p90': float(frame.nucleus_cell_fraction.quantile(.9)),
@@ -61,7 +62,7 @@ def main():
         checks.append({'image': tag, 'verified_cells': len(all_cells)})
         all_cells['cell_area_um2'] = all_cells.Cell__n_px * .3774 ** 2
         all_cells['nucleus_cell_fraction'] = all_cells.Nucleus__n_px / all_cells.Cell__n_px
-        named = all_cells[all_cells.label.isin(NAMED)]
+        named = all_cells[all_cells.label.isin(CURRENT_NAMED)]
         reference.append({'image': tag, 'named_endocrine_cells': len(named),
                           'cell_area_um2_median': float(named.cell_area_um2.median()),
                           'nucleus_cell_fraction_median': float(named.nucleus_cell_fraction.median())})
