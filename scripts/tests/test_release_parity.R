@@ -3,6 +3,32 @@
 suppressPackageStartupMessages(library(testthat))
 source("scripts/verify_release_parity.R")
 
+test_that("component review builds cannot be packaged by changing displayed groups", {
+  builder <- new.env(parent = globalenv())
+  sys.source("scripts/build_release_data.R", envir = builder)
+  root <- tempfile("component-review-contract-")
+  dir.create(root)
+  on.exit(unlink(root, recursive = TRUE), add = TRUE)
+  named <- c("Beta cell", "Alpha cell", "Delta cell", "CHGA+ hormone-negative")
+  app_members <- function(aggregate, labels) intersect(named, labels)
+  contract <- list(labels = named, label_groups = list(endocrine = named),
+                   component_selection = list(schema = "uniform.component_selection/1",
+                                              status = "diagnostic_pending_review"))
+  path <- file.path(root, "uniform_release.json")
+  jsonlite::write_json(contract, path, auto_unbox = TRUE)
+  expect_error(builder$validate_release_label_groups(root, app_members), "diagnostic candidate prevents release")
+  contract$component_selection <- NULL
+  jsonlite::write_json(contract, path, auto_unbox = TRUE)
+  writeLines("{}", file.path(root, "component_selection_audit.json"))
+  expect_error(builder$validate_release_label_groups(root, app_members), "diagnostic candidate prevents release")
+  unlink(path)
+  expect_error(builder$validate_release_label_groups(root, app_members), "uniform manifest is missing")
+  unlink(file.path(root, "component_selection_audit.json"))
+  contract$labels <- c(named, "Conflict component_boundary")
+  jsonlite::write_json(contract, path, auto_unbox = TRUE)
+  expect_error(builder$validate_release_label_groups(root, app_members), "component boundary conflicts")
+})
+
 test_that("releases reject unresolved endocrine calls and inconsistent aggregate definitions", {
   builder <- new.env(parent = globalenv())
   sys.source("scripts/build_release_data.R", envir = builder)

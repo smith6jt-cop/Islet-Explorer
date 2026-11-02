@@ -25,13 +25,33 @@ RELEASE_SCHEMAS <- c("1", "5")
 #' of source and release tables cannot detect a shared scientific-definition error.
 #' Earlier roots did not declare label_groups; their historical contract is unchanged.
 validate_release_label_groups <- function(source_root, aggregate_members) {
+  # Component-selection v1 is an explicit diagnostic construction protocol.
+  # Its per-cell boundary conflicts and inherited unresolved endocrine objects
+  # still require reconciliation. A successfully assembled review root is not
+  # a releasable root, even if its displayed group list has been edited.
+  diagnostic_files <- c("component_selection.json", "component_selection_audit.json")
+  has_component_diagnostic <- any(file.exists(file.path(source_root, diagnostic_files)))
   path <- file.path(source_root, "uniform_release.json")
-  if (!file.exists(path)) return(invisible(list(applicable = FALSE)))
+  if (!file.exists(path)) {
+    if (has_component_diagnostic) {
+      stop("Component-selection diagnostic candidate prevents release; its uniform manifest is missing.",
+           call. = FALSE)
+    }
+    return(invisible(list(applicable = FALSE)))
+  }
   uniform <- jsonlite::read_json(path, simplifyVector = TRUE)
+  if (has_component_diagnostic || !is.null(uniform$component_selection)) {
+    stop("Component-selection diagnostic candidate prevents release. Reconcile inherited unresolved endocrine ",
+         "objects and component boundary conflicts upstream; a review build is not scientific acceptance.",
+         call. = FALSE)
+  }
   if (is.null(uniform$label_groups)) return(invisible(list(applicable = FALSE)))
   labels <- uniform$labels
   if (!is.character(labels) || !length(labels) || anyNA(labels) || any(!nzchar(labels)) || anyDuplicated(labels)) {
     stop("Invalid declared phenotype labels in uniform_release.json", call. = FALSE)
+  }
+  if (any(grepl("component.boundary", labels, ignore.case = TRUE))) {
+    stop("Unresolved component boundary conflicts prevent release.", call. = FALSE)
   }
   endocrine <- uniform$label_groups$endocrine
   if (!is.character(endocrine) || !length(endocrine) || anyNA(endocrine) || anyDuplicated(endocrine) ||

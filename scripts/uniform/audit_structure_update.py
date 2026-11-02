@@ -155,7 +155,8 @@ def aligned_pair(a: pd.DataFrame, b: pd.DataFrame, kind: str, issues: list, out:
     return a, b
 
 
-def audit_image(baseline: Path, candidate: Path, output: Path, image: str) -> dict:
+def audit_image(baseline: Path, candidate: Path, output: Path, image: str,
+                component_scope: bool = False) -> dict:
     dest = output / "images" / image
     dest.mkdir()
     result = {"image": image, "passed": False, "issues": [], "inputs": {}, "field_changes": []}
@@ -233,18 +234,26 @@ def audit_image(baseline: Path, candidate: Path, output: Path, image: str) -> di
             unexpected = differences.copy()
             for ci, column in enumerate(columns):
                 allowed = kind == "context" and column in LY_CONTEXT or kind == "identity" and column in IDENTITY_DERIVED
+                # A separately validated pair of component-selection runs also
+                # retains the natural decisions before selection. Apply the same
+                # local change restrictions to those diagnostic decisions. Never
+                # permit a general natural__ prefix or change to source evidence.
+                natural_field = column.removeprefix("natural__") if column.startswith("natural__") else None
+                if component_scope and kind == "identity":
+                    allowed |= natural_field in IDENTITY_DERIVED or column == "component_decision_source"
                 if allowed:
                     unexpected[:, ci] &= ~allowed_area
                 if kind == "identity" and column in ENDOCRINE_PROTECTED:
                     unexpected[:, ci] |= differences[:, ci] & endocrine_union
-                if kind == "identity" and column == "label":
-                    involves_lymphatic = (a.label.eq("Endothelium Lymphatic")
-                                           | b.label.eq("Endothelium Lymphatic")).to_numpy(bool)
+                if kind == "identity" and (column == "label" or component_scope and column == "natural__label"):
+                    involves_lymphatic = (a[column].eq("Endothelium Lymphatic")
+                                           | b[column].eq("Endothelium Lymphatic")).to_numpy(bool)
                     unexpected[:, ci] |= differences[:, ci] & ~involves_lymphatic
-                    result["counts"]["label_changes_neither_lymphatic"] = int(
+                    result["counts"][f"{column}_changes_neither_lymphatic"] = int(
                         (differences[:, ci] & ~involves_lymphatic).sum())
                     changed_geometry = pd.Series(geometry_changed, index=ca.index).reindex(a.index, fill_value=False).to_numpy(bool)
-                    result["counts"]["label_changes_with_unchanged_lymphatic_geometry"] = int(
+                    unexpected[:, ci] |= differences[:, ci] & ~changed_geometry
+                    result["counts"][f"{column}_changes_with_unchanged_lymphatic_geometry"] = int(
                         (differences[:, ci] & ~changed_geometry).sum())
                 # No marker flag/fold exception, including PDPN. Unrecognized
                 # columns remain immutable rather than implicitly authorized.
@@ -293,6 +302,36 @@ def audit_image(baseline: Path, candidate: Path, output: Path, image: str) -> di
     return result
 
 
+def validate_component_pair(baseline: Path, candidate: Path) -> dict | None:
+    """Natural decision exceptions require two complete, matching component contracts."""
+    present = [(r / "typing/component_selection.json").exists() for r in (baseline, candidate)]
+    if not any(present):
+        return None
+    if not all(present):
+        raise ValueError("Both sides must have the same explicit component-selection scope")
+    sys.path.insert(0, str(Path(__file__).resolve().parent / "typing"))
+    import component_selection as CS
+    bindings = [CS.validate(r) for r in (baseline, candidate)]
+    audits = [CS.validate_audit(r) for r in (baseline, candidate)]
+    a, b = bindings
+    for field in ("scope", "endocrine_source", "nonendocrine_source", "endocrine_markers", "endocrine_labels"):
+        if a[field] != b[field]:
+            raise ValueError(f"Component control and candidate differ in {field}")
+    if set(a["images"]) != set(b["images"]):
+        raise ValueError("Component control and candidate have different donor inventories")
+    keys = {k for k in a["files"] if k.startswith(("endocrine/", "nonendocrine/", "registry/", "code/"))}
+    if keys != {k for k in b["files"] if k.startswith(("endocrine/", "nonendocrine/", "registry/", "code/"))}:
+        raise ValueError("Component control and candidate have different source inventories")
+    for key in keys:
+        if a["files"][key]["sha256"] != b["files"][key]["sha256"]:
+            raise ValueError(f"Component control and candidate source differs: {key}")
+    return {"schema": a["schema"], "validated": True,
+            "endocrine_source": a["endocrine_source"], "nonendocrine_source": a["nonendocrine_source"],
+            "manifest_sha256": [CS.sha(r / CS.MANIFEST) for r in (baseline, candidate)],
+            "audit_sha256": [CS.sha(r / CS.AUDIT) for r in (baseline, candidate)],
+            "selected_named_endocrine_cells": [x["preserved_named_endocrine_cells"] for x in audits]}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--baseline", type=Path, required=True)
@@ -314,6 +353,11 @@ def main() -> int:
     started = datetime.now(timezone.utc).isoformat()
     script_source = fingerprint(Path(__file__), {})
     issues = []
+    component_pair = None
+    try:
+        component_pair = validate_component_pair(baseline, candidate)
+    except Exception as exc:
+        issues.append({"reason": "component_contract_invalid", "error": f"{type(exc).__name__}: {exc}"})
     inventories = {}
     for version, root in (("baseline", baseline), ("candidate", candidate)):
         inventories[version] = {k: sorted(p.stem for p in (root / "typing" / k).glob("*.parquet"))
@@ -344,7 +388,8 @@ def main() -> int:
                        "files": [x["file"] for x in calibration if not x["passed"]]})
     results = []
     with ProcessPoolExecutor(args.workers) as pool:
-        futures = [pool.submit(audit_image, baseline, candidate, output, image) for image in images]
+        futures = [pool.submit(audit_image, baseline, candidate, output, image, component_pair is not None)
+                   for image in images]
         for image, future in zip(images, futures):
             result = future.result()
             results.append(result)
@@ -373,6 +418,7 @@ def main() -> int:
                "target_structure": "Lymphatic", "baseline": str(baseline), "candidate": str(candidate),
                "started_utc": started, "finished_utc": datetime.now(timezone.utc).isoformat(),
                "script_sha256": script_source["sha256"],
+               "component_selection_pair": component_pair,
                "complete_donor_inventory_audited": set(images) == available,
                "images": images, "donor_inventory": inventories,
                "selected_donor_inventory": selected_inventory, "issues": issues,

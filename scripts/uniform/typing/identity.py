@@ -74,6 +74,7 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import registry as RG  # noqa: E402
 import area_coverage as AC  # noqa: E402
+import component_selection as CS  # noqa: E402
 
 STATUSES = ('none', 'single', 'resolved', 'lineage_ambiguous', 'doublet_suspected')
 # the established endocrine typing: the run's typing state before the final run (v17's calls, never assembled; its
@@ -268,11 +269,16 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED) -> tu
     plan = build_plan(reg, markers)
     ix = plan['ix']
     d = load_values(run, tag, reg, markers + state, lv, ld)
-    baseline = SU.baseline_identity(run, tag, d['object_id'])
+    component = CS.validate(run, tag)
+    # Component reconciliation is an explicit, independently validated scope.
+    # It cannot also claim the unchanged-calibration structure-only contract.
+    baseline = SU.baseline_identity(run, tag, d['object_id']) if component is None else None
     endocrine_labels = set(plan['labels'].loc[
         plan['labels']['lineage'].str.match(r'^Endocrine(?::|$)'), 'label'])
     protected_endocrine = (baseline['label'].isin(endocrine_labels).to_numpy()
                           if baseline is not None else np.zeros(len(d), bool))
+    if component is not None:
+        protected_endocrine = CS.source_identity(component, tag, d['object_id']).label.isin(CS.LABELS).to_numpy()
     n = len(d)
     V = np.column_stack([np.log1p(np.clip(np.nan_to_num(d[d.attrs['columns'][m]].to_numpy(float), nan=0.0), 0, None))
                          for m in markers])
@@ -648,6 +654,9 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED) -> tu
         for col in ('label', 'compartment', 'lineage'):
             if not out.loc[endocrine_union, col].equals(baseline.loc[endocrine_union, col]):
                 raise ValueError(f'{tag}: structure-only revision changed endocrine {col}')
+    component_report = None
+    if component is not None:
+        out, component_report = CS.apply(run, tag, out, SC, ix, component)
     audit = {'image': tag, 'cells': n, 'markers': markers,
              'readings': {m: {'positivity': str(lv.loc[m, 'measurement']),
                               **({'differentiation': str(ld.loc[m, 'measurement'])} if m in diff else {})}
@@ -657,10 +666,12 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED) -> tu
              'label': {str(k): int(v) for k, v in out['label'].value_counts().items()},
              'compartment_status': {str(k): int(v) for k, v in out['compartment_status'].value_counts().items()},
              'lineage_status': {str(k): int(v) for k, v in out['lineage_status'].value_counts().items()},
-             'status': {str(k): int(v) for k, v in pd.Series(status[status != '']).value_counts().items()},
-             'no_marker_above_background': int((status == 'no_marker_above_background').sum()),
+             'status': {str(k): int(v) for k, v in out.loc[out.status != '', 'status'].value_counts().items()},
+             'no_marker_above_background': int((out.status == 'no_marker_above_background').sum()),
              'excluded': {str(k): int(v) for k, v in out.loc[out['label'] == 'Excluded', 'excluded_reason']
                           .value_counts().items()}}
+    if component_report is not None:
+        audit['component_selection'] = component_report
     return out, audit
 
 
@@ -688,6 +699,16 @@ def main() -> int:
     tags = a.images or [r['image_name'] for r in RG.csv.DictReader(RG.COHORT.open())]
     dest = (a.dest or run / 'typing' / 'identity').resolve()
     binding = SU.validate_calibration(run)
+    component = CS.validate(run)
+    if component is not None:
+        if dest != run / 'typing' / 'identity':
+            ap.error('Component selection must write the fresh run identity directory')
+        if dest.exists() and any(dest.iterdir()):
+            ap.error('Component selection cannot overwrite existing identities; prepare a fresh run')
+        if set(tags) != set(component['images']) or len(tags) != len(component['images']):
+            ap.error('Component selection must process every image in its explicit binding')
+        if (run / CS.AUDIT).exists():
+            ap.error('Component selection requires an absent completed audit')
     audit_dest = None
     if binding is not None:
         if dest != run / 'typing' / 'identity':
@@ -704,6 +725,8 @@ def main() -> int:
     with ProcessPoolExecutor(min(a.workers, len(tags))) as ex:
         audits = list(ex.map(process, [run] * len(tags), tags, [dest] * len(tags), [a.endocrine_from] * len(tags)))
     (dest / 'summary.json').write_text(json.dumps(audits, indent=1))
+    if component is not None:
+        CS.write_audit(run, [audit['component_selection'] for audit in audits])
     if binding is not None:
         # A successful classification is not sufficient: validate all components,
         # including every marker and all cells outside the changed structure.
