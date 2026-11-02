@@ -1264,6 +1264,17 @@ phenotype_rules_table_df <- function() {
 # Modal builder. Pure shiny — no DT dependency. Pass to showModal() from any tab's
 # Phenotype-Rules button handler.
 phenotype_rules_modal_ui <- function() {
+  # The identity producer's assembled roots still carry the earlier rule CSV.
+  # Its cohort-scale, hormone-margin and top-marker notes describe that older
+  # producer, so use the recorded generation's definitions for these roots.
+  if (root_has_identity_typing()) {
+    return(shiny::modalDialog(
+      title = "Cell Phenotype Rules", size = "l", easyClose = TRUE,
+      footer = shiny::modalButton("Close"),
+      identity_typing_help_ui(),
+      shiny::tags$div(style = "max-height: 60vh; overflow: auto;",
+        identity_phenotype_definitions_ui())))
+  }
   protein_path <- data_path("protein_phenotype_rules.csv")
   if (file.exists(protein_path)) {
     rules <- utils::read.csv(protein_path, stringsAsFactors = FALSE, na.strings = "")
@@ -1626,6 +1637,106 @@ clear_selection_button <- function(ns) {
 #' TRUE when the served root is the uniform 20-donor build (one typing workflow for every donor).
 is_uniform_root <- function() file.exists(data_path("uniform_release.json"))
 
+# The manifest identifies the producer and its measurement choices; directory
+# names and the mere presence of uniform_release.json do not identify a method.
+# v18/v19 record membrane positivity for four markers and whole-cell Ki67;
+# v20 records whole-cell positivity and nuclear Ki67. Preserve both descriptions.
+root_identity_typing_manifest <- local({
+  cache <- new.env(parent = emptyenv())
+  function() {
+    path <- data_path("uniform_release.json")
+    if (!file.exists(path)) return(NULL)
+    stamp <- paste(path, file.mtime(path), file.info(path)$size)
+    if (!identical(cache$stamp, stamp)) {
+      manifest <- tryCatch(jsonlite::fromJSON(path), error = function(e) NULL)
+      cache$manifest <- if (identical(manifest$cell_typing, "typing/identity (identity.py)")) manifest else NULL
+      cache$stamp <- stamp
+    }
+    cache$manifest
+  }
+})
+root_has_identity_typing <- function() !is.null(root_identity_typing_manifest())
+
+# This is the recorded schema-5 positivity signature, not a version guessed
+# from a root's name. The current producer compares these four markers on the
+# membrane only for differentiation. Older identity roots used it for positivity.
+root_has_separate_differentiation <- function() {
+  m <- root_identity_typing_manifest()$measurements
+  markers <- c("ECAD", "CD3e", "CD68", "CD163")
+  !is.null(m) && all(markers %in% names(m)) &&
+    all(unlist(m[markers], use.names = FALSE) == "whole_cell") && identical(m$Ki67, "nucleus")
+}
+
+identity_measurements_text <- function() {
+  m <- root_identity_typing_manifest()$measurements
+  if (is.null(m) || !length(m)) return("The release does not record its marker measurement choices.")
+  groups <- split(names(m), unlist(m, use.names = FALSE))
+  names_for <- function(k) paste(groups[[k]], collapse = ", ")
+  parts <- c(
+    if (length(groups$whole_cell)) paste0("Whole-cell positivity: ", names_for("whole_cell"), "."),
+    if (length(groups$membrane)) paste0("Membrane positivity: ", names_for("membrane"), "."),
+    if (length(groups$nucleus)) paste0("Nuclear positivity: ", names_for("nucleus"), "."))
+  if (root_has_separate_differentiation()) parts <- c(parts,
+    "ECAD, CD3e, CD68 and CD163 use membrane measurements to compare competing identities, with separate membrane levels; their positive/negative calls still use the whole cell.")
+  paste(parts, collapse = " ")
+}
+
+IDENTITY_HORMONE_TEXT <- paste0(
+  "Within an Islet, Cluster or Single, a cell assigned to the endocrine lineage is named Beta, Alpha or Delta by ",
+  "the unique highest scaled positive hormone (INS, GCG or SST). Each hormone is scaled within its image as ",
+  "(value − positivity level) / (99.9th percentile − positivity level), floored at zero. No twofold margin is ",
+  "required. CHGA-positive cells with no hormone above its level are CHGA⁺ hormone-negative. ",
+  "An exact hormone tie or an object class retained without marker support is unresolved, not a named endocrine ",
+  "cell type; current release checks require those unresolved definitions to be resolved.")
+
+identity_structure_text <- function() paste0(
+  "Structure-qualified cell calls require the centroid inside the relevant structure, more than half the cell's ",
+  "area inside that structure class, and its marker both positive and highest by fold over level among the cell's ",
+  "positive typing markers: CD31 for blood vessel, B3TUBB for nerve, PDPN for lymphatic. Structure overlap is ",
+  "retained for cells that keep another identity. Cell counts and structure union areas are separate measures. ",
+  if (root_has_separate_differentiation())
+    "In this generation, Neural and endothelial identities require the qualifying structure call. "
+  else
+    "This earlier identity generation also permits marker-based Neural and Endothelial assignments outside that structure step. ",
+  "Collagen IV contributes area and distance measurements, not cell identity.")
+
+identity_typing_help_ui <- function() shiny::tagList(
+  shiny::tags$p("All donors use the release's panel- and tissue-specific marker registry. Positivity and canary ",
+    "levels are set separately for each image and marker using the selected reference populations. Typing uses ",
+    "despeckled, spillover-corrected REDSEA measurements. The plotted marker scale is per image, from its level ",
+    "to its 99.9th percentile, clipped to [0, 1]."),
+  shiny::tags$p(identity_measurements_text(), " Ki67 is a proliferation flag, not an identity marker."),
+  shiny::tags$p(IDENTITY_HORMONE_TEXT, " Singles retain their cell identity but are counted as objects only; ",
+    "they have no core or peri-islet analysis region."),
+  shiny::tags$p(identity_structure_text()),
+  shiny::tags$p("Canary evidence resolves competing compartments and lineages before their marker rules name ",
+    "the cell. Unresolved conflicts and suspected doublets retain explicit labels. Cells with insufficient ",
+    "evidence retain their starting object or Tissue class; they are not named after a top marker. Cells that ",
+    "fail measurement or nucleus eligibility checks are outside the analyzed cell universe."))
+
+identity_phenotype_definitions_ui <- function() {
+  defs <- c(
+    "Beta cell" = "Endocrine lineage inside an endocrine object, with INS the unique highest scaled positive hormone.",
+    "Alpha cell" = "As Beta cell, with GCG the unique highest scaled positive hormone.",
+    "Delta cell" = "As Beta cell, with SST the unique highest scaled positive hormone.",
+    "CHGA+ hormone-negative" = "Endocrine lineage inside an endocrine object, CHGA positive and no positive INS, GCG or SST.",
+    "CD8a Tcell" = "T lineage with CD3e positive and CD8a positive; if CD4 is also positive, the higher fold over its own level names the subtype.",
+    "CD4 Tcell" = "T lineage with CD3e positive and CD4 positive; if CD8a is also positive, the higher fold over its own level names the subtype.",
+    "T cell" = "T lineage with CD3e positive but neither subtype marker positive; retained without a named subtype.",
+    "B cell" = "B lineage with CD20 and CD45 positive and a single detected hematopoietic lineage.",
+    "Macrophage" = "Myeloid lineage with CD68 or CD163 positive; its name records the positive/negative profile of CD68, CD163, LGALS3 and CD4.",
+    "Hematopoietic CD45+" = "Hematopoietic compartment without a named lineage, with CD45 positive.",
+    "Hematopoietic CD45-" = "Hematopoietic compartment without a named lineage, with CD45 not above its level.",
+    "Exocrine" = "Epithelial compartment assigned to the exocrine lineage by the registry's epithelial evidence.",
+    "Stromal" = "Mesenchymal compartment assigned to the mural lineage with SMA positive.",
+    "Structure-qualified cells" = identity_structure_text())
+  shiny::tagList(
+    shiny::tags$h6(style = "margin-top: 12px; font-weight: 700;", "Phenotype definitions"),
+    shiny::tags$p("These definitions follow compartment and lineage assignment; a positive marker alone does not imply its cell type."),
+    shiny::tags$ul(style = "padding-left: 18px; margin-bottom: 6px;",
+      lapply(names(defs), function(n) shiny::tags$li(shiny::tags$strong(phenotype_text(n)), ": ", defs[[n]]))))
+}
+
 #' The cell labels a uniform root assigns (uniform_release.json "labels"); NULL for other roots.
 root_phenotype_labels <- local({
   cache <- new.env(parent = emptyenv())
@@ -1746,6 +1857,7 @@ object_classes_help <- function() {
 
 #' Help paragraph on how cells are typed, shared by every tab's help popover.
 cell_typing_help <- function() {
+  if (root_has_identity_typing()) return(identity_typing_help_ui())
   if (!is_uniform_root()) {
     return(shiny::tags$p(shiny::tags$strong("Cell labels."),
       " The original 15 donors retain their saved cell labels; the five additions use reviewed reconstructed ",
@@ -1996,6 +2108,10 @@ UNIFORM_T_CELL_DEFINITIONS_BEFORE_V14 <- c(
   "CD4 Tcell" = "CD3e+ and CD4+, CD8a\u2212, no epithelial marker")
 
 phenotype_marker_definitions_ui <- function() {
+  if (root_has_identity_typing()) return(shiny::tagList(
+    shiny::tags$p(identity_measurements_text()),
+    shiny::tags$p(IDENTITY_HORMONE_TEXT),
+    identity_phenotype_definitions_ui()))
   if (is_uniform_root()) {
     defs <- UNIFORM_PHENOTYPE_DEFINITIONS
     # From v16 positivity is the image's own background and the CD45 rule's class is listed as "CD45+" (applied before
