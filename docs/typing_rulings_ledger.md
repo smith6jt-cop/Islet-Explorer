@@ -10,6 +10,12 @@ a ruling given in the Islet-Explorer-Senior project, which applies here as a pri
 Status: **in force**, **superseded** (by the ruling named), or **agent choice** (an agent's decision or an option the agent
 wrote; not the owner's words, kept or changed on evidence).
 
+## Accuracy audit — 2026-11-02
+
+| Source | Ruling | Status |
+|---|---|---|
+| Owner, current audit | "If the typing is done properly, there should never be unnamed endocrine definitions." | in force: investigate upstream typing; do not resolve the assembly/UI discrepancy by counting unnamed object labels as endocrine. The earlier agent choice to include unnamed cluster/single cells in endocrine totals is not accepted. Release checks reject those identities. Measurement and image evidence, and the remaining disposition question, are recorded in [the audit](v20_accuracy_audit_20261102.md). No replacement threshold or cell identity has been selected. |
+
 ## Continuation decisions — 2026-10-29 afternoon
 
 Recovered from Claude session `8ce4ae92-f09a-4a34-b446-fc296c96b58e` and confirmed by the owner's request to implement
