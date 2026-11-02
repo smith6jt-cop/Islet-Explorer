@@ -94,6 +94,28 @@ metadata_hash="$(awk '
   exit 65
 }
 
+# The dated owner deferral permits activation during the remediation window;
+# it is not a patched-decoder claim and cannot authorize a later activation.
+security_result="$(read_meta SECURITY_RESULT)"
+if [[ "${security_result}" == pass-with-duckdb-remediation-window ]]; then
+  duckdb_patch_by="$(read_meta DUCKDB_PATCH_BY)"
+  python3 - "${duckdb_patch_by}" <<'PY'
+import datetime, sys
+today = datetime.datetime.now(datetime.timezone.utc).date()
+if sys.argv[1] != "2026-11-10" or not datetime.date(2026, 11, 2) <= today <= datetime.date(2026, 11, 10):
+    raise SystemExit("ERROR: DuckDB deferral is missing, invalid or expired; patch by 2026-11-10 UTC.")
+PY
+  echo "DuckDB CVE-2026-111497 remains open; owner-authorized deployment window ends 2026-11-10 UTC."
+elif [[ -n "${security_result}" && "${security_result}" != pass-no-high-or-critical ]]; then
+  echo "ERROR: unsupported security release decision." >&2
+  exit 65
+fi
+
+# Always rehash the bounded security evidence, even for --quick. A previous
+# full data stamp does not authenticate a subsequently edited scan/deferral.
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+python3 "${script_dir}/verify-release-security.py" "${release_dir}"
+
 actual_images="$(find "${release_dir}/data/images" -type f \
   \( -iname '*.ome.tif' -o -iname '*.ome.tiff' \) | wc -l)"
 if [[ "${actual_images}" != "${expected_images}" ]]; then

@@ -172,41 +172,11 @@ a zero-High/Critical package scan did not fix or detect both copies. The Python
 lock keeps Pillow **13.0.0** but builds it from source against the patched
 Ubuntu-managed FreeType/Brotli libraries, with two compilation workers.
 
-**Current owner direction: implement released fixes; defer DuckDB until the
-upstream PR merges.** DuckDB therefore retains the original CRAN **1.5.2**
-R package/API version without the proposed backport. Its known vulnerable
-decoder remains a release blocker, as recorded in
-[BASE_HARDENING.md](BASE_HARDENING.md#2026-11-02-bundled-brotli-in-pillow-and-duckdb-services-stopped).
-The CRAN archive is pinned to SHA-256
-`55f98a336513a94354f328791c8b94521b9f2e918a57d7e9fe6c0cb6b9a38db6`.
-The [DuckDB port](https://github.com/duckdb/duckdb/pull/27791), reviewed as
-**open/unmerged on 2026-11-02**, is not part of the active installation path.
-The stopped backport attempt and exact pins are preserved on local branch
-`security/deferred-duckdb-brotli-20261102` at `3a12daa`, described in the
-[remediation record](../docs/container_security_20261102.md). Do not copy its
-helper, patch, or source-receipt requirement back into current build instructions
-before the owner's upstream condition is satisfied. The archived attempt also
-records the nested `duckdb/src/duckdb.tar.xz` configure/installation pitfall.
+**Current owner direction:** deploy the current build to the live PubApp after its real data/release/runtime checks, within the notice's DuckDB patch window through **2026-11-10 UTC**. Develop/test our DuckDB fix separately for the dev PubApp. See [the dated decision](../docs/duckdb_remediation_window_20261102.md). Production retains pinned CRAN DuckDB **1.5.2** (archive SHA-256 `55f98a336513a94354f328791c8b94521b9f2e918a57d7e9fe6c0cb6b9a38db6`); the preserved backport at `3a12daa` is for the isolated dev branch.
 
-`scan-image.sh` runs the current checkout's `verify-brotli.py` inside the exact
-immutable image, with no network or data mounts. It requires:
+`scan-image.sh` runs this checkout's `verify-brotli.py` inside the immutable image, with no network or data mounts. The raw version-2 report continues to fail on the known DuckDB decoder result `0`/error `-9`. `evaluate-brotli-report.py` accepts that single complete finding during the recorded window and emits `RESULT=pass-with-duckdb-remediation-window`, with the raw failure, authorization copy and deadline bound by hash. Fixed decoder result `0`/error `-17` passes normally. Pillow/Ubuntu/Node failures, unknown decoder behavior, crashes, timeouts, missing evidence and other High/Critical findings still block. No general CVE suppression is added.
 
-* Verified Ubuntu and Node patch versions and Pillow linkage to the managed
-  system decoder, with no vendored Brotli library in the Python environment.
-* DuckDB runtime version 1.5.2 and the actual installed `duckdb.so` hash. The
-  deferred unmerged patch's source receipt is not required by the active gate.
-* The installed decoder's rejection of the upstream malformed-stream regression
-  with result 0/error -17. A version number or clean package scan cannot pass;
-  missing symbols, crashes and timeouts fail.
-* The normal Syft/Grype scan with no High or Critical finding. There is no new
-  CVE suppression.
-
-Every newly generated release manifest requires the hashed
-`islet.brotli_verification/2` report, passing DuckDB decoder/library fields,
-and the matching immutable image evidence. Missing reports/hashes and older
-Pillow-only reports are rejected. An old successful scan cannot authorize a new
-release manifest; rescan the actual candidate with the current gate. Historical
-manifests are retained as records, not upgraded acceptance evidence.
+`generate-release-manifest.sh` verifies those hashes, the exact authorization and its date. It records the decision/deadline in `release.env`; `verify-release.sh`, including `--quick`, rejects an invalid or expired deferral. Copy the updated release tooling when staging the new release. The raw finding remains unresolved until the dev fix passes and is promoted. Old strict-gate evidence stays unchanged; rescan the exact current candidate into a fresh evidence directory. No extra approval is needed for the already-authorized DuckDB window. Scientific/data acceptance and runtime checks remain required.
 
 For a future eligible candidate, the optional valid-data check below is available.
 It has not been run on a completed patched image. Set `IMAGE_ID` to its immutable

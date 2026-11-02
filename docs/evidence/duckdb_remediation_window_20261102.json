@@ -1,0 +1,105 @@
+{
+  "recorded_at": "2026-11-02T22:09:51.188340+00:00",
+  "status": "known-duckdb-finding-nonblocking-within-remediation-window",
+  "patch_by": "2026-11-10",
+  "deadline_timezone": "UTC",
+  "owner_direction": "Current validated build to live production; separate DuckDB fix for dev",
+  "tested_image_id": "sha256:2bbb928db9760c86d7a1bb9adf9002bb1a27d88da96b02a600baca93c090d733",
+  "source_revision": "23bd2fdd223d090f4c5ff438167245c459dbeb16",
+  "package_high": 0,
+  "package_critical": 0,
+  "raw_brotli_result": "fail",
+  "duckdb_error_code": -9,
+  "release_decision": "pass-with-duckdb-remediation-window",
+  "unrelated_pillow_finding_rejected": true,
+  "image_release_contract_tests": "pass",
+  "activation_recovery_contract_tests": "pass",
+  "live_activation_performed_by_this_change": false,
+  "prior_evidence_unchanged": true,
+  "evidence": {
+    "deploy/duckdb-remediation-window.json": {
+      "sha256": "0004561231d03e2a7cd20bdfecc72c4b1165bd25421d409b2d890d9edec3c15b",
+      "bytes": 740
+    },
+    "deploy/evaluate-brotli-report.py": {
+      "sha256": "f1a953ed5fc2b92247072796cded32eb8e2eea699093353581302f6efdefbfbc",
+      "bytes": 3085
+    },
+    "deploy/generate-release-manifest.sh": {
+      "sha256": "eaaddb2ac34c0bede3a2b3cc23ddb87b0181eebf5b81df60543661849abb28cc",
+      "bytes": 13187
+    },
+    "deploy/scan-image.sh": {
+      "sha256": "8256763cbb29ddecaab3d3962d205ddde272cf2948effc98d1334b31a4b4a9cc",
+      "bytes": 5952
+    },
+    "deploy/verify-release-security.py": {
+      "sha256": "87b55dc893f557c8dee5939704b00c49a3ffbf23de63eb220b6366488355bc20",
+      "bytes": 6310
+    },
+    "deploy/verify-release.sh": {
+      "sha256": "d6c1ea0f99bcad82d9c07eb33c2a13eecd2b0e3f7f40df08d2c204e406c0a387",
+      "bytes": 10067
+    },
+    "tmp/security-duckdb-window-20261102/old-dev-rejection.log": {
+      "sha256": "cb1d59f56b5bd53f23b08cfb53c21707a5f05f1d873819b2559e6db836271de7",
+      "bytes": 163
+    },
+    "tmp/security-duckdb-window-20261102/old-dev.brotli.json": {
+      "sha256": "397785281fb927ef16708f970052d1d1d1a74d52d845ce966ea73fa0c0480acc",
+      "bytes": 2362
+    },
+    "tmp/security-duckdb-window-20261102/rescan.log": {
+      "sha256": "ae35cfc5c4df28ca5d180ccc9d2c706305e6784e30f06f7cdfe10401d888b0b2",
+      "bytes": 236
+    },
+    "tmp/security-duckdb-window-20261102/scan/sha256_2bbb928db9760c86d7a1bb9adf9002bb1a27d88da96b02a600baca93c090d733.R-packages.tsv": {
+      "sha256": "c689784588aff4c7bd275d4d6ae98db6e07ee59078a788016d328cebf46911fc",
+      "bytes": 9883
+    },
+    "tmp/security-duckdb-window-20261102/scan/sha256_2bbb928db9760c86d7a1bb9adf9002bb1a27d88da96b02a600baca93c090d733.brotli.json": {
+      "sha256": "1b8c216dc00f7b699aadd0b891896b8c8ce1bbfa616a54d92ce5c621c69deada",
+      "bytes": 1508
+    },
+    "tmp/security-duckdb-window-20261102/scan/sha256_2bbb928db9760c86d7a1bb9adf9002bb1a27d88da96b02a600baca93c090d733.cyclonedx.json": {
+      "sha256": "0e62c9e4e6df8905d051ce2b532f2ce8334a8bab8fd184176f238f30a3046f35",
+      "bytes": 17847673
+    },
+    "tmp/security-duckdb-window-20261102/scan/sha256_2bbb928db9760c86d7a1bb9adf9002bb1a27d88da96b02a600baca93c090d733.duckdb-deferral.json": {
+      "sha256": "0004561231d03e2a7cd20bdfecc72c4b1165bd25421d409b2d890d9edec3c15b",
+      "bytes": 740
+    },
+    "tmp/security-duckdb-window-20261102/scan/sha256_2bbb928db9760c86d7a1bb9adf9002bb1a27d88da96b02a600baca93c090d733.grype-db.json": {
+      "sha256": "bb74bfdf4a9cbef2326f8e99e693d36d1b869ec8a9c3f60916b5025dc14d54d7",
+      "bytes": 342
+    },
+    "tmp/security-duckdb-window-20261102/scan/sha256_2bbb928db9760c86d7a1bb9adf9002bb1a27d88da96b02a600baca93c090d733.grype.json": {
+      "sha256": "c3a40badf796b2018563a8652108f95ccd38625f93509b424eb0c8a84c5d63f7",
+      "bytes": 37225054
+    },
+    "tmp/security-duckdb-window-20261102/scan/sha256_2bbb928db9760c86d7a1bb9adf9002bb1a27d88da96b02a600baca93c090d733.python-packages.txt": {
+      "sha256": "86c73a12682130e701daafb087b7a8e906cff81467dd8163ee40404e165344f5",
+      "bytes": 831
+    },
+    "tmp/security-duckdb-window-20261102/scan/sha256_2bbb928db9760c86d7a1bb9adf9002bb1a27d88da96b02a600baca93c090d733.sbom-corrections.json": {
+      "sha256": "960011a8780b5d1956d365d730eab94c90a06dfabfc585c5c49d5239d5d74b42",
+      "bytes": 726
+    },
+    "tmp/security-duckdb-window-20261102/scan/sha256_2bbb928db9760c86d7a1bb9adf9002bb1a27d88da96b02a600baca93c090d733.scan.txt": {
+      "sha256": "d1a6c24aa1beaeaf5833b75ebaffea55dd57eeb269fe41125299d96aa94a8091",
+      "bytes": 1117
+    },
+    "tmp/security-duckdb-window-20261102/scan/sha256_2bbb928db9760c86d7a1bb9adf9002bb1a27d88da96b02a600baca93c090d733.syft.cyclonedx.json": {
+      "sha256": "a8911de5679a189766d76e8943d2d9a250fe5bef2eaef323db18eeb8ead555d1",
+      "bytes": 12112398
+    },
+    "tmp/security-duckdb-window-20261102/test-deployment-recovery.log": {
+      "sha256": "d9b92e3d626ecc5dd9a5c4cc6d00a40957ed485d330abb2120f7e1550513b91d",
+      "bytes": 58
+    },
+    "tmp/security-duckdb-window-20261102/test-image-evidence-final.log": {
+      "sha256": "276aaa4014a8bc6af428e895756813bc696d8b9036991f5cc7b325e846162a71",
+      "bytes": 2995
+    }
+  }
+}

@@ -1,5 +1,7 @@
 # Shiny Server base remediation
 
+**Latest owner direction, 2026-11-02:** the current build is intended for the live production PubApp once its actual data/release/runtime checks pass. The known DuckDB finding is nonblocking through the notice's **2026-11-10 UTC** patch deadline; develop/test our DuckDB fix separately for the dev PubApp. See [the dated release decision](../docs/duckdb_remediation_window_20261102.md). This supersedes the earlier strict DuckDB hold and no-activation directions below. Historical failed reports remain unchanged; data checks and other security findings still apply.
+
 Review date: 2026-09-08, with the 2026-10-22 dependency pins below. This is a
 tested source-build remediation; the exact application image and its
 operating-system package upgrades still require the release build, SBOM,

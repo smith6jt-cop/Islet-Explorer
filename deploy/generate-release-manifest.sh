@@ -114,7 +114,7 @@ scan_ref="$(required_evidence_value "${scan_attestation}" IMAGE_REF)" || exit $?
 scan_image_id="$(required_evidence_value "${scan_attestation}" IMAGE_ID)" || exit $?
 syft_version="$(required_evidence_value "${scan_attestation}" SYFT_VERSION)" || exit $?
 grype_version="$(required_evidence_value "${scan_attestation}" GRYPE_VERSION)" || exit $?
-[[ "${scan_result}" == pass-no-high-or-critical ]] || {
+[[ "${scan_result}" == pass-no-high-or-critical || "${scan_result}" == pass-with-duckdb-remediation-window ]] || {
   echo "ERROR: image evidence does not record a passing High/Critical gate." >&2
   exit 65
 }
@@ -180,18 +180,28 @@ brotli_hash="$(read_optional_evidence_value "${scan_attestation}" BROTLI_REPORT_
   exit 66
 }
 verify_evidence_hash BROTLI_REPORT_SHA256 "${brotli_report}" || exit $?
-python3 - "${brotli_report}" <<'PY'
-import json, re, sys
-report = json.load(open(sys.argv[1]))
-if report.get("result") != "pass" or report.get("cve") != "CVE-2026-111497" or report.get("errors") != []:
-    raise SystemExit("ERROR: Brotli verification did not pass.")
-duckdb = report.get("duckdb", {})
-if (report.get("schema") != "islet.brotli_verification/2"
-        or duckdb.get("version") != "1.5.2"
-        or duckdb.get("result") != 0 or duckdb.get("error_code") != -17
-        or not re.fullmatch(r"[0-9a-f]{64}", str(duckdb.get("library_sha256", "")))):
-    raise SystemExit("ERROR: rescan with the current DuckDB binary gate.")
-PY
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+decision_args=("${brotli_report}")
+if [[ "${scan_result}" == pass-with-duckdb-remediation-window ]]; then
+  duckdb_deferral="${attestations_dir}/${safe_name}.duckdb-deferral.json"
+  [[ -f "${duckdb_deferral}" && ! -L "${duckdb_deferral}" ]] || {
+    echo "ERROR: DuckDB remediation-window record is required." >&2
+    exit 66
+  }
+  verify_evidence_hash DUCKDB_DEFERRAL_SHA256 "${duckdb_deferral}" || exit $?
+  cmp -s "${duckdb_deferral}" "${script_dir}/duckdb-remediation-window.json" || {
+    echo "ERROR: DuckDB deferral does not match the recorded owner direction." >&2
+    exit 65
+  }
+  [[ "$(required_evidence_value "${scan_attestation}" PACKAGE_RESULT)" == pass-no-high-or-critical &&
+     "$(required_evidence_value "${scan_attestation}" DUCKDB_PATCH_BY)" == 2026-11-10 ]] || exit 65
+  decision_args+=("${duckdb_deferral}")
+fi
+evaluated_result="$(python3 "${script_dir}/evaluate-brotli-report.py" "${decision_args[@]}")"
+[[ "${evaluated_result}" == "${scan_result}" ]] || {
+  echo "ERROR: scan result disagrees with the measured report and remediation window." >&2
+  exit 65
+}
 
 grype_db_status="${attestations_dir}/${safe_name}.grype-db.json"
 grype_db_hash="$(read_optional_evidence_value "${scan_attestation}" GRYPE_DB_STATUS_SHA256)" || {
@@ -293,6 +303,10 @@ trap 'rm -f -- "${env_tmp}" "${manifest_tmp}"' EXIT
   printf 'IMAGE_REF=%s\n' "${image_ref}"
   printf 'GIT_COMMIT=%s\n' "${git_commit,,}"
   printf 'DATA_SCHEMA=%s\n' "${data_schema}"
+  printf 'SECURITY_RESULT=%s\n' "${scan_result}"
+  if [[ "${scan_result}" == pass-with-duckdb-remediation-window ]]; then
+    printf 'DUCKDB_PATCH_BY=2026-11-10\n'
+  fi
   printf 'EXPECTED_IMAGES=%s\n' "${expected_images}"
   printf 'CREATED_AT=%s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
   printf 'DATA_FILES=%s\n' "${data_files}"

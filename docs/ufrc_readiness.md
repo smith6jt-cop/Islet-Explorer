@@ -1,5 +1,7 @@
 # Islet Explorer UFRC readiness and evidence index
 
+**Latest owner direction, 2026-11-02:** the current build is intended for the live production PubApp once its actual data/release/runtime checks pass. The known DuckDB finding is nonblocking through the notice's **2026-11-10 UTC** patch deadline; develop/test our DuckDB fix separately for the dev PubApp. See [the dated release decision](duckdb_remediation_window_20261102.md). This supersedes the earlier strict DuckDB hold and no-activation directions below. Historical failed reports remain unchanged; data checks and other security findings still apply.
+
 **Scientific status, 2026-11-02:** dev v20 was stopped at the owner's request;
 both services are masked during [container security remediation](container_security_20261102.md).
 Production remains stopped. The [component comparison](v19_v20_component_comparison_20261102.md)

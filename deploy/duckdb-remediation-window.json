@@ -1,0 +1,14 @@
+{
+  "schema": "islet.duckdb_remediation_window/1",
+  "id": "duckdb-cve-2026-111497-until-20261110",
+  "cve": "CVE-2026-111497",
+  "component": "DuckDB 1.5.2 bundled Brotli",
+  "duckdb_version": "1.5.2",
+  "patch_by": "2026-11-10",
+  "deadline_timezone": "UTC",
+  "authorization_date": "2026-11-02",
+  "authorization": "Owner: duckdb should not block deployment; the guidance is we have several days to patch the already fixed but not merged duckdb issue.",
+  "deployment_direction": "The current build will go to the live PubApp; a separate DuckDB fix will be developed for the dev PubApp.",
+  "finding_disposition": "Unresolved; temporarily nonblocking within the notice's remediation window.",
+  "institutional_approval_claimed": false
+}

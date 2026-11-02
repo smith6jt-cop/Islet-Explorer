@@ -68,6 +68,16 @@ if [[ "${1:-}" == run ]]; then
         printf '{"cve":"CVE-2026-111497","result":"fail","errors":["vendored Brotli"]}\n'
         exit 1
       fi
+      if [[ "${MOCK_DUCKDB_DEFERRED:-0}" == 1 ]]; then
+        python3 - <<'PY'
+import json
+print(json.dumps({"schema": "islet.brotli_verification/2", "cve": "CVE-2026-111497",
+ "result": "fail", "errors": ["DuckDB's bundled Brotli fails the upstream block-switch regression (CVE-2026-111497)."],
+ "duckdb": {"version": "1.5.2", "result": 0, "error_code": -9,
+ "expected_error_code": -17, "library_sha256": "a" * 64}}))
+PY
+        exit 1
+      fi
       printf '{"schema":"islet.brotli_verification/2","cve":"CVE-2026-111497","result":"pass","errors":[],"duckdb":{"version":"1.5.2","result":0,"error_code":-17,"library_sha256":"%s"}}\n' \
         "$(printf 'a%.0s' {1..64})"
       ;;
@@ -204,6 +214,30 @@ expect_status 2 env PATH="${mock_bin}:${PATH}" MOCK_LOG_DIR="${mock_log}" \
   fail "failed Grype gate produced a passing attestation"
 [[ -f "${scan_fail_dir}/${safe_name}.syft.cyclonedx.json" && -f "${scan_fail_dir}/${safe_name}.sbom-corrections.json" ]] || \
   fail "failed Grype gate lost its original SBOM or correction record"
+
+python3 "${repo_root}/deploy/tests/test-duckdb-remediation-window.py"
+# Exercise the live-clock integration while the authorization is current. The
+# pure decision tests above also cover both dates outside the window.
+window_open=$(python3 - <<'PY'
+import datetime
+print(int(datetime.date(2026,11,2) <= datetime.datetime.now(datetime.timezone.utc).date() <= datetime.date(2026,11,10)))
+PY
+)
+deferred_scan="${work_dir}/scan-duckdb-deferred"
+if ((window_open)); then
+  env PATH="${mock_bin}:${PATH}" MOCK_LOG_DIR="${mock_log}" MOCK_IMAGE_ID="${image_id}" \
+    MOCK_DUCKDB_DEFERRED=1 "${repo_root}/deploy/scan-image.sh" "${image_id}" "${deferred_scan}"
+  grep -Fqx 'RESULT=pass-with-duckdb-remediation-window' "${deferred_scan}/${safe_name}.scan.txt" || \
+    fail 'dated deferral was misrepresented as a clean scan'
+  grep -Fqx 'DUCKDB_PATCH_BY=2026-11-10' "${deferred_scan}/${safe_name}.scan.txt" || fail 'deadline missing'
+  expect_status 2 env PATH="${mock_bin}:${PATH}" MOCK_LOG_DIR="${mock_log}" MOCK_IMAGE_ID="${image_id}" \
+    MOCK_DUCKDB_DEFERRED=1 MOCK_GRYPE_FAIL=1 \
+    "${repo_root}/deploy/scan-image.sh" "${image_id}" "${work_dir}/deferred-but-high"
+  [[ ! -e "${work_dir}/deferred-but-high/${safe_name}.scan.txt" ]] || fail 'deferral bypassed Grype'
+else
+  expect_status 1 env PATH="${mock_bin}:${PATH}" MOCK_LOG_DIR="${mock_log}" MOCK_IMAGE_ID="${image_id}" \
+    MOCK_DUCKDB_DEFERRED=1 "${repo_root}/deploy/scan-image.sh" "${image_id}" "${deferred_scan}"
+fi
 
 expect_status 64 "${repo_root}/deploy/build-image.sh" \
   --tag local/test:release --version release \
@@ -393,6 +427,53 @@ rehash_fixture() {
       LC_ALL=C sort -z | xargs -0 sha256sum > MANIFEST.sha256
   )
 }
+if ((window_open)); then
+  release_deferred="${work_dir}/release-duckdb-deferred"
+  make_release "${release_deferred}"
+  cp -- "${deferred_scan}"/* "${release_deferred}/attestations/"
+  expect_status 0 "${repo_root}/deploy/generate-release-manifest.sh" \
+    "${release_deferred}" deferred "${image_id}" "${commit}" 1
+  grep -Fqx 'SECURITY_RESULT=pass-with-duckdb-remediation-window' "${release_deferred}/release.env" || \
+    fail 'release lost its unresolved DuckDB status'
+  expect_status 0 "${repo_root}/deploy/verify-release.sh" "${release_deferred}"
+  expect_status 0 "${repo_root}/deploy/verify-release.sh" "${release_deferred}" --quick
+  for corruption in missing_authorization changed_authorization changed_report changed_scan strip_result clean_result; do
+    corrupt_release="${work_dir}/release-security-${corruption}"
+    cp -a -- "${release_deferred}" "${corrupt_release}"
+    case "${corruption}" in
+      missing_authorization) rm -- "${corrupt_release}/attestations/${safe_name}.duckdb-deferral.json" ;;
+      changed_authorization) printf '\n' >> "${corrupt_release}/attestations/${safe_name}.duckdb-deferral.json" ;;
+      changed_report) printf '\n' >> "${corrupt_release}/attestations/${safe_name}.brotli.json" ;;
+      changed_scan) printf '\n' >> "${corrupt_release}/attestations/${safe_name}.scan.txt" ;;
+      strip_result) sed -i '/^SECURITY_RESULT=/d' "${corrupt_release}/release.env"; rehash_fixture "${corrupt_release}" ;;
+      clean_result) sed -i 's/^SECURITY_RESULT=.*/SECURITY_RESULT=pass-no-high-or-critical/' "${corrupt_release}/release.env"; rehash_fixture "${corrupt_release}" ;;
+    esac
+    expect_status 1 "${repo_root}/deploy/verify-release.sh" "${corrupt_release}"
+    expect_status 1 "${repo_root}/deploy/verify-release.sh" "${corrupt_release}" --quick
+  done
+  # Even a rehashed release cannot extend or remove the deadline.
+  for deadline in 2026-12-31 2026-11-01 missing; do
+    release_deadline="${work_dir}/release-duckdb-${deadline}"
+    cp -a -- "${release_deferred}" "${release_deadline}"
+    sed -i "s/^DUCKDB_PATCH_BY=.*/DUCKDB_PATCH_BY=${deadline}/" "${release_deadline}/release.env"
+    rehash_fixture "${release_deadline}"
+    expect_status 1 "${repo_root}/deploy/verify-release.sh" "${release_deadline}"
+    expect_status 1 "${repo_root}/deploy/verify-release.sh" "${release_deadline}" --quick
+  done
+  for fault in missing tampered; do
+    release_bad_deferral="${work_dir}/release-deferral-${fault}"
+    cp -a -- "${release_deferred}" "${release_bad_deferral}"
+    if [[ "${fault}" == missing ]]; then
+      rm -- "${release_bad_deferral}/attestations/${safe_name}.duckdb-deferral.json"
+      expected_status=66
+    else
+      printf '\n' >> "${release_bad_deferral}/attestations/${safe_name}.duckdb-deferral.json"
+      expected_status=65
+    fi
+    expect_status "${expected_status}" "${repo_root}/deploy/generate-release-manifest.sh" \
+      "${release_bad_deferral}" deferred "${image_id}" "${commit}" 1
+  done
+fi
 for mutation in missing duplicate malformed unsupported missing_version duplicate_version; do
   release_bad="${work_dir}/release-${mutation}-count"
   cp -a -- "${release_expanded}" "${release_bad}"

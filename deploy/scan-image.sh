@@ -61,12 +61,28 @@ readonly r_packages="${output_dir}/${safe_name}.R-packages.tsv"
 readonly python_packages="${output_dir}/${safe_name}.python-packages.txt"
 readonly attestation="${output_dir}/${safe_name}.scan.txt"
 readonly brotli_report="${output_dir}/${safe_name}.brotli.json"
+readonly duckdb_deferral="${output_dir}/${safe_name}.duckdb-deferral.json"
 
 # Package-only scans miss the vulnerable Brotli shared objects in Pillow wheels.
 # Feed this checkout's gate into the exact image, so rescanning an older image
 # cannot silently use an old or missing in-image verifier. No service is started.
+brotli_status=0
 podman run --rm --network none -i --entrypoint /opt/islet-explorer-py/bin/python \
-  "${image_id}" - < "${script_dir}/verify-brotli.py" > "${brotli_report}"
+  "${image_id}" - < "${script_dir}/verify-brotli.py" > "${brotli_report}" || brotli_status=$?
+# Keep the raw failed report. The owner permits only this known DuckDB finding
+# during the notice's patch window; crashes and other decoder failures still fail.
+((brotli_status <= 1)) || exit "${brotli_status}"
+security_result="$(python3 "${script_dir}/evaluate-brotli-report.py" \
+  "${brotli_report}" "${script_dir}/duckdb-remediation-window.json")"
+if [[ ( "${security_result}" == pass-no-high-or-critical && "${brotli_status}" != 0 ) ||
+      ( "${security_result}" == pass-with-duckdb-remediation-window && "${brotli_status}" != 1 ) ]]; then
+  echo "ERROR: decoder process status disagrees with its measured report." >&2
+  exit 1
+fi
+if [[ "${security_result}" == pass-with-duckdb-remediation-window ]]; then
+  cp -- "${script_dir}/duckdb-remediation-window.json" "${duckdb_deferral}"
+  echo "DuckDB finding retained; nonblocking through the 2026-11-10 UTC patch deadline."
+fi
 
 syft_status=0
 syft "podman:${image_id}" -o "cyclonedx-json=${raw_sbom}" || syft_status=$?
@@ -91,7 +107,12 @@ podman run --rm --entrypoint /opt/islet-explorer-py/bin/python "${image_id}" \
   printf 'SCANNED_AT=%s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
   printf 'SYFT_VERSION=%s\n' "${syft_version}"
   printf 'GRYPE_VERSION=%s\n' "${grype_version}"
-  printf 'RESULT=pass-no-high-or-critical\n'
+  printf 'RESULT=%s\n' "${security_result}"
+  printf 'PACKAGE_RESULT=pass-no-high-or-critical\n'
+  if [[ "${security_result}" == pass-with-duckdb-remediation-window ]]; then
+    printf 'DUCKDB_DEFERRAL_SHA256=%s\n' "$(sha256sum "${duckdb_deferral}" | awk '{print $1}')"
+    printf 'DUCKDB_PATCH_BY=2026-11-10\n'
+  fi
   printf 'BROTLI_REPORT_SHA256=%s\n' "$(sha256sum "${brotli_report}" | awk '{print $1}')"
   printf 'SBOM_SHA256=%s\n' "$(sha256sum "${sbom}" | awk '{print $1}')"
   printf 'RAW_SBOM_SHA256=%s\n' "$(sha256sum "${raw_sbom}" | awk '{print $1}')"
@@ -104,4 +125,4 @@ podman run --rm --entrypoint /opt/islet-explorer-py/bin/python "${image_id}" \
   fi
 } > "${attestation}"
 
-echo "Security gate passed; artifacts written to ${output_dir}."
+echo "Security release decision: ${security_result}; artifacts written to ${output_dir}."

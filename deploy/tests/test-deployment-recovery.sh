@@ -15,6 +15,8 @@ fixture_deploy="${work_dir}/deploy"
 mkdir -p "${mock_bin}" "${fixture_deploy}"
 cp "${repo_root}/deploy/activate-release.sh" \
   "${repo_root}/deploy/rollback-release.sh" "${repo_root}/deploy/verify-release.sh" \
+  "${repo_root}/deploy/verify-release-security.py" "${repo_root}/deploy/evaluate-brotli-report.py" \
+  "${repo_root}/deploy/duckdb-remediation-window.json" \
   "${repo_root}/deploy/islet-explorer.container.in" "${fixture_deploy}/"
 
 # Exercise real activation, release verification, and rollback with isolated
