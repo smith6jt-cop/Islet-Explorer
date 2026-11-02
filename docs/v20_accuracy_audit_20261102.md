@@ -2,6 +2,8 @@
 
 **Status: not ready for production.** The audit found an app immune-list defect and an unresolved upstream typing issue. Production remains stopped. Neither a passing reconciliation nor a passing browser suite is scientific acceptance.
 
+**Latest follow-up:** [the classifier-to-cell discrepancy trace](endocrine_classifier_discrepancy_20261102.md) establishes where original pixel detection diverges from corrected whole-cell typing. All 20 classifier masks replay exactly; 7,413 of the 7,800 unresolved cells contain original above-threshold pixels. All 1,468 islets contain positive cells; 910 single objects and 38 clusters have no positive eligible member. The new level-selection gate rejects this inconsistency. The earlier retype/exclude question is superseded by the owner's instruction to resolve the classifier discrepancy.
+
 ## Verified evidence
 
 The audited candidate is `pubapps-2026-11-uniform-v20`, app commit `c974946`, image `sha256:517e969d2333744f609533b8f4a7fd217ce8a852fe30ef3551e0d805c2a0db00`. Its deployment `MANIFEST.sha256` hashes to `d9a29beda767eeb3beab57f6a5eb67836229dd8d9807c27208bd646366398d7c`; its separate `data/manifest.json` hashes to `81259bcaedb878f3039150006e18aded71abd8d9469090dae1064ad371bdec55` on both the workstation and VM. Live dev state and image identity were read from the VM; production still names v10-perf2 and is failed/stopped.
@@ -69,7 +71,7 @@ The reproducible measurement audit (`scripts/research/audit_unnamed_endocrine_me
 
 All 7,800 are negative for the four endocrine markers under the current corrected-value levels. Their median nucleus/cell pixel fraction is 0.783 and median cell area is 37.46 µm². Comparing raw means to a corrected-value threshold is only a diagnostic: it is not a calibrated alternative positivity method. Earlier endocrine calls also used a superseded measurement/threshold method and cannot simply be restored. The evidence does not justify discarding all 7,800 cells or forcing hormone names.
 
-Use `output/v20_unnamed_measurements_20261102_r2/` for the measurement report. The first report's named-cell geometry comparison used the old hormone spelling; r2 corrects that comparison to all 113,116 currently named endocrine cells. The unresolved-cell totals above were unaffected. Thirty returned diagnostic artifacts/scripts match their HPG SHA-256 values (`HPG_DIAGNOSTIC_SHA256SUMS`). Only the two new diagnostic scripts were sent to HPG; their exact hashes were recorded, and the HPG `.git` and scientific pipeline files were not updated.
+Use `output/v20_unnamed_measurements_20261102_r2/` for this first measurement report. The first report's named-cell geometry comparison used the old hormone spelling; r2 corrects that comparison to all 113,116 currently named endocrine cells. The unresolved-cell totals above were unaffected. Thirty returned diagnostic artifacts/scripts match their HPG SHA-256 values (`HPG_DIAGNOSTIC_SHA256SUMS`). At that stage only the two diagnostic scripts were sent to HPG. The subsequent classifier trace used committed source updates and an explicit changed-file plus `.git` transfer; its separate provenance, native-raster measurements and 68 returned artifact hashes are recorded in the follow-up report. Existing scientific outputs were not overwritten.
 
 ### New release check
 
@@ -85,7 +87,7 @@ All 20 existing DG lymphatic sheets were visually rechecked in this audit (whole
 
 ## Remaining work before promotion
 
-1. Resolve the unnamed-cell typing discrepancy using the diagnostic evidence above. The owner has been asked whether cells still lacking endocrine evidence after measurement/boundary review should return to general marker-based typing (keeping object membership separately) or be excluded from cell-type analyses. This disposition is not decided by the audit. In particular, the older instruction preserving cluster/single identity by object cannot silently be replaced by forced hormone names.
+1. Reconcile cell selection and corrected-mean positivity with the original classifier evidence, using the [completed causal trace](endocrine_classifier_discrepancy_20261102.md). The earlier general-typing/exclusion question is withdrawn: a negative corrected mean does not establish absent original endocrine signal. The new level-selection gate detects fully negative objects; the separate release gate still detects unnamed members of otherwise positive objects. No replacement identity or threshold has been established.
 2. Apply only a scientifically justified correction; if typing or measurements change, run the required image review and HPG workflow into a fresh candidate, then regenerate assembly, embeddings and release data.
 3. Complete the remaining geometry/measurement and UI/export accuracy checks; do not infer their completion from hash parity.
 4. Obtain the owner's QuPath/dev acceptance of the corrected candidate. Then build and stage its immutable image/data release with the immune fix, run full parity and browser/access acceptance, and promote through the established deployment procedure.
