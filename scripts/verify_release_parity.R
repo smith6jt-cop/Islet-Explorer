@@ -111,7 +111,11 @@ parity_runtime <- function(repo, root) {
                     "CD45_RULE_LABEL", "CD45_TOP_MARKER_LABEL", "root_has_top_marker_labels",
                     "root_cd45_is_rule_label", "top_marker_labels", "PHENOTYPE_GROUP_AGGREGATES",
                     "phenotype_group", "is_phenotype_aggregate", "phenotype_aggregate_members",
-                    "phenotype_aggregates_for", "add_phenotype_aggregate_columns")
+                    "phenotype_aggregates_for", "add_phenotype_aggregate_columns",
+                    # drilldown_helpers.R builds its palettes at load time with the macrophage-profile and
+                    # top-marker families (app commits 82ce23e-270d000)
+                    "MACROPHAGE_LABELS", "MACROPHAGE_MARKERS", "macrophage_collapse", "macrophage_signs",
+                    "TOP_MARKER_LABELS")
   expressions <- parse(file.path(repo, "app", "shiny_app", "R", "00_globals.R"))
   for (expr in expressions) {
     if (is.call(expr) && identical(expr[[1]], as.name("<-")) &&
