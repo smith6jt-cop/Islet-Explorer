@@ -12,6 +12,9 @@
 >   - root `data/development/uniform-20donor-20261030-v20`;
 >   - QuPath project `data/development/qupath-review-20261030-v20`;
 >   - the final reconciliation passed on all 20 images.
+> - **v20 on the dev site (2026-11-02 06:07 UTC):** release `pubapps-2026-11-uniform-v20` (commit c974946) runs on
+>   the staging instance at `https://devislet-explorer.rc.ufl.edu/islet-explorer/`; production is unchanged and
+>   stopped. Record: `docs/ufrc_readiness.md`, "Candidate c974946 with the v20 root".
 > - **Open:**
 >   - the owner's review of v20 in QuPath;
 >   - step 6, whether Nerve and Capillary also need the despeckle (asked 2026-11-01).
