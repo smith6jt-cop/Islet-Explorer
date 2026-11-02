@@ -58,7 +58,7 @@
     },
     "picomatch": "^4.0.7",
     "proxy-addr": "2.0.8",
-    "follow-redirects": "1.16.1",
+    "follow-redirects": "1.16.2",
     "body-parser": "2.4.0"
   },
   "license": "AGPL-3.0",

@@ -26,11 +26,12 @@ source_url=https://api.github.com/repos/rstudio/shiny-server/tarball/$source_rev
 # 2026-10-24 adds one runtime dependency, permessage-deflate 0.1.7 (below).
 # 2026-10-25 adds a fifth pin, body-parser 2.4.0 as an override (GHSA-27r3-jxmh-p828),
 # whose dependency range moves qs to 6.16.1; see BASE_HARDENING.md.
+# 2026-11-01 moves the follow-redirects override to 1.16.2 (GHSA-mrwp-f3q8-3g9p); see BASE_HARDENING.md.
 upstream_package_sha256=191d5ee18b8b1263a3fff0109634e55f2bec78e13f3db004b751c8c0342bb714
 upstream_shrinkwrap_sha256=914bc927be865cb448c2eceff03fad641b93bea962c2bbacc485a14309a6b4fd
 pinned_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/shiny-server
-pinned_package_sha256=1b57c364d942417f015578676f2490c9c4bff72331a3747a5e456e4b14c36892
-pinned_shrinkwrap_sha256=d3ddc237a34ab5bd141881a65e807dbe8a738accfc62041d3285209448a294a9
+pinned_package_sha256=b346526e15c01031143d04d381d8b70c6e7b85bba8e11c0ab0883230e68dd475
+pinned_shrinkwrap_sha256=359025ba5e91a2f82fafd77a513e3a75183d223168bcc8550c5c892af1bd57e9
 # 2026-10-24: the WebSocket transport offers permessage-deflate (the app's figure messages
 # shrink about five times on the wire, see BASE_HARDENING.md). The pinned manifest adds
 # permessage-deflate 0.1.7 (its one dependency, safe-buffer, is already locked), and
@@ -38,8 +39,12 @@ pinned_shrinkwrap_sha256=d3ddc237a34ab5bd141881a65e807dbe8a738accfc62041d3285209
 # Both the upstream file and the patched result are hash-checked.
 upstream_sockjs_sha256=f5bc3729f08b2110f34d0196cb2e8b27a305792c4f7e255ac23e60d04795a253
 patched_sockjs_sha256=9c671905f16d61cb1b93c71717b2762266d0f08cf31e2cffc5635b01f7f2af32
-node_version=v24.20.0
-node_sha256=2f2c0da162318f0de47665410c7c8c2ed3d36c8f3105de4bbc61176c70a7cbf2
+# The source revision's .nvmrc names v24.20.0. Since 2026-11-01 the build uses a later patch
+# release of the same LTS line, v24.22.2, which carries the October 2026 Node.js security
+# release (CVE-2026-111497, -105482, -105483, -106069); see BASE_HARDENING.md.
+upstream_node_version=v24.20.0
+node_version=v24.22.2
+node_sha256=48cc0e21e048790e54c0cf5749c2725005313d652651c40b7a21feb9697aaf75
 node_url=https://nodejs.org/dist/$node_version/node-$node_version-linux-x64.tar.xz
 work_dir=$(mktemp -d /tmp/islet-shiny-build.XXXXXXXX)
 trap 'rm -rf "$work_dir"' EXIT
@@ -53,7 +58,7 @@ printf '%s  %s\n' "$source_sha256" "$work_dir/source.tar.gz" \
   "$node_sha256" "$work_dir/node.tar.xz" | sha256sum --check --strict
 tar -xzf "$work_dir/source.tar.gz" --strip-components=1 -C "$work_dir/source"
 cd "$work_dir/source"
-[[ "$(cat .nvmrc)" = "$node_version" ]]
+[[ "$(cat .nvmrc)" = "$upstream_node_version" && "${node_version%%.*}" = "${upstream_node_version%%.*}" ]]
 
 # Offer permessage-deflate on the SockJS WebSocket transport (2026-10-24). SockJS hands
 # `faye_server_options` to faye-websocket, whose `extensions` option negotiates the
@@ -154,18 +159,19 @@ ln -s /usr/bin/pandoc "$output_dir/ext/pandoc/pandoc"
 [[ ! -e "$output_dir/node_modules/mocha" ]]
 "$output_dir/bin/shiny-server" --version > "$evidence_dir/staged-version.txt"
 python3 - "$evidence_dir" "$source_revision" "$source_url" "$source_sha256" \
-  "$node_version" "$node_url" "$node_sha256" \
+  "$node_version" "$node_url" "$node_sha256" "$upstream_node_version" \
   "$upstream_package_sha256" "$upstream_shrinkwrap_sha256" \
   "$pinned_package_sha256" "$pinned_shrinkwrap_sha256" <<'PY'
 import json, pathlib, sys
-(dest, revision, source_url, source_hash, node_version, node_url, node_hash,
+(dest, revision, source_url, source_hash, node_version, node_url, node_hash, upstream_node_version,
  upstream_package, upstream_shrinkwrap, pinned_package, pinned_shrinkwrap) = sys.argv[1:]
 pathlib.Path(dest, 'build-provenance.json').write_text(json.dumps({
     'upstream_revision': revision,
     'source_url': source_url, 'source_sha256': source_hash,
     'node_version': node_version, 'node_url': node_url, 'node_sha256': node_hash,
+    'upstream_node_version': upstream_node_version,
     'dependency_policy': ('upstream npm-shrinkwrap.json regenerated with five security pins '
-                          '(handlebars 4.7.10, compression 1.8.2, proxy-addr 2.0.8, follow-redirects 1.16.1, '
+                          '(handlebars 4.7.10, compression 1.8.2, proxy-addr 2.0.8, follow-redirects 1.16.2, '
                           'body-parser 2.4.0 with qs 6.16.1) '
                           'plus permessage-deflate 0.1.7 for WebSocket compression (lib/proxy/sockjs.js '
                           'patched, both hashes checked); npm ci; omit dev at runtime'),
