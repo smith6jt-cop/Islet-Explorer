@@ -1,5 +1,15 @@
 # Data Provenance — Islet Explorer
 
+**Current selection, 2026-11-02:** the owner selected frozen v19 endocrine calls,
+with v19/v20 compared by component. Both roots share 3,199,606 eligible UUIDs and
+the same Tissue/cell/endocrine geometry. The DG Lymphatic-only rerun unintentionally
+changed shared calibration; corrected code now binds calibration independently
+and verifies all markers and identities. Diagnostic replays are evidence, not
+assembled app roots. No corrected mixed candidate has been accepted or deployed.
+See [the component comparison](../docs/v19_v20_component_comparison_20261102.md),
+[workflow guide](../docs/workflow_user_guide.md), and [handoff](../docs/handoff_20261102.md).
+Older lineage sections below are retained as historical records.
+
 > **2026-10-15 owner directive:** donor 78 (HDL078 / HPAP-078) is removed from the app and all analysis ([record](../docs/owner_directive_20261015.md); `scripts/excluded_donors.csv`). Rows and counts below that include HPAP-078 describe historical staging. The [recovery record](../docs/owner_directive_20261015.md#original-15-donor-files) lists which files behind the original 15 donors were located.
 
 This document describes the canonical data lineage for the Islet Explorer app.

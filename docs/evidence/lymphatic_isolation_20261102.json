@@ -1,0 +1,64 @@
+{
+  "scope": "Diagnostic isolation of initial v20 option1 to DG, not a selected mixed candidate or release",
+  "passed": true,
+  "images": 20,
+  "totals": {
+    "context_baseline": 3525977,
+    "context_candidate": 3525977,
+    "identity_baseline": 3199606,
+    "identity_candidate": 3199606,
+    "redsea_baseline": 3525977,
+    "redsea_candidate": 3525977,
+    "lymphatic_footprint_union": 131983,
+    "lymphatic_membership_or_overlap_changed": 124427,
+    "baseline_named_endocrine": 113134,
+    "context_changed_cells": 124427,
+    "context_unexpected_cells": 0,
+    "label_changes_neither_lymphatic": 0,
+    "label_changes_with_unchanged_lymphatic_geometry": 0,
+    "identity_changed_cells": 5765,
+    "identity_unexpected_cells": 0,
+    "redsea_changed_cells": 0,
+    "redsea_unexpected_cells": 0
+  },
+  "historical_label_changes": 715,
+  "historical_label_changes_outside_lymphatic_footprints": 303,
+  "corrected_label_changes": 352,
+  "corrected_label_changes_all_involve_lymphatic": true,
+  "source_sha256": {
+    "scripts/uniform/typing/identity.py": "cf3061e8bbc09782b23f1c18802768493aa8f182f1245481fae8e1514aaeaf19",
+    "scripts/uniform/typing/structure_update.py": "b1f176d47caa3ab4008be58c6dd96d8d378d4dd80bae0072515e9ffb979b4235",
+    "scripts/uniform/typing/calibration_context.py": "479c2dbb7b0c9d93775efa250b54a7aedf8c8feb0e741a2684898dc4d0ce61e7",
+    "scripts/uniform/typing/area_coverage.py": "0684db0e5475f253776f47de37b372de065fc2f309cf23ba0724ad274f5099d2",
+    "scripts/uniform/typing/registry.py": "2fb22bd2fe368983c02c8e4137ea7aa6d0fa54ebf81cccffa213e8111ed33dfa",
+    "scripts/uniform/typing/levels.py": "f08d79bac51197da60981e95a8172f15b9deda691d27f86be5ec41eebe6f62d1",
+    "scripts/uniform/typing/canary.py": "ba063d776148dc6e877976031b5652a0602ffb3caad4dffb178868eb00b35293",
+    "scripts/uniform/audit_structure_update.py": "41334e8541e7ffb04e6646213b0dfacdfa3fe493b5bddf4d9d44f58a9d3b5f24"
+  },
+  "evidence": [
+    {
+      "path": "output/v19_v20_component_comparison_20261102/methods/lymphatic_controlled_contrast/summary.json",
+      "sha256": "a2c30c149a20760d70133dd2ea0bf1e2e88430b0dac3230ca62b3dbc303b0c8d"
+    },
+    {
+      "path": "output/v19_v20_component_comparison_20261102/methods/audit_isolated_replay_v2/summary.json",
+      "sha256": "32451f1234b9e57068b1d5cd5b0972f33208c0626c9cfdab813f5cafb18f8ebb"
+    },
+    {
+      "path": "output/v19_v20_component_comparison_20261102/methods/lymphatic_isolated_replay_v2/integration_result.json",
+      "sha256": "fa6fa0127680c4409acf9b64807487f81a03fb140b42e0aa0d9e000cadd47895"
+    },
+    {
+      "path": "output/v19_v20_component_comparison_20261102/methods/lymphatic_isolated_replay_v2/calibration_cli_refusal_checks.json",
+      "sha256": "216cbb968369a53df5a67bfc6bc609cfedc4e4b6376ddf02d7698fd291f0347e"
+    },
+    {
+      "path": "output/v19_v20_component_comparison_20261102/methods/lymphatic_initial_control/baseline_replay_comparison.json",
+      "sha256": "c58cdcd4f521b261c7adbe4dd3795415aa3a2284f4a3c00432161c8d8627cfb9"
+    },
+    {
+      "path": "output/v19_v20_component_comparison_20261102/calibration_context_binding_realdata_v1/verification_r2.json",
+      "sha256": "faf42a28fbba5b784f5c688ffdad05ee9deb4933db655b75f759722bd874746c"
+    }
+  ]
+}

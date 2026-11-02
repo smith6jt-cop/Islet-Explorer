@@ -1,5 +1,13 @@
 # Typing processing on HiPerGator (owner decisions of 2026-10-31)
 
+**2026-11-02 correction:** the old `run_v20.py` full-calibration phase is historical
+and must not be used for a Lymphatic-only revision. Use the explicit calibration/context
+baseline and automatic invariant audit in [the workflow guide](workflow_user_guide.md).
+The [component comparison](v19_v20_component_comparison_20261102.md) records the real-data
+regression and corrected diagnostic replay. Local replay evidence does not replace a fresh
+authoritative HPG candidate. Source synchronization uses the explicit changed-file rule below;
+sealed scientific inputs and the four protected modules are never overwritten.
+
 The remaining steps of [the 2026-10-31 typing handoff](typing_handoff_20261031.md) run on HiPerGator (HPG) from a
 copy of the workstation's data. Owner decisions, 2026-10-31:
 

@@ -1,13 +1,19 @@
 # Islet Explorer — User Guide
 
-Interactive web application for exploring pancreatic islet CODEX multiplexed imaging data from nPOD donors. Tracks insulin loss, immune infiltration, and cellular microenvironment changes across the ND → Aab+ → T1D disease progression.
+Interactive web application for exploring pancreatic islet CODEX multiplexed imaging data from nPOD donors. Compares endocrine composition, immune cells and spatial microenvironments across ND, Aab+ and T1D donor groups; these cross-sectional observations do not establish disease progression.
 
-**Requested reviewer URL (use only after UFRC confirms production access)**:
+**2026-11-02:** this guide covers app features. For the complete data-to-app process, use
+[the workflow user guide](workflow_user_guide.md). Dev last served unaccepted v20; dev and
+production are now stopped and masked during [security remediation](container_security_20261102.md).
+V19 endocrine is selected within a [component comparison](v19_v20_component_comparison_20261102.md), and the
+Lymphatic isolation fix is verified diagnostically; no corrected mixed app root is available yet.
+
+**Provisioned reviewer URL (production currently stopped)**:
 `https://islet-explorer.rc.ufl.edu/islet-explorer/`
 
-> **Publication profile (August 2026):** Reviewers see Plot, Trajectory, Viewer,
-> and Spatial only. AI, Statistics, and Inflammation are disabled. The concise,
-> release-current instructions are in [reviewer_guide.md](reviewer_guide.md). This longer
+> **Publication profile:** The enabled tabs are Plot, Trajectory, Spatial and Viewer,
+> in that order. AI, Statistics, and Inflammation are disabled. The concise
+> access and feature instructions are in [reviewer_guide.md](reviewer_guide.md). This longer
 > guide retains descriptions of dormant development modules for maintainers; those
 > sections are not claims about the reviewer deployment. The detailed measurements and
 > limitations behind the current composition DPT/PAGA method are recorded in
@@ -39,22 +45,27 @@ Interactive web application for exploring pancreatic islet CODEX multiplexed ima
 The reviewer release validates a checksummed manifest, loads prepared islet summaries from
 read-only Parquet, queries large spatial tables through embedded DuckDB, and reads the
 trajectory H5AD and composition feature table as separate immutable artifacts. The
-underlying cohort contains:
+frozen v19 and v20 comparison roots both contain:
 
-- **15 nPOD donors** (ND, Aab+, T1D); the trajectory H5AD has **5,214 observations**,
-  while the prepared core-area and composition tables each have **5,382 rows**
-- **31 protein markers** (mean expression per islet)
-- **Trajectory source coordinates and marker values**, plus a separately released
-  phenotype-composition matrix used to refit diffusion pseudotime in the app
-- **21 upstream phenotype labels**, of which 12 are retained in reviewer-facing selectors
-- **Donor demographics** (age, sex, autoantibody status)
-- **62 neighborhood metrics** (peri-islet composition, immune infiltration, enrichment z-scores, distances)
-- **QuPath groovy data** (targets, markers, composition, LGALS3)
+- **20 nPOD donors:** 7 ND, 7 Aab+ and 6 T1D. Donor 78 is excluded.
+- **3,199,606 analysis-eligible cells**, with the same UUIDs in both versions.
+- **4,848 analysed endocrine objects** in the assembled metadata: 1,468 Islets and
+  3,380 Clusters. The 5,227 Singles are counted separately, outside this object-analysis
+  cohort. These app counts are not the full upstream geometry inventory.
+- **1,392 saved endocrine-composition embedding objects**, with at least ten core cells.
+- **31 exported marker-value channels**, donor demographics, core/peri composition,
+  and spatial structure measurements. Marker availability and measurement definitions
+  come from the selected root; a measured channel is not necessarily a typing marker.
 
-The source preparation measured 48,438 target rows, 64,584 marker rows, and 21
-paired core/peri feature definitions. These are distinct table counts; filters
-and available measurements determine the count in each view. The release
-manifest is authoritative for the frozen reviewer data.
+These counts describe the two frozen comparison artifacts, not an accepted corrected
+release. The root's `uniform_release.json`, label groups and generated release manifest
+define each artifact. Displayed counts also depend on the current filters and available
+measurements. Phenotype choices are derived from that root rather than a fixed list of
+21 labels. See [the component comparison](v19_v20_component_comparison_20261102.md).
+
+**Historical compatibility data:** the earlier 15-donor root had 5,214 trajectory H5AD
+observations and 5,382 prepared core-area/composition rows. Its 21 source labels and
+19-rule CSV describe that older pipeline only; they are not the current cohort contract.
 
 Local development retains the legacy H5AD/Excel loader for pipeline work. Production fails
 closed if a required manifest artifact or hash is missing; it does not silently fall back
@@ -65,7 +76,7 @@ to a different scientific dataset.
 | Group | Color | Description |
 |-------|-------|-------------|
 | **ND** | Steel Blue (#4477AA) | Non-diabetic control donors |
-| **Aab+** | Burnt Umber (#CC6633) | Autoantibody-positive (pre-T1D) |
+| **Aab+** | Burnt Umber (#CC6633) | Autoantibody-positive donors |
 | **T1D** | Forest Green (#228833) | Type 1 diabetic donors |
 
 Colors are configurable via the **Donor Status Colors** palette selector (Paul Tol default, Bright, Okabe-Ito, Diverging). The selector is available on the Plot sidebar, Trajectory tab, and Spatial tab — all stay synced.
@@ -74,41 +85,49 @@ Colors are configurable via the **Donor Status Colors** palette selector (Paul T
 
 ## Cell Phenotypes & Marker Rules
 
-The upstream data carry 21 phenotype labels. The canonical gating CSV contains 19
-hierarchical phenotype rules; four additional residual/aggregate definitions are documented
-in the app. Nine source labels are retired from reviewer-facing selectors, legends, and
-tests, leaving 12 active phenotype choices. The broader rule reference remains visible for
-provenance and interpretation of source artifacts.
+Phenotype choices, group totals and marker-profile names follow the loaded root's frozen
+identity tables and label groups. The current typing registry is
+[`scripts/uniform/typing/registry/`](../scripts/uniform/typing/registry/); an existing frozen
+root must be interpreted with its recorded policy and provenance, not silently reinterpreted
+using a newer registry. Group choices such as **Endocrine (all)**, **T Cell (all)** and
+**Macrophage (all)** are aggregates, not additional cell identities.
 
 ### How to read a rule
 
-Each phenotype is defined by which markers must be **positive** (`+`) and which must be **negative** (`−`). Rules are hierarchical: a sub-phenotype inherits its parent's constraints. For example, the displayed rule for `CD8 T cell` is the union of its row (`CD8a+`, `CD4−`) and its parent `T cell` row (`CD3e+`, `CD20−`, `CD68−`, `CD163−`, …) and so on. Some categories use **any-of** logic (e.g. `Endothelial` requires at least one of `PDPN+ / CD34+ / CD31+`); the rule text spells that out explicitly when it applies.
+`+` and `−` describe positivity against the image's recorded marker level. Final v20
+uses whole-cell positivity; CD3e, CD68, CD163 and ECAD use separate membrane measurements
+when comparing competing identities. Ki67 uses the nucleus upstream, but neither frozen
+v19 nor v20 exports that state to the app yet.
+
+Endocrine names require endocrine-object membership and marker evidence. The final v20
+method names a hormone-positive cell by its unique highest scaled INS, GCG or SST value;
+CHGA-positive cells without a positive hormone have the explicit **CHGA+ hormone-negative**
+label. Pixel-classifier positivity and corrected whole-cell positivity are different
+measurements. Retained `Islet`, `EndocrineCluster` or `EndocrineSingle` labels must not be
+presented as resolved endocrine types. The unresolved Cluster/Single definitions and
+inconsistent endocrine aggregates remain release-blocking discrepancies.
+The owner selected v19 endocrine decisions for the eventual combined candidate, which has
+not yet been assembled. See [the discrepancy trace](endocrine_classifier_discrepancy_20261102.md).
+
+Under the v20 structure-only rule, **Endothelium Blood Vessel**, **Endothelium Lymphatic**
+and **Neural** require the corresponding structure membership, more than half of the cell's
+area inside it, a positive defining marker and the qualifying highest fold over level.
+PDPN/CD34/CD31 positivity alone does not define a current generic Endothelial cell.
+Structure area measurements and structure-qualified cell counts are separate endpoints.
 
 ### Where the rules appear in the app
 
 - **"?" help icons** (since 2026-10-20, one per card or control panel): a card or Data / View controls panel with something to explain has a "?" beside its title, and its popover explains only that card or panel. Click the icon to open it; click elsewhere or press Escape to close it. Only one is open at a time.
-- **"Phenotype rules — marker definitions" button**, at the top of each tab's Data controls help, opens a reference table with the 19 CSV rules and 4 explicitly described residual/aggregate definitions. It is a provenance reference, so it is broader than the labels offered in reviewer selectors. The Spatial tab's Data controls help also lists each offered phenotype's definition in words.
+- **"Phenotype rules — marker definitions" button**, at the top of each tab's Data controls help, opens the root's rule reference. Historical fallback descriptions are not authority for newer typing; use the frozen root's manifest and the workflow record when auditing a definition. The Spatial tab's phenotype choices follow its actual data labels.
 - There are no inline hints under the phenotype selectors and no rules list in the drill-down panel; both were removed on 2026-10-17, when all help text moved into the "?" popovers.
 
-### The 15 markers used by the gating CSV
+### Historical rule references
 
-`INS, GCG, SST, SMA, CD20, CD3e, CD68, CD163, CD8a, CD4, HLADR, PDPN, CD34, CD31, B3TUBB`.
-The H5AD/scVI panel contains 31 markers; additional markers are available for
-visualization but are not part of the gating CSV. An upstream template once listed
-`CD99` and `CD56`, but neither exists in this 31-plex panel, so those phantom columns
-were removed from the app's canonical rule file.
-
-### Residual categories
-
-Four source-artifact definitions are not formally gated by the CSV. They remain in the
-reference modal for provenance but are retired from reviewer-facing selectors:
-
-- **ECAD+** — epithelial cells (E-cadherin+); residual ductal/exocrine bucket from the upstream single-cell pipeline.
-- **APCs** — antigen-presenting cells aggregate (HLADR+ myeloid lineage). Used by neighborhood metrics.
-- **Structural** — fallback for fibroblast/stroma-like cells negative for every endocrine and immune marker.
-- **Unknown** — cells matching no rule above.
-
-These are described as such inside the in-app modal so users know when a label is a residual bucket rather than a strictly gated phenotype.
+`data/phenotype_rules.csv` retains the older 19-rule hierarchy and its residual categories
+for compatibility with historical data. Its 15-marker list, ECAD+/APCs/Structural/Unknown
+buckets and marker-only Endothelial route must not be used to explain the final v20
+workflow. Current macrophage profiles encode CD68/CD163/LGALS3/CD4 states; conflicts and
+unresolved start classes remain visible as recorded data rather than being renamed.
 
 ---
 
@@ -147,7 +166,9 @@ of Plot. A caption reports how many rows the most recent run excluded.
 
 ### Why this matters
 
-With thousands of islet measurements from only 15 donors, a single extreme islet within one donor can dominate the group mean and pull mixed-effects estimates. Keeping the rule visible (count badge + ghost × markers) means you can audit at a glance whether a striking effect is being driven by one or two unusual islets.
+Multiple endocrine objects come from each donor. A single extreme object can influence
+a summary without representing an independent donor. The count badge and ghost markers
+make the effect of the displayed outlier rule inspectable.
 
 ---
 
@@ -196,7 +217,7 @@ The Plot tab is the primary exploration interface. It has a **sidebar** (left) a
 - **Feature/Composition selector**: Choose what to plot
   - *Scatter mode*: Select from markers (31 proteins) or targets (hormone intensities)
   - *Composition mode*: Three option groups (the previous "Immune Metrics" group of 5 hand-curated ratios was removed in Apr 2026 — use the Spatial tab's per-phenotype enrichment / proportion / distance views instead):
-    - **Phenotype Proportions** — the 12 retained reviewer-facing phenotypes from the 21-label source artifact. The original 15 retain historical labels; five additions use reviewed reconstructed rules, so pooled phenotype comparisons span both methods.
+    - **Phenotype Proportions** — the loaded root's phenotype groups and labels. All 20 donors in the uniform comparison roots use the recorded uniform workflow; the older original-versus-additions typing split is historical.
     - **Peri-Islet Proportions** — proportions of those retained phenotypes in the 20 μm expansion zone around the islet
     - **Core+Peri Proportions** — combined phenotype proportions using core and peri cell counts
 
@@ -239,10 +260,10 @@ The word *density* is reused in several places with different denominators. Each
 
 ## Trajectory Tab
 
-Visualizes one composition-derived diffusion-pseudotime ordering. For each selected
-cell-count cohort, the app uses log-normalized core plus 20 µm peri-islet cell-type
+Visualizes one composition-derived diffusion-pseudotime ordering. For the fitted cohort
+of endocrine objects with at least ten core cells, the app uses log-normalized core plus 20 µm peri-islet cell-type
 composition, a cosine 15-nearest-neighbor graph, and the ND islet nearest the ND centroid
-as the root. Production uses scanpy DPT; destiny is the explicit axis fallback when
+as the root. The implementation uses scanpy DPT; destiny is the explicit axis fallback when
 scanpy is unavailable. PAGA/ForceAtlas2 supplies the separate two-dimensional graph card.
 
 ### Layout
@@ -262,7 +283,13 @@ The Trajectory tab uses a full-width layout (no sidebar). All controls are inlin
 
 3. **Multi-Feature Heatmap** — Z-scored expression of user-selected markers along pseudotime bins. Default markers: INS, GCG, SST, CD3e, CD8a, CD68, CD45, HLADR. Blue-white-red diverging colormap, z-scores clamped to [-2.5, 2.5].
 
-**Y-axis scale on the scatter** — Marker values are **scVI-normalized expression** (bounded roughly `0–1`), aggregated as the **mean across the cells in each islet**. They are *not* raw fluorescence intensity and *not* z-scores. Values almost never reach zero because (1) the scVI output for an individual cell rarely sits at exactly 0, and (2) averaging the cells in an islet smooths out any remaining zeros. The **multi-feature heatmap** below the scatter, by contrast, IS z-scored per marker across pseudotime bins (intentional — it standardizes markers for cross-marker comparison).
+**Y-axis scale on the scatter** — The frozen v19/v20 roots export per-image marker values
+scaled as `(x − level) / (p99.9 − level)`, clipped to `[0, 1]`, then averaged over the object's
+core cells. Their measurement and level provenance is in `uniform_release.json`; these
+are not scVI values or raw fluorescence. The multi-feature heatmap separately standardizes
+each marker across pseudotime bins. The owner's acquisition restriction means CODEX INS
+intensity is not an approved quantitative between-donor hypothesis endpoint; see
+[the measurement review](ins_measurement_review_20261026.md).
 
 4. **UMAP Cards** — The islet-level UMAP (on a uniform root, the endocrine-composition layout the
    Spatial tab shows, for the same ten-cell objects) is shown once by donor status and once by the
@@ -298,16 +325,16 @@ The Trajectory tab uses a full-width layout (no sidebar). All controls are inlin
 
 ### Cell-Count-Weighted Trends
 
-Trend lines are weighted by `log1p(cell count)` so that well-measured islets (many cells) drive the biological signal while noisy small islets (few cells) contribute proportionally less. This is important because 60% of islets have ≤10 cells — their aggregated expression values are inherently noisier.
-
-Hover over any point to see its cell count in the tooltip (e.g., "Cells: 3"). Small islets at unexpected positions (e.g., ND islets at high pseudotime) typically have very few cells.
+Trend lines use `log1p(cell count)` weights. Inspect the cell count in each point's tooltip;
+the current fitted cohort includes only objects with at least ten core cells. Weighting and
+the cohort definition are analytical choices, not evidence of biological progression.
 
 ### Interpretation Limits
 
 Pseudotime is an ordering of compositional similarity, not elapsed time or proof of a
-causal ND → Aab+ → T1D transition. Donor identity is a major source of variation in this
-15-donor cohort. The audit found no donor-level separation of ND and Aab+ on the legacy
-axes, so avoid presenting a clean, evenly spaced three-stage progression. Treat marker
+causal ND → Aab+ → T1D transition. Multiple objects from one donor are not independent
+donor replicates. Legacy 15-donor trajectory findings do not validate the current 20-donor
+candidate or its changed cell identities. Treat marker
 trends as exploratory and preserve the displayed cell range, engine, scale, and donor
 context in any exported interpretation.
 
@@ -334,9 +361,14 @@ Embedded OME-TIFF viewer (Avivator) for full-resolution multiplexed imaging data
 
 ## Statistics Tab
 
+**Dormant historical module:** this tab is disabled in the publication profile. The
+controls below document its implementation, not a current reviewer feature or acceptance
+of its historical analyses.
+
 Rigorous statistical analysis of the currently selected feature from the Plot sidebar. The Statistics tab **shares the Plot sidebar** — changing the feature, filters, or disease groups in the sidebar updates both Plot and Statistics simultaneously.
 
-An **"About this tab"** banner at the top summarizes what the tab does, the donor cohort (N=15), and the primary test (a donor-aware mixed-effects model with donor as a random intercept). Each section heading carries a small **(?)** icon — hover it for a one-line description of that section's contents.
+An **"About this tab"** banner summarizes the module and its donor-aware mixed-effects
+model. Historical hard-coded cohort counts are not the current release inventory.
 
 The tab uses a **5-section narrative layout** that walks you through a logical analytical flow, with numbered headings and brief explanations at each step.
 
@@ -354,7 +386,7 @@ The tab uses a **5-section narrative layout** that walks you through a logical a
 
 Three equal-height cards showing the core statistical results:
 
-- **Hypothesis Testing** (left): Global test + pairwise comparisons table with Cohen's d effect sizes, 95% CIs, and BH-corrected p-values. The primary "Overall" row uses a mixed-effects model with donor as random intercept. The "Donor-level means" row averages islets within each donor (N=15) as a conservative cross-check.
+- **Hypothesis Testing** (left): Global test + pairwise comparisons table with Cohen's d effect sizes, 95% CIs, and BH-corrected p-values. The primary "Overall" row uses a mixed-effects model with donor as random intercept. The "Donor-level means" row averages islets within each donor as a conservative cross-check.
 - **Effect Size Forest Plot** (center): Visual display of pairwise Cohen's d with confidence intervals. Points colored by significance.
 - **Area Under Curve** (right): Trapezoidal AUC by disease group with percentage change relative to ND baseline.
 
@@ -394,22 +426,18 @@ Dynamic text (subdued gray background) describing all statistical tests, correct
 
 Tissue-wide spatial visualization and peri-islet microenvironment analysis. Combines single-cell tissue scatter plots with Leiden clustering and neighborhood enrichment metrics.
 
-For the current 21-donor schema-4 candidate, the right panel shows 7,493
-feature-supported islets from 11,136 classifier-eligible islets. UMAP and Leiden
-are saved offline from typed cell counts per canonical cell inside the
-classifier-determined endocrine core; disease status only colors the fixed
-coordinates. Eligibility requires only that the classifier core does not touch
-an image edge and contains at least one canonical cell. Downstream phenotype
-support cannot revoke eligibility. The four Leiden resolutions and cluster
-composition remain visible without refitting. References below to 15 donors,
-5,214 islets and H5AD raw-marker PCA describe the frozen original compatibility
-path.
+The frozen v19/v20 roots each record 1,392 saved embedding objects from the 20-donor
+cohort. Their UMAP and Leiden use endocrine composition for objects with at least ten
+core cells; donor status colors the saved coordinates. The earlier 21-donor schema-4
+experiment and its 7,493/11,136 object counts are superseded and are not this dataset.
+Changing identities requires rebuilding these derived outputs from a coherent candidate;
+a diagnostic identity replay cannot be substituted for an assembled root.
 
 ### 3-Panel Layout
 
 1. **Controls Sidebar** (left panel)
-   - Donor selector (15 nPOD donors with disease status labels)
-   - Color by: Phenotype (21 cell types) or Leiden cluster
+   - Donor selector (the loaded root's donors, with disease status labels)
+   - Color by: Phenotype (root-specific labels) or Leiden cluster
    - Leiden resolution dropdown (0.3, 0.5, 0.8, 1.0) — visible when Leiden coloring selected
    - Region filter: All cells, Core + Peri only, or Core only
    - **Color background cells**: Toggle to show tissue background cells in phenotype colors (dimmed) instead of gray
@@ -436,15 +464,15 @@ path.
    from each camera button). The layout by donor status is on the Trajectory tab.
    - Built from each object's endocrine composition (the Beta, Alpha, Delta and CHGA+ hormone-negative proportions of
      its core endocrine cells) for the objects with ten or more core cells, with no donor correction (2026-10-19).
-     Smaller objects have too few cells to place and have no point or cluster. Disease separates mainly by T1D
-     beta-cell loss; ND and Aab+ objects overlap, as Aab+ donors range from ND-like to T1D-like.
+     Smaller objects have no point or cluster in this saved layout. Color patterns are
+     descriptive; the layout alone does not establish disease progression or classification accuracy.
    - Hidden with message when Leiden data unavailable in H5AD
 
 ### Data Sources
 
-- **Tissue CSVs**: `data/donors/{imageid}.csv` (15 files, ~78 MB total). Columns: X/Y centroids (μm), phenotype, cell_region (core/peri/tissue), islet_name.
+- **Donor cell tables**: the selected source root's `donors/{imageid}.csv`, or their manifest-backed production Parquets. Columns include X/Y centroids (μm), phenotype, cell_region (core/peri/tissue), and islet_name. The frozen v19/v20 roots contain 20 donors.
 - **Leiden clustering**: Stored in `islet_explorer.h5ad` .obs as `leiden_0.3`, `leiden_0.5`, `leiden_0.8`, `leiden_1.0` + UMAP coords `leiden_umap_1`, `leiden_umap_2`.
-- **Neighborhood metrics**: ~100 columns merged into H5AD .obs (peri-islet composition, per-phenotype enrichment z-scores and distances, plus aggregate immune metrics).
+- **Neighborhood metrics**: the selected root's per-object core/peri composition, enrichment and distance artifacts. Available fields and denominators follow that root and its manifest.
 
 ### Neighborhood Analysis Cards
 
@@ -506,10 +534,11 @@ axis), and Distance to nearest cell (measured from the core's center, so it trac
 
 ### Data Coverage
 
-- The historical 5,214-row neighborhood artifact covers the trajectory cohort;
-  its coverage must not be inferred for every row in the larger prepared summaries.
-- Donor 6533 has 191 islets (fully integrated after Parent annotation fix)
-- Biological validation: T1D immune_frac_peri > Aab+ > ND (immune infiltration increases with disease progression)
+- Coverage is determined by the selected root, matching UUID/object mappings and the
+  displayed filters. Use the manifest and exported row counts rather than historical
+  5,214-row totals or old donor-specific counts.
+- A disease-group ordering in a plot is an observation, not a validation of typing,
+  segmentation or a disease-progression claim.
 
 ---
 
@@ -532,7 +561,7 @@ Click any islet data point in the Plot or Trajectory tab to inspect individual c
 
 ### Single Cells View
 
-- **Color by**: Phenotype (21 categorical colors) or any of 31 protein markers (viridis inferno continuous scale)
+- **Color by**: the root's phenotype labels or available protein markers (viridis inferno continuous scale)
 - **Show peri-islet**: Toggle checkbox to include/exclude cells from the 20 μm expansion zone
   - Core cells: filled circles
   - Peri-islet cells: open circles (shape 1)
@@ -541,22 +570,27 @@ Click any islet data point in the Plot or Trajectory tab to inspect individual c
 
 ### Data Source
 
-Per-islet cell CSVs in `data/cells/` (5,214 files, ~203 MB total). Each file contains:
+Source-root `cells/` files and the corresponding production spatial tables provide the
+selected object's cells. Their inventory is release-specific. Fields include:
 - X/Y centroid coordinates (μm, converted to pixel space for GeoJSON overlay)
-- Phenotype label (1 of 21 types)
+- Phenotype label from the frozen identity table
 - Region (core or peri-islet)
 - Cell/Nucleus area
 - 31 protein marker expression values
 
 ### Availability
 
-- The source drill-down collection contains 5,214 per-islet CSV files; availability
-  for a selected prepared row depends on its identifier mapping.
+- Availability for a selected row depends on its identifier mapping and the released
+  cell/geometry artifacts; no fixed historical CSV count establishes completeness.
 - If cell data is unavailable for a clicked islet, the panel shows "Boundaries" mode with a message
 
 ---
 
 ## AI Assistant
+
+**Dormant development module:** AI is disabled in the publication profile and production
+has no AI API credential. The following is historical local-module documentation, not a
+current reviewer capability or authorization to send scientific data to an AI service.
 
 An embedded AI chat panel powered by the University of Florida Navigator AI Toolkit. Ask questions about your data, plots, statistics, or troubleshooting steps.
 
@@ -596,6 +630,6 @@ If credentials are missing, the chat panel displays a configuration message inst
 Rebuilding the app data, the full data lineage, deployment/operations, and troubleshooting (data loading, pipeline, deployment, the AI assistant, and the macOS drill-down/Viewer fixes) now live in the **[Administration & Operations Guide](admin_guide.md)**.
 
 Quick pointers:
-- **Rebuild app data**: `conda activate scvi-env`, then run the pipeline scripts (`reaggregate_islets.py` → `compute_neighborhood_metrics.py` → `extract_per_islet_cells.py` → `extract_per_donor_tissue.py` → `build_h5ad_for_app.py`). Produces `data/islet_explorer.h5ad`. Details in the admin guide.
+- **Rebuild app data**: follow the [workflow user guide](workflow_user_guide.md) and selected component provenance. A structure-only update binds its baseline calibration and runs the automatic invariance audit. The old `reaggregate_islets.py` chain is historical compatibility processing, not the current uniform workflow.
 - **Local development**: `cd app/shiny_app && Rscript -e 'shiny::runApp(".", port = 7777)'`.
 - **App won't load, missing filters, blank panels, or browser-specific issues**: see the admin guide's [Troubleshooting](admin_guide.md#troubleshooting) section.

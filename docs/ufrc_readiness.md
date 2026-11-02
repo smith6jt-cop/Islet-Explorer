@@ -1,5 +1,12 @@
 # Islet Explorer UFRC readiness and evidence index
 
+**Scientific status, 2026-11-02:** dev v20 was stopped at the owner's request;
+both services are masked during [container security remediation](container_security_20261102.md).
+Production remains stopped. The [component comparison](v19_v20_component_comparison_20261102.md)
+and [workflow guide](workflow_user_guide.md) govern the correction. Successful
+deployment/browser checks do not establish scientific acceptance. The staged
+whole-v19 reference image was never activated; no corrected mixed release exists.
+
 Updated 2026-10-22 for the uniform 20-donor release candidate (data schema 5); the 2026-10-16 update covered UFRC comment 13 and the owner-directed processing reset. This is the review index for the supplied
 [`UFIT_PubApps_Instance_Request.docx`](../UFIT_PubApps_Instance_Request.docx),
 including its hosting policy, project plan, and development standards. It records

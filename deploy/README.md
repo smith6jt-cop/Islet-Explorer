@@ -1,11 +1,23 @@
 # Islet Explorer on UFRC PubApps
 
+**Current status, 2026-11-02:** UFRC provisioned both hostnames. Dev was stopped
+at the owner's request during the [container security remediation](../docs/container_security_20261102.md);
+both services are persistently masked against restart. Dev last served
+`pubapps-2026-11-uniform-v20` (`c974946`); production remains stopped since 10-26.
+The in-house service is also stopped. V20 is not scientifically accepted, and the
+whole-v19 reference release was staged but never activated. The owner selected
+v19 endocrine within a component comparison; no corrected mixed release exists.
+Use the [workflow guide](../docs/workflow_user_guide.md) and
+[current handoff](../docs/handoff_20261102.md) before these deployment procedures.
+Historical activation records and successful software checks are not acceptance
+of the current scientific inputs.
+
 Production runbook for the journal-review deployment requested at:
 
 `https://islet-explorer.rc.ufl.edu/islet-explorer/`
 
-UFRC must confirm this hostname and path before it is given to reviewers; until then it
-is a request value, not evidence that the service has been provisioned.
+UFRC provisioned this hostname/path on 2026-10-23. Production is currently stopped;
+the address alone is not evidence of an active or scientifically accepted release.
 
 The UFRC access request is **Public Restricted** (whole-site Basic Auth), while
 the collection is classified **Sensitive** during peer review. The app is
@@ -21,8 +33,8 @@ logging requirements and additional hardening guidance are in
 [`docs/pubapps_log_inventory.md`](../docs/pubapps_log_inventory.md).
 
 The local development app at `http://10.15.152.7:8080/islet-explorer/`
-(loopback port 3840) serves the main working tree on the reprocessed uniform root
-`data/development/uniform-20donor-20261022-v10/` since 2026-10-22 (owner: "make the
+(loopback port 3840) previously served the main working tree on the reprocessed uniform root
+`data/development/uniform-20donor-20261022-v10/` from 2026-10-22 (owner: "make the
 test app the live app"), selected by `ISLET_DATA_ROOT` in the untracked
 `tmp/local-app.env`. It was offline from 2026-10-15 until the uniform reprocessing
 (see [the directive record](../docs/owner_directive_20261015.md#follow-up-decisions--2026-10-15)),

@@ -1,5 +1,13 @@
 # Islet Explorer: file-by-file reference
 
+**Current additions, 2026-11-02:** [the workflow user guide](workflow_user_guide.md) covers
+the present source-to-app chain. `scripts/uniform/typing/calibration_context.py` pins reference
+context; `typing/structure_update.py` pins a structure revision's calibration and baseline;
+`scripts/uniform/audit_structure_update.py` verifies every component after identity generation.
+The [component comparison](v19_v20_component_comparison_20261102.md) and
+[cross-repository change notice](typing_change_notice_20261102.md) describe the selected sources,
+fixes, evidence and remaining work. The file count below belongs to its stated September revision.
+
 Inspected 2026-09-10 at Git `000e970cac91220f71200b5240f4729a3d32d44e`. This catalog explicitly describes all **225 tracked entries** at that revision, including the submodule reference. It supplements [the maintainer walkthrough](maintainer_walkthrough.md).
 
 The subsequent offline expansion workflow and its separate data staging are

@@ -1,5 +1,21 @@
 # CODEX uniform segmentation and islets
 
+## Current entry point — 2026-11-02
+
+Read the [workflow user guide](../../docs/workflow_user_guide.md),
+[typing rulings](../../docs/typing_rulings_ledger.md), and
+[component comparison/correction](../../docs/v19_v20_component_comparison_20261102.md) first.
+The chronological methods below preserve earlier generations; they do not override later rulings.
+Current cell measurements use despeckling and REDSEA. V19 is selected for endocrine cells;
+v20 DG is the instructed Lymphatic geometry, with common non-Lymphatic geometry retained.
+
+For a **structure-only** revision, prepare fresh inputs, explicitly pin the baseline with
+`typing/structure_update.py`, regenerate live context/endpoints, and run identity plus its automatic
+`audit_structure_update.py` gate. All marker calibration, REDSEA, QC and endocrine decisions remain fixed.
+`typing/calibration_context.py` keeps reference populations separate from current structural membership.
+Do not run the historical v20 all-marker recalibration driver for a Lymphatic-only change.
+This path verifies change isolation; it does not select components or accept unresolved endocrine objects.
+
 Owner directives of 2026-10-15: every cell and nucleus segmentation comes from the most recent InstanSeg model
 with a small channel set, as in Islet-Explorer-Senior, and the newest islet method is applied to every image.
 Donor 78 is excluded (`../excluded_donors.csv`). This folder applies one scripted chain to all 20 images;

@@ -1,5 +1,13 @@
 # Typing change notice, 2026-10-27 (for agents using the uniform typing)
 
+**Superseded coordination status, 2026-11-02:** read
+[the current CODEX-to-Senior/HPG change notice](typing_change_notice_20261102.md)
+and [component comparison](v19_v20_component_comparison_20261102.md).
+The older v18 wait, marker rules and served-root statements below are historical.
+V19 endocrine is selected; DG reference leakage is corrected in code, but no corrected
+mixed candidate has been accepted. Transfer shared fixes with explicit assay profiles;
+do not adopt provisional CODEX labels as PhenoCycler or Xenium data.
+
 **For:** the Codex agent in this repository and the Claude agent on HiPerGator (spleen same-slide analysis).
 Written by the Claude Code session doing the owner's typing review.
 

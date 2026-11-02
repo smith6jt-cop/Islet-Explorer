@@ -2,6 +2,18 @@
 
 Interactive R Shiny application for exploring pancreatic islet CODEX multiplexed imaging data from nPOD and HPAP donors. Compares ND, autoantibody-positive and T1D donor groups using cross-sectional measurements; autoantibody positivity is not treated as a clinical disease stage.
 
+## Current workflow and data status — 2026-11-02
+
+Start with the [complete workflow user guide](docs/workflow_user_guide.md),
+[app user guide](docs/user_guide.md), and [current component comparison](docs/v19_v20_component_comparison_20261102.md).
+The owner selected **v19 endocrine cells**, with the remaining components compared against v20.
+The Lymphatic-only update had unintentionally recalibrated unrelated markers; the correction separates
+calibration from live structure membership and checks every component on the real 20-donor data.
+Dev last served the unaccepted v20 candidate; dev and production are now stopped and masked during
+[container security remediation](docs/container_security_20261102.md). The in-house app remains stopped.
+No corrected mixed candidate has been assembled or promoted. The older cohort and release sections below
+describe historical artifacts, not the current selection.
+
 <div align="center">
 
 [![GitHub](https://img.shields.io/badge/GitHub-Repository-blue.svg)](https://github.com/smith6jt-cop/Islet-Explorer)

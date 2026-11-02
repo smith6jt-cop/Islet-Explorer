@@ -1,5 +1,7 @@
 # CLAUDE.md - Shiny App (Islet Explorer)
 
+> **2026-11-02 status:** dev last served v20 (`c974946`); dev and production are now stopped and masked under the owner's [security direction](../../docs/container_security_20261102.md). The in-house app remains stopped. The owner selected v19 endocrine and a component-wise comparison, not a whole-v19 rollback. Shared calibration leakage from the DG Lymphatic update is corrected in pipeline code and tested separately; no corrected mixed app root has been assembled. Release checks still reject unnamed endocrine definitions/aggregate mismatch. See [the current comparison](../../docs/v19_v20_component_comparison_20261102.md) and [workflow user guide](../../docs/workflow_user_guide.md). The older roots below are historical.
+
 > **2026-10-15:** donor 78 (HDL078 / HPAP-078) is removed from the app. `ISLET_EXCLUDED_DONORS` in `00_globals.R` (kept in step with `scripts/excluded_donors.csv` by a pipeline test) makes `load_shared_prepared_data()` refuse a data root that contains it, and the Viewer never lists its image. The local app is offline at the owner's direction until the reprocessed root is accepted; the last served root was `data/development/protein-expanded-20261015-v3/`.
 
 > **2026-10-16 uniform root (awaiting owner review):** `data/development/uniform-20donor-20261019-v7/` (2026-10-19: v7 is v6

@@ -1,12 +1,24 @@
 # Islet Explorer — Journal Reviewer Guide
 
-This guide describes the frozen PubApps reviewer release. It does not describe dormant
-development modules.
+This guide describes the publication-profile interface. It does not describe dormant
+development modules or certify a scientific data release.
+
+**Current status, 2026-11-02:** production and dev are stopped and persistently masked
+during [security remediation](container_security_20261102.md). Dev last served unaccepted
+v20. The owner selected v19 endocrine within a
+[component comparison](v19_v20_component_comparison_20261102.md); no corrected mixed root
+has been assembled or accepted. A staged whole-v19 reference was never activated. Use
+the release/access notice supplied with a future review round rather than assuming that
+the provisioned address below is currently available.
+
+The [workflow user guide](workflow_user_guide.md) explains data processing, component
+selection and release checks; the [user guide](user_guide.md) describes controls in more
+detail. A passing software, security or packaging check is not scientific acceptance.
 
 ## Access and data handling
 
-- Requested URL: `https://islet-explorer.rc.ufl.edu/islet-explorer/` (pending UFRC
-  production-access confirmation; use the access link supplied by the journal).
+- Provisioned URL: `https://islet-explorer.rc.ufl.edu/islet-explorer/` (currently stopped;
+  use the access link and release notice supplied by the journal).
 - Username: supplied in the journal's confidential reviewer instructions.
 - Password: supplied separately through the confidential reviewer channel.
 - Supported clients: current desktop Firefox, Chrome, Edge, or Safari. The interface is
@@ -24,6 +36,13 @@ Sensitive reviewer material and should be handled according to the journal's pol
 
 ## Reviewer-visible tabs
 
+The publication profile contains **Plot, Trajectory, Spatial and Viewer**, in that order.
+Counts, phenotype choices and aggregate definitions follow the loaded root's manifest and
+frozen label groups. The v19/v20 comparison cohort has 20 donors (7 ND, 7 Aab+, 6 T1D);
+older 15-donor counts and the legacy 19-rule CSV are not the current data contract.
+The frozen comparison roots still contain unresolved endocrine definitions and cannot
+be presented as the accepted corrected dataset.
+
 ### Plot
 
 Explore marker expression, target measurements, hormone fractions, reviewer-facing cell
@@ -40,9 +59,10 @@ features, scanpy diffusion pseudotime, and a PAGA-initialized ForceAtlas2 layout
 expression or a cell-type/endocrine-cell ratio can be displayed against raw or
 rank-normalized pseudotime.
 
-The cell-count range is part of the analytical definition: changing it refits the
-trajectory on the selected islets rather than merely hiding points. The default lower
-bound is 10 cells per islet. Pseudotime is an ordering of compositional similarity, not
+The current fitted cohort comprises endocrine objects with at least ten core cells,
+regardless of Islet/Cluster class; the other tabs' endocrine-object selector does not
+change this definition. The selected marker changes the displayed measurement, not the
+pseudotime axis. Pseudotime is an ordering of compositional similarity, not
 elapsed time or evidence of a causal transition. Donor identity is an important source of
 variation, and the view should not be read as proof that every donor follows one uniform
 ND → Aab+ → T1D path.
@@ -51,12 +71,11 @@ The PAGA coordinates, UMAP coordinates, and multi-feature heatmap rows can be do
 as CSV; publication-sized plots can be downloaded as PNG. Click an islet to open its
 segmentation and cell view.
 
-### Viewer
-
-Inspect the donor OME-TIFF image with the bundled Avivator viewer and configurable marker
-channels. The browser requests only needed byte ranges from the large image. First access
-to an image may be slower than later navigation. Clicking an islet in Plot or Trajectory
-selects the corresponding donor image when that mapping is available.
+For frozen v19/v20, marker values are per-image scaled measurements averaged over core
+cells, not scVI expression. The heatmap separately standardizes its displayed markers.
+CODEX INS intensity is not an approved quantitative between-donor hypothesis endpoint
+under the recorded acquisition restriction; see the
+[measurement review](ins_measurement_review_20261026.md).
 
 ### Spatial
 
@@ -64,6 +83,19 @@ Inspect donor tissue cells, islet Leiden clusters, peri-islet phenotype enrichme
 infiltration, and signed distance from islets. Large tissue views are rendered as static
 plots for stability. Filtered spatial rows and the displayed aggregate results can be
 downloaded where a CSV button is present.
+
+Structure area, cell-area overlap, distance and structure-qualified cell identity are
+different measurements. In the v20 method, marker positivity alone does not assign a
+generic Endothelial or Neural type: those identities require their corresponding
+structure qualification. The current component-selection review must reconcile this
+rule with the selected v19 endocrine cells before a new scientific release.
+
+### Viewer
+
+Inspect the donor OME-TIFF image with the bundled Avivator viewer and configurable marker
+channels. The browser requests only needed byte ranges from the large image. First access
+to an image may be slower than later navigation. Clicking an islet in Plot or Trajectory
+selects the corresponding donor image when that mapping is available.
 
 ## Features intentionally absent
 
@@ -74,7 +106,7 @@ by its server.
 
 ## Reproducibility and problem reports
 
-The reviewer site is pinned to one Git commit, OCI image digest, and checksummed data/image
+A reviewer release is pinned to one Git commit, OCI image digest, and checksummed data/image
 release for the duration of a review round. The project will document any emergency
 security update that changes reviewer-visible behavior.
 

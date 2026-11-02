@@ -2,28 +2,79 @@
 
 Developer- and maintainer-facing reference for rebuilding the app data, deploying the Shiny app, and troubleshooting. End-user feature documentation lives in [user_guide.md](user_guide.md).
 
-**Requested reviewer URL (pending UFRC production-access confirmation)**:
+**Current workflow, 2026-11-02:** use [the complete workflow user guide](workflow_user_guide.md)
+and [current handoff](handoff_20261102.md) for processing, component selection and release state.
+The Lymphatic correction freezes calibration and automatically audits all components; the old
+all-marker rerun is not a structure-only procedure. Dev last served unaccepted v20; dev and
+production are now stopped and persistently masked during
+[security remediation](container_security_20261102.md). The staged whole-v19 reference was
+never activated. V19 endocrine is selected within the
+[component comparison](v19_v20_component_comparison_20261102.md); no corrected mixed root exists.
+
+**Provisioned reviewer URL (production currently stopped)**:
 `https://islet-explorer.rc.ufl.edu/islet-explorer/`
 
 > **Deployment authority:** [deploy/README.md](../deploy/README.md) and
-> [PUBAPPS_UFRC_HANDOFF.md](../PUBAPPS_UFRC_HANDOFF.md) define the August 2026 reviewer
-> deployment. Any older mutable-code, direct-nginx, Apptainer, or AI-key instruction in
+> [PUBAPPS_UFRC_HANDOFF.md](../PUBAPPS_UFRC_HANDOFF.md) define the reviewer
+> deployment contract and its dated history. Any older mutable-code, direct-nginx, Apptainer, or AI-key instruction in
 > historical notes is not a production procedure.
 
-> **Current migration status, 2026-10-16:** The local app is offline pending
-> uniform reprocessing of the 20-donor target; donor 78/HDL078 is permanently
-> excluded. The PubApps instance request form was submitted with ticket `83810`
-> on 2026-08-31, and UFIT canceled individual assessment `IRM-456246` on
-> 2026-10-15 while routing the project to the master assessment. UFRC comment 13
-> says VM provisioning is next and asks for DNS/proxy requirements; the reply is
-> drafted in the [launch-preparation note](ufrc_launch_preparation_20261015.md).
-> See the [reprocessing plan](uniform_reprocessing_plan_20261015.md) for the
-> processing gates. Do not start or deploy a local candidate before the
-> reprocessed root is accepted.
+The provisioned endpoints do not imply an active service. The owner stopped dev on
+2026-11-02; production has been stopped since 10-26. Preserve both service masks during
+the current remediation. A security replacement image is not an accepted scientific
+release or an instruction to restart. Earlier October provisioning notes are historical;
+use the current [security record](container_security_20261102.md) and
+[readiness record](ufrc_readiness.md).
 
 ---
 
 ## Data Pipeline
+
+### Current uniform workflow
+
+Follow [workflow_user_guide.md](workflow_user_guide.md) and
+[scripts/uniform/README.md](../scripts/uniform/README.md). The old H5AD rebuild below is
+historical compatibility processing, not the uniform workflow.
+
+The frozen v19/v20 roots each contain 20 donors and 3,199,606 eligible cell UUIDs. Their
+assembled metadata records 4,848 analysed Islet/Cluster objects, 5,227 Singles counted
+separately and 1,392 saved embedding objects. These counts belong to specific artifacts;
+upstream geometry and filtered app views need not have the same row count. Use each
+root's `uniform_release.json` and label groups. Donor 78 must remain absent.
+
+A coherent candidate needs one identity per UUID and explicit component provenance.
+The owner selected v19 endocrine; v20 implements later measurement and structure rules
+but also contains the demonstrated Lymphatic calibration regression. Do not copy v20
+labels wholesale or mix already aggregated v19/v20 summaries. No corrected mixed
+candidate has been assembled or accepted.
+
+For a **Lymphatic-only update**:
+
+1. Prepare a fresh root from an explicitly selected baseline, preserving measurements,
+   QC and endocrine membership.
+2. Bind it with `scripts/uniform/typing/structure_update.py`. Its immutable calibration
+   context is separate from the new live Lymphatic geometry.
+3. Regenerate permitted structure context and endpoints. Reuse calibration;
+   `levels.py` and `canary.py` refuse recalibration of a bound run.
+4. Run `identity.py` for every bound image into its fresh identity directory. The CLI
+   automatically runs `audit_structure_update.py` in a fresh external report directory.
+   Named endocrine identities, marker positivity/canary/folds, measurements/QC and
+   unrelated context must stay unchanged; changed labels must involve Lymphatic cells
+   within the old/new footprint.
+5. Review image evidence and reconcile selected components. Passing the isolation audit
+   establishes consistency, not scientific acceptance.
+
+Use the workflow guide for commands and prerequisites. The successful diagnostic in
+[the component comparison](v19_v20_component_comparison_20261102.md) uses initial-v20
+calibration to test isolation; it does not implement the selected v19 endocrine component.
+Do not rerun the historical all-marker v20 driver for a structure-only revision.
+
+After reconciliation, rebuild summaries, marker scales, embeddings, spatial tables and
+geometry mappings from the coherent candidate. Endocrine-object and release guards must
+pass; do not hide unnamed cells by broadening an aggregate. Full hashes and source/release
+parity establish packaging fidelity, not biological accuracy.
+
+### Historical 15-donor pipeline — compatibility only
 
 The 2026-09-08 source preparation distinguishes the 5,214-observation trajectory
 H5AD from prepared app tables: `core_area` and `comp` each have 5,382 rows,
@@ -32,9 +83,11 @@ The counts in the historical pipeline below refer to their named artifacts,
 not to every runtime summary. Use [the evidence index](ufrc_readiness.md) and
 the generated release manifest for current release validation.
 
-### Rebuilding the App Data
+#### Rebuilding the historical app data
 
-The canonical pipeline rebuilds `data/islet_explorer.h5ad` from source:
+The historical pipeline rebuilt `data/islet_explorer.h5ad` from its older source labels.
+The following commands are retained for reproducing that artifact, not repairing a current
+uniform root:
 
 ```bash
 # Activate the Python environment
@@ -63,7 +116,7 @@ python scripts/build_h5ad_for_app.py
 # → data/islet_explorer.h5ad (~70 MB)
 ```
 
-### Full Lineage
+#### Historical lineage
 
 ```
 CODEX_scvi_BioCov_phenotyped_newDuctal.h5ad  (2.6M cells, canonical single-cell)
@@ -79,7 +132,7 @@ Branch pipelines:
 - `scripts/extract_per_donor_tissue.py` — per-donor tissue CSVs for Spatial tab scatter
 - Leiden clustering from `islet_analysis/islets_core_clustered.h5ad` (4 resolutions) — merged by `build_h5ad_for_app.py`
 
-### Upstream Data Sources
+#### Historical upstream data sources
 
 | Source | Location | Description |
 |--------|----------|-------------|
@@ -99,8 +152,8 @@ See `data/DATA_PROVENANCE.md` for the complete lineage documentation including v
 ```
 reviewer HTTPS + Basic Auth
   ↓ UFRC high-availability reverse proxy
-Requested PubApps backend 127.0.0.1:3838
-  (final address and port pending UFRC confirmation)
+Provisioned VM private listeners: production :3838 / dev :3839
+  (both currently stopped and masked)
   ↓ rootless Podman forwarding
 immutable Shiny container 0.0.0.0:3838
   ├── manifest-backed data + images (read-only)
@@ -109,7 +162,10 @@ immutable Shiny container 0.0.0.0:3838
 
 ### Updating the App
 
-Never edit or `git pull` into an active reviewer release. Build and scan a clean,
+Neither service is authorized to restart during remediation. Preserve its mask; an older
+activation or rollback command does not authorize unmasking or restarting it.
+
+For a future authorized release, never edit or `git pull` into an active release. Build and scan a clean,
 digest-pinned OCI image; build and fully checksum-verify a new data release; then use
 `deploy/activate-release.sh`. It health-checks the new Quadlet service and restores the
 prior unit on failure. Use `deploy/rollback-release.sh` for an explicit rollback. See the
@@ -119,11 +175,13 @@ deployment runbook for complete commands and required evidence.
 
 ```bash
 cd app/shiny_app
-Rscript -e 'shiny::runApp(".", port = 7777)'
+ISLET_DATA_ROOT=/absolute/path/to/explicit-review-root Rscript -e 'shiny::runApp(".", port = 7777)'
 # Then open http://localhost:7777 in browser
 ```
 
-Port 7777 is for local testing only and is not accessible to end users.
+Port 7777 is for local testing only. Select the data root explicitly and retain its
+scientific status in review notes. This does not start the stopped in-house or PubApps
+services or establish an unaccepted root as a release.
 
 ### R Dependencies
 
@@ -141,7 +199,8 @@ conda activate scvi-env
 
 The production app environment is independently pinned by
 `deploy/requirements-python.lock`; do not substitute the mutable pipeline environment in
-the reviewer image.
+the reviewer image. The scVI packages above describe legacy pipeline capability; the
+frozen v19/v20 manifests explicitly record `scvi_required: false`.
 
 ---
 
@@ -149,8 +208,9 @@ the reviewer image.
 
 ### Production app fails to load
 
-1. Run `deploy/verify-deployment.sh` with the active release root and expected image
-   reference.
+1. Confirm whether a service is expected to be running. Both are currently stopped and
+   masked; do not restart them to troubleshoot. For a future active release, run
+   `deploy/verify-deployment.sh` with its release root and expected image reference.
 2. Inspect the sanitized service journal and Shiny log; do not print environment values or
    reviewer request URLs containing query strings.
 3. Verify the active data manifest in full mode. Production must fail closed on a missing
@@ -158,48 +218,50 @@ the reviewer image.
 
 ### Local development app fails to load
 
-1. Check that `data/islet_explorer.h5ad` exists and is ~70 MB
-2. Check that R packages are installed: `library(anndata); library(reticulate)`
-3. Check that Python is accessible via reticulate: `reticulate::py_available()`
-4. For development only, the Excel fallback requires `data/master_results.xlsx` and has
-   reduced functionality.
+1. Confirm the explicit `ISLET_DATA_ROOT` and its manifest/provenance.
+2. Check required H5AD, summary, geometry, donor and cell artifacts against that root's
+   inventory. Historical fixed file sizes are not a completeness check.
+3. Check the pinned R/Python environment and the error log.
+4. The Excel loader is historical development compatibility only; production must not
+   fall back to a different dataset.
 
 ### No phenotype or demographic filters
 
-The app is running from Excel fallback. Rebuild the H5AD:
-```bash
-conda activate scvi-env
-python scripts/build_h5ad_for_app.py
-```
+Check that the loaded root and prepared summaries match. Current phenotypes follow the
+frozen identity/label-group contract, not the old 19-rule CSV. Missing fields require a
+source correction and a coherent rebuild; do not fill them from another version's tables.
 
 ### No neighborhood metrics in Plot selector
 
-1. Verify `data/neighborhood_metrics.csv` exists (5,214 rows)
-2. Rebuild the H5AD: `python scripts/build_h5ad_for_app.py`
-3. Kill stale R workers and refresh the browser
+Check the selected root's neighborhood artifacts and prepared summary fields, then the
+feature's current tab placement. Correct source mismatches through the uniform workflow
+and recheck parity; the historical 5,214-row file is not the current contract.
 
 ### Single-cell drill-down not available
 
-1. Verify `data/cells/` directory contains ~5,023 CSV files
-2. If missing, regenerate: `python scripts/extract_per_islet_cells.py`
+Check the selected object identifier against the root's cell/geometry inventory and
+production spatial tables. Do not infer completeness from an old fixed CSV count or
+repair a uniform root with the historical extraction script.
 
 ### Segmentation viewer shows "No GeoJSON found"
 
-1. Check that `data/json/` or `data/gson/` has `.geojson` / `.geojson.gz` files
+1. Check the selected root's `json/` or `gson/` and its release manifest.
 2. Case ID zero-padding: GeoJSON files use 4-digit padded IDs (`0112.geojson`), data uses unpadded (`112`). The app handles this automatically via `sprintf("%04d", ...)` fallback.
 
 ### Statistics tab shows no results
 
-The Statistics tab uses data from the Plot sidebar. Ensure:
+Statistics is disabled in the publication profile. If explicitly enabled for local
+development, its historical module uses the Plot sidebar. Ensure:
+
 1. A feature is selected in the Plot sidebar
 2. At least 2 disease groups are checked
 3. The diameter range includes some islets
 
 ### Spatial tab tissue scatter is empty
 
-1. Verify `data/donors/` directory contains 15 CSV files
-2. If missing, regenerate: `python scripts/extract_per_donor_tissue.py`
-3. If Leiden panel says "not available", rebuild the H5AD with Leiden data: `python scripts/build_h5ad_for_app.py` (requires `islet_analysis/islets_core_clustered.h5ad`)
+Check the selected donor, current filters and root-specific donor/spatial inventory.
+The current comparison cohort has 20 donors. If Leiden data are missing, inspect the
+recorded embedding cohort and artifacts before rebuilding through the uniform workflow.
 
 ### AI assistant shows error or no response (development only)
 
@@ -207,13 +269,13 @@ The reviewer release intentionally has no AI panel or key; this is expected. Do 
 Navigator/OpenAI credential to production. Development AI configuration is outside the
 approved reviewer data flow and requires a separate local secret plus appropriate review.
 
-### Leiden UMAP shows a blob
+### Leiden or trajectory data appear inconsistent
 
-The Leiden UMAP visualization uses raw marker PCA coordinates (same as the Trajectory tab). If it shows a blob, the clustered H5AD may have outdated scVI-based UMAP coordinates. Fix:
-1. Copy visualization UMAP from `data/adata_ins_root.h5ad` into `islet_analysis/islets_core_clustered.h5ad`
-2. Rebuild: `python scripts/build_h5ad_for_app.py`
-3. Restart the local development app. For production, build and activate a new immutable
-   release through `deploy/README.md`; do not replace code inside the running container.
+Check the root's recorded embedding method, eligible object cohort and identity hashes.
+Frozen v19/v20 use endocrine composition; historical raw-marker/scVI layouts are different
+artifacts. Do not copy coordinates from another H5AD to make a plot appear correct.
+Rebuild derived outputs from the chosen identities and rerun parity. Visual separation
+alone does not establish correct processing or biological progression.
 
 ### Drill-down does nothing or Viewer flickers on macOS (fixed Jun 2026)
 
