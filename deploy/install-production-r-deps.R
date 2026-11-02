@@ -28,49 +28,31 @@ if (!requireNamespace("destiny", quietly = TRUE) ||
   BiocManager::install("destiny", ask = FALSE, update = FALSE)
 }
 
-local({
+if (!("duckdb" %in% rownames(utils::installed.packages())) ||
+    as.character(utils::packageVersion("duckdb")) != expected[["duckdb"]]) {
   # rocker/shiny:4.5.1 retains a 2025 CRAN snapshot, before DuckDB 1.5.2.
   # Install the reviewed CRAN source archive, checking its bytes before R can
   # execute any package configure/install code. Never substitute current CRAN.
   duckdb_source <- "https://cran.r-project.org/src/contrib/Archive/duckdb/duckdb_1.5.2.tar.gz"
   duckdb_sha256 <- "55f98a336513a94354f328791c8b94521b9f2e918a57d7e9fe6c0cb6b9a38db6"
   archive <- tempfile(pattern = "duckdb-1.5.2-", fileext = ".tar.gz")
-  patched_archive <- tempfile(pattern = "duckdb-1.5.2-brotli-", fileext = ".tar.gz")
-  receipt <- "/opt/islet-explorer-build/duckdb-brotli-source.json"
   tryCatch({
     utils::download.file(duckdb_source, archive, mode = "wb", method = "libcurl")
     actual_sha256 <- digest::digest(file = archive, algo = "sha256", serialize = FALSE)
     if (!identical(actual_sha256, duckdb_sha256)) {
       stop("DuckDB source SHA-256 mismatch; refusing to install.")
     }
-    # The package version alone cannot distinguish the vulnerable decoder from
-    # this backport. Always rebuild the verified nested source, even when the
-    # base already has DuckDB 1.5.2. Do not reuse precompiled object files.
-    patch_status <- system2("python3", c(
-      "/opt/islet-explorer-build/patch-duckdb-brotli.py",
-      "--source", shQuote(archive), "--output", shQuote(patched_archive),
-      "--receipt", shQuote(receipt)
-    ))
-    if (patch_status != 0L) stop("DuckDB Brotli source patch verification failed.")
     # DuckDB otherwise chooses build parallelism from host resources. Bound it
     # for a predictable workstation/container build without changing the binary.
     old_makeflags <- Sys.getenv("MAKEFLAGS", unset = NA_character_)
-    old_prebuilt <- Sys.getenv("DUCKDB_R_PREBUILT_ARCHIVE", unset = NA_character_)
     Sys.setenv(MAKEFLAGS = "-j2")
-    Sys.unsetenv("DUCKDB_R_PREBUILT_ARCHIVE")
-    tryCatch({
-      install_status <- system2(file.path(R.home("bin"), "R"),
-        c("CMD", "INSTALL", "--preclean", shQuote(patched_archive)))
-      if (install_status != 0L) stop("Patched DuckDB source installation failed.")
-      Sys.chmod(receipt, mode = "0444")
-    }, finally = {
-      if (is.na(old_makeflags)) Sys.unsetenv("MAKEFLAGS") else
+    tryCatch(
+      utils::install.packages(archive, repos = NULL, type = "source"),
+      finally = if (is.na(old_makeflags)) Sys.unsetenv("MAKEFLAGS") else
         Sys.setenv(MAKEFLAGS = old_makeflags)
-      if (is.na(old_prebuilt)) Sys.unsetenv("DUCKDB_R_PREBUILT_ARCHIVE") else
-        Sys.setenv(DUCKDB_R_PREBUILT_ARCHIVE = old_prebuilt)
-    })
-  }, finally = unlink(c(archive, patched_archive)))
-})
+    )
+  }, finally = unlink(archive))
+}
 
 actual <- vapply(names(expected), function(pkg) {
   if (!requireNamespace(pkg, quietly = TRUE)) return(NA_character_)

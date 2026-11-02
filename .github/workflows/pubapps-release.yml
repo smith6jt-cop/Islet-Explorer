@@ -63,7 +63,6 @@ jobs:
             deploy/shiny-server.conf deploy/container-entrypoint.sh deploy/r-worker.py \
             deploy/scan-image.sh deploy/correct-syft-vim-cpe.py deploy/verify-brotli.py \
             scripts/install_shiny_deps.R deploy/install-production-r-deps.R \
-            deploy/patch-duckdb-brotli.py deploy/patches/duckdb-brotli-CVE-2026-111497.patch \
             deploy/requirements-python.lock > "${build_root}/evidence/build-inputs.sha256"
 
       - name: Install Podman and reserve image/export disk space

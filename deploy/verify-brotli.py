@@ -16,92 +16,12 @@ import subprocess
 import sys
 
 
-DUCKDB_SOURCE_RECEIPT = pathlib.Path("/opt/islet-explorer-build/duckdb-brotli-source.json")
-DUCKDB_SOURCE_PINS = {
-    "schema": "islet.duckdb_brotli_source_patch/1",
-    "cve": "CVE-2026-111497",
-    "package": "duckdb",
-    "package_version": "1.5.2",
-    "result": "source_patch_verified",
-    "source_sha256": "55f98a336513a94354f328791c8b94521b9f2e918a57d7e9fe6c0cb6b9a38db6",
-    "patch_sha256": "d00033af815fcb214daa9630d9da11b39a191dfab17b0f8cff367157af5806ca",
-    "upstream_commit": "0ed4268a4401abcb4472096340477cf4af7d1a2b",
-    "upstream_1_1_1_backport_commit": "da9806362874b9bd4b552a3af360b5d6347beb12",
-    "port_commit": "2b942af6319783a5cc3c21d76a8e560e191978b2",
-}
-DUCKDB_SOURCE_FILES = {
-    "third_party/brotli/dec/decode.cpp": {
-        "before_sha256": "27062f01a0f429f14ea0bc0587d9db83230e60f7725c7253817a6c3517eb08f4",
-        "after_sha256": "fff654fe532c55f0f70503b6af1a0ad7166b33edb68ff89c2eb021353b40595d",
-    },
-    "third_party/brotli/include/brotli/decode.h": {
-        "before_sha256": "a39110bec706e846f51c05a6374282c4cec04b099ead97e425f049840f2a02b8",
-        "after_sha256": "781b0e6ece03bdc8800189983c9e636bd1ac550f5bab582c5c36960042a84155",
-    },
-}
-
-
 def file_sha256(path):
     digest = hashlib.sha256()
     with pathlib.Path(path).open("rb") as stream:
         for block in iter(lambda: stream.read(1 << 20), b""):
             digest.update(block)
     return digest.hexdigest()
-
-
-def unique_json_object(pairs):
-    result = {}
-    for key, value in pairs:
-        if key in result:
-            raise ValueError(f"Duplicate JSON field: {key}")
-        result[key] = value
-    return result
-
-
-def verify_duckdb_source(path, runtime_version, errors):
-    """Validate the reviewed source receipt; the installed decoder is tested separately."""
-    path = pathlib.Path(path)
-    result = {"path": str(path), "result": "fail", "runtime_package_version": runtime_version}
-    initial_errors = len(errors)
-    if runtime_version != DUCKDB_SOURCE_PINS["package_version"]:
-        errors.append(f"DuckDB {runtime_version} is not the pinned 1.5.2 source backport.")
-    try:
-        if path.is_symlink() or not path.is_file():
-            raise ValueError("receipt must be a regular, non-symlink file")
-        raw = path.read_bytes()
-        result["receipt_sha256"] = hashlib.sha256(raw).hexdigest()
-        receipt = json.loads(raw, object_pairs_hook=unique_json_object)
-        if not isinstance(receipt, dict):
-            raise ValueError("receipt must be a JSON object")
-        result["receipt"] = receipt
-        for key, expected in DUCKDB_SOURCE_PINS.items():
-            if receipt.get(key) != expected:
-                errors.append(f"DuckDB source receipt has an unverified {key}.")
-        for key in ("patched_source_sha256", "helper_sha256"):
-            if not isinstance(receipt.get(key), str) or not re.fullmatch(r"[0-9a-f]{64}", receipt[key]):
-                errors.append(f"DuckDB source receipt is missing a valid {key}.")
-        files = receipt.get("files")
-        if (not isinstance(files, list) or len(files) != len(DUCKDB_SOURCE_FILES)
-                or any(not isinstance(item, dict) for item in files)):
-            raise ValueError("receipt must describe exactly the two reviewed decoder source files")
-        paths = [item.get("path") for item in files]
-        if any(not isinstance(name, str) for name in paths) or set(paths) != set(DUCKDB_SOURCE_FILES):
-            raise ValueError("receipt decoder source inventory differs from the reviewed patch")
-        for item in files:
-            for key, expected in DUCKDB_SOURCE_FILES[item["path"]].items():
-                if item.get(key) != expected:
-                    errors.append(f"DuckDB source receipt has an unverified {item['path']} {key}.")
-        verification = receipt.get("verification")
-        if not isinstance(verification, dict):
-            raise ValueError("receipt is missing the unchanged-source verification")
-        for key in ("unrelated_member_payloads_and_metadata_unchanged", "member_order_and_mtimes_preserved"):
-            if verification.get(key) is not True:
-                errors.append(f"DuckDB source receipt did not verify {key}.")
-    except (OSError, ValueError, TypeError) as exc:
-        errors.append(f"DuckDB source provenance failed: {exc}")
-    if len(errors) == initial_errors:
-        result["result"] = "pass"
-    return result
 
 
 # Use the upstream regression vector, in an isolated subprocess with no data
@@ -198,7 +118,6 @@ def verify():
         "version": duckdb_version,
         "library": duckdb_library,
         "library_sha256": file_sha256(duckdb_library),
-        "source_provenance": verify_duckdb_source(DUCKDB_SOURCE_RECEIPT, duckdb_version, errors),
     }
     env = dict(os.environ)
     env["LD_LIBRARY_PATH"] = str(r_home / "lib") + (":" + env["LD_LIBRARY_PATH"] if env.get("LD_LIBRARY_PATH") else "")

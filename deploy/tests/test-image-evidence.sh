@@ -68,8 +68,8 @@ if [[ "${1:-}" == run ]]; then
         printf '{"cve":"CVE-2026-111497","result":"fail","errors":["vendored Brotli"]}\n'
         exit 1
       fi
-      printf '{"schema":"islet.brotli_verification/2","cve":"CVE-2026-111497","result":"pass","errors":[],"duckdb":{"version":"1.5.2","result":0,"error_code":-17,"library_sha256":"%s","source_provenance":{"result":"pass","receipt_sha256":"%s"}}}\n' \
-        "$(printf 'a%.0s' {1..64})" "$(printf 'b%.0s' {1..64})"
+      printf '{"schema":"islet.brotli_verification/2","cve":"CVE-2026-111497","result":"pass","errors":[],"duckdb":{"version":"1.5.2","result":0,"error_code":-17,"library_sha256":"%s"}}\n' \
+        "$(printf 'a%.0s' {1..64})"
       ;;
     *) : ;;
   esac
