@@ -15,6 +15,8 @@ Released security fixes are active in source `23bd2fd`; the owner deferred the u
 backport. Its remaining decoder vulnerability blocks release even if the package scan passes.
 No corrected mixed candidate has been assembled or promoted. The older cohort and release sections below
 describe historical artifacts, not the current selection.
+The [component build record](docs/component_build_20261102.md) describes the new explicit
+review builder, preserved v19 endocrine contract, Ki67 export checks and HPG execution.
 
 <div align="center">
 

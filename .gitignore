@@ -50,6 +50,8 @@ literature/*
 **/typing/calibration_context.json
 **/typing/calibration_context/
 **/typing/structure_update.json
+**/typing/component_selection.json
+**/typing/component_selection_audit.json
 *-structure-audit/
 # Release/agent-transfer archives; their source and small receipts are tracked.
 *.oci.tar

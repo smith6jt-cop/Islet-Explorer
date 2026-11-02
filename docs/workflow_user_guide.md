@@ -175,7 +175,46 @@ The completed real-data check is `output/v19_v20_component_comparison_20261102/m
 
 The mixed candidate must start from cell-level evidence. Preserve the selected v19 endocrine decisions and their explicitly selected calibration/measurement contract, apply the instructed non-endocrine methods, and resolve overlaps by UUID so each eligible cell has one identity. Record the origin of every selected component and every changed boundary decision. Recompute downstream tables from that coherent assignment; do not combine version-specific aggregate CSVs or reuse a v20 denominator with v19 labels.
 
-An audited component-combination command has not yet been implemented. `identity.py --endocrine-from` is a historical input option, not a verified one-command implementation of the current mixed-component selection. Do not treat the isolation diagnostic as that implementation.
+The explicit diagnostic builder is now `scripts/hpg/build_component_candidate.py`,
+with preparation in `scripts/hpg/stage_component_build.py` and the component
+contract in `typing/component_selection.py`. Its [build record](component_build_20261102.md)
+explains the exact source choices and remaining conflicts. `identity.py
+--endocrine-from` remains a historical input option; it does not implement this
+selection.
+
+The builder requires a JSON config with these exact keys: `expected_commit`,
+`selection_reason`, `source_package`, `endocrine_source`, `structure_source`,
+`donor_source`, `donor_metadata`, `initial_source_run`, `control_run`,
+`candidate_run`, `assembly_root`, and `report_root`. Every source must exist;
+every output must be fresh and separate from all inputs and other outputs.
+The package is the checksummed initial-v20 calibration/context/identity/coverage
+capture, not the current DG run under the same historical workstation path.
+
+Submit from the HPG repository root after explicitly syncing the clean source
+commit and verifying the package:
+
+```bash
+/opt/slurm/bin/sbatch --job-name=component-build --qos=maigan-b \
+  --cpus-per-task=24 --mem=192G --time=06:00:00 \
+  scripts/hpg/jobs/site_job.sbatch \
+  python scripts/hpg/build_component_candidate.py --config "$BUILD_CONFIG"
+```
+
+The serial job verifies and materializes the initial source, prepares a typing
+control and a DG candidate, builds both identity sets, runs the all-component
+Lymphatic invariance audit, assembles the app root, and validates the exported
+cell states. Its `build_journal.json` records commands, host, source commit,
+seal, stages and exit codes. A failed stage stops the remaining stages and
+retains the failed output; select fresh destinations for another attempt.
+
+The control preserves the old context as a classification comparison and does
+not claim a new geometry acceptance. The DG candidate uses a fresh derivation
+binding that fully validates the original accepted geometry and exact shared
+input bytes. Historical generation metadata remains unchanged; the new
+validator proof is recorded separately. Neither a passing control nor a
+completed app assembly grants release acceptance. The diagnostic component
+protocol preserves inherited unresolved cells and records additional boundary
+conflicts, so the release builder rejects it.
 
 The paired evidence for review is under `output/v19_v20_component_comparison_20261102/endocrine/` and `visual/paired_v2/`. It includes exact changed UUIDs, all 14 named subtype switches, and 39 representative gains/losses with both versions' labels, thresholds, and corrected values. Eight subtype switches cross a positivity boundary; six retain the same binary flags but change the normalized winning hormone. Image brightness or a larger named-cell count alone cannot establish a better call.
 
@@ -199,7 +238,7 @@ Assembly is a fresh derived output, separate from a processing run. The current 
 ```bash
 "$PY" scripts/uniform/assemble_uniform.py \
   --run "$RUN" \
-  --donor-source data/development/protein-expanded-20261015-v3 \
+  --donor-source data/development/uniform-20donor-20261029-v18 \
   --donor-metadata scripts/uniform/donor_metadata.csv \
   --output "$ASSEMBLY" --report-root "$FRESH_ASSEMBLY_REPORT" \
   --workers 6 --include-collagen-iv
@@ -211,7 +250,7 @@ Assembly rebuilds the app's cell labels, per-object core/peri summaries, marker 
 
 The composition UMAP/Leiden and trajectory input use the named Beta, Alpha, Delta, and CHGA+ hormone-negative shares for objects with at least ten core cells, with no donor correction. The Harmony protein embedding is retained as a separate record. Rebuild these derived representations when component identities change; do not interpret pseudotime as longitudinal disease progression.
 
-Verify the exact donor inventory, UUID uniqueness, all required files and image links, matching counts across cell and summary tables, excluded-donor absence, and consistent endocrine/immune definitions between assembly and UI. Carry Ki67/proliferation state into the app export; both frozen v19 and v20 currently omit it. The local immune-gradient correction includes `Hematopoietic CD45+`, which the last dev app's older list omitted. It needs a rebuilt release before it can appear on a future served site.
+Verify the exact donor inventory, UUID uniqueness, all required files and image links, matching counts across cell and summary tables, excluded-donor absence, and consistent endocrine/immune definitions between assembly and UI. The corrected exporter preserves binary `Ki67_pos` in cell types, per-object cells, donor cells and cell-distance tables, with per-image measurement/level provenance in `uniform_release.json`. It verifies every state against the selected upstream measurement. The release parity check verifies those states survive runtime conversion. Ki67 is not an identity or a new embedding input. Both frozen v19 and v20 omit this field. The local immune-gradient correction includes `Hematopoietic CD45+`, which the last dev app's older list omitted. It needs a rebuilt release before it can appear on a future served site.
 
 The release builder and parity verifier reject unresolved endocrine definitions or disagreement with the app endocrine aggregate. Removing unnamed cells only from a denominator is not a correction. Preserve the failing report and return to the input discrepancy.
 
