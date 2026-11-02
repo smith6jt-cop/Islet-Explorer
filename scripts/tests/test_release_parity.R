@@ -3,6 +3,39 @@
 suppressPackageStartupMessages(library(testthat))
 source("scripts/verify_release_parity.R")
 
+test_that("releases reject unresolved endocrine calls and inconsistent aggregate definitions", {
+  builder <- new.env(parent = globalenv())
+  sys.source("scripts/build_release_data.R", envir = builder)
+  root <- tempfile("endocrine-group-contract-")
+  dir.create(root)
+  on.exit(unlink(root, recursive = TRUE), add = TRUE)
+  named <- c("Beta cell", "Alpha cell", "Delta cell", "CHGA+ hormone-negative")
+  app_members <- function(aggregate, labels) intersect(named, labels)
+  write_contract <- function(labels, endocrine) {
+    jsonlite::write_json(list(labels = labels, label_groups = list(endocrine = endocrine)),
+                         file.path(root, "uniform_release.json"), auto_unbox = FALSE)
+  }
+  # The v20 failure remains a failure even if someone removes the unnamed cells
+  # from the denominator without resolving their identities.
+  write_contract(c(named, "EndocrineCluster", "EndocrineSingle", "Islet", "Tissue"),
+                  c(named, "EndocrineCluster", "EndocrineSingle"))
+  expect_error(builder$validate_release_label_groups(root, app_members), "Unresolved endocrine identities")
+  write_contract(c(named, "EndocrineSingle"), named)
+  expect_error(builder$validate_release_label_groups(root, app_members), "Unresolved endocrine identities")
+  # Islet/Tissue are locations, not endocrine identities. Their unresolved cells
+  # must not silently enter the endocrine denominator.
+  write_contract(c(named, "Islet", "Tissue"), c(named, "Islet"))
+  expect_error(builder$validate_release_label_groups(root, app_members), "Unresolved endocrine identities")
+  write_contract(c(named, "Islet", "Tissue"), named[-1])
+  expect_error(builder$validate_release_label_groups(root, app_members), "Endocrine group mismatch")
+  write_contract(c(named, "Islet", "Tissue"), named)
+  result <- builder$validate_release_label_groups(root, app_members)
+  expect_true(result$applicable)
+  expect_setequal(result$endocrine, named)
+  write_contract(named, c(named, "Unknown"))
+  expect_error(builder$validate_release_label_groups(root, app_members), "Invalid declared endocrine group")
+})
+
 test_that("donor Parquet preserves blank identifiers and numeric missingness", {
   # These are required CI dependencies: missing packages must fail, not skip.
   builder <- new.env(parent = globalenv())

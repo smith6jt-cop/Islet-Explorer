@@ -248,6 +248,9 @@ parity_run <- function(options, repo) {
   }
   builder <- parity_builder(repo)
   schema <- as.character(manifest$schema_version %||% "")
+  record("endocrine_group_definition", {
+    builder$validate_release_label_groups(source_root, source_env$phenotype_aggregate_members)
+  })
   record("passthrough_files_and_trees", {
     if (is.null(manifest)) parity_fail("verified_manifest_required")
     spec <- builder$release_passthrough_files(schema, source_root)

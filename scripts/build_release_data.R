@@ -21,6 +21,40 @@
 # belonged to the retired all-donor experiments and are never reused.
 RELEASE_SCHEMAS <- c("1", "5")
 
+#' Check final-typing group definitions before materializing a release. Equality
+#' of source and release tables cannot detect a shared scientific-definition error.
+#' Earlier roots did not declare label_groups; their historical contract is unchanged.
+validate_release_label_groups <- function(source_root, aggregate_members) {
+  path <- file.path(source_root, "uniform_release.json")
+  if (!file.exists(path)) return(invisible(list(applicable = FALSE)))
+  uniform <- jsonlite::read_json(path, simplifyVector = TRUE)
+  if (is.null(uniform$label_groups)) return(invisible(list(applicable = FALSE)))
+  labels <- uniform$labels
+  if (!is.character(labels) || !length(labels) || anyNA(labels) || any(!nzchar(labels)) || anyDuplicated(labels)) {
+    stop("Invalid declared phenotype labels in uniform_release.json", call. = FALSE)
+  }
+  endocrine <- uniform$label_groups$endocrine
+  if (!is.character(endocrine) || !length(endocrine) || anyNA(endocrine) || anyDuplicated(endocrine) ||
+      !all(endocrine %in% labels)) {
+    stop("Invalid declared endocrine group in uniform_release.json", call. = FALSE)
+  }
+  # Owner 2026-11-02: proper endocrine typing must not leave unnamed definitions.
+  unresolved <- union(intersect(labels, c("EndocrineCluster", "EndocrineSingle", "Endocrine")),
+                      intersect(endocrine, c("Islet", "Tissue")))
+  if (length(unresolved)) {
+    stop("Unresolved endocrine identities prevent release: ", paste(unresolved, collapse = ", "),
+         ". Resolve upstream typing and regenerate the candidate; changing aggregate membership is insufficient.",
+         call. = FALSE)
+  }
+  app_members <- aggregate_members("All endocrine cells", labels)
+  if (!setequal(endocrine, app_members)) {
+    stop("Endocrine group mismatch between upstream data and app aggregate. Upstream only: ",
+         paste(setdiff(endocrine, app_members), collapse = ", "), "; app only: ",
+         paste(setdiff(app_members, endocrine), collapse = ", "), call. = FALSE)
+  }
+  invisible(list(applicable = TRUE, endocrine = endocrine))
+}
+
 #' Files copied as they are, by schema: `required` must exist, `optional` are taken when present. A uniform
 #' root (uniform_release.json present) must be released as schema 5: under schema 1 the app would run with
 #' the frozen 15-donor behaviour (no uniform typing text, no object-count card, no composition-embedding
@@ -339,6 +373,7 @@ build_release <- function(options) {
   missing <- aggregate_names[!vapply(aggregate_names, exists, logical(1), envir = globalenv(), inherits = FALSE)]
   if (length(missing)) stop("App definitions missing from 00_globals.R: ", paste(missing, collapse = ", "), call. = FALSE)
 
+  validate_release_label_groups(source_root, phenotype_aggregate_members)
   master <- load_master_h5ad(h5ad_path)
   if (is.null(master)) stop("Canonical H5AD could not be reconstructed", call. = FALSE)
   prepared <- prep_data(master)
