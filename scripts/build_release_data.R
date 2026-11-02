@@ -318,6 +318,21 @@ build_release <- function(options) {
   source(file.path(repo_root, "app", "shiny_app", "R", "utils_safe_join.R"), local = globalenv())
   source(file.path(repo_root, "app", "shiny_app", "R", "01_runtime_data_backend.R"), local = globalenv())
   source(file.path(repo_root, "app", "shiny_app", "R", "data_loading.R"), local = globalenv())
+  # prep_data() adds the phenotype group aggregates ("All endocrine cells", "All T cells", "All macrophages"; app
+  # commit 82ce23e), whose root-aware helpers live in 00_globals.R. Evaluate exactly those definitions, as
+  # verify_release_parity.R does, rather than the UI stack.
+  aggregate_names <- c("MACROPHAGE_LABEL_PATTERN", "MACROPHAGE_KEY_PATTERN", "is_macrophage_label",
+                       "root_phenotype_labels", "root_has_marker_profile_labels", "TOP_MARKER_BASE",
+                       "CD45_RULE_LABEL", "CD45_TOP_MARKER_LABEL", "root_has_top_marker_labels",
+                       "root_cd45_is_rule_label", "top_marker_labels", "PHENOTYPE_GROUP_AGGREGATES",
+                       "phenotype_group", "is_phenotype_aggregate", "phenotype_aggregate_members",
+                       "phenotype_aggregates_for", "add_phenotype_aggregate_columns")
+  for (expr in parse(file.path(repo_root, "app", "shiny_app", "R", "00_globals.R"))) {
+    if (is.call(expr) && identical(expr[[1]], as.name("<-")) && is.symbol(expr[[2]]) &&
+        as.character(expr[[2]]) %in% aggregate_names) eval(expr, globalenv())
+  }
+  missing <- aggregate_names[!vapply(aggregate_names, exists, logical(1), envir = globalenv(), inherits = FALSE)]
+  if (length(missing)) stop("App definitions missing from 00_globals.R: ", paste(missing, collapse = ", "), call. = FALSE)
 
   master <- load_master_h5ad(h5ad_path)
   if (is.null(master)) stop("Canonical H5AD could not be reconstructed", call. = FALSE)

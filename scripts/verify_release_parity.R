@@ -101,10 +101,17 @@ parity_runtime <- function(repo, root) {
                   "data_loading.R", "drilldown_helpers.R")) {
     sys.source(file.path(repo, "app", "shiny_app", "R", file), envir = env)
   }
-  # Read only the canonical phenotype policy and pixel constant, without running
-  # the UI/credential/package startup code in 00_globals.R.
+  # Read only the canonical phenotype policy, the pixel constant and the definitions prep_data() needs for the
+  # phenotype group aggregates (app commit 82ce23e), without running the UI/credential/package startup code in
+  # 00_globals.R.
   policy_names <- c("PHENOTYPE_RETIRED", "phenotype_keep", "phenotype_is_kept",
-                    "phenotype_filter_rows", "PIXEL_SIZE_UM")
+                    "phenotype_filter_rows", "PIXEL_SIZE_UM",
+                    "MACROPHAGE_LABEL_PATTERN", "MACROPHAGE_KEY_PATTERN", "is_macrophage_label",
+                    "root_phenotype_labels", "root_has_marker_profile_labels", "TOP_MARKER_BASE",
+                    "CD45_RULE_LABEL", "CD45_TOP_MARKER_LABEL", "root_has_top_marker_labels",
+                    "root_cd45_is_rule_label", "top_marker_labels", "PHENOTYPE_GROUP_AGGREGATES",
+                    "phenotype_group", "is_phenotype_aggregate", "phenotype_aggregate_members",
+                    "phenotype_aggregates_for", "add_phenotype_aggregate_columns")
   expressions <- parse(file.path(repo, "app", "shiny_app", "R", "00_globals.R"))
   for (expr in expressions) {
     if (is.call(expr) && identical(expr[[1]], as.name("<-")) &&
