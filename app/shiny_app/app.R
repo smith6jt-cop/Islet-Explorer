@@ -533,13 +533,9 @@ if (identical(Sys.getenv("ISLET_WARM_TRAJECTORY", .warm_trajectory_default), "1"
     # otherwise waits for it as well.
     .warm_h5ad <- data_path("adata_ins_root.h5ad")
     if (file.exists(.warm_h5ad)) invisible(islet_read_h5ad_shared(.warm_h5ad))
-    # The process's first PNG draw builds the font cache (ragg + systemfonts in a fresh container, about 4 s,
-    # paid by the first renderPlot() a reviewer triggered: 4.2 s on the first Trajectory open of the Level 2
-    # staging process, 2026-10-26). One small text draw here moves it before the health check.
-    .warm_png <- tempfile(fileext = ".png")
-    if (requireNamespace("ragg", quietly = TRUE)) ragg::agg_png(.warm_png, width = 64, height = 64) else
-      grDevices::png(.warm_png, width = 64, height = 64)
-    graphics::plot.new(); graphics::text(0.5, 0.5, "warm"); grDevices::dev.off(); unlink(.warm_png)
+    # The process's first PNG draw builds the font cache; one small text draw here moves it before the health
+    # check (islet_warm_png(), 00_globals.R).
+    islet_warm_png()
     !is.null(compute_scanpy_pseudotime(TRAJ_MIN_CELLS, Inf)) &&
       !is.null(paga_result(TRAJ_MIN_CELLS, Inf))
   }, error = function(e) FALSE)

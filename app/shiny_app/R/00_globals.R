@@ -479,6 +479,23 @@ islet_ggsave <- function(file, plot, ...) {
   ggplot2::ggsave(file, plot = plot + light, bg = "white", ...)
 }
 
+#' One small text draw for app.R's warm-up: the process's first PNG draw builds the font cache (ragg + systemfonts
+#' in a fresh container, about 4 s, paid by the first renderPlot() a reviewer triggered: 4.2 s on the first
+#' Trajectory open of the Level 2 staging process, 2026-10-26). The margins are zero because a 64 px figure cannot
+#' hold the default ones: plot.new() stopped with "figure margins too large", and the warm-up of 080714b-c8d942b
+#' failed there before warming the trajectory caches (found on the v20 release container, 2026-11-01).
+islet_warm_png <- function() {
+  path <- tempfile(fileext = ".png")
+  if (requireNamespace("ragg", quietly = TRUE)) ragg::agg_png(path, width = 64, height = 64) else
+    grDevices::png(path, width = 64, height = 64)
+  device <- grDevices::dev.cur()
+  on.exit({ grDevices::dev.off(device); unlink(path) }, add = TRUE)
+  graphics::par(mar = c(0, 0, 0, 0))
+  graphics::plot.new()
+  graphics::text(0.5, 0.5, "warm")
+  invisible(TRUE)
+}
+
 # ============================================================================
 # CSV export helper
 # ============================================================================
