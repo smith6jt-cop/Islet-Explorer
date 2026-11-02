@@ -482,7 +482,7 @@ deploy/activate-release.sh \
 |---|---|---|
 | Quadlet unit / container | `islet-explorer.container`, `islet-explorer` | `islet-explorer-dev.container`, `islet-explorer-dev` |
 | Host port (container 3838) | 3838 | 3839 |
-| Memory cap | 9g | 4g |
+| Memory cap | 9g | 4g (6g for the v20 release, 2026-11-02) |
 | Runtime mounts | `runtime/logs`, `runtime/tmp` | `runtime/islet-explorer-dev/logs`, `.../tmp` |
 | Deployment state | `deployments/active.state`, `previous.state` | `deployments/islet-explorer-dev.active.state`, `.previous.state` |
 | Proxy hostname | `islet-explorer.rc.ufl.edu` → `pubmaigan1:3838` | `devislet-explorer.rc.ufl.edu` → `pubmaigan1:3839` |
