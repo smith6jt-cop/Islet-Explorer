@@ -25,6 +25,7 @@ COHORT = HERE / 'cohort.csv'
 PREVIOUS_BASELINE = HERE.parents[1] / 'data/development/uniform-20donor-20261027'
 _CACHE = {}
 _HASH_CACHE = {}
+DERIVED_SCHEMA = 'uniform.structure_generation_derivation/1'
 
 
 def _stat(target):
@@ -545,6 +546,112 @@ def _validate(run):
     return _result(inv, run, binding_path, binding, manifest_path, manifest, paths)
 
 
+def _derived_inputs(tags):
+    """Files whose unchanged bytes let a fresh run reuse an accepted generation."""
+    paths = ['project_manifest.json', 'structures/collagen_iv.json', 'structure_metrics_manifest.json']
+    for tag in tags:
+        paths.extend(f'{folder}/{tag}{suffix}' for folder, suffix in (
+            ('cells', '.parquet'), ('cell_geojson', '.geojson'), ('context', '.parquet'),
+            ('islets', '.geojson'), ('inputs/tissue', '.geojson'),
+            ('typing/redsea', '.parquet'), ('typing/context', '.parquet'), ('typing/context', '.json')))
+        paths.extend(f'structures/{cls}/{cls}__{tag}.geojson' for cls in CLASSES)
+    return paths
+
+
+def _artifact_generation(source, validation_generation):
+    """Keep the actual frozen artifact method record separate from today's proof.
+
+    A resolver code change alone does not mean the already measured endpoints
+    were recomputed with that code. All source metadata must agree, and every
+    scientific-generation field must equal the newly validated original source.
+    """
+    generation = json.loads((source / 'structure_metrics_manifest.json').read_text()).get('structure_generation')
+    if not isinstance(generation, dict):
+        raise ValueError('Derived source lacks its frozen artifact generation')
+    resolver = generation.get('resolver_sha256')
+    if not isinstance(resolver, str) or re.fullmatch('[0-9a-f]{64}', resolver) is None:
+        raise ValueError('Derived source lacks its original resolver SHA256')
+    scientific = lambda value: {key: item for key, item in value.items() if key != 'resolver_sha256'}
+    if scientific(generation) != scientific(validation_generation):
+        raise ValueError('Frozen source artifacts differ from the validated scientific generation')
+    for tag in _cohort():
+        metadata = json.loads((source / 'typing/context' / f'{tag}.json').read_text())
+        if metadata.get('structure_generation') != generation:
+            raise ValueError(f'{tag}: source context and endpoint generations differ')
+    return generation
+
+
+def _validate_derived(run, record):
+    """Reuse an accepted source, retaining its provenance instead of rewriting it."""
+    source = Path(record.get('source_run', '')).resolve()
+    if (record.get('run') != str(run) or source == run or not record.get('selection_reason', '').strip()
+            or source.is_relative_to(run) or run.is_relative_to(source)):
+        raise ValueError('Invalid derived structure-generation source/run')
+    source_binding = source / BINDING
+    source_record = json.loads(source_binding.read_text())
+    # One explicit derivation only: no chain, loop or historical pointer repair.
+    if source_record.get('schema') != 'uniform.structure_generation_binding/1':
+        raise ValueError('Derived generations require a directly validated original source')
+    original = validate(source)
+    if original is None:
+        raise ValueError('Derived structure source lacks an accepted generation')
+    tags = _cohort()
+    if record.get('images') != tags or set(record.get('input_sha256', {})) != set(_derived_inputs(tags)):
+        raise ValueError('Derived structure-generation cohort/input inventory differs')
+    if any(not isinstance(digest, str) or re.fullmatch('[0-9a-f]{64}', digest) is None
+           for digest in [record.get('source_binding_sha256'), *record['input_sha256'].values()]):
+        raise ValueError('Derived structure-generation requires explicit SHA256 pins')
+    inv = _Inventory()
+    inv.json(run / BINDING)
+    inv.add(source_binding, record.get('source_binding_sha256'))
+    artifact_generation = _artifact_generation(source, original['provenance'])
+    if (record.get('source_generation') != artifact_generation
+            or record.get('validation_generation') != original['provenance']):
+        raise ValueError('Derived structure-generation source provenance changed')
+    for relative, digest in record['input_sha256'].items():
+        inv.add(source / relative, digest)
+        inv.add(run / relative, digest)
+    # Cache validity must include every ancestry guard used by the original source.
+    source_inventory = _CACHE[str(source)]['_inventory']
+    inv.files.update(source_inventory.files)
+    inv.identities.update(source_inventory.identities)
+    return {**original, 'provenance': artifact_generation, 'derivation': record, 'files': inv.files,
+            'identities': inv.identities, '_inventory': inv}
+
+
+def pin_derivation(run, source, *, selection_reason):
+    """Bind a fresh run once to an unchanged accepted source; never edit ancestry."""
+    run, source = Path(run).resolve(strict=True), Path(source).resolve(strict=True)
+    if run == source or run.is_relative_to(source) or source.is_relative_to(run):
+        raise ValueError('Derived run and original source must be independent directories')
+    target = run / BINDING
+    if target.exists() or target.is_symlink():
+        raise FileExistsError(f'{target}: generation already exists; rebinding is prohibited')
+    if not isinstance(selection_reason, str) or not selection_reason.strip():
+        raise ValueError('Derived generation requires an explicit selection reason')
+    original = validate(source)
+    if (original is None or json.loads((source / BINDING).read_text()).get('schema')
+            != 'uniform.structure_generation_binding/1'):
+        raise ValueError('Derived generation needs a validated original source')
+    tags = _cohort()
+    artifact_generation = _artifact_generation(source, original['provenance'])
+    hashes = {}
+    for relative in _derived_inputs(tags):
+        digest = _sha(source / relative)
+        if _sha(run / relative) != digest:
+            raise ValueError(f'{relative}: derived run differs from the accepted source')
+        hashes[relative] = digest
+    record = {'schema': DERIVED_SCHEMA, 'run': str(run), 'source_run': str(source),
+              'selection_reason': selection_reason, 'images': tags,
+              'source_binding_sha256': _sha(source / BINDING),
+              'source_generation': artifact_generation, 'validation_generation': original['provenance'],
+              'input_sha256': hashes}
+    with target.open('x') as stream:
+        json.dump(record, stream, indent=2)
+        stream.write('\n')
+    return validate(run)
+
+
 def validate(run, tags=None):
     """Prove the complete bound cohort once; invalidate cache on any tracked-file change.
 
@@ -563,7 +670,9 @@ def validate(run, tags=None):
         current = False
     if not current:
         _CACHE.pop(str(run), None)
-        cached = _validate(run); _CACHE[str(run)] = cached
+        record = json.loads(binding.read_text())
+        cached = _validate_derived(run, record) if record.get('schema') == DERIVED_SCHEMA else _validate(run)
+        _CACHE[str(run)] = cached
     if tags is not None and (len(tags) != len(set(tags)) or set(tags) - set(cached['paths'])):
         raise ValueError('Requested images are outside the bound structure cohort')
     return {k: v for k, v in cached.items() if k != '_inventory'}

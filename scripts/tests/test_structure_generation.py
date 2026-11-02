@@ -1,6 +1,7 @@
 """Explicit structure selection is immutable, reviewed and tied to the cell lineage."""
 import json
 import os
+import shutil
 from pathlib import Path
 import sys
 
@@ -257,6 +258,118 @@ def test_endpoint_reads_selected_mask_under_stable_logical_key(tmp_path, monkeyp
     assert np.isclose(lymph['area_density'], .2)
     assert result['inputs']['structures/Lymphatic/Lymphatic__image.geojson'] == S._sha(selected)
     assert result['structure_generation'] == {'manifest_sha256': 'chosen'}
+
+
+def derived_candidate(bound):
+    source = bound[0]
+    candidate = source.parent / 'fresh-derived'; candidate.mkdir()
+    generation = S.provenance(source)
+    write(source / 'structure_metrics_manifest.json', {'structure_generation': generation})
+    for tag in S._cohort():
+        write(source / 'typing/context' / f'{tag}.json', {'structure_generation': generation})
+    for relative in S._derived_inputs(S._cohort()):
+        path = source / relative
+        if not path.exists():
+            write(path, {'immutable input': relative})
+        target = candidate / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(path, target)
+    return source, candidate
+
+
+def test_derived_run_retains_original_provenance_without_rewriting_ancestry(bound):
+    source, candidate = derived_candidate(bound)
+    before = (source / S.BINDING).read_bytes()
+    expected = S.provenance(source)
+    result = S.pin_derivation(candidate, source, selection_reason='Exact immutable input reuse')
+    assert result['provenance'] == expected
+    assert result['derivation']['run'] == str(candidate)
+    assert S.path(candidate, 'one', 'Lymphatic') == S.path(source, 'one', 'Lymphatic')
+    assert (source / S.BINDING).read_bytes() == before
+    with pytest.raises(FileExistsError, match='rebinding'):
+        S.pin_derivation(candidate, source, selection_reason='Cannot replace a prior pin')
+
+
+@pytest.mark.parametrize('when', ['before_pin', 'after_cached_validation'])
+def test_derived_candidate_input_changes_are_rejected(bound, when):
+    source, candidate = derived_candidate(bound)
+    if when == 'after_cached_validation':
+        S.pin_derivation(candidate, source, selection_reason='Exact immutable input reuse')
+    (candidate / 'cells/one.parquet').write_text('changed measurement input')
+    with pytest.raises(ValueError, match='differs|hash mismatch'):
+        if when == 'before_pin':
+            S.pin_derivation(candidate, source, selection_reason='Exact immutable input reuse')
+        else:
+            S.validate(candidate)
+
+
+def test_derived_requires_actual_accepted_original_source(bound):
+    source, candidate = derived_candidate(bound)
+    _, wrapper, _, publish, _ = bound
+    pointer = wrapper['images']['one']['reviews']['Lymphatic']
+    path = Path(pointer['path'])
+    review = json.loads(path.read_text()); review['status'] = 'needs_review'
+    wrapper['images']['one']['reviews']['Lymphatic'] = write(path, review); publish()
+    with pytest.raises(ValueError, match='not accepted'):
+        S.pin_derivation(candidate, source, selection_reason='Cannot waive source review')
+    assert not (candidate / S.BINDING).exists()
+
+
+def test_derived_cache_guards_original_review_and_source_generation(bound):
+    source, candidate = derived_candidate(bound)
+    S.pin_derivation(candidate, source, selection_reason='Exact immutable input reuse')
+    view = Path(bound[1]['images']['one']['reviews']['Lymphatic']['path']).with_name('one_tile01.png')
+    view.write_text('source review changed after derived validation')
+    with pytest.raises(ValueError, match='hash mismatch'):
+        S.validate(candidate)
+
+
+@pytest.mark.parametrize('defect', ['source_generation', 'missing_hash', 'self_source'])
+def test_derived_binding_tampering_is_rejected(bound, defect):
+    source, candidate = derived_candidate(bound)
+    S.pin_derivation(candidate, source, selection_reason='Exact immutable input reuse')
+    path = candidate / S.BINDING
+    record = json.loads(path.read_text())
+    if defect == 'source_generation':
+        record['source_generation']['manifest_sha256'] = '0' * 64
+    elif defect == 'missing_hash':
+        record['source_binding_sha256'] = None
+    else:
+        record['source_run'] = str(candidate)
+    write(path, record)
+    with pytest.raises(ValueError):
+        S.validate(candidate)
+
+
+def test_derived_separates_frozen_resolver_from_current_validation(bound):
+    source, candidate = derived_candidate(bound)
+    frozen = dict(S.provenance(source), resolver_sha256='1' * 64)
+    for relative in ['structure_metrics_manifest.json', *[
+            f'typing/context/{tag}.json' for tag in S._cohort()]]:
+        write(source / relative, {'structure_generation': frozen})
+        shutil.copy2(source / relative, candidate / relative)
+    result = S.pin_derivation(candidate, source, selection_reason='Reuse unchanged frozen artifact generation')
+    assert result['provenance'] == frozen
+    assert result['derivation']['validation_generation']['resolver_sha256'] == S._LOADED_SHA
+    assert result['derivation']['source_generation']['resolver_sha256'] != S._LOADED_SHA
+
+
+def test_derived_cannot_map_different_scientific_generation(bound):
+    source, candidate = derived_candidate(bound)
+    path = source / 'structure_metrics_manifest.json'
+    record = json.loads(path.read_text())
+    record['structure_generation']['manifest_sha256'] = '2' * 64
+    write(path, record)
+    with pytest.raises(ValueError, match='scientific generation'):
+        S.pin_derivation(candidate, source, selection_reason='Cannot replace accepted source geometry')
+
+
+def test_derived_direct_api_rejects_nested_output_before_publication(bound):
+    source = bound[0]
+    nested = source / 'nested-candidate'; nested.mkdir()
+    with pytest.raises(ValueError, match='independent directories'):
+        S.pin_derivation(nested, source, selection_reason='Nested output must not modify source')
+    assert not (nested / S.BINDING).exists()
 
 
 def test_cell_context_uses_selected_geometry_and_records_generation(tmp_path, monkeypatch):
