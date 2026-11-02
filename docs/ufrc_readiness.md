@@ -10,8 +10,11 @@ whole-v19 reference image was never activated; no corrected mixed release exists
 **Security build status, 2026-11-02:** released fixes are active at `23bd2fd`;
 the owner deferred the unmerged DuckDB backport. Its `3a12daa` build was stopped,
 with the work preserved separately. The parallel security session owns one
-current-app offline candidate and separate package-scan evidence. DuckDB's
-binary check still blocks a passing full-security attestation and restart.
+current-app offline candidate and separate package-scan evidence. Image
+`2bbb928db9760c86d7a1bb9adf9002bb1a27d88da96b02a600baca93c090d733` is
+built and staged offline: 0 High/Critical package findings, dependency/rendering smoke pass.
+DuckDB alone still fails the binary check, blocking a passing full-security
+attestation and restart; the artifact is marked `remediation-incomplete`.
 The [dated security record](container_security_20261102.md) owns image/build status;
 historical zero-High/Critical package scans below do not satisfy this new gate.
 

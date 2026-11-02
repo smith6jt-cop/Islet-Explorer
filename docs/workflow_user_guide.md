@@ -15,6 +15,7 @@ This guide follows the data from the source images to the reviewed app and its r
 | Dev site | `https://devislet-explorer.rc.ufl.edu/islet-explorer/` last served `pubapps-2026-11-uniform-v20`. The owner stopped dev during container security remediation on 2026-11-02; it is now masked. |
 | Production | `https://islet-explorer.rc.ufl.edu/islet-explorer/` has been stopped since 2026-10-26 and is now also masked. Its recorded release is `pubapps-2026-10-uniform-v10-perf2`. |
 | Local app service | `islet-explorer-local.service`, port 3840, is inactive/disabled. |
+| Offline security image | `2bbb928d…` from `23bd2fd` is built and imported under a hold on PubApps. Released fixes pass package/dependency checks, but the full gate fails on deferred DuckDB. It is not deployable; see the security record. |
 | Whole-v19 reference release | The build at `190addc` was staged but never activated. It remains reference evidence; its historical compatibility exception is withdrawn from current source. |
 
 The [component comparison](v19_v20_component_comparison_20261102.md) records the selections and evidence. The [compact isolation receipt](evidence/lymphatic_isolation_20261102.json) binds the verified source and reports. The [container security record](container_security_20261102.md) documents the service masks, affected images, and replacement-image work. Neither service is authorized to restart as part of that remediation. Do not infer that a committed fix, successful diagnostic, or staged bundle has changed served data.

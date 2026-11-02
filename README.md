@@ -11,6 +11,8 @@ The Lymphatic-only update had unintentionally recalibrated unrelated markers; th
 calibration from live structure membership and checks every component on the real 20-donor data.
 Dev last served the unaccepted v20 candidate; dev and production are now stopped and masked during
 [container security remediation](docs/container_security_20261102.md). The in-house app remains stopped.
+Released security fixes are active in source `23bd2fd`; the owner deferred the unmerged DuckDB
+backport. Its remaining decoder vulnerability blocks release even if the package scan passes.
 No corrected mixed candidate has been assembled or promoted. The older cohort and release sections below
 describe historical artifacts, not the current selection.
 

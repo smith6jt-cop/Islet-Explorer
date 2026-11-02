@@ -8,6 +8,14 @@ The [component comparison](v19_v20_component_comparison_20261102.md) and
 [cross-repository change notice](typing_change_notice_20261102.md) describe the selected sources,
 fixes, evidence and remaining work. The file count below belongs to its stated September revision.
 
+Security additions are `deploy/verify-brotli.py` (actual installed decoder and
+library checks) and `deploy/tests/check-duckdb-brotli.R` (temporary real-Parquet
+compatibility checks). The active source has no unmerged DuckDB patch/helper;
+that work is preserved separately at `3a12daa`. See
+[the security record](container_security_20261102.md) and
+[deployment guide](../deploy/README.md) for the released fixes, strict gate,
+offline artifact status and service masks.
+
 Inspected 2026-09-10 at Git `000e970cac91220f71200b5240f4729a3d32d44e`. This catalog explicitly describes all **225 tracked entries** at that revision, including the submodule reference. It supplements [the maintainer walkthrough](maintainer_walkthrough.md).
 
 The subsequent offline expansion workflow and its separate data staging are

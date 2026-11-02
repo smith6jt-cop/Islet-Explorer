@@ -166,9 +166,12 @@ valid-data check cannot waive malformed-stream rejection.
 
 **Build status:** the combined `3a12daa` backport build was stopped following
 the owner's direction. No completed patched image or patched-image compatibility
-result is claimed. An offline candidate containing the released fixes can be
-built for inspection, but the original DuckDB decoder is expected to fail the
-strict gate. It must not receive a passing attestation or be released. Revisit
+result is claimed. The released-fixes-only image `2bbb928d…` from `23bd2fd` was
+built, scanned and imported offline under a hold. Its package scan has 0
+High/Critical findings and dependency/rendering smoke checks pass, but the
+original DuckDB decoder alone fails the strict gate. It has no passing release
+attestation and cannot be activated. The dated security record binds its exact
+image/export/staging evidence. Revisit
 the DuckDB change after the upstream condition is met and its implementation
 and compatibility have been reviewed.
 

@@ -235,9 +235,11 @@ and does not replace full release scientific parity or browser checks.
 
 The combined backport build at `3a12daa` was stopped following the owner's
 newer direction. No completed patched image, passing final scan, or patched-image
-compatibility result is claimed. An offline candidate with the released
-Pillow/Node/system fixes is expected to fail the strict DuckDB decoder gate
-until that dependency is resolved; it must not receive a passing attestation.
+compatibility result is claimed. The offline available-fixes image `2bbb928d…`
+from `23bd2fd` is built and imported under a hold: package scan 0 High/Critical
+and dependency/rendering smoke pass, while DuckDB alone fails the strict gate.
+It has no passing release attestation. The [dated security record](../docs/container_security_20261102.md)
+binds its full image ID, export hashes, checks and unchanged service state.
 Both services remain stopped and masked. Building or testing an image does not
 authorize a restart or accept a scientific data candidate.
 

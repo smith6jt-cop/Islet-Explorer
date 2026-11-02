@@ -26,6 +26,12 @@ release or an instruction to restart. Earlier October provisioning notes are his
 use the current [security record](container_security_20261102.md) and
 [readiness record](ufrc_readiness.md).
 
+The current security direction applies the released fixes and defers DuckDB's
+unmerged backport. Source `23bd2fd` builds Pillow against the patched system
+libraries while retaining the original CRAN DuckDB 1.5.2. An offline candidate
+may be built and inspected, but the strict decoder gate still fails on DuckDB;
+a zero-High/Critical package scan does not make that artifact deployable.
+
 ---
 
 ## Data Pipeline

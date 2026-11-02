@@ -1,0 +1,173 @@
+{
+  "recorded_utc": "2026-11-02T21:10:55.206483+00:00",
+  "status": "released_fixes_built_and_staged_offline_duckdb_deferred",
+  "image_id": "sha256:2bbb928db9760c86d7a1bb9adf9002bb1a27d88da96b02a600baca93c090d733",
+  "source_commit": "23bd2fdd223d090f4c5ff438167245c459dbeb16",
+  "artifact_status": "remediation-incomplete",
+  "package_scanner_counts": {
+    "Medium": 4724,
+    "Low": 189,
+    "Negligible": 196,
+    "High": 0,
+    "Critical": 0
+  },
+  "grype_database_built": "2026-11-02T06:26:52Z",
+  "original_high_critical_package_matches_no_longer_detected": 8,
+  "full_security_gate": "FAIL",
+  "remaining_cve": "CVE-2026-111497",
+  "remaining_component": "DuckDB 1.5.2 bundled Brotli",
+  "duckdb_backport_applied": false,
+  "duckdb_binary": {
+    "version": "1.5.2",
+    "library": "/usr/local/lib/R/site-library/duckdb/libs/duckdb.so",
+    "library_sha256": "133dc889002c6008a3d42c0f6167c63e8c1f39d12b45f726f38e98fffbd55bcf",
+    "result": 0,
+    "error_code": -9,
+    "expected_error_code": -17
+  },
+  "ubuntu_packages": {
+    "libbrotli1": "1.1.0-2ubuntu0.1",
+    "libbrotli-dev": "1.1.0-2ubuntu0.1"
+  },
+  "node": {
+    "node": "24.22.2",
+    "brotli": "1.2.0"
+  },
+  "pillow_version": "13.0.0",
+  "pillow_vendored_brotli": [],
+  "dependency_smoke": {
+    "result": "pass",
+    "pillow": "13.0.0",
+    "checks": [
+      "PNG",
+      "JPEG",
+      "TIFF",
+      "FreeType text",
+      "matplotlib Agg",
+      "Node runtime imports"
+    ],
+    "runtime": {
+      "body-parser": "2.4.0",
+      "follow-redirects": "1.16.2",
+      "node": "24.22.2"
+    }
+  },
+  "r_source_parse_count": 35,
+  "r_and_python_dependency_probes": "pass",
+  "prohibited_release_files_present": [],
+  "archive": {
+    "path": "tmp/security-available-fixes-20261102/islet-explorer-available-duckdb-deferred-20261102.oci.tar",
+    "bytes": 2188395008,
+    "sha256": "6509df201e1fb9e3d1294d401a168a9ee7c523ad3bc564f876169f92da2a35c1"
+  },
+  "host_staging": {
+    "artifact_status": "remediation-incomplete",
+    "loaded": true,
+    "image_id": "sha256:2bbb928db9760c86d7a1bb9adf9002bb1a27d88da96b02a600baca93c090d733",
+    "source_revision": "23bd2fdd223d090f4c5ff438167245c459dbeb16",
+    "staging_directory": "/pubapps/maigan/islet-explorer/incoming/security-available-20261102",
+    "hostname": "pubmaigan1.ufhpc",
+    "checked_at": "2026-11-02T21:08:24.988966+00:00",
+    "transfer_checksums_verified": true,
+    "services_remain_masked_and_stopped": true,
+    "service_and_deployment_hashes_unchanged": true,
+    "running_containers": [],
+    "application_port_listeners": "",
+    "activation_performed": false,
+    "full_release_gate": "FAIL: deferred DuckDB bundled Brotli",
+    "passing_release_files_present": false,
+    "local_disk_free_after_load": 5962076160
+  },
+  "scientific_data_release_assembled": false,
+  "scientific_acceptance": false,
+  "services_restarted": false,
+  "git_pushed": false,
+  "deferred_branch": "security/deferred-duckdb-brotli-20261102",
+  "evidence_root": "tmp/security-available-fixes-20261102",
+  "evidence": {
+    "ARTIFACTS.sha256": {
+      "sha256": "cad555ab5a6c86e7fa5c125d6e48fc875694eff2c03e0d91c0601651b65a73e8",
+      "bytes": 4012
+    },
+    "remediation-status.json": {
+      "sha256": "3502dfe8ddcb8b222be88ff9332722004c909d63a9a2973a79b0eebdaf71925a",
+      "bytes": 2002
+    },
+    "fixed-findings.json": {
+      "sha256": "a73b669250942979ba02f31acb351cffb3358d96af1c7e43e695f192af0f7b64",
+      "bytes": 2459
+    },
+    "dependency-smoke.json": {
+      "sha256": "6d9fcb7c7f96aadf0bdb3592ab845913478d662263b8e77472b853dec7aaf404",
+      "bytes": 273
+    },
+    "duckdb-deferral-source-check.json": {
+      "sha256": "cd0e988174f07317e27dc962375cf1b2ce94c3c4a2e2025157f246e637f16d9e",
+      "bytes": 345
+    },
+    "source-identity.txt": {
+      "sha256": "cfbaf0a9dfde3a528b75b040eea40c200885cd82250705a8cbcce853c344ede1",
+      "bytes": 214
+    },
+    "build-inputs.sha256": {
+      "sha256": "1754bccdf2bc7f473817c542ecadc68ef4354dcdb6a5c261097b732e1cdfb956",
+      "bytes": 934
+    },
+    "build.log": {
+      "sha256": "2ccabe61b34dbf54382b59fa00e3296f72615c81cf67cc3b1c1321bffe83ac27",
+      "bytes": 1084771
+    },
+    "build.exit": {
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+      "bytes": 2
+    },
+    "host-before-staging.json": {
+      "sha256": "6fd51f619d717ad11b7eb376d7153b3a63937aac6fe636c822a158884685b36c",
+      "bytes": 1770
+    },
+    "host-after-staging.json": {
+      "sha256": "112f41692629d37c8b3d86d1c6d4a05a7a7a73270c826ddfeb829b0cf4eec997",
+      "bytes": 1770
+    },
+    "host-load-receipt.json": {
+      "sha256": "a3f239d90ba499648b41b5582a42afbda9aefbd67cc7dbbd7ed4fcb52d0a7bb8",
+      "bytes": 784
+    },
+    "HOLD.txt": {
+      "sha256": "0219517dc6430d64421a350f35c0e36002316854e5d4dc47469bde7a6a03d085",
+      "bytes": 901
+    },
+    "islet-explorer-available-duckdb-deferred-20261102.oci.tar.metadata": {
+      "sha256": "a9cbe290ffe67c0c98b9ffabf489c5cb7644989bde2efbf880e3d1cd8da8cad9",
+      "bytes": 393
+    },
+    "islet-explorer-available-duckdb-deferred-20261102.oci.tar.sha256": {
+      "sha256": "abfb07a4d3579ef3540c2d0206c8646271499fc0db4c5998aca46c551c2e20b7",
+      "bytes": 257
+    },
+    "full-gate/sha256_2bbb928db9760c86d7a1bb9adf9002bb1a27d88da96b02a600baca93c090d733.brotli.json": {
+      "sha256": "0b9183d7af023a2d21d0abc3b7804bf4cdfa580ed0943c56b748ab38bf227db1",
+      "bytes": 1508
+    },
+    "package-scan/sha256_2bbb928db9760c86d7a1bb9adf9002bb1a27d88da96b02a600baca93c090d733.cyclonedx.json": {
+      "sha256": "e726ad21790f4381bdea85127291e75621338f28b6cdddfac63fe23033e92522",
+      "bytes": 17847673
+    },
+    "package-scan/sha256_2bbb928db9760c86d7a1bb9adf9002bb1a27d88da96b02a600baca93c090d733.grype.json": {
+      "sha256": "a6d4459729c51ea2b65f350a782fb4ada475a409348ab912f0cb217b5aea38fe",
+      "bytes": 37225054
+    },
+    "package-scan/sha256_2bbb928db9760c86d7a1bb9adf9002bb1a27d88da96b02a600baca93c090d733.grype-db.json": {
+      "sha256": "bb74bfdf4a9cbef2326f8e99e693d36d1b869ec8a9c3f60916b5025dc14d54d7",
+      "bytes": 342
+    }
+  },
+  "artifact_checksum_entries": 38,
+  "final_remote_verification": {
+    "path": "tmp/security-available-final-verification-20261102.log",
+    "sha256": "cfea4ec432f4adf26f817f0963f36bf2049e12d4b5ae28b02f62a7feaed030e5",
+    "verified_at_utc": "2026-11-02T21:10:11.275925Z",
+    "checksum_entries": 38,
+    "same_image_and_unchanged_host_state": true
+  }
+}

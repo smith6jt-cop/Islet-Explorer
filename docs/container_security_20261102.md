@@ -11,6 +11,15 @@ message is a CC notification; it does not supply the detailed package findings
 below. Those findings come from the retained local image inspection, rescans and
 decoder probes, not from the notification body.
 
+The owner pasted the underlying notice into the parallel security session. That
+notice lists dev image `517e969d…` with 0 fixable Critical/High findings but KEV
+`CVE-2026-111497`, due **2026-11-10**, and historical production image
+`ae95fd23…` with 0 fixable Critical / 3 High, the same KEV due **2026-11-10**,
+and High findings due **2026-12-02**. It says production was last seen on
+2026-10-26 and was not running, and must be patched before restarting. Those
+are the notice's counts and dates; the later local rescan counts below are
+separate observations. The pasted notice does not enumerate the three High IDs.
+
 The combined current-app/backport build started at **20:30:16 UTC** from clean
 commit `3a12daa5670806e264f703d97911d1f0340df530`. After the clarification, it
 was stopped at **20:39:51 UTC**, exit `130`. No completed candidate image, image
@@ -30,9 +39,46 @@ is under `tmp/security-available-fixes-20261102/`. Its package scan and any
 export must be marked **`remediation-incomplete`**: the unchanged DuckDB decoder
 is expected to fail the normal security gate. No passing security attestation,
 deployable release manifest or activation may be inferred from that offline
-artifact. The successor build's exact source/image IDs and actual results will
-be recorded by that session. Building it does not assemble or accept a new
+artifact. The local build, package scan, smoke checks and export have now
+completed as recorded below. Building it does not assemble or accept a new
 scientific data root.
+
+## Built offline candidate — released fixes verified, DuckDB unresolved
+
+| Item | Recorded result |
+|---|---|
+| Immutable image | `sha256:2bbb928db9760c86d7a1bb9adf9002bb1a27d88da96b02a600baca93c090d733` |
+| Source | Clean `23bd2fdd223d090f4c5ff438167245c459dbeb16`; original CRAN DuckDB installer matches `5b3c535`, backport helper/patch absent |
+| Package scan, 21:04:59 UTC | 0 Critical / 0 High; 4,724 Medium / 189 Low / 196 Negligible; Grype database built 2026-11-02 06:26:52 UTC |
+| Earlier production rescan findings | All eight Critical/High package matches are no longer detected; exact package/version comparison in `fixed-findings.json` |
+| Released components | Node 24.22.2, body-parser 2.4.0, follow-redirects 1.16.2; Ubuntu `libbrotli1` and `libbrotli-dev` 1.1.0-2ubuntu0.1; source-built Pillow 13.0.0 linked to the managed decoder, no vendored Brotli in the venv |
+| Runtime checks | Python/R dependency probes and all 35 app source parses pass; exact Node package imports and Pillow PNG/JPEG/TIFF, FreeType text and Matplotlib Agg smoke checks pass against the immutable image |
+| Full security gate | **FAIL**, solely DuckDB 1.5.2's bundled decoder returning `-9` instead of `-17` for CVE-2026-111497; the backport was not applied |
+| OCI export | 2,188,395,008 bytes, exported 21:05:03 UTC; SHA-256 `6509df201e1fb9e3d1294d401a168a9ee7c523ad3bc564f876169f92da2a35c1` |
+| Release authority | `remediation-incomplete`; no passing `.scan.txt`, `published-image.txt`, `release.env` or `MANIFEST.sha256`; no new data release or activation |
+
+The archive is
+`tmp/security-available-fixes-20261102/islet-explorer-available-duckdb-deferred-20261102.oci.tar`,
+with `.metadata` and `.sha256` sidecars. The immutable image is bound to the
+same source and base digest in its labels and export metadata. Its package scan
+is deliberately separate from the failing full gate. `HOLD.txt` prohibits
+activation; the active service masks remain required. No complete DuckDB
+remediation or scientific acceptance is claimed by these results.
+
+Offline import to `pubmaigan1.ufhpc` completed at **21:08:24 UTC**, under
+`/pubapps/maigan/islet-explorer/incoming/security-available-20261102` with its
+`HOLD.txt`. All 32 transferred artifact checksums passed; `load-image.sh`
+verified the same immutable image, source and base identity. Before/after
+records confirm unchanged service masks, both Quadlet files and all four
+deployment-state files, no running containers and no listeners on 3838/3839.
+Both services remain stopped/masked; no activation occurred. Host local storage
+has 5,962,076,160 bytes free after import. `host-load-receipt.json` and
+`host-after-staging.json` retain these checks. See the compact
+[build and staging receipt](evidence/security_available_fixes_20261102.json).
+After adding the host receipts/logs, all **38** final `ARTIFACTS.sha256` entries
+passed on the server at **21:10:11 UTC**. The final check again confirmed the
+same imported image, unchanged masks/configuration and no running containers
+or backend listeners. Proof: `tmp/security-available-final-verification-20261102.log`.
 
 ## Host mitigation
 
@@ -183,7 +229,7 @@ evidence of the attempted transformation; they do not authorize its use now.
 | Image/release evidence contract at `3a12daa` | Mocked Podman/scanner fixtures, including missing/partial/failed Brotli report rejection | Verifies that historical gate's plumbing; fixture image IDs and scan results are not real image attestations or proof of the successor gate |
 | Active evidence contract at `23bd2fd` | Mocked contract suite passed after removing the deferred source-receipt requirement; actual old-dev image still fails on its bundled Pillow decoder and DuckDB error `-9` | Confirms the active gate remains strict; no claim that the new candidate passes |
 | Combined `3a12daa` build | Stopped at 20:39:51 UTC, exit `130`; no completed image or export | No replacement-image validation or release acceptance |
-| Released-fixes-only offline build | Assigned to the parallel security session; exact source/image IDs and results to be recorded there | Package scan/export must remain `remediation-incomplete`; normal gate failure on DuckDB is expected |
+| Released-fixes-only offline build | Image `2bbb928d…` constructed; package scan 0 High/Critical, dependency/rendering smoke pass; full gate fails only DuckDB; OCI exported | Released fixes verified; artifact remains `remediation-incomplete`, with no full-security pass or activation |
 
 The source backport receipt and checks are in
 `tmp/security-build-20261102-review/patch-receipt-a.json` and
@@ -200,7 +246,7 @@ or mock tests do not permit restarting an old image. An offline artifact marked
 needs its actual binary, valid-data and security checks, followed by separate
 release/data acceptance and activation.
 
-## Interim ticket reply (draft only; not sent)
+## Ticket reply (draft only; not sent)
 
 > We have stopped `maigan/islet-explorer-dev` on `pubmaigan1.ufhpc` and
 > persistently masked its service against automatic restart. Production
@@ -208,11 +254,14 @@ release/data acceptance and activation.
 > We verified that no containers are running and neither backend port is
 > listening. The old production image will not be restarted or used for rollback.
 >
-> Local inspection found affected Brotli copies bundled with Pillow and DuckDB,
-> despite patched Node and Ubuntu Brotli packages in dev. We are preparing a
-> current-app offline build using released fixes, including source-built Pillow.
-> The owner has deferred the unmerged DuckDB backport. DuckDB therefore remains
-> unresolved, and any offline package scan/export will be marked remediation
-> incomplete; it will not carry a passing normal security attestation. Both
-> workloads remain stopped and masked. Please record the operational mitigation
-> as shutdown; no service restart or complete remediation is being claimed.
+> We rebuilt current application source `23bd2fd` as immutable image
+> `sha256:2bbb928db9760c86d7a1bb9adf9002bb1a27d88da96b02a600baca93c090d733`.
+> The released Node/system/Pillow fixes and dependency/rendering checks pass;
+> the package scan reports 0 High / 0 Critical. The full binary gate still fails
+> on CVE-2026-111497 in DuckDB 1.5.2's bundled Brotli decoder. The unmerged
+> DuckDB backport is deferred, so this is incomplete remediation.
+>
+> The checksummed image is imported offline under an explicit hold. Neither
+> service configuration changed and no container was started as an application.
+> Please retain shutdown as the mitigation while the DuckDB issue remains
+> unresolved. No passing release attestation or restart is claimed.
