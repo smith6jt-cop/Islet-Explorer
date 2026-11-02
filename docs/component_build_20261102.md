@@ -51,8 +51,14 @@ The matching released-fixes image is `41e62a97…`, built from `b15f0fc`. Its pa
 scan has zero High/Critical findings and its dependency and installed Shiny/R
 runtime checks pass. The known DuckDB finding remains visible and is nonblocking
 under the owner's [dated remediation window](duckdb_remediation_window_20261102.md)
-through 2026-11-10 UTC. The separate dev build will test the local DuckDB fix.
+through 2026-11-10 UTC. The local DuckDB fix is kept in the separate dev build.
 Both PubApps services remain stopped while the current data checks are resolved.
+
+The subsequent [separate dev DuckDB build](dev_duckdb_fix_20261102.md) is also
+complete: image `b26558a9…` from branch commit `92c63ba` passes the strict decoder
+and security gate without a deferral, plus read-only BROTLI round trips on real
+v19/v20 release tables. It is retained locally and has not been activated.
+This does not change the selected production image or the data failures below.
 
 The executable entry point is `scripts/hpg/build_component_candidate.py --config
 CONFIG.json`, run through `scripts/hpg/jobs/site_job.sbatch`. The exact config and
