@@ -170,6 +170,32 @@ verify_evidence_hash REPORT_SHA256 "${report}" || exit $?
 verify_evidence_hash R_PACKAGES_SHA256 "${r_packages}" || exit $?
 verify_evidence_hash PYTHON_PACKAGES_SHA256 "${python_packages}" || exit $?
 
+# Every newly generated manifest must carry the current supplementary gate.
+# Existing historical manifests remain historical evidence; old scan receipts
+# cannot authorize a new release without checking the actual bundled decoders.
+brotli_report="${attestations_dir}/${safe_name}.brotli.json"
+brotli_hash="$(read_optional_evidence_value "${scan_attestation}" BROTLI_REPORT_SHA256)" || exit 65
+[[ -n "${brotli_hash}" && -f "${brotli_report}" && ! -L "${brotli_report}" ]] || {
+  echo "ERROR: a current Brotli verification report is required; rescan the image." >&2
+  exit 66
+}
+verify_evidence_hash BROTLI_REPORT_SHA256 "${brotli_report}" || exit $?
+python3 - "${brotli_report}" <<'PY'
+import json, re, sys
+report = json.load(open(sys.argv[1]))
+if report.get("result") != "pass" or report.get("cve") != "CVE-2026-111497" or report.get("errors") != []:
+    raise SystemExit("ERROR: Brotli verification did not pass.")
+duckdb = report.get("duckdb", {})
+provenance = duckdb.get("source_provenance", {})
+if (report.get("schema") != "islet.brotli_verification/2"
+        or duckdb.get("version") != "1.5.2"
+        or duckdb.get("result") != 0 or duckdb.get("error_code") != -17
+        or provenance.get("result") != "pass"
+        or not re.fullmatch(r"[0-9a-f]{64}", str(duckdb.get("library_sha256", "")))
+        or not re.fullmatch(r"[0-9a-f]{64}", str(provenance.get("receipt_sha256", "")))):
+    raise SystemExit("ERROR: rescan with the current DuckDB binary and provenance gate.")
+PY
+
 grype_db_status="${attestations_dir}/${safe_name}.grype-db.json"
 grype_db_hash="$(read_optional_evidence_value "${scan_attestation}" GRYPE_DB_STATUS_SHA256)" || {
   echo "ERROR: duplicate GRYPE_DB_STATUS_SHA256 in scan evidence." >&2

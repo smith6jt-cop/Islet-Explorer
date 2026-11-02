@@ -1,3 +1,6 @@
+# Pillow's 13.0.0 Linux wheels bundle vulnerable Brotli 1.2.0 (CVE-2026-111497).
+# Build against the security-updated system FreeType/Brotli libraries instead.
+--no-binary=pillow
 PyYAML==6.0.3
 anndata==0.12.6
 array-api-compat==1.12.0

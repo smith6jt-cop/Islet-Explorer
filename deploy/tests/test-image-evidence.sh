@@ -63,6 +63,14 @@ if [[ "${1:-}" == run ]]; then
     *" --pull=missing "*) if [[ "${MOCK_BASE_FAIL:-0}" == 1 ]]; then exit 65; fi ;;
     *" /bin/cat "*) printf 'Package\tVersion\nshiny\t1.0\n' ;;
     *" pip freeze --all "*) printf 'scanpy==1.0\n' ;;
+    *" --network none -i --entrypoint /opt/islet-explorer-py/bin/python "*)
+      if [[ "${MOCK_BROTLI_FAIL:-0}" == 1 ]]; then
+        printf '{"cve":"CVE-2026-111497","result":"fail","errors":["vendored Brotli"]}\n'
+        exit 1
+      fi
+      printf '{"schema":"islet.brotli_verification/2","cve":"CVE-2026-111497","result":"pass","errors":[],"duckdb":{"version":"1.5.2","result":0,"error_code":-17,"library_sha256":"%s","source_provenance":{"result":"pass","receipt_sha256":"%s"}}}\n' \
+        "$(printf 'a%.0s' {1..64})" "$(printf 'b%.0s' {1..64})"
+      ;;
     *) : ;;
   esac
   exit 0
@@ -179,6 +187,14 @@ grep -Fq -- '--add-cpes-if-none=false' "${mock_log}/grype.log" || fail "Grype CP
   fail "scan did not retain its original SBOM and correction record"
 grep -Eq '^RAW_SBOM_SHA256=[0-9a-f]{64}$' "${attestation}" || fail "raw SBOM hash was not recorded"
 grep -Eq '^SBOM_CORRECTIONS_SHA256=[0-9a-f]{64}$' "${attestation}" || fail "correction record hash was not recorded"
+grep -Eq '^BROTLI_REPORT_SHA256=[0-9a-f]{64}$' "${attestation}" || fail "Brotli report hash was not recorded"
+
+brotli_fail_dir="${work_dir}/scan-brotli-fail"
+expect_status 1 env PATH="${mock_bin}:${PATH}" MOCK_LOG_DIR="${mock_log}" \
+  MOCK_IMAGE_ID="${image_id}" MOCK_BROTLI_FAIL=1 \
+  "${repo_root}/deploy/scan-image.sh" "${image_id}" "${brotli_fail_dir}"
+[[ ! -e "${brotli_fail_dir}/${safe_name}.scan.txt" && -s "${brotli_fail_dir}/${safe_name}.brotli.json" ]] || \
+  fail "failed Brotli gate must retain its report without issuing an attestation"
 
 scan_fail_dir="${work_dir}/scan-fail"
 expect_status 2 env PATH="${mock_bin}:${PATH}" MOCK_LOG_DIR="${mock_log}" \
@@ -319,6 +335,33 @@ grep -Fqx 'MANIFEST_VERSION=2' "${release_ok}/release.env" || fail 'manifest ver
 grep -Fqx 'EXPECTED_IMAGES=15' "${release_ok}/release.env" || fail 'original image count was not recorded'
 expect_status 0 "${repo_root}/deploy/verify-release.sh" "${release_ok}"
 expect_status 0 "${repo_root}/deploy/verify-release.sh" "${release_ok}" --quick
+
+# A historical package-only scan cannot authorize a new release. Both the
+# supplementary report and its bound digest are mandatory at generation time.
+for absent in both report hash; do
+  release_old_scan="${work_dir}/release-old-scan-${absent}"
+  make_release "${release_old_scan}"
+  if [[ "${absent}" != hash ]]; then
+    rm -- "${release_old_scan}/attestations/${safe_name}.brotli.json"
+  fi
+  if [[ "${absent}" != report ]]; then
+    sed -i '/^BROTLI_REPORT_SHA256=/d' "${release_old_scan}/attestations/${safe_name}.scan.txt"
+  fi
+  expect_status 66 "${repo_root}/deploy/generate-release-manifest.sh" \
+    "${release_old_scan}" release "${image_id}" "${commit}" 1
+  [[ ! -e "${release_old_scan}/release.env" ]] || fail 'old scan wrote release metadata'
+done
+
+release_partial_scan="${work_dir}/release-partial-scan"
+make_release "${release_partial_scan}"
+printf '{"cve":"CVE-2026-111497","result":"pass","errors":[]}\n' \
+  > "${release_partial_scan}/attestations/${safe_name}.brotli.json"
+partial_hash="$(sha256sum "${release_partial_scan}/attestations/${safe_name}.brotli.json" | awk '{print $1}')"
+sed -i "s/^BROTLI_REPORT_SHA256=.*/BROTLI_REPORT_SHA256=${partial_hash}/" \
+  "${release_partial_scan}/attestations/${safe_name}.scan.txt"
+expect_status 1 "${repo_root}/deploy/generate-release-manifest.sh" \
+  "${release_partial_scan}" release "${image_id}" "${commit}" 1
+[[ ! -e "${release_partial_scan}/release.env" ]] || fail 'partial scan wrote release metadata'
 
 release_expanded="${work_dir}/release-expanded"
 make_release "${release_expanded}" 21

@@ -17,6 +17,9 @@
 !deploy/tests/
 !deploy/tests/smoke-shiny-server.py
 !deploy/install-production-r-deps.R
+!deploy/patch-duckdb-brotli.py
+!deploy/patches/
+!deploy/patches/duckdb-brotli-CVE-2026-111497.patch
 !deploy/requirements-python.lock
 !deploy/shiny-server.conf
 !deploy/container-entrypoint.sh

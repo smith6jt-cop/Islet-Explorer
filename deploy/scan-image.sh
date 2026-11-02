@@ -60,6 +60,13 @@ readonly grype_db_status="${output_dir}/${safe_name}.grype-db.json"
 readonly r_packages="${output_dir}/${safe_name}.R-packages.tsv"
 readonly python_packages="${output_dir}/${safe_name}.python-packages.txt"
 readonly attestation="${output_dir}/${safe_name}.scan.txt"
+readonly brotli_report="${output_dir}/${safe_name}.brotli.json"
+
+# Package-only scans miss the vulnerable Brotli shared objects in Pillow wheels.
+# Feed this checkout's gate into the exact image, so rescanning an older image
+# cannot silently use an old or missing in-image verifier. No service is started.
+podman run --rm --network none -i --entrypoint /opt/islet-explorer-py/bin/python \
+  "${image_id}" - < "${script_dir}/verify-brotli.py" > "${brotli_report}"
 
 syft_status=0
 syft "podman:${image_id}" -o "cyclonedx-json=${raw_sbom}" || syft_status=$?
@@ -85,6 +92,7 @@ podman run --rm --entrypoint /opt/islet-explorer-py/bin/python "${image_id}" \
   printf 'SYFT_VERSION=%s\n' "${syft_version}"
   printf 'GRYPE_VERSION=%s\n' "${grype_version}"
   printf 'RESULT=pass-no-high-or-critical\n'
+  printf 'BROTLI_REPORT_SHA256=%s\n' "$(sha256sum "${brotli_report}" | awk '{print $1}')"
   printf 'SBOM_SHA256=%s\n' "$(sha256sum "${sbom}" | awk '{print $1}')"
   printf 'RAW_SBOM_SHA256=%s\n' "$(sha256sum "${raw_sbom}" | awk '{print $1}')"
   printf 'SBOM_CORRECTIONS_SHA256=%s\n' "$(sha256sum "${sbom_corrections}" | awk '{print $1}')"
