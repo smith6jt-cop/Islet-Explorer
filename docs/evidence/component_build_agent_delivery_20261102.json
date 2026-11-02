@@ -1,0 +1,52 @@
+{
+  "schema": "islet.senior_component_delivery/1",
+  "created_utc": "2026-11-02T22:45:51.592355+00:00",
+  "source_commit": "2150edd93ea379acd60cc36db3eb0b18eeb207d4",
+  "code_history_base": "29f45b35dc1566d4fce89d0e8813fa5b55743c4c",
+  "delivery_mechanism": "Fresh read-only sibling packages, exact source archive, incremental Git history and compact QA evidence",
+  "bundle_verified_against_CODEX_history_on_both_sites": true,
+  "active_recipient_checkouts_modified": false,
+  "credentials_included": false,
+  "full_raw_scans_included": false,
+  "scientific_data_modified": false,
+  "agent_read_acknowledged": false,
+  "recipient_port_applied": false,
+  "scientific_acceptance": false,
+  "service_actions_performed": false,
+  "notice": "docs/typing_change_notice_20261102.md",
+  "guide": "docs/workflow_user_guide.md",
+  "build_evidence": "docs/evidence/component_build_20261102.json",
+  "workstation": {
+    "path": "/home/smith6jt/IO60panc2nd/CODEX-handoff-20261102-component-build",
+    "checksummed_files": 17,
+    "payload_bytes": 2056899,
+    "sha256sums_sha256": "7e091cea244305ceef160c4a2d83a7b519c20604f0ca46ede40481c84223b388",
+    "verified": true,
+    "archive_files_verified": 214,
+    "readonly_modes_verified": true
+  },
+  "hpg": {
+    "path": "/blue/maigan/smith6jt/CODEX-handoff-20261102-component-build",
+    "checksummed_files": 17,
+    "payload_bytes": 2056899,
+    "sha256sums_sha256": "7e091cea244305ceef160c4a2d83a7b519c20604f0ca46ede40481c84223b388",
+    "verified": true,
+    "archive_files_verified": 214,
+    "readonly_modes_verified": true
+  },
+  "raw_scientific_inputs_included": false,
+  "aggregated_QA_evidence_included": true,
+  "full_receipt": {
+    "path": "tmp/component-build-20261102-v1/senior-delivery.json",
+    "sha256": "a4801a76bd7d68895f0796ffcec3a4fba232795aa01103d00288a1bc292d57ac"
+  },
+  "recipient_notified_utc": "2026-11-02T22:46:41.232137+00:00",
+  "recipient_thread_id": "01a19ca5-0cff-7d81-8027-4868ab012b79",
+  "recipient_received_acknowledged": true,
+  "receipt_acknowledgement": {
+    "recorded_utc": "2026-11-02T22:49:04.588480+00:00",
+    "source": "Senior agent commentary observed through read_thread",
+    "text": "The separate CODEX package has now arrived with a checksum; its receipt review will remain separate from this run and will not change the protein method.",
+    "scope": "Arrival acknowledged; independent verification/read acknowledgement still pending"
+  }
+}

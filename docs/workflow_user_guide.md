@@ -379,6 +379,10 @@ completed component/Ki67/build fixes, release preflight correction and outcome
 evidence to the same workstation/HPG sibling locations. The
 [change notice](typing_change_notice_20261102.md) lists its commit groups and
 receipt. Keep it distinct from the initial 17-file isolation package.
+The [supplemental delivery receipt](evidence/component_build_agent_delivery_20261102.json)
+records the verified 17-file package at both sites, pinned source `2150edd`,
+and the recipient's acknowledgement status. No active recipient checkout or
+scientific data was edited.
 
 The handoff carries the actual commit range, changed-file list, evidence receipt, guide, and blockers: separate calibration reference context from mutable structure context; bind all marker/canary calibration and baseline identity; protect named islet endocrine cells; run the all-component invariant audit; preserve the selected v19 endocrine component; do not infer that this diagnostic is a deployable root. File delivery is not an agent read acknowledgement or a completed port. Record those later outcomes separately and preserve workspace-specific changes. Do not transplant CODEX thresholds or data into another modality merely because its pipeline shares code ancestry.
 

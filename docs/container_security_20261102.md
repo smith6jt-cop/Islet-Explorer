@@ -2,7 +2,27 @@
 
 **Latest owner direction, 2026-11-02:** the current build is intended for the live production PubApp once its actual data/release/runtime checks pass. The known DuckDB finding is nonblocking through the notice's **2026-11-10 UTC** patch deadline; develop/test our DuckDB fix separately for the dev PubApp. See [the dated release decision](duckdb_remediation_window_20261102.md). This supersedes the earlier strict DuckDB hold and no-activation directions below. Historical failed reports remain unchanged; data checks and other security findings still apply.
 
-## Current request and build status
+## Completed current builds
+
+The matching production candidate is now image `41e62a97…`, source `b15f0fc`.
+It passes package/dependency checks, the installed Shiny/R/static-image smoke,
+and the policy at `7941df1` with the dated DuckDB exception. Its failed raw
+DuckDB decoder report remains visible. It is built locally and has not been
+exported or host-staged. The associated app and QuPath builds are complete;
+actual endocrine consistency failures still prevent a data release. See the
+[component build record](component_build_20261102.md) and its linked evidence.
+
+The separate dev image `b26558a9…`, source `92c63ba`, passes the strict decoder
+and full security gate **without a deferral**, plus real v19/v20 release-table
+BROTLI compatibility checks. It is exported locally and has not been host-staged
+or activated. The [dev validation record](dev_duckdb_fix_20261102.md) binds the
+image, source patch, scans, tests and archive. A read-only host check at
+22:40:10 UTC confirms both services remain stopped/masked with no backend ports.
+
+The earlier build sequence below is retained as history; it does not override
+the dated production direction or these completed results.
+
+## Earlier request and build sequence
 
 The owner requested a build with the fixes required by today's IT security email,
 then clarified: **released fixes only; leave DuckDB aside until its upstream PR
