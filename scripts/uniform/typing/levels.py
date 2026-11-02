@@ -60,11 +60,14 @@ images; a failure there is flagged for review. A chosen background-based level m
 stops the run (a known-negative level is judged by its own check; background_based).
 A marker with no passing option is left out of typing on all images, unless the registry marks it required (a class
 cannot do without it): then the run stops.
+After final levels are written, their joint INS/GCG/SST/CHGA positivity must recover every final endocrine object:
+at least one analysis-eligible member cell is positive. Empty objects and EndocrineSingle objects without exactly one
+analysis-eligible member also stop the run. This object-level check does not require every cell in an islet to be positive.
 
 Writes typing/levels.csv (the positivity level per image and marker), typing/levels_differentiation.csv (the level
 of the markers compared on another measurement, on that measurement), typing/levels_options.csv (every option, image
 and check), typing/levels_selection.csv and typing/levels_differentiation_selection.csv (per marker: chosen option,
-or dropped / stop, and why).
+or dropped / stop, and why), plus endocrine_object_audit/ (object positivity and membership consistency).
 
     python scripts/uniform/typing/levels.py --out $OUT --workers 20 [--images ND_0112 ...]
 """
@@ -86,6 +89,7 @@ from sklearn.mixture import GaussianMixture
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import registry as RG  # noqa: E402
+from endocrine_object_audit import audit as audit_endocrine_objects  # noqa: E402
 
 EDGES = np.linspace(0.0, 14.0, 281)            # log1p units, 0.05 wide
 CEN = (EDGES[:-1] + EDGES[1:]) / 2
@@ -757,6 +761,9 @@ def main() -> int:
     tags = a.images or [r['image_name'] for r in RG.csv.DictReader(RG.COHORT.open())]
     dest = (a.report or out / 'typing').resolve()
     dest.mkdir(parents=True, exist_ok=True)
+    object_audit_dir = dest / 'endocrine_object_audit'
+    if object_audit_dir.exists():
+        ap.error(f'{object_audit_dir} already exists; use a fresh run or --report directory')
     nulls = empty_nulls(out)
     status = {r['image_name']: r['donor_status'] for r in RG.csv.DictReader(RG.COHORT.open())}
     select_on = [t for t in tags if status.get(t) == 'ND']
@@ -847,6 +854,10 @@ def main() -> int:
     lv = final[final['reading'] == 'positivity'][cols]
     lv.to_csv(dest / 'levels.csv', index=False)
     final[final['reading'] == 'differentiation'][cols].to_csv(dest / 'levels_differentiation.csv', index=False)
+    object_audit = audit_endocrine_objects(out, object_audit_dir, levels_path=dest / 'levels.csv', images=tags)
+    print('[endocrine object audit]', json.dumps(object_audit['totals']), flush=True)
+    if not object_audit['passes']:
+        print(f'STOP: endocrine object positivity or membership is inconsistent; see {object_audit_dir}', flush=True)
     wild = lv.iloc[0:0]
     pd.set_option('display.width', 250)
     print(dec.to_string(index=False))
@@ -862,6 +873,8 @@ def main() -> int:
     if len(stops):
         print(f'STOP: methods that do not work on every image: {", ".join(stops["marker"])}', flush=True)
         return 2
+    if not object_audit['passes']:
+        return 4
     return 0
 
 
