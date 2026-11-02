@@ -44,6 +44,16 @@ literature/*
 # folder carries its README, commands and source hashes; the scripts that
 # regenerate it are tracked under scripts/research/.
 /output/
+# Per-run calibration snapshots/bindings contain machine-specific paths and
+# scientific evidence. Keep them with the checksummed run, even when a scratch
+# run lives outside data/ or output/. The producing Python modules stay tracked.
+**/typing/calibration_context.json
+**/typing/calibration_context/
+**/typing/structure_update.json
+*-structure-audit/
+# Release/agent-transfer archives; their source and small receipts are tracked.
+*.oci.tar
+*.git.bundle
 *.h5ad
 *.h5
 *.hdf5
