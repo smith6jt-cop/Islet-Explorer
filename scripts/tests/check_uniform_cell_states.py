@@ -44,7 +44,17 @@ def validate_assembled(args):
     assert {p.name for p in (root / 'cell_types').glob('*.parquet')} == expected_membership
     assert {p.stem for p in (root / 'donors').glob('*.csv')} == {Path(p).stem for p in expected_membership}
     lookup = pd.read_csv(root / 'islet_spatial_lookup.csv', dtype={'case_id': str})
-    expected_objects = {str(value) + '.csv' for value in lookup.combined_islet_id}
+    # The lookup retains unpaired geometry objects. Only paired analysis rows in
+    # the assembled H5AD have per-object CSVs (e.g. frozen v20: 4,853 vs 4,848).
+    adata = ad.read_h5ad(root / 'islet_explorer.h5ad', backed='r')
+    assert list(adata.var_names) == assembly.MARKERS and len(adata.var_names) == 31
+    object_ids = adata.obs['islet_id'].astype(str)
+    assert not object_ids.isna().any() and not object_ids.duplicated().any()
+    analysis_objects = set(object_ids)
+    adata.file.close()
+    assert analysis_objects <= set(lookup.combined_islet_id)
+    assert not lookup.combined_islet_id.duplicated().any()
+    expected_objects = {value + '.csv' for value in analysis_objects}
     assert {p.name for p in (root / 'cells').glob('*.csv')} == expected_objects
     total_object_rows = 0
     for row in rows:
@@ -90,7 +100,8 @@ def validate_assembled(args):
         pd.testing.assert_frame_equal(
             donor[full_key].sort_values(full_key).reset_index(drop=True),
             expected_donor.sort_values(full_key).reset_index(drop=True), check_dtype=False)
-        per_object = lookup[lookup.case_id.astype(int) == int(case)]
+        per_object = lookup[(lookup.case_id.astype(int) == int(case)) &
+                            lookup.combined_islet_id.isin(analysis_objects)]
         object_rows = 0
         for name in per_object.combined_islet_id:
             frame = pd.read_csv(root / 'cells' / f'{name}.csv',
@@ -111,9 +122,6 @@ def validate_assembled(args):
                         'distance_row_associations_exact': True}
         total_object_rows += object_rows
     assert manifest['cell_states'] == assembly.cell_state_metadata(expected_states)
-    adata = ad.read_h5ad(root / 'islet_explorer.h5ad', backed='r')
-    assert list(adata.var_names) == assembly.MARKERS and len(adata.var_names) == 31
-    adata.file.close()
     report = {'result': 'pass', 'scope': 'All-20 completed cell-state exports; no assembly or classification run',
               'scientific_accuracy_established': False, 'run': str(args.run.resolve()),
               'assembled_root': str(root), 'images': reports,
