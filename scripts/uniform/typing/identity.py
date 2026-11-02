@@ -245,6 +245,7 @@ def established(path: Path, tag: str, object_id: pd.Series, reg: RG.Registry, pl
 
 
 def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED) -> tuple[pd.DataFrame, dict]:
+    import structure_update as SU
     reg = RG.load()
     markers = used_markers(run, reg)
     state = reg.markers('state')
@@ -267,6 +268,11 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED) -> tu
     plan = build_plan(reg, markers)
     ix = plan['ix']
     d = load_values(run, tag, reg, markers + state, lv, ld)
+    baseline = SU.baseline_identity(run, tag, d['object_id'])
+    endocrine_labels = set(plan['labels'].loc[
+        plan['labels']['lineage'].str.match(r'^Endocrine(?::|$)'), 'label'])
+    protected_endocrine = (baseline['label'].isin(endocrine_labels).to_numpy()
+                          if baseline is not None else np.zeros(len(d), bool))
     n = len(d)
     V = np.column_stack([np.log1p(np.clip(np.nan_to_num(d[d.attrs['columns'][m]].to_numpy(float), nan=0.0), 0, None))
                          for m in markers])
@@ -385,7 +391,7 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED) -> tu
         j = ix.get(r.named_by)
         if j is None:
             raise SystemExit(f'{tag}: structure marker {r.named_by} has no level')
-        hit = inside & (np.nan_to_num(frac) > majority) & P[:, j] & (top_any == j) & ~by_object
+        hit = inside & (np.nan_to_num(frac) > majority) & P[:, j] & (top_any == j) & ~by_object & ~protected_endocrine
         label[hit], named_by[hit] = r.label, r.named_by
         compartment[hit], lineage[hit] = r.compartment, r.lineage
         comp_basis[hit] = lin_basis[hit] = 'structure'
@@ -634,6 +640,14 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED) -> tu
         out[f'pos__{m}'] = P[:, j].astype(np.int8)
         out[f'canary__{m}'] = C[:, j].astype(np.int8)
         out[f'fold__{m}'] = F[:, j].astype(np.float32)
+    if baseline is not None:
+        # A structure revision must not change either membership or subtype of
+        # the selected endocrine component. Do not repair a mismatch by copying
+        # labels over incompatible evidence; stop for an explicit reconciliation.
+        endocrine_union = protected_endocrine | out['label'].isin(endocrine_labels).to_numpy()
+        for col in ('label', 'compartment', 'lineage'):
+            if not out.loc[endocrine_union, col].equals(baseline.loc[endocrine_union, col]):
+                raise ValueError(f'{tag}: structure-only revision changed endocrine {col}')
     audit = {'image': tag, 'cells': n, 'markers': markers,
              'readings': {m: {'positivity': str(lv.loc[m, 'measurement']),
                               **({'differentiation': str(ld.loc[m, 'measurement'])} if m in diff else {})}
@@ -659,20 +673,46 @@ def process(run: Path, tag: str, dest: Path, endocrine_from: str = ESTABLISHED) 
 
 
 def main() -> int:
+    import subprocess
+    import structure_update as SU
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--run', type=Path, required=True)
     ap.add_argument('--images', nargs='*', default=None, help='default: every image of cohort.csv')
     ap.add_argument('--workers', type=int, default=20)
     ap.add_argument('--dest', type=Path, default=None, help='default: $RUN/typing/identity (trials: a scratch folder)')
     ap.add_argument('--endocrine-from', default=ESTABLISHED, help='the established endocrine typing, under $RUN')
+    ap.add_argument('--structure-audit', type=Path, default=None,
+                    help='fresh audit directory outside input runs; required automatically for bound structure updates')
     a = ap.parse_args()
     run = a.run.resolve()
     tags = a.images or [r['image_name'] for r in RG.csv.DictReader(RG.COHORT.open())]
     dest = (a.dest or run / 'typing' / 'identity').resolve()
+    binding = SU.validate_calibration(run)
+    audit_dest = None
+    if binding is not None:
+        if dest != run / 'typing' / 'identity':
+            ap.error('Bound structure updates must write the fresh run identity directory')
+        if dest.exists() and any(dest.iterdir()):
+            ap.error('Bound structure updates cannot overwrite existing identities; prepare a fresh run')
+        if set(tags) != set(binding['images']):
+            ap.error('A structure update must process every image in its explicit baseline binding')
+        audit_dest = (a.structure_audit or run.parent / f'{run.name}-structure-audit').resolve()
+        if audit_dest.exists() or any(audit_dest == p or audit_dest.is_relative_to(p)
+                                      for p in (run, Path(binding['baseline']))):
+            ap.error('Use a fresh structure audit directory outside both input roots')
     dest.mkdir(parents=True, exist_ok=True)
     with ProcessPoolExecutor(min(a.workers, len(tags))) as ex:
         audits = list(ex.map(process, [run] * len(tags), tags, [dest] * len(tags), [a.endocrine_from] * len(tags)))
     (dest / 'summary.json').write_text(json.dumps(audits, indent=1))
+    if binding is not None:
+        # A successful classification is not sufficient: validate all components,
+        # including every marker and all cells outside the changed structure.
+        command = [sys.executable, str(Path(__file__).resolve().parents[1] / 'audit_structure_update.py'),
+                   '--baseline', binding['baseline'], '--candidate', str(run), '--output', str(audit_dest),
+                   '--workers', str(min(a.workers, 4)), '--images', *tags]
+        result = subprocess.run(command, check=False)
+        if result.returncode:
+            raise SystemExit(f'Structure update failed invariance checks; see {audit_dest}')
     return 0
 
 

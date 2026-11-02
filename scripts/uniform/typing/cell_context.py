@@ -236,8 +236,14 @@ def main() -> int:
     a = ap.parse_args()
     rows = CT.cohort_rows()
     generation = SG.provenance(a.out)
-    import_structures(a.out, rows)
     tags = [r['image_name'] for r in rows] if a.images == ['all'] else a.images
+    if generation is not None:
+        import calibration_context as CC
+        import structure_update as SU
+        CC.validate(a.out, tags, require_bound=True)
+        if SU.validate_calibration(a.out) is None:
+            ap.error('Pin the explicit baseline with structure_update.py before changing Lymphatic context.')
+    import_structures(a.out, rows)
     with ProcessPoolExecutor(a.workers) as pool:
         list(pool.map(process, [a.out] * len(tags), tags))
     if SG.provenance(a.out) != generation:

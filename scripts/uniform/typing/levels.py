@@ -89,6 +89,7 @@ from sklearn.mixture import GaussianMixture
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import registry as RG  # noqa: E402
+import calibration_context as CC  # noqa: E402
 from endocrine_object_audit import audit as audit_endocrine_objects  # noqa: E402
 
 EDGES = np.linspace(0.0, 14.0, 281)            # log1p units, 0.05 wide
@@ -228,7 +229,7 @@ def load(out: Path, tag: str, reg: RG.Registry) -> pd.DataFrame:
     cols = sorted({reg.column(m, meas) for m in reg.measured_markers()
                    for meas in reg.candidates(m) + ([reg.differentiation(m)] if reg.differentiation(m) else [])})
     rs = pd.read_parquet(out / 'typing' / 'redsea' / f'{tag}.parquet', columns=['object_id', 'qc_analysis_eligible'] + cols)
-    ctx = pd.read_parquet(out / 'typing' / 'context' / f'{tag}.parquet',
+    ctx = pd.read_parquet(CC.context_path(out, tag),
                           columns=['object_id', 'context', 'endocrine_object_class'] + list(OVERLAP.values()))
     xy = pd.read_parquet(out / 'cells' / f'{tag}.parquet', columns=['Object ID', 'Centroid X µm', 'Centroid Y µm'])
     xy.columns = ['object_id', 'x_um', 'y_um']
@@ -756,6 +757,9 @@ def main() -> int:
     ap.add_argument('--report', type=Path, default=None, help='write tables here instead of $OUT/typing (trials)')
     a = ap.parse_args()
     out = a.out.resolve()
+    import structure_update as SU
+    if SU.validate_calibration(out) is not None:
+        ap.error('This structure-only run has frozen calibration. Reuse its levels; do not rerun levels.py.')
     reg = RG.load()
     reg_name = tuple(reg.name.split('__'))
     tags = a.images or [r['image_name'] for r in RG.csv.DictReader(RG.COHORT.open())]

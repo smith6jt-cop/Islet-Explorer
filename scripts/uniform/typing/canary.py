@@ -120,6 +120,9 @@ def main() -> int:
     ap.add_argument('--workers', type=int, default=20)
     a = ap.parse_args()
     run = a.run.resolve()
+    import structure_update as SU
+    if SU.validate_calibration(run) is not None:
+        ap.error('This structure-only run has frozen calibration. Reuse its canary levels; do not rerun canary.py.')
     tags = [r['image_name'] for r in RG.csv.DictReader(RG.COHORT.open())]
     with ProcessPoolExecutor(min(a.workers, len(tags))) as ex:
         rows = [r for rs in ex.map(image_levels, [run] * len(tags), tags) for r in rs]
