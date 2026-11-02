@@ -1,0 +1,25 @@
+{
+  "created_utc": "2026-11-02T20:02:07.488328+00:00",
+  "source_commit": "29f45b35dc1566d4fce89d0e8813fa5b55743c4c",
+  "delivery_mechanism": "Committed CODEX notice and fresh read-only sibling packages, per Senior coordination handoff",
+  "workstation": {
+    "path": "/home/smith6jt/IO60panc2nd/CODEX-handoff-20261102-lymphatic-isolation",
+    "checksummed_files": 17,
+    "sha256sums_sha256": "67a56038efea9e03fa10f7ead0e5f620bf5d18cdcd6a425232fbe1077dbb47dc",
+    "verified": true
+  },
+  "hpg": {
+    "path": "/blue/maigan/smith6jt/CODEX-handoff-20261102-lymphatic-isolation",
+    "checksummed_files": 17,
+    "sha256sums_sha256": "67a56038efea9e03fa10f7ead0e5f620bf5d18cdcd6a425232fbe1077dbb47dc",
+    "verified": true
+  },
+  "active_recipient_checkouts_modified": false,
+  "scientific_data_modified": false,
+  "agent_read_acknowledged": false,
+  "recipient_port_applied": false,
+  "notice": "docs/typing_change_notice_20261102.md",
+  "guide": "docs/workflow_user_guide.md",
+  "code_history_base": "307bc1b",
+  "supplemental_security_document": "Separately hashed concurrent working-tree document; not part of source commit"
+}

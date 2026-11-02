@@ -1,0 +1,78 @@
+{
+  "source_commit": "29f45b35dc1566d4fce89d0e8813fa5b55743c4c",
+  "prior_commit": "190addc8487d8e28e601571dcbb5747031dabac4",
+  "remote_root": "/blue/maigan/smith6jt/islet-explorer-hpg/root",
+  "method": "Explicit committed-file rsync; incremental Git objects/ref/index only; no checkout/reset/stash or whole-tree sync",
+  "verified_file_count": 34,
+  "verified_files": {
+    ".gitignore": "422176922fbd46391386b77f7a5def0d791fcade69475f737b0d16aa9f2baba8",
+    "CLAUDE.md": "52b3bf540292eadf697f2bde34b9de138eeef42ca9163bc21ffd977074fa8723",
+    "README.md": "91cefdbcc48a2fb25ff4fd6c05b96f1abf3aa91f89058bfcdf3a58a09b52217a",
+    "app/shiny_app/CLAUDE.md": "30ba7e0da371625db573d64f456886ba153faa9091df955032ad0c57177c83fa",
+    "app/shiny_app/R/00_globals.R": "74deb96148213268742d94aa0aa1d33f25bb98e5f5783a253aa1b7dc364dced7",
+    "app/shiny_app/tests/testthat/test-macrophage-labels.R": "e2d94c29f86c5f2331d079a3ad85df29e54966a3ca912a89f60494c59e013d93",
+    "data/DATA_PROVENANCE.md": "2c57c05ad2577126acb72cf984e91d5dc9c6beed34c601c187f286fa4afcdcf3",
+    "deploy/README.md": "006b8e59a0a0e57473af9de05be07a23f6b0636b16ac0132c55071a1567b852c",
+    "docs/admin_guide.md": "6e0b066a675b6a72011ad6ec767c2e453c9b652502c9706ed49d7ee383b4a7d4",
+    "docs/evidence/lymphatic_isolation_20261102.json": "2bcfff7e0cdddf98ba3cdfd6a895e66bd0706a1ae2053bfdabbe6aeb5915c373",
+    "docs/handoff_20261102.md": "2ab539e10447756be7ecde1243cb68d8726f109f9ce60c9bbf8b9b0863a918bb",
+    "docs/hpg_processing_20261031.md": "a763729151e6bd59993e4dd4b1c7cd4034e0d8ba58e5a1ac27bc271899fcb110",
+    "docs/repository_file_guide.md": "3f07905dd3cd00881f17d23c3ab1fe1f3cf9cb02e47e2f711f1526eccb6f2da0",
+    "docs/reviewer_guide.md": "557ac79446472ac7ecb8985dcb754bfcdba245f388efb2910dac7c53b5bfed41",
+    "docs/typing_change_notice_20261027.md": "4f67e5849eef9082da999a2a1fdec3486cdd93065435f5a1f4809896031190b7",
+    "docs/typing_change_notice_20261102.md": "cf60d47cc80aa8b9917bd34cc4f5e71b0744791ec0b9279abca748e8e4350626",
+    "docs/typing_rulings_ledger.md": "173e5f6573c8aca0272395d5a31a17373fbe64d163620a54dd9037fc8d361f66",
+    "docs/ufrc_readiness.md": "711aea77caff8e9c6a56b0e7c5a2d779c1e74d0a1cc3ca21440656e95b69fa18",
+    "docs/user_guide.md": "ec868c6ad289256a42387d6f0426e20f50a7d1bb1ee82a176ce7046186e852e3",
+    "docs/v19_selection_20261102.md": "aabab7dd57c933a2e0798f6a95002632e4c79e805967858ab70c0b3456c59cdd",
+    "docs/v19_v20_component_comparison_20261102.md": "922d9c12b048d6de1e10e86a742268f51e4d041eb876c433a82172d7ec9e6cda",
+    "docs/workflow_user_guide.md": "36cfc9aaa55283f406cb4d2547f25106e0deaa5f19abd0bd9c9fbec6a6034d20",
+    "scripts/CLAUDE.md": "a45e0e6df285cd16cfb82ee194aee073d82a4843023a70f765889f2770385ecc",
+    "scripts/build_release_data.R": "ad4a43e0233d456f0a6d252f5c327eb3300256607c2e1a2af0fcc34e7f7e27b1",
+    "scripts/tests/test_release_parity.R": "e0ab56335e9a01a8479fae66232f9c803a2cbb77a71b0b13310014e197194973",
+    "scripts/uniform/README.md": "b6151d756ebe9311f5bcf8d8c61ebe3d7a559bcba9fe3a33c04858d8f6fab033",
+    "scripts/uniform/audit_structure_update.py": "41334e8541e7ffb04e6646213b0dfacdfa3fe493b5bddf4d9d44f58a9d3b5f24",
+    "scripts/uniform/typing/calibration_context.py": "479c2dbb7b0c9d93775efa250b54a7aedf8c8feb0e741a2684898dc4d0ce61e7",
+    "scripts/uniform/typing/canary.py": "ba063d776148dc6e877976031b5652a0602ffb3caad4dffb178868eb00b35293",
+    "scripts/uniform/typing/cell_context.py": "fd021197d44c029d65e2f7534d1de93fd1fc63baf3d6da0159897dbd2ab0ed8c",
+    "scripts/uniform/typing/identity.py": "cf3061e8bbc09782b23f1c18802768493aa8f182f1245481fae8e1514aaeaf19",
+    "scripts/uniform/typing/levels.py": "f08d79bac51197da60981e95a8172f15b9deda691d27f86be5ec41eebe6f62d1",
+    "scripts/uniform/typing/structure_update.py": "b1f176d47caa3ab4008be58c6dd96d8d378d4dd80bae0072515e9ffb979b4235",
+    "scripts/verify_release_parity.R": "5cc5ab27150bb33e74960a7e19fd0beb29a3c97fea7671b4290e8d567a08395e"
+  },
+  "protected_modules_unchanged": true,
+  "protected_modules": {
+    "scripts/uniform/typing/redsea_cells.py": {
+      "sha256": "af1ae8577a19c9189e5672a997e6e8c84ad919bd4abb80670c8607d4e187eeef",
+      "inode": 252215051455353386,
+      "ctime_ns": 1793541081000000000,
+      "mtime_ns": 1793312315000000000,
+      "size": 27200
+    },
+    "scripts/uniform/typing/codex_typing.py": {
+      "sha256": "737eeaa1ad6eadf1ae194d27acb5fa285acbf925c6ad7b360f4ff747acd8c07f",
+      "inode": 252215051455353378,
+      "ctime_ns": 1793541081000000000,
+      "mtime_ns": 1793198224000000000,
+      "size": 33030
+    },
+    "scripts/uniform/typing/refresh_ready_cells.py": {
+      "sha256": "3986d2dd024e83c1d774e2d3c01b597eb05cbbc652b5a7113aedcb2fe6d10517",
+      "inode": 252215051455353389,
+      "ctime_ns": 1793541081000000000,
+      "mtime_ns": 1793307810000000000,
+      "size": 16921
+    },
+    "scripts/uniform/typing/refresh_filtered_cells.py": {
+      "sha256": "892cef924c7a62803969ccc4d2c62cef92eece06f90c12a2e3c51de0604e2d45",
+      "inode": 252215051455353388,
+      "ctime_ns": 1793541081000000000,
+      "mtime_ns": 1793316643000000000,
+      "size": 7316
+    }
+  },
+  "remote_clean_after_sync": true,
+  "scientific_jobs_started": false,
+  "scientific_data_transferred": false,
+  "full_receipt": "output/hpg_source_sync_20261102/receipt.json"
+}
