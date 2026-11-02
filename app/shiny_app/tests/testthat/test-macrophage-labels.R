@@ -16,6 +16,7 @@
     if (is.call(e) && identical(e[[1]], as.name("<-")) && as.character(e[[2]]) %in% wanted) eval(e, env)
   }
   env$root_has_marker_profile_labels <- function() TRUE
+  env$root_historical_endocrine_contract <- function() NULL
   env$root_has_top_marker_labels <- function() TRUE
   env$root_cd45_is_rule_label <- function() FALSE        # v15: "CD45+" is a top-marker label
   env

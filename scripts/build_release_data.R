@@ -41,7 +41,12 @@ validate_release_label_groups <- function(source_root, aggregate_members) {
   # Owner 2026-11-02: proper endocrine typing must not leave unnamed definitions.
   unresolved <- union(intersect(labels, c("EndocrineCluster", "EndocrineSingle", "Endocrine")),
                       intersect(endocrine, c("Islet", "Tissue")))
-  if (length(unresolved)) {
+  # Owner 2026-11-02: use the frozen v19 data unchanged. Only its exact metadata bytes select this
+  # historical contract; every other final-typing root retains the unresolved-label rejection.
+  # Keep this digest aligned with root_historical_endocrine_contract() in the app.
+  contract_sha <- digest::digest(file = path, algo = "sha256", serialize = FALSE)
+  historical_v19 <- identical(contract_sha, "13d44b679c8f07a6b2789655a6bd8bb811b426cbf3d4697f9e92f3529de6b49d")
+  if (length(unresolved) && !historical_v19) {
     stop("Unresolved endocrine identities prevent release: ", paste(unresolved, collapse = ", "),
          ". Resolve upstream typing and regenerate the candidate; changing aggregate membership is insufficient.",
          call. = FALSE)
@@ -52,7 +57,10 @@ validate_release_label_groups <- function(source_root, aggregate_members) {
          paste(setdiff(endocrine, app_members), collapse = ", "), "; app only: ",
          paste(setdiff(app_members, endocrine), collapse = ", "), call. = FALSE)
   }
-  invisible(list(applicable = TRUE, endocrine = endocrine))
+  invisible(list(applicable = TRUE, endocrine = endocrine, historical_selection = historical_v19,
+                 selected_version = if (historical_v19) "v19" else NULL,
+                 uniform_release_sha256 = contract_sha, unresolved_labels = as.list(unresolved),
+                 scientific_acceptance = "not asserted by this compatibility check"))
 }
 
 #' Files copied as they are, by schema: `required` must exist, `optional` are taken when present. A uniform
@@ -361,7 +369,7 @@ build_release <- function(options) {
   # commit 82ce23e), whose root-aware helpers live in 00_globals.R. Evaluate exactly those definitions, as
   # verify_release_parity.R does, rather than the UI stack.
   aggregate_names <- c("MACROPHAGE_LABEL_PATTERN", "MACROPHAGE_KEY_PATTERN", "is_macrophage_label",
-                       "root_phenotype_labels", "root_has_marker_profile_labels", "TOP_MARKER_BASE",
+                       "root_phenotype_labels", "root_historical_endocrine_contract", "root_has_marker_profile_labels", "TOP_MARKER_BASE",
                        "CD45_RULE_LABEL", "CD45_TOP_MARKER_LABEL", "root_has_top_marker_labels",
                        "root_cd45_is_rule_label", "top_marker_labels", "PHENOTYPE_GROUP_AGGREGATES",
                        "phenotype_group", "is_phenotype_aggregate", "phenotype_aggregate_members",
@@ -373,7 +381,7 @@ build_release <- function(options) {
   missing <- aggregate_names[!vapply(aggregate_names, exists, logical(1), envir = globalenv(), inherits = FALSE)]
   if (length(missing)) stop("App definitions missing from 00_globals.R: ", paste(missing, collapse = ", "), call. = FALSE)
 
-  validate_release_label_groups(source_root, phenotype_aggregate_members)
+  label_group_contract <- validate_release_label_groups(source_root, phenotype_aggregate_members)
   master <- load_master_h5ad(h5ad_path)
   if (is.null(master)) stop("Canonical H5AD could not be reconstructed", call. = FALSE)
   prepared <- prep_data(master)
@@ -505,6 +513,7 @@ build_release <- function(options) {
     # The OME-TIFF count in images/, which deploy/generate-release-manifest.sh takes as the reviewed
     # EXPECTED_IMAGES and deploy/verify-release.sh checks against the staged files.
     expected_images = expected_images,
+    label_group_contract = label_group_contract,
     artifacts = artifacts,
     canonical_sources = source_hashes
   )
