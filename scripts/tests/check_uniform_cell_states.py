@@ -26,10 +26,112 @@ def rejected(callback, text):
         raise AssertionError(f'Expected rejection: {text}')
 
 
+def validate_assembled(args):
+    """Read every completed cell export; never invoke geometry or assembly."""
+    root = args.assembled_root.resolve(strict=True)
+    reg = assembly.RG.load()
+    fields = [f'{marker}_pos' for marker in reg.markers('state')]
+    rows = assembly.CT.cohort_rows()
+    levels = pd.read_csv(args.run / 'typing/levels.csv')
+    manifest = json.loads((root / 'uniform_release.json').read_text())
+    assert manifest['donors'] == len(rows) == 20
+    expected_states, reports = {}, {}
+    distance_columns = ['case_id', 'phenotype', 'cell_region', *fields]
+    distance = pd.read_csv(root / 'cell_distance.csv', usecols=distance_columns,
+                           dtype={'case_id': str}, keep_default_na=False)
+    assert set(distance.case_id) == {str(int(row['case_id'])) for row in rows}
+    expected_membership = {f"{int(row['case_id'])}.parquet" for row in rows}
+    assert {p.name for p in (root / 'cell_types').glob('*.parquet')} == expected_membership
+    assert {p.stem for p in (root / 'donors').glob('*.csv')} == {Path(p).stem for p in expected_membership}
+    lookup = pd.read_csv(root / 'islet_spatial_lookup.csv', dtype={'case_id': str})
+    expected_objects = {str(value) + '.csv' for value in lookup.combined_islet_id}
+    assert {p.name for p in (root / 'cells').glob('*.csv')} == expected_objects
+    total_object_rows = 0
+    for row in rows:
+        tag, case = row['image_name'], str(int(row['case_id']))
+        lv = levels[levels.image == tag].set_index('marker')
+        expected_states[tag] = {'cell_states': {
+            f'{marker}_pos': {'marker': marker, 'measurement': str(lv.loc[marker, 'measurement']),
+                             'redsea_column': reg.column(marker, str(lv.loc[marker, 'measurement'])),
+                             'level_log': float(lv.loc[marker, 'level_log'])}
+            for marker in reg.markers('state')}}
+        source = pd.read_parquet(args.run / 'typing/identity' / f'{tag}.parquet',
+                                 columns=['object_id', 'label', *fields])
+        source = source[source.label != 'Excluded'].set_index('object_id')
+        assert not source.index.has_duplicates and not source.index.isna().any()
+        member = pd.read_parquet(root / 'cell_types' / f'{case}.parquet')
+        assert not member.object_id.duplicated().any() and not member.object_id.isna().any()
+        assert set(member.object_id) == set(source.index)
+        reference = source.loc[member.object_id]
+        np.testing.assert_array_equal(member.phenotype, reference.label)
+        for field in fields:
+            assert pd.api.types.is_numeric_dtype(member[field]) and member[field].isin([0, 1]).all()
+            np.testing.assert_array_equal(member[field], reference[field])
+
+        key = ['X_centroid', 'Y_centroid', 'phenotype']
+        coordinate_reference = member[['x_um', 'y_um', 'phenotype', *fields]].rename(
+            columns={'x_um': 'X_centroid', 'y_um': 'Y_centroid'}).drop_duplicates()
+        assert not coordinate_reference.duplicated(key).any(), f'{tag}: ambiguous coordinate/phenotype state key'
+        def check_coordinates(frame):
+            expected = frame[key].merge(coordinate_reference, on=key, how='left',
+                                        validate='many_to_one', indicator=True)
+            assert expected['_merge'].eq('both').all(), f'{tag}: export contains unknown cell coordinate/phenotype'
+            for field in fields:
+                assert pd.api.types.is_numeric_dtype(frame[field]) and frame[field].isin([0, 1]).all()
+                np.testing.assert_array_equal(frame[field], expected[field])
+
+        donor = pd.read_csv(root / 'donors' / f'{case}.csv', float_precision='round_trip', keep_default_na=False)
+        assert len(donor) == len(member)
+        check_coordinates(donor)
+        # Match the complete donor key multiset as well as values, so duplicating
+        # one coordinate cannot silently replace another cell with the same state.
+        full_key = [*key, 'cell_region', 'islet_name', *fields]
+        expected_donor = member.rename(columns={'x_um': 'X_centroid', 'y_um': 'Y_centroid'})[full_key]
+        pd.testing.assert_frame_equal(
+            donor[full_key].sort_values(full_key).reset_index(drop=True),
+            expected_donor.sort_values(full_key).reset_index(drop=True), check_dtype=False)
+        per_object = lookup[lookup.case_id.astype(int) == int(case)]
+        object_rows = 0
+        for name in per_object.combined_islet_id:
+            frame = pd.read_csv(root / 'cells' / f'{name}.csv',
+                                usecols=[*key, 'cell_region', *fields], float_precision='round_trip')
+            assert frame.cell_region.isin(['core', 'peri']).all()
+            check_coordinates(frame)
+            object_rows += len(frame)
+        # cell_distance has neither UUID nor coordinates. Assembly writes each
+        # donor in the exact cell_types UUID order, then concatenates cohort order.
+        # Verify this documented row association, including phenotype and region.
+        actual_distance = distance.loc[distance.case_id == case, ['phenotype', 'cell_region', *fields]]
+        pd.testing.assert_frame_equal(actual_distance.reset_index(drop=True),
+                                      member[['phenotype', 'cell_region', *fields]].reset_index(drop=True),
+                                      check_dtype=False)
+        reports[tag] = {'cells': len(member), 'positive': {field: int(member[field].sum()) for field in fields},
+                        'object_files': len(per_object), 'object_rows': object_rows,
+                        'uuid_flags_and_labels_exact': True, 'coordinate_export_flags_exact': True,
+                        'distance_row_associations_exact': True}
+        total_object_rows += object_rows
+    assert manifest['cell_states'] == assembly.cell_state_metadata(expected_states)
+    adata = ad.read_h5ad(root / 'islet_explorer.h5ad', backed='r')
+    assert list(adata.var_names) == assembly.MARKERS and len(adata.var_names) == 31
+    adata.file.close()
+    report = {'result': 'pass', 'scope': 'All-20 completed cell-state exports; no assembly or classification run',
+              'scientific_accuracy_established': False, 'run': str(args.run.resolve()),
+              'assembled_root': str(root), 'images': reports,
+              'cells': sum(record['cells'] for record in reports.values()),
+              'object_files': len(expected_objects), 'object_rows': total_object_rows,
+              'fields': fields, 'measurement_and_level_metadata_exact': True,
+              'embedding_marker_count': 31,
+              'distance_row_contract': 'Within each donor, cell_types UUID order; phenotype/region/state matched exactly'}
+    (args.out / 'summary.json').write_text(json.dumps(report, indent=2) + '\n')
+    print(json.dumps({key: report[key] for key in ('result', 'cells', 'object_files', 'object_rows')}))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--run', type=Path, required=True)
-    parser.add_argument('--donor-source', type=Path, required=True)
+    parser.add_argument('--donor-source', type=Path)
+    parser.add_argument('--assembled-root', type=Path,
+                        help='validate every existing export; never rerun build_image')
     parser.add_argument('--image', default='ND_0112')
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--validate-only', action='store_true',
@@ -37,7 +139,14 @@ def main():
     args = parser.parse_args()
     if args.out.exists():
         parser.error('use a fresh output directory')
+    if args.assembled_root and args.validate_only:
+        parser.error('--assembled-root and --validate-only select different validation scopes')
+    if not args.assembled_root and not args.validate_only and args.donor_source is None:
+        parser.error('--donor-source is required to generate a donor assembly fragment')
     args.out.mkdir(parents=True)
+    if args.assembled_root:
+        validate_assembled(args)
+        return
     reg = assembly.RG.load()
     rows = assembly.CT.cohort_rows()
     levels = pd.read_csv(args.run / 'typing/levels.csv')

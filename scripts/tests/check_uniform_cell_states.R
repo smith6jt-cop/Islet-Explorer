@@ -44,35 +44,35 @@ tryCatch({
       rejected = c("flipped state", "nonbinary state", "missing state")),
       auto_unbox = TRUE, pretty = TRUE), "\n")
   } else {
-  builder$csv_to_parquet(con, file.path(source_root, "cell_distance.csv"),
-    file.path(release_root, "spatial", "cell_distance.parquet"), character_case_id = TRUE)
-  for (file in list.files(file.path(source_root, "donors"), "[.]csv$", full.names = TRUE)) {
-    donor <- sub("[.]csv$", "", basename(file))
-    builder$csv_to_parquet(con, file, file.path(release_root, "spatial", "tissue",
-      paste0("case_id=", donor), paste0(donor, ".parquet")), preserve_blank_islet_name = TRUE)
-  }
-  stopifnot(file.copy(file.path(source_root, "cells"), release_root, recursive = TRUE))
-  result <- parity_cell_states(source_root, release_root, runtime)
-  stopifnot(isTRUE(result$applicable), "Ki67_pos" %in% unlist(result$fields))
-  path <- file.path(release_root, "spatial", "cell_distance.parquet")
-  rows <- runtime$islet_read_parquet(path)
-  original <- rows$Ki67_pos[[1L]]
-  rows$Ki67_pos[[1L]] <- 1 - original
-  unlink(path)
-  builder$write_frame_parquet(con, rows, path, "altered_state_distance")
-  expect_rejection(parity_cell_states(source_root, release_root, runtime), "numeric_mismatch")
-  rows$Ki67_pos[[1L]] <- 2L
-  unlink(path)
-  builder$write_frame_parquet(con, rows, path, "nonbinary_state_distance")
-  expect_rejection(parity_cell_states(source_root, release_root, runtime), "cell_state_not_binary")
-  rows$Ki67_pos[[1L]] <- original
-  rows$Ki67_pos <- NULL
-  unlink(path)
-  builder$write_frame_parquet(con, rows, path, "missing_state_distance")
-  expect_rejection(parity_cell_states(source_root, release_root, runtime), "Ki67_pos")
-  cat(jsonlite::toJSON(list(result = "pass", source = source_root, parity = result,
-    rejected = c("flipped state", "nonbinary state", "missing state")),
-    auto_unbox = TRUE, pretty = TRUE), "\n")
+    builder$csv_to_parquet(con, file.path(source_root, "cell_distance.csv"),
+      file.path(release_root, "spatial", "cell_distance.parquet"), character_case_id = TRUE)
+    for (file in list.files(file.path(source_root, "donors"), "[.]csv$", full.names = TRUE)) {
+      donor <- sub("[.]csv$", "", basename(file))
+      builder$csv_to_parquet(con, file, file.path(release_root, "spatial", "tissue",
+        paste0("case_id=", donor), paste0(donor, ".parquet")), preserve_blank_islet_name = TRUE)
+    }
+    stopifnot(file.copy(file.path(source_root, "cells"), release_root, recursive = TRUE))
+    result <- parity_cell_states(source_root, release_root, runtime)
+    stopifnot(isTRUE(result$applicable), "Ki67_pos" %in% unlist(result$fields))
+    path <- file.path(release_root, "spatial", "cell_distance.parquet")
+    rows <- runtime$islet_read_parquet(path)
+    original <- rows$Ki67_pos[[1L]]
+    rows$Ki67_pos[[1L]] <- 1 - original
+    unlink(path)
+    builder$write_frame_parquet(con, rows, path, "altered_state_distance")
+    expect_rejection(parity_cell_states(source_root, release_root, runtime), "numeric_mismatch")
+    rows$Ki67_pos[[1L]] <- 2L
+    unlink(path)
+    builder$write_frame_parquet(con, rows, path, "nonbinary_state_distance")
+    expect_rejection(parity_cell_states(source_root, release_root, runtime), "cell_state_not_binary")
+    rows$Ki67_pos[[1L]] <- original
+    rows$Ki67_pos <- NULL
+    unlink(path)
+    builder$write_frame_parquet(con, rows, path, "missing_state_distance")
+    expect_rejection(parity_cell_states(source_root, release_root, runtime), "Ki67_pos")
+    cat(jsonlite::toJSON(list(result = "pass", source = source_root, parity = result,
+      rejected = c("flipped state", "nonbinary state", "missing state")),
+      auto_unbox = TRUE, pretty = TRUE), "\n")
   }
 }, finally = {
   runtime$islet_disconnect_backend()
