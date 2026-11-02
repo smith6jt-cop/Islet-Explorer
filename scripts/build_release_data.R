@@ -21,31 +21,98 @@
 # belonged to the retired all-donor experiments and are never reused.
 RELEASE_SCHEMAS <- c("1", "5")
 
+#' Validate component provenance and unresolved assignments independently of
+#' historical review-status flags.
+validate_release_components <- function(source_root, uniform) {
+  files <- c(manifest = "component_selection.json", audit = "component_selection_audit.json")
+  paths <- file.path(source_root, files)
+  meta <- uniform$component_selection
+  if (is.null(meta) && !any(file.exists(paths))) return(invisible(NULL))
+  fail <- function(message) stop("Invalid component evidence: ", message, call. = FALSE)
+  if (is.null(meta) || !all(file.exists(paths))) fail("selection metadata and both evidence files are required")
+  if (!identical(meta$schema, "uniform.component_selection/1")) fail("unsupported selection schema")
+  for (kind in names(files)) {
+    if (!identical(meta[[paste0(kind, "_file")]], unname(files[[kind]])) ||
+        !identical(meta[[paste0(kind, "_sha256")]], sha256_file(file.path(source_root, files[[kind]])))) {
+      fail(paste(kind, "path/hash mismatch"))
+    }
+  }
+  selection <- jsonlite::read_json(paths[[1]], simplifyVector = FALSE)
+  audit <- jsonlite::read_json(paths[[2]], simplifyVector = FALSE)
+  if (!identical(selection$schema, "uniform.component_selection/1") ||
+      !identical(audit$schema, "uniform.component_selection_audit/1") ||
+      !identical(audit$manifest_sha256, meta$manifest_sha256)) fail("audit does not bind the selected manifest")
+  tags <- names(selection$images)
+  if (!length(tags) || anyDuplicated(tags) || !setequal(tags, names(audit$images)) ||
+      !setequal(tags, names(uniform$identity_sha256)) ||
+      !identical(as.numeric(uniform$donors), as.numeric(length(tags)))) fail("donor inventory differs")
+  count <- function(value) {
+    if (!is.numeric(value) || length(value) != 1L || is.na(value) || !is.finite(value) ||
+        value < 0 || value != floor(value)) fail("missing or invalid count")
+    as.numeric(value)
+  }
+  fields <- c("cells", "preserved_named_endocrine_cells", "preserved_unresolved_endocrine_cells",
+              "unresolved_endocrine_cells", "boundary_conflicts")
+  for (field in fields) {
+    total <- sum(vapply(audit$images, function(row) count(row[[field]]), numeric(1)))
+    if (count(audit[[field]]) != total) fail(paste(field, "does not equal per-image counts"))
+    if (field != "cells" && count(meta[[field]]) != total) fail(paste(field, "differs from assembly"))
+  }
+  for (tag in tags) {
+    row <- audit$images[[tag]]; source <- selection$images[[tag]]
+    identity_hash <- row$identity$sha256
+    if (!identical(row$image, tag) || !is.character(identity_hash) ||
+        length(identity_hash) != 1L || is.na(identity_hash) ||
+        !grepl("^[0-9a-f]{64}$", identity_hash) ||
+        !identical(identity_hash, uniform$identity_sha256[[tag]])) {
+      fail(paste(tag, "identity evidence differs from assembly"))
+    }
+    if (!identical(row$selected_endocrine_hormone_evidence_replayed, TRUE) ||
+        count(row$cells) != count(source$cells) ||
+        count(row$preserved_named_endocrine_cells) != count(source$named_endocrine_cells) ||
+        count(row$preserved_unresolved_endocrine_cells) != count(source$unresolved_endocrine_cells)) {
+      fail(paste(tag, "does not preserve the selected endocrine source"))
+    }
+    if (row$unresolved_endocrine_cells < row$preserved_unresolved_endocrine_cells ||
+        row$preserved_named_endocrine_cells + row$unresolved_endocrine_cells +
+          row$boundary_conflicts > row$cells) {
+      fail(paste(tag, "component counts contradict the eligible cell census"))
+    }
+  }
+  if (count(audit$cells) != count(uniform$cells_analysed) + count(uniform$cells_excluded)) {
+    fail("eligible cell count differs from assembly census")
+  }
+  if (audit$unresolved_endocrine_cells > 0 || audit$boundary_conflicts > 0) {
+    stop("Unresolved component assignments prevent release: ", audit$unresolved_endocrine_cells,
+         " unresolved object-class cell labels; ", audit$boundary_conflicts,
+         " endocrine component boundary conflicts. Resolve the assignments upstream and regenerate the data.",
+         call. = FALSE)
+  }
+  invisible(audit)
+}
+
 #' Check final-typing group definitions before materializing a release. Equality
 #' of source and release tables cannot detect a shared scientific-definition error.
 #' Earlier roots did not declare label_groups; their historical contract is unchanged.
 validate_release_label_groups <- function(source_root, aggregate_members) {
-  # Component-selection v1 is an explicit diagnostic construction protocol.
-  # Its per-cell boundary conflicts and inherited unresolved endocrine objects
-  # still require reconciliation. A successfully assembled review root is not
-  # a releasable root, even if its displayed group list has been edited.
   diagnostic_files <- c("component_selection.json", "component_selection_audit.json")
   has_component_diagnostic <- any(file.exists(file.path(source_root, diagnostic_files)))
   path <- file.path(source_root, "uniform_release.json")
   if (!file.exists(path)) {
     if (has_component_diagnostic) {
-      stop("Component-selection diagnostic candidate prevents release; its uniform manifest is missing.",
+      stop("Invalid component evidence: its uniform manifest is missing.",
            call. = FALSE)
     }
     return(invisible(list(applicable = FALSE)))
   }
   uniform <- jsonlite::read_json(path, simplifyVector = TRUE)
-  if (has_component_diagnostic || !is.null(uniform$component_selection)) {
-    stop("Component-selection diagnostic candidate prevents release. Reconcile inherited unresolved endocrine ",
-         "objects and component boundary conflicts upstream; a review build is not scientific acceptance.",
-         call. = FALSE)
+  validate_release_components(source_root, uniform)
+  if (is.null(uniform$label_groups)) {
+    if (!is.null(uniform$component_selection)) {
+      stop("Invalid component evidence: assembly label groups are missing.", call. = FALSE)
+    }
+    return(invisible(list(applicable = FALSE)))
   }
-  if (is.null(uniform$label_groups)) return(invisible(list(applicable = FALSE)))
   labels <- uniform$labels
   if (!is.character(labels) || !length(labels) || anyNA(labels) || any(!nzchar(labels)) || anyDuplicated(labels)) {
     stop("Invalid declared phenotype labels in uniform_release.json", call. = FALSE)
@@ -101,7 +168,7 @@ release_passthrough_files <- function(schema, source_root) {
   list(required = c("adata_ins_root.h5ad", "barlow_islet_features.csv", "islet_spatial_lookup.csv",
                     "donor_metadata.csv", "uniform_release.json", "endocrine_objects_by_donor.csv",
                     "protein_phenotype_rules.csv"),
-       optional = "phenotype_rules.csv")
+       optional = c("phenotype_rules.csv", "component_selection.json", "component_selection_audit.json"))
 }
 
 # The image bundle: every file of the image tree plus, for each OME-TIFF that is a symlink, the XML and

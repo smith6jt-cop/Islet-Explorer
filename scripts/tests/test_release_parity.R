@@ -3,7 +3,7 @@
 suppressPackageStartupMessages(library(testthat))
 source("scripts/verify_release_parity.R")
 
-test_that("component review builds cannot be packaged by changing displayed groups", {
+test_that("component release decisions use verified failures rather than a review-status flag", {
   builder <- new.env(parent = globalenv())
   sys.source("scripts/build_release_data.R", envir = builder)
   root <- tempfile("component-review-contract-")
@@ -11,19 +11,80 @@ test_that("component review builds cannot be packaged by changing displayed grou
   on.exit(unlink(root, recursive = TRUE), add = TRUE)
   named <- c("Beta cell", "Alpha cell", "Delta cell", "CHGA+ hormone-negative")
   app_members <- function(aggregate, labels) intersect(named, labels)
-  contract <- list(labels = named, label_groups = list(endocrine = named),
-                   component_selection = list(schema = "uniform.component_selection/1",
-                                              status = "diagnostic_pending_review"))
+  selection_path <- file.path(root, "component_selection.json")
+  audit_path <- file.path(root, "component_selection_audit.json")
   path <- file.path(root, "uniform_release.json")
+  identity_hash <- paste(rep("a", 64), collapse = "")
+  write_contract <- function(boundary = 0, unresolved = 0, preserved_unresolved = 0) {
+    selection <- list(schema = "uniform.component_selection/1", status = "diagnostic_pending_review",
+      release_ready = FALSE, images = list(one = list(cells = 5, named_endocrine_cells = 4,
+                                                     unresolved_endocrine_cells = preserved_unresolved)))
+    jsonlite::write_json(selection, selection_path, auto_unbox = TRUE)
+    row <- list(cells = 5, preserved_named_endocrine_cells = 4,
+                preserved_unresolved_endocrine_cells = preserved_unresolved,
+                unresolved_endocrine_cells = unresolved, boundary_conflicts = boundary,
+                selected_endocrine_hormone_evidence_replayed = TRUE)
+    audit <- c(list(schema = "uniform.component_selection_audit/1", status = "diagnostic_pending_review",
+                    release_ready = FALSE, manifest_sha256 = builder$sha256_file(selection_path),
+                    images = list(one = c(row, list(image = "one", identity = list(sha256 = identity_hash))))),
+               row[names(row) != "selected_endocrine_hormone_evidence_replayed"])
+    jsonlite::write_json(audit, audit_path, auto_unbox = TRUE)
+    meta <- c(list(schema = selection$schema, status = selection$status, release_ready = FALSE,
+                   manifest_file = "component_selection.json", manifest_sha256 = builder$sha256_file(selection_path),
+                   audit_file = "component_selection_audit.json", audit_sha256 = builder$sha256_file(audit_path)),
+              row[setdiff(names(row), c("cells", "selected_endocrine_hormone_evidence_replayed"))])
+    contract <- list(labels = named, label_groups = list(endocrine = named), component_selection = meta,
+                     donors = 1, cells_analysed = 5, cells_excluded = 0,
+                     identity_sha256 = list(one = identity_hash))
+    jsonlite::write_json(contract, path, auto_unbox = TRUE)
+    contract
+  }
+  # Live deployment was authorized: an old diagnostic flag is not a fresh
+  # permission requirement when real evidence and other release checks pass.
+  contract <- write_contract()
+  expect_true(builder$validate_release_label_groups(root, app_members)$applicable)
+  contract$label_groups <- NULL
   jsonlite::write_json(contract, path, auto_unbox = TRUE)
-  expect_error(builder$validate_release_label_groups(root, app_members), "diagnostic candidate prevents release")
+  expect_error(builder$validate_release_label_groups(root, app_members), "assembly label groups are missing")
+  write_contract(boundary = 1)
+  expect_error(builder$validate_release_label_groups(root, app_members), "1 endocrine component boundary conflicts")
+  write_contract(unresolved = 1)
+  expect_error(builder$validate_release_label_groups(root, app_members), "1 unresolved object-class cell labels")
+  write_contract(preserved_unresolved = 1)
+  expect_error(builder$validate_release_label_groups(root, app_members), "component counts contradict")
+  write_contract(boundary = 2)
+  expect_error(builder$validate_release_label_groups(root, app_members), "component counts contradict")
+  contract <- write_contract()
+  contract$identity_sha256 <- list(other = identity_hash)
+  jsonlite::write_json(contract, path, auto_unbox = TRUE)
+  expect_error(builder$validate_release_label_groups(root, app_members), "donor inventory differs")
+  contract <- write_contract()
+  contract$identity_sha256$one <- paste(rep("b", 64), collapse = "")
+  jsonlite::write_json(contract, path, auto_unbox = TRUE)
+  expect_error(builder$validate_release_label_groups(root, app_members), "identity evidence differs")
+  for (defect in c("stripped", "wrong_image")) {
+    contract <- write_contract()
+    audit <- jsonlite::read_json(audit_path, simplifyVector = FALSE)
+    if (defect == "stripped") audit$images$one$identity <- NULL else audit$images$one$image <- "other"
+    jsonlite::write_json(audit, audit_path, auto_unbox = TRUE)
+    contract$component_selection$audit_sha256 <- builder$sha256_file(audit_path)
+    jsonlite::write_json(contract, path, auto_unbox = TRUE)
+    expect_error(builder$validate_release_label_groups(root, app_members), "identity evidence differs")
+  }
+  contract <- write_contract()
+  cat("\n", file = audit_path, append = TRUE)
+  expect_error(builder$validate_release_label_groups(root, app_members), "audit path/hash mismatch")
+  contract <- write_contract()
+  contract$component_selection$boundary_conflicts <- 1
+  jsonlite::write_json(contract, path, auto_unbox = TRUE)
+  expect_error(builder$validate_release_label_groups(root, app_members), "boundary_conflicts differs from assembly")
+  contract <- write_contract()
   contract$component_selection <- NULL
   jsonlite::write_json(contract, path, auto_unbox = TRUE)
-  writeLines("{}", file.path(root, "component_selection_audit.json"))
-  expect_error(builder$validate_release_label_groups(root, app_members), "diagnostic candidate prevents release")
+  expect_error(builder$validate_release_label_groups(root, app_members), "both evidence files are required")
   unlink(path)
   expect_error(builder$validate_release_label_groups(root, app_members), "uniform manifest is missing")
-  unlink(file.path(root, "component_selection_audit.json"))
+  unlink(c(selection_path, audit_path))
   contract$labels <- c(named, "Conflict component_boundary")
   jsonlite::write_json(contract, path, auto_unbox = TRUE)
   expect_error(builder$validate_release_label_groups(root, app_members), "component boundary conflicts")
@@ -177,7 +238,7 @@ test_that("the passthrough list follows the schema and refuses the wrong schema 
   five <- builder$release_passthrough_files("5", uniform)
   expect_true(all(c("uniform_release.json", "endocrine_objects_by_donor.csv", "protein_phenotype_rules.csv",
                     "donor_metadata.csv", "adata_ins_root.h5ad") %in% five$required))
-  expect_identical(five$optional, "phenotype_rules.csv")
+  expect_identical(five$optional, c("phenotype_rules.csv", "component_selection.json", "component_selection_audit.json"))
   expect_error(builder$release_passthrough_files("1", uniform), "--schema 5")
   expect_error(builder$release_passthrough_files("5", frozen), "uniform root")
   expect_error(builder$release_passthrough_files("4", frozen), "Unsupported --schema 4")
