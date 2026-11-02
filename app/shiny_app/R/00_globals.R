@@ -925,7 +925,7 @@ phenotype_group <- function(x) {
   out[x %in% "B cell"] <- "B Cell"
   out[is_macrophage_label(x) | x %in% "All macrophages"] <- "Macrophage"
   # "Immune": the older roots' general class (retired from selectors) and, from v16, the CD45 rule's "CD45+".
-  out[x %in% c("Immune", if (root_cd45_is_rule_label()) CD45_RULE_LABEL)] <- "Immune"
+  out[x %in% c("Immune", "Hematopoietic CD45+", if (root_cd45_is_rule_label()) CD45_RULE_LABEL)] <- "Immune"
   if (root_has_top_marker_labels()) out[x %in% top_marker_labels()] <- "Top marker only"
   out
 }

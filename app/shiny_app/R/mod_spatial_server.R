@@ -1550,6 +1550,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                                              macrophage_markers())))
       if (!any(is_macrophage_label(listed))) listed <- c(listed, "Macrophage")
       if (root_cd45_is_rule_label()) listed <- c(listed, CD45_RULE_LABEL)     # the CD45 rule's class (v16)
+      if ("Hematopoietic CD45+" %in% root) listed <- c(listed, "Hematopoietic CD45+")
       c(phenotype_aggregates_for(c(listed, "T cell")), listed)
     })
     gradient_choices <- reactive(c(list("All immune cells" = "all"), phenotype_grouped_choices(gradient_phenotypes())))

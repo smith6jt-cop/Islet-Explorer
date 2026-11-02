@@ -21,6 +21,21 @@
              check.names = FALSE, stringsAsFactors = FALSE)
 }
 
+test_that("v20 all-immune gradient includes unnamed CD45-positive cells but not CD45-negative or conflicts", {
+  env <- .immune_env()
+  labels <- c("Hematopoietic CD45+", "T cell", "Hematopoietic CD45-", "Conflict B/T", "Exocrine")
+  profile <- list(
+    bins = data.frame(case_id = "1", donor_status = "ND", phenotype = labels,
+                      bin = "0-20", n = c(8, 2, 10, 10, 70)),
+    tissue = data.frame(case_id = "1", donor_status = "ND", phenotype = labels,
+                        n = c(2, 3, 20, 20, 55)))
+  g <- env$immune_gradient(profile, env$IMMUNE_LABELS)
+  expect_equal(g$count, 10)
+  expect_equal(g$share, 0.10)
+  expect_equal(g$tissue_share, 0.05)
+  expect_equal(g$value, 2)
+})
+
 test_that("insulitis prevalence is each donor's share of objects at or over the threshold", {
   env <- .immune_env()
   d <- env$insulitis_prevalence(.immune_comp(), 15)
