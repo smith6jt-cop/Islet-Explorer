@@ -1,0 +1,145 @@
+{
+  "status": "dev-duckdb-fix-image-validated",
+  "image_id": "sha256:b26558a9b3791c05f6bf158152efc7eba29fe1c17159d6a23678bd306a4532d6",
+  "source_revision": "92c63ba914f71e7b96d45efae1f60b3eae81e024",
+  "checked_at": "2026-11-02T22:37:40.832981+00:00",
+  "duckdb_decoder_result": 0,
+  "duckdb_error_code": -17,
+  "full_security_gate": "PASS",
+  "duckdb_deferral_used": false,
+  "package_high": 0,
+  "package_critical": 0,
+  "source_provenance": "pass",
+  "dependency_smoke": "pass",
+  "real_parquet_roundtrips": [
+    "190addc",
+    "c974946"
+  ],
+  "new_data_release_accepted": false,
+  "host_activation_performed": false,
+  "scope": "Separate dev image; production build and release owned by the component session",
+  "schema": "islet.dev_duckdb_fix_validation/1",
+  "recorded_at": "2026-11-02T22:40:07.365926+00:00",
+  "branch": "security/dev-duckdb-fix-20261102",
+  "worktree": "/data/panc_CODEX/Islet-Explorer-duckdb-dev-20261102",
+  "evidence_root": "tmp/security-duckdb-dev-20261102",
+  "library_sha256": "a7f0d156ebd3d510f387289a698ce4cf165ed02eb5b44ba5cb82ebd2989ecbee",
+  "archive": {
+    "path": "tmp/security-duckdb-dev-20261102/islet-explorer-dev-duckdb-fixed-20261102.oci.tar",
+    "bytes": 2188034048,
+    "sha256": "fb19874949a6e203a5207d18f590aaa8feac12f0757f09b38fc0cafdd8bae008"
+  },
+  "host_staged": false,
+  "services_remain_stopped_and_masked": true,
+  "evidence": {
+    "validation-status.json": {
+      "sha256": "f57d94f7f339c78787f0dd565c5d394e96ed5f149091ca5170b567a085cc8303",
+      "bytes": 720
+    },
+    "source-identity.txt": {
+      "sha256": "933f5204b023cc8d25286c6edc899144b87fcce30a9a0f10c66ceb2514d41327",
+      "bytes": 152
+    },
+    "build-inputs.sha256": {
+      "sha256": "d12d9e018d5f29ee437999b6b4ef12de3bd3a606120fd4edf7f257cc92e57693",
+      "bytes": 765
+    },
+    "build.log": {
+      "sha256": "f608ceb4759b5dde1618fa2bb4dc80be3824f83a43e3995dac78d2657a6e9b79",
+      "bytes": 1085758
+    },
+    "build.exit": {
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "bytes": 2
+    },
+    "installed-source-receipt.json": {
+      "sha256": "b67dddae972044069e4e7eabe682f60fac33bca528c257f2706a4855607ba319",
+      "bytes": 2823
+    },
+    "source-patch-receipt.json": {
+      "sha256": "e3198250bf332cd72b30eca0a88c875fe70219ddb6752678c16899c693fd6849",
+      "bytes": 2940
+    },
+    "source-provenance-validation.json": {
+      "sha256": "e4e13023db758c1e46d47470940010d0b74a0fe9753d9f5b961af3102b5fb217",
+      "bytes": 3281
+    },
+    "dependency-smoke.json": {
+      "sha256": "6d9fcb7c7f96aadf0bdb3592ab845913478d662263b8e77472b853dec7aaf404",
+      "bytes": 273
+    },
+    "parquet-190addc.json": {
+      "sha256": "104dfe4951ef24c062fae031aa37cb53f7f6ce5d5ac8785f4317e704975e8479",
+      "bytes": 77986
+    },
+    "parquet-c974946.json": {
+      "sha256": "58581d2db72ae2f6e9250561e374a0f273eb346a90af0d88230df2127efdae6d",
+      "bytes": 69499
+    },
+    "host-status-at-validation.json": {
+      "sha256": "bbd742c57b6bfd6b9b2bcd898c67856f36c1f1d6ac2164d4f0ea65774febdb67",
+      "bytes": 1770
+    },
+    "test-image-evidence.log": {
+      "sha256": "880e244f263f80a1b8c5ce61c2e7c39f031a4b11419af608b53eada65bf34885",
+      "bytes": 2530
+    },
+    "r-installer-parse.log": {
+      "sha256": "c5fea88fd8196cc9c0637801b894e6898d7d5694d2fd84238740eda524acc081",
+      "bytes": 3688
+    },
+    "ARTIFACTS.sha256": {
+      "sha256": "183533f53bcfd195d4ba62b5a748a2c9e53db4ec416742e47d65270cb73f639f",
+      "bytes": 4069
+    },
+    "islet-explorer-dev-duckdb-fixed-20261102.oci.tar.metadata": {
+      "sha256": "7bba37ce69e4a8c83c81ccc0d29e02a21710dad8fdd9ab705a32d35f014c4598",
+      "bytes": 393
+    },
+    "islet-explorer-dev-duckdb-fixed-20261102.oci.tar.sha256": {
+      "sha256": "44c6cd62425397ec121f69b0a8457ba813558c2c244d597606bd54ccbda85708",
+      "bytes": 239
+    },
+    "scan/sha256_b26558a9b3791c05f6bf158152efc7eba29fe1c17159d6a23678bd306a4532d6.cyclonedx.json": {
+      "sha256": "5dac75b0d31d42873206900f15977828bee1724f16f6c99486ad86540d1ad0cc",
+      "bytes": 17847656
+    },
+    "scan/sha256_b26558a9b3791c05f6bf158152efc7eba29fe1c17159d6a23678bd306a4532d6.syft.cyclonedx.json": {
+      "sha256": "a6f920152c45b8ed675c430fea6c4aa6500a3e1c11f762591a2f6c95fbc22b5f",
+      "bytes": 12112381
+    },
+    "scan/published-image.txt": {
+      "sha256": "01589abe24cd4d401c0019f95bd0f98dadacbf6f4bfd6327232bd1f36693743d",
+      "bytes": 245
+    },
+    "scan/sha256_b26558a9b3791c05f6bf158152efc7eba29fe1c17159d6a23678bd306a4532d6.sbom-corrections.json": {
+      "sha256": "639235bfbbf5916faf1744b1eecb4ead46d4d9ac93247983ab2432fec7b99ebf",
+      "bytes": 726
+    },
+    "scan/sha256_b26558a9b3791c05f6bf158152efc7eba29fe1c17159d6a23678bd306a4532d6.brotli.json": {
+      "sha256": "a8b4258a37709c78a1f162704e1aa9d3dbf31fea15f14c89313611d102817670",
+      "bytes": 4833
+    },
+    "scan/sha256_b26558a9b3791c05f6bf158152efc7eba29fe1c17159d6a23678bd306a4532d6.grype.json": {
+      "sha256": "aeec3e8b3beb37bb5faa7d8e82766652861d5fe81043975ebc1f9698f654ab8d",
+      "bytes": 37225037
+    },
+    "scan/sha256_b26558a9b3791c05f6bf158152efc7eba29fe1c17159d6a23678bd306a4532d6.R-packages.tsv": {
+      "sha256": "c689784588aff4c7bd275d4d6ae98db6e07ee59078a788016d328cebf46911fc",
+      "bytes": 9883
+    },
+    "scan/sha256_b26558a9b3791c05f6bf158152efc7eba29fe1c17159d6a23678bd306a4532d6.grype-db.json": {
+      "sha256": "bb74bfdf4a9cbef2326f8e99e693d36d1b869ec8a9c3f60916b5025dc14d54d7",
+      "bytes": 342
+    },
+    "scan/sha256_b26558a9b3791c05f6bf158152efc7eba29fe1c17159d6a23678bd306a4532d6.scan.txt": {
+      "sha256": "6eab9c3a300b1bca2acae6851bdcee6a60ec90ea68d2b56bd83fe68cba8d95e4",
+      "bytes": 951
+    },
+    "scan/sha256_b26558a9b3791c05f6bf158152efc7eba29fe1c17159d6a23678bd306a4532d6.python-packages.txt": {
+      "sha256": "86c73a12682130e701daafb087b7a8e906cff81467dd8163ee40404e165344f5",
+      "bytes": 831
+    }
+  },
+  "host_state_checked_at": "2026-11-02T22:40:10.815986+00:00"
+}
