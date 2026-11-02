@@ -9,7 +9,9 @@ Usage: deploy/activate-release.sh --project-root ABS_PATH --release RELEASE
 
 Installs/updates the user Quadlet from a fully verified release. The immutable
 IMAGE_REF and DATA_SCHEMA are read from RELEASE_DIR/release.env. If startup or
-health verification fails, the prior unit is restored automatically.
+health verification fails, the prior unit and its active/inactive state are
+restored automatically. A previously stopped service is never restarted by
+failure recovery.
 --publish-address publishes the backend on that VM address instead of the
 loopback 127.0.0.1: use it only for the private address UFRC's reverse proxy
 connects to, and only where UFRC's network keeps that port from every other
@@ -305,6 +307,10 @@ fi
 escape_sed() { printf '%s' "$1" | sed 's/[&|\\]/\\&/g'; }
 rendered="$(mktemp)"
 backup=""
+previous_active=false
+if systemctl --user is-active --quiet "${service_name}"; then
+  previous_active=true
+fi
 trap 'rm -f -- "${rendered}" "${backup:-}"' EXIT
 
 sed \
@@ -368,6 +374,19 @@ restore_previous_unit() {
     [[ "${previous_address}" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || previous_address="127.0.0.1"
     [[ "${previous_port}" =~ ^[0-9]{1,5}$ ]] || previous_port="${port}"
     install -m 0644 "${backup}" "${unit_path}" || return 1
+    if [[ "${previous_active}" != true ]]; then
+      # A service may have been stopped for security remediation. Restoring
+      # its configuration must not start that old image on candidate failure.
+      systemctl --user stop "${service_name}" || return 1
+      systemctl --user daemon-reload || return 1
+      if podman container exists "${instance}"; then
+        local still_running
+        still_running="$(podman inspect --format '{{.State.Running}}' "${instance}")" || return 1
+        [[ "${still_running}" == false ]] || return 1
+      fi
+      echo "Prior unit restored and left stopped; release state is unchanged." >&2
+      return 0
+    fi
     systemctl --user daemon-reload || return 1
     systemctl --user restart "${service_name}" || return 1
     "${script_dir}/verify-deployment.sh" --url \

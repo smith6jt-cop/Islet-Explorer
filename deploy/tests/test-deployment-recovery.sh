@@ -50,6 +50,7 @@ unit="${XDG_CONFIG_HOME}/containers/systemd/${service}.container"
 image="$(awk -F= '$1 == "Image" {print $2; exit}' "${unit}" 2>/dev/null || true)"
 printf '%s\n' "$* ${image}" >> "${MOCK_CASE}/systemctl-calls"
 case "${2:-}" in
+  is-active) test -f "${MOCK_CASE}/running-image" ;;
   daemon-reload)
     if [[ "${MOCK_SCENARIO}" == reload_fail && "${image}" == "${MOCK_CANDIDATE_IMAGE}" ]]; then exit 1; fi
     ;;
@@ -114,7 +115,7 @@ make_release() {
   )
 }
 
-for scenario in success reload_fail start_fail candidate_health_fail recovery_restart_fail recovery_health_fail first_health_fail; do
+for scenario in success reload_fail start_fail candidate_health_fail recovery_restart_fail recovery_health_fail first_health_fail inactive_health_fail; do
   case_dir="${work_dir}/${scenario}"
   project="${case_dir}/project"
   config="${case_dir}/config"
@@ -128,7 +129,9 @@ for scenario in success reload_fail start_fail candidate_health_fail recovery_re
     cp "${unit}" "${case_dir}/original-unit"
     printf 'RELEASE=old\nIMAGE_REF=%s\n' "${prior_image}" > "${state}/active.state"
     cp "${state}/active.state" "${case_dir}/original-state"
-    printf '%s\n' "${prior_image}" > "${case_dir}/running-image"
+    if [[ "${scenario}" != inactive_health_fail ]]; then
+      printf '%s\n' "${prior_image}" > "${case_dir}/running-image"
+    fi
   fi
   set +e
   env PATH="${mock_bin}:${PATH}" XDG_CONFIG_HOME="${config}" \
@@ -173,6 +176,14 @@ for scenario in success reload_fail start_fail candidate_health_fail recovery_re
     first_health_fail)
       [[ ! -e "${unit}" && ! -e "${state}/active.state" && ! -e "${case_dir}/running-image" ]] || \
         fail 'failed first activation left a candidate service or active state'
+      ;;
+    inactive_health_fail)
+      cmp -s "${unit}" "${case_dir}/original-unit" || fail 'inactive prior unit was not restored'
+      cmp -s "${state}/active.state" "${case_dir}/original-state" || fail 'inactive prior state changed'
+      [[ ! -e "${case_dir}/running-image" && ! -e "${state}/previous.state" ]] || fail 'inactive recovery started a service or changed previous state'
+      ! grep -Fqx "${prior_image}" "${case_dir}/health-checks" || fail 'inactive prior image was checked as running'
+      ! grep -Fq "restart islet-explorer.service ${prior_image}" "${case_dir}/systemctl-calls" || fail 'inactive prior image was restarted'
+      grep -Fq 'restored and left stopped' "${case_dir}/output" || fail 'inactive recovery outcome missing'
       ;;
     *)
       cmp -s "${unit}" "${case_dir}/original-unit" || fail "${scenario}: old unit was not restored"
