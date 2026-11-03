@@ -24,6 +24,7 @@ The first component build's unresolved assignments are historical diagnostics.
 | Scientific source | `67ee6c9`, HPG job `49168359`, fresh v2 paths. |
 | Image/release source | `e5689f6`, adding the app palette-name fix; release `pubapps-2026-11-components-v1` is being prepared. |
 | Corrected parity validator | `d3ec00e`; validation-only correction, with image/data and scientific producer commits retained. |
+| Composite verifier | `c3dc494`; binds the original 24 passing checks and corrected full state/UUID proofs to unchanged inputs. |
 
 Both all-20 identity runs and the final row review have passed: 3,199,606 cells,
 exact selected endocrine membership, zero unnamed endocrine definitions or
@@ -35,8 +36,8 @@ and native QuPath build also pass, and all outputs are returned with verified
 checksums. Immutable schema-5 packaging and full byte verification have passed.
 The original parity run passed 24 of 25 checks; its only failure was a floating
 distance treated as an exact key. The corrected full state gate and independent
-UUID/state check pass. Final composite parity acceptance, inventory and
-production activation remain pending; [current results](component_build_v2_20261102.md#release-parity-correction-and-remaining-checks)
+UUID/state check pass, and the final targeted composite parity and inventory
+are validated. Production activation remains pending; [current results](component_build_v2_20261102.md#release-parity-correction-and-remaining-checks)
 record the retained failed report and targeted revalidation.
 Production activation is already authorized after the actual checks pass;
 no additional classification-permission question is pending. Production and
@@ -359,6 +360,11 @@ SOURCE_ROOT="$ASSEMBLY" ./verify-data.sh
 RELEASE_NAME="$RELEASE" ./bind-release.sh
 ```
 
+Freeze and hash each operational wrapper before execution. Do not edit a
+running shell script: the retained binder attempt exited 127 after a wrapper
+edit, although the data were unchanged. Keep that failed log and recover with
+a new, fixed wrapper after checking the completed steps and current bindings.
+
 The tracked commands and complete instructions are in [deploy/README.md](../deploy/README.md). Data packaging uses `scripts/build_release_data.R --schema 5`, then `scripts/verify_release_data.R --mode full --schema 5` and `scripts/verify_release_parity.R`. The app interpreter for those R operations is selected by `RETICULATE_PYTHON=/home/smith6jt/.local/share/islet-explorer-py/bin/python`. Schema 1 belongs to the frozen 15-donor release, not this 20-donor workflow.
 
 For v2, packaging and full byte verification passed on the copied `e5689f6`
@@ -373,9 +379,32 @@ confirms exact coordinates, labels and all 78,680 Ki67-positive states.
 `Rscript scripts/tests/test_release_parity.R` passes, including regression
 controls that still reject changed/nonbinary flags, missing duplicate rows and
 distance changes above tolerance. The [build record](component_build_v2_20261102.md#release-parity-correction-and-remaining-checks)
-links the retained failed report and both new proofs. The final targeted
-composite and inventory are pending; these intermediate passes do not authorize
-claiming the release live.
+links the retained failed report and both new proofs. Composer `c3dc494` passes
+14 real-evidence tests and independent review. Its final targeted composite
+passes with exact producer/runtime identities and unchanged input inventories;
+it reuses the original 24 passing checks rather than claiming a monolithic rerun.
+
+Validate the recorded composite from the repository containing the committed
+composer (and its referenced evidence files), leaving the frozen `e5689f6`
+producer checkout unchanged:
+
+```bash
+python3 scripts/compose_release_parity.py validate \
+  --report tmp/pubapps-component-release-20261102-v2/evidence/release-parity-e5689f6-revalidated-r3.json
+```
+
+The report SHA256 is
+`9fa22ceb122b2ab18cec4262aaf6f3bf3173ff11b72d732d5e90e4eebc5a9c5f`;
+the bound unchanged-input proof SHA256 is
+`9ba46f8cb5d196b919181e61bc0cd3d84e179271911f95c2c909e782b6a34baf`.
+The final inventory then passed from clean `e5689f6` at 02:33:52 UTC, with
+composite validation passing both before and after it. The inventory report
+`evidence/release-inventory-e5689f6.json` under the same release build directory
+has SHA256 `6147832fc3ea1693ded18dff8ee05b8602db8542ff564a6dd8f92bcad11ae248`
+and binds the final r3 parity hash. Activation remains pending. Use the
+validated final report path when binding subsequent evidence; retain earlier
+drafts separately. The [compact completion receipt](evidence/component_release_validation_20261102.json)
+records the build, test and inventory results with their exact evidence hashes.
 
 Use copied files for a reviewer bundle so later source edits cannot alter it through shared inodes. `--materialize hardlink` is only for disposable local tests. Keep image data and credentials outside the OCI image. Preserve the SBOM, vulnerability scan, dependency evidence, immutable image ID, data manifest, parity/inventory reports, and full logs. Current security validation also requires the image's Brotli library evidence from `deploy/verify-brotli.py`, invoked by `deploy/scan-image.sh`: patched Ubuntu/Node, Pillow linked to the system decoder, and DuckDB's actual decoder regression with its installed-library hash. New release manifests require the version-2 report; missing reports and older Pillow-only reports are rejected. A clean package scan alone missed the embedded decoders. Never rewrite the directory of an active release.
 
@@ -488,7 +517,7 @@ The handoff carries the actual commit range, changed-file list, evidence receipt
 1. **Completed for v2:** matched control and DG candidate, exact selected endocrine membership, zero unnamed endocrine definitions/boundary placeholders, unchanged marker states and untargeted identities, and Lymphatic-only permitted changes. The actual Unclassified source transitions are reviewed; no invented count cutoff hides unsupported rows.
 2. **Completed for v2:** hash-bound classifier-lineage proof and exact Single whole-cell checks, with the separate corrected-cell and centroid-membership diagnostics and original geometry preserved.
 3. **Completed for v2:** dependent app tables, spatial outputs, scales and embeddings, every exported UUID/label/Ki67 association and four-name endocrine census. App and native QuPath artifacts are returned with verified checksums and locally resolving image paths.
-4. **Packaging and full byte verification completed; final parity/inventory pending:** schema-5 data and image retain producer `e5689f6`, with scientific producer `67ee6c9` recorded separately. The validation-only `d3ec00e` correction passes the full actual cell-state check. Require the targeted composite's unchanged-input proof, remaining inventory, installed-runtime tests and dated security evidence before release acceptance.
+4. **Packaging, full byte verification, targeted composite parity and inventory completed:** schema-5 data and image retain producer `e5689f6`, with scientific producer `67ee6c9` recorded separately. Validator `d3ec00e` passes the full actual cell-state check; composer `c3dc494` binds it to the original 24 passing checks and unchanged inputs. Preserve these final reports alongside installed-runtime tests and dated security evidence for release acceptance.
 5. The security owner stages and binds the matching pair, handles the production mask, activates, and verifies the real service, authenticated proxy, Viewer ranges, sidecars and browser interactions. Record the actual outcome in [the deployment record](container_security_20261102.md). A successful build alone does not mean the site is online.
 6. Complete the remaining outside-network and reboot acceptance work according to [UFRC readiness](ufrc_readiness.md), and coordinate the separately patched DuckDB dev build. Preserve prior evidence and recipient workspaces when delivering the new grouped changes.
 

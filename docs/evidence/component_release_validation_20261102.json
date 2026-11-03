@@ -1,0 +1,107 @@
+{
+  "schema": "uniform.release_validation_completion/1",
+  "status": "passed",
+  "completed_utc": "2026-11-03T02:33:52Z",
+  "recorded_utc": "2026-11-03T02:37:08.317611+00:00",
+  "scope": "Local immutable release build and computational validation; no service activation claim.",
+  "method": "24 unchanged passing full-run checks plus corrected complete cell-state gate and independent UUID audit; committed composer validates hash bindings and unchanged input proof before and after actual inventory.",
+  "source_root": "/data/panc_CODEX/Islet-Explorer/data/development/uniform-20donor-20261102-component-app-v2",
+  "release_root": "/data/panc_CODEX/Islet-Explorer/tmp/pubapps-component-release-20261102-v2/artifacts/release-e5689f6/data",
+  "commits": {
+    "scientific_producer": "67ee6c9d0b28f467eee589fea24829a6546e3d74",
+    "release_and_image_producer": "e5689f6453e68bc9e94cbe83689cb9db4d3d0b83",
+    "corrected_verifier": "d3ec00e113fbbdb8abb7eb4b57ee4ffc7ca46580",
+    "evidence_composer": "c3dc4944afda1d257c4c73d69ccaaa3b00da8c72"
+  },
+  "validation": {
+    "schema5_build_exit": 0,
+    "independent_full_byte_verifier_exit": 0,
+    "original_full_report_status": "failed",
+    "original_full_passed_checks": 24,
+    "original_failure": "cell_state_exports: signed_dist was incorrectly treated as an exact key",
+    "accepted_checks": 25,
+    "corrected_full_state_gate_passed": true,
+    "independent_uuid_associations_passed": true,
+    "inventory_exit": 0,
+    "composite_validated_before_and_after_inventory": true
+  },
+  "counts": {
+    "cells": 3199606,
+    "ki67_positive_cells": 78680,
+    "ki67_mismatches": 0,
+    "donor_files": 20,
+    "object_files": 4848,
+    "object_rows": 357658
+  },
+  "image_tree": {
+    "file_count": 80,
+    "ome_tiff_count": 20,
+    "bytes": 155515691675,
+    "sha256": "eff7617270dd3b6f10d67d3519f0293401c463681f81ae7d80e9751cf9d15804"
+  },
+  "tests": {
+    "r_suite_blocks": 13,
+    "r_suite_assertions": 99,
+    "new_decimal_parser_regression_assertions": 9,
+    "real_row_negative_controls": 2,
+    "composite_actual_evidence_tests": 14
+  },
+  "evidence": {
+    "accepted_composite": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/pubapps-component-release-20261102-v2/evidence/release-parity-e5689f6-revalidated-r3.json",
+      "sha256": "9fa22ceb122b2ab18cec4262aaf6f3bf3173ff11b72d732d5e90e4eebc5a9c5f"
+    },
+    "inventory": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/pubapps-component-release-20261102-v2/evidence/release-inventory-e5689f6.json",
+      "sha256": "6147832fc3ea1693ded18dff8ee05b8602db8542ff564a6dd8f92bcad11ae248"
+    },
+    "unchanged_inputs": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/pubapps-component-release-20261102-v2/evidence/parity-unchanged-inputs-r3.json",
+      "sha256": "9ba46f8cb5d196b919181e61bc0cd3d84e179271911f95c2c909e782b6a34baf"
+    },
+    "original_failed_full_report": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/pubapps-component-release-20261102-v2/evidence/release-parity-e5689f6.json",
+      "sha256": "4705a9ffdccc11ab73ecaa72f4f553b2066bd83d5d727b621fb87c5d2e9794dd"
+    },
+    "original_failed_wrapper_log": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/pubapps-component-release-20261102-v2/verify-data.log",
+      "sha256": "ba343291562a1489911a68f14543b4ca02b09e3f8287adabd61b8b0da6291b6b"
+    },
+    "corrected_complete_state_gate": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/pubapps-component-release-20261102-v2/evidence/verifier-correction-realdata.json",
+      "sha256": "af18e0150fa48884b478fe917974ce17960e94b4bb9e57f3b9a5350ad27efbc7"
+    },
+    "independent_uuid_audit": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/pubapps-component-release-20261102-v2/evidence/cell-state-uuid-independent/summary.json",
+      "sha256": "1b88a11a37dc4c71b17fa6d50cdf76f26106907cbc5412a0d956a4910cb975d1"
+    },
+    "source_uniform_manifest": {
+      "path": "/data/panc_CODEX/Islet-Explorer/data/development/uniform-20donor-20261102-component-app-v2/uniform_release.json",
+      "sha256": "7ff7c4d92cffa393b16f3118ef04855e959bda14d3862aecce0da95344e91082"
+    },
+    "release_data_manifest": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/pubapps-component-release-20261102-v2/artifacts/release-e5689f6/data/manifest.json",
+      "sha256": "8ddeecf3639921d2e53538e2d86b6bb4278cc622d29a928a3136fdece3d9f6b1"
+    },
+    "scientific_build_journal": {
+      "path": "/data/panc_CODEX/Islet-Explorer/output/component_candidate_build_20261102_v2/build_journal.json",
+      "sha256": "1c84ae77d06b485480ae027bb2e71eab5cef43187ace96ad2941f82af593a836"
+    },
+    "image_seal_comparison": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/pubapps-component-release-20261102-v2/evidence/release-image-seal-comparison.json",
+      "sha256": "0eda02403c1cd491d67c8d9cd33f8638ee92974d6f56f02820dec253e3801cdd"
+    },
+    "inventory_completion_log": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/pubapps-component-release-20261102-v2/inventory-revalidated-r2.log",
+      "sha256": "37bb6d5a71ac6934e758c2f36fe36e79ff75e8097ea538168c7a76683693d024"
+    },
+    "r_regression_tests": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/pubapps-component-release-20261102-v2/evidence/verifier-correction-tests-r2.log",
+      "sha256": "ee083924176bfaa71b2b98b1ad16d8d3bda03eaaf1109c04bda756a40df08d4c"
+    },
+    "composite_rejection_tests": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/pubapps-component-release-20261102-v2/evidence/composite-revalidation-tests-r3.log",
+      "sha256": "e94f3fce00f909dd1051e5fe8ad92c287cebbe1d860d9ce817fe3d7bf4234123"
+    }
+  }
+}

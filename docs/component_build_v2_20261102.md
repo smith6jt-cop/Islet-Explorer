@@ -171,14 +171,36 @@ from the release Parquet. Its receipt is
 `evidence/cell-state-uuid-independent/summary.json`, SHA256
 `1b88a11a37dc4c71b17fa6d50cdf76f26106907cbc5412a0d956a4910cb975d1`.
 
-Final parity acceptance is pending a separate **targeted composite receipt**.
-It must hash-bind the preserved original 24 passing checks, the corrected
-full state result, the exact narrow verifier change and unchanged actual
-source/release inputs. It must record validator `d3ec00e` separately from
-scientific producer `67ee6c9` and image/data producer `e5689f6`; it must not
-rewrite the original failed report or claim a new monolithic 25-check run.
-Final inventory and production activation remain pending. No passing live-site
-claim follows from the completed packaging or targeted state check.
+Final parity acceptance **passes through targeted revalidation**. Composer
+`c3dc4944afda1d257c4c73d69ccaaa3b00da8c72` binds the original 24 passing checks,
+the corrected full state result, the independent UUID proof and unchanged
+source/release inputs. It retains scientific producer `67ee6c9`, image/data
+producer `e5689f6` and corrected validator `d3ec00e` as separate identities.
+The original failed report remains unchanged; this is not a new monolithic
+25-check run.
+
+The final receipt is
+`evidence/release-parity-e5689f6-revalidated-r3.json`, SHA256
+`9fa22ceb122b2ab18cec4262aaf6f3bf3173ff11b72d732d5e90e4eebc5a9c5f`.
+Its `evidence/parity-unchanged-inputs-r3.json` proof has SHA256
+`9ba46f8cb5d196b919181e61bc0cd3d84e179271911f95c2c909e782b6a34baf`.
+The proof checks complete file and symlink inventories, fresh non-image content
+hashes, and unchanged image identities with timestamps predating the original
+full verification. All 14 real-evidence composer tests pass; independent review
+confirmed that omitted proofs, altered retained checks or runtime identity,
+and incomplete input inventories are rejected.
+
+The final inventory completed at **02:33:52 UTC**, exit 0, from the clean
+`e5689f6` producer checkout. It binds the final r3 parity receipt and unchanged
+release manifest, covering 22 release artifacts, 20 TIFFs and their metadata.
+`evidence/release-inventory-e5689f6.json` SHA256 is
+`6147832fc3ea1693ded18dff8ee05b8602db8542ff564a6dd8f92bcad11ae248`;
+the execution log is `inventory-revalidated-r2.log` in the release build root.
+Composite validation passed immediately before and after inventory execution.
+The [compact release-validation receipt](evidence/component_release_validation_20261102.json)
+binds the completed build, retained failure, accepted checks, tests and inventory.
+Production activation remains pending. These results establish packaging
+equivalence and inventory; they do not claim the site is live.
 
 ## What the additional object proof establishes
 
