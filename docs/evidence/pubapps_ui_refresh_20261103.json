@@ -1,0 +1,41 @@
+{
+  "schema": "islet.pubapps_ui_refresh_build/1",
+  "status": "locally_built_full_release_verified",
+  "recorded_at_utc": "2026-11-03T21:40:20Z",
+  "release": "pubapps-2026-11-ui-refresh-26b6613",
+  "source": {
+    "commit": "26b66131668c01326d4b95bdb1efbf1d37ef7527",
+    "branch": "spatial-review-20261020",
+    "worktree_clean": true
+  },
+  "image": {
+    "id": "sha256:2931955ab95330c7804bfea7f9ca25774aa4813f7c9db645a3fd63e35f99035e",
+    "base": "docker.io/rocker/shiny@sha256:dd10b638e2e7e6b73cfbfef2bbed51d5a97b624f8122e9379f1c3395bf660ef8",
+    "strict_security_gate": "passed",
+    "high": 0,
+    "critical": 0,
+    "duckdb_deferral": false,
+    "brotli_decoder_result": 0,
+    "brotli_decoder_error": -17,
+    "evidence": "../tmp/unclassified-ui-accessibility-20261103/image-26b66131668c01326d4b95bdb1efbf1d37ef7527/validation-status.json"
+  },
+  "data": {
+    "release": "pubapps-2026-11-components-v1",
+    "schema": 5,
+    "expected_ome_tiff_images": 20,
+    "data_manifest_sha256": "8ddeecf3639921d2e53538e2d86b6bb4278cc622d29a928a3136fdece3d9f6b1",
+    "producer_commit": "67ee6c9d0b28f467eee589fea24829a6546e3d74",
+    "reused_unchanged_accepted_data": true
+  },
+  "release_manifest_sha256": "8c43f6823bd52dddc51efa0912541751122987326cda5453cc2e0b0b1faf9d6e",
+  "full_release_verification": "passed",
+  "archive": {
+    "path": "../../tmp/pubapps-ui-refresh-20261103/islet-explorer-pubapps-2026-11-ui-refresh-26b6613.oci.tar",
+    "sha256": "a3a73bae10534f1507c37574647d0169a7ff7886e74a292d881eda6cac215874",
+    "bytes": 2189972992
+  },
+  "transfer_to_hpg": false,
+  "pubapps_staging": false,
+  "service_activation": false,
+  "scope": "Build and verify local PubApps release candidate only; public services unchanged."
+}

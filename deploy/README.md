@@ -10,15 +10,16 @@ the strict decoder gate without a deferral. The older
 `islet-explorer-local.service` remains inactive.
 Use the [workflow guide](../docs/workflow_user_guide.md) and
 [current v2 build record](../docs/component_build_v2_20261102.md). Earlier masked-service,
-whole-v19 and v1 diagnostic records are historical. The [November 3 display fixes](../docs/app_display_fixes_20261103.md)
-are running in a separate persistent [local review](http://127.0.0.1:3845/islet-explorer/)
-from source `1596b03`, image `846962f7…`, using the separately accepted read-only data built
-from `5e6580f`; see the [local review record](../docs/local_duckdb_review_20261103.md).
-The persistent local user service is enabled on loopback port 3845. Data and View
-controls start collapsed; click a heading to show or hide them. The
-[controls review receipt](../docs/evidence/local_controls_review_20261103.json) records this successor’s checks.
-The owner's November 3 direction is **LOCAL REVIEW ONLY**: dev activation is
-paused pending the owner's review and decision. Both public services remain unchanged.
+whole-v19 and v1 diagnostic records are historical. The November 3 UI changes
+are running in the persistent [local review](http://127.0.0.1:3845/islet-explorer/)
+from source `26b6613`, image `2931955a…`. The fully verified candidate
+`pubapps-2026-11-ui-refresh-26b6613` pairs this app with the unchanged accepted
+production schema-5 data. Its OCI archive is prepared locally and has not been
+transferred or activated on PubApps; production and public dev remain unchanged.
+See the [build record](../docs/pubapps_ui_refresh_20261103.md) and the
+[local review record](../docs/local_duckdb_review_20261103.md) for details.
+The owner's November 3 direction remains **LOCAL REVIEW ONLY** for service
+changes: dev activation is paused pending the owner's review and decision.
 
 Production runbook for the journal-review deployment requested at:
 

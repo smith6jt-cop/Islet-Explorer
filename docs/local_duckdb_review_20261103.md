@@ -1,13 +1,16 @@
 # Local DuckDB and display review — 2026-11-03
 
-The Unclassified and card-layout successor is installed and healthy at
-[the local preview](http://127.0.0.1:3845/islet-explorer/).
-**Native acceptance passed: standard browser 49/49, Composition 12/12
-and Spatial 12/12, with the recorded visual reviews complete.** The
-[review receipt](evidence/local_unclassified_ui_review_20261103.json) records
-the completed checks and their provenance. This remains **local review only**.
+The current app at [the local preview](http://127.0.0.1:3845/islet-explorer/)
+is source `26b66131668c01326d4b95bdb1efbf1d37ef7527`, image
+`sha256:2931955ab95330c7804bfea7f9ca25774aa4813f7c9db645a3fd63e35f99035e`.
+It includes the follow-on Trajectory and Spatial changes. The strict image
+gate, read-only mounts and local runtime are verified; the browser and visual
+acceptance receipts below are for the earlier `3c81075` review baseline and are
+not relabeled as fresh checks of this successor. The current UI is packaged in
+the fully verified [PubApps build candidate](pubapps_ui_refresh_20261103.md),
+which uses accepted production data and has not been transferred or activated.
 
-| Component | Current local identity |
+| Component | Earlier native review baseline |
 |---|---|
 | Application source | `3c81075307c97356cf6ded5df0ac10e810c8b9fa` |
 | Immutable local image | `sha256:eb6f3c32779a22e4c1ca7a843bd9de5011de253ac42fb3fd4e574d7b34b2c920` |
