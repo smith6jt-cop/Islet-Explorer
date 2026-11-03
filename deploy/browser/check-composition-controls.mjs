@@ -341,17 +341,37 @@ try {
       return image?.complete && image.naturalWidth > 0 && !output.classList.contains('recalculating');
     });
     await settled();
-    const palettes = await page.evaluate(() => Object.fromEntries(
+    const readPalettes = () => page.evaluate(() => Object.fromEntries(
       ['composition_palette', 'spatial_palette', 'drilldown_palette'].map(id => {
         const element = document.getElementById(id);
         return [id, element?.selectize?.getValue() || element?.value];
       })));
+    const palettes = await readPalettes();
     const after = await snapshot();
     const physicalClicks = await page.evaluate(() => window.__compositionInputEvents
       .filter(event => event.name === 'plot-linked_click').length);
-    return { passed: absentInitially && physicalClicks > 0 && Object.values(palettes).every(value => value === wanted) &&
-      JSON.stringify(before.colors) === JSON.stringify(after.colors), absentInitially, physicalClicks,
-    expectedPalette: wanted, palettes, beforeColors: before.colors, afterColors: after.colors };
+    const firstMountPassed = absentInitially && physicalClicks > 0 && Object.values(palettes).every(value => value === wanted) &&
+      JSON.stringify(before.colors) === JSON.stringify(after.colors);
+    const remounts = [];
+    if (firstMountPassed) {
+      for (const [tabName, namespace] of [['Spatial', 'spatial'], ['Plot', 'plot']]) {
+        await page.click(`#tabs a[data-value="${tabName}"]`);
+        await page.waitForSelector(`#${namespace}-segmentation_viewer_panel #drilldown_palette`);
+        await page.waitForFunction(id => {
+          const image = document.querySelector(`#${id}-segmentation_viewer_panel #islet_segmentation_view img`);
+          return image?.complete && image.naturalWidth > 0;
+        }, {}, namespace);
+        await settled();
+        remounts.push({ tab: tabName, palettes: await readPalettes(), barColors: (await snapshot()).colors });
+      }
+      await waitBars();
+    }
+    const final = await snapshot();
+    return { passed: firstMountPassed && remounts.length === 2 &&
+      remounts.every(item => Object.values(item.palettes).every(value => value === wanted) &&
+        JSON.stringify(item.barColors) === JSON.stringify(before.colors)) &&
+      JSON.stringify(before.colors) === JSON.stringify(final.colors), absentInitially, physicalClicks,
+    expectedPalette: wanted, palettes, remounts, beforeColors: before.colors, afterColors: final.colors };
   });
   await check('clear_marker_preserves_selected_population_without_duplicate_parent', async () => {
     await setPanel(true);

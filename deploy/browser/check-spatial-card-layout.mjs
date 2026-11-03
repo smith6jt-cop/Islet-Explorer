@@ -55,12 +55,34 @@ async function tissueReady() {
   });
   await idle();
   let prior = '', stable = 0;
+  const started = Date.now(), history = [];
   for (let i = 0; i < 80 && stable < 3; i++) {
     await delay(250); await idle();
-    const next = await page.$eval('#spatial-tissue_scatter img', el => JSON.stringify([
-      el.src, el.naturalWidth, el.naturalHeight, el.getBoundingClientRect().width, el.getBoundingClientRect().height]));
+    const sample = await page.$eval('#spatial-tissue_scatter img', async el => {
+      const rect = el.getBoundingClientRect();
+      const sample = {src: el.src, naturalWidth: el.naturalWidth, naturalHeight: el.naturalHeight,
+        width: rect.width, height: rect.height,
+        domain: Shiny.shinyapp.$values['spatial-tissue_scatter']?.coordmap?.panels?.[0]?.domain,
+        checkedMarkers: [...document.querySelectorAll('input[name="spatial-mac_markers_filter"]:checked')].map(x => x.value),
+        markerInputs: Object.fromEntries(Object.entries(Shiny.shinyapp.$inputValues).filter(([key]) => /mac.*markers/.test(key))) };
+      const canvas = document.createElement('canvas'); canvas.width = el.naturalWidth; canvas.height = el.naturalHeight;
+      const context = canvas.getContext('2d'); context.drawImage(el, 0, 0);
+      const bytes = context.getImageData(0, 0, canvas.width, canvas.height).data;
+      const digest = await crypto.subtle.digest('SHA-256', bytes);
+      sample.pixel_sha256 = [...new Uint8Array(digest)].map(x => x.toString(16).padStart(2, '0')).join('');
+      canvas.width = 0; canvas.height = 0;
+      return sample;
+    });
+    const {src, domain, checkedMarkers, markerInputs, pixel_sha256, ...dimensions} = sample;
+    // Preserve the original strict criterion until the recorded image/dimension
+    // evidence distinguishes genuine redraw feedback from a volatile image URL.
+    const next = JSON.stringify({src, ...dimensions});
+    history.push({elapsed_ms: Date.now() - started, source_sha256: hash(src), pixel_sha256,
+      domain, checkedMarkers, markerInputs, ...dimensions});
     stable = next === prior ? stable + 1 : 0; prior = next;
   }
+  (report.tissue_stability_attempts ||= []).push({phase: report.phase || null, stable, history});
+  if (stable < 3) await save();
   assert(stable >= 3, 'Tissue image did not stabilize');
 }
 async function geometry() {
@@ -169,6 +191,7 @@ try {
   await check('four_marker_dense_selection', async () => {
     await dataPanel(true);
     for (const marker of ['CD68', 'CD163', 'LGALS3', 'CD4']) {
+      report.phase = `select_marker_${marker}`; await save();
       const selector = `input[name="spatial-mac_markers_filter"][value="${marker}"]`;
       if (!await page.$eval(selector, el => el.checked)) await page.click(selector);
       await page.waitForFunction(selector => document.querySelector(selector)?.checked, {}, selector);

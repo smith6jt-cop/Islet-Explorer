@@ -36,10 +36,12 @@ let browser,page;
 async function ready() {
   await page.waitForFunction(()=>['plot-plt','plot-dist'].every(id=>{
     const el=document.getElementById(id);return el?._fullLayout && el.data?.length &&
-      !el.classList.contains('recalculating') && !el.classList.contains('shiny-output-error');
+      !el.classList.contains('recalculating') && !el.classList.contains('shiny-output-error') &&
+      Math.abs(el._fullLayout.width-el.getBoundingClientRect().width)<3;
   }) && !document.documentElement.classList.contains('shiny-busy'));
 }
 async function dataPanel(open) {
+  await page.waitForSelector('#plot-mode');
   const detail=await page.$('#plot-mode');
   const panel=await detail.evaluateHandle(e=>e.closest('details'));
   if(await panel.evaluate(e=>e.open)!==open) {
@@ -47,10 +49,12 @@ async function dataPanel(open) {
     await page.waitForFunction(open=>document.getElementById('plot-mode').closest('details').open===open,{},open);
   }
   await panel.dispose();await detail.dispose();
+  await pause(200);
 }
 async function choose(id,value) {
+  await page.waitForFunction(id=>{const e=document.getElementById(id);return e?.selectize && e.getClientRects().length===0 && e.selectize.$control[0].getClientRects().length>0;},{},id);
   if(await page.$eval('#'+id,e=>e.value)===value)return;
-  const label=await page.$eval('#'+id,(e,v)=>e.selectize.options[v]?.text,value);
+  const label=await page.$eval('#'+id,(e,v)=>e.selectize.options[v]?.[e.selectize.settings.labelField],value);
   assert(label,`Missing choice ${id}/${value}`);
   const input='#'+id+'-selectized';
   await page.$eval(input,e=>e.scrollIntoView({block:'center'}));
@@ -60,6 +64,7 @@ async function choose(id,value) {
   await page.waitForSelector(option,{visible:true});await page.click(option);
   await page.waitForFunction((id,v)=>document.getElementById(id)?.value===v && Shiny.shinyapp.$inputValues[id]===v,{},id,value);
   await ready();
+  if(id==='plot-mode')await page.waitForFunction(v=>['left','right'].every(side=>document.getElementById(`plot-${side}_title`)?.textContent.startsWith(v)),{},value);
 }
 async function metric(value) {
   const selector=`input[name="plot-metric"][value="${value}"]`;
@@ -74,7 +79,7 @@ async function snapshot() {
     const clean=t=>String(t||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
     const which=document.getElementById('plot-which');
     return {layer:document.getElementById('plot-mode').value,selection:which.value,
-      selection_label:which.selectize.options[which.value]?.text,
+      selection_label:which.selectize.options[which.value]?.[which.selectize.settings.labelField],
       metric:document.querySelector('input[name="plot-metric"]:checked')?.value || null,
       cards:['left','right'].map((side,i)=>{
         const heading=document.getElementById(`plot-${side}_title`),card=heading.closest('.plot-type-card');
@@ -97,6 +102,7 @@ async function settled() {
 }
 function verify(state,expected) {
   assert.equal(state.layer,expected.layer);
+  assert.equal(state.selection,expected.selection);
   if(expected.metric)assert.equal(state.metric,expected.metric);
   const typeNames={diameter:'Against Diameter',status:'By Donor Status'};
   const measure=expected.layer==='Microenvironment'?state.selection.split('|')[0]:state.selection_label;
@@ -129,7 +135,17 @@ async function screenshot(name) {
   report.screenshots.push({path:filename,sha256:hash(await fs.readFile(filename)),name});
 }
 async function run(name,expected) {
-  await dataPanel(false);const state=await settled();
+  await dataPanel(false);
+  await page.waitForFunction(expected=>{
+    const clean=t=>String(t||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
+    const which=document.getElementById('plot-which');
+    if(!which || which.value!==expected.selection)return false;
+    const measure=expected.layer==='Microenvironment'?expected.selection.split('|')[0]:expected.label;
+    const metric={Percentage:'proportion',Counts:'count',Density:'density'}[expected.metric];
+    return ['plot-plt','plot-dist'].every(id=>{const el=document.getElementById(id),title=clean(el?._fullLayout?.title?.text);
+      return el && !el.classList.contains('recalculating') && title.includes(measure) && (!metric || title.includes(metric));});
+  },{timeout:90000},expected);
+  const state=await settled();
   const entry={name,expected,state};report.checks.push(entry);
   try {verify(state,expected);entry.passed=true;}
   catch(e){entry.passed=false;entry.error=e.stack||String(e);}
@@ -152,24 +168,24 @@ try {
     await page.setViewport({width,height:1100});
     await dataPanel(true);await choose('plot-mode','Cell Populations');
     const populations=await page.$eval('#plot-which',e=>Object.values(e.selectize.options)
-      .filter(o=>/^prop_/.test(o.value)&& /Beta|Alpha/.test(o.value)).map(o=>({value:o.value,label:o.text})));
+      .filter(o=>/^prop_/.test(o.value)&& /Beta|Alpha/.test(o.value)).map(o=>({value:o.value,label:o[e.selectize.settings.labelField]})));
     assert(populations.length>=2,'Two core endocrine populations required');
     for(const population of populations.slice(0,2))for(const m of ['Percentage','Counts','Density']) {
       await dataPanel(true);await choose('plot-which',population.value);await metric(m);
-      await run(`${width}-${population.value.replace(/[^a-zA-Z0-9]+/g,'_')}-${m}`,{layer:'Cell Populations',metric:m});
+      await run(`${width}-${population.value.replace(/[^a-zA-Z0-9]+/g,'_')}-${m}`,{layer:'Cell Populations',metric:m,selection:population.value,label:population.label});
     }
     await choose('plot-left_type','status');await choose('plot-right_type','diameter');
-    await run(`${width}-cell-populations-swapped`,{layer:'Cell Populations',metric:'Density'});
+    await run(`${width}-cell-populations-swapped`,{layer:'Cell Populations',metric:'Density',selection:populations[1].value,label:populations[1].label});
     await dataPanel(true);await choose('plot-mode','Microenvironment');
     const structures=await page.$eval('#plot-which',e=>Object.values(e.selectize.options)
       .filter(o=>/\|islet_core$/.test(o.value)).slice(0,2).map(o=>o.value));
     assert(structures.length>=2,'Two structural measures required');
     for(const structure of structures) {
       await dataPanel(true);await choose('plot-which',structure);
-      await run(`${width}-${structure.replace(/[^a-zA-Z0-9]+/g,'_')}`,{layer:'Microenvironment'});
+      await run(`${width}-${structure.replace(/[^a-zA-Z0-9]+/g,'_')}`,{layer:'Microenvironment',selection:structure});
     }
     await choose('plot-left_type','diameter');await choose('plot-right_type','status');
-    await run(`${width}-microenvironment-restored-types`,{layer:'Microenvironment'});
+    await run(`${width}-microenvironment-restored-types`,{layer:'Microenvironment',selection:structures[1]});
   }
   report.input_events=await page.evaluate(()=>window.plotTitleEvents);
   report.visible_errors=await page.$$eval('.shiny-output-error',els=>els.filter(e=>e.getClientRects().length).map(e=>e.textContent));

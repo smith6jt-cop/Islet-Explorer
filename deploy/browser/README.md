@@ -32,7 +32,8 @@ node deploy/browser/check-plot-titles.mjs \
 
 Composition checks include physical mouse/keyboard selection, empty-state
 persistence, the original/selected denominators, shared palette colors and palette
-persistence after first opening object details. PAGA checks both independently
+persistence after first opening object details and switching between Plot and
+Spatial. PAGA checks both independently
 colored views, exact keyed coordinates, equal map areas, guide placement, linked
 interaction and CSV parity. Spatial checks card-width maps, dense legends,
 brush/reset, the donor selector's precise scope and grouped Distance controls at
