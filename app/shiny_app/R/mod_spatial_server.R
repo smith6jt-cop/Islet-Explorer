@@ -337,7 +337,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         if (color_bg && !use_leiden) {
           # Color background cells by phenotype (dimmed)
           bg_phenos <- sort(unique(bg$phenotype))
-          bg_pal <- palette()[bg_phenos]
+          bg_pal <- stats::setNames(unname(palette()[bg_phenos]), bg_phenos)
           bg_pal[is.na(bg_pal)] <- "#CCCCCC"
           p <- p + ggplot2::geom_point(
             data = bg,
@@ -385,7 +385,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           legend_phenos <- intersect(canonical_order, present)
           legend_phenos <- c(legend_phenos, setdiff(present, legend_phenos))
           legend_phenos <- legend_phenos[order(match(phenotype_group(legend_phenos), PHENOTYPE_GROUP_ORDER))]
-          pal <- palette()[legend_phenos]
+          pal <- stats::setNames(unname(palette()[legend_phenos]), legend_phenos)
           pal[is.na(pal)] <- "#CCCCCC"
 
           p <- p + ggplot2::geom_point(
@@ -768,7 +768,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
 
       # Use active phenotype palette where available
       pheno_present <- unique(bar_df$phenotype)
-      pal <- palette()[pheno_present]
+      pal <- stats::setNames(unname(palette()[pheno_present]), pheno_present)
       pal[is.na(pal)] <- "#CCCCCC"
 
       canonical_order <- names(palette())
