@@ -1424,7 +1424,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                     condition = "input.dist_ptype == 'density'", ns = ns,
                     control_group("Show",
                       # Populated by the phenotype/marker mode observer below.
-                      selectInput(ns("dist_group"), NULL, choices = NULL, width = "100%"))
+                      selectInput(ns("dist_group"), tags$span(class = "sr-only", "Group by"), choices = NULL, width = "100%"))
                   )
                 )
               ),
