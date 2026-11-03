@@ -1080,7 +1080,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       # The shared retired-phenotype gate: every neighborhood selector, the
       # composition filter, both composition plots and the CSV exports read
       # phenotype_options(), so filtering here keeps them all on the 12 labels.
-      recs <- Filter(function(r) phenotype_is_kept(r$label), recs)
+      recs <- Filter(function(r) phenotype_is_kept(r$label) && !phenotype_is_unclassified(r$label), recs)
       if (length(recs) == 0) return(list())
       recs <- recs[order(sapply(recs, function(r) r$label))]
       names(recs) <- sapply(recs, function(r) r$label)

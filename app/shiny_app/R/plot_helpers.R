@@ -48,18 +48,18 @@ plot_composition_selection_choices <- function(comp_cols, combined_pairs = NULL,
   choices <- list()
   if (length(prop_cols)) {
     labels <- sub("^prop_", "", prop_cols)
-    keep <- phenotype_is_kept(labels)
+    keep <- phenotype_is_kept(labels) & !phenotype_is_unclassified(labels)
     if (any(keep)) choices <- add_region(choices, "Core", prop_cols[keep], labels[keep])
   }
   if (length(peri_prop_cols)) {
     labels <- vapply(peri_prop_cols, function(col) {
       extract_phenotype_from_column(col) %||% col
     }, character(1), USE.NAMES = FALSE)
-    keep <- phenotype_is_kept(labels)
+    keep <- phenotype_is_kept(labels) & !phenotype_is_unclassified(labels)
     if (any(keep)) choices <- add_region(choices, "Peri-Islet", peri_prop_cols[keep], labels[keep])
   }
   if (length(combined_vals)) {
-    keep <- phenotype_is_kept(names(combined_vals))
+    keep <- phenotype_is_kept(names(combined_vals)) & !phenotype_is_unclassified(names(combined_vals))
     if (any(keep)) choices <- add_region(choices, "Core+Peri", unname(combined_vals[keep]), names(combined_vals)[keep])
   }
   choices

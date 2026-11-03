@@ -874,7 +874,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
     # Include the root's disjoint phenotype categories, with each region's established default selection.
     composition_include_choices <- reactive({
       labels <- prepared()$combined_pairs$label
-      unique(c(phenotype_partition_labels(labels), DONOR_COMPOSITION_OTHER))
+      phenotype_selectable(unique(c(phenotype_partition_labels(labels), DONOR_COMPOSITION_OTHER)))
     })
     # Only the region resets the choice (toggling an object class must not); a new macrophage marker choice keeps it,
     # with the macrophage categories included together. An empty choice stays empty when markers change.

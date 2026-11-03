@@ -1063,7 +1063,7 @@ phenotype_text <- function(x) {
 
 #' Named choices for a selector: values stay the data labels, names are their display text.
 phenotype_choices_named <- function(labels) {
-  labels <- unique(unclassified_collapse(phenotype_keep(labels)))
+  labels <- phenotype_selectable(phenotype_keep(labels))
   stats::setNames(labels, phenotype_text(labels))
 }
 
@@ -1131,7 +1131,7 @@ phenotype_aggregate_members <- function(aggregate, labels) {
 #' Parent totals are available to single-metric queries, never additive leaves.
 #' With split macrophage children, the unsplit alias is the same population.
 phenotype_partition_labels <- function(labels) {
-  labels <- unique(unclassified_collapse(phenotype_keep(labels)))
+  labels <- phenotype_selectable(phenotype_keep(labels))
   labels <- labels[!is_phenotype_aggregate(labels)]
   if (any(is_macrophage_label(labels) & labels != "Macrophage")) labels <- setdiff(labels, "Macrophage")
   labels
@@ -1179,7 +1179,7 @@ add_phenotype_aggregate_columns <- function(comp) {
 
 #' `labels` split by group, in PHENOTYPE_GROUP_ORDER, each group's aggregate first and the rest in the given order.
 phenotype_groups_split <- function(labels, include_aggregates = TRUE) {
-  labels <- if (include_aggregates) unique(unclassified_collapse(phenotype_keep(labels))) else phenotype_partition_labels(labels)
+  labels <- if (include_aggregates) phenotype_selectable(phenotype_keep(labels)) else phenotype_partition_labels(labels)
   if (any(is_macrophage_label(labels) & labels != "Macrophage")) labels <- setdiff(labels, "Macrophage")
   if ("Macrophage" %in% labels) labels <- setdiff(labels, "All macrophages")
   g <- phenotype_group(labels)
@@ -1201,6 +1201,11 @@ phenotype_groups_split <- function(labels, include_aggregates = TRUE) {
 #' is a list, so a one-label group is still an option group. `values` default to the labels.
 phenotype_grouped_choices <- function(labels, values = labels, prefix = "") {
   labels <- as.character(labels)
+  values <- as.character(values)
+  if (length(values) != length(labels)) stop("`values` must align with `labels`.", call. = FALSE)
+  keep <- !phenotype_is_unclassified(labels)
+  labels <- labels[keep]
+  values <- values[keep]
   # Explicit metric values must already refer to projected object columns. Raw
   # labels used as values can safely follow their leaf projection here.
   if (identical(as.character(values), labels)) values <- unclassified_collapse(values)
@@ -1219,6 +1224,8 @@ phenotype_grouped_choices <- function(labels, values = labels, prefix = "") {
 #' update may change `selected` (updateCheckboxGroupInput(selected = )), not the choices: re-render instead.
 phenotype_group_checkboxes <- function(input_id, labels, selected = labels, label = NULL, counts = NULL,
                                        choice_names = NULL, marker_input_id = NULL, markers = character(0)) {
+  labels <- phenotype_selectable(labels)
+  selected <- phenotype_selectable(selected)
   groups <- phenotype_groups_split(labels, include_aggregates = FALSE)
   box <- function(v) {
     n <- if (is.null(counts)) NA_integer_ else suppressWarnings(as.integer(counts[v]))
@@ -2248,6 +2255,18 @@ object_class_arg <- function(object_classes) {
 phenotype_is_conflict <- function(x) {
   x <- trimws(as.character(x))
   !is.na(x) & grepl("^Conflict($|[[:space:]_])", x, ignore.case = TRUE)
+}
+
+# Unclassified categories are reported in help only. They remain in source
+# data and in read-only whole-cohort counts, but never appear as user choices.
+phenotype_is_unclassified <- function(x) {
+  value <- unclassified_collapse(as.character(x))
+  !is.na(value) & value %in% c(unname(UNCLASSIFIED_KEYS), UNCLASSIFIED_PARENT)
+}
+
+phenotype_selectable <- function(x) {
+  x <- as.character(x)
+  unique(x[!is.na(x) & nzchar(x) & !phenotype_is_unclassified(x)])
 }
 
 #' Drop retired and Conflict labels from visible choices, preserving their order.
