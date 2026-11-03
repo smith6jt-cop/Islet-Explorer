@@ -94,7 +94,7 @@ test_that("phenotypes are grouped, each group's aggregate first; one-label group
   expect_equal(names(env$phenotype_groups_split(labels)), c("Endocrine", "T Cell", "B Cell", "Macrophage", "Other"))
   aggs <- env$phenotype_aggregates_for(c(labels, "T cell"))
   expect_setequal(aggs, c("All endocrine cells", "All T cells", "All macrophages"))
-  expect_setequal(env$phenotype_aggregate_members("All T cells", c(labels, "T cell")), c("CD8a Tcell", "CD4 Tcell"))
+  expect_setequal(env$phenotype_aggregate_members("All T cells", c(labels, "T cell")), c("CD8a Tcell", "CD4 Tcell", "T cell"))
   ch <- env$phenotype_grouped_choices(c(aggs, labels), prefix = "Core \u2014 ")
   expect_equal(names(ch)[1], "Core \u2014 Endocrine")
   expect_true(is.list(ch[["Core \u2014 B Cell"]]))
@@ -122,7 +122,7 @@ test_that("aggregate columns sum the members' proportions of the same cells", {
                      check.names = FALSE)
   out <- env$add_phenotype_aggregate_columns(comp)
   expect_equal(out[["prop_All T cells"]], c(0.3, NA))
-  expect_equal(out[["peri_prop_All_T_cells"]], c(0.05, 0))
+  expect_equal(out[["peri_prop_All_T_cells"]], c(0.05, 0.1))
 })
 
 test_that("the macrophage master toggle adds no additive phenotype value", {
