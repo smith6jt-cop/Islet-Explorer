@@ -422,7 +422,9 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         if (use_leiden && "cluster" %in% colnames(fg)) {
           # Keep every cluster assigned to this donor in the legend, even when
           # the current region contains no cells from one of its clusters.
-          cluster_levels <- leiden_levels(if (!is.null(lmap)) unname(lmap) else fg$cluster)
+          leiden_col <- input$leiden_res
+          cohort_clusters <- prepared()$comp[[leiden_col]]
+          cluster_levels <- leiden_levels(cohort_clusters)
           special_levels <- intersect(c("No Leiden assignment", "Tissue"), unique(as.character(fg$cluster)))
           fg$cluster <- factor(fg$cluster, levels = c(cluster_levels, "No Leiden assignment", "Tissue"))
           extra_colors <- if (length(cluster_levels) > length(leiden_palette))

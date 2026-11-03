@@ -101,7 +101,10 @@ spatial_ui <- function(id) {
 
       # ---- Right: Leiden cluster composition ----
       column(5,
-        div(class = "card", style = "padding: 15px; margin-bottom: 15px; overflow: visible; height: 100%;",
+        div(class = "card", style = paste(
+          "padding: 15px; margin-bottom: 15px; overflow: visible; height: 100%; min-height: 640px;",
+          "display: flex; flex-direction: column;"
+        ),
           card_title_help("Leiden clusters", style = "margin: 0 0 8px;", help = list(
             tags$p(tags$strong("Composition"),
                    " shows each Leiden cluster's mean core phenotype proportions, for the checked donor statuses and",
@@ -116,12 +119,16 @@ spatial_ui <- function(id) {
             unclassified_help_ui())),
           uiOutput(ns("leiden_not_available")),
           tags$h5("Composition", class = "control-subtitle"),
-          plotlyOutput(ns("cluster_composition"), height = "300px"),
-          tags$div(style = "margin-top: 8px;",
+          tags$div(style = "flex: 1 1 0; min-height: 240px;",
+            plotlyOutput(ns("cluster_composition"), height = "100%")
+          ),
+          tags$div(style = "display: flex; flex: 1 1 0; min-height: 240px; flex-direction: column; margin-top: 8px;",
             radioButtons(ns("cluster_view"), "Membership By",
                          c("Donor Status" = "status", "Donor" = "donor"),
                          selected = "status", inline = TRUE),
-            plotlyOutput(ns("cluster_membership"), height = "300px")
+            tags$div(style = "flex: 1 1 0; min-height: 0;",
+              plotlyOutput(ns("cluster_membership"), height = "100%")
+            )
           )
         )
       )
