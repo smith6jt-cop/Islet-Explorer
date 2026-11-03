@@ -450,7 +450,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         theme_islet() +
         ggplot2::theme(
           # Keep the rightmost x-axis tick inside the narrow tissue PNG.
-          plot.margin = ggplot2::margin_part(r = 18),
+          plot.margin = ggplot2::margin_part(r = 24),
           legend.position = "bottom",
           legend.direction = "horizontal",
           legend.title.position = "top",
@@ -516,7 +516,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         p$x$data <- lapply(p$x$data, function(tr) {
           if (!is.null(tr$marker$colorbar))
             tr$marker$colorbar <- utils::modifyList(tr$marker$colorbar, list(
-              orientation = "h", x = 0.5, xanchor = "center", yref = "container", y = 0.02, yanchor = "bottom",
+              orientation = "h", x = 0.5, xanchor = "center", y = -0.3, yanchor = "bottom",
               len = 0.8, thickness = 14, title = list(side = "top"),
               tickfont = list(size = ISLET_FONT_SIZES$dense_min)))
           tr
@@ -536,7 +536,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                        constrain = "domain"),
           legend = list(title = list(text = legend_title, font = fonts$legend_title, side = "top"),
                         orientation = "h", font = fonts$legend_text,
-                        x = 0.5, xanchor = "center", yref = "container", y = 0.02, yanchor = "bottom",
+                        x = 0.5, xanchor = "center", y = -0.3, yanchor = "bottom",
                         itemsizing = "constant", tracegroupgap = 2)
         ) %>%
         plotly_islet_config(filename_root)
@@ -559,6 +559,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
             var plots = ids.map(function(id) { return document.getElementById(id); });
             if (plots.some(function(plot) { return !plot || !plot._fullLayout; })) return;
             var tallest = 0;
+            var clearance = 40;
             plots.forEach(function(plot) {
               plot.querySelectorAll('g.colorbar').forEach(function(guide) {
                 var title = guide.querySelector('g.cbtitle > text');
@@ -572,11 +573,38 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
               plot.querySelectorAll('g.legend, g.colorbar').forEach(function(guide) {
                 tallest = Math.max(tallest, guide.getBoundingClientRect().height);
               });
+              var axisTitle = plot.querySelector('.g-xtitle');
+              if (axisTitle) {
+                var layout = plot._fullLayout;
+                var paperBottom = plot.getBoundingClientRect().top + layout._size.t + layout._size.h;
+                // Keep the guide clear of the actual axis title too; font and
+                // title offsets differ between the supported Plotly versions.
+                clearance = Math.max(clearance,
+                  axisTitle.getBoundingClientRect().bottom - paperBottom + 8 + 0.02 * layout.height);
+              }
             });
-            var bottom = Math.ceil(Math.max(110, tallest + 40));
+            var bottom = Math.ceil(Math.max(110, tallest + clearance));
             plots.forEach(function(plot) {
-              if (Math.abs(plot._fullLayout.margin.b - bottom) > 0.5)
-                Plotly.relayout(plot, {'margin.b': bottom});
+              var layout = plot._fullLayout;
+              // Both supported Plotly versions default to paper coordinates;
+              // Plotly.js 2.11 (the pinned image) has no yref attribute.
+              // Use paper coordinates to put each guide bottom 2% above the
+              // widget bottom, using the height AFTER the shared margin.
+              var height = layout.height - layout.margin.t - bottom;
+              if (height <= 0) return;
+              var y = (0.02 * layout.height - bottom) / height;
+              var update = {};
+              if (Math.abs(layout.margin.b - bottom) > 0.5) update['margin.b'] = bottom;
+              if (layout.legend && Math.abs(layout.legend.y - y) > 0.000001)
+                update['legend.y'] = y;
+              var bars = [];
+              plot.data.forEach(function(trace, index) {
+                if (trace.marker && trace.marker.colorbar &&
+                    Math.abs(trace.marker.colorbar.y - y) > 0.000001) bars.push(index);
+              });
+              if (bars.length)
+                Plotly.update(plot, {'marker.colorbar.y': y}, update, bars);
+              else if (Object.keys(update).length) Plotly.relayout(plot, update);
             });
           });
         };
