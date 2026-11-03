@@ -554,11 +554,12 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
     measure_name <- function() {
       wsel <- validated_selection() %||% ""
       if (identical(validated_mode(), "Microenvironment")) return(strsplit(wsel, "\\|")[[1]][1])
+      metric_name <- switch(validated_metric(), Counts = "count", Density = "density", "proportion")
       # extract_phenotype_from_column() turns the sanitised peri / combined stems ("Beta_cell",
       # "CHGAplus_hormone-negative") back into the phenotype's label.
-      if (startsWith(wsel, "combined_prop_")) paste0(phenotype_text(extract_phenotype_from_column(wsel)), " core+peri proportion")
-      else if (startsWith(wsel, "peri_prop_")) paste0(phenotype_text(extract_phenotype_from_column(wsel)), " peri-islet proportion")
-      else if (startsWith(wsel, "prop_")) paste0(phenotype_text(extract_phenotype_from_column(wsel)), " proportion")
+      if (startsWith(wsel, "combined_prop_")) paste(phenotype_text(extract_phenotype_from_column(wsel)), "core+peri", metric_name)
+      else if (startsWith(wsel, "peri_prop_")) paste(phenotype_text(extract_phenotype_from_column(wsel)), "peri-islet", metric_name)
+      else if (startsWith(wsel, "prop_")) paste(phenotype_text(extract_phenotype_from_column(wsel)), metric_name)
       else wsel
     }
 
@@ -661,7 +662,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         show_points = isTRUE(input$show_points), pt_size = input$pt_size %||% 3, pt_alpha = input$pt_alpha %||% 0.4,
         log_y = isTRUE(input$log_scale), box = identical(input$dist_type, "Box"),
         ylab = measure_axis_label(),
-        title = paste0("Distribution across donor groups", outlier_title_suffix(dd$summary)),
+        title = paste0(measure_name(), " across donor groups", outlier_title_suffix(dd$summary)),
         clip = axis_clip()))
       trajectory_link_plot(fig, ns)
     }
@@ -679,8 +680,9 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         PLOT_CARD_DEFAULT[[card]] else value
     }
     card_type_label <- function(card) names(PLOT_TYPE_CHOICES)[match(card_type(card), PLOT_TYPE_CHOICES)]
-    output$left_title <- renderText(card_heading_text(card_type_label("left")))
-    output$right_title <- renderText(card_heading_text(card_type_label("right")))
+    card_heading <- function(card) card_heading_text(paste(validated_mode(), card_type_label(card), sep = " \u2014 "))
+    output$left_title <- renderText(card_heading("left"))
+    output$right_title <- renderText(card_heading("right"))
 
     # A card's rows: flagged for outliers, binned by diameter, with link keys.
     card_rows <- function(card) {
