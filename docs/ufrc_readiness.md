@@ -2,6 +2,25 @@
 
 **Latest owner direction, 2026-11-02:** the current build is intended for the live production PubApp once its actual data/release/runtime checks pass. The known DuckDB finding is nonblocking through the notice's **2026-11-10 UTC** patch deadline; develop/test our DuckDB fix separately for the dev PubApp. See [the dated release decision](duckdb_remediation_window_20261102.md). This supersedes the earlier strict DuckDB hold and no-activation directions below. Historical failed reports remain unchanged; data checks and other security findings still apply.
 
+## Current production release preparation — 2026-11-03 UTC
+
+The owner delegated the remaining decision and requested live production activation.
+The final image and schema-5 release builder use `e5689f6`; HPG scientific job
+`49168359` uses `67ee6c9`. All 20 donors pass classification and object-lineage
+checks. There are 7,398 explicitly unclassified cells (0.23% of 3,199,606), no
+prior named nonendocrine identities lost, and all 110,721 selected endocrine
+identities retained. See the [final independent row review](unclassified_component_review_20261103.md)
+and [component v2 build record](component_build_20261102.md).
+
+App assembly and final image/data/release verification are still running. Production
+and dev remain stopped and masked until actual activation. The authoritative
+[security/deployment record](container_security_20261102.md) and
+[machine-readable receipt](evidence/pubapps_live_20261102.json) will record the
+verified release and public acceptance. DuckDB remains under the dated November 10
+window; the separate dev fix does not block this production release.
+
+## Earlier component v1 result — superseded by the v2 work above
+
 **Completed build, 2026-11-02:** HPG job `49141854`, source `b15f0fc`, assembled
 `data/development/uniform-20donor-20261102-component-app-v1`: 20 donors, 3,199,606
 analysed cells and 4,848 paired objects. All 110,721 named v19 endocrine cells are preserved;
@@ -9,7 +28,7 @@ the control-to-DG audit passes with 351 Lymphatic-related label changes and no u
 changes. All-20 Ki67 export and row-association QA passes. The complete QuPath review is
 `data/development/qupath-review-20261102-components-v1/project.qpproj`.
 
-**Outstanding data checks:** 8,629 unresolved endocrine cells and 2,472 component boundary
+**Data failures recorded for v1:** 8,629 unresolved endocrine cells and 2,472 component boundary
 conflicts remain. The corrected-cell object audit fails on 953 populated objects without
 a positive eligible INS/GCG/SST/CHGA member (915 singles, 38 clusters, no islets), plus
 three single-membership anomalies. Original pixel-classifier replay still passes; these
