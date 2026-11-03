@@ -2,7 +2,7 @@
 
 This guide follows the data from the source images to the reviewed app and its release. It is for the owner, analysts, and operators who need to know which inputs are being used, what each stage changes, and what must pass before the app goes online. For the app controls themselves, use the [reviewer guide](reviewer_guide.md). For scientific decisions, the [typing rulings ledger](typing_rulings_ledger.md) and latest owner directions in [CLAUDE.md](../CLAUDE.md) take precedence over historical examples.
 
-## Current state — 2026-11-02
+## Current state — 2026-11-03
 
 **Production is live** at
 [Islet Explorer](https://islet-explorer.rc.ufl.edu/islet-explorer/) with
@@ -43,12 +43,14 @@ are validated. The [current results](component_build_v2_20261102.md#release-pari
 retain the failed report and targeted revalidation. Production activation and
 public checks completed at **2026-11-03 02:42:27 UTC**: the host is healthy,
 access checks pass **15/15**, and the authenticated browser suite passes
-**49/49**. Dev remains **stopped and masked**; the local app service remains
-inactive/disabled. The separate off-campus acceptance and reboot tests are
+**49/49**. The separate strict-DuckDB dev release was activated and verified at
+**2026-11-03 12:42 UTC**, from source `378843e`, image `e704ac2a…`, with its own
+15/15 access and 49/49 browser checks; see the [dev receipt](evidence/dev_duckdb_deployment_20261103.json).
+The local app service remains inactive/disabled. The separate off-campus acceptance and reboot tests are
 still pending.
 
-The separate [dev DuckDB fix](dev_duckdb_fix_20261102.md) passes its strict
-validation and remains local. Production's known DuckDB finding is nonblocking
+The separate [dev DuckDB fix](dev_duckdb_fix_20261102.md) passes strict
+validation without a deferral and is running on dev. It has not been promoted to production. Production's known DuckDB finding is nonblocking
 only within the [dated window through November 10 UTC](duckdb_remediation_window_20261102.md).
 The historical whole-v19 reference and frozen v20 are not the selected release.
 
@@ -330,7 +332,7 @@ value. Unclassified remains visible in phenotype controls, cell totals,
 legends and downloads. Its preserved evidence is in the processing identity
 records and component audit.
 
-Verify the exact donor inventory, UUID uniqueness, all required files and image links, matching counts across cell and summary tables, excluded-donor absence, and consistent endocrine/immune definitions between assembly and UI. The corrected exporter preserves binary `Ki67_pos` in cell types, per-object cells, donor cells and cell-distance tables, with per-image measurement/level provenance in `uniform_release.json`. It verifies every state against the selected upstream measurement. The release parity check verifies those states survive runtime conversion. Ki67 is not an identity or a new embedding input. Both frozen v19 and v20 omit this field. The local immune-gradient correction includes `Hematopoietic CD45+`, which the last dev app's older list omitted. It needs a rebuilt release before it can appear on a future served site.
+Verify the exact donor inventory, UUID uniqueness, all required files and image links, matching counts across cell and summary tables, excluded-donor absence, and consistent endocrine/immune definitions between assembly and UI. The corrected exporter preserves binary `Ki67_pos` in cell types, per-object cells, donor cells and cell-distance tables, with per-image measurement/level provenance in `uniform_release.json`. It verifies every state against the selected upstream measurement. The release parity check verifies those states survive runtime conversion. Ki67 is not an identity or a new embedding input. Both frozen v19 and v20 omit this field. The accepted component release includes the immune-gradient correction for `Hematopoietic CD45+`, which the earlier v20 dev app's list omitted.
 
 The release builder and parity verifier reject unresolved endocrine definitions or disagreement with the app endocrine aggregate. Removing unnamed cells only from a denominator is not a correction. Preserve the failing report and return to the input discrepancy.
 
@@ -411,18 +413,18 @@ records the build, test and inventory results with their exact evidence hashes.
 
 Use copied files for a reviewer bundle so later source edits cannot alter it through shared inodes. `--materialize hardlink` is only for disposable local tests. Keep image data and credentials outside the OCI image. Preserve the SBOM, vulnerability scan, dependency evidence, immutable image ID, data manifest, parity/inventory reports, and full logs. Current security validation also requires the image's Brotli library evidence from `deploy/verify-brotli.py`, invoked by `deploy/scan-image.sh`: patched Ubuntu/Node, Pillow linked to the system decoder, and DuckDB's actual decoder regression with its installed-library hash. New release manifests require the version-2 report; missing reports and older Pillow-only reports are rejected. A clean package scan alone missed the embedded decoders. Never rewrite the directory of an active release.
 
-The owner's latest November 2 direction is to deploy the current validated build to the live PubApp within the DuckDB remediation window through **2026-11-10 UTC**, then develop and test our DuckDB fix separately for dev. The production candidate retains the original hash-pinned CRAN DuckDB 1.5.2. `scan-image.sh` records the real failed binary report plus a distinct dated nonblocking release decision; manifest and full/quick release checks enforce that deadline. Other package findings and scientific/data validation are not waived. The preserved backport at `3a12daa` is available for the isolated dev worktree. Follow the [dated decision](duckdb_remediation_window_20261102.md), [build commands](../deploy/README.md) and [security evidence](container_security_20261102.md). The real-Parquet test for the dev fix writes only temporary BROTLI-compressed output and compares schema, values, missingness, duplicates and aggregates. An older read-only payload can support a diagnostic smoke, but cannot supply the matching release/data acceptance.
+The owner's latest November 2 direction is to deploy the current validated build to the live PubApp within the DuckDB remediation window through **2026-11-10 UTC**, then develop and test our DuckDB fix separately for dev. The active production release retains the original hash-pinned CRAN DuckDB 1.5.2. The retained production validation records the real failed binary report plus a distinct dated nonblocking release decision; its manifest and full/quick release checks enforce that deadline. Current build source includes the reviewed dev patch (`b5fae5c`) and requires its source receipt plus the strict installed-decoder check. Other package findings and scientific/data validation are not waived. The isolated dev fix is now live under its [separate deployment receipt](evidence/dev_duckdb_deployment_20261103.json); `3a12daa` remains historical backport evidence. Follow the [dated decision](duckdb_remediation_window_20261102.md), [build commands](../deploy/README.md) and [security evidence](container_security_20261102.md). The real-Parquet test for the dev fix writes only temporary BROTLI-compressed output and compares schema, values, missingness, duplicates and aggregates. An older read-only payload can support a diagnostic smoke, but cannot supply the matching release/data acceptance.
 
 A verified release can first be smoke-tested with the production runtime using `deploy/run.sh`. It takes environment variables `PROJECT_ROOT`, `RELEASE`, `PORT`, `CONTAINER_NAME`, and `MEMORY`; it binds loopback and verifies the release before launching. The documented local smoke port is 3843. Check the container's health and `trajectory_warm_ok` in its log, then run the expanded browser suite. Do not substitute a development-mode launch for this test.
 
-The following is the established helper invocation for **future dev activation**, after explicit restart authorization, a verified patched image, scientific acceptance appropriate to that review, and deliberate handling of the service mask. It is not a current restart instruction:
+The following is the established helper invocation for a **future dev update**, after preparing the authorized image/data pair and its validation evidence. Dev is currently active; use a fresh release name and retain its prior rollback state:
 
 ```bash
-RELEASE_NAME="$RELEASE" INSTANCE=islet-explorer-dev PORT=3839 MEMORY=6g \
+RELEASE_NAME="$RELEASE" INSTANCE=islet-explorer-dev PORT=3839 MEMORY=4g \
   PUBLISH_ADDRESS=10.13.41.21 ./deploy-vm.sh
 ```
 
-When the service is permitted to run, this stages through HPG to `pubmaigan1`, validates the bundle/image, and activates dev. It cannot restart the currently masked service. Keep its release name distinct from every existing release. The VM's project root is `/pubapps/maigan/islet-explorer`; dev uses `dev/html`, `dev/auth`, and `runtime/islet-explorer-dev/`. The image aliases are served by UFRC's proxy from release-linked files, while Shiny runs in rootless Podman.
+This stages through HPG to `pubmaigan1`, validates the bundle/image, and activates dev. Check the actual service state and evidence before a future update; do not assume the historical mask is still present. Keep its release name distinct from every existing release. The VM's project root is `/pubapps/maigan/islet-explorer`; dev uses `dev/html`, `dev/auth`, and `runtime/islet-explorer-dev/`. The image aliases are served by UFRC's proxy from release-linked files, while Shiny runs in rootless Podman.
 
 After activation, run the actual proxy browser check with a restricted credential file:
 
@@ -435,6 +437,8 @@ node deploy/browser/check-app.mjs \
 Inspect the same candidate yourself. Plot, Trajectory, Spatial, and Viewer are the reviewer tabs; Statistics, Inflammation, and AI are not part of the reviewer profile. Check cohort and phenotype selectors, linked object selection/clear-selection, cell drill-down, endocrine and immune totals, spatial gradients, exported CSVs, and Viewer image/geometry alignment. The Viewer should stream TIFF ranges with its XML/offset sidecars, rather than download an entire image. Compare representative displayed objects directly with the candidate's records and new QuPath project.
 
 Browser checks establish runtime behavior; source/release parity establishes packaging equivalence. Neither establishes correct scientific cell identities. Record scientific review separately.
+
+The [November 3 display changes](app_display_fixes_20261103.md) are locally implemented and validated, pending a new dev build. They reserve arrow space for long dropdown labels, place Trajectory’s Segmentation card in its own full-width row with consistent spacing, remove the citation suffix from its PAGA title, and put Spatial legends below their plots. Dense tissue labels wrap, and the plot grows vertically to preserve the map area. These are presentation changes; scientific data and controls remain separate from the deployment status above.
 
 ## 9. Production activation, rollback, and operations
 
@@ -452,8 +456,8 @@ provenance checks.
 
 For future activations, record the selected release, source commit, image ID,
 manifest hash, validation evidence and rollback state. The security owner
-coordinates staging and activation. Dev remains stopped and masked; its
-separately patched DuckDB image remains a separate artifact. Historical v20
+coordinates staging and activation. Dev serves its separately patched DuckDB
+release under its own [verified receipt](evidence/dev_duckdb_deployment_20261103.json). Historical v20
 and whole-v19 releases are not the selected production data.
 
 For the existing helper workflow, the documented promotion command, run from `tmp/ufrc-release-20261022`, is:
@@ -474,7 +478,7 @@ tooling/deploy/rollback-release.sh --project-root /pubapps/maigan/islet-explorer
   --instance islet-explorer-dev
 ```
 
-Choose the intended instance. Rollback restores its recorded previous release, including the image aliases and local-data mounts; verify the destination's security and scientific acceptance first. Dev remains masked, so activation and rollback cannot restart it while that mask is present. The obsolete image identified in the security alert must not be restarted or selected for rollback. The security owner handles a mask only after selecting the authorized image/data pair and completing its applicable gates, including the recorded production DuckDB window. Dev's mask also prevents automatic restart after reboot.
+Choose the intended instance. Rollback restores its recorded previous release, including the image aliases and local-data mounts; verify the destination's security and scientific acceptance first. The obsolete image identified in the security alert must not be restarted or selected for rollback. The security owner handles a mask only after selecting the authorized image/data pair and completing its applicable gates, including the recorded production DuckDB window. Both current services are active; the independent reboot acceptance test is still pending.
 
 Operational evidence includes `systemctl --user status`, `journalctl --user -u <instance>.service`, the instance's runtime logs, deployment state under `runtime/deployments`, and proxy logs under `/pubapps/logs/maigan/`. Keep at least active and previous image/data pairs until the new release has passed the reboot test. Deleting old workstation bundles or VM releases is a separate owner decision.
 
@@ -542,8 +546,8 @@ The handoff carries the actual commit range, changed-file list, evidence receipt
 2. **Completed for v2:** hash-bound classifier-lineage proof and exact Single whole-cell checks, with the separate corrected-cell and centroid-membership diagnostics and original geometry preserved.
 3. **Completed for v2:** dependent app tables, spatial outputs, scales and embeddings, every exported UUID/label/Ki67 association and four-name endocrine census. App and native QuPath artifacts are returned with verified checksums and locally resolving image paths.
 4. **Packaging, full byte verification, targeted composite parity and inventory completed:** schema-5 data and image retain producer `e5689f6`, with scientific producer `67ee6c9` recorded separately. Validator `d3ec00e` passes the full actual cell-state check; composer `c3dc494` binds it to the original 24 passing checks and unchanged inputs. Preserve these final reports alongside installed-runtime tests and dated security evidence for release acceptance.
-5. **Completed for production:** the security owner staged and bound the matching pair, handled the production mask, activated the healthy service and passed all 15 public access checks and 49 authenticated browser checks. The [deployment record](container_security_20261102.md) binds the actual live outcome; dev remains stopped and masked.
-6. Complete the remaining outside-network and reboot acceptance work according to [UFRC readiness](ufrc_readiness.md), and coordinate the separately patched DuckDB dev build. Preserve prior evidence and recipient workspaces when delivering the new grouped changes.
+5. **Completed for production:** the security owner staged and bound the matching pair, handled the production mask, activated the healthy service and passed all 15 public access checks and 49 authenticated browser checks. The [deployment record](container_security_20261102.md) binds the actual live production outcome. The separate strict-DuckDB [dev release](evidence/dev_duckdb_deployment_20261103.json) also completed activation and its access/browser checks.
+6. Complete the remaining outside-network and reboot acceptance work according to [UFRC readiness](ufrc_readiness.md), and review the separately patched DuckDB dev release before any production promotion. Preserve prior evidence and recipient workspaces when delivering the new grouped changes.
 
 Hypothesis work remains a separate analysis stream; follow the [app-based hypothesis plan](app_based_hypothesis_plan_20261026.md) and [research workflow](../scripts/research/README.md). Retain its approved definitions and historical outputs under `output/app_hypotheses_20261026/`; the typing correction is not permission to rerun or reinterpret it against a new data root automatically. CODEX INS intensity is not an approved quantitative between-donor hypothesis endpoint under the owner's acquisition clarification. Report measurements and technical evidence without adding biological interpretations beyond the approved plan.
 

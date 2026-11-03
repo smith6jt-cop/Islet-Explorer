@@ -9,7 +9,10 @@ named v19 endocrine cells and applies current methods to the remaining cells.
 Production `pubapps-2026-11-components-v1` is live and verified as of
 2026-11-03 02:42 UTC (November 2 local), with 15/15 authenticated-access and
 49/49 browser checks passing. Consult the [deployment record](container_security_20261102.md)
-for the exact image, data and validation evidence.
+for the exact image, data and validation evidence. The separate strict-DuckDB
+[dev release](evidence/dev_duckdb_deployment_20261103.json) is also live and verified.
+The [November 3 display fixes](app_display_fixes_20261103.md) described below are
+local changes pending a new dev build; neither current live image contains them.
 
 **Live reviewer URL (authentication required)**:
 `https://islet-explorer.rc.ufl.edu/islet-explorer/`
@@ -245,10 +248,14 @@ The Plot tab is the primary exploration interface. It has a **sidebar** (left) a
 - **AAb Filter**: Filter by autoantibody positivity (when available)
 - **Age Range**: Slider to restrict donor age (H5AD only)
 - **Sex**: Checkbox filter (H5AD only)
-- **Endocrine objects** (first in the Data controls; the Spatial tab has a copy that stays in step): choose Islets and/or Clusters. Singles (one endocrine cell) are not analyzed; the Endocrine objects per donor card at the bottom of the Plot tab counts them, and the segmentation map outlines them in orange. This replaced the Min cells/islet filter on 2026-10-17; every tab except Trajectory uses the selected classes (Trajectory fits every object with 10 or more core cells).
+- **Endocrine objects** (first in the Data controls; the Spatial tab has a copy that stays in step): choose Islets and/or Clusters. Singles (whole-cell endocrine objects, not necessarily named endocrine cell identities) are not analyzed; the Endocrine objects per donor card at the bottom of the Plot tab counts them, and the segmentation map outlines them in orange. This replaced the Min cells/islet filter on 2026-10-17; every tab except Trajectory uses the selected classes (Trajectory fits every object with 10 or more core cells).
 - **Diameter Range**: Restrict islet diameter in μm
 
 ### Main Panel
+
+The pending November 3 layout update lets Plot selectors use the available card width and
+reserves space beside the arrow, so long selected labels can wrap without overlapping it.
+The selector values and calculations are unchanged.
 
 - **Scatter (left)**: Interactive Plotly scatter, diameter vs selected feature, with binned summary lines per donor status. Excluded outliers (see [Outlier Handling](#outlier-handling)) appear as faint gray × ghost markers.
 - **Distribution (right)**: Violin or box plot of the same feature, grouped by donor status. Has its own **independent** "Exclude zero values" checkbox — toggling it no longer affects the left scatter. Outlier ghost × markers render here too.
@@ -286,6 +293,10 @@ scanpy is unavailable. PAGA/ForceAtlas2 supplies the separate two-dimensional gr
 ### Layout
 
 The Trajectory tab uses a full-width layout (no sidebar). All controls are inline.
+The pending November 3 layout update aligns the pseudotime and UMAP cards, then
+places the Segmentation map in a full-width row with consistent spacing above and
+below. Its PAGA card title is “PAGA force-directed layout”; the method attribution
+remains in the help text.
 
 ### Components
 
@@ -484,6 +495,11 @@ a diagnostic identity replay cannot be substituted for an assembled root.
      Smaller objects have no point or cluster in this saved layout. Color patterns are
      descriptive; the layout alone does not establish disease progression or classification accuracy.
    - Hidden with message when Leiden data unavailable in H5AD
+
+The pending November 3 display update places the tissue-scatter legend and both
+UMAP legends or continuous color bars below their plots. Dense tissue labels wrap,
+and the plot grows vertically to preserve the map area while keeping downloads
+below it. Coloring choices, linked selection and exported values are unchanged.
 
 ### Data Sources
 

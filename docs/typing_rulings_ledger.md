@@ -10,6 +10,14 @@ a ruling given in the Islet-Explorer-Senior project, which applies here as a pri
 Status: **in force**, **superseded** (by the ruling named), or **agent choice** (an agent's decision or an option the agent
 wrote; not the owner's words, kept or changed on evidence).
 
+## App presentation — 2026-11-03
+
+| Source | Ruling or implementation choice | Status |
+|---|---|---|
+| Owner, app review | "The longstanding existing rule is to not categorize broad types and subtypes as separate classes." | in force: restore the 2026-10-17 display rule, including current hematopoietic residual labels. Additive categories use disjoint leaves; an explicitly named parent total remains available as a single-measure query. |
+| Owner, app review | "We also do not want to show the \"conflict\" classes anywhere in the app." | in force for app choices, plots, tables, hover text and downloads. This supersedes earlier display retention of those labels, not their preservation in scientific source evidence. |
+| Agent implementation | Keep all source labels, measurements and original denominators unchanged. General-class residuals remain in the existing No subtype category; hidden QC-conflict cells do not enter that category. Displayed composition bars normalize over displayed cells, while CSV and hover retain original-denominator proportions. | implemented; [scope and verification](app_display_fixes_20261103.md). Source Tissue and other terminal labels are retained. Live trajectory fitting uses the same retained-feature policy as the app; saved embeddings are unchanged. |
+
 ## Accuracy audit — 2026-11-02
 
 The later selected-component implementation and measured outcomes are recorded

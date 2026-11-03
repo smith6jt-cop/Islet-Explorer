@@ -2,7 +2,7 @@
 
 Interactive R Shiny application for exploring pancreatic islet CODEX multiplexed imaging data from nPOD donors. Compares ND, autoantibody-positive and T1D donor groups using cross-sectional measurements; autoantibody positivity is not treated as a clinical disease stage.
 
-## Current workflow and data status — 2026-11-02
+## Current workflow and data status — 2026-11-03
 
 Start with the [complete workflow user guide](docs/workflow_user_guide.md),
 [app user guide](docs/user_guide.md), and [selected-component v2 build record](docs/component_build_v2_20261102.md).
@@ -29,11 +29,15 @@ checks and is running as **`pubapps-2026-11-components-v1`** at
 Full data verification, targeted parity and inventory pass; the actual running
 census matches all 3,199,606 cells and 78,680 Ki67-positive states. Authenticated
 access passes 15/15 checks and the browser suite passes 49/49, completed at
-2026-11-03 02:42 UTC (November 2 local). Dev remains stopped and masked. See the
+2026-11-03 02:42 UTC (November 2 local). The separate strict-DuckDB dev release
+`pubapps-2026-11-dev-duckdb-v1` is also live, verified at 12:42 UTC from source
+`378843e`, image `e704ac2a…`, with no DuckDB deferral; see its
+[deployment receipt](docs/evidence/dev_duckdb_deployment_20261103.json) and the
 [authoritative deployment record](docs/container_security_20261102.md).
 The known DuckDB finding remains nonblocking only within the
 [dated window through November 10 UTC](docs/duckdb_remediation_window_20261102.md);
-the separately validated development fix remains an independent artifact.
+the dev fix has not been promoted to production. The [new display fixes](docs/app_display_fixes_20261103.md)
+are implemented locally and await a new dev build.
 Older cohort and release sections below describe historical artifacts.
 
 <div align="center">

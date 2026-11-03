@@ -1,0 +1,846 @@
+{
+  "schema": "uniform.donor_composition_presentation_check/1",
+  "passed": true,
+  "checked_utc": "2026-11-03T13:01:43Z",
+  "scope": "Read-only unfiltered immutable release object summaries; all 16 macrophage marker selections across core, peri and both. Counts are object memberships, not unique cohort cells.",
+  "object_rows": 4853,
+  "source_release_runtime_loaders_passed": true,
+  "builder_extracted_helpers": 18,
+  "builder_label_groups_passed": true,
+  "builder_aggregate_columns_unchanged": {
+    "rows": 4853,
+    "columns": 286,
+    "keys": [
+      "Case ID",
+      "islet_key"
+    ],
+    "max_absolute_difference": 0
+  },
+  "scenarios": [
+    {
+      "markers": [],
+      "region": "core",
+      "donors": 20,
+      "source_memberships": 129249,
+      "hidden_conflict_memberships": 1269,
+      "no_subtype_memberships": 1190,
+      "displayed_memberships": 127980,
+      "no_conflict_or_aggregate_rows": true,
+      "exact_source_denominators": true,
+      "no_subtype_excludes_conflicts": true,
+      "shown_proportions_sum_100": true,
+      "default_leave_out_proportions_sum_100": true
+    },
+    {
+      "markers": [],
+      "region": "peri",
+      "donors": 20,
+      "source_memberships": 228409,
+      "hidden_conflict_memberships": 1304,
+      "no_subtype_memberships": 8080,
+      "displayed_memberships": 227105,
+      "no_conflict_or_aggregate_rows": true,
+      "exact_source_denominators": true,
+      "no_subtype_excludes_conflicts": true,
+      "shown_proportions_sum_100": true,
+      "default_leave_out_proportions_sum_100": true
+    },
+    {
+      "markers": [],
+      "region": "both",
+      "donors": 20,
+      "source_memberships": 357658,
+      "hidden_conflict_memberships": 2573,
+      "no_subtype_memberships": 9270,
+      "displayed_memberships": 355085,
+      "no_conflict_or_aggregate_rows": true,
+      "exact_source_denominators": true,
+      "no_subtype_excludes_conflicts": true,
+      "shown_proportions_sum_100": true,
+      "default_leave_out_proportions_sum_100": true
+    },
+    {
+      "markers": [
+        "CD68"
+      ],
+      "region": "core",
+      "donors": 20,
+      "source_memberships": 129249,
+      "hidden_conflict_memberships": 1269,
+      "no_subtype_memberships": 1190,
+      "displayed_memberships": 127980,
+      "no_conflict_or_aggregate_rows": true,
+      "exact_source_denominators": true,
+      "no_subtype_excludes_conflicts": true,
+      "shown_proportions_sum_100": true,
+      "default_leave_out_proportions_sum_100": true
+    },
+    {
+      "markers": [
+        "CD68"
+      ],
+      "region": "peri",
+      "donors": 20,
+      "source_memberships": 228409,
+      "hidden_conflict_memberships": 1304,
+      "no_subtype_memberships": 8080,
+      "displayed_memberships": 227105,
+      "no_conflict_or_aggregate_rows": true,
+      "exact_source_denominators": true,
+      "no_subtype_excludes_conflicts": true,
+      "shown_proportions_sum_100": true,
+      "default_leave_out_proportions_sum_100": true
+    },
+    {
+      "markers": [
+        "CD68"
+      ],
+      "region": "both",
+      "donors": 20,
+      "source_memberships": 357658,
+      "hidden_conflict_memberships": 2573,
+      "no_subtype_memberships": 9270,
+      "displayed_memberships": 355085,
+      "no_conflict_or_aggregate_rows": true,
+      "exact_source_denominators": true,
+      "no_subtype_excludes_conflicts": true,
+      "shown_proportions_sum_100": true,
+      "default_leave_out_proportions_sum_100": true
+    },
+    {
+      "markers": [
+        "CD163"
+      ],
+      "region": "core",
+      "donors": 20,
+      "source_memberships": 129249,
+      "hidden_conflict_memberships": 1269,
+      "no_subtype_memberships": 1190,
+      "displayed_memberships": 127980,
+      "no_conflict_or_aggregate_rows": true,
+      "exact_source_denominators": true,
+      "no_subtype_excludes_conflicts": true,
+      "shown_proportions_sum_100": true,
+      "default_leave_out_proportions_sum_100": true
+    },
+    {
+      "markers": [
+        "CD163"
+      ],
+      "region": "peri",
+      "donors": 20,
+      "source_memberships": 228409,
+      "hidden_conflict_memberships": 1304,
+      "no_subtype_memberships": 8080,
+      "displayed_memberships": 227105,
+      "no_conflict_or_aggregate_rows": true,
+      "exact_source_denominators": true,
+      "no_subtype_excludes_conflicts": true,
+      "shown_proportions_sum_100": true,
+      "default_leave_out_proportions_sum_100": true
+    },
+    {
+      "markers": [
+        "CD163"
+      ],
+      "region": "both",
+      "donors": 20,
+      "source_memberships": 357658,
+      "hidden_conflict_memberships": 2573,
+      "no_subtype_memberships": 9270,
+      "displayed_memberships": 355085,
+      "no_conflict_or_aggregate_rows": true,
+      "exact_source_denominators": true,
+      "no_subtype_excludes_conflicts": true,
+      "shown_proportions_sum_100": true,
+      "default_leave_out_proportions_sum_100": true
+    },
+    {
+      "markers": [
+        "CD68",
+        "CD163"
+      ],
+      "region": "core",
+      "donors": 20,
+      "source_memberships": 129249,
+      "hidden_conflict_memberships": 1269,
+      "no_subtype_memberships": 1190,
+      "displayed_memberships": 127980,
+      "no_conflict_or_aggregate_rows": true,
+      "exact_source_denominators": true,
+      "no_subtype_excludes_conflicts": true,
+      "shown_proportions_sum_100": true,
+      "default_leave_out_proportions_sum_100": true
+    },
+    {
+      "markers": [
+        "CD68",
+        "CD163"
+      ],
+      "region": "peri",
+      "donors": 20,
+      "source_memberships": 228409,
+      "hidden_conflict_memberships": 1304,
+      "no_subtype_memberships": 8080,
+      "displayed_memberships": 227105,
+      "no_conflict_or_aggregate_rows": true,
+      "exact_source_denominators": true,
+      "no_subtype_excludes_conflicts": true,
+      "shown_proportions_sum_100": true,
+      "default_leave_out_proportions_sum_100": true
+    },
+    {
+      "markers": [
+        "CD68",
+        "CD163"
+      ],
+      "region": "both",
+      "donors": 20,
+      "source_memberships": 357658,
+      "hidden_conflict_memberships": 2573,
+      "no_subtype_memberships": 9270,
+      "displayed_memberships": 355085,
+      "no_conflict_or_aggregate_rows": true,
+      "exact_source_denominators": true,
+      "no_subtype_excludes_conflicts": true,
+      "shown_proportions_sum_100": true,
+      "default_leave_out_proportions_sum_100": true
+    },
+    {
+      "markers": [
+        "LGALS3"
+      ],
+      "region": "core",
+      "donors": 20,
+      "source_memberships": 129249,
+      "hidden_conflict_memberships": 1269,
+      "no_subtype_memberships": 1190,
+      "displayed_memberships": 127980,
+      "no_conflict_or_aggregate_rows": true,
+      "exact_source_denominators": true,
+      "no_subtype_excludes_conflicts": true,
+      "shown_proportions_sum_100": true,
+      "default_leave_out_proportions_sum_100": true
+    },
+    {
+      "markers": [
+        "LGALS3"
+      ],
+      "region": "peri",
+      "donors": 20,
+      "source_memberships": 228409,
+      "hidden_conflict_memberships": 1304,
+      "no_subtype_memberships": 8080,
+      "displayed_memberships": 227105,
+      "no_conflict_or_aggregate_rows": true,
+      "exact_source_denominators": true,
+      "no_subtype_excludes_conflicts": true,
+      "shown_proportions_sum_100": true,
+      "default_leave_out_proportions_sum_100": true
+    },
+    {
+      "markers": [
+        "LGALS3"
+      ],
+      "region": "both",
+      "donors": 20,
+      "source_memberships": 357658,
+      "hidden_conflict_memberships": 2573,
+      "no_subtype_memberships": 9270,
+      "displayed_memberships": 355085,
+      "no_conflict_or_aggregate_rows": true,
+      "exact_source_denominators": true,
+      "no_subtype_excludes_conflicts": true,
+      "shown_proportions_sum_100": true,
+      "default_leave_out_proportions_sum_100": true
+    },
+    {
+      "markers": [
+        "CD68",
+        "LGALS3"
+      ],
+      "region": "core",
+      "donors": 20,
+      "source_memberships": 129249,
+      "hidden_conflict_memberships": 1269,
+      "no_subtype_memberships": 1190,
+      "displayed_memberships": 127980,
+      "no_conflict_or_aggregate_rows": true,
+      "exact_source_denominators": true,
+      "no_subtype_excludes_conflicts": true,
+      "shown_proportions_sum_100": true,
+      "default_leave_out_proportions_sum_100": true
+    },
+    {
+      "markers": [
+        "CD68",
+        "LGALS3"
+      ],
+      "region": "peri",
+      "donors": 20,
+      "source_memberships": 228409,
+      "hidden_conflict_memberships": 1304,
+      "no_subtype_memberships": 8080,
+      "displayed_memberships": 227105,
+      "no_conflict_or_aggregate_rows": true,
+      "exact_source_denominators": true,
+      "no_subtype_excludes_conflicts": true,
+      "shown_proportions_sum_100": true,
+      "default_leave_out_proportions_sum_100": true
+    },
+    {
+      "markers": [
+        "CD68",
+        "LGALS3"
+      ],
+      "region": "both",
+      "donors": 20,
+      "source_memberships": 357658,
+      "hidden_conflict_memberships": 2573,
+      "no_subtype_memberships": 9270,
+      "displayed_memberships": 355085,
+      "no_conflict_or_aggregate_rows": true,
+      "exact_source_denominators": true,
+      "no_subtype_excludes_conflicts": true,
+      "shown_proportions_sum_100": true,
+      "default_leave_out_proportions_sum_100": true
+    },
+    {
+      "markers": [
+        "CD163",
+        "LGALS3"
+      ],
+      "region": "core",
+      "donors": 20,
+      "source_memberships": 129249,
+      "hidden_conflict_memberships": 1269,
+      "no_subtype_memberships": 1190,
+      "displayed_memberships": 127980,
+      "no_conflict_or_aggregate_rows": true,
+      "exact_source_denominators": true,
+      "no_subtype_excludes_conflicts": true,
+      "shown_proportions_sum_100": true,
+      "default_leave_out_proportions_sum_100": true
+    },
+    {
+      "markers": [
+        "CD163",
+        "LGALS3"
+      ],
+      "region": "peri",
+      "donors": 20,
+      "source_memberships": 228409,
+      "hidden_conflict_memberships": 1304,
+      "no_subtype_memberships": 8080,
+      "displayed_memberships": 227105,
+      "no_conflict_or_aggregate_rows": true,
+      "exact_source_denominators": true,
+      "no_subtype_excludes_conflicts": true,
+      "shown_proportions_sum_100": true,
+      "default_leave_out_proportions_sum_100": true
+    },
+    {
+      "markers": [
+        "CD163",
+        "LGALS3"
+      ],
+      "region": "both",
+      "donors": 20,
+      "source_memberships": 357658,
+      "hidden_conflict_memberships": 2573,
+      "no_subtype_memberships": 9270,
+      "displayed_memberships": 355085,
+      "no_conflict_or_aggregate_rows": true,
+      "exact_source_denominators": true,
+      "no_subtype_excludes_conflicts": true,
+      "shown_proportions_sum_100": true,
+      "default_leave_out_proportions_sum_100": true
+    },
+    {
+      "markers": [
+        "CD68",
+        "CD163",
+        "LGALS3"
+      ],
+      "region": "core",
+      "donors": 20,
+      "source_memberships": 129249,
+      "hidden_conflict_memberships": 1269,
+      "no_subtype_memberships": 1190,
+      "displayed_memberships": 127980,
+      "no_conflict_or_aggregate_rows": true,
+      "exact_source_denominators": true,
+      "no_subtype_excludes_conflicts": true,
+      "shown_proportions_sum_100": true,
+      "default_leave_out_proportions_sum_100": true
+    },
+    {
+      "markers": [
+        "CD68",
+        "CD163",
+        "LGALS3"
+      ],
+      "region": "peri",
+      "donors": 20,
+      "source_memberships": 228409,
+      "hidden_conflict_memberships": 1304,
+      "no_subtype_memberships": 8080,
+      "displayed_memberships": 227105,
+      "no_conflict_or_aggregate_rows": true,
+      "exact_source_denominators": true,
+      "no_subtype_excludes_conflicts": true,
+      "shown_proportions_sum_100": true,
+      "default_leave_out_proportions_sum_100": true
+    },
+    {
+      "markers": [
+        "CD68",
+        "CD163",
+        "LGALS3"
+      ],
+      "region": "both",
+      "donors": 20,
+      "source_memberships": 357658,
+      "hidden_conflict_memberships": 2573,
+      "no_subtype_memberships": 9270,
+      "displayed_memberships": 355085,
+      "no_conflict_or_aggregate_rows": true,
+      "exact_source_denominators": true,
+      "no_subtype_excludes_conflicts": true,
+      "shown_proportions_sum_100": true,
+      "default_leave_out_proportions_sum_100": true
+    },
+    {
+      "markers": [
+        "CD4"
+      ],
+      "region": "core",
+      "donors": 20,
+      "source_memberships": 129249,
+      "hidden_conflict_memberships": 1269,
+      "no_subtype_memberships": 1190,
+      "displayed_memberships": 127980,
+      "no_conflict_or_aggregate_rows": true,
+      "exact_source_denominators": true,
+      "no_subtype_excludes_conflicts": true,
+      "shown_proportions_sum_100": true,
+      "default_leave_out_proportions_sum_100": true
+    },
+    {
+      "markers": [
+        "CD4"
+      ],
+      "region": "peri",
+      "donors": 20,
+      "source_memberships": 228409,
+      "hidden_conflict_memberships": 1304,
+      "no_subtype_memberships": 8080,
+      "displayed_memberships": 227105,
+      "no_conflict_or_aggregate_rows": true,
+      "exact_source_denominators": true,
+      "no_subtype_excludes_conflicts": true,
+      "shown_proportions_sum_100": true,
+      "default_leave_out_proportions_sum_100": true
+    },
+    {
+      "markers": [
+        "CD4"
+      ],
+      "region": "both",
+      "donors": 20,
+      "source_memberships": 357658,
+      "hidden_conflict_memberships": 2573,
+      "no_subtype_memberships": 9270,
+      "displayed_memberships": 355085,
+      "no_conflict_or_aggregate_rows": true,
+      "exact_source_denominators": true,
+      "no_subtype_excludes_conflicts": true,
+      "shown_proportions_sum_100": true,
+      "default_leave_out_proportions_sum_100": true
+    },
+    {
+      "markers": [
+        "CD68",
+        "CD4"
+      ],
+      "region": "core",
+      "donors": 20,
+      "source_memberships": 129249,
+      "hidden_conflict_memberships": 1269,
+      "no_subtype_memberships": 1190,
+      "displayed_memberships": 127980,
+      "no_conflict_or_aggregate_rows": true,
+      "exact_source_denominators": true,
+      "no_subtype_excludes_conflicts": true,
+      "shown_proportions_sum_100": true,
+      "default_leave_out_proportions_sum_100": true
+    },
+    {
+      "markers": [
+        "CD68",
+        "CD4"
+      ],
+      "region": "peri",
+      "donors": 20,
+      "source_memberships": 228409,
+      "hidden_conflict_memberships": 1304,
+      "no_subtype_memberships": 8080,
+      "displayed_memberships": 227105,
+      "no_conflict_or_aggregate_rows": true,
+      "exact_source_denominators": true,
+      "no_subtype_excludes_conflicts": true,
+      "shown_proportions_sum_100": true,
+      "default_leave_out_proportions_sum_100": true
+    },
+    {
+      "markers": [
+        "CD68",
+        "CD4"
+      ],
+      "region": "both",
+      "donors": 20,
+      "source_memberships": 357658,
+      "hidden_conflict_memberships": 2573,
+      "no_subtype_memberships": 9270,
+      "displayed_memberships": 355085,
+      "no_conflict_or_aggregate_rows": true,
+      "exact_source_denominators": true,
+      "no_subtype_excludes_conflicts": true,
+      "shown_proportions_sum_100": true,
+      "default_leave_out_proportions_sum_100": true
+    },
+    {
+      "markers": [
+        "CD163",
+        "CD4"
+      ],
+      "region": "core",
+      "donors": 20,
+      "source_memberships": 129249,
+      "hidden_conflict_memberships": 1269,
+      "no_subtype_memberships": 1190,
+      "displayed_memberships": 127980,
+      "no_conflict_or_aggregate_rows": true,
+      "exact_source_denominators": true,
+      "no_subtype_excludes_conflicts": true,
+      "shown_proportions_sum_100": true,
+      "default_leave_out_proportions_sum_100": true
+    },
+    {
+      "markers": [
+        "CD163",
+        "CD4"
+      ],
+      "region": "peri",
+      "donors": 20,
+      "source_memberships": 228409,
+      "hidden_conflict_memberships": 1304,
+      "no_subtype_memberships": 8080,
+      "displayed_memberships": 227105,
+      "no_conflict_or_aggregate_rows": true,
+      "exact_source_denominators": true,
+      "no_subtype_excludes_conflicts": true,
+      "shown_proportions_sum_100": true,
+      "default_leave_out_proportions_sum_100": true
+    },
+    {
+      "markers": [
+        "CD163",
+        "CD4"
+      ],
+      "region": "both",
+      "donors": 20,
+      "source_memberships": 357658,
+      "hidden_conflict_memberships": 2573,
+      "no_subtype_memberships": 9270,
+      "displayed_memberships": 355085,
+      "no_conflict_or_aggregate_rows": true,
+      "exact_source_denominators": true,
+      "no_subtype_excludes_conflicts": true,
+      "shown_proportions_sum_100": true,
+      "default_leave_out_proportions_sum_100": true
+    },
+    {
+      "markers": [
+        "CD68",
+        "CD163",
+        "CD4"
+      ],
+      "region": "core",
+      "donors": 20,
+      "source_memberships": 129249,
+      "hidden_conflict_memberships": 1269,
+      "no_subtype_memberships": 1190,
+      "displayed_memberships": 127980,
+      "no_conflict_or_aggregate_rows": true,
+      "exact_source_denominators": true,
+      "no_subtype_excludes_conflicts": true,
+      "shown_proportions_sum_100": true,
+      "default_leave_out_proportions_sum_100": true
+    },
+    {
+      "markers": [
+        "CD68",
+        "CD163",
+        "CD4"
+      ],
+      "region": "peri",
+      "donors": 20,
+      "source_memberships": 228409,
+      "hidden_conflict_memberships": 1304,
+      "no_subtype_memberships": 8080,
+      "displayed_memberships": 227105,
+      "no_conflict_or_aggregate_rows": true,
+      "exact_source_denominators": true,
+      "no_subtype_excludes_conflicts": true,
+      "shown_proportions_sum_100": true,
+      "default_leave_out_proportions_sum_100": true
+    },
+    {
+      "markers": [
+        "CD68",
+        "CD163",
+        "CD4"
+      ],
+      "region": "both",
+      "donors": 20,
+      "source_memberships": 357658,
+      "hidden_conflict_memberships": 2573,
+      "no_subtype_memberships": 9270,
+      "displayed_memberships": 355085,
+      "no_conflict_or_aggregate_rows": true,
+      "exact_source_denominators": true,
+      "no_subtype_excludes_conflicts": true,
+      "shown_proportions_sum_100": true,
+      "default_leave_out_proportions_sum_100": true
+    },
+    {
+      "markers": [
+        "LGALS3",
+        "CD4"
+      ],
+      "region": "core",
+      "donors": 20,
+      "source_memberships": 129249,
+      "hidden_conflict_memberships": 1269,
+      "no_subtype_memberships": 1190,
+      "displayed_memberships": 127980,
+      "no_conflict_or_aggregate_rows": true,
+      "exact_source_denominators": true,
+      "no_subtype_excludes_conflicts": true,
+      "shown_proportions_sum_100": true,
+      "default_leave_out_proportions_sum_100": true
+    },
+    {
+      "markers": [
+        "LGALS3",
+        "CD4"
+      ],
+      "region": "peri",
+      "donors": 20,
+      "source_memberships": 228409,
+      "hidden_conflict_memberships": 1304,
+      "no_subtype_memberships": 8080,
+      "displayed_memberships": 227105,
+      "no_conflict_or_aggregate_rows": true,
+      "exact_source_denominators": true,
+      "no_subtype_excludes_conflicts": true,
+      "shown_proportions_sum_100": true,
+      "default_leave_out_proportions_sum_100": true
+    },
+    {
+      "markers": [
+        "LGALS3",
+        "CD4"
+      ],
+      "region": "both",
+      "donors": 20,
+      "source_memberships": 357658,
+      "hidden_conflict_memberships": 2573,
+      "no_subtype_memberships": 9270,
+      "displayed_memberships": 355085,
+      "no_conflict_or_aggregate_rows": true,
+      "exact_source_denominators": true,
+      "no_subtype_excludes_conflicts": true,
+      "shown_proportions_sum_100": true,
+      "default_leave_out_proportions_sum_100": true
+    },
+    {
+      "markers": [
+        "CD68",
+        "LGALS3",
+        "CD4"
+      ],
+      "region": "core",
+      "donors": 20,
+      "source_memberships": 129249,
+      "hidden_conflict_memberships": 1269,
+      "no_subtype_memberships": 1190,
+      "displayed_memberships": 127980,
+      "no_conflict_or_aggregate_rows": true,
+      "exact_source_denominators": true,
+      "no_subtype_excludes_conflicts": true,
+      "shown_proportions_sum_100": true,
+      "default_leave_out_proportions_sum_100": true
+    },
+    {
+      "markers": [
+        "CD68",
+        "LGALS3",
+        "CD4"
+      ],
+      "region": "peri",
+      "donors": 20,
+      "source_memberships": 228409,
+      "hidden_conflict_memberships": 1304,
+      "no_subtype_memberships": 8080,
+      "displayed_memberships": 227105,
+      "no_conflict_or_aggregate_rows": true,
+      "exact_source_denominators": true,
+      "no_subtype_excludes_conflicts": true,
+      "shown_proportions_sum_100": true,
+      "default_leave_out_proportions_sum_100": true
+    },
+    {
+      "markers": [
+        "CD68",
+        "LGALS3",
+        "CD4"
+      ],
+      "region": "both",
+      "donors": 20,
+      "source_memberships": 357658,
+      "hidden_conflict_memberships": 2573,
+      "no_subtype_memberships": 9270,
+      "displayed_memberships": 355085,
+      "no_conflict_or_aggregate_rows": true,
+      "exact_source_denominators": true,
+      "no_subtype_excludes_conflicts": true,
+      "shown_proportions_sum_100": true,
+      "default_leave_out_proportions_sum_100": true
+    },
+    {
+      "markers": [
+        "CD163",
+        "LGALS3",
+        "CD4"
+      ],
+      "region": "core",
+      "donors": 20,
+      "source_memberships": 129249,
+      "hidden_conflict_memberships": 1269,
+      "no_subtype_memberships": 1190,
+      "displayed_memberships": 127980,
+      "no_conflict_or_aggregate_rows": true,
+      "exact_source_denominators": true,
+      "no_subtype_excludes_conflicts": true,
+      "shown_proportions_sum_100": true,
+      "default_leave_out_proportions_sum_100": true
+    },
+    {
+      "markers": [
+        "CD163",
+        "LGALS3",
+        "CD4"
+      ],
+      "region": "peri",
+      "donors": 20,
+      "source_memberships": 228409,
+      "hidden_conflict_memberships": 1304,
+      "no_subtype_memberships": 8080,
+      "displayed_memberships": 227105,
+      "no_conflict_or_aggregate_rows": true,
+      "exact_source_denominators": true,
+      "no_subtype_excludes_conflicts": true,
+      "shown_proportions_sum_100": true,
+      "default_leave_out_proportions_sum_100": true
+    },
+    {
+      "markers": [
+        "CD163",
+        "LGALS3",
+        "CD4"
+      ],
+      "region": "both",
+      "donors": 20,
+      "source_memberships": 357658,
+      "hidden_conflict_memberships": 2573,
+      "no_subtype_memberships": 9270,
+      "displayed_memberships": 355085,
+      "no_conflict_or_aggregate_rows": true,
+      "exact_source_denominators": true,
+      "no_subtype_excludes_conflicts": true,
+      "shown_proportions_sum_100": true,
+      "default_leave_out_proportions_sum_100": true
+    },
+    {
+      "markers": [
+        "CD68",
+        "CD163",
+        "LGALS3",
+        "CD4"
+      ],
+      "region": "core",
+      "donors": 20,
+      "source_memberships": 129249,
+      "hidden_conflict_memberships": 1269,
+      "no_subtype_memberships": 1190,
+      "displayed_memberships": 127980,
+      "no_conflict_or_aggregate_rows": true,
+      "exact_source_denominators": true,
+      "no_subtype_excludes_conflicts": true,
+      "shown_proportions_sum_100": true,
+      "default_leave_out_proportions_sum_100": true
+    },
+    {
+      "markers": [
+        "CD68",
+        "CD163",
+        "LGALS3",
+        "CD4"
+      ],
+      "region": "peri",
+      "donors": 20,
+      "source_memberships": 228409,
+      "hidden_conflict_memberships": 1304,
+      "no_subtype_memberships": 8080,
+      "displayed_memberships": 227105,
+      "no_conflict_or_aggregate_rows": true,
+      "exact_source_denominators": true,
+      "no_subtype_excludes_conflicts": true,
+      "shown_proportions_sum_100": true,
+      "default_leave_out_proportions_sum_100": true
+    },
+    {
+      "markers": [
+        "CD68",
+        "CD163",
+        "LGALS3",
+        "CD4"
+      ],
+      "region": "both",
+      "donors": 20,
+      "source_memberships": 357658,
+      "hidden_conflict_memberships": 2573,
+      "no_subtype_memberships": 9270,
+      "displayed_memberships": 355085,
+      "no_conflict_or_aggregate_rows": true,
+      "exact_source_denominators": true,
+      "no_subtype_excludes_conflicts": true,
+      "shown_proportions_sum_100": true,
+      "default_leave_out_proportions_sum_100": true
+    }
+  ],
+  "input_and_helper_sha256": {
+    "/data/panc_CODEX/Islet-Explorer/tmp/pubapps-component-release-20261102-v2/artifacts/release-e5689f6/data/manifest.json": "8ddeecf3639921d2e53538e2d86b6bb4278cc622d29a928a3136fdece3d9f6b1",
+    "/data/panc_CODEX/Islet-Explorer/data/development/uniform-20donor-20261102-component-app-v2/uniform_release.json": "7ff7c4d92cffa393b16f3118ef04855e959bda14d3862aecce0da95344e91082",
+    "/data/panc_CODEX/Islet-Explorer/tmp/pubapps-component-release-20261102-v2/artifacts/release-e5689f6/data/summary/islets.parquet": "cc1737e9d0801dfea08935885be8ad314415522ee356878205d58cddbf34008b",
+    "/data/panc_CODEX/Islet-Explorer/tmp/pubapps-component-release-20261102-v2/artifacts/release-e5689f6/data/summary/combined_pairs.parquet": "cac727a3ab16957a6fb4316463f0f29ba47c4756ecadfe79362c424dbadefa71",
+    "/data/panc_CODEX/Islet-Explorer/app/shiny_app/R/00_globals.R": "0844f958e1d77b965300746a7574956fd20b8df10e2ee6022ecae574841577ae",
+    "/data/panc_CODEX/Islet-Explorer/app/shiny_app/R/donor_composition.R": "7f1c9e01d21dd8f445bed2a2dcbfa06997d72d6b0388eea9ac888a1dab9caf93",
+    "/data/panc_CODEX/Islet-Explorer/scripts/verify_release_parity.R": "ec873845d7837d7566a665bd84ab73d059c167f9242d3eb9dc610f792b742616",
+    "/data/panc_CODEX/Islet-Explorer/scripts/build_release_data.R": "a342490a74404c7a887075ea3555315cfcfc5572721c4d3450732f8286865a60"
+  },
+  "source_and_release_files_unchanged": true,
+  "tolerance": 1e-07
+}

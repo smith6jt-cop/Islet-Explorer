@@ -2,8 +2,9 @@
 
 **Current selected-component v2 release:** production `pubapps-2026-11-components-v1`
 is live and verified as of 2026-11-03 02:42 UTC (November 2 local), with all
-15 authenticated-access and 49 browser checks passing. Dev remains stopped
-and masked. Read [the current build](../docs/component_build_v2_20261102.md) and
+15 authenticated-access and 49 browser checks passing. The separate strict-DuckDB
+dev release is also live, verified at 12:42 UTC from source `378843e`, image
+`e704ac2a…`; see [its deployment receipt](../docs/dev_duckdb_deployment_20261103.md). Read [the current build](../docs/component_build_v2_20261102.md) and
 [resolution contract](../docs/component_resolution_20261102.md): exact named v19 endocrine membership,
 evidence-preserving Unclassified outcomes, the four-type denominator, and
 classifier-lineage proof with unchanged geometry. Scientific source is

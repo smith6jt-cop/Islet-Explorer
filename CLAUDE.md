@@ -4,8 +4,8 @@
 image `89b3f840…`, from image/data producer `e5689f6` and scientific producer
 `67ee6c9`. Validation completed at 2026-11-03 02:42 UTC (November 2 local):
 full host bytes, actual running census, 15/15 authenticated-access checks and
-49/49 browser checks pass. Dev remains stopped/masked; the local service remains
-inactive/disabled. Read the [live receipt](docs/evidence/pubapps_live_20261102.json),
+49/49 browser checks pass. Dev now serves the separately verified strict-DuckDB
+release described below; the local service remains inactive/disabled. Read the [live receipt](docs/evidence/pubapps_live_20261102.json),
 [release-validation receipt](docs/evidence/component_release_validation_20261102.json)
 and [workflow guide](docs/workflow_user_guide.md). Parity validator `d3ec00e` and
 evidence composer `c3dc494` are separately versioned; do not relabel the unchanged
@@ -23,7 +23,7 @@ directory; the authoritative inventory and live data already contain 20 TIFFs.
 
 **Latest owner direction, 2026-11-02:** the current build is intended for the live production PubApp once its actual data/release/runtime checks pass. The known DuckDB finding is nonblocking through the notice's **2026-11-10 UTC** patch deadline; develop/test our DuckDB fix separately for the dev PubApp. See [the dated release decision](docs/duckdb_remediation_window_20261102.md). This supersedes the earlier strict DuckDB hold and no-activation directions below. Historical failed reports remain unchanged; data checks and other security findings still apply.
 
-**Separate dev security build completed:** [dev image `b26558a9…`](docs/dev_duckdb_fix_20261102.md), source `92c63ba`, passes the strict actual decoder/security gate without a deferral and both real-table BROTLI round trips. Main documentation commit `9980d38` records its evidence. The exported image remains local; no host staging or activation occurred. It does not replace the verified production release above.
+**Separate dev security release is live:** `pubapps-2026-11-dev-duckdb-v1`, image `e704ac2a…`, source `378843e`, was verified at 2026-11-03 12:42 UTC. Its strict actual decoder/security gate passes without a deferral; access and browser checks pass 15/15 and 49/49. Read the [dev deployment receipt](docs/evidence/dev_duckdb_deployment_20261103.json) and [fix record](docs/dev_duckdb_fix_20261102.md). Production remains the independently verified release above. The subsequent [display fixes](docs/app_display_fixes_20261103.md) are local changes pending a new dev build; they are not included in either running image.
 
 ## Historical November 2 build snapshots
 

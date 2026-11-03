@@ -14,12 +14,14 @@ every accepted phenotype count across 20 donors and 3,199,606 eligible cells.
 There are 7,398 explicitly Unclassified cells (0.23%), no prior named
 nonendocrine identities lost, and all 110,721 selected endocrine identities
 retained. See the [independent row review](unclassified_component_review_20261103.md)
-and [component v2 build record](component_build_20261102.md).
+and [component v2 build record](component_build_v2_20261102.md).
 
 The available package fixes are deployed, with 0 High / 0 Critical findings
 in the final image's package scan. DuckDB remains open within the dated
-November 10 window. Dev remains stopped and persistently masked; its separately
-validated DuckDB fix has not been activated. The
+November 10 window. The separate strict-DuckDB dev release is live and verified
+as of 12:42 UTC, from source `378843e`, image `e704ac2a…`, without a deferral; its
+[deployment receipt](evidence/dev_duckdb_deployment_20261103.json) records its own
+15/15 access and 49/49 browser checks. The
 [security/deployment record](container_security_20261102.md) and
 [machine-readable receipt](evidence/pubapps_live_20261102.json) bind the actual
 deployed image, data and public acceptance. Independent off-campus access and a

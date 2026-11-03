@@ -1,23 +1,24 @@
 # Islet Explorer on UFRC PubApps
 
-**Current status, 2026-11-02:** UFRC provisioned both hostnames. Dev was stopped
-at the owner's request during the [container security remediation](../docs/container_security_20261102.md);
-both services are persistently masked against restart. Dev last served
-`pubapps-2026-11-uniform-v20` (`c974946`); production remains stopped since 10-26.
-The in-house service is also stopped. V20 is not scientifically accepted, and the
-whole-v19 reference release was staged but never activated. The owner selected
-v19 endocrine within a component comparison; no corrected mixed release exists.
+**Current status, 2026-11-03:** production `pubapps-2026-11-components-v1`
+and the separate strict-DuckDB dev release `pubapps-2026-11-dev-duckdb-v1` are
+active and verified. Their exact source, image, data, checks and service state
+are bound by the [production receipt](../docs/evidence/pubapps_live_20261102.json)
+and [dev receipt](../docs/evidence/dev_duckdb_deployment_20261103.json).
+Production retains its dated DuckDB window through November 10 UTC; dev passes
+the strict decoder gate without a deferral. The in-house service remains inactive.
 Use the [workflow guide](../docs/workflow_user_guide.md) and
-[current handoff](../docs/handoff_20261102.md) before these deployment procedures.
-Historical activation records and successful software checks are not acceptance
-of the current scientific inputs.
+[current v2 build record](../docs/component_build_v2_20261102.md). Earlier masked-service,
+whole-v19 and v1 diagnostic records are historical. The [November 3 display fixes](../docs/app_display_fixes_20261103.md)
+are local changes pending a new dev build, absent from both running images.
 
 Production runbook for the journal-review deployment requested at:
 
 `https://islet-explorer.rc.ufl.edu/islet-explorer/`
 
-UFRC provisioned this hostname/path on 2026-10-23. Production is currently stopped;
-the address alone is not evidence of an active or scientifically accepted release.
+UFRC provisioned this hostname/path on 2026-10-23. The production receipt above
+records successful activation and checks; the address alone does not establish
+scientific acceptance.
 
 The UFRC access request is **Public Restricted** (whole-site Basic Auth), while
 the collection is classified **Sensitive** during peer review. The app is
@@ -151,9 +152,13 @@ Core R packages are resolved by `scripts/install_shiny_deps.R` against the
 base-image repository configuration. That inherited snapshot predates the tested
 DuckDB 1.5.2 release, so the production installer obtains that exact CRAN source
 archive and checks its pinned SHA-256 before installation, with compilation
-bounded to two jobs. The owner deferred the unmerged DuckDB Brotli backport;
-the current original 1.5.2 decoder remains a release blocker described below.
+bounded to two jobs. Production retains the original decoder under the dated
+November 10 remediation window below; the separate dev branch fixes its decoder
+and passes strict validation, with its source provenance in the dev receipt.
 `destiny` remains pinned to 3.22.0 through Bioconductor 3.21.
+The working branch now contains the exact reviewed DuckDB patch from `378843e`
+(cherry-pick `b5fae5c`), so new builds use the strict fixed decoder. This code
+integration does not change the older image currently serving production.
 The image build records every resolved R
 package and version at `/opt/islet-explorer-build/R-packages.tsv`; the required
 release scan writes ID-derived CycloneDX, Grype, R-package, Python-package, and
@@ -172,14 +177,14 @@ a zero-High/Critical package scan did not fix or detect both copies. The Python
 lock keeps Pillow **13.0.0** but builds it from source against the patched
 Ubuntu-managed FreeType/Brotli libraries, with two compilation workers.
 
-**Current owner direction:** deploy the current build to the live PubApp after its real data/release/runtime checks, within the notice's DuckDB patch window through **2026-11-10 UTC**. Develop/test our DuckDB fix separately for the dev PubApp. See [the dated decision](../docs/duckdb_remediation_window_20261102.md). Production retains pinned CRAN DuckDB **1.5.2** (archive SHA-256 `55f98a336513a94354f328791c8b94521b9f2e918a57d7e9fe6c0cb6b9a38db6`); the preserved backport at `3a12daa` is for the isolated dev branch.
+**Current owner direction:** deploy the current build to the live PubApp after its real data/release/runtime checks, within the notice's DuckDB patch window through **2026-11-10 UTC**. Develop/test our DuckDB fix separately for the dev PubApp. See [the dated decision](../docs/duckdb_remediation_window_20261102.md). Production retains pinned CRAN DuckDB **1.5.2** (archive SHA-256 `55f98a336513a94354f328791c8b94521b9f2e918a57d7e9fe6c0cb6b9a38db6`); the historical backport at `3a12daa` is preserved separately. The current isolated dev fix is deployed and strictly validated in the [dev receipt](../docs/evidence/dev_duckdb_deployment_20261103.json).
 
-`scan-image.sh` runs this checkout's `verify-brotli.py` inside the immutable image, with no network or data mounts. The raw version-2 report continues to fail on the known DuckDB decoder result `0`/error `-9`. `evaluate-brotli-report.py` accepts that single complete finding during the recorded window and emits `RESULT=pass-with-duckdb-remediation-window`, with the raw failure, authorization copy and deadline bound by hash. Fixed decoder result `0`/error `-17` passes normally. Pillow/Ubuntu/Node failures, unknown decoder behavior, crashes, timeouts, missing evidence and other High/Critical findings still block. No general CVE suppression is added.
+`scan-image.sh` runs this checkout's `verify-brotli.py` inside the immutable image, with no network or data mounts. The original production decoder has the known result `0`/error `-9`. `evaluate-brotli-report.py` accepts that single complete finding during the recorded window and emits `RESULT=pass-with-duckdb-remediation-window`, with the raw failure, authorization copy and deadline bound by hash. New fixed builds must return `0`/error `-17` and pass the reviewed source-provenance check without a deferral. Pillow/Ubuntu/Node failures, unknown decoder behavior, crashes, timeouts, missing evidence and other High/Critical findings still block. No general CVE suppression is added.
 
-`generate-release-manifest.sh` verifies those hashes, the exact authorization and its date. It records the decision/deadline in `release.env`; `verify-release.sh`, including `--quick`, rejects an invalid or expired deferral. Copy the updated release tooling when staging the new release. The raw finding remains unresolved until the dev fix passes and is promoted. Old strict-gate evidence stays unchanged; rescan the exact current candidate into a fresh evidence directory. No extra approval is needed for the already-authorized DuckDB window. Scientific/data acceptance and runtime checks remain required.
+`generate-release-manifest.sh` verifies those hashes, the exact authorization and its date. It records the decision/deadline in `release.env`; `verify-release.sh`, including `--quick`, rejects an invalid or expired deferral. Copy the updated release tooling when staging the new release. The raw finding remains unresolved in production until the separately validated dev fix is promoted. Old strict-gate evidence stays unchanged; rescan the exact current candidate into a fresh evidence directory. No extra approval is needed for the already-authorized DuckDB window. Scientific/data acceptance and runtime checks remain required.
 
-For a future eligible candidate, the optional valid-data check below is available.
-It has not been run on a completed patched image. Set `IMAGE_ID` to its immutable
+For a future candidate, the valid-data check below is available. Its successful
+runs on the completed patched dev image are recorded in the [dev fix evidence](../docs/dev_duckdb_fix_20261102.md). Set `IMAGE_ID` to its immutable
 `sha256:` ID, `REAL_PARQUET` to an absolute path for a representative nonempty
 release Parquet containing text and numeric columns, and `PARQUET_REPORT` to a
 fresh report path outside the release. From the repository root:
@@ -203,15 +208,16 @@ scientific input is mounted read-only. Check the command exit status and report
 before recording success. This is separate from the malformed-stream probe
 and does not replace full release scientific parity or browser checks.
 
-The combined backport build at `3a12daa` was stopped following the owner's
+**Historical early November 2 build status:** the combined backport build at `3a12daa` was stopped following the owner's
 newer direction. No completed patched image, passing final scan, or patched-image
 compatibility result is claimed. The offline available-fixes image `2bbb928d…`
 from `23bd2fd` is built and imported under a hold: package scan 0 High/Critical
 and dependency/rendering smoke pass, while DuckDB alone fails the strict gate.
 It has no passing release attestation. The [dated security record](../docs/container_security_20261102.md)
 binds its full image ID, export hashes, checks and unchanged service state.
-Both services remain stopped and masked. Building or testing an image does not
-authorize a restart or accept a scientific data candidate.
+Both services were stopped and masked at that time. The current receipts at
+the top of this guide supersede that operational state; building or testing an
+image alone does not establish scientific acceptance.
 
 ## 1. Project build, test, scan, and OCI export
 

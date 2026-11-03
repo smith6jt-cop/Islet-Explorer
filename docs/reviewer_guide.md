@@ -8,7 +8,10 @@ is live as `pubapps-2026-11-components-v1`, verified at 2026-11-03 02:42 UTC
 (November 2 local) with 15/15 authenticated-access and 49/49 browser checks.
 It preserves the exact named v19 endocrine cells and the isolated DG Lymphatic revision. Consult
 the [deployment record](container_security_20261102.md) and the supplied review
-round's release/access notice for actual availability.
+round's release/access notice for actual availability. The strict-DuckDB
+[dev release](evidence/dev_duckdb_deployment_20261103.json) is independently live
+and verified. The [November 3 display fixes](app_display_fixes_20261103.md) are
+local changes pending a new dev build; they are not yet in either live image.
 
 The [workflow user guide](workflow_user_guide.md) explains data processing, component
 selection and release checks; the [user guide](user_guide.md) describes controls in more

@@ -11,8 +11,9 @@ final assignment policy.
 Production is live at
 [Islet Explorer](https://islet-explorer.rc.ufl.edu/islet-explorer/) with the
 selected-component v2 data. Activation and public endpoint checks completed
-successfully at 2026-11-03 02:42:27 UTC (November 2 local). Dev remains stopped
-and masked. The remaining off-campus acceptance and reboot tests are separate
+successfully at 2026-11-03 02:42:27 UTC (November 2 local). The separate strict-DuckDB
+[dev release](evidence/dev_duckdb_deployment_20261103.json) was subsequently activated
+and verified at 12:42 UTC. The remaining off-campus acceptance and reboot tests are separate
 from this verified activation.
 
 ## Build and provenance
@@ -247,8 +248,9 @@ and `public-browser.json`. See the authoritative
 service and proxy details. These runtime checks do not add a biological
 ground-truth claim to the scientific evidence.
 
-Dev remains **inactive and masked**; its separately patched DuckDB build was
-not activated. The off-campus acceptance run and reboot test remain pending,
+The separately patched DuckDB dev release is **active and verified**, with its
+own source/image/data bindings in the [dev receipt](evidence/dev_duckdb_deployment_20261103.json).
+It does not change this production release. The off-campus acceptance run and reboot test remain pending,
 as recorded in [UFRC readiness](ufrc_readiness.md).
 
 The separate development DuckDB fix remains an independent build. The owner's

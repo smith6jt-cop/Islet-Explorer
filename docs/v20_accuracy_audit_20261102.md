@@ -3,7 +3,8 @@
 **Subsequent selected-component build, November 2:** the completed v2 app and
 QuPath builds use scientific source `67ee6c9`; the matched image/release builder
 uses `e5689f6`. Production `pubapps-2026-11-components-v1` is now live and
-verified (2026-11-03 02:42 UTC); dev remains stopped and masked. Read [the v2 build record](component_build_v2_20261102.md),
+verified (2026-11-03 02:42 UTC). The separate strict-DuckDB dev release is also
+live, verified at 12:42 UTC; see [its receipt](dev_duckdb_deployment_20261103.md). Read [the v2 build record](component_build_v2_20261102.md),
 [resolution contract](component_resolution_20261102.md), and
 [actual deployment status](container_security_20261102.md) for current work.
 The version-specific source paths, failed diagnostics and prior service state

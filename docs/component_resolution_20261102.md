@@ -81,7 +81,8 @@ The security session completed the authorized production deployment as
 producer is `e5689f6`; the scientific producer remains `67ee6c9`. Full host
 verification, the running census, 15/15 authenticated-access checks and 49/49
 browser checks pass. The [live receipt](evidence/pubapps_live_20261102.json)
-records the actual outcome. Dev remains stopped and masked.
+records the actual outcome. The separate strict-DuckDB dev release is also live
+as of 2026-11-03 12:42 UTC; see [its deployment receipt](dev_duckdb_deployment_20261103.md).
 
 ## Measured v2 results
 

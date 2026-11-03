@@ -1,0 +1,279 @@
+{
+  "schema": "islet.local_app_display_review/2",
+  "recorded_at_utc": "2026-11-03T13:40:44.173659+00:00",
+  "source_commit": "5e6580fe68af12dd18bee430988bc1ed64061526",
+  "status": "targeted_visual_validation_passed",
+  "overall_visual_acceptance": true,
+  "source_binding": {
+    "tracked_source_files": 73,
+    "all_current_and_committed_bytes_match_launch": true,
+    "tracked_source_sha256": {
+      "app/shiny_app/R/00_audit.R": "97ea262f2bd53fdb557fc40ca156e44e89c886d35fc6a7ec75243833f3a749de",
+      "app/shiny_app/R/00_globals.R": "0844f958e1d77b965300746a7574956fd20b8df10e2ee6022ecae574841577ae",
+      "app/shiny_app/R/01_runtime_data_backend.R": "059227c8f721d4ebff6f7af6fa26a2367314f7621ecb4a158d025ab5452e712a",
+      "app/shiny_app/R/ai_helpers.R": "895122d305f51dbd70ec27f4d4ab38866957ad173424f0fb8cb2192455f18710",
+      "app/shiny_app/R/barlow_pseudotime.R": "658eca4be996ee7d6f8d0fe441d7bf4ae3e2d809064167e0acafd5aab4ff56d9",
+      "app/shiny_app/R/data_loading.R": "92a59758e5c51ccc53221a5bad452b192133cbeb177ea228d4869f913d1e39aa",
+      "app/shiny_app/R/donor_composition.R": "7f1c9e01d21dd8f445bed2a2dcbfa06997d72d6b0388eea9ac888a1dab9caf93",
+      "app/shiny_app/R/drilldown_helpers.R": "c70410192f05a23732773946be023db25b916d89175e0357f1ec827dce03d9d5",
+      "app/shiny_app/R/mod_ai_assistant_server.R": "a670eab523668a46576af4045540f7c807bb06bb9628eff69a22bd980bf704ef",
+      "app/shiny_app/R/mod_ai_assistant_ui.R": "6ef901ce6e8b6b7301c3afd3599bfa1fab89ac9d191ba04dcc6227e56606aa47",
+      "app/shiny_app/R/mod_inflammation_server.R": "b9b2f24b51a90540bb37228f07efe1d66e1c1e2878d56e0400f32c149411aa51",
+      "app/shiny_app/R/mod_inflammation_ui.R": "8e8e6b48464ea69da0d172cc3eff6c16504a04fbd6f45c63e37104999c962668",
+      "app/shiny_app/R/mod_plot_server.R": "024d57c851f83eb3942fb46aadcaffa7a9c95105b1a14688ce20e0b7e398d19c",
+      "app/shiny_app/R/mod_plot_ui.R": "6fb33154e4526d0188ccf8bca8cb09406507814fd5d6650268dc2899bd5b827f",
+      "app/shiny_app/R/mod_spatial_server.R": "b2a21a9f807e967690922d711bd5d75169a0f5770bcacf8aa37ce5baab664a8d",
+      "app/shiny_app/R/mod_spatial_ui.R": "d6c9a4d7a2180eaee7cb0a9be9b84cf4184f71ba37a253dafc2f66c16f0e45e1",
+      "app/shiny_app/R/mod_statistics_server.R": "f454eefae5d0a1f346069ecb7df2bd366e139740b9260b1a65009b29e624f20a",
+      "app/shiny_app/R/mod_statistics_ui.R": "071a49f98f506511fbdb28b20f3b488f670e81ac67dc994a0ca24344ca7eebba",
+      "app/shiny_app/R/mod_trajectory_server.R": "1bf7b3a19ab7aed6200a1ff1f33bcbb47d82f830f6317ab0d22169e51d4454b9",
+      "app/shiny_app/R/mod_trajectory_ui.R": "fe83a377c770717b7f3038843002fc07a6b10aa182b5abd9504d26960f061085",
+      "app/shiny_app/R/mod_viewer_server.R": "87e90341e226ecf5ad9e0fa092ba48b180c1f6950ceec2685f1fd214ae76c9be",
+      "app/shiny_app/R/mod_viewer_ui.R": "b019ba50e31834cf1f6341beb68f0e3d62510241e0af88fc5fa4b4c3c85d4e80",
+      "app/shiny_app/R/object_counts.R": "af2db99dd451c9adf1a8586a7714070245fb506a83f753ab42102cdb2b1f533b",
+      "app/shiny_app/R/paga_layout.R": "6fa10c44a40b27d998b59ca5d5529c9413e2d2d693e1a643deedb5078e80efd6",
+      "app/shiny_app/R/plot_figures.R": "c71b8cc3f659d04124a6fa3d30a2d0b9a41cc29aeefe2e97304767c9fd4bdb5f",
+      "app/shiny_app/R/plot_helpers.R": "355248112ef1c1b691f0732ae74ef407dcb92160c584df0d91465f1a29081587",
+      "app/shiny_app/R/plot_types.R": "d4b4d8145c53659ed5f6d232810e2e1dcd06df31994e9ad1918d31959cc852e9",
+      "app/shiny_app/R/segmentation_helpers.R": "77fa1a1a5cb82d5a62e09a4435bf5672cd60474b32db1f879e5b7f765c4256a6",
+      "app/shiny_app/R/spatial_helpers.R": "0bf1ee9f62dd11ac226a4ecb4c6fa5e1d26dffc2a69fde6fa33bdead8e68f338",
+      "app/shiny_app/R/spatial_islet_immune.R": "ac4089c893741129fa7d9c64e00673e260712ffb4da5a766d0ba07ac3212a011",
+      "app/shiny_app/R/trajectory_links.R": "90f9d28925aca833606db7c24fe4e25e9f2e6bc54414e98cfb2054a6c1cc75e0",
+      "app/shiny_app/R/utils_safe_join.R": "0601997b7be6e18568657d6e947f1ab1f13fe3ac3deffe741069ceee3fb21f57",
+      "app/shiny_app/R/utils_stats.R": "d377fed7aa6e82ae7e0b365284dd8669ed2bfd5b7c9ee22ae05c97bfef78a742",
+      "app/shiny_app/R/viewer_helpers.R": "5aaa6244110a61f41adb966609dbc213e8bdbf07203fa71c8c11f56a6214392d",
+      "app/shiny_app/app.R": "adca84b78051d193a6e4dee3a69c5864dc49c252d9c542dac0803be8f699cd98",
+      "app/shiny_app/python/paga_pseudotime.py": "477221e9b235073a6bde5a062fb0c412452b52c166d1ffd0e1831941b901bd08",
+      "app/shiny_app/tests/manual/stats_audit.R": "7d47b9a7799dc485a043c1a0851de7f0a647210f2fa5e1f86027159df7a58356",
+      "app/shiny_app/tests/parse_check.R": "b7b9711db8a2110ad78b632153912d553c9f74a91f9ff4d3c5977d5b34fb90f3",
+      "app/shiny_app/tests/run_tests.R": "c7f30a27888783ca70b26b77d780110aac96fd5b65a1a29a8da4140df78bce64",
+      "app/shiny_app/tests/testthat/helper-setup.R": "5a1823fa827834819db1c56c896174fdc21d26cb1a83450df560ddc9e0b99def",
+      "app/shiny_app/tests/testthat/test-app-parses.R": "6ba38e85bb4dc1460d549a27feb52057ba4ec9da929d7b2488e5f7315d75d4b6",
+      "app/shiny_app/tests/testthat/test-application-logging.R": "444cbf7091ab398c71b1714ddab2372055cec0b61ce40175ab58bad608cc1ec6",
+      "app/shiny_app/tests/testthat/test-drilldown-display.R": "1f3031c02fc75251cb356aadd0cec98b0912b546a9d18fa4fff5471a64b4d975",
+      "app/shiny_app/tests/testthat/test-inflammation-display.R": "f1deccaa87b9d2cde41baa61fe3c6ee7b23efde78e8daea5ada6cc3e6213d8f9",
+      "app/shiny_app/tests/testthat/test-macrophage-labels.R": "9653be2f5c3bb7739d664bfd9e3819d70a2290b1fc62b8799da73c952be22f78",
+      "app/shiny_app/tests/testthat/test-phenotype-retained.R": "fcd4ebd7242890d600567ba2d0ea807f5716a311fdd3f7c9ace773cc7ebd7aae",
+      "app/shiny_app/tests/testthat/test-plot-figures.R": "6f63173c0bf9fcb8655b74e5648f6a9f08771ca65fb66890068c559759b50bad",
+      "app/shiny_app/tests/testthat/test-plot-population-choices.R": "0d23ef24a0d1b26aaa0b339f8506b0d54185b953a190edafce5997d763e0ab30",
+      "app/shiny_app/tests/testthat/test-plot-types.R": "5a64df992ad071482f1091548f134f0f6c896282e3f24f0ec7865fc2fc9cf611",
+      "app/shiny_app/tests/testthat/test-runtime-data-backend.R": "674bf6ade54afc1f1c4baaa6b1ffbf25251f4aa7e682d6ece7b3301831573366",
+      "app/shiny_app/tests/testthat/test-security-boundaries.R": "25ad0681918d2d04e8c9fcd6918f31df5382f1f8bce63664b139b1de76b2a576",
+      "app/shiny_app/tests/testthat/test-spatial-islet-immune.R": "6b102e4f48d38e3522db9e74cac24ae1d69b8c4893191eec7c1aa01ba768d786",
+      "app/shiny_app/tests/testthat/test-trajectory-helpers.R": "1573b57a8cffb26f5994efdb6e867a35f46d30a73958c640d0fec78971ffa48c",
+      "app/shiny_app/tests/testthat/test-umap-drawing.R": "1327826bd3dd01151dc4427689551602a8613023e0a46751199de67f6f96019c",
+      "app/shiny_app/tests/testthat/test-utils_stats.R": "70bbf3b09116088f8d9facf98dc13b9edc734ae652fa2a121a184e28a10a9b52",
+      "app/shiny_app/tests/testthat/test-viewer-readiness.R": "3256bf599c1dc903a614096c35efa9cb30329f4ff1c5543e95d242b7c6eff197",
+      "app/shiny_app/tests/testthat/test-warm-up.R": "05645ea512bc4bd2f2184e17f7c89bc7e90288efc60ce11fd3d57d5cbe8a56f0",
+      "app/shiny_app/www/avivator/assets/deflate-Bj5r1ZIu.js": "879e8cd52d1d8584991b92474d56fd3f5070b044c89192f4165130ab61d0e9f3",
+      "app/shiny_app/www/avivator/assets/index-DBmmXfNW.js": "ecc048a2270e7ca6325543b8a48f0ed16156d669d732286c104deeb7dabbe2a0",
+      "app/shiny_app/www/avivator/assets/index-jOqUmYCe.css": "55b42f6f01c5f6da7d8d499b3e96a952b724ac5bba115ad588e584c0d8001806",
+      "app/shiny_app/www/avivator/assets/jpeg-BXvFeBhq.js": "4a54229f6451ccf23bb8c4db0585531c2adf913db1afb62c8ceebe5d72ce8b3d",
+      "app/shiny_app/www/avivator/assets/lerc-DeOxovhr.js": "5647d20237660d6988a453f9f3760e976a4c17f4214af86aacbbcf7a6f52a351",
+      "app/shiny_app/www/avivator/assets/lzw-4WQwzCSE.js": "65fdc3a991b54d0f0919307a1cfe274ea2248330e5d2838233159980f7f7c739",
+      "app/shiny_app/www/avivator/assets/packbits-D01fq4dm.js": "972ac09cd6cff6e76962fd59c9d52e62e405b9a4e141904f354fb94b81d056d3",
+      "app/shiny_app/www/avivator/assets/pako.esm-Cram60i4.js": "6e747ee8172cfffe92f375a1129301b0577fa0000f17e85bc0c4439a88024c94",
+      "app/shiny_app/www/avivator/assets/raw-BaiDF_Ic.js": "61862f711bb54b585cb5003484e3f86288208bf0dc0725a4cce88765551dedc5",
+      "app/shiny_app/www/avivator/assets/webimage-wutFjnm1.js": "0aeccf8f7c053f920221dafa12d6f85e6f348c00e30c181bca24d2a9eda667d3",
+      "app/shiny_app/www/card-help.js": "7003a6a05e4e9c2009eed2ae4e509cdc2bb4a210e6361de776b3395f7133c17c",
+      "app/shiny_app/www/islet-theme.css": "574393af216b59febf46da57c0e638a3c7856e7b8e94ea780ae7e87903d07e52",
+      "app/shiny_app/www/islet-theme.js": "4dbc24e2b239aa287bad4e1804ec711bc7bd13047ffb4fee8a0fae6d7205ca7f",
+      "app/shiny_app/www/phenotype-groups.js": "bcc4f93b4bbf073a919d5623b8d27c4c59fd9d5f75a8226e0a154a7473e0d4e5",
+      "app/shiny_app/www/sticky-layout.js": "d3e59f6218f9fb3f02458fd4848847173703a0e274f940e5518ab333b4d00233",
+      "app/shiny_app/www/trajectory-links.js": "40e3c39d88f787af06ab56223744998f3d05a28ad6ea356ec668d8f7d59fa0f8"
+    },
+    "excluded_untracked_generated_test_reproducers": {
+      "app/shiny_app/tests/testthat/_problems/test-phenotype-retained-25.R": "c260bc7c163f19a2d6c3804588da6605c5e404af5043a8c8c0272c3fc02ffc33",
+      "app/shiny_app/tests/testthat/_problems/test-phenotype-retained-42.R": "4bdc71dc34bbfd3f95ce9cd276f03f59fdf11cacb1b5d45b1d3883c30f43e4f1"
+    }
+  },
+  "runtime": {
+    "pid": 4152631,
+    "url": "http://127.0.0.1:3845/",
+    "runtime_mode": "production",
+    "data_schema": 5,
+    "data_root": "/data/panc_CODEX/Islet-Explorer/tmp/pubapps-component-release-20261102-v2/artifacts/release-e5689f6/data"
+  },
+  "data_manifest_sha256": "8ddeecf3639921d2e53538e2d86b6bb4278cc622d29a928a3136fdece3d9f6b1",
+  "evidence": {
+    "launch-final-r7.json": {
+      "path": "tmp/ui-layout-review-20261103/launch-final-r7.json",
+      "sha256": "c9f9736edb804a2e14827762a15d9fa37380d1f1e1bb00ae46e563aab3c95dca"
+    },
+    "layout-final-r4.json": {
+      "path": "tmp/ui-layout-review-20261103/layout-final-r4.json",
+      "sha256": "10d71514c920da651516a69f0fe0c33ba08f2f87cdb5c32dca7b1946fc5abcdb"
+    },
+    "spatial-final-r5.json": {
+      "path": "tmp/ui-layout-review-20261103/spatial-final-r5.json",
+      "sha256": "32bf47e728a089133d0b13998c7f4bad8511bae69839fe2338d61572ab95a9b0"
+    },
+    "taxonomy-final-r4.json": {
+      "path": "tmp/ui-layout-review-20261103/taxonomy-final-r4.json",
+      "sha256": "b041cd650cf62063c0973f7963ff521f8bb893fe53f8b213e298735ce460028a"
+    },
+    "tissue-dynamic-final-r2.json": {
+      "path": "tmp/ui-layout-review-20261103/tissue-dynamic-final-r2.json",
+      "sha256": "12c8ebb4d358d19c903afd8c1569987ea31110b81b0244df5e2401c88e1c07bb"
+    },
+    "tissue-dynamic-failure.json": {
+      "path": "tmp/ui-layout-review-20261103/tissue-dynamic-failure.json",
+      "sha256": "39169ad45ea51b23be6af3a93e6cd352e3babbb2dd30dc9770f9f7cd65ee93e3"
+    },
+    "tissue-all-wrapped-final.json": {
+      "path": "tmp/ui-layout-review-20261103/tissue-all-wrapped-final.json",
+      "sha256": "f3c0693497c85f776f08f74ad67ebe04cb14aae35ff8d8174bed776acb22d70f"
+    },
+    "display-review-r1.json": {
+      "path": "tmp/ui-layout-review-20261103/display-review-r1.json",
+      "sha256": "2be4b3c95d95bacd511d6b730f1923effc766f5a9cb97bcb20ea3cede830b9c3"
+    }
+  },
+  "validation_provenance": {
+    "prior_targeted_source_commit": "926c7aee0b6c500ad18287bc00b2cdff7b177d6e",
+    "prior_checks": "Plot/Trajectory dropdown/card bounds, taxonomy DOM/trace checks and six paired Spatial color/width cases all passed.",
+    "final_source_change_files": [
+      "app/shiny_app/R/mod_spatial_server.R",
+      "app/shiny_app/R/mod_spatial_ui.R"
+    ],
+    "final_source_diff_sha256": "4adb5952cfe2d638b8cb0fb3b73bf8e9d1b207bb2aed00a3ea00d28a1d52109b",
+    "change_scope": "Only tissue legend wrapping and coordinated dynamic output/cached-render sizing were added; UMAP/title-spacing and other runtime code are unchanged from prior targeted checks.",
+    "final_source_revalidation": "Default and all 27 phenotype choices with all 4 macrophage subdivisions at 1200/1600; exact visible panel dimensions from server coordmap and actual DOM scaling, screenshots inspected, stable output element, downloads below, brush/reset verified.",
+    "retained_prior_failure": "Original clipping, wrap-only small-map and auto-height cache failures remain preserved; the final dynamic-height screenshots and checks supersede them without rewriting evidence."
+  },
+  "results": {
+    "plot_trajectory_pass": true,
+    "viewports": [
+      1200,
+      1600
+    ],
+    "minimum_dropdown_arrow_clearance_px": 7,
+    "segmentation_gap_above_below_px": [
+      20,
+      20
+    ],
+    "trajectory_overview_bottom_difference_px": 0,
+    "removed_title_suffix": true,
+    "spatial_paired_modes_pass": true,
+    "spatial_mode_cases": 6,
+    "spatial_points_per_plot": [
+      1392
+    ],
+    "minimum_colorbar_title_to_fill_gap_px": 5.99993896484375,
+    "taxonomy_pass": true,
+    "taxonomy_hidden_choices": 0,
+    "conflict_plot_text_entries": 0,
+    "targeted_browser_page_errors": 0,
+    "tissue_all_visible_partition_choices_selected": 27,
+    "tissue_legend_clipping_resolved_at_widths": [
+      1200,
+      1600
+    ],
+    "tissue_visible_dimensions": [
+      {
+        "mode": "default",
+        "viewport_width": 1200,
+        "panel_css_height": 406.82379923381046,
+        "image_css_height": 842.875,
+        "output_css_height": 842.875,
+        "downloads_below": true
+      },
+      {
+        "mode": "default",
+        "viewport_width": 1600,
+        "panel_css_height": 454.1760002278794,
+        "image_css_height": 805.8125,
+        "output_css_height": 805.8125,
+        "downloads_below": true
+      },
+      {
+        "mode": "all27",
+        "viewport_width": 1200,
+        "panel_css_height": 406.8228261247817,
+        "image_css_height": 1111.875,
+        "output_css_height": 1111.875,
+        "downloads_below": true
+      },
+      {
+        "mode": "all27",
+        "viewport_width": 1600,
+        "panel_css_height": 482.5363404328895,
+        "image_css_height": 1062.984375,
+        "output_css_height": 1062.984375,
+        "downloads_below": true
+      }
+    ],
+    "tissue_brush_reset": {
+      "beforeDomain": {
+        "left": -233.3075,
+        "right": 5014.9575,
+        "bottom": 3760.23675,
+        "top": -169.77175
+      },
+      "zoomedDomain": {
+        "left": 973.851829342005,
+        "right": 3276.307605615295,
+        "bottom": 2472.426979756246,
+        "top": 728.0788861792445
+      },
+      "resetDomain": {
+        "left": -233.3075,
+        "right": 5014.9575,
+        "bottom": 3760.23675,
+        "top": -169.77175
+      },
+      "zoomChanged": true,
+      "resetRestored": true,
+      "stableOutputElement": true
+    },
+    "visual_checks": "Tissue panel stays 406\u2013483px high and grows vertically with dense legends. Final categorical and continuous legends/colorbars are below the plots and inside their widgets; colorbar titles have 6px separation; tissue labels are fully visible."
+  },
+  "screenshots_inspected": {
+    "spatial-tissue-default-1200-dynamic-r2-raw.png": {
+      "path": "tmp/ui-layout-review-20261103/screenshots/spatial-tissue-default-1200-dynamic-r2-raw.png",
+      "sha256": "332e09b0b30a6925a287d7198666042f118351d7da6038e71e41611f2f78b8c9"
+    },
+    "spatial-tissue-all27-1200-dynamic-r2-raw.png": {
+      "path": "tmp/ui-layout-review-20261103/screenshots/spatial-tissue-all27-1200-dynamic-r2-raw.png",
+      "sha256": "b8be8bfa5583e657d443ec1beb9300ba069e2e07f38e2e31765ac22a0ffea40a"
+    },
+    "spatial-tissue-default-1600-dynamic-r2-raw.png": {
+      "path": "tmp/ui-layout-review-20261103/screenshots/spatial-tissue-default-1600-dynamic-r2-raw.png",
+      "sha256": "89638a28b74b577307f02c1f6130672995e1a411901f706925dfbe6092a0d4ca"
+    },
+    "spatial-tissue-all27-1600-dynamic-r2-raw.png": {
+      "path": "tmp/ui-layout-review-20261103/screenshots/spatial-tissue-all27-1600-dynamic-r2-raw.png",
+      "sha256": "2a8a56949f9aa929047ee33efcf5187a0336ec25dfa1e14117735817de78ad09"
+    },
+    "spatial-umaps-donor-leiden-1200-final-r5.png": {
+      "path": "tmp/ui-layout-review-20261103/screenshots/spatial-umaps-donor-leiden-1200-final-r5.png",
+      "sha256": "3582f83b332e86f596ecdc9186f9201f6f2c0fc7e97e22fc52bdc6cde7a3ae54"
+    },
+    "spatial-umaps-age-immune_frac_peri-1200-final-r5.png": {
+      "path": "tmp/ui-layout-review-20261103/screenshots/spatial-umaps-age-immune_frac_peri-1200-final-r5.png",
+      "sha256": "f4814e42c828c655eff26b5b9c847748aeef98f9cff4d0459bba8b215492b2da"
+    },
+    "spatial-umaps-donor-leiden-1600-final-r5.png": {
+      "path": "tmp/ui-layout-review-20261103/screenshots/spatial-umaps-donor-leiden-1600-final-r5.png",
+      "sha256": "17f7d43d025edfc13d86fabc12354fa2b708280a0264cc22e9eb124f2aaf10bf"
+    },
+    "spatial-umaps-age-immune_frac_peri-1600-final-r5.png": {
+      "path": "tmp/ui-layout-review-20261103/screenshots/spatial-umaps-age-immune_frac_peri-1600-final-r5.png",
+      "sha256": "f3b7160ea079c1d71c5664eb6e044729d05d6b67caaf3092ed53faf15b59cae2"
+    }
+  },
+  "expanded_loopback_smoke": {
+    "source_note": "Before final colorbar title-spacing change; exact final source validated by targeted cases above.",
+    "completed": true,
+    "checks": 49,
+    "passed": 45,
+    "failed": [
+      "expanded_image_inventory_and_ranges",
+      "viewer_range_16_bytes",
+      "viewer_canvas_rendered",
+      "viewer_control_semantics"
+    ],
+    "limitation": "runApp lacks production static Range aliases; full Viewer/Range acceptance requires immutable container and public dev."
+  },
+  "publication": "Local validation only. Full 49 Viewer/Range acceptance remains for immutable-container/public-dev testing; no deployment or biological-accuracy claim."
+}

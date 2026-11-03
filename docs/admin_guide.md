@@ -2,22 +2,24 @@
 
 Developer- and maintainer-facing reference for rebuilding the app data, deploying the Shiny app, and troubleshooting. End-user feature documentation lives in [user_guide.md](user_guide.md).
 
-**Current workflow, 2026-11-02:** use [the complete workflow guide](workflow_user_guide.md),
-[component build record](component_build_20261102.md), and [current handoff](handoff_20261102.md).
-HPG job `49141854`, source `b15f0fc`, completed the selected component app and all-20 export
-QA. It preserves all 110,721 named v19 endocrine cells. Its control-to-DG comparison passes
-with 351 Lymphatic-related label changes and no unrelated changes. The completed root is
-`data/development/uniform-20donor-20261102-component-app-v1` on HPG and the workstation; the complete returned
-QuPath project is `data/development/qupath-review-20261102-components-v1/project.qpproj`.
+**Current workflow, 2026-11-03:** use [the workflow guide](workflow_user_guide.md)
+and [selected-component v2 build record](component_build_v2_20261102.md).
+Scientific producer `67ee6c9` preserves all 110,721 selected named v19 endocrine
+calls across 20 donors and 3,199,606 eligible cells. Its controlled DG revision
+has 353 permitted Lymphatic-related label changes and no unrelated changes.
+The final 7,398 Unclassified cells retain their evidence; 716,451 Tissue calls
+remain unchanged. Zero unnamed endocrine definitions or boundary placeholders
+remain. The classifier-lineage proof passes while corrected-cell and centroid
+diagnostics remain visible; they are not evidence of negative original pixels.
 
-The build retains 8,629 unresolved endocrine cells and 2,472 component boundary conflicts.
-The corrected-cell object audit fails on 953 populated objects (915 singles, 38 clusters,
-no islets) without a positive eligible INS/GCG/SST/CHGA member, plus three single-membership
-anomalies. This test is distinct from the original pixel masks, whose replay passes.
-These data checks remain unresolved; no service was restarted. The staged whole-v19
-reference was never activated.
+Production `pubapps-2026-11-components-v1` is live from `e5689f6`, image `89b3f840…`.
+The separate strict-DuckDB dev release `pubapps-2026-11-dev-duckdb-v1` is live
+from `378843e`, image `e704ac2a…`. Their separate receipts bind the actual data,
+image and validation: [production](evidence/pubapps_live_20261102.json),
+[dev](evidence/dev_duckdb_deployment_20261103.json). The [November 3 display changes](app_display_fixes_20261103.md)
+remain local pending a new dev build. The in-house service remains inactive.
 
-**Provisioned reviewer URL (production currently stopped)**:
+**Live reviewer URL (authentication required):**
 `https://islet-explorer.rc.ufl.edu/islet-explorer/`
 
 > **Deployment authority:** [deploy/README.md](../deploy/README.md) and
@@ -25,19 +27,12 @@ reference was never activated.
 > deployment contract and its dated history. Any older mutable-code, direct-nginx, Apptainer, or AI-key instruction in
 > historical notes is not a production procedure.
 
-The provisioned endpoints do not imply an active service. The owner stopped dev on
-2026-11-02; production has been stopped since 10-26. Both remain masked. The later owner
-direction authorizes the current build for production once actual data/release/runtime
-checks pass; no repeated permission request follows from the older diagnostic status.
-Use the [security record](container_security_20261102.md) and
-[readiness record](ufrc_readiness.md) for current evidence.
-
-The matching released-fixes image `41e62a97…` is built from `b15f0fc`. Package, dependency
-and installed Shiny/R runtime checks pass. It retains original CRAN DuckDB 1.5.2, with the
-known finding explicitly nonblocking through **2026-11-10 UTC** under the
-[dated release decision](duckdb_remediation_window_20261102.md). Develop and test the DuckDB
-fix separately for dev. This dated deferral does not waive the unresolved data checks or
-other release checks; historical failed security reports remain unchanged.
+The receipts establish actual active services, not merely provisioned endpoints.
+Production retains its dated DuckDB exception through **2026-11-10 UTC**;
+the separate dev fix passes the strict decoder gate without an exception.
+Neither security nor browser checks replace scientific validation. The separate
+outside-network acceptance and reboot tests remain pending; see [UFRC readiness](ufrc_readiness.md).
+Historical failed reports and earlier v1 diagnostics remain preserved.
 
 ---
 
@@ -59,8 +54,10 @@ A coherent candidate needs one identity per UUID and explicit component provenan
 The owner selected v19 endocrine; v20 implements later measurement and structure rules
 but also contains the demonstrated Lymphatic calibration regression. Do not copy v20
 labels wholesale or mix already aggregated v19/v20 summaries. The component builder has
-now regenerated the app from those selected inputs; its unresolved assignments and object
-audit failures remain explicit.
+regenerated the selected-component v2 app and validated its exact UUID/identity
+contract. Unsupported rows remain Unclassified; original-classifier lineage and
+Single whole-cell association are the release object proof. The older strict
+corrected-cell diagnostic remains separately visible.
 
 For a **Lymphatic-only update**:
 
@@ -168,7 +165,7 @@ See `data/DATA_PROVENANCE.md` for the complete lineage documentation including v
 reviewer HTTPS + Basic Auth
   ↓ UFRC high-availability reverse proxy
 Provisioned VM private listeners: production :3838 / dev :3839
-  (both currently stopped and masked)
+  (both active under their separately verified release receipts)
   ↓ rootless Podman forwarding
 immutable Shiny container 0.0.0.0:3838
   ├── manifest-backed data + images (read-only)
@@ -177,9 +174,10 @@ immutable Shiny container 0.0.0.0:3838
 
 ### Updating the App
 
-The owner authorized production once the actual data/release/runtime checks pass, with
-DuckDB deferred through the dated November 10 deadline. The current data failures still
-prevent activation, so both services remain stopped and masked.
+Production and dev have completed their recorded validation and activation.
+Production retains the dated November 10 DuckDB deadline; dev passes the strict
+decoder gate. Future updates still need their own matching image/data evidence
+and must preserve the prior release for rollback.
 
 For the authorized release, never edit or `git pull` into an active release. Build and scan a clean,
 digest-pinned OCI image; build and fully checksum-verify a new data release; then use
@@ -196,8 +194,8 @@ ISLET_DATA_ROOT=/absolute/path/to/explicit-review-root Rscript -e 'shiny::runApp
 ```
 
 Port 7777 is for local testing only. Select the data root explicitly and retain its
-scientific status in review notes. This does not start the stopped in-house or PubApps
-services or establish an unaccepted root as a release.
+scientific status in review notes. This does not change the inactive in-house service or either active PubApps
+service, or establish an unaccepted root as a release.
 
 ### R Dependencies
 
@@ -224,10 +222,9 @@ frozen v19/v20 manifests explicitly record `scvi_required: false`.
 
 ### Production app fails to load
 
-1. Confirm whether a service is expected to be running. Both are currently stopped and
-   masked while the data checks are unresolved; do not restart them merely to troubleshoot.
-   Once the authorized release passes its checks and is active, run
-   `deploy/verify-deployment.sh` with its release root and expected image reference.
+1. Confirm the selected instance and its recorded release. Both PubApps instances are
+   active under their separate receipts; inspect the current state before changing it.
+   Run `deploy/verify-deployment.sh` with that release root and expected image reference.
 2. Inspect the sanitized service journal and Shiny log; do not print environment values or
    reviewer request URLs containing query strings.
 3. Verify the active data manifest in full mode. Production must fail closed on a missing

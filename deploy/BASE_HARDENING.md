@@ -2,10 +2,19 @@
 
 **Latest owner direction, 2026-11-02:** the current build is intended for the live production PubApp once its actual data/release/runtime checks pass. The known DuckDB finding is nonblocking through the notice's **2026-11-10 UTC** patch deadline; develop/test our DuckDB fix separately for the dev PubApp. See [the dated release decision](../docs/duckdb_remediation_window_20261102.md). This supersedes the earlier strict DuckDB hold and no-activation directions below. Historical failed reports remain unchanged; data checks and other security findings still apply.
 
-Review date: 2026-09-08, with the 2026-10-22 dependency pins below. This is a
-tested source-build remediation; the exact application image and its
-operating-system package upgrades still require the release build, SBOM,
-vulnerability scan, and browser gates.
+**Current outcome, 2026-11-03:** production and the separate strict-DuckDB dev
+release are active and verified. The [production receipt](../docs/evidence/pubapps_live_20261102.json)
+and [dev receipt](../docs/evidence/dev_duckdb_deployment_20261103.json) bind the
+actual images and their gates. Production uses the dated DuckDB window; dev
+passes strict validation without it. Current build source now includes the
+reviewed source patch and strict receipt check, cherry-picked as `b5fae5c`;
+this does not change the bytes of the already-running production image.
+Neither live image includes the subsequent
+[local display changes](../docs/app_display_fixes_20261103.md).
+
+Historical review date: 2026-09-08, with the 2026-10-22 dependency pins below.
+These source-build records are not a substitute for each new image’s build,
+SBOM, vulnerability scan and browser gates.
 
 ## 2026-10-22: four runtime dependency pins
 
@@ -118,15 +127,16 @@ The original pinned source lacks the fix, and the inspected installed library
 returned the vulnerable error (-9) on the upstream regression vector, instead
 of the patched -17. A Pillow-only replacement cannot pass the complete gate.
 
-**The owner's later direction supersedes the local backport:** implement the
+**Historical direction before the dated production window and separate dev work:** implement the
 released fixes and defer DuckDB until its upstream PR merges. The
 [DuckDB port proposal](https://github.com/duckdb/duckdb/pull/27791) was
-**open and unmerged when reviewed on 2026-11-02**. Active build instructions
-therefore retain the original CRAN R package **1.5.2**, its existing R API and
+**open and unmerged when reviewed on 2026-11-02**. Production build instructions
+therefore retained the original CRAN R package **1.5.2**, its existing R API and
 SHA-256 pin `55f98a336513a94354f328791c8b94521b9f2e918a57d7e9fe6c0cb6b9a38db6`,
 without applying the proposed decoder patch. The known decoder vulnerability
-remains an explicit release blocker; released Pillow, Node, and system-library
-fixes do not resolve it.
+failed the strict gate; released Pillow, Node, and system-library fixes did
+not resolve it. The later production window and separately validated dev fix
+are recorded at the top of this document.
 
 The stopped combined-backport attempt is retained on local branch
 `security/deferred-duckdb-brotli-20261102` at `3a12daa`, with its source helper, patch,
@@ -138,7 +148,9 @@ Those are archived review details, not active installation instructions or an
 accepted image. The attempt identified an installation pitfall: CRAN configuration
 extracts `duckdb/src/duckdb.tar.xz`, so editing only an extracted directory can
 be undone. Its helper patched the nested archive and package `MD5`, preserving
-unrelated members. The helper and patch are removed from the active build path.
+unrelated members. The helper and patch were removed at that historical stage;
+the subsequently reviewed dev implementation is restored in current build
+source at `b5fae5c`, with its receipt and actual binary regression required.
 
 The scan feeds the current checkout's `verify-brotli.py` into the exact immutable
 image with networking disabled and no data mounts. The required
@@ -147,17 +159,19 @@ linkage, DuckDB runtime package version and installed-library hash, and a
 bounded subprocess calling the installed
 DuckDB decoder. The malformed upstream stream must return decoder result 0
 and error -17; timeout, crash, missing symbols, or a vulnerable decoder fail.
-The active gate does not require the deferred unmerged patch's source receipt.
-Removing that receipt requirement does not waive the actual decoder check.
+The earlier released-fixes-only gate did not require a patch source receipt.
+Current build source does require the reviewed patch receipt in addition to
+the actual decoder check; the live dev receipt records that strict result.
 
 `scan-image.sh` then runs the SBOM/Grype High/Critical gate and binds the Brotli
-report hash in `.scan.txt`. Every **new** release manifest requires that passing
-v2 report and its DuckDB binary-check fields. An old scan without the report, or
+report hash in `.scan.txt`. Every **new** release manifest requires the complete
+v2 report and its DuckDB binary-check fields, plus a passing strict result or
+the exact dated production exception validated by the release security gate. An old scan without the report, or
 an earlier Pillow-only report, cannot authorize a new manifest. No CVE
 suppression was added. Existing historical manifests remain historical records,
 not evidence that an old image satisfies the new gate.
 
-The optional future valid-data check is `tests/check-duckdb-brotli.R`: it reads a real
+The valid-data check, run successfully for the later dev fix, is `tests/check-duckdb-brotli.R`: it reads a real
 release Parquet, round-trips all its rows through BROTLI compression in temporary
 storage, checks the actual compression metadata, schema/values/missingness,
 duplicate multiplicities, numeric and grouped aggregates, and unchanged source
@@ -166,7 +180,7 @@ gives the read-only container invocation for a future eligible candidate. Local
 script-development checks do not demonstrate a fixed image, and a successful
 valid-data check cannot waive malformed-stream rejection.
 
-**Build status:** the combined `3a12daa` backport build was stopped following
+**Historical early November 2 build status:** the combined `3a12daa` backport build was stopped following
 the owner's direction. No completed patched image or patched-image compatibility
 result is claimed. The released-fixes-only image `2bbb928d…` from `23bd2fd` was
 built, scanned and imported offline under a hold. Its package scan has 0
@@ -177,8 +191,8 @@ image/export/staging evidence. Revisit
 the DuckDB change after the upstream condition is met and its implementation
 and compatibility have been reviewed.
 
-At the owner's request dev was stopped. Both PubApps services are persistently
-masked; replacement-image preparation does not authorize restarting either one.
+At that point the owner had stopped dev and both PubApps services were
+persistently masked. The later verified activations are recorded above.
 Old releases are not eligible rollback targets until rebuilt and reverified.
 
 ## Original base review

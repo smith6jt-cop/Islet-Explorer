@@ -1,0 +1,34 @@
+{
+  "schema": "uniform.presentation_hierarchy_check/1",
+  "passed": true,
+  "source_manifest_sha256": "7ff7c4d92cffa393b16f3118ef04855e959bda14d3862aecce0da95344e91082",
+  "source_cells": 3199606,
+  "visible_partition_cells": 3091614,
+  "hidden_conflict_cells": 9213,
+  "hidden_retired_no_subtype_cells": 98779,
+  "retired_counts": {
+    "T cell": 3397,
+    "Hematopoietic CD45+": 50698,
+    "Hematopoietic CD45-": 44684
+  },
+  "parent_totals": [
+    {
+      "label": "All endocrine cells",
+      "members": ["CHGA+ hormone-negative", "Beta cell", "Alpha cell", "Delta cell"],
+      "cells": 110721
+    },
+    {
+      "label": "All T cells",
+      "members": ["T cell", "CD8a Tcell", "CD4 Tcell"],
+      "cells": 36864
+    },
+    {
+      "label": "All macrophages",
+      "members": ["CD68+CD163+Macrophage_LGALS3+CD4+", "CD68+CD163+Macrophage_LGALS3+CD4-", "CD68+CD163+Macrophage_LGALS3-CD4+", "CD68+CD163+Macrophage_LGALS3-CD4-", "CD68+CD163-Macrophage_LGALS3+CD4+", "CD68+CD163-Macrophage_LGALS3+CD4-", "CD68+CD163-Macrophage_LGALS3-CD4+", "CD68+CD163-Macrophage_LGALS3-CD4-", "CD68-CD163+Macrophage_LGALS3+CD4+", "CD68-CD163+Macrophage_LGALS3+CD4-", "CD68-CD163+Macrophage_LGALS3-CD4+", "CD68-CD163+Macrophage_LGALS3-CD4-"],
+      "cells": 190096
+    }
+  ],
+  "visible_categories": ["CHGA+ hormone-negative", "Beta cell", "Alpha cell", "Delta cell", "Exocrine", "CD8a Tcell", "CD4 Tcell", "B cell", "Stromal", "Endothelium Blood Vessel", "Neural", "Endothelium Lymphatic", "Macrophage", "Doublet suspected", "Tissue", "Unclassified"],
+  "source_labels_and_counts_unchanged": true,
+  "all_partition_members_unique": true
+}

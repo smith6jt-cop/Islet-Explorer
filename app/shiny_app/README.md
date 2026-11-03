@@ -1,5 +1,11 @@
 # Shiny App: Islet Area Distributions
 
+**Historical introduction and run example.** For the current selected-component
+app, deployment status and supported launch procedure, read
+[the workflow guide](../../docs/workflow_user_guide.md) and
+[the app user guide](../../docs/user_guide.md). The legacy workbook path and
+`shiny` directory example below do not select the current schema-5 release.
+
 Interactive Shiny app to explore islet area distributions across donor status (ND → Aab+ → T1D) with:
 
 - Band-region Islet_Markers: % positive per islet vs. size (mean ± SE)
