@@ -98,6 +98,13 @@ RUN set -eux; \
     /opt/islet-explorer-py/bin/python -c \
       'import anndata, scanpy, igraph, leidenalg, fa2_modified; print("python trajectory dependencies: ok")'
 
+# Reuse the licensed fonts in pinned Matplotlib. Minimal system fonts lack the
+# superscript marker signs; fontconfig registration covers ragg and Cairo alike.
+COPY deploy/install-raster-fonts.py /opt/islet-explorer-build/install-raster-fonts.py
+COPY deploy/tests/check-raster-fonts.R /opt/islet-explorer-build/check-raster-fonts.R
+RUN /opt/islet-explorer-py/bin/python /opt/islet-explorer-build/install-raster-fonts.py \
+      --validation-script /opt/islet-explorer-build/check-raster-fonts.R
+
 COPY --chown=shiny:shiny app/shiny_app /srv/islet-explorer/app/shiny_app
 COPY --chown=shiny:shiny app/docs/logo.png /srv/islet-explorer/app/docs/logo.png
 COPY deploy/shiny-server.conf /etc/shiny-server/shiny-server.conf

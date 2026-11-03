@@ -16,6 +16,8 @@
 !deploy/shiny-server/npm-shrinkwrap.json
 !deploy/tests/
 !deploy/tests/smoke-shiny-server.py
+!deploy/tests/check-raster-fonts.R
+!deploy/install-raster-fonts.py
 !deploy/install-production-r-deps.R
 !deploy/patch-duckdb-brotli.py
 !deploy/patches/
