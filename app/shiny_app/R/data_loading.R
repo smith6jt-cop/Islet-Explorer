@@ -392,7 +392,9 @@ prep_data <- function(master) {
     }
   }
 
-  # Group aggregates ("All macrophages", owner 2026-10-27) as derived proportion columns, before the pair table.
+  # Consolidate unresolved display subclasses without changing the stored measurements.
+  comp <- unclassified_collapse_comp(comp)
+  # Group aggregates as derived proportion columns, before the pair table.
   comp <- add_phenotype_aggregate_columns(comp)
 
   # Combined (core+peri) phenotype pair table. peri_prop_* columns sanitize

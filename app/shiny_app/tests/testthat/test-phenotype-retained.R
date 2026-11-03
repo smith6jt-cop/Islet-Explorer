@@ -15,7 +15,9 @@
   env$PHENOTYPE_COLORS <- c("Beta cell" = 1, "Endocrine" = 1, "Ductal" = 1,
                             "Macrophage" = 1, "CD8a Tcell" = 1, "T cell" = 1,
                             "Immune" = 1, "Acinar" = 1)
-  .load_defs("R/00_globals.R", c("PHENOTYPE_RETIRED", "phenotype_keep", "phenotype_retired",
+  .load_defs("R/00_globals.R", c("UNCLASSIFIED_KEYS", "UNCLASSIFIED_PARENT", "UNCLASSIFIED_RAW_TO_KEY", "unclassified_collapse",
+                                 "PHENOTYPE_DISPLAY_NAMES", "phenotype_text", "MACROPHAGE_LABEL_PATTERN",
+                                 "PHENOTYPE_RETIRED", "phenotype_keep", "phenotype_retired",
                                  "phenotype_is_kept", "phenotype_is_conflict", "phenotype_filter_conflict_columns",
                                  "phenotype_filter_rows", "phenotype_marker_definitions", "write_islet_csv"), env)
   .load_defs("R/spatial_helpers.R", "canonical_phenotype_order", env)
@@ -34,16 +36,18 @@ test_that("a top-marker root keeps ECAD+ (v17), other roots keep it retired", {
   expect_false(env$phenotype_is_kept("ECAD+"))
 })
 
-test_that("Conflict labels and current pan residuals cannot enter app choices or rows", {
+test_that("Conflict labels stay hidden while current pan residuals project into Unclassified", {
   env <- .retained_env()
   labels <- c("Conflict B/T", "Conflict_Endocrine/Exocrine", " conflict B/Myeloid", "Hematopoietic CD45+",
               "Hematopoietic CD45-", "T cell", "CD4 Tcell", "Tissue", "Unclassified", NA, "")
   expect_identical(env$phenotype_is_conflict(labels),
     c(TRUE, TRUE, TRUE, rep(FALSE, 8)))
-  expect_identical(env$phenotype_keep(labels), c("CD4 Tcell", "Tissue", "Unclassified"))
+  expect_identical(env$phenotype_keep(labels), labels[4:9])
   frame <- data.frame(phenotype = labels, source_row = seq_along(labels))
   out <- env$phenotype_filter_rows(frame)
-  expect_identical(out$source_row, 7:9)
+  expect_identical(out$source_row, 4:9)
+  expect_identical(out$phenotype, c(rep(unname(env$UNCLASSIFIED_KEYS["subtype"]), 3),
+    "CD4 Tcell", unname(env$UNCLASSIFIED_KEYS[c("tissue", "reassessed")])) )
   expect_identical(frame$phenotype, labels)
   expect_false(env$phenotype_is_conflict("NonConflict marker"))
 })
@@ -60,17 +64,24 @@ test_that("wide app exports omit Conflict columns without changing source totals
   expect_identical(names(frame), fields)
 })
 
-test_that("identity reference help lists retained leaves without the retired broad residual classes", {
+test_that("identity reference delegates the Unclassified family once to its shared explanation", {
   env <- .retained_env()
   .load_defs("R/00_globals.R", "identity_phenotype_definitions_ui", env)
   env$root_has_selected_endocrine <- function() TRUE
   env$identity_structure_text <- function() "Structure-qualified cell rules."
   env$phenotype_text <- identity
+  calls <- 0L
+  env$unclassified_help_ui <- function() {
+    calls <<- calls + 1L
+    shiny::tags$p("Shared Unclassified family explanation and cohort census")
+  }
   html <- as.character(env$identity_phenotype_definitions_ui())
   expect_false(grepl("Hematopoietic CD45", html, fixed = TRUE))
   expect_false(grepl("<strong>T cell</strong>", html, fixed = TRUE))
   expect_match(html, "<strong>CD4 Tcell</strong>", fixed = TRUE)
-  expect_match(html, "<strong>Unclassified</strong>", fixed = TRUE)
+  expect_false(grepl("<strong>Unclassified</strong>", html, fixed = TRUE))
+  expect_equal(calls, 1L)
+  expect_match(html, "Shared Unclassified family explanation and cohort census", fixed = TRUE)
 })
 
 test_that("the shared CSV writer projects phenotype fields and retains unrelated provenance", {
@@ -86,9 +97,10 @@ test_that("the shared CSV writer projects phenotype fields and retains unrelated
   lines <- readLines(path)
   expect_true(any(grepl("omitted 1 Conflict-labeled rows and 1 Conflict phenotype columns", lines, fixed = TRUE)))
   actual <- read.csv(path, comment.char = "#", check.names = FALSE)
-  expect_identical(actual$phenotype, c("Beta cell", "Tissue"))
+  expect_identical(actual$phenotype, c("Beta cell", "Unclassified \u2014 Insufficient typing evidence"))
+  expect_identical(actual$phenotype_source_label, c("Beta cell", "Tissue"))
   expect_identical(actual$label, c("Conflict review note", "source note"))
-  expect_identical(names(actual), c("phenotype", "label", "total_cells"))
+  expect_identical(names(actual), c("phenotype", "label", "total_cells", "phenotype_source_label"))
   expect_identical(frame, original)
 })
 
@@ -96,7 +108,8 @@ test_that("observed retired labels do not re-enter the canonical order", {
   env <- .retained_env()
   out <- env$canonical_phenotype_order(c("Acinar", "Unknown", "Beta cell", "Novel label"))
   expect_false(any(out %in% env$PHENOTYPE_RETIRED))
-  expect_equal(out, c("Beta cell", "Ductal", "Macrophage", "CD8a Tcell", "Novel label"))
+  expect_equal(out, c("Beta cell", "Ductal", "Macrophage", "CD8a Tcell",
+                      unname(env$UNCLASSIFIED_KEYS["subtype"]), "Novel label"))
 })
 
 test_that("protein rules compose parent constraints for retained labels only", {
@@ -112,7 +125,7 @@ test_that("protein rules compose parent constraints for retained labels only", {
     "T cell,CD8a Tcell,CD8a,,CD4,x",
     "all,Ductal,,CK19|panCK,INS,x"), rules)
   defs <- env$phenotype_marker_definitions(rules)
-  expect_equal(names(defs), c("Beta cell", "Ductal", "Macrophage", "CD8a Tcell"))
+  expect_equal(names(defs), c("Beta cell", "Ductal", "Macrophage", "CD8a Tcell", "T cell"))
   expect_equal(defs[["Beta cell"]], "INS+  —  GCG−, SST−")
   expect_equal(defs[["Macrophage"]],
                "any of CD68+ / CD163+  —  CD20−, CD3e−, INS−, GCG−, SST−")

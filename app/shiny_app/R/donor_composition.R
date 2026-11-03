@@ -2,7 +2,7 @@
 # The plot cards show one phenotype at a time; this card shows every donor's whole make-up: the proportion of each
 # retained phenotype among all the cells of the donor's selected objects, pooled (cells of the phenotype summed over
 # the objects, over all their cells), in the core, the 20 um peri-islet band or both. Cells of the general classes
-# (Endocrine, T cell, Immune: cells without a subtype) count in the total and are shown together as "No subtype", so
+# without a resolved lineage/subtype count in the total and form an Unclassified subclass, so
 # each bar sums to 100 % of the cells shown. Hidden QC-conflict cells are excluded from the displayed partition,
 # but remain in the original total_cells denominator. It follows the Data controls' object classes, donor status,
 # autoantibody, age, sex and
@@ -11,7 +11,7 @@
 DONOR_COMPOSITION_REGIONS <- c("Core" = "core", "Peri-islet band" = "peri", "Core + peri-islet" = "both")
 DONOR_COMPOSITION_ORDERS <- c("Donor status, then beta-cell proportion" = "beta",
                               "Donor status, then donor ID" = "id")
-DONOR_COMPOSITION_OTHER <- "No subtype"
+DONOR_COMPOSITION_OTHER <- unname(UNCLASSIFIED_KEYS[["subtype"]])
 
 # Leave out (owner, 2026-10-21: "the large proportions of endocrine obscure the other types for core, and exocrine does
 # the same thing in peri"): the phenotypes left out by default in each region; the bars then show the proportions of
@@ -69,15 +69,20 @@ donor_composition_table <- function(comp, pairs, region = c("core", "peri", "bot
   cells <- matrix(cells, nrow = nrow(comp), dimnames = list(NULL, pairs$label))
   ids <- as.character(comp$`Case ID`)
   status <- as.character(comp$`Donor Status`)
-  kept <- pairs$label %in% phenotype_partition_labels(pairs$label)
+  display_labels <- unclassified_collapse(pairs$label)
+  kept <- display_labels %in% phenotype_partition_labels(pairs$label)
   rows <- lapply(split(seq_len(nrow(comp)), ids), function(i) {
     tot <- sum(total[i])
     n <- colSums(cells[i, , drop = FALSE])
-    listed <- n[kept]
-    out <- data.frame(phenotype = c(names(listed), DONOR_COMPOSITION_OTHER),
-                      # Hidden QC-conflict cells must not silently become "No subtype".
-                      cells = c(unname(listed), max(tot - sum(listed) - sum(hidden[i]), 0)),
-                      stringsAsFactors = FALSE)
+    leaves <- unique(display_labels[kept])
+    listed <- stats::setNames(vapply(leaves, function(leaf) sum(n[kept & display_labels == leaf]), numeric(1)), leaves)
+    # Residuals on older roots retain their original accounting. On the current
+    # root the three broad source labels are explicit members of this leaf.
+    residual <- max(tot - sum(listed) - sum(hidden[i]), 0)
+    if (DONOR_COMPOSITION_OTHER %in% names(listed)) {
+      listed[[DONOR_COMPOSITION_OTHER]] <- listed[[DONOR_COMPOSITION_OTHER]] + residual
+    } else listed <- c(listed, stats::setNames(residual, DONOR_COMPOSITION_OTHER))
+    out <- data.frame(phenotype = names(listed), cells = unname(listed), stringsAsFactors = FALSE)
     out$case_id <- ids[i[1]]
     out$donor_status <- status[i[1]]
     out$total_cells <- tot
@@ -169,9 +174,9 @@ donor_composition_card_ui <- function(ns) {
         tags$p("Each donor's cell make-up: the proportion of each phenotype among all the cells of the donor's",
                " selected endocrine objects, pooled over the objects (a large object counts for more cells), in the",
                " chosen region. The squares above the bars give each donor's status."),
-        tags$p(tags$strong("No subtype"), " (gray) holds the cells typed only to a general class (Endocrine, T cell",
-               " or immune cells without a subtype). Hidden QC-conflict cells are excluded from these categories,",
-               " including No subtype. Each bar sums to 100% of the cells shown; hover also reports the proportion",
+        tags$p("The Unclassified family has four mutually exclusive subclasses describing why a more specific",
+               " identity was not assigned. Hidden QC-conflict cells are excluded from these categories.",
+               " Each bar sums to 100% of the cells shown; hover also reports the proportion",
                " of all original cells."),
         tags$p(tags$strong("Leave out."), " One or two classes hold nearly every cell (the endocrine types in the",
                " core, Exocrine in the band) and flatten the rest, so they are left out by default: the bars then",
@@ -182,7 +187,8 @@ donor_composition_card_ui <- function(ns) {
                " concern one measure, and this card shows every phenotype."),
         tags$p("The CSV gives each retained category's cell count and proportion of all original cells. It includes",
                " categories selected under Leave out. The original total_cells denominator includes hidden cells;",
-               " the CSV proportions therefore need not sum to 100%."))),
+               " the CSV proportions therefore need not sum to 100%."),
+        unclassified_help_ui())),
       div(style = "display: flex; align-items: flex-end; gap: 14px;",
         div(style = "width: 190px;", selectInput(ns("composition_region"), "Region", choices = DONOR_COMPOSITION_REGIONS,
                                                  selected = "core", width = "100%")),

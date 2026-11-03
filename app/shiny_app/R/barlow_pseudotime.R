@@ -44,7 +44,9 @@ barlow_features_path <- function() data_path("barlow_islet_features.csv")
 barlow_trajectory_features <- function(columns) {
   features <- grep("^(core|peri)_", columns, value = TRUE)
   labels <- sub("^(core|peri)_", "", features)
-  features[labels %in% phenotype_keep(labels)]
+  # Display consolidation must not add unresolved residuals to the fitted graph.
+  computational_retired <- c(PHENOTYPE_RETIRED, "T cell", "Hematopoietic CD45+", "Hematopoietic CD45-")
+  features[labels %in% phenotype_keep(labels) & !(labels %in% computational_retired)]
 }
 
 barlow_available <- function() {
@@ -200,10 +202,10 @@ barlow_ratio_types <- function(markers = character(0)) {
   # (00_globals.R); the CSV still carries them because `Endocrine` is the RATIO
   # DENOMINATOR even though it is not selectable as a numerator.
   # The macrophages merged for the checked markers (macrophage_collapse(); owner, 2026-10-27).
-  kept <- sort(unique(macrophage_collapse(phenotype_keep(all), markers)))
+  kept <- sort(unique(phenotype_collapse(phenotype_keep(all), markers)))
   # The group aggregates ("All macrophages"; owner, 2026-10-27), summed from all the members' counts, general
   # classes ("T cell", "Endocrine") included.
-  c(phenotype_aggregates_for(unique(macrophage_collapse(all, markers))), kept)
+  c(phenotype_aggregates_for(unique(phenotype_collapse(all, markers))), kept)
 }
 
 #' log1p(cells of `type` / endocrine cells in the islet core), per islet.

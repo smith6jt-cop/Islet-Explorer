@@ -26,7 +26,8 @@ Shiny.addCustomMessageHandler('islet_update_viewer_src', function(msg){
                " Choose a donor from Select Image; the file name gives donor status and case number."),
         tags$p(tags$strong("Navigating."),
                " Click inside the viewer first to enable pan, zoom and mouse-wheel zoom. Avivator's own panel sets",
-               " the channels, their colors and contrast.")),
+               " the channels, their colors and contrast."),
+        unclassified_help_ui()),
       uiOutput(ns("image_selector")))),
     uiOutput(ns("viewer_frame"))
   )

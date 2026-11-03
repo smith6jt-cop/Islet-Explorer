@@ -36,6 +36,7 @@ plot_main_ui <- function(id, extra_panel = NULL) {
                  " A phenotype proportion that is above zero in fewer than 1% of the objects is not offered: plotted,",
                  " it is a line of points at zero."),
           cell_typing_help(),
+          unclassified_help_ui(),
           tags$p(tags$strong("Filters."),
                  " Unchecking an autoantibody removes the Aab+ donors positive for it (ND and T1D donors are not",
                  " affected); IAA covers the IAA and micro-IAA assays. The diameter range keeps objects within it; the bin width sets the diameter bins of the",

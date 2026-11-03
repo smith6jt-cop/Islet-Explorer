@@ -13,7 +13,8 @@ make_backend_env <- function(root) {
                                        "phenotype_filter_conflict_columns", "phenotype_partition_labels",
                                        "is_phenotype_aggregate", "PHENOTYPE_GROUP_AGGREGATES",
                                        "is_macrophage_label", "MACROPHAGE_LABEL_PATTERN",
-                                       "MACROPHAGE_KEY_PATTERN")) {
+                                       "MACROPHAGE_KEY_PATTERN", "UNCLASSIFIED_KEYS", "UNCLASSIFIED_PARENT",
+                                       "UNCLASSIFIED_RAW_TO_KEY", "unclassified_collapse")) {
       eval(expr, envir = env)
     }
   }

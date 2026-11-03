@@ -730,7 +730,7 @@ server <- function(input, output, session) {
     if (show_cells) {
       cells <- load_islet_cells(info$case_id, info$islet_key)
       if (!is.null(cells)) {
-        cells$phenotype <- macrophage_collapse(cells$phenotype, macrophage_markers())
+        cells$phenotype <- phenotype_collapse(cells$phenotype, macrophage_markers())
         color_by <- input$drilldown_color_by %||% "phenotype"
         if (!islet_valid_scalar_choice(color_by, colnames(cells),
                                        "drilldown_color_invalid")) {
@@ -790,7 +790,7 @@ server <- function(input, output, session) {
     if (!show_peri && "cell_region" %in% colnames(cells)) {
       cells <- cells[cells$cell_region == "core", , drop = FALSE]
     }
-    cells$phenotype <- macrophage_collapse(cells$phenotype, macrophage_markers())
+    cells$phenotype <- phenotype_collapse(cells$phenotype, macrophage_markers())
     tryCatch(render_drilldown_summary(cells, palette = active_palette()), error = function(e) NULL)
   })
   output$islet_drilldown_summary <- renderPlot({ islet_drilldown_summary_plot() }, bg = "transparent")

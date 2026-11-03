@@ -31,7 +31,8 @@ trajectory_ui <- function(id) {
         tags$p(tags$strong("Y axis."),
                " Marker expression is the mean of the object's core cells on the cohort marker scale (0-1). Cell-type",
                " ratio is log(1 + cells / endocrine cells) for the chosen phenotype in the chosen region."),
-        cell_typing_help()),
+        cell_typing_help(),
+        unclassified_help_ui()),
       # The fitted cohort is every object with TRAJ_MIN_CELLS or more core cells (since 2026-10-18); the
       # status line reports how many objects were fitted.
       uiOutput(ns("traj_status")),
@@ -131,7 +132,8 @@ trajectory_ui <- function(id) {
             tags$p(tags$strong("Reading it."),
                    " The orientation is a modeling choice, and an ordering of objects along it does not show",
                    " disease progression; donor differences can shape it."),
-            linked_help)),
+            linked_help,
+            unclassified_help_ui())),
           trajectory_linked_plotly(ns("traj_scatter"), height = 850),
           plotlyOutput(ns("traj_heatmap"), height = 100)
         )
@@ -146,7 +148,8 @@ trajectory_ui <- function(id) {
                    " hormone-negative proportions of its core endocrine cells), with one neighbor graph for UMAP and",
                    " Leiden and no donor correction; the same layout as the Spatial tab's UMAPs. The upper UMAP is",
                    " colored by donor status, the lower by the feature chosen in the Data controls."),
-            linked_help)),
+            linked_help,
+            unclassified_help_ui())),
           h5("UMAP: Donor Status", style = "font-size: 13px; margin-top: 8px;"),
           trajectory_linked_plotly(ns("traj_umap_donor"), height = 320),
           div(style = "text-align: right; margin-top: 6px;",
@@ -177,7 +180,8 @@ trajectory_ui <- function(id) {
         div(class = "card", style = "padding: 15px; margin-bottom: 20px;",
           card_title_help("Multi-Feature Heatmap", style = "color: var(--islet-heading); margin: 0 0 8px;",
             help = list(tags$p("Pseudotime is cut into equal bins; each row is a feature's bin means, standardized",
-                               " across bins and clipped at \u00b12.5."))),
+                               " across bins and clipped at \u00b12.5."),
+                        unclassified_help_ui())),
           fluidRow(
             column(8, uiOutput(ns("multi_heatmap_marker_selector"))),
             column(4, sliderInput(ns("multi_heatmap_nbins"), "Number of bins:", min = 10, max = 40, value = 20, step = 5))
@@ -204,7 +208,8 @@ trajectory_ui <- function(id) {
             help = list(tags$p("Barlow et al.'s PAGA-initialized force-directed layout of the same graph (cosine,",
                                " 15 neighbors, Leiden resolution 1). Each point is an object; the axes are layout",
                                " coordinates with no units, so only relative position means anything. It is built on",
-                               " request, on the same objects as the pseudotime."))),
+                               " request, on the same objects as the pseudotime."),
+                        unclassified_help_ui())),
           checkboxInput(ns("paga_show_layout"), "Build and show PAGA layout",
                         value = FALSE),
           conditionalPanel(

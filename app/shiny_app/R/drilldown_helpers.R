@@ -183,6 +183,17 @@ PHENOTYPE_COLORS_HIGH_CONTRAST <- with_top_marker_family(PHENOTYPE_COLORS_HIGH_C
 PHENOTYPE_COLORS_COLORBLIND <- with_top_marker_family(PHENOTYPE_COLORS_COLORBLIND)
 PHENOTYPE_COLORS_MAX_DISTINCT <- with_top_marker_family(PHENOTYPE_COLORS_MAX_DISTINCT)
 
+# The unresolved family uses consistent, distinct muted colors in every palette.
+with_unclassified_family <- function(pal) {
+  pal[unname(UNCLASSIFIED_KEYS)] <- c("#9B9B9B", "#BC9BCB", "#8AA9BB", "#CC9A74")
+  pal[[UNCLASSIFIED_PARENT]] <- "#9B9B9B"
+  pal
+}
+PHENOTYPE_COLORS <- with_unclassified_family(PHENOTYPE_COLORS)
+PHENOTYPE_COLORS_HIGH_CONTRAST <- with_unclassified_family(PHENOTYPE_COLORS_HIGH_CONTRAST)
+PHENOTYPE_COLORS_COLORBLIND <- with_unclassified_family(PHENOTYPE_COLORS_COLORBLIND)
+PHENOTYPE_COLORS_MAX_DISTINCT <- with_unclassified_family(PHENOTYPE_COLORS_MAX_DISTINCT)
+
 # ── Palette registry and accessor ────────────────────────────────────────
 PHENOTYPE_PALETTES <- list(
   "Original"             = PHENOTYPE_COLORS,
@@ -268,6 +279,7 @@ render_islet_drilldown_plot <- function(info, cells, color_by = "phenotype", sho
   # Apply the presentation policy to points, not just the palette. Keep the
   # loaded scientific table intact for original-denominator counts elsewhere.
   if ("phenotype" %in% names(cells)) {
+    cells$phenotype <- unclassified_collapse(cells$phenotype)
     visible <- if (color_by == "phenotype") phenotype_is_kept(cells$phenotype) else
       !phenotype_is_conflict(cells$phenotype)
     cells <- cells[visible, , drop = FALSE]
@@ -346,7 +358,8 @@ render_drilldown_summary <- function(cells, palette = PHENOTYPE_COLORS) {
     return(NULL)
   }
 
-  # General classes are not listed beside their subtypes (PHENOTYPE_RETIRED).
+  cells$phenotype <- unclassified_collapse(cells$phenotype)
+  # Display leaves are mutually exclusive; raw records in the loader stay intact.
   cells <- cells[phenotype_is_kept(cells$phenotype), , drop = FALSE]
   if (nrow(cells) == 0) return(NULL)
 

@@ -64,7 +64,7 @@ canonical_phenotype_order <- function(extra = character(0)) {
   # Extras pass the same retired-label gate; otherwise a retired label observed
   # in the data (absent from `canon` because it was gated out) came back here.
   extra <- phenotype_keep(unique(as.character(extra[!is.na(extra) & nzchar(extra)])))
-  c(canon, sort(setdiff(extra, canon)))
+  unique(unclassified_collapse(c(canon, sort(setdiff(extra, canon)))))
 }
 
 #' Load per-donor tissue cells with caching
@@ -151,7 +151,7 @@ cell_distance_available <- function() {
 .cd_using_parquet <- function() file.exists(CELL_DISTANCE_PARQUET_PATH)
 
 .cd_kept_clause <- function(con = islet_duckdb_connection()) {
-  retired <- PHENOTYPE_RETIRED %||% character(0)
+  retired <- phenotype_retired() %||% character(0)
   if (!length(retired)) return("TRUE")
   vals <- paste(vapply(retired, islet_sql_string, character(1), con = con), collapse = ", ")
   paste0("(phenotype IS NULL OR phenotype NOT IN (", vals, "))")

@@ -186,7 +186,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       cells <- load_donor_tissue(donor_id)
       # macrophages merged for the checked markers (owner, 2026-10-27)
       if (!is.null(cells) && "phenotype" %in% names(cells))
-        cells$phenotype <- macrophage_collapse(cells$phenotype, macrophage_markers())
+        cells$phenotype <- phenotype_collapse(cells$phenotype, macrophage_markers())
       cells
     })
 
@@ -237,7 +237,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
     pheno_choice_info <- reactive({
       cells <- tryCatch(donor_cells(), error = function(e) NULL)
       observed <- if (is.null(cells)) character(0) else cells$phenotype
-      phenos <- phenotype_partition_labels(macrophage_collapse(canonical_phenotype_order(observed), macrophage_markers()))
+      phenos <- phenotype_partition_labels(phenotype_collapse(canonical_phenotype_order(observed), macrophage_markers()))
       counts <- table(factor(observed, levels = phenos))
       list(phenos = phenos, counts = counts)
     })
@@ -1249,7 +1249,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       card_style <- "padding: 15px; margin-bottom: 15px; overflow: visible; height: 100%; box-sizing: border-box;"
       card_title <- function(txt, ...) div(style = "display: flex; align-items: center; gap: 4px; margin: 0 0 8px 0; align-self: center;",
         h5(txt, style = "font-size: 15px; font-weight: 600; margin: 0;"),
-        card_help(paste(txt, "help"), ...))
+        card_help(paste(txt, "help"), ..., unclassified_help_ui()))
       ctrl_row   <- "display: flex; gap: 6px 18px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 4px;"
       dl_csv <- function(id) div(style = "margin-top: 6px;",
         downloadButton(ns(id), "Download CSV", style = "font-size: 12px; padding: 3px 10px;"))
@@ -1303,7 +1303,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           ),
           column(4,
             div(class = "card", style = card_style,
-              card_title("Immune gradient around islets",
+              card_title("Cell distribution around islets",
                 tags$p("For each donor and each distance from the nearest endocrine object's border, the chosen",
                        " cells' proportion of all cells there, divided by the same proportion in the donor's own tissue (its",
                        " cells outside every endocrine object and its band). 1, the dashed line, is the donor's",
@@ -1314,7 +1314,8 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                        " counts; a point resting on fewer than 20 of the chosen cells is faded, as one donor's B Cell or",
                        " T Cell CD4⁺ cells in a bin are often only a few."),
                 tags$p("Dividing by each donor's own tissue separates gathering at islets from a donor having more",
-                       " immune cells everywhere. It reads per-cell data, so the Endocrine objects selector does",
+                       " selected cells everywhere. The All immune cells option retains its original immune definition;",
+                       " Unclassified choices use their specified source populations. It reads per-cell data, so the Endocrine objects selector does",
                        " not apply.")),
               div(style = ctrl_row,
                 selectInput(ns("gradient_phenotype"), "Cells", choices = isolate(gradient_choices()), selected = "all",
@@ -1332,7 +1333,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           div(class = "card", style = card_style,
             div(style = ctrl_row,
               card_title("Phenotype composition & enrichment",
-                tags$p("Every immune phenotype at once (and, from v15, the cells named only by their top marker), in the core or the 20 \u00b5m band. The left chart summarizes",
+                tags$p("The selected phenotypes, including the Unclassified subclasses, in the core or the 20 \u00b5m band. The left chart summarizes",
                        " each donor status across its donors; the heatmap shows each donor, grouped by status, so the",
                        " spread behind each bar is visible. Each donor's value is the mean over its objects."),
                 tags$p(tags$strong("Enrichment z"),
@@ -1384,7 +1385,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                        " zero-anchored at the islet border), spanning islet interior to bulk tissue. Negative = inside",
                        " islet, positive = outside; the dashed line marks the border. Pooled per cell (descriptive)",
                        " \u2014 every cell counts once, so donors with more cells weigh more. For a donor-fair view see",
-                       " Immune gradient around islets."),
+                       " Cell distribution around islets."),
                 tags$p(tags$strong("Group by"),
                        " Phenotype lists the immune phenotypes (the endocrine and exocrine classes are left out);",
                        " Marker+ lists every panel marker, all 31 being measured in every donor, a cell counting as",
@@ -1475,7 +1476,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       # Phenotype mode lists the immune phenotypes (owner, 2026-10-20: no endocrine or exocrine classes); marker
       # mode every marker the data root flags (all 31 panel markers from v8).
       if (identical(input$dist_mode %||% "phenotype", "marker")) cell_distance_markers()
-      else phenotype_partition_labels(macrophage_collapse(setdiff(cell_distance_phenotypes(), NON_IMMUNE_LABELS), macrophage_markers()))
+      else phenotype_partition_labels(phenotype_collapse(setdiff(cell_distance_phenotypes(), NON_IMMUNE_LABELS), macrophage_markers()))
     })
     observeEvent(list(input$dist_mode, macrophage_markers()), {
       mode <- input$dist_mode %||% "phenotype"
@@ -1646,7 +1647,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
 
     GRADIENT_MIN_CELLS <- 20
     # The immune phenotypes in their groups (owner, 2026-10-27), each group's aggregate first where it has two or
-    # more phenotypes ("All T cells" counts the T cells without a subtype too). The macrophages are one label on the
+    # more phenotypes. Unresolved lineage/subtype cells are in the Unclassified family. The macrophages are one label on the
     # frozen root and twelve marker-profile labels from v14.
     # The macrophages merged for the checked markers (owner, 2026-10-27).
     gradient_phenotypes <- reactive({
@@ -1656,9 +1657,9 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                                              macrophage_markers())))
       if (!any(is_macrophage_label(listed))) listed <- c(listed, "Macrophage")
       if (root_cd45_is_rule_label()) listed <- c(listed, CD45_RULE_LABEL)     # the CD45 rule's class (v16)
-      if ("Hematopoietic CD45+" %in% root) listed <- c(listed, "Hematopoietic CD45+")
+      listed <- c(listed, intersect(unclassified_collapse(root), unname(UNCLASSIFIED_KEYS)))
       listed <- phenotype_partition_labels(listed)
-      c(phenotype_aggregates_for(c(listed, "T cell")), listed)
+      c(phenotype_aggregates_for(listed), listed)
     })
     gradient_choices <- reactive(c(list("All immune cells" = "all"), phenotype_grouped_choices(gradient_phenotypes())))
     gradient_labels <- reactive(c("all" = "All immune cells",
@@ -1674,9 +1675,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
     gradient_data <- reactive({
       choice <- input$gradient_phenotype %||% "all"
       if (!(choice %in% unlist(gradient_choices(), use.names = FALSE))) choice <- "all"
-      labels <- if (identical(choice, "all")) IMMUNE_LABELS
-                else if (is_phenotype_aggregate(choice)) phenotype_aggregate_members(choice, IMMUNE_LABELS)
-                else choice
+      labels <- if (identical(choice, "all")) IMMUNE_LABELS else phenotype_members(choice)
       g <- immune_gradient(donor_distance_profile(), labels)
       req(g, nrow(g) > 0)
       g <- g[as.character(g$status) %in% (input$groups %||% STATUS_ORDER), , drop = FALSE]
@@ -1752,7 +1751,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                      cells = g$cells, chosen_cells = g$count, proportion = g$share, donor_tissue_proportion = g$tissue_share,
                      ratio_to_own_tissue = g$value, stringsAsFactors = FALSE)
         write_islet_csv(file, out, islet_csv_header(
-          "Spatial — immune gradient around endocrine objects, per donor",
+          "Spatial — cell distribution around endocrine objects, per donor",
           paste("Cells:", unname(gradient_labels()[input$gradient_phenotype %||% "all"])),
           "Distance: from the nearest endocrine object's border (negative = inside, binned as Core)",
           "Own tissue: the donor's cells outside every endocrine object and its 20 um band",

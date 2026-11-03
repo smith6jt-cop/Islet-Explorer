@@ -12,7 +12,8 @@
               "PHENOTYPE_GROUP_ORDER", "PHENOTYPE_GROUP_AGGREGATES", "phenotype_group", "is_phenotype_aggregate",
               "phenotype_aggregate_members", "phenotype_aggregates_for", "phenotype_groups_split",
               "phenotype_grouped_choices", "phenotype_group_checkboxes", "add_phenotype_aggregate_columns")
-  wanted <- c(wanted, "PHENOTYPE_RETIRED", "phenotype_retired", "phenotype_keep", "phenotype_is_kept",
+  wanted <- c(wanted, "UNCLASSIFIED_KEYS", "UNCLASSIFIED_PARENT", "UNCLASSIFIED_RAW_TO_KEY",
+              "unclassified_collapse", "phenotype_collapse", "unclassified_collapse_comp", "PHENOTYPE_RETIRED", "phenotype_retired", "phenotype_keep", "phenotype_is_kept",
               "phenotype_is_conflict", "phenotype_partition_labels")
   for (e in exprs) {
     if (is.call(e) && identical(e[[1]], as.name("<-")) && as.character(e[[2]]) %in% wanted) eval(e, env)
@@ -41,12 +42,12 @@ test_that("additive choices contain leaves once while single-metric choices reta
   leaves <- c("Beta cell", "Alpha cell", "CD4 Tcell", env$MACROPHAGE_LABELS[1:2])
   labels <- c("All endocrine cells", "All T cells", "All macrophages", "Macrophage", leaves,
               "T cell", "Hematopoietic CD45+", "Hematopoietic CD45-", "Conflict B/T", leaves[1])
-  expect_identical(env$phenotype_partition_labels(labels), leaves)
+  expect_identical(env$phenotype_partition_labels(labels), c(leaves, unname(env$UNCLASSIFIED_KEYS["subtype"])))
   html <- as.character(env$phenotype_group_checkboxes("exclusive", labels))
   expect_false(grepl('value="All ', html, fixed = TRUE))
   expect_false(grepl('value="Macrophage"', html, fixed = TRUE))
   expect_false(grepl("Conflict|Hematopoietic", html))
-  expect_equal(lengths(regmatches(html, gregexpr('name="exclusive"', html))), length(leaves))
+  expect_equal(lengths(regmatches(html, gregexpr('name="exclusive"', html))), length(leaves) + 1L)
   single <- unname(unlist(env$phenotype_grouped_choices(labels)))
   expect_true(all(c("All endocrine cells", "All T cells", "All macrophages") %in% single))
   expect_false(any(c("Macrophage", "T cell", "Conflict B/T") %in% single))
@@ -61,7 +62,7 @@ test_that("root-bound parent queries include residual source members once withou
   expect_setequal(env$phenotype_members(c("All T cells", "CD4 Tcell", "T cell")), raw[5:7])
   expect_setequal(env$phenotype_members(c("Macrophage", "All macrophages", env$MACROPHAGE_LABELS[1])), raw[8:9])
   expect_length(env$phenotype_members("Conflict T/Myeloid"), 0)
-  expect_false("T cell" %in% env$phenotype_keep(raw))
+  expect_true("T cell" %in% env$phenotype_keep(raw))
   expect_false("Conflict T/Myeloid" %in% unlist(env$phenotype_grouped_choices(raw)))
 })
 
@@ -71,7 +72,8 @@ test_that("display names put the broad name first, with every marker sign a supe
                                     "CD8a Tcell", "CD4 Tcell", "T cell", "B cell", "Macrophage", "Immune", "Exocrine",
                                     "All macrophages", "SMA+", NA)),
                c("Macrophage CD68\u207aCD163\u207bLGALS3\u207aCD4\u207b", "Endocrine CHGA\u207a hormone-negative",
-                 "Endocrine Beta", "T Cell CD8a\u207a", "T Cell CD4\u207a", "T Cell", "B Cell", "Macrophage",
+                 "Endocrine Beta", "T Cell CD8a\u207a", "T Cell CD4\u207a",
+                 "Unclassified \u2014 Lineage or subtype unresolved", "B Cell", "Macrophage",
                  "Immune", "Exocrine", "Macrophage (all)", "SMA\u207a", NA))
   ch <- env$phenotype_choices_named(c("Beta cell", "CD68-CD163+Macrophage_LGALS3-CD4+"))
   expect_equal(unname(ch), c("Beta cell", "CD68-CD163+Macrophage_LGALS3-CD4+"))
@@ -92,7 +94,7 @@ test_that("phenotypes are grouped, each group's aggregate first; one-label group
   expect_equal(names(env$phenotype_groups_split(labels)), c("Endocrine", "T Cell", "B Cell", "Macrophage", "Other"))
   aggs <- env$phenotype_aggregates_for(c(labels, "T cell"))
   expect_setequal(aggs, c("All endocrine cells", "All T cells", "All macrophages"))
-  expect_setequal(env$phenotype_aggregate_members("All T cells", c(labels, "T cell")), c("CD8a Tcell", "CD4 Tcell", "T cell"))
+  expect_setequal(env$phenotype_aggregate_members("All T cells", c(labels, "T cell")), c("CD8a Tcell", "CD4 Tcell"))
   ch <- env$phenotype_grouped_choices(c(aggs, labels), prefix = "Core \u2014 ")
   expect_equal(names(ch)[1], "Core \u2014 Endocrine")
   expect_true(is.list(ch[["Core \u2014 B Cell"]]))
@@ -120,7 +122,7 @@ test_that("aggregate columns sum the members' proportions of the same cells", {
                      check.names = FALSE)
   out <- env$add_phenotype_aggregate_columns(comp)
   expect_equal(out[["prop_All T cells"]], c(0.3, NA))
-  expect_equal(out[["peri_prop_All_T_cells"]], c(0.05, 0.1))
+  expect_equal(out[["peri_prop_All_T_cells"]], c(0.05, 0))
 })
 
 test_that("macrophages merge by the checked markers; a merged category expands back to its data labels", {

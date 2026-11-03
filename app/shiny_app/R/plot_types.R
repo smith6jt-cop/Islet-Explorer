@@ -548,5 +548,6 @@ plot_types_help <- function() {
                   " selected on",
                   " another tab is ringed here too."),
     shiny::tags$p("The CSV button exports what the card shows: binned summaries, per-object values or one row per",
-                  " donor, as the type plots."))
+                  " donor, as the type plots."),
+    unclassified_help_ui())
 }

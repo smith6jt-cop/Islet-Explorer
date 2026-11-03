@@ -510,15 +510,56 @@ islet_warm_png <- function() {
 # @param header  Character vector of provenance lines (the "# " is added here).
 write_islet_csv <- function(file, df, header = character(0)) {
   if (is.data.frame(df)) {
+    # Labels are a presentation projection, not an aggregation operation. In
+    # particular, z scores, distances and fitted features must never be summed
+    # here just because two old labels now belong to the same display leaf.
+    prefix_pattern <- "^(combined_prop_|peri_prop_|peri_count_|enrich_z_|min_dist_|prop_|core_|peri_|count_|n_)"
+    decode <- function(x) {
+      x <- as.character(x)
+      encoded <- !is.na(x) & grepl(prefix_pattern, x, perl = TRUE)
+      label <- x
+      label[encoded] <- gsub("_", " ", gsub("plus", "+", sub(prefix_pattern, "", x[encoded], perl = TRUE),
+                                            fixed = TRUE), fixed = TRUE)
+      list(label = label, prefix = ifelse(encoded, sub(paste0("(", prefix_pattern, ").*$"), "\\1", x, perl = TRUE), ""))
+    }
+    project <- function(x) {
+      parts <- decode(x)
+      key <- unclassified_collapse(parts$label)
+      hit <- !is.na(key) & key %in% c(unname(UNCLASSIFIED_KEYS), UNCLASSIFIED_PARENT)
+      out <- as.character(x)
+      out[hit] <- paste0(parts$prefix[hit], phenotype_text(key[hit]))
+      out
+    }
     before <- c(nrow(df), ncol(df))
     df <- phenotype_filter_conflict_columns(df)
-    for (column in intersect(c("phenotype", "cell_type", "Phenotype", "Cell type"), names(df))) {
-      df <- df[!phenotype_is_conflict(df[[column]]), , drop = FALSE]
+    label_columns <- intersect(c("phenotype", "cell_type", "Phenotype", "Cell type", "item", "feature_name"), names(df))
+    for (column in label_columns) {
+      df <- df[!phenotype_is_conflict(decode(df[[column]])$label), , drop = FALSE]
     }
     omitted <- before - c(nrow(df), ncol(df))
     if (any(omitted > 0)) header <- c(header, sprintf(
       "Display projection: omitted %d Conflict-labeled rows and %d Conflict phenotype columns; source records are unchanged.",
       omitted[1], omitted[2]))
+    for (column in label_columns) {
+      original <- as.character(df[[column]])
+      projected <- project(original)
+      if (!identical(projected, original)) {
+        source_column <- paste0(column, "_source_label")
+        while (source_column %in% names(df)) source_column <- paste0(source_column, "_original")
+        df[[source_column]] <- original
+        df[[column]] <- projected
+      }
+    }
+    original_names <- names(df)
+    display_names <- project(original_names)
+    if (anyDuplicated(display_names)) stop(
+      "Unclassified export headers overlap; prepare mutually exclusive display metrics before export. Values were not combined.",
+      call. = FALSE)
+    renamed <- which(display_names != original_names)
+    if (length(renamed)) header <- c(header, paste0("Source column: ", original_names[renamed], " -> ", display_names[renamed]))
+    names(df) <- display_names
+    if (length(renamed) || any(grepl("_source_label(_original)*$", names(df)))) header <- c(header,
+      "Unclassified names are display groups; source-label columns and source-column mappings preserve their inputs. Rows and measured values are not merged or recomputed at export; source data are unchanged.")
   }
   con <- base::file(file, open = "w", encoding = "UTF-8")
   on.exit(close(con), add = TRUE)
@@ -777,16 +818,109 @@ macrophage_collapse <- function(labels, markers = character(0)) {
   labels
 }
 
+# Presentation-only leaves: raw identity records remain unchanged. The parent has
+# its own key so it cannot be confused with the literal raw Unclassified label.
+UNCLASSIFIED_KEYS <- c(
+  tissue = "Unclassified insufficient typing evidence",
+  reassessed = "Unclassified insufficient evidence after reassessment",
+  subtype = "Unclassified lineage or subtype unresolved",
+  competing = "Unclassified competing lineage or compartment signals")
+UNCLASSIFIED_PARENT <- "All unclassified cells"
+UNCLASSIFIED_RAW_TO_KEY <- stats::setNames(
+  unname(UNCLASSIFIED_KEYS[c("tissue", "reassessed", "subtype", "subtype", "subtype", "competing")]),
+  c("Tissue", "Unclassified", "Hematopoietic CD45+", "Hematopoietic CD45-", "T cell", "Doublet suspected"))
+
+#' Project raw labels to mutually exclusive Unclassified leaves; other labels and NA stay unchanged.
+#' No subtype is a derived alias, not another source population to add to its members.
+unclassified_collapse <- function(labels) {
+  labels <- as.character(labels)
+  hit <- !is.na(labels) & labels %in% names(UNCLASSIFIED_RAW_TO_KEY)
+  labels[hit] <- unname(UNCLASSIFIED_RAW_TO_KEY[labels[hit]])
+  labels[!is.na(labels) & labels == "No subtype"] <- UNCLASSIFIED_KEYS[["subtype"]]
+  labels
+}
+
+#' The app's cell-label projection, including the selected macrophage resolution.
+phenotype_collapse <- function(labels, markers = character(0)) {
+  unclassified_collapse(macrophage_collapse(labels, markers))
+}
+
+#' Merge Unclassified object metrics from their original members, without adding aliases twice.
+#' Proportions/counts sum, enrichment is recomputed from observed/expected counts, distance is the nearest member.
+unclassified_collapse_comp <- function(comp) {
+  if (is.null(comp) || !is.data.frame(comp)) return(comp)
+  original <- comp
+  safe <- function(x) gsub("+", "plus", gsub(" ", "_", x, fixed = TRUE), fixed = TRUE)
+  families <- c("prop_", "peri_prop_", "peri_count_", "enrich_z_", "min_dist_")
+  field <- function(prefix, labels) paste0(prefix, if (prefix == "prop_") labels else safe(labels))
+  num <- function(col) if (col %in% names(original)) suppressWarnings(as.numeric(original[[col]])) else rep(NA_real_, nrow(original))
+  total <- function(cols) {
+    values <- do.call(cbind, lapply(cols, num))
+    out <- rowSums(values, na.rm = TRUE)
+    out[rowSums(is.finite(values)) == 0] <- NA_real_
+    out
+  }
+  labels <- sub("^prop_", "", grep("^prop_", names(original), value = TRUE))
+  for (key in c(unname(UNCLASSIFIED_KEYS), UNCLASSIFIED_PARENT)) {
+    parent <- identical(key, UNCLASSIFIED_PARENT)
+    if (parent) {
+      original <- comp
+      labels <- sub("^prop_", "", grep("^prop_", names(original), value = TRUE))
+    }
+    raw <- if (parent) unname(UNCLASSIFIED_KEYS) else names(UNCLASSIFIED_RAW_TO_KEY)[UNCLASSIFIED_RAW_TO_KEY == key]
+    aliases <- c(key, if (identical(key, UNCLASSIFIED_KEYS[["subtype"]])) "No subtype")
+    members <- intersect(raw, labels)
+    if (!length(members)) members <- intersect(aliases, labels)[1L]
+    members <- members[!is.na(members)]
+    if (!length(members)) next
+    # An existing projection is sufficient when no raw source columns remain.
+    # If both are present, prefer raw members and replace the projection.
+    for (prefix in c("prop_", "peri_prop_", "peri_count_")) {
+      cols <- intersect(field(prefix, members), names(original))
+      if (length(cols)) comp[[field(prefix, key)]] <- total(cols)
+    }
+    zcols <- field("enrich_z_", members)
+    if (any(zcols %in% names(original))) {
+      observed <- expected <- rep(0, nrow(original))
+      complete <- rep(TRUE, nrow(original))
+      for (member in members) {
+        z <- num(field("enrich_z_", member)); n <- num(field("peri_count_", member))
+        valid <- is.finite(z) & is.finite(n) & n >= 0
+        root <- (-z + sqrt(pmax(z^2 + 4 * n, 0))) / 2
+        expected <- expected + ifelse(valid, root^2, 0)
+        observed <- observed + ifelse(valid, n, 0)
+        complete <- complete & valid
+      }
+      comp[[field("enrich_z_", key)]] <- ifelse(complete & expected > 0,
+        (observed - expected) / sqrt(expected), NA_real_)
+    }
+    distances <- intersect(field("min_dist_", members), names(original))
+    if (length(distances)) {
+      values <- lapply(distances, num)
+      nearest <- do.call(pmin, c(values, na.rm = TRUE))
+      nearest[!is.finite(nearest)] <- NA_real_
+      comp[[field("min_dist_", key)]] <- nearest
+    }
+    drop <- if (parent) character(0) else unlist(lapply(families, field, labels = c(raw, aliases)), use.names = FALSE)
+    destinations <- vapply(families, field, character(1), labels = key)
+    comp <- comp[, setdiff(names(comp), setdiff(drop, destinations)), drop = FALSE]
+  }
+  comp
+}
+
 #' The data labels behind each label: a key's macrophage labels, a group aggregate's members, else the label itself.
 phenotype_members <- function(labels) {
   raw <- root_phenotype_labels()
   if (is.null(raw)) raw <- c("Beta cell", "Alpha cell", "Delta cell", "CHGA+ hormone-negative", "Endocrine",
-                            "CD8a Tcell", "CD4 Tcell", "T cell", "Macrophage", MACROPHAGE_LABELS)
+                            "CD8a Tcell", "CD4 Tcell", "T cell", "Macrophage", MACROPHAGE_LABELS,
+                            names(UNCLASSIFIED_RAW_TO_KEY))
   raw <- unique(as.character(raw[!phenotype_is_conflict(raw)]))
   out <- character(0)
   for (l in as.character(labels[!is.na(labels) & !phenotype_is_conflict(labels)])) {
     out <- c(out, if (is_phenotype_aggregate(l)) {
       phenotype_aggregate_members(l, raw)
+    } else if (l %in% unname(UNCLASSIFIED_KEYS) || identical(l, "No subtype")) {
+      raw[unclassified_collapse(raw) == unclassified_collapse(l)]
     } else if (identical(l, "Macrophage")) {
       raw[is_macrophage_label(raw)]
     } else if (grepl(MACROPHAGE_KEY_PATTERN, l)) {
@@ -902,7 +1036,12 @@ PHENOTYPE_DISPLAY_NAMES <- c(
   # the frozen typing's CSV forms (PHENOTYPE_ALIASES)
   "CD8 T cell" = "T Cell CD8+", "CD4 T cell" = "T Cell CD4+",
   # the group aggregates (PHENOTYPE_GROUP_AGGREGATES)
-  "All endocrine cells" = "Endocrine (all)", "All T cells" = "T Cell (all)", "All macrophages" = "Macrophage (all)")
+  "All endocrine cells" = "Endocrine (all)", "All T cells" = "T Cell (all)", "All macrophages" = "Macrophage (all)",
+  "All unclassified cells" = "Unclassified (all)",
+  "Unclassified insufficient typing evidence" = "Unclassified \u2014 Insufficient typing evidence",
+  "Unclassified insufficient evidence after reassessment" = "Unclassified \u2014 Insufficient evidence after reassessment",
+  "Unclassified lineage or subtype unresolved" = "Unclassified \u2014 Lineage or subtype unresolved",
+  "Unclassified competing lineage or compartment signals" = "Unclassified \u2014 Competing lineage/compartment signals")
 
 #' The display text of phenotype labels (PHENOTYPE_DISPLAY_NAMES; a marker-profile macrophage label becomes
 #' "Macrophage CD68+CD163-LGALS3+CD4-"), every marker's + and - as superscripts (U+207A, U+207B): a + always, a - that
@@ -910,7 +1049,7 @@ PHENOTYPE_DISPLAY_NAMES <- c(
 #' Labels not listed pass unchanged apart from the superscripts. Vectorized; keeps names; NA stays NA.
 phenotype_text <- function(x) {
   if (is.null(x) || !length(x)) return(x)
-  out <- as.character(x)
+  out <- unclassified_collapse(x)
   ok <- !is.na(out)
   named <- ok & out %in% names(PHENOTYPE_DISPLAY_NAMES)
   out[named] <- unname(PHENOTYPE_DISPLAY_NAMES[out[named]])
@@ -924,7 +1063,7 @@ phenotype_text <- function(x) {
 
 #' Named choices for a selector: values stay the data labels, names are their display text.
 phenotype_choices_named <- function(labels) {
-  labels <- phenotype_keep(labels)
+  labels <- unique(unclassified_collapse(phenotype_keep(labels)))
   stats::setNames(labels, phenotype_text(labels))
 }
 
@@ -937,11 +1076,11 @@ phenotype_label_html <- function(x) lapply(phenotype_text(x), function(t) htmlto
 # None per group and for the whole list (phenotype_group_checkboxes(), www/phenotype-groups.js), a single choice as
 # option groups (phenotype_grouped_choices()), with the group's aggregate ("All macrophages") where a selector can
 # plot one. Labels a root lacks simply do not appear.
-PHENOTYPE_GROUP_ORDER <- c("Endocrine", "T Cell", "B Cell", "Macrophage", "Immune", "Other", "Top marker only")
+PHENOTYPE_GROUP_ORDER <- c("Endocrine", "T Cell", "B Cell", "Macrophage", "Immune", "Unclassified", "Other", "Top marker only")
 # A group's aggregate: every cell of the group, its general class included ("Endocrine", "T cell"), which every total
-# counts. Offered only where the root names macrophages by marker profile (root_has_marker_profile_labels()).
+# counts. The Unclassified parent also applies to roots without macrophage profiles.
 PHENOTYPE_GROUP_AGGREGATES <- c("Endocrine" = "All endocrine cells", "T Cell" = "All T cells",
-                                "Macrophage" = "All macrophages")
+                                "Macrophage" = "All macrophages", "Unclassified" = "All unclassified cells")
 
 #' The group of each phenotype label (an aggregate belongs to its own group); "Other" for the rest.
 phenotype_group <- function(x) {
@@ -955,6 +1094,7 @@ phenotype_group <- function(x) {
   # "Immune": the older roots' general class (retired from selectors) and, from v16, the CD45 rule's "CD45+".
   out[x %in% c("Immune", "Hematopoietic CD45+", if (root_cd45_is_rule_label()) CD45_RULE_LABEL)] <- "Immune"
   if (root_has_top_marker_labels()) out[x %in% top_marker_labels()] <- "Top marker only"
+  out[unclassified_collapse(x) %in% c(unname(UNCLASSIFIED_KEYS), UNCLASSIFIED_PARENT)] <- "Unclassified"
   out
 }
 
@@ -965,25 +1105,33 @@ is_phenotype_aggregate <- function(x) as.character(x) %in% PHENOTYPE_GROUP_AGGRE
 phenotype_aggregate_members <- function(aggregate, labels) {
   group <- names(PHENOTYPE_GROUP_AGGREGATES)[match(aggregate, PHENOTYPE_GROUP_AGGREGATES)]
   labels <- unique(as.character(labels))
-  labels[!is.na(labels) & !phenotype_is_conflict(labels) &
+  labels <- labels[!is.na(labels) & !phenotype_is_conflict(labels) &
            phenotype_group(labels) %in% group & !is_phenotype_aggregate(labels)]
+  if (identical(aggregate, UNCLASSIFIED_PARENT)) {
+    labels <- unlist(lapply(unname(UNCLASSIFIED_KEYS), function(key) {
+      candidates <- labels[unclassified_collapse(labels) == key]
+      raw <- intersect(candidates, names(UNCLASSIFIED_RAW_TO_KEY))
+      if (length(raw)) raw else if (key %in% candidates) key else head(candidates, 1L)
+    }), use.names = FALSE)
+  }
+  labels
 }
 
 #' Mutually exclusive categories for a multiple-selection or stacked view.
 #' Parent totals are available to single-metric queries, never additive leaves.
 #' With split macrophage children, the unsplit alias is the same population.
 phenotype_partition_labels <- function(labels) {
-  labels <- phenotype_keep(labels)
+  labels <- unique(unclassified_collapse(phenotype_keep(labels)))
   labels <- labels[!is_phenotype_aggregate(labels)]
   if (any(is_macrophage_label(labels) & labels != "Macrophage")) labels <- setdiff(labels, "Macrophage")
   labels
 }
 
-#' The aggregates offered beside `labels`: each group aggregate with two or more members, on a marker-profile root.
+#' Group aggregates with two or more members; Unclassified is available on every root.
 phenotype_aggregates_for <- function(labels) {
-  if (!root_has_marker_profile_labels()) return(character(0))
   keep <- vapply(PHENOTYPE_GROUP_AGGREGATES, function(a) length(phenotype_aggregate_members(a, labels)) >= 2,
                  logical(1))
+  if (!root_has_marker_profile_labels()) keep[names(keep) != "Unclassified"] <- FALSE
   unname(PHENOTYPE_GROUP_AGGREGATES[keep])
 }
 
@@ -1014,7 +1162,7 @@ add_phenotype_aggregate_columns <- function(comp) {
 
 #' `labels` split by group, in PHENOTYPE_GROUP_ORDER, each group's aggregate first and the rest in the given order.
 phenotype_groups_split <- function(labels, include_aggregates = TRUE) {
-  labels <- if (include_aggregates) phenotype_keep(labels) else phenotype_partition_labels(labels)
+  labels <- if (include_aggregates) unique(unclassified_collapse(phenotype_keep(labels))) else phenotype_partition_labels(labels)
   if (any(is_macrophage_label(labels) & labels != "Macrophage")) labels <- setdiff(labels, "Macrophage")
   if ("Macrophage" %in% labels) labels <- setdiff(labels, "All macrophages")
   g <- phenotype_group(labels)
@@ -1023,6 +1171,7 @@ phenotype_groups_split <- function(labels, include_aggregates = TRUE) {
   out <- lapply(PHENOTYPE_GROUP_ORDER, function(k) {
     i <- which(g == k)
     if (k == "Macrophage") i[order(!is_phenotype_aggregate(labels[i]), sign_order[i])]
+    else if (k == "Unclassified") i[order(match(labels[i], c(UNCLASSIFIED_PARENT, unname(UNCLASSIFIED_KEYS))))]
     else if (k == "Top marker only") i[order(match(labels[i], TOP_MARKER_ORDER))]
     else i[order(!is_phenotype_aggregate(labels[i]))]
   })
@@ -1035,6 +1184,10 @@ phenotype_groups_split <- function(labels, include_aggregates = TRUE) {
 #' is a list, so a one-label group is still an option group. `values` default to the labels.
 phenotype_grouped_choices <- function(labels, values = labels, prefix = "") {
   labels <- as.character(labels)
+  # Explicit metric values must already refer to projected object columns. Raw
+  # labels used as values can safely follow their leaf projection here.
+  if (identical(as.character(values), labels)) values <- unclassified_collapse(values)
+  labels <- unclassified_collapse(labels)
   values <- stats::setNames(as.character(values), labels)
   out <- list()
   for (k in names(groups <- phenotype_groups_split(labels))) {
@@ -1742,7 +1895,8 @@ identity_hormone_text <- function() {
     "Beta, Alpha and Delta use the unique highest scaled positive hormone; CHGA-positive cells without ",
     "a positive hormone are CHGA⁺ hormone-negative. These four named types alone define endocrine totals. ",
     "Other cells use supported non-endocrine rules. Previously unresolved object-class calls without ",
-    "a supported identity are retained as Unclassified, outside endocrine totals and within total cell counts.")
+    "a supported identity retain the raw Unclassified label, shown in the Insufficient evidence after reassessment ",
+    "subclass, outside endocrine totals and within total cell counts.")
 }
 
 identity_structure_text <- function() paste0(
@@ -1766,9 +1920,9 @@ identity_typing_help_ui <- function() shiny::tagList(
     "they have no core or peri-islet analysis region."),
   shiny::tags$p(identity_structure_text()),
   shiny::tags$p("Canary evidence resolves competing compartments and lineages before their marker rules name ",
-    "the cell. Competing-identity QC labels remain in the source audit and are hidden from app views and downloads. ",
+    "the cell. Conflict QC labels remain in the source audit and are hidden from app views and downloads. ",
     if (root_has_selected_endocrine())
-      "Unclassified cells retain their evidence and resolution reason; existing Tissue classifications are preserved. Cells are not named after a top marker. Cells that "
+      "The Unclassified display family preserves the distinct raw Tissue, Unclassified, unresolved-lineage and Doublet suspected evidence. Cells are not named after a top marker. Cells that "
     else
       "Cells with insufficient evidence retain their starting object or Tissue class; they are not named after a top marker. Cells that ",
     "fail measurement or nucleus eligibility checks are outside the analyzed cell universe."))
@@ -1781,11 +1935,8 @@ identity_phenotype_definitions_ui <- function() {
     "CHGA+ hormone-negative" = "Endocrine lineage inside an endocrine object, CHGA positive and no positive INS, GCG or SST.",
     "CD8a Tcell" = "T lineage with CD3e positive and CD8a positive; if CD4 is also positive, the higher fold over its own level names the subtype.",
     "CD4 Tcell" = "T lineage with CD3e positive and CD4 positive; if CD8a is also positive, the higher fold over its own level names the subtype.",
-    "T cell" = "T lineage with CD3e positive but neither subtype marker positive; retained without a named subtype.",
     "B cell" = "B lineage with CD20 and CD45 positive and a single detected hematopoietic lineage.",
     "Macrophage" = "Myeloid lineage with CD68 or CD163 positive; its name records the positive/negative profile of CD68, CD163, LGALS3 and CD4.",
-    "Hematopoietic CD45+" = "Hematopoietic compartment without a named lineage, with CD45 positive.",
-    "Hematopoietic CD45-" = "Hematopoietic compartment without a named lineage, with CD45 not above its level.",
     "Exocrine" = "Epithelial compartment assigned to the exocrine lineage by the registry's epithelial evidence.",
     "Stromal" = "Mesenchymal compartment assigned to the mural lineage with SMA positive.",
     "Structure-qualified cells" = identity_structure_text())
@@ -1795,15 +1946,14 @@ identity_phenotype_definitions_ui <- function() {
       "Selected v19 endocrine membership with GCG the unique highest scaled positive hormone.",
       "Selected v19 endocrine membership with SST the unique highest scaled positive hormone.",
       "Selected v19 endocrine membership, CHGA positive and no positive INS, GCG or SST.")
-    defs["Unclassified"] <- paste0("A reconsidered object-class or component-boundary cell for which the existing rules ",
-      "provide no supported identity. Retained in total cell counts, with its evidence and reason; not an endocrine type.")
   }
   defs <- defs[phenotype_is_kept(names(defs))]
   shiny::tagList(
     shiny::tags$h6(style = "margin-top: 12px; font-weight: 700;", "Phenotype definitions"),
     shiny::tags$p("These definitions follow compartment and lineage assignment; a positive marker alone does not imply its cell type."),
     shiny::tags$ul(style = "padding-left: 18px; margin-bottom: 6px;",
-      lapply(names(defs), function(n) shiny::tags$li(shiny::tags$strong(phenotype_text(n)), ": ", defs[[n]]))))
+      lapply(names(defs), function(n) shiny::tags$li(shiny::tags$strong(phenotype_text(n)), ": ", defs[[n]]))),
+    unclassified_help_ui())
 }
 
 #' The cell labels a uniform root assigns (uniform_release.json "labels"); NULL for other roots.
@@ -2026,12 +2176,13 @@ phenotype_hint_ui <- function(name, prefix = "Markers:",
 # "Endocrine", "T cell" and "Immune" are general classes whose subtypes are listed (Beta / Alpha / Delta cell;
 # CD8a / CD4 Tcell; T cell and Macrophage), so they are not offered beside them (owner, 2026-10-17: "There should
 # not be a phenotype listed that is a general class when there are subtypes"). In the uniform root they hold the
-# cells left without a subtype; these remain in source totals and the existing "No subtype" composition residual.
+# cells left without a subtype. The current T cell and CD45 residuals now feed the
+# Unclassified lineage/subtype leaf; other historical retired classes stay hidden.
 # Conflict labels are different: hidden rows stay in scientific source totals, but are removed from displayed
 # categories rather than folded into "No subtype". Displayed-category proportions use the displayed cells.
 # This is an app presentation policy; it does not retype source cells or recompute the frozen embedding.
-PHENOTYPE_RETIRED <- c("Endocrine", "Acinar", "Endothelial", "T cell",
-                       "Immune", "Hematopoietic CD45+", "Hematopoietic CD45-",
+PHENOTYPE_RETIRED <- c("Endocrine", "Acinar", "Endothelial",
+                       "Immune",
                        "Unknown", "ECAD+", "Structural", "APCs")
 
 # Endocrine object classes analyzed by the app (owner A5, 2026-10-16, with a filter). Singles (one endocrine cell)
@@ -2250,5 +2401,7 @@ phenotype_marker_definitions_ui <- function() {
 #' Drop retired phenotypes from a data frame with a phenotype column.
 phenotype_filter_rows <- function(df, col = "phenotype") {
   if (is.null(df) || !is.data.frame(df) || !(col %in% names(df))) return(df)
-  df[phenotype_is_kept(df[[col]]), , drop = FALSE]
+  df <- df[phenotype_is_kept(df[[col]]), , drop = FALSE]
+  df[[col]] <- unclassified_collapse(df[[col]])
+  df
 }

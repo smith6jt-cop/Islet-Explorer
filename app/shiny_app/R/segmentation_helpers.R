@@ -803,7 +803,9 @@ segmentation_viewer_panel_ui <- function(info, close_id, layout = c("wide", "sta
     conditionalPanel(
       condition = "input.drilldown_show_cells",
       div(style = paste0("padding: ", if (wide) 15 else 12, "px; background-color: var(--islet-surface-2); border-radius: 5px;"),
-        h5("Cell Composition", style = paste0("margin-top: 0; font-size: ", if (wide) 17 else 16, "px;")),
+        card_title_help("Cell Composition", style = paste0("margin-top: 0; font-size: ", if (wide) 17 else 16, "px;"),
+          help = list(tags$p("Cells in the selected endocrine object and, when enabled, its peri-islet band."),
+                      unclassified_help_ui())),
         plotOutput("islet_drilldown_summary", height = if (wide) "400px" else "300px"),
         div(style = "text-align: right; margin-top: 6px;",
           downloadButton("dl_islet_drilldown_summary", "Download PNG",
@@ -814,8 +816,12 @@ segmentation_viewer_panel_ui <- function(info, close_id, layout = c("wide", "sta
     )
   }
   header <- div(style = "display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;",
-    if (wide) h3(title, style = "margin: 0; color: var(--islet-heading); font-size: 22px;")
-    else h4(title, style = "margin: 0; color: var(--islet-heading); font-size: 20px;"),
+    div(style = "display: flex; align-items: center; gap: 6px;",
+      if (wide) h3(title, style = "margin: 0; color: var(--islet-heading); font-size: 22px;")
+      else h4(title, style = "margin: 0; color: var(--islet-heading); font-size: 20px;"),
+      card_help("Selected endocrine object help",
+        tags$p("The map shows the selected object's boundaries and, when enabled, its cells colored by phenotype or marker."),
+        unclassified_help_ui())),
     actionButton(close_id, "Close", class = "btn btn-sm btn-outline-secondary"))
 
   if (wide) {

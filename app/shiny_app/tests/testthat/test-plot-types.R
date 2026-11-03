@@ -4,7 +4,8 @@
   env <- new.env(parent = globalenv())
   defs <- c("PHENOTYPE_RETIRED", "phenotype_is_kept", "phenotype_keep", "phenotype_retired",
             "phenotype_is_conflict", "phenotype_partition_labels", "PHENOTYPE_GROUP_AGGREGATES",
-            "is_phenotype_aggregate", "MACROPHAGE_LABEL_PATTERN", "MACROPHAGE_KEY_PATTERN", "is_macrophage_label")
+            "is_phenotype_aggregate", "MACROPHAGE_LABEL_PATTERN", "MACROPHAGE_KEY_PATTERN", "is_macrophage_label",
+            "UNCLASSIFIED_KEYS", "UNCLASSIFIED_PARENT", "UNCLASSIFIED_RAW_TO_KEY", "unclassified_collapse")
   for (expr in parse(.find_source("R/00_globals.R"))) {
     if (is.call(expr) && identical(expr[[1]], as.name("<-")) && is.symbol(expr[[2]]) &&
         as.character(expr[[2]]) %in% defs) eval(expr, env)
@@ -75,7 +76,7 @@ test_that("donor composition pools cells over objects and closes each bar with N
                       peri_col = c("peri_prop_Beta_cell", "peri_prop_Immune"), stringsAsFactors = FALSE)
   core <- env$donor_composition_table(comp, pairs, "core")
   d1 <- core[core$case_id == "1", ]
-  expect_equal(d1$phenotype, c("Beta cell", "No subtype"))  # Immune is a general class: in No subtype
+  expect_equal(d1$phenotype, c("Beta cell", env$DONOR_COMPOSITION_OTHER))  # Immune is a general class: in No subtype
   expect_equal(d1$cells, c(20, 20))
   expect_equal(d1$proportion, c(50, 50))
   expect_equal(unique(d1$n_objects), 2)
@@ -103,8 +104,8 @@ test_that("donor categories count leaves once and never turn hidden QC cells int
   }
   original <- comp
   tab <- env$donor_composition_table(comp, pairs, "both")
-  expect_identical(tab$phenotype, c(labels[c(1, 3, 6, 7)], "No subtype"))
-  expect_equal(tab$cells, c(50, 40, 30, 30, 90))
+  expect_identical(tab$phenotype, c(labels[1], env$DONOR_COMPOSITION_OTHER, labels[c(3, 6, 7)]))
+  expect_equal(tab$cells, c(50, 90, 40, 30, 30))
   expect_true(all(tab$total_cells == 300))
   expect_equal(sum(tab$proportion), 80) # 60 hidden cells stay in the original denominator.
   shown <- env$donor_composition_shown(tab)
@@ -116,8 +117,8 @@ test_that("donor categories count leaves once and never turn hidden QC cells int
   expect_equal(env$donor_composition_table(comp, without_conflict_pair, "both"), tab)
   core_tab <- env$donor_composition_table(comp, without_conflict_pair, "core")
   peri_tab <- env$donor_composition_table(comp, without_conflict_pair, "peri")
-  expect_equal(core_tab$cells[core_tab$phenotype == "No subtype"], 20)
-  expect_equal(peri_tab$cells[peri_tab$phenotype == "No subtype"], 70)
+  expect_equal(core_tab$cells[core_tab$phenotype == env$DONOR_COMPOSITION_OTHER], 20)
+  expect_equal(peri_tab$cells[peri_tab$phenotype == env$DONOR_COMPOSITION_OTHER], 70)
   expect_equal(sum(core_tab$cells), 90)
   expect_equal(sum(peri_tab$cells), 150)
   expect_identical(comp, original)

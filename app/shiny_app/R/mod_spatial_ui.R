@@ -24,7 +24,8 @@ spatial_ui <- function(id) {
                  " limits the tissue scatter to cells in endocrine-object cores, or cores and their 20 \u00b5m",
                  " peri-islet bands."),
           cell_typing_help(),
-          phenotype_marker_definitions_ui()),
+          phenotype_marker_definitions_ui(),
+          if (!root_has_identity_typing()) unclassified_help_ui()),
         control_grid(
           control_group("Objects",
             # Non-namespaced: synced with the Plot tab's copy (app.R).
@@ -74,7 +75,8 @@ spatial_ui <- function(id) {
             card_title_help("Tissue Scatter Plot", help = list(
               tags$p("Every analyzed cell of the chosen donor at its position. Drag to zoom; double-click or Reset",
                      " Zoom to return. Show cells (Data controls) limits the plot to cells in endocrine-object cores,",
-                     " or cores and their 20 \u00b5m peri-islet bands."))),
+                     " or cores and their 20 \u00b5m peri-islet bands."),
+              unclassified_help_ui())),
             actionButton(ns("scatter_reset_zoom"), "Reset Zoom",
                          style = "font-size: 12px; padding: 2px 10px;",
                          class = "btn-sm btn-outline-secondary")
@@ -103,7 +105,8 @@ spatial_ui <- function(id) {
                    " composition states are disease-associated, and whether a cluster belongs to a few donors. The",
                    " number above each bar is the cluster's donor count, and hover names its largest donor."),
             tags$p("The clusters are those of the Islet-Level UMAPs below, at the resolution chosen in the Data",
-                   " controls."))),
+                   " controls."),
+            unclassified_help_ui())),
           uiOutput(ns("leiden_not_available")),
           radioButtons(ns("cluster_view"), "Show",
                        c("Composition" = "composition", "Donor status" = "status", "Donor" = "donor"),
@@ -138,7 +141,8 @@ spatial_ui <- function(id) {
                  " Hover over an object in either UMAP to ring it in both. Click it to select it and open its",
                  " segmentation map and single cells below; Clear selection (Data controls) releases it. An object",
                  " selected on the",
-                 " Plot or Trajectory tab is ringed here too."))),
+                 " Plot or Trajectory tab is ringed here too."),
+          unclassified_help_ui())),
         fluidRow(
           column(6,
             selectInput(ns("umap_color_left"), "Color by", choices = SPATIAL_UMAP_COLOR_CHOICES,
