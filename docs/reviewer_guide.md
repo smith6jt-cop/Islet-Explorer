@@ -3,15 +3,11 @@
 This guide describes the publication-profile interface. It does not describe dormant
 development modules or certify a scientific data release.
 
-**Current status, 2026-11-02:** production and dev are stopped and persistently masked
-during [security remediation](container_security_20261102.md). Dev last served unaccepted
-v20. The owner selected v19 endocrine within a
-[component comparison](v19_v20_component_comparison_20261102.md). The new mixed root
-has been assembled and its export checks pass, but unresolved endocrine definitions
-and component conflicts prevent release. See the [build record](component_build_20261102.md).
-A staged whole-v19 reference was never activated. Use
-the release/access notice supplied with a future review round rather than assuming that
-the provisioned address below is currently available.
+**Current status, 2026-11-02:** the [selected-component v2 build](component_build_v2_20261102.md)
+is being validated for the owner-authorized production release. It preserves the
+exact named v19 endocrine cells and the isolated DG Lymphatic revision. Consult
+the [deployment record](container_security_20261102.md) and the supplied review
+round's release/access notice for actual availability.
 
 The [workflow user guide](workflow_user_guide.md) explains data processing, component
 selection and release checks; the [user guide](user_guide.md) describes controls in more
@@ -42,8 +38,15 @@ The publication profile contains **Plot, Trajectory, Spatial and Viewer**, in th
 Counts, phenotype choices and aggregate definitions follow the loaded root's manifest and
 frozen label groups. The v19/v20 comparison cohort has 20 donors (7 ND, 7 Aab+, 6 T1D);
 older 15-donor counts and the legacy 19-rule CSV are not the current data contract.
-The frozen comparison roots still contain unresolved endocrine definitions and cannot
-be presented as the accepted corrected dataset.
+The frozen comparison roots are historical references. In the selected-component
+release, endocrine cell totals use exactly Beta, Alpha, Delta and CHGA+
+hormone-negative. Anatomical Islet/Cluster/Single objects are distinct from cell
+identities. Cells without a supported assignment remain visible as Unclassified
+in overall counts, plots and downloads; they do not enter endocrine cell totals.
+An object with no named endocrine core cells retains its structure and counts,
+but its endocrine composition is unavailable. A positive region from the
+original image classifier does not imply a positive corrected mean for every
+cell inside it. The method help records the selected assignment rule.
 
 ### Plot
 

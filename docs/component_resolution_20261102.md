@@ -80,3 +80,16 @@ The production deployment is owned by the parallel security session. It will
 use the matching frozen source/image and verified release data. The owner has
 already authorized activation once these actual checks pass; no further
 classification or production-permission question is pending.
+
+## Measured v2 results
+
+Both all-20 identity runs are complete: 3,199,606 cells and exact 110,721 named
+v19 endocrine calls, with zero unnamed endocrine definitions or boundary
+placeholders. The control has 7,396 Unclassified cells; the DG candidate has
+7,398 (0.23122%). The full Lymphatic invariance audit passes, including the two
+additional outcomes in changed Lymphatic geometry. Independent control review
+finds zero prior mixed-app named non-endocrine identities among these rows;
+they were anatomical labels or component-boundary placeholders. Marker and
+Ki67 evidence replays exactly. Remaining proof, assembly and release outcomes
+are maintained in [the v2 build record](component_build_v2_20261102.md) and
+[deployment status](container_security_20261102.md).

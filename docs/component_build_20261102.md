@@ -1,5 +1,11 @@
 # Component candidate build — 2026-11-02
 
+**Historical v1 diagnostic:** the owner subsequently delegated the remaining
+selection and live release. Read [the v2 build record](component_build_v2_20261102.md)
+and [resolution contract](component_resolution_20261102.md) for the current
+assignment rule and build. The failures and paths below are retained unchanged
+as evidence of the first build; they are not current permission requirements.
+
 The owner requested the builds after selecting v19 endocrine cells and requiring
 the Lymphatic correction to preserve unrelated components. This build is a fresh
 offline review candidate. It is not a scientific acceptance or a deployment.

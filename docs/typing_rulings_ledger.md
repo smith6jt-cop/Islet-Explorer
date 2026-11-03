@@ -12,6 +12,19 @@ wrote; not the owner's words, kept or changed on evidence).
 
 ## Accuracy audit — 2026-11-02
 
+The later selected-component implementation and measured outcomes are recorded
+in [the resolution contract](component_resolution_20261102.md) and
+[v2 build record](component_build_v2_20261102.md). The older rows below retain
+their original context; the subsequent delegation resolves their pending
+selection/activation language.
+
+| Source | Ruling or implementation choice | Status |
+|---|---|---|
+| Owner, subsequent delegation | "Resolve the decision and get the pubapp live" | in force: resolve the selected-component boundary and activate the matching production release after actual data, security and runtime checks. No new selection or production-permission question is pending. |
+| Owner, subsequent classification direction | "There shouldn't be many unclassified cells." | in force: report actual counts and trace their source/current-rule evidence. This supplies no numerical cutoff and does not authorize invented identities, hidden rows or restoration of unsupported old names. |
+| Agent implementation under that delegation | Preserve the exact named v19 endocrine membership; reconsider only nonselected endocrine/boundary rows through existing current non-endocrine rules; retain unsupported outcomes as Unclassified with source/natural evidence. | agent choice, implemented in component schema `/2`; measurements, flags, eligibility, geometry, existing Tissue and untargeted identities are preserved. Full cohort and isolation checks govern the resulting data. |
+| Agent measurement reconciliation | Prove original classifier lineage and exact Single whole-cell association separately from corrected-cell positivity and centroid membership. | agent choice supported by original replay and geometry evidence; no geometry, membership or threshold change. Both diagnostic results remain recorded. |
+
 | Source | Ruling | Status |
 |---|---|---|
 | Owner, Lymphatic isolation | "The lymphatic changes should not have influenced the endocrine cell types"; "The lymphatic changes shouldn't have negatively affected anything else as well" | in force: isolate Lymphatic geometry/context/endpoints from shared calibration and unrelated cell identities. The controlled initial-v20→DG comparison found 715 changed labels, including 303 outside both Lymphatic footprints, and 15 recalibrated markers. Fix the dependency and verify all components; a threshold/count change is not evidence of improved accuracy. See the component comparison for the implementation and real-data evidence. |

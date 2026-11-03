@@ -4,6 +4,13 @@ Owner: “I meant use v19 for the endocrine cells since they were done properly.
 
 The task is to evaluate components separately, using v19 as the selected endocrine source. A wholesale rollback to v19 was the assistant's mistaken interpretation. The prepared whole-v19 release is retained as reference evidence only; no new scientific release was activated. Dev last served v20; dev and production are now stopped and masked under the owner's parallel [security direction](container_security_20261102.md). The mixed candidate is now built at `b15f0fc`; its actual endocrine consistency checks still fail. See [the completed build record](component_build_20261102.md). The main-tree exception that allowed unresolved v19 identities into a new release has been withdrawn.
 
+**Subsequent resolution:** the owner delegated the remaining decision and live
+release. The [resolution contract](component_resolution_20261102.md) implements
+exact named v19 endocrine membership with current non-endocrine methods and
+explicit unsupported outcomes. The [v2 build record](component_build_v2_20261102.md)
+contains current validation; later status supersedes pending-selection language
+in the historical comparison below.
+
 ## Comparison contract
 
 * Compare frozen `uniform-20donor-20261029-v19` with frozen `uniform-20donor-20261030-v20` by exact cell UUID, donor, geometry and source hashes.

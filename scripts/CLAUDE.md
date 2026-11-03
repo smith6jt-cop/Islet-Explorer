@@ -1,5 +1,14 @@
 # CLAUDE.md - Pipeline Scripts
 
+**Current selected-component v2 work:** the owner delegated the remaining
+selection and production activation. Read [the current build](../docs/component_build_v2_20261102.md) and
+[resolution contract](../docs/component_resolution_20261102.md): exact named v19 endocrine membership,
+evidence-preserving Unclassified outcomes, the four-type denominator, and
+classifier-lineage proof with unchanged geometry. Scientific source is
+`67ee6c9`; the matching image/release source is `e5689f6`. The security session
+owns [actual deployment status](../docs/container_security_20261102.md). The earlier v1 build counts,
+pending-decision language and service snapshots below are historical.
+
 > **2026-11-02 current workflow and completed build:** read [the workflow guide](../docs/workflow_user_guide.md), [component build record](../docs/component_build_20261102.md), and [component comparison](../docs/v19_v20_component_comparison_20261102.md). HPG job `49141854`, source `b15f0fc`, assembled the selected component app: all 110,721 named v19 endocrine cells are preserved; the controlled DG update changes 351 Lymphatic-related labels and passes the unrelated-component invariance checks. All-20 Ki67 export QA passes. The build retains 8,629 unresolved endocrine cells and 2,472 boundary conflicts; the corrected-cell object audit fails on 953 populated objects (915 singles, 38 clusters, no islets), plus three single-membership anomalies. The complete 20-image QuPath project is `data/development/qupath-review-20261102-components-v1/project.qpproj`. Image `41e62a97…` matches `b15f0fc`. Production is authorized once actual data/release/runtime checks pass; the known DuckDB finding has a dated nonblocking window through 2026-11-10 UTC, not a permanent deployment hold. No service restart occurred. For future Lymphatic-only revisions, bind frozen calibration/context and run the automatic full-component audit; do not recalibrate all markers on changed structure context. Historical script descriptions below do not override these rules.
 
 > **2026-10-15 owner directives:** donor 78 (HDL078 / HPAP-078) is removed from all analysis. `excluded_donors.csv` is the record and `excluded_donors.py` the guard: cohort loaders (`research/common.py`, `cohort_expansion/prepare_analysis.py`, `build_donor_metadata.py`) and the protein pipeline reject it, so the historical 21-donor `research/cohort-v1.csv` no longer loads. The current protein cohort is `protein_expansion_cohort.csv` (20 donors). All 20 donors are to be reprocessed through one scripted workflow; see [the reprocessing plan](../docs/uniform_reprocessing_plan_20261015.md).

@@ -3,12 +3,11 @@
 Interactive web application for exploring pancreatic islet CODEX multiplexed imaging data from nPOD donors. Compares endocrine composition, immune cells and spatial microenvironments across ND, Aab+ and T1D donor groups; these cross-sectional observations do not establish disease progression.
 
 **2026-11-02:** this guide covers app features. For the complete data-to-app process, use
-[the workflow user guide](workflow_user_guide.md). Dev last served unaccepted v20; dev and
-production are now stopped and masked during [security remediation](container_security_20261102.md).
-V19 endocrine is selected within a [component comparison](v19_v20_component_comparison_20261102.md), and the
-Lymphatic isolation fix passes in the completed mixed-component build. Its app
-exports and QuPath project are available, but unresolved endocrine assignments
-still prevent release; see the [build record](component_build_20261102.md).
+[the workflow user guide](workflow_user_guide.md). The
+[selected-component v2 build](component_build_v2_20261102.md) preserves the exact
+named v19 endocrine cells and applies current methods to the remaining cells.
+The owner has authorized production after validation; consult the
+[deployment record](container_security_20261102.md) for actual availability.
 
 **Provisioned reviewer URL (production currently stopped)**:
 `https://islet-explorer.rc.ufl.edu/islet-explorer/`
@@ -43,6 +42,16 @@ still prevent release; see the [build record](component_build_20261102.md).
 ## Overview
 
 ### Data Source
+
+The selected-component release uses exactly Beta, Alpha, Delta and CHGA+
+hormone-negative for endocrine cell totals. Islet, Cluster and Single are
+anatomical object classes, not additional cell identities. Unsupported cell
+assignments remain explicit as **Unclassified**, retained in overall cell
+counts, phenotype controls, plots and downloads. Their grey palette entry
+remains visible in legends. Existing Tissue labels are distinct and unchanged.
+An object with no named endocrine core cells still has a structural record,
+but no available endocrine composition or invented embedding value. Use the
+method help and loaded release manifest for the exact generation.
 
 The reviewer release validates a checksummed manifest, loads prepared islet summaries from
 read-only Parquet, queries large spatial tables through embedded DuckDB, and reads the

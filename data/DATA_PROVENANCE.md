@@ -1,5 +1,14 @@
 # Data Provenance — Islet Explorer
 
+**Current selected-component v2 work:** the owner delegated the remaining
+selection and production activation. Read [the current build](../docs/component_build_v2_20261102.md) and
+[resolution contract](../docs/component_resolution_20261102.md): exact named v19 endocrine membership,
+evidence-preserving Unclassified outcomes, the four-type denominator, and
+classifier-lineage proof with unchanged geometry. Scientific source is
+`67ee6c9`; the matching image/release source is `e5689f6`. The security session
+owns [actual deployment status](../docs/container_security_20261102.md). The earlier v1 build counts,
+pending-decision language and service snapshots below are historical.
+
 **Current selection, 2026-11-02:** the owner selected frozen v19 endocrine calls,
 with v19/v20 compared by component. Both roots share 3,199,606 eligible UUIDs and
 the same Tissue/cell/endocrine geometry. The DG Lymphatic-only rerun unintentionally

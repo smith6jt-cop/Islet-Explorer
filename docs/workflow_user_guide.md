@@ -4,25 +4,37 @@ This guide follows the data from the source images to the reviewed app and its r
 
 ## Current state — 2026-11-02
 
-**The mixed-component app and QuPath builds are complete; actual endocrine consistency checks still fail. Both dev and production remain stopped and persistently masked.** The owner selected **v19 for endocrine cells**, with the other components evaluated separately. This is not approval to replace the entire app with v19.
+The owner has directed **“Resolve the decision and get the pubapp live.”** The
+selected-component v2 build is running with the exact named v19 endocrine
+membership and current non-endocrine methods. Read the
+[resolution contract](component_resolution_20261102.md),
+[current build and measured counts](component_build_v2_20261102.md), and
+[authoritative security/deployment status](container_security_20261102.md).
+The first component build's unresolved assignments are historical diagnostics.
 
-| Item | Current status |
+| Component | Selected rule |
 |---|---|
-| Endocrine component | The 110,721 named endocrine cells in frozen v19 are the selected baseline. Its unresolved cells and object-membership anomalies remain explicit problems. |
-| Lymphatic component | The instructed v20 DG method uses despeckled PDPN detection plus the PDPN level gate. Its geometry must not recalibrate other components. |
-| Other components | Keep the common geometry and the instructed v20 measurement/structure rules, with component boundaries reconciled by cell UUID. Frozen v20 labels cannot simply be copied because they include unintended calibration changes. |
-| Isolation fix | The all-20-image diagnostic replay passes: 352 label changes, all involving Lymphatic identity inside the old/new Lymphatic footprint; no unexpected changes to other markers, identities, QC, or non-Lymphatic context. It uses initial-v20 calibration and preserves 113,134 initial-v20 named endocrine cells. It is **not** the selected v19-endocrine candidate. |
-| Completed component build | HPG job `49141854`, source `b15f0fc`: all eight stages pass. The selected 110,721 named v19 endocrine cells are preserved; the mixed-control→DG audit finds 351 Lymphatic-only changes and zero unexpected changes. Export checks pass for all 3,199,606 cells, including Ki67. |
-| Remaining data failures | 8,629 unresolved object-class cell labels, 2,472 component boundary conflicts; the strict corrected-cell object audit fails for 953 populated objects and three Single membership anomalies. These are actual failures, independent of the old diagnostic status flag. |
-| Current matching image | `41e62a97…` from `b15f0fc` passes package, dependency, installed Shiny/R/static-image and dated security-policy checks. Built offline; not exported or staged. See the [build record](component_build_20261102.md). |
-| Separate dev DuckDB fix | `b26558a9…` from `92c63ba` passes the strict decoder/security gate without a deferral and real release-table BROTLI round trips. Exported locally, not host-staged or activated. See the [dev validation record](dev_duckdb_fix_20261102.md). |
-| Dev site | `https://devislet-explorer.rc.ufl.edu/islet-explorer/` last served `pubapps-2026-11-uniform-v20`. The owner stopped dev during container security remediation on 2026-11-02; it is now masked. |
-| Production | `https://islet-explorer.rc.ufl.edu/islet-explorer/` has been stopped since 2026-10-26 and is now also masked. Its recorded release is `pubapps-2026-10-uniform-v10-perf2`. |
-| Local app service | `islet-explorer-local.service`, port 3840, is inactive/disabled. |
-| Offline security image | `2bbb928d…` from `23bd2fd` is built and imported under a hold on PubApps. Released fixes pass package/dependency checks. Its original strict gate failed DuckDB; fresh dated deferral evidence now makes that known finding nonblocking within the patch window. A matching validated data release is still required. |
-| Whole-v19 reference release | The build at `190addc` was staged but never activated. It remains reference evidence; its historical compatibility exception is withdrawn from current source. |
+| Endocrine | Exact 110,721 named v19 UUIDs and subtypes, independently replayed against their hormone evidence. |
+| Lymphatic | Instructed DG geometry, isolated from calibration and other components. |
+| Other identities | Current whole-cell positivity, membrane differentiation and structure-qualified rules using initial-v20 non-hormone calibration. |
+| Boundary resolution | Only declared nonselected endocrine/boundary rows are reconsidered through existing rules. Unsupported rows retain explicit Unclassified evidence; existing Tissue labels are unchanged. |
+| Endocrine totals | Exactly Beta, Alpha, Delta and CHGA+ hormone-negative; no anatomical object labels in cell denominators. |
+| Object proof | Hash-bound original classifier lineage and exact Single whole-cell association, with corrected-cell and centroid diagnostics retained separately. |
+| Scientific source | `67ee6c9`, HPG job `49168359`, fresh v2 paths. |
+| Image/release source | `e5689f6`, adding the app palette-name fix; release `pubapps-2026-11-components-v1` is being prepared. |
 
-The [component comparison](v19_v20_component_comparison_20261102.md) records the selections and evidence. The [compact isolation receipt](evidence/lymphatic_isolation_20261102.json) binds the verified source and reports. The [container security record](container_security_20261102.md) documents the service masks, affected images, and replacement-image work. The owner has now directed the current build to live production once its real data/release/runtime checks pass, with our DuckDB fix developed separately for dev. The known DuckDB finding is nonblocking through the notice's **2026-11-10 UTC** deadline under the [dated release decision](duckdb_remediation_window_20261102.md). Do not infer that a committed fix, successful diagnostic, or staged bundle has changed served data.
+All 20 control donors have completed: 3,199,606 cells, exact selected endocrine
+membership, zero unnamed endocrine definitions or boundary placeholders, and
+7,396 Unclassified cells (0.2312%). Candidate, proof, export and release checks
+are still running. Production activation is already authorized after the
+actual checks pass; no additional classification-permission question is pending.
+Production and dev remain stopped until their respective activation is verified.
+The local app service remains inactive/disabled.
+
+The separate [dev DuckDB fix](dev_duckdb_fix_20261102.md) passes its strict
+validation and remains local. Production's known DuckDB finding is nonblocking
+only within the [dated window through November 10 UTC](duckdb_remediation_window_20261102.md).
+The historical whole-v19 reference and frozen v20 are not the selected release.
 
 ## 1. Find the correct inputs
 
@@ -179,17 +191,21 @@ The completed real-data check is `output/v19_v20_component_comparison_20261102/m
 
 The mixed candidate must start from cell-level evidence. Preserve the selected v19 endocrine decisions and their explicitly selected calibration/measurement contract, apply the instructed non-endocrine methods, and resolve overlaps by UUID so each eligible cell has one identity. Record the origin of every selected component and every changed boundary decision. Recompute downstream tables from that coherent assignment; do not combine version-specific aggregate CSVs or reuse a v20 denominator with v19 labels.
 
-The explicit diagnostic builder is now `scripts/hpg/build_component_candidate.py`,
+The selected-component builder is `scripts/hpg/build_component_candidate.py`,
 with preparation in `scripts/hpg/stage_component_build.py` and the component
-contract in `typing/component_selection.py`. Its [build record](component_build_20261102.md)
-explains the exact source choices and remaining conflicts. `identity.py
+contract in `typing/component_selection.py`. Read the current
+[resolution contract](component_resolution_20261102.md); the
+[first build record](component_build_20261102.md) preserves the earlier failed
+diagnostic. `identity.py
 --endocrine-from` remains a historical input option; it does not implement this
 selection.
 
 The builder requires a JSON config with these exact keys: `expected_commit`,
 `selection_reason`, `source_package`, `endocrine_source`, `structure_source`,
 `donor_source`, `donor_metadata`, `initial_source_run`, `control_run`,
-`candidate_run`, `assembly_root`, and `report_root`. Every source must exist;
+`candidate_run`, `assembly_root`, `report_root`, `classifier_run`,
+`classifier_replay`, `classifier_replay_sha256`, `geometry_reference`,
+`geometry_provenance`, and `geometry_provenance_sha256`. Every source must exist;
 every output must be fresh and separate from all inputs and other outputs.
 The package is the checksummed initial-v20 calibration/context/identity/coverage
 capture, not the current DG run under the same historical workstation path.
@@ -206,26 +222,40 @@ commit and verifying the package:
 
 The serial job verifies and materializes the initial source, prepares a typing
 control and a DG candidate, builds both identity sets, runs the all-component
-Lymphatic invariance audit, assembles the app root, and validates the exported
-cell states. Its `build_journal.json` records commands, host, source commit,
+Lymphatic invariance audit, proves the endocrine objects' original classifier
+lineage, assembles the app root, and validates exported cell states and all
+four-type endocrine denominators. Its `build_journal.json` records commands, host, source commit,
 seal, stages and exit codes. A failed stage stops the remaining stages and
 retains the failed output; select fresh destinations for another attempt.
 
-The completed November 2 run uses
+The historical first November 2 run uses
 `tmp/component-build-20261102-v1/build-config-r2.json`; its copied config and
 journal are under `output/component_candidate_build_20261102_v1`. The app root is
 `data/development/uniform-20donor-20261102-component-app-v1`. Open
 `data/development/qupath-review-20261102-components-v1/project.qpproj` for its
 20-image review project. Keep these completed outputs immutable; a corrected run
-needs new output names and a newly recorded config.
+needs new output names and a newly recorded config. The selected-component v2
+run uses `tmp/component-build-20261102-v2/build-config.json`, report root
+`output/component_candidate_build_20261102_v2`, and the corresponding
+`20261102-component-*-v2` control/candidate/app roots. Its scientific source is
+`67ee6c9`; the matching image and release builder use `e5689f6`, which adds only
+the app palette-name fix and its test. Each manifest records its actual producer.
 
 The control preserves the old context as a classification comparison and does
 not claim a new geometry acceptance. The DG candidate uses a fresh derivation
 binding that fully validates the original accepted geometry and exact shared
 input bytes. Historical generation metadata remains unchanged; the new
 validator proof is recorded separately. Neither a passing control nor a
-completed app assembly proves biological accuracy. The component protocol
-preserves inherited unresolved cells and records additional boundary conflicts.
+completed app assembly proves biological accuracy. Component schema `/2`
+preserves exactly the selected v19 named endocrine UUIDs and subtypes. Only
+nonselected endocrine/boundary rows run through the existing non-endocrine
+rules again. Unsupported rows become explicit **Unclassified**, retaining
+their source and natural calls, marker states and reasons. Existing Tissue
+labels and untargeted identities remain unchanged. Source unresolved counts
+remain provenance; final unnamed endocrine definitions and boundary
+placeholders must both be zero. The audit reports all unclassified counts and
+source transitions by donor; do not force a desired count by hiding rows or
+restoring unsupported old labels.
 The release builder verifies the evidence and rejects actual unresolved
 assignments, conflicting definitions or broken provenance; a historical review
 status alone does not add an approval requirement to the owner's live-build
@@ -257,15 +287,25 @@ Assembly is a fresh derived output, separate from a processing run. The current 
   --run "$RUN" \
   --donor-source data/development/uniform-20donor-20261029-v18 \
   --donor-metadata scripts/uniform/donor_metadata.csv \
+  --endocrine-object-audit "$OBJECT_AUDIT/summary.json" \
   --output "$ASSEMBLY" --report-root "$FRESH_ASSEMBLY_REPORT" \
   --workers 6 --include-collagen-iv
 ```
 
-`--donor-source` supplies the existing donor/image-link source; it does not select that root's old phenotypes. The explicit nPOD metadata table supplies the authoritative current donor fields. Check the actual source coverage before running. `--include-collagen-iv` retains the instructed structure endpoints.
+`--donor-source` supplies the existing donor/image-link source; it does not select that root's old phenotypes. The explicit nPOD metadata table supplies the authoritative current donor fields. Check the actual source coverage before running. `--include-collagen-iv` retains the instructed structure endpoints. Selected-component schema `/2` requires `--endocrine-object-audit` to identify the passing classifier-lineage report produced by the preceding build stage. Assembly rechecks its input hashes against the actual candidate; a report copied from another run is insufficient.
 
 Assembly rebuilds the app's cell labels, per-object core/peri summaries, marker displays, spatial records, structure endpoints, donor counts, and embedding inputs. It records input provenance in `uniform_release.json`. Core membership uses the cell centroid. The peri region is a 20 µm ring within Tissue with endocrine objects removed. A cell can belong to multiple peri regions. Singles are counted and shown, but are not islet-level analysis rows or separate core/peri objects.
 
 The composition UMAP/Leiden and trajectory input use the named Beta, Alpha, Delta, and CHGA+ hormone-negative shares for objects with at least ten core cells, with no donor correction. The Harmony protein embedding is retained as a separate record. Rebuild these derived representations when component identities change; do not interpret pseudotime as longitudinal disease progression.
+
+The `named_four/1` contract uses those same four types in every endocrine cell
+total and composition denominator. Object classes are geometry labels;
+Unclassified is an explicit cell outcome. Neither enters the endocrine
+denominator. An object with zero named endocrine core cells retains its geometry
+and counts, with unavailable endocrine composition and no invented embedding
+value. Unclassified remains visible in phenotype controls, cell totals,
+legends and downloads. Its preserved evidence is in the processing identity
+records and component audit.
 
 Verify the exact donor inventory, UUID uniqueness, all required files and image links, matching counts across cell and summary tables, excluded-donor absence, and consistent endocrine/immune definitions between assembly and UI. The corrected exporter preserves binary `Ki67_pos` in cell types, per-object cells, donor cells and cell-distance tables, with per-image measurement/level provenance in `uniform_release.json`. It verifies every state against the selected upstream measurement. The release parity check verifies those states survive runtime conversion. Ki67 is not an identity or a new embedding input. Both frozen v19 and v20 omit this field. The local immune-gradient correction includes `Hematopoietic CD45+`, which the last dev app's older list omitted. It needs a rebuilt release before it can appear on a future served site.
 
@@ -315,7 +355,13 @@ Browser checks establish runtime behavior; source/release parity establishes pac
 
 ## 9. Production activation, rollback, and operations
 
-Production activation follows acceptance of the exact dev-reviewed image/data pair and explicit authorization to lift the current stop. **Nothing in this guide authorizes unmasking or activating either site, the unaccepted v20, or the whole-v19 reference.** The owner controls the production decision. Record the selected patched release, source commit, image ID, manifest hash, scientific/security review evidence, and intended rollback before activation.
+The owner has explicitly directed **“Resolve the decision and get the pubapp live.”**
+Activation of the selected-component build is authorized once its actual scientific,
+release, security and runtime checks pass. The security session owns staging and
+activation. Record the selected release, source commit, image ID, manifest hash,
+validation evidence and rollback state. Dev's separately patched DuckDB build
+remains a separate artifact. Historical v20 and whole-v19 releases are not the
+selected production data.
 
 For the existing helper workflow, the documented promotion command, run from `tmp/ufrc-release-20261022`, is:
 
@@ -323,9 +369,9 @@ For the existing helper workflow, the documented promotion command, run from `tm
 RELEASE_NAME="$RELEASE" PUBLISH_ADDRESS=10.13.41.21 ./deploy-vm.sh --skip-stage
 ```
 
-Its defaults select production `islet-explorer`, port 3838, 9 GiB, and `prod/html`. `--skip-stage` requires the exact accepted release already staged and verified. The original handoff describes the owner's `!` invocation for this operation; it is not evidence that the present candidate has approval.
+Its defaults select production `islet-explorer`, port 3838, 9 GiB, and `prod/html`. `--skip-stage` requires the exact accepted release already staged and verified. The original handoff's owner-only `!` instruction predates the explicit production delegation above.
 
-On the VM, the tracked equivalent is `tooling/deploy/activate-release.sh` with `--project-root /pubapps/maigan/islet-explorer`, `--release`, `--publish-address 10.13.41.21`, `--docroot /pubapps/maigan/islet-explorer/prod/html`, and `--local-data /local/maigan/releases`. Activation rechecks content hashes, starts the immutable image, verifies health, and only then records active/previous state. If startup fails, it attempts to restore and verify the previous unit. Check the exit status and recovery report rather than assuming rollback succeeded.
+On the VM, the tracked equivalent is `tooling/deploy/activate-release.sh` with `--project-root /pubapps/maigan/islet-explorer`, `--release`, `--publish-address 10.13.41.21`, `--docroot /pubapps/maigan/islet-explorer/prod/html`, and `--local-data /local/maigan/releases`. Activation rechecks content hashes, starts the immutable image, verifies health, and only then records active/previous state. Recovery preserves the prior service state: a previously stopped service stays stopped if activation fails; it must not automatically restart an insecure old image. Check the exit status and recovery report rather than assuming rollback succeeded.
 
 The tracked rollback commands, executed as the service account on `pubmaigan1`, are:
 
@@ -386,14 +432,14 @@ scientific data was edited.
 
 The handoff carries the actual commit range, changed-file list, evidence receipt, guide, and blockers: separate calibration reference context from mutable structure context; bind all marker/canary calibration and baseline identity; protect named islet endocrine cells; run the all-component invariant audit; preserve the selected v19 endocrine component; do not infer that this diagnostic is a deployable root. File delivery is not an agent read acknowledgement or a completed port. Record those later outcomes separately and preserve workspace-specific changes. Do not transplant CODEX thresholds or data into another modality merely because its pipeline shares code ancestry.
 
-## 11. What remains before the app can return online
+## 11. Complete and verify the live release
 
-1. Resolve the mixed candidate's 2,472 component boundary conflicts: preserve the exact v19 endocrine membership or explicitly allow additional calls under its hormone thresholds. Keep the unresolved decisions visible until the rule is defined.
-2. Resolve the inherited endocrine discrepancy without inventing cutoffs, assigning unsupported labels, or excluding cells to hide it. The completed candidate has 8,629 unresolved cell labels and 953 populated objects with no positive eligible member under corrected-cell thresholds: 915 Singles and 38 Clusters. All 1,468 Islets have positive members. Two Singles are empty and one has two eligible members. Original pixel-classifier positivity is a different test; see the classifier trace before changing membership or thresholds.
-3. Rebuild into fresh paths after the evidence-supported correction. The current app, QuPath, Ki67 and invariant checks are complete, but changed identities require regenerated summaries, scales, spatial outputs and embeddings. Pass actual component provenance, object consistency and release-label/aggregate checks. A positive islet does not resolve an unnamed member's typing.
-4. Reconcile the final QuPath and app outputs with the required image/geometry checks. Retain reviewed exceptions and failed evidence; do not create a new permission requirement solely from an old diagnostic metadata flag.
-5. Package and verify the matching schema-5 data release and image. The current image's installed-runtime smoke and dated security check pass. Bind the final payload to that image and validate the actual runtime queries, downloads and image routes. DuckDB's known raw failure is nonblocking only within the recorded deadline; the other data/security checks remain mandatory.
-6. The owner has already directed the validated current build to live production. Once the actual checks pass, activate that exact release with the production mask handled deliberately, verify service/proxy/image aliases, and finish the outstanding outside-network and reboot acceptance work. Coordinate the separate patched-DuckDB dev build and its service changes with the security owner; do not require a new production permission prompt.
+1. Finish the v2 matched control and DG candidate. Require exact selected endocrine membership, zero unnamed endocrine definitions/boundary placeholders, unchanged marker states and untouched identities, and Lymphatic-only permitted changes. Inspect the actual Unclassified source transitions; do not impose an invented count cutoff or hide unsupported rows.
+2. Pass the hash-bound classifier-lineage proof and exact Single whole-cell checks. Preserve the separate corrected-cell and centroid-membership diagnostics and unchanged geometry.
+3. Rebuild all dependent app tables, spatial outputs, scales and embeddings. Verify every exported UUID/label/Ki67 association and the four-name endocrine census in cell, object, H5AD and composition outputs. Return new app and QuPath artifacts with checksums.
+4. Build schema-5 data with the same frozen source used for the image and parity verifier. Preserve actual scientific-producer provenance separately. Require full release verification, source/release parity, inventory, installed-runtime tests and dated security evidence.
+5. The security owner stages and binds the matching pair, handles the production mask, activates, and verifies the real service, authenticated proxy, Viewer ranges, sidecars and browser interactions. Record the actual outcome in [the deployment record](container_security_20261102.md). A successful build alone does not mean the site is online.
+6. Complete the remaining outside-network and reboot acceptance work according to [UFRC readiness](ufrc_readiness.md), and coordinate the separately patched DuckDB dev build. Preserve prior evidence and recipient workspaces when delivering the new grouped changes.
 
 Hypothesis work remains a separate analysis stream. Retain its approved definitions and historical outputs under `output/app_hypotheses_20261026/`; the typing correction is not permission to rerun or reinterpret it against a new data root automatically. CODEX INS intensity is not an approved quantitative between-donor hypothesis endpoint under the owner's acquisition clarification. Report measurements and technical evidence without adding biological interpretations beyond the approved plan.
 

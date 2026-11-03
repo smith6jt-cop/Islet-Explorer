@@ -1,5 +1,13 @@
 # Endocrine classifier / typing discrepancy — 2026-11-02
 
+**Current resolution:** the [selected-component v2 build](component_build_v2_20261102.md)
+implements the owner's delegated decision. It preserves exact named v19 cell
+calls and resolves only declared nonselected endocrine/boundary rows through
+current rules. A separate hash-bound audit proves original classifier lineage
+and exact Single whole-cell association while retaining the corrected-cell
+and centroid diagnostics below. The historical v20 and v1 counts are unchanged;
+they are not the v2 final cell assignments.
+
 The classifier and the later cell-typing step use different spatial units, preprocessing and thresholds. **The data do not show that the classifier detected 7,800 objects without endocrine signal.** They show 7,800 unresolved **cells** whose corrected whole-cell measurements fail the later positivity rules. Original classifier signal is still present in most of those cells. Some final cell-based objects also extend away from the original detected signal.
 
 The owner's direction is: “The classifier is trained with INS, GCG, SST, and CHGA so it cannot be possible for the endocrine objects to be negative. Resolve this discrepancy.” This supersedes the earlier question about sending these cells to general typing or excluding them. Neither disposition follows from a negative corrected mean.
