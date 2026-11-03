@@ -392,9 +392,9 @@ prep_data <- function(master) {
     }
   }
 
-  # Consolidate unresolved display subclasses without changing the stored measurements.
-  comp <- unclassified_collapse_comp(comp)
-  # Group aggregates as derived proportion columns, before the pair table.
+  # Biological aggregates must be computed while the original source labels exist.
+  # Display subclasses are consolidated at load_shared_prepared_data(), which is
+  # shared by this development path and the serialized production release path.
   comp <- add_phenotype_aggregate_columns(comp)
 
   # Combined (core+peri) phenotype pair table. peri_prop_* columns sanitize
@@ -653,6 +653,17 @@ load_shared_prepared_data <- function(root = data_root) {
   if (length(excluded)) {
     stop("Data root ", root, " contains excluded donor(s) ", paste(excluded, collapse = ", "),
          "; select a root built without them (see scripts/excluded_donors.csv).", call. = FALSE)
+  }
+
+  # Production reads serialized summaries without calling prep_data(). Apply the
+  # same presentation taxonomy at this shared boundary, then rebuild the paired
+  # metrics so selectors and core+peri calculations use the projected columns.
+  # Compute biological aggregates before removing their original source leaves.
+  if (is.data.frame(prepared$comp)) {
+    prepared$comp <- add_phenotype_aggregate_columns(prepared$comp)
+    prepared$comp <- unclassified_collapse_comp(prepared$comp)
+    prepared$comp <- add_phenotype_aggregate_columns(prepared$comp)
+    prepared$combined_pairs <- build_combined_pairs(prepared$comp)
   }
 
   if (!islet_is_production()) {

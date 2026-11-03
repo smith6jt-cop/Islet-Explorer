@@ -14,10 +14,16 @@ make_backend_env <- function(root) {
                                        "is_phenotype_aggregate", "PHENOTYPE_GROUP_AGGREGATES",
                                        "is_macrophage_label", "MACROPHAGE_LABEL_PATTERN",
                                        "MACROPHAGE_KEY_PATTERN", "UNCLASSIFIED_KEYS", "UNCLASSIFIED_PARENT",
-                                       "UNCLASSIFIED_RAW_TO_KEY", "unclassified_collapse")) {
+                                       "UNCLASSIFIED_RAW_TO_KEY", "unclassified_collapse",
+                                       "unclassified_collapse_comp", "phenotype_group",
+                                       "phenotype_aggregate_members", "phenotype_aggregates_for",
+                                       "add_phenotype_aggregate_columns")) {
       eval(expr, envir = env)
     }
   }
+  env$root_has_marker_profile_labels <- function() TRUE
+  env$root_has_top_marker_labels <- function() FALSE
+  env$root_cd45_is_rule_label <- function() FALSE
   sys.source(.find_source("R/01_runtime_data_backend.R"), envir = env)
   env
 }
@@ -248,6 +254,39 @@ test_that("development uses the selected source root even when a manifest exists
   env$audit_na <- function(...) invisible(NULL)
 
   expect_identical(env$load_shared_prepared_data(root)$source, "development")
+})
+
+test_that("production and development project unresolved summaries before caching", {
+  for (production in c(TRUE, FALSE)) {
+    root <- tempfile("islet-projected-summary-")
+    dir.create(root)
+    env <- make_backend_env(root)
+    sys.source(.find_source("R/data_loading.R"), envir = env)
+    env$islet_is_production <- function() production
+    env$audit_na <- function(...) invisible(NULL)
+    raw <- data.frame(`Case ID` = "112", check.names = FALSE)
+    labels <- c(names(env$UNCLASSIFIED_RAW_TO_KEY), "CD4 Tcell", "CD8a Tcell")
+    safe <- function(x) gsub("+", "plus", gsub(" ", "_", x, fixed = TRUE), fixed = TRUE)
+    for (i in seq_along(labels)) {
+      raw[[paste0("prop_", labels[i])]] <- i / 100
+      raw[[paste0("peri_prop_", safe(labels[i]))]] <- i / 200
+    }
+    source <- list(comp = raw, combined_pairs = env$build_combined_pairs(raw))
+    env$load_prepared_release <- function(...) source
+    env$load_master_auto <- function(...) source
+    env$prep_data <- identity
+    result <- env$load_shared_prepared_data(root)
+    expect_identical(source$comp, raw)
+    expect_true(all(c(unname(env$UNCLASSIFIED_KEYS), env$UNCLASSIFIED_PARENT) %in% result$combined_pairs$label))
+    expect_false(any(names(env$UNCLASSIFIED_RAW_TO_KEY) %in% result$combined_pairs$label))
+    expect_equal(result$comp[[paste0("prop_", env$UNCLASSIFIED_KEYS[["subtype"]])]], 0.12)
+    expect_equal(result$comp[[paste0("prop_", env$UNCLASSIFIED_PARENT)]], 0.21)
+    expect_equal(result$comp[["prop_All T cells"]], 0.20)
+    expect_equal(result$comp[["peri_prop_All_T_cells"]], 0.10)
+    # A cached result must be the projected data; never expose a raw release on a cache hit.
+    env$load_prepared_release <- env$load_master_auto <- function(...) stop("cache miss")
+    expect_identical(env$load_shared_prepared_data(root), result)
+  }
 })
 
 test_that("excluded donor IDs match in every spelling and other donors pass", {
