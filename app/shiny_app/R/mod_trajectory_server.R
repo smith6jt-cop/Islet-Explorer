@@ -342,7 +342,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       # versa) -- the two namespaces do not overlap and a stale value would
       # silently plot nothing.
       if (identical(input$traj_y_mode %||% "ratio", "ratio")) {
-        types <- barlow_ratio_types(macrophage_markers())
+        types <- phenotype_selectable(barlow_ratio_types(macrophage_markers()))
         if (!length(types)) {
           return(selectInput(ns("traj_ratio_type"), "Select cell type:",
                              choices = c("Composition features unavailable" = ""),
