@@ -1531,8 +1531,8 @@ phenotype_rules_button <- function(input_id,
 
 # ---- Control panels (owner, 2026-10-17: one layout and separation in every tab) ----
 # Every tab puts its tab-wide controls in two collapsible panels at the top of the tab: "Data controls" (what is
-# selected, filtered or computed; open) and "View controls" (how it is drawn; closed). A selector that only
-# chooses what one card plots stays on that card. Downloads sit under the plot they export.
+# selected, filtered or computed) and "View controls" (how it is drawn). Both panels start collapsed. A selector
+# that only chooses what one card plots stays on that card. Downloads sit under the plot they export.
 CONTROL_PANEL_CSS <- paste0(
   ".control-panel { border: 1px solid var(--islet-border-strong); border-radius: 6px; padding: 0 12px; margin-bottom: 12px; ",
   "background: var(--islet-panel-bg); } ",
