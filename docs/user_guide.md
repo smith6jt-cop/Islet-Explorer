@@ -13,11 +13,13 @@ for the exact image, data and validation evidence. The separate strict-DuckDB
 [dev release](evidence/dev_duckdb_deployment_20261103.json) is also live and verified.
 The [November 3 display fixes](app_display_fixes_20261103.md) described below are
 running for [local review](http://127.0.0.1:3845/islet-explorer/) from source
-`1596b03`, image `846962f7…`, using the separately accepted read-only data built from
+`3c81075`, image `eb6f3c32…`, using the separately accepted read-only data built from
 `5e6580f`; see the [local review record](local_duckdb_review_20261103.md).
 The persistent local user service is enabled on loopback port 3845. Data and View
 controls start collapsed; click a heading to show or hide them. The
-[controls review receipt](evidence/local_controls_review_20261103.json) records this successor’s checks.
+[combined review receipt](evidence/local_unclassified_ui_review_20261103.json)
+records native standard checks passing 49/49 and Composition/Spatial checks
+each passing 12/12, with completed visual reviews and their recorded limits.
 The owner's November 3 direction is **LOCAL REVIEW ONLY**: dev activation is
 paused pending the owner's review and decision. Both public services remain unchanged.
 

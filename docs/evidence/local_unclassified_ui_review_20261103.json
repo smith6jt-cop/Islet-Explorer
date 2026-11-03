@@ -1,0 +1,198 @@
+{
+  "schema": "islet.local_unclassified_ui_review/1",
+  "status": "accepted_local_review",
+  "recorded_utc": "2026-11-03T18:15:37.113835+00:00",
+  "scope": "Local review of consolidated Unclassified hierarchy, shared card help and coordinated card controls. No public deployment or ticket reply.",
+  "url": "http://127.0.0.1:3845/islet-explorer/",
+  "runtime": {
+    "source": "3c81075307c97356cf6ded5df0ac10e810c8b9fa",
+    "image": "sha256:eb6f3c32779a22e4c1ca7a843bd9de5011de253ac42fb3fd4e574d7b34b2c920",
+    "container_id": "cfbd33fba2b7c53d2a607f2e09120e66cb2c9df462940994355e531bc6a325d9",
+    "started_at": "2026-11-03T13:05:55.838337039-05:00",
+    "health": "healthy",
+    "native_baked_app": true,
+    "service": "islet-explorer-local-review-20261103-r2.service",
+    "persistent_enabled": true,
+    "loopback_port": 3845
+  },
+  "data": {
+    "producer": "5e6580fe68af12dd18bee430988bc1ed64061526",
+    "manifest_sha256": "03038ebdcd172e82ff7afba1f2025cb905e5859bcee423b05618b04c993f7320",
+    "read_only": true,
+    "donors": 20,
+    "cells": 3199606,
+    "source_labels_and_scientific_artifacts_unchanged": true
+  },
+  "classification": {
+    "parent": "Unclassified (all)",
+    "subclasses": [
+      "Insufficient typing evidence",
+      "Insufficient evidence after reassessment",
+      "Lineage or subtype unresolved",
+      "Competing lineage/compartment signals"
+    ],
+    "disease_counts": [
+      {
+        "key": "All unclassified cells",
+        "ND": 333948,
+        "Aab+": 234223,
+        "T1D": 255776,
+        "Total": 823947
+      },
+      {
+        "key": "Unclassified insufficient typing evidence",
+        "ND": 301875,
+        "Aab+": 197764,
+        "T1D": 216812,
+        "Total": 716451
+      },
+      {
+        "key": "Unclassified insufficient evidence after reassessment",
+        "ND": 1701,
+        "Aab+": 3190,
+        "T1D": 2507,
+        "Total": 7398
+      },
+      {
+        "key": "Unclassified lineage or subtype unresolved",
+        "ND": 30061,
+        "Aab+": 32679,
+        "T1D": 36039,
+        "Total": 98779
+      },
+      {
+        "key": "Unclassified competing lineage or compartment signals",
+        "ND": 311,
+        "Aab+": 590,
+        "T1D": 418,
+        "Total": 1319
+      }
+    ],
+    "counts_scope": "Global tissue-cell census, independent of card filters; parent is not additive alongside its children.",
+    "biological_aggregates_preserved": [
+      "All T cells",
+      "All immune cells"
+    ]
+  },
+  "verification": {
+    "final_native_standard_browser": "49/49 passed; Spatial label violation corrected",
+    "final_native_family_smoke": "Passed canonical choices, parent plot, exact physical help table and visual inspection",
+    "full_family_predecessor": "Native ccda497/c760: four help tables/eight inspected images, family selection controls, 4842 Plot objects and1398 Trajectory objects; parent sums and pseudotime/UMAP invariance passed",
+    "source_bridge": "102/104 app files identical; three exact UI substitutions explain all other changes (accessible label and two toolbar flex styles). Prior checks retain original identities.",
+    "card_controls": "59 focused checks: final3c Composition12 and Spatial12; predecessorccda PAGA15 and Plot titles20. See separate receipt for exact visual scopes and excluded screenshot crops.",
+    "R_suite": "795 assertions/121 tests and36 parsed files on ccda497; successor UI-only delta parsed and native-tested",
+    "production_loader": "131 checks on337513e actual immutable release, including biological totals; not relabeled as a fresh final-source data rebuild",
+    "security": {
+      "high": 0,
+      "critical": 0,
+      "duckdb_deferral": false,
+      "decoder_result": 0,
+      "decoder_error": -17,
+      "duckdb_and_font_receipts_identical_to_prior_accepted_image": true
+    },
+    "scheduled_health": "Two observed automatic custom-timer checks passed with stable identity; automatic Podman interval disabled"
+  },
+  "evidence": {
+    "image_validation": {
+      "path": "tmp/unclassified-ui-accessibility-20261103/image-3c81075307c97356cf6ded5df0ac10e810c8b9fa/validation-status.json",
+      "sha256": "dddfb676d633162906d7686d689d81ccba0539480627b3bdb2b8875342ea5944",
+      "bytes": 578
+    },
+    "image_inspection": {
+      "path": "tmp/unclassified-ui-accessibility-20261103/image-3c81075307c97356cf6ded5df0ac10e810c8b9fa/image-inspect.json",
+      "sha256": "00c9f97351ef89293c38d3e37802214e3e23349e7e326c5f32370ef598c27016",
+      "bytes": 34652
+    },
+    "build_identity": {
+      "path": "tmp/unclassified-ui-accessibility-20261103/image-3c81075307c97356cf6ded5df0ac10e810c8b9fa/source-identity.txt",
+      "sha256": "d203e0659b8853c98e35fbca0ac4c4d603c38e71d80eb3e64eff1af1d9747669",
+      "bytes": 200
+    },
+    "runtime_verification": {
+      "path": "tmp/unclassified-ui-accessibility-20261103/runtime-3c81075307c97356cf6ded5df0ac10e810c8b9fa/runtime-verification.log",
+      "sha256": "61181985f820c962b2153a8b453ec3f6f6f42f159ef22d6d11b9d36f309276e0",
+      "bytes": 439
+    },
+    "container_startup": {
+      "path": "tmp/unclassified-ui-accessibility-20261103/runtime-3c81075307c97356cf6ded5df0ac10e810c8b9fa/container-startup-inspect.json",
+      "sha256": "9ae25129e863fc1f3666a90edec5004864db621790d88b164ab85d8e89ca9a07",
+      "bytes": 25881
+    },
+    "persistent_unit": {
+      "path": "tmp/unclassified-ui-accessibility-20261103/runtime-3c81075307c97356cf6ded5df0ac10e810c8b9fa/service-configuration.txt",
+      "sha256": "73139bec817ba7779d8ec916af8e34cd9196bd69f11f2f4f1fd80bfebaa42720",
+      "bytes": 827
+    },
+    "standard_browser": {
+      "path": "tmp/unclassified-ui-accessibility-20261103/runtime-3c81075307c97356cf6ded5df0ac10e810c8b9fa/local-browser.json",
+      "sha256": "8d1900a799af857780c5d50e75a26afa08326d4eccfaa7d4d8a1352fc55fddf1",
+      "bytes": 7365
+    },
+    "scheduled_health": {
+      "path": "tmp/unclassified-ui-accessibility-20261103/runtime-3c81075307c97356cf6ded5df0ac10e810c8b9fa/periodic-health-observations/periodic-health.json",
+      "sha256": "ce15fe608028e067b844904a99f34aed9411260f97fe6ef6f7f52efeae0d1439",
+      "bytes": 2144
+    },
+    "final_family_smoke": {
+      "path": "tmp/unclassified-native-20261103/native-3c81075-smoke-receipt.json",
+      "sha256": "8f1088ebb96990839913c1548a72483cf971e3a279940a00668b583a1abc55ee",
+      "bytes": 4899
+    },
+    "full_predecessor_family": {
+      "path": "tmp/unclassified-native-20261103/native-ccda497-acceptance-receipt.json",
+      "sha256": "d904806c3bd543297d2c014754d613b365b6568679d01349290fa0f7d3392672",
+      "bytes": 6305
+    },
+    "source_bridge": {
+      "path": "tmp/unclassified-native-20261103/ccda497-to-3c81075-source-bridge.json",
+      "sha256": "5a7df6eaf293a9309a30c89836bea1e590df5cdacf93015738861ee8a7fd6f6f",
+      "bytes": 13191
+    },
+    "card_controls": {
+      "path": "docs/evidence/card_controls_validation_20261103.json",
+      "sha256": "e8fdccb78d24f77196fd598d3e3ee4d4fd4cec9bdb6a150cd5847c3497591bce",
+      "bytes": 14742
+    },
+    "production_data_integration": {
+      "path": "tmp/unclassified-local-review-20261103/actual-data-run3-production-loader/actual-data-integration.json",
+      "sha256": "7da3f3f7e421a6737b7ded509cefa99919541341089609c68c0d3fe53dc174ab",
+      "bytes": 127062
+    },
+    "cohort_census": {
+      "path": "tmp/unclassified-help-20261103/actual-census.json",
+      "sha256": "f0aeaca560b0108ed813a0191af32d935e4b41cac24821ad233920de262ca415",
+      "bytes": 26027
+    },
+    "R_suite_predecessor": {
+      "path": "tmp/unclassified-ui-combined-20261103/runtime-ccda49712c7df0e28634d843155c98977c961eae/full-r-ccda497.json",
+      "sha256": "abfcebd6c7a5130ad950052b04dd06fab39745400d8ac773f84535d41b0d0ed1",
+      "bytes": 175
+    },
+    "old_controls_receipt": {
+      "path": "docs/evidence/local_controls_review_20261103.json",
+      "sha256": "1ee06c6ddee832f231b0b7640f8ae5ea77380a123bdbbdb7a79bc859e60e6817",
+      "bytes": 15188
+    },
+    "old_native_projection_failure": {
+      "path": "tmp/unclassified-native-20261103/18df-native-failure-receipt.json",
+      "sha256": "366554d8a1fe5765d7039d53ac86509ae35a31efe5d386e03fc4851a1f0265bc",
+      "bytes": 2868
+    }
+  },
+  "preserve_active_backing": [
+    "tmp/unclassified-ui-accessibility-20261103/runtime-3c81075307c97356cf6ded5df0ac10e810c8b9fa",
+    "tmp/unclassified-ui-accessibility-20261103/image-3c81075307c97356cf6ded5df0ac10e810c8b9fa",
+    "tmp/duckdb-dev-ui-release-20261103/final-5e6580f/artifacts/release-5e6580f/data",
+    "tmp/unclassified-native-20261103"
+  ],
+  "limits": [
+    "Local review only; public dev/prod unchanged.",
+    "No additional reboot test; persistent service and lingering configured.",
+    "Local cgroup-v1 does not enforce requested4GiB/2048-task bounds.",
+    "Automated accessibility is a subset; incomplete contrast findings and visual scope are retained in source reports.",
+    "Prior exact-library Parquet/font and scientific parity proofs are inherited, not rerun claims."
+  ],
+  "historical_builds": {
+    "d6405d6_aceb89dc": "Built and security-verified but never activated; superseded by final toolbar correction."
+  }
+}
