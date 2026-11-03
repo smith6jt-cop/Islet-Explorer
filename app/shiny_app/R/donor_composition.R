@@ -199,10 +199,10 @@ donor_composition_card_ui <- function(ns) {
       downloadButton(ns("dl_composition_csv"), "CSV", class = "btn-sm btn-outline-secondary")
     ),
     div(class = "composition-toolbar", style = "display: flex; align-items: center; gap: 8px 16px; flex-wrap: wrap; margin: 8px 0;",
-      div(class = "plot-type-select", style = "flex: 1 1 220px; min-width: 0;",
+      div(class = "plot-type-select", style = "flex: 0 0 200px; min-width: 0;",
         selectInput(ns("composition_region"), "Region", choices = DONOR_COMPOSITION_REGIONS,
                     selected = "core", width = "100%")),
-      div(class = "plot-type-select", style = "flex: 1.6 1 330px; min-width: 0;",
+      div(class = "plot-type-select", style = "flex: 2 1 360px; min-width: 0;",
         selectInput(ns("composition_order"), "Order Donors By", choices = DONOR_COMPOSITION_ORDERS,
                     selected = "beta", width = "100%")),
       div(class = "plot-type-select", style = "flex: 1.2 1 280px; min-width: 0;",
