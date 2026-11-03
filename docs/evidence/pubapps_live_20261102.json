@@ -1,13 +1,13 @@
 {
   "schema": "islet.pubapps_live_deployment/1",
-  "status": "image_validated_and_host_staged_waiting_for_data",
-  "recorded_at": "2026-11-03T00:38:16.276598+00:00",
+  "status": "production_live_verified",
+  "recorded_at": "2026-11-03T02:43:58.632611+00:00",
   "release": "pubapps-2026-11-components-v1",
   "release_git_commit": "e5689f6453e68bc9e94cbe83689cb9db4d3d0b83",
   "scientific_git_commit": "67ee6c9d0b28f467eee589fea24829a6546e3d74",
   "scientific_job": "49168359",
   "production_url": "https://islet-explorer.rc.ufl.edu/islet-explorer/",
-  "production_active": false,
+  "production_active": true,
   "dev_stopped_and_masked": true,
   "duckdb_patch_by": "2026-11-10",
   "duckdb_development_image": "sha256:b26558a9b3791c05f6bf158152efc7eba29fe1c17159d6a23678bd306a4532d6",
@@ -32,7 +32,34 @@
     "tmp/pubapps-live-20261102/image-scan/sha256_89b3f84070b1edb89124347572ed43f278b5a8478e243053957037ccb1ceff8e.cyclonedx.json": "2610485ca2c9c966b7765e8e7d18faa684c6e5eb1e4033b545688c6db78e5ebd",
     "tmp/pubapps-live-20261102/image-scan/sha256_89b3f84070b1edb89124347572ed43f278b5a8478e243053957037ccb1ceff8e.grype.json": "2f4fcdc72b85dadef53816d3a69a312cb6021fd63d75164759b5ea68ccf6351c",
     "tmp/pubapps-live-20261102/image-scan/sha256_89b3f84070b1edb89124347572ed43f278b5a8478e243053957037ccb1ceff8e.python-packages.txt": "86c73a12682130e701daafb087b7a8e906cff81467dd8163ee40404e165344f5",
-    "tmp/pubapps-live-20261102/image-scan/sha256_89b3f84070b1edb89124347572ed43f278b5a8478e243053957037ccb1ceff8e.sbom-corrections.json": "d7bfa7b579118581610edd01075cb3b850f2af78c857957d58ff8b5cf393a87f"
+    "tmp/pubapps-live-20261102/image-scan/sha256_89b3f84070b1edb89124347572ed43f278b5a8478e243053957037ccb1ceff8e.sbom-corrections.json": "d7bfa7b579118581610edd01075cb3b850f2af78c857957d58ff8b5cf393a87f",
+    "tmp/pubapps-component-release-20261102-v2/evidence/release-parity-e5689f6.json": "4705a9ffdccc11ab73ecaa72f4f553b2066bd83d5d727b621fb87c5d2e9794dd",
+    "tmp/pubapps-live-20261102/binding-full-verification.log": "64aaef8636775125da377759a2b24fccd354f45b26aeaa28b2dbc6ea0b3efbf1",
+    "tmp/pubapps-live-20261102/deployment-progress.log": "9825271875e291c74b2d9c9c806d1d004b44d817f16290f56c2db7e1758dfc85",
+    "tmp/pubapps-live-20261102/live-host.json": "0ebebbd5ed9b495558f86790bf6381f3b015e28a8c7bc8073b0a82039dfcc158",
+    "tmp/pubapps-live-20261102/runtime-census.json": "0e8bf95d277105be8e72fd2f891ada69a20bb86b9c5099be3b4964f4e9db9b24",
+    "tmp/pubapps-live-20261102/public-access.json": "47ed1da6d6a67db1881af360b9b5925f62d5b92ceb28d8099fcf67f9fe849289",
+    "tmp/pubapps-live-20261102/public-browser.json": "9af5ef313d46254d0f7bc2ca7f1bc9ff5f07b17849fe7cbca3f98f1250e36746",
+    "tmp/pubapps-live-20261102/host-activation.log": "34c247d44bcc393ac516b8f3b9f8b6582b22dd373fd1eed128c31415f544508f",
+    "tmp/pubapps-live-20261102/host-release-stage.log": "fec116aff2ff115589d9c19f704c5cd4a37c65a6bc7e4180520caf2f70fba006",
+    "tmp/pubapps-live-20261102/offline-runtime-census.json": "0e8bf95d277105be8e72fd2f891ada69a20bb86b9c5099be3b4964f4e9db9b24",
+    "tmp/pubapps-live-20261102/offline-runtime-census-receipt.json": "f964a2ea9fb1920a649b26938658a7ca8f97c5d2be3f8ecc7bbc4ff4f0bf0b6d",
+    "tmp/pubapps-live-20261102/acceptance-validator.json": "97fbd6c657ddc655c17aad61a6cac16c6a15b8a2f8d2a48346cbc2ec191e0363",
+    "tmp/pubapps-live-20261102/deployment-progress-v2.log": "1fcbb68a430dcb2eee75cdddbbab72acadc3dbe8503137008d062aed61bbbe9b",
+    "tmp/pubapps-component-release-20261102-v2/verify-data.log": "ba343291562a1489911a68f14543b4ca02b09e3f8287adabd61b8b0da6291b6b",
+    "tmp/pubapps-component-release-20261102-v2/evidence/release-image-seal-comparison.json": "0eda02403c1cd491d67c8d9cd33f8638ee92974d6f56f02820dec253e3801cdd",
+    "tmp/pubapps-component-release-20261102-v2/evidence/release-parity-e5689f6-revalidated-r3.json": "9fa22ceb122b2ab18cec4262aaf6f3bf3173ff11b72d732d5e90e4eebc5a9c5f",
+    "tmp/pubapps-component-release-20261102-v2/evidence/verifier-correction-realdata.json": "af18e0150fa48884b478fe917974ce17960e94b4bb9e57f3b9a5350ad27efbc7",
+    "tmp/pubapps-component-release-20261102-v2/evidence/release-inventory-e5689f6.json": "6147832fc3ea1693ded18dff8ee05b8602db8542ff564a6dd8f92bcad11ae248",
+    "tmp/pubapps-component-release-20261102-v2/artifacts/release-e5689f6/MANIFEST.sha256": "67511303fc9759fcd1821556c3f2b732b2c61f31eda1d335b7ec86fdcf73442b",
+    "tmp/pubapps-component-release-20261102-v2/artifacts/release-e5689f6/release.env": "9c54af93450df736ca29d263e64923af7b139c5a22c5325db1505ba295a5f6d1",
+    "tmp/pubapps-component-release-20261102-v2/artifacts/release-e5689f6/data/manifest.json": "8ddeecf3639921d2e53538e2d86b6bb4278cc622d29a928a3136fdece3d9f6b1",
+    "docs/unclassified_component_review_20261103.json": "a76304996aa830de1e17129ca049361ae9c8dff9ba4597b3db864ccedd0989c5",
+    "docs/evidence/component_release_validation_20261102.json": "58823334c80ac1051dd8ff847e734f2b65489c02c6effff0daf6533705590110",
+    "tmp/component-build-20261102-v2/return-app.receipt.json": "0e3fb4302a4c9593a479a4cfea9bace6b0f50dc6e650f5cf08f2190dabf70da6",
+    "tmp/pubapps-component-release-20261102-v2/evidence/cell-state-uuid-independent/summary.json": "1b88a11a37dc4c71b17fa6d50cdf76f26106907cbc5412a0d956a4910cb975d1",
+    "data/development/uniform-20donor-20261102-component-app-v2/uniform_release.json": "7ff7c4d92cffa393b16f3118ef04855e959bda14d3862aecce0da95344e91082",
+    "tmp/pubapps-component-release-20261102-v2/evidence/parity-unchanged-inputs-r3.json": "9ba46f8cb5d196b919181e61bc0cd3d84e179271911f95c2c909e782b6a34baf"
   },
   "image_id": "sha256:89b3f84070b1edb89124347572ed43f278b5a8478e243053957037ccb1ceff8e",
   "image_host_staged": true,
@@ -62,5 +89,75 @@
     "source_summary": "output/unclassified_candidate_review_20261103/summary.json",
     "source_summary_sha256": "87efb9562f53e28b45fb2d53d4e3320c7a1bb66087910f3198376f4ec80bfe2b",
     "limitation": "Does not replace assembled-app, release parity, image security or runtime acceptance."
-  }
+  },
+  "full_data_verification": "passed",
+  "outer_release_full_byte_verification": "passed",
+  "release_data_parity": "passed_with_targeted_verifier_correction",
+  "release_manifest_sha256": "67511303fc9759fcd1821556c3f2b732b2c61f31eda1d335b7ec86fdcf73442b",
+  "activation_attempted": true,
+  "deployment_state": {
+    "RELEASE": "pubapps-2026-11-components-v1",
+    "IMAGE_REF": "sha256:89b3f84070b1edb89124347572ed43f278b5a8478e243053957037ccb1ceff8e",
+    "INSTANCE": "islet-explorer",
+    "PUBLISH_ADDRESS": "10.13.41.21",
+    "PORT": "3838",
+    "MEMORY": "9g",
+    "DOCROOT": "/pubapps/maigan/islet-explorer/prod/html",
+    "LOCAL_DATA": "/local/maigan/releases",
+    "ACTIVATED_AT": "2026-11-03T02:41:54Z"
+  },
+  "data_manifest_sha256": "8ddeecf3639921d2e53538e2d86b6bb4278cc622d29a928a3136fdece3d9f6b1",
+  "parity_validation_provenance": {
+    "schema": "islet.parity_targeted_revalidation/1",
+    "validator_commit": "d3ec00e113fbbdb8abb7eb4b57ee4ffc7ca46580",
+    "verifier_sha256": "672658b045514616b1b32bd65afa4be5904d7a3778a5951157558e1b566dc648",
+    "composer_sha256": "640dd9f2df295d5d0c8693351e807c89e394d8bb83f5f39c42a5517a41eb8318",
+    "method": "24 unchanged full-run checks plus corrected complete cell-state gate and independent UUID audit",
+    "evidence": {
+      "original_full_report": {
+        "path": "/data/panc_CODEX/Islet-Explorer/tmp/pubapps-component-release-20261102-v2/evidence/release-parity-e5689f6.json",
+        "sha256": "4705a9ffdccc11ab73ecaa72f4f553b2066bd83d5d727b621fb87c5d2e9794dd"
+      },
+      "corrected_state_report": {
+        "path": "/data/panc_CODEX/Islet-Explorer/tmp/pubapps-component-release-20261102-v2/evidence/verifier-correction-realdata.json",
+        "sha256": "af18e0150fa48884b478fe917974ce17960e94b4bb9e57f3b9a5350ad27efbc7"
+      },
+      "independent_uuid_audit": {
+        "path": "/data/panc_CODEX/Islet-Explorer/tmp/pubapps-component-release-20261102-v2/evidence/cell-state-uuid-independent/summary.json",
+        "sha256": "1b88a11a37dc4c71b17fa6d50cdf76f26106907cbc5412a0d956a4910cb975d1"
+      },
+      "source_manifest": {
+        "path": "/data/panc_CODEX/Islet-Explorer/data/development/uniform-20donor-20261102-component-app-v2/uniform_release.json",
+        "sha256": "7ff7c4d92cffa393b16f3118ef04855e959bda14d3862aecce0da95344e91082"
+      },
+      "release_manifest": {
+        "path": "/data/panc_CODEX/Islet-Explorer/tmp/pubapps-component-release-20261102-v2/artifacts/release-e5689f6/data/manifest.json",
+        "sha256": "8ddeecf3639921d2e53538e2d86b6bb4278cc622d29a928a3136fdece3d9f6b1"
+      },
+      "unchanged_inputs": {
+        "path": "/data/panc_CODEX/Islet-Explorer/tmp/pubapps-component-release-20261102-v2/evidence/parity-unchanged-inputs-r3.json",
+        "sha256": "9ba46f8cb5d196b919181e61bc0cd3d84e179271911f95c2c909e782b6a34baf"
+      }
+    }
+  },
+  "reused_full_parity_checks": 24,
+  "targeted_realdata_state_export_check": "passed_with_corruption_rejection_controls",
+  "host_full_byte_verification": "passed_before_activation",
+  "runtime_cell_census": "matches every phenotype count in accepted final source",
+  "runtime_census_totals": {
+    "cells": 3199606,
+    "donors": 20,
+    "Ki67_positive": 78680
+  },
+  "public_access_checks": {
+    "checks": 15,
+    "passed": 15,
+    "failed": 0
+  },
+  "public_browser_checks": {
+    "total": 49,
+    "passed": 49
+  },
+  "browser_accessibility": {},
+  "verification_scope": "Workstation through the public HTTPS URL; independent off-campus access and host reboot were not tested."
 }

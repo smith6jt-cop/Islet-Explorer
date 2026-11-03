@@ -2,41 +2,58 @@
 
 **Latest owner direction, 2026-11-02:** the current build is intended for the live production PubApp once its actual data/release/runtime checks pass. The known DuckDB finding is nonblocking through the notice's **2026-11-10 UTC** patch deadline; develop/test our DuckDB fix separately for the dev PubApp. See [the dated release decision](duckdb_remediation_window_20261102.md). This supersedes the earlier strict DuckDB hold and no-activation directions below. Historical failed reports remain unchanged; data checks and other security findings still apply.
 
-## Production activation in progress
+## Production live — 2026-11-03 UTC
 
-The owner delegated the remaining decision and requested that the production
-PubApp be made live. The final image and schema-5 release builder are pinned to
-clean source `e5689f6453e68bc9e94cbe83689cb9db4d3d0b83`. Scientific HPG job
-`49168359` uses frozen source `67ee6c9`; the later app-only change preserves
-dynamic phenotype names, including Unclassified, in plot legends. Actual
-classification counts and acceptance are recorded in the
-[component resolution record](component_resolution_20261102.md).
+[The production PubApp](https://islet-explorer.rc.ufl.edu/islet-explorer/) is
+running release `pubapps-2026-11-components-v1`. Production was activated under
+the owner's explicit direction after full release/data checks passed; dev remains
+stopped and persistently masked. The [deployment receipt](evidence/pubapps_live_20261102.json)
+records the actual image, data, service state and public acceptance.
 
-**Not yet live:** the final image is built, validated, exported and loaded on
-PubApps as `sha256:89b3f84070b1edb89124347572ed43f278b5a8478e243053957037ccb1ceff8e`.
-Its package scan reports **0 High / 0 Critical**, every prior package finding
-is resolved, all 35 R files parse, and installed Shiny/R/static-range plus actual
-plot-scale checks pass. The security release decision is
-`pass-with-duckdb-remediation-window`; the raw DuckDB failure is retained.
-The OCI archive SHA-256 is
-`d68761c53f9b0d90678640e63b31cc3e6dac9d080b6c937f22a00f3859f85992`.
+The deployed immutable image is
+`sha256:89b3f84070b1edb89124347572ed43f278b5a8478e243053957037ccb1ceff8e`,
+from clean source `e5689f6453e68bc9e94cbe83689cb9db4d3d0b83`.
+Its package scan reports **0 High / 0 Critical** and all eight prior locally
+identified High/Critical package findings are closed. The notice's three High
+findings were not individually enumerated in its body. Released fixes include
+Node 24.22.2, body-parser 2.4.0, follow-redirects 1.16.2, Ubuntu Brotli
+1.1.0-2ubuntu0.1, and source-built Pillow 13.0.0. All 35 R files parse;
+installed Shiny/R/static-range and actual plot-scale tests pass. The OCI archive
+SHA-256 is `d68761c53f9b0d90678640e63b31cc3e6dac9d080b6c937f22a00f3859f85992`.
 
-The fresh app data is still being assembled and checked. Both services remain
-stopped and masked until production activation. The machine-readable
-[deployment receipt](evidence/pubapps_live_20261102.json)
-records the current state and will be updated after actual activation and public
-acceptance. The intended release is `pubapps-2026-11-components-v1`.
+The data builder uses the same clean source. Scientific HPG job `49168359`
+uses `67ee6c9`; the later app-only change preserves dynamic phenotype names in
+plot legends. Full-byte data verification, release parity, inventory and the
+host's full release verification passed. All 20 donors and 3,199,606 eligible
+cells are deployed. A query inside the running production container matches
+**every** accepted phenotype count: 7,398 cells are Unclassified (0.23%), no
+previously named nonendocrine identities are lost, and all 110,721 selected
+endocrine identities are preserved. See the
+[independent row review](unclassified_component_review_20261103.md).
 
-Host preparation is complete. An unused, never-activated staging directory's
-independent 80-file image copy passed every SHA-256 check and was moved to the
-new release without hardlinking or deleting any prior release. The unused
-`2bbb928d…` Podman cache entry was evicted only after its retained OCI archive
-passed its checksum and all service/container references were checked. This
-provides 10.69 GB of local staging space; the archive and evidence remain intact.
-Pinned deployment tooling is staged, and failure recovery now leaves a previously
-stopped service stopped. Anonymous access is denied and authenticated static
-image byte ranges pass through the production HTTPS proxy. These preflight checks
-do not claim a running application.
+The original parity report is preserved with its one failed state-export check.
+It treated floating-point distance values as exact keys: 213 CSV/Parquet values
+differed by at most `7.1054e-15`, while all Ki67 flags matched exactly. Corrected
+verifier `d3ec00e` applies the existing `1e-12` distance tolerance and keeps binary
+states exact. Its complete real-data check, independent UUID audit and deliberate
+corruption controls passed. The hash-bound acceptance record retains all 24 other
+full parity checks and separately identifies the corrected verifier; runtime
+source, image and scientific data remain unchanged.
+
+Production is healthy with the expected immutable image and read-only scientific
+mounts. The three public image aliases resolve to this release. All public-access
+checks passed (zero failures), including anonymous denial, authenticated app and
+static access, exact TIFF byte ranges, sidecars and WebSocket upgrade. All
+**49 browser checks** passed through the public HTTPS URL. These are
+workstation-to-public-URL checks; independent off-campus access and a host reboot
+were not tested, and this record does not claim UFIT approval.
+
+**DuckDB remains open:** the release decision is
+`pass-with-duckdb-remediation-window`, with the raw failing decoder result
+retained and a **2026-11-10 UTC** patch deadline. This is the owner's dated
+deployment direction, not a patched-decoder claim or institutional exception.
+The separate dev fix is validated locally, as recorded below; dev has not been
+restarted. No vulnerable old image was started during activation or recovery.
 
 ## Earlier completed builds
 
@@ -307,19 +324,18 @@ release/data acceptance and activation.
 ## Ticket reply (draft only; not sent)
 
 > We have stopped `maigan/islet-explorer-dev` on `pubmaigan1.ufhpc` and
-> persistently masked its service against automatic restart. Production
-> `maigan/islet-explorer` remains stopped and its service is also masked.
-> We verified that no containers are running and neither backend port is
-> listening. The old production image will not be restarted or used for rollback.
+> persistently masked its service against automatic restart.
 >
-> We rebuilt current application source `23bd2fd` as immutable image
-> `sha256:2bbb928db9760c86d7a1bb9adf9002bb1a27d88da96b02a600baca93c090d733`.
-> The released Node/system/Pillow fixes and dependency/rendering checks pass;
-> the package scan reports 0 High / 0 Critical. The full binary gate still fails
-> on CVE-2026-111497 in DuckDB 1.5.2's bundled Brotli decoder. The unmerged
-> DuckDB backport is deferred, so this is incomplete remediation.
+> Production `maigan/islet-explorer` has been rebuilt and activated as release
+> `pubapps-2026-11-components-v1`, source `e5689f6`, immutable image
+> `sha256:89b3f84070b1edb89124347572ed43f278b5a8478e243053957037ccb1ceff8e`.
+> The available Node/system/Pillow and dependency updates are applied. The
+> current package scan reports 0 High / 0 Critical; all eight prior locally
+> identified High/Critical package findings are no longer detected. Full data,
+> release, running-container and public-access checks passed.
 >
-> The checksummed image is imported offline under an explicit hold. Neither
-> service configuration changed and no container was started as an application.
-> Please retain shutdown as the mitigation while the DuckDB issue remains
-> unresolved. No passing release attestation or restart is claimed.
+> CVE-2026-111497 in DuckDB's bundled Brotli decoder remains open and is tracked
+> for the notice's November 10 patch deadline. The project owner directed this
+> production deployment within that remediation window. A separate dev fix has
+> passed local decoder and data compatibility checks but has not been deployed.
+> We are not claiming complete DuckDB remediation or an institutional exception.

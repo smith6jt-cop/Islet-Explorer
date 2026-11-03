@@ -2,22 +2,28 @@
 
 **Latest owner direction, 2026-11-02:** the current build is intended for the live production PubApp once its actual data/release/runtime checks pass. The known DuckDB finding is nonblocking through the notice's **2026-11-10 UTC** patch deadline; develop/test our DuckDB fix separately for the dev PubApp. See [the dated release decision](duckdb_remediation_window_20261102.md). This supersedes the earlier strict DuckDB hold and no-activation directions below. Historical failed reports remain unchanged; data checks and other security findings still apply.
 
-## Current production release preparation — 2026-11-03 UTC
+## Current production release — live 2026-11-03 UTC
 
-The owner delegated the remaining decision and requested live production activation.
-The final image and schema-5 release builder use `e5689f6`; HPG scientific job
-`49168359` uses `67ee6c9`. All 20 donors pass classification and object-lineage
-checks. There are 7,398 explicitly unclassified cells (0.23% of 3,199,606), no
-prior named nonendocrine identities lost, and all 110,721 selected endocrine
-identities retained. See the [final independent row review](unclassified_component_review_20261103.md)
+[The production PubApp](https://islet-explorer.rc.ufl.edu/islet-explorer/) runs
+`pubapps-2026-11-components-v1`, immutable image `89b3f840…`, clean source
+`e5689f6`. Full data verification, release parity/inventory and host byte
+verification passed. Production is healthy; public-access checks and all
+49 browser checks passed. The running-container census exactly matches
+every accepted phenotype count across 20 donors and 3,199,606 eligible cells.
+
+There are 7,398 explicitly Unclassified cells (0.23%), no prior named
+nonendocrine identities lost, and all 110,721 selected endocrine identities
+retained. See the [independent row review](unclassified_component_review_20261103.md)
 and [component v2 build record](component_build_20261102.md).
 
-App assembly and final image/data/release verification are still running. Production
-and dev remain stopped and masked until actual activation. The authoritative
+The available package fixes are deployed, with 0 High / 0 Critical findings
+in the final image's package scan. DuckDB remains open within the dated
+November 10 window. Dev remains stopped and persistently masked; its separately
+validated DuckDB fix has not been activated. The
 [security/deployment record](container_security_20261102.md) and
-[machine-readable receipt](evidence/pubapps_live_20261102.json) will record the
-verified release and public acceptance. DuckDB remains under the dated November 10
-window; the separate dev fix does not block this production release.
+[machine-readable receipt](evidence/pubapps_live_20261102.json) bind the actual
+deployed image, data and public acceptance. Independent off-campus access and a
+host reboot were not tested; this is an operational record, not UFIT approval.
 
 ## Earlier component v1 result — superseded by the v2 work above
 
@@ -80,7 +86,7 @@ before that the Plan A Level 2 candidate `0b55429`, release `pubapps-2026-10-uni
 from 2026-10-26 19:23 UTC, and the Level 1 candidate `e10b2ee` of 2026-10-25; all recorded
 below. Dev was subsequently stopped and both services masked on November 2. Production was promoted to perf2 on 2026-10-26 20:51 UTC by the owner ("Push what
 is complete so far to the live app"); **both instances were stopped at 21:31 UTC that day,
-and production has stayed stopped** (the staging instance was started again only by the v20
+and production remained stopped until the November 3 activation above** (the staging instance was started again only by the v20
 activation). `pubapps-2026-10-uniform-v10` (`d55680a`) stays on the VM for
 `rollback-release.sh`. The
 schema-5 production release was published on the VM's
