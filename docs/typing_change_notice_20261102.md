@@ -46,12 +46,24 @@ evidence hashes and remaining packaging/runtime checks.
 | `c93eebf` | Apply the same four-name endocrine contract to assembly, composition inputs, export census and release/parity checks. |
 | `67ee6c9` | Prove original classifier lineage, preserved geometry ancestry and exact Single whole-cell association separately from corrected-cell and centroid diagnostics. |
 | `e5689f6` | Preserve phenotype names when a palette has no explicit color, so counts, points and legend entries remain aligned. |
+| `d3ec00e` | Compare measured distances at the established tolerance during cell-state release parity; retain exact categorical and binary-state associations, row multiplicity and corruption controls. |
 | `caf79f2` | Keep a previously stopped service stopped when release activation fails; do not restart an insecure old image during recovery. |
 
 These are implementation patterns and CODEX evidence. The exact v19 membership,
 numeric levels, endocrine panel and cohort remain CODEX-specific. Adapt through
 recipient-owned `core/multiplex5000` and `core/panels` with the receiving data's
 contracts; do not apply this history blindly to the completed Senior delivery.
+
+Release validation exposed a separate comparator defect: `signed_dist` was an
+exact key even though R and DuckDB can parse the same decimal one floating-point
+step apart. The corrected full state check passes all 3,199,606 cells and
+4,848 object exports. An independent UUID-level audit confirms every Ki67,
+phenotype and coordinate association. Regression tests retain rejection of
+changed/nonbinary states, lost rows and distance changes above the existing
+`1e-12` tolerance. The failed original report stays intact. This validator-only
+commit does not change the scientific producer `67ee6c9`, image/data producer
+`e5689f6`, or any built data. Its final acceptance evidence records the validator
+version separately.
 
 The new package will be named `CODEX-handoff-20261102-component-resolution` at
 the same workstation and HPG sibling locations as the prior packages. It uses

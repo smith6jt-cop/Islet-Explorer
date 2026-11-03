@@ -5,8 +5,9 @@ This guide follows the data from the source images to the reviewed app and its r
 ## Current state — 2026-11-02
 
 The owner has directed **“Resolve the decision and get the pubapp live.”** The
-selected-component v2 build is running with the exact named v19 endocrine
-membership and current non-endocrine methods. Read the
+selected-component v2 scientific build and native QuPath review are complete,
+using the exact named v19 endocrine membership and current non-endocrine
+methods. Read the
 [resolution contract](component_resolution_20261102.md),
 [current build and measured counts](component_build_v2_20261102.md), and
 [authoritative security/deployment status](container_security_20261102.md).
@@ -22,6 +23,7 @@ The first component build's unresolved assignments are historical diagnostics.
 | Object proof | Hash-bound original classifier lineage and exact Single whole-cell association, with corrected-cell and centroid diagnostics retained separately. |
 | Scientific source | `67ee6c9`, HPG job `49168359`, fresh v2 paths. |
 | Image/release source | `e5689f6`, adding the app palette-name fix; release `pubapps-2026-11-components-v1` is being prepared. |
+| Corrected parity validator | `d3ec00e`; validation-only correction, with image/data and scientific producer commits retained. |
 
 Both all-20 identity runs and the final row review have passed: 3,199,606 cells,
 exact selected endocrine membership, zero unnamed endocrine definitions or
@@ -30,8 +32,12 @@ mixed-app named non-endocrine identity is lost; 716,451 Tissue labels remain
 unchanged. All 353 controlled DG label changes involve permitted Lymphatic
 geometry. The all-20 classifier-lineage proof, app assembly, every-cell export verification
 and native QuPath build also pass, and all outputs are returned with verified
-checksums. Release packaging and activation are still underway;
-[current results](component_build_v2_20261102.md) distinguish their outcomes.
+checksums. Immutable schema-5 packaging and full byte verification have passed.
+The original parity run passed 24 of 25 checks; its only failure was a floating
+distance treated as an exact key. The corrected full state gate and independent
+UUID/state check pass. Final composite parity acceptance, inventory and
+production activation remain pending; [current results](component_build_v2_20261102.md#release-parity-correction-and-remaining-checks)
+record the retained failed report and targeted revalidation.
 Production activation is already authorized after the actual checks pass;
 no additional classification-permission question is pending. Production and
 dev remain stopped until their respective activation is verified. The local
@@ -142,7 +148,7 @@ For an **unbound new typing generation**, the current calibration and typing ent
 "$PY" scripts/uniform/typing/structure_metrics.py --run "$RUN" --workers 3
 ```
 
-`levels.py --report FRESH_DIRECTORY` can write a separate candidate calibration report. Its method-selection tables retain failed choices and reasons. A recorded level is not proof the method passed. The new endocrine object audit runs after level construction and causes failure if a populated endocrine object has no INS/GCG/SST/CHGA-positive eligible member, or if object membership is malformed. To audit existing inputs without changing them:
+`levels.py --report FRESH_DIRECTORY` can write a separate candidate calibration report. Its method-selection tables retain failed choices and reasons. A recorded level is not proof the method passed. The default endocrine object audit runs after level construction and causes failure if a populated endocrine object has no INS/GCG/SST/CHGA-positive eligible member, or if object membership is malformed. To audit existing inputs without changing them:
 
 ```bash
 "$PY" scripts/uniform/typing/endocrine_object_audit.py \
@@ -150,6 +156,13 @@ For an **unbound new typing generation**, the current calibration and typing ent
 ```
 
 Exit code 4 means the reported scientific consistency checks failed. The check does **not** require every cell within an islet to be endocrine-positive. The separate release-label check also detects unresolved endocrine definitions inside otherwise positive objects. Neither check repairs the inputs by relabeling cells.
+
+The selected-component v2 build uses the separate classifier-lineage mode
+described in section 6. It requires all six pinned classifier/geometry inputs,
+proves original classifier-region ancestry and exact Single whole-cell
+association, and retains the corrected-cell result as a diagnostic. Its pass
+does not make that earlier diagnostic pass or assert that each descendant's
+corrected cell mean is positive. See the [object proof scope](component_build_v2_20261102.md#what-the-additional-object-proof-establishes).
 
 ## 5. Make a Lymphatic-only revision without changing other components
 
@@ -319,7 +332,23 @@ The release builder and parity verifier reject unresolved endocrine definitions 
 
 ## 8. Build a release and review the app on dev
 
-Use one clean committed release checkout for the OCI image, data builder, and parity checks. The existing linked release checkout is `/data/panc_CODEX/Islet-Explorer-release-20261022`. Its commit must match the image revision, data manifest, and release metadata. A source change after building requires rebuilding the affected release artifacts; editing metadata to make commits agree is invalid. Current security builds use separate clean worktrees described in the security record; do not move a checkout another task is using.
+Use a clean committed release checkout for the OCI image and data builder,
+recording the actual producer in the image revision, data manifest and release
+metadata. The current v2 release checkout is
+`/data/panc_CODEX/Islet-Explorer-component-release-20261102-r2` at `e5689f6`;
+`/data/panc_CODEX/Islet-Explorer-release-20261022` is historical. A source change
+that affects an artifact requires rebuilding that artifact. Editing metadata
+to make commits agree is invalid. Keep the scientific producer (`67ee6c9` for
+v2) distinct from the packaging producer. Do not move a checkout another task
+is using.
+
+A correction confined to a validation tool may instead revalidate the unchanged
+artifacts. Record the validator's own commit and hash, the exact code difference,
+actual input hashes, the original result and the new result. Do not relabel the
+image or data as produced by the newer validator. For a targeted composite,
+prove that the inputs and implementation for retained checks are unchanged,
+identify precisely which checks were rerun and link their fresh results. Keep
+the failed original report. A composite is not a newly executed full suite.
 
 The project-specific helpers live in `tmp/ufrc-release-20261022/`. They are local operational files, not a portable tracked interface. Read their paths and defaults before reuse; several default to v10. From that helper directory, after selecting a clean release commit and a new unique release name, the established sequence is:
 
@@ -331,6 +360,22 @@ RELEASE_NAME="$RELEASE" ./bind-release.sh
 ```
 
 The tracked commands and complete instructions are in [deploy/README.md](../deploy/README.md). Data packaging uses `scripts/build_release_data.R --schema 5`, then `scripts/verify_release_data.R --mode full --schema 5` and `scripts/verify_release_parity.R`. The app interpreter for those R operations is selected by `RETICULATE_PYTHON=/home/smith6jt/.local/share/islet-explorer-py/bin/python`. Schema 1 belongs to the frozen 15-donor release, not this 20-donor workflow.
+
+For v2, packaging and full byte verification passed on the copied `e5689f6`
+bundle. The original parity result remains 24/25: `signed_dist` was accidentally
+an exact key in the cell-state comparison. The 213 CSV-reader rounding
+differences were at most `7.105427357601002e-15`, below the existing `1e-12`
+measurement tolerance. Validator `d3ec00e` retains distance in the comparison
+and row ordering while keeping categorical keys, binary states and duplicate
+multiplicity exact. Its full real-data state check passes all 3,199,606 cells,
+20 donor exports and 4,848 object exports; an independent source-UUID check
+confirms exact coordinates, labels and all 78,680 Ki67-positive states.
+`Rscript scripts/tests/test_release_parity.R` passes, including regression
+controls that still reject changed/nonbinary flags, missing duplicate rows and
+distance changes above tolerance. The [build record](component_build_v2_20261102.md#release-parity-correction-and-remaining-checks)
+links the retained failed report and both new proofs. The final targeted
+composite and inventory are pending; these intermediate passes do not authorize
+claiming the release live.
 
 Use copied files for a reviewer bundle so later source edits cannot alter it through shared inodes. `--materialize hardlink` is only for disposable local tests. Keep image data and credentials outside the OCI image. Preserve the SBOM, vulnerability scan, dependency evidence, immutable image ID, data manifest, parity/inventory reports, and full logs. Current security validation also requires the image's Brotli library evidence from `deploy/verify-brotli.py`, invoked by `deploy/scan-image.sh`: patched Ubuntu/Node, Pillow linked to the system decoder, and DuckDB's actual decoder regression with its installed-library hash. New release manifests require the version-2 report; missing reports and older Pillow-only reports are rejected. A clean package scan alone missed the embedded decoders. Never rewrite the directory of an active release.
 
@@ -387,7 +432,7 @@ tooling/deploy/rollback-release.sh --project-root /pubapps/maigan/islet-explorer
   --instance islet-explorer-dev
 ```
 
-Choose the intended instance. Rollback restores its recorded previous release, including the image aliases and local-data mounts; verify the destination's security and scientific acceptance first. Activation and rollback cannot restart the currently masked services. The obsolete image identified in the security alert must not be restarted or selected for rollback. Preserve the masks until an explicitly authorized patched release is ready; do not unmask a unit while it still points to a vulnerable image. The current masks also prevent automatic restart after reboot.
+Choose the intended instance. Rollback restores its recorded previous release, including the image aliases and local-data mounts; verify the destination's security and scientific acceptance first. Activation and rollback cannot restart the currently masked services. The obsolete image identified in the security alert must not be restarted or selected for rollback. The security owner handles a mask only after selecting the authorized image/data pair and completing its applicable gates, including the recorded production DuckDB window. The current masks also prevent automatic restart after reboot.
 
 Operational evidence includes `systemctl --user status`, `journalctl --user -u <instance>.service`, the instance's runtime logs, deployment state under `runtime/deployments`, and proxy logs under `/pubapps/logs/maigan/`. Keep at least active and previous image/data pairs until the new release has passed the reboot test. Deleting old workstation bundles or VM releases is a separate owner decision.
 
@@ -440,10 +485,10 @@ The handoff carries the actual commit range, changed-file list, evidence receipt
 
 ## 11. Complete and verify the live release
 
-1. Finish the v2 matched control and DG candidate. Require exact selected endocrine membership, zero unnamed endocrine definitions/boundary placeholders, unchanged marker states and untouched identities, and Lymphatic-only permitted changes. Inspect the actual Unclassified source transitions; do not impose an invented count cutoff or hide unsupported rows.
-2. Pass the hash-bound classifier-lineage proof and exact Single whole-cell checks. Preserve the separate corrected-cell and centroid-membership diagnostics and unchanged geometry.
-3. Rebuild all dependent app tables, spatial outputs, scales and embeddings. Verify every exported UUID/label/Ki67 association and the four-name endocrine census in cell, object, H5AD and composition outputs. Return new app and QuPath artifacts with checksums.
-4. Build schema-5 data with the same frozen source used for the image and parity verifier. Preserve actual scientific-producer provenance separately. Require full release verification, source/release parity, inventory, installed-runtime tests and dated security evidence.
+1. **Completed for v2:** matched control and DG candidate, exact selected endocrine membership, zero unnamed endocrine definitions/boundary placeholders, unchanged marker states and untargeted identities, and Lymphatic-only permitted changes. The actual Unclassified source transitions are reviewed; no invented count cutoff hides unsupported rows.
+2. **Completed for v2:** hash-bound classifier-lineage proof and exact Single whole-cell checks, with the separate corrected-cell and centroid-membership diagnostics and original geometry preserved.
+3. **Completed for v2:** dependent app tables, spatial outputs, scales and embeddings, every exported UUID/label/Ki67 association and four-name endocrine census. App and native QuPath artifacts are returned with verified checksums and locally resolving image paths.
+4. **Packaging and full byte verification completed; final parity/inventory pending:** schema-5 data and image retain producer `e5689f6`, with scientific producer `67ee6c9` recorded separately. The validation-only `d3ec00e` correction passes the full actual cell-state check. Require the targeted composite's unchanged-input proof, remaining inventory, installed-runtime tests and dated security evidence before release acceptance.
 5. The security owner stages and binds the matching pair, handles the production mask, activates, and verifies the real service, authenticated proxy, Viewer ranges, sidecars and browser interactions. Record the actual outcome in [the deployment record](container_security_20261102.md). A successful build alone does not mean the site is online.
 6. Complete the remaining outside-network and reboot acceptance work according to [UFRC readiness](ufrc_readiness.md), and coordinate the separately patched DuckDB dev build. Preserve prior evidence and recipient workspaces when delivering the new grouped changes.
 

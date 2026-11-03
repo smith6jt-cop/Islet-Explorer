@@ -10,11 +10,13 @@ final assignment policy.
 
 ## Build and provenance
 
-HPG job `49168359` runs through the sealed site environment with scientific
+HPG job `49168359` completed through the sealed site environment with scientific
 source `67ee6c9d0b28f467eee589fea24829a6546e3d74`. The matched production image
 and schema-5 release builder use `e5689f6453e68bc9e94cbe83689cb9db4d3d0b83`.
 The latter adds only the phenotype-palette name fix and its test. Scientific
-and release manifests must retain these distinct actual producer commits.
+and release manifests retain these distinct actual producer commits. The later
+parity-validator correction is `d3ec00e113fbbdb8abb7eb4b57ee4ffc7ca46580`;
+it does not change either producer, the image or the data bundle.
 
 | Artifact | Path relative to the repository |
 |---|---|
@@ -23,7 +25,7 @@ and release manifests must retain these distinct actual producer commits.
 | Candidate | `data/development/uniform-20donor-20261102-component-candidate-v2` |
 | App | `data/development/uniform-20donor-20261102-component-app-v2` |
 | Reports | `output/component_candidate_build_20261102_v2` |
-| Intended QuPath review | `data/development/qupath-review-20261102-components-v2` |
+| Completed QuPath review | `data/development/qupath-review-20261102-components-v2` |
 | Release worktree | `/data/panc_CODEX/Islet-Explorer-component-release-20261102-r2` |
 | Release build/evidence | `tmp/pubapps-component-release-20261102-v2` |
 
@@ -31,7 +33,7 @@ Config SHA256: `cc6085cd7a0d18528b67b9890552c7ce28ba082ab75ae91f8aa52b3eb3bd2457
 Source synchronization transferred an explicit committed file list and Git
 objects. All seven protected scientific files retain their recorded hashes,
 inodes and timestamps on both sites; the site seal and source package are
-unchanged. No source update is permitted during the running job.
+unchanged. Source remained frozen throughout both scientific and QuPath jobs.
 
 ## Observed results
 
@@ -112,11 +114,14 @@ outputs remained unchanged during transfer. Return receipt
 `tmp/component-build-20261102-v2/return-app.receipt.json` SHA256:
 `0e3fb4302a4c9593a479a4cfea9bace6b0f50dc6e650f5cf08f2190dabf70da6`.
 
-Immutable schema-5 packaging began at 00:45:40 UTC from the clean `e5689f6`
-release worktree. It uses independent copied files and an image-tree
-expectation bound to the original seal and the verified 80-file host inventory.
-Full byte verification, source/release parity, inventory and production
-activation remain pending.
+Immutable schema-5 packaging completed at 01:21:25 UTC from the clean `e5689f6`
+release worktree, using independent copied files. Its 80 image files, including
+20 TIFFs, total 155,515,691,675 bytes; their tree digest matches the original
+sealed TIFF pins and verified sidecars. The full schema-5 byte verifier then
+passed, exit 0. The unchanged data manifest SHA256 is
+`8ddeecf3639921d2e53538e2d86b6bb4278cc622d29a928a3136fdece3d9f6b1`.
+The logs are `tmp/pubapps-component-release-20261102-v2/build-data.log` and
+`verify-data.log` in the same directory.
 
 QuPath job `49170425` completed `0:0` in 8 minutes 30 seconds. All 20 imports
 pass, reconciling all 3,525,977 detections as 3,199,606 eligible and 326,371
@@ -131,6 +136,49 @@ The [compact scientific receipt](evidence/component_build_v2_20261102.json)
 binds completed gates, counts, diagnostics, source protection and returned
 artifacts. Its producer flags remain unchanged: these checks establish rule
 consistency and provenance, not independent biological ground truth.
+
+## Release parity correction and remaining checks
+
+The original source/release parity run passed **24 of 25 checks**. Only
+`cell_state_exports` failed with `numeric_mismatch`: its exact-key list included
+the floating measurement `signed_dist`. R's `fread` and DuckDB's CSV reader
+represented 213 of 3,199,606 distances differently, by at most
+`7.105427357601002e-15`. None exceeded the already established `1e-12` absolute
+measurement tolerance. All categorical fields, missingness and Ki67 flags
+matched. The failed `evidence/release-parity-e5689f6.json`/`.md` and original
+`verify-data.log` are retained under the release build directory.
+
+Validator commit `d3ec00e` removes distance only from the exact-key list; it
+retains distance in the comparison and canonical row ordering. Categorical
+keys, binary states and duplicate multiplicities remain exact. No scientific
+input, image, packaged table or producer metadata was modified. The permanent
+`Rscript scripts/tests/test_release_parity.R` suite passed. Its new regression
+uses the actual decimal that exposed the parser difference and checks that
+altered flags, nonbinary values, missing duplicate rows and distances above
+tolerance still fail. The log is `evidence/verifier-correction-tests-r2.log`.
+
+The corrected **full actual cell-state gate** passes for all 3,199,606 distance
+rows, 20 donor exports / 3,199,606 rows and 4,848 object exports / 357,658 rows.
+Deliberate in-memory flag and distance corruption controls still fail; the
+source and bundle are read only. `evidence/verifier-correction-realdata.json`
+binds the verifier hash and unchanged source/release manifests.
+
+An independent Python check also passes every source UUID's row association,
+phenotype, region, coordinate and Ki67 state: 78,680 positives and zero state
+or coordinate differences. All 4,848 object CSVs are byte-identical. Reading
+the source decimals with round-trip precision gives zero distance differences
+from the release Parquet. Its receipt is
+`evidence/cell-state-uuid-independent/summary.json`, SHA256
+`1b88a11a37dc4c71b17fa6d50cdf76f26106907cbc5412a0d956a4910cb975d1`.
+
+Final parity acceptance is pending a separate **targeted composite receipt**.
+It must hash-bind the preserved original 24 passing checks, the corrected
+full state result, the exact narrow verifier change and unchanged actual
+source/release inputs. It must record validator `d3ec00e` separately from
+scientific producer `67ee6c9` and image/data producer `e5689f6`; it must not
+rewrite the original failed report or claim a new monolithic 25-check run.
+Final inventory and production activation remain pending. No passing live-site
+claim follows from the completed packaging or targeted state check.
 
 ## What the additional object proof establishes
 
