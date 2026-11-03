@@ -1,0 +1,20 @@
+{
+  "schema": "islet.pubapps_live_deployment/1",
+  "status": "building_and_validating_not_activated",
+  "recorded_at": "2026-11-03T00:20:36.173253+00:00",
+  "release": "pubapps-2026-11-components-v1",
+  "release_git_commit": "e5689f6453e68bc9e94cbe83689cb9db4d3d0b83",
+  "scientific_git_commit": "67ee6c9d0b28f467eee589fea24829a6546e3d74",
+  "scientific_job": "49168359",
+  "production_url": "https://islet-explorer.rc.ufl.edu/islet-explorer/",
+  "production_active": false,
+  "dev_stopped_and_masked": true,
+  "duckdb_patch_by": "2026-11-10",
+  "duckdb_development_image": "sha256:b26558a9b3791c05f6bf158152efc7eba29fe1c17159d6a23678bd306a4532d6",
+  "evidence_sha256": {
+    "tmp/pubapps-live-20261102/host-preparation-receipt.json": "27e2073bbc5a151421f0ce387ff31122a15dfd3823369bb0cf6486396b14ba1d",
+    "tmp/pubapps-live-20261102/proxy-preflight.json": "058278b2ddf30d22fc8529cc7a95ebfec3f3e5794bd8e31e3376b4b50252e043",
+    "tmp/pubapps-live-20261102/host-tooling-final-provenance.log": "091b1e6e443a6f8fa845b9ecdab2e91c1c8a51566a28ac60a4f664b980f89022",
+    "tmp/pubapps-live-20261102/tooling.sha256": "10759878f822b68373e70ce273413865f07cc044eaaff79b1ef092cad9f19aff"
+  }
+}

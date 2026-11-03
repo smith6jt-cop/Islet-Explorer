@@ -2,7 +2,34 @@
 
 **Latest owner direction, 2026-11-02:** the current build is intended for the live production PubApp once its actual data/release/runtime checks pass. The known DuckDB finding is nonblocking through the notice's **2026-11-10 UTC** patch deadline; develop/test our DuckDB fix separately for the dev PubApp. See [the dated release decision](duckdb_remediation_window_20261102.md). This supersedes the earlier strict DuckDB hold and no-activation directions below. Historical failed reports remain unchanged; data checks and other security findings still apply.
 
-## Completed current builds
+## Production activation in progress
+
+The owner delegated the remaining decision and requested that the production
+PubApp be made live. The final image and schema-5 release builder are pinned to
+clean source `e5689f6453e68bc9e94cbe83689cb9db4d3d0b83`. Scientific HPG job
+`49168359` uses frozen source `67ee6c9`; the later app-only change preserves
+dynamic phenotype names, including Unclassified, in plot legends. Actual
+classification counts and acceptance are recorded in the
+[component resolution record](component_resolution_20261102.md).
+
+**Not yet live:** the final image is building and the fresh data candidate is
+undergoing its checks. Both services remain stopped and masked until production
+activation. The machine-readable [deployment receipt](evidence/pubapps_live_20261102.json)
+records the current state and will be updated after actual activation and public
+acceptance. The intended release is `pubapps-2026-11-components-v1`.
+
+Host preparation is complete. An unused, never-activated staging directory's
+independent 80-file image copy passed every SHA-256 check and was moved to the
+new release without hardlinking or deleting any prior release. The unused
+`2bbb928d…` Podman cache entry was evicted only after its retained OCI archive
+passed its checksum and all service/container references were checked. This
+provides 10.69 GB of local staging space; the archive and evidence remain intact.
+Pinned deployment tooling is staged, and failure recovery now leaves a previously
+stopped service stopped. Anonymous access is denied and authenticated static
+image byte ranges pass through the production HTTPS proxy. These preflight checks
+do not claim a running application.
+
+## Earlier completed builds
 
 The matching production candidate is now image `41e62a97…`, source `b15f0fc`.
 It passes package/dependency checks, the installed Shiny/R/static-image smoke,
