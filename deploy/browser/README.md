@@ -1,5 +1,53 @@
 # Browser acceptance
 
+## Card controls review — November 3, 2026
+
+The focused card checks supplement `check-app.mjs --expanded true`. They require
+an explicitly identified loopback preview and save screenshots for direct visual
+inspection. Use a fresh evidence directory for every attempt. Set `REVIEW_SOURCE`
+to the full inspected app commit, `REVIEW_IMAGE` to its actual `sha256:…` image ID,
+and `REVIEW_EVIDENCE` to the new output directory:
+
+```bash
+node deploy/browser/check-composition-controls.mjs \
+  --url http://127.0.0.1:3845/islet-explorer/ \
+  --source-commit "$REVIEW_SOURCE" --runtime-kind native-image --image-id "$REVIEW_IMAGE" \
+  --output "$REVIEW_EVIDENCE/composition.json" --shots "$REVIEW_EVIDENCE/composition-shots"
+
+node deploy/browser/check-paired-paga.mjs \
+  --url http://127.0.0.1:3845/islet-explorer/ \
+  --source "$REVIEW_SOURCE" --runtime-kind native-image --image "$REVIEW_IMAGE" \
+  --output "$REVIEW_EVIDENCE/paga.json" --shots "$REVIEW_EVIDENCE/paga-shots"
+
+node deploy/browser/check-spatial-card-layout.mjs \
+  --url http://127.0.0.1:3845/islet-explorer/ \
+  --source "$REVIEW_SOURCE" --runtime-kind native-image --image "$REVIEW_IMAGE" \
+  --output "$REVIEW_EVIDENCE/spatial.json" --shots "$REVIEW_EVIDENCE/spatial-shots"
+
+node deploy/browser/check-plot-titles.mjs \
+  --url http://127.0.0.1:3845/islet-explorer/ \
+  --source "$REVIEW_SOURCE" --runtime-kind native-image --image "$REVIEW_IMAGE" \
+  --output "$REVIEW_EVIDENCE/titles.json" --shots "$REVIEW_EVIDENCE/titles-shots"
+```
+
+Composition checks include physical mouse/keyboard selection, empty-state
+persistence, the original/selected denominators, shared palette colors and palette
+persistence after first opening object details. PAGA checks both independently
+colored views, exact keyed coordinates, equal map areas, guide placement, linked
+interaction and CSV parity. Spatial checks card-width maps, dense legends,
+brush/reset, the donor selector's precise scope and grouped Distance controls at
+1200/1600px. Its optional `--scope distance` is a focused follow-up, not a replacement
+for the default full run.
+The title check switches data layers, populations, metrics and plot types, requiring
+both Plot cards to identify the selected layer and measure without overlapping controls.
+
+For a diagnostic source snapshot use `--runtime-kind source-overlay` and record
+the baked image source separately. Caller-supplied source/image arguments do not
+prove runtime identity: bind reports to the actual container inspection and
+read-only source/data inventory. Retain failed attempts and directly inspect
+the resulting screenshots before recording visual acceptance. These checks do
+not establish scientific typing, security, public access or reboot acceptance.
+
 ## Linked trajectory inspection
 
 The focused regression check for the current expanded-cohort development app
