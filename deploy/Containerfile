@@ -19,19 +19,6 @@ RUN bash /opt/islet-server-build/harden-base.sh \
 
 FROM ${BASE_IMAGE}
 
-ARG BASE_IMAGE
-ARG OCI_CREATED=""
-ARG OCI_REVISION="unknown"
-ARG OCI_VERSION="development"
-
-LABEL org.opencontainers.image.title="Islet Explorer" \
-      org.opencontainers.image.description="Reviewer-facing pancreatic islet explorer for UFRC PubApps" \
-      org.opencontainers.image.source="https://github.com/smith6jt-cop/Islet-Explorer" \
-      org.opencontainers.image.base.name="${BASE_IMAGE}" \
-      org.opencontainers.image.created="${OCI_CREATED}" \
-      org.opencontainers.image.revision="${OCI_REVISION}" \
-      org.opencontainers.image.version="${OCI_VERSION}"
-
 USER root
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -146,3 +133,18 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=180s --retries=5 \
 
 ENTRYPOINT ["/usr/local/bin/islet-container-entrypoint"]
 CMD ["/usr/bin/shiny-server"]
+
+# Keep changing release metadata after dependency and application layers so a
+# new Git revision or build timestamp does not invalidate compiled dependencies.
+ARG BASE_IMAGE
+ARG OCI_CREATED=""
+ARG OCI_REVISION="unknown"
+ARG OCI_VERSION="development"
+
+LABEL org.opencontainers.image.title="Islet Explorer" \
+      org.opencontainers.image.description="Reviewer-facing pancreatic islet explorer for UFRC PubApps" \
+      org.opencontainers.image.source="https://github.com/smith6jt-cop/Islet-Explorer" \
+      org.opencontainers.image.base.name="${BASE_IMAGE}" \
+      org.opencontainers.image.created="${OCI_CREATED}" \
+      org.opencontainers.image.revision="${OCI_REVISION}" \
+      org.opencontainers.image.version="${OCI_VERSION}"
