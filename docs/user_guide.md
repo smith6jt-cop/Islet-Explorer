@@ -58,9 +58,14 @@ paused pending the owner's review and decision. Both public services remain unch
 The selected-component release uses exactly Beta, Alpha, Delta and CHGA+
 hormone-negative for endocrine cell totals. Islet, Cluster and Single are
 anatomical object classes, not additional cell identities. Unsupported cell
-assignments remain explicit as **Unclassified**, retained in overall cell
-counts, phenotype controls, plots and downloads. Their grey palette entry
-remains visible in legends. Existing Tissue labels are distinct and unchanged.
+assignments remain explicit in the scientific data. In the local display, the
+**Unclassified** family groups four disjoint subclasses: insufficient typing
+evidence, insufficient evidence after reassessment, unresolved lineage/subtype,
+and competing lineage/compartment signals. These describe why a specific identity
+was not assigned; they are not additional endocrine identities. Raw Tissue,
+Unclassified, general-class residual and Doublet suspected labels remain preserved
+in the source. The family and its leaf choices are never counted together in an
+additive plot.
 An object with no named endocrine core cells still has a structural record,
 but no available endocrine composition or invented embedding value. Use the
 method help and loaded release manifest for the exact generation.
@@ -238,44 +243,60 @@ All plots use a consistent font baseline (16pt body text, 18pt titles, ≥12pt f
 
 The Plot tab is the primary exploration interface. It has a **sidebar** (left) and **main panel** (right).
 
-### Sidebar Controls
+### Data And View Controls
 
-- **Mode**: Switch between `Scatter` (feature vs diameter) and `Composition` (cell type proportions)
-- **Feature/Composition selector**: Choose what to plot
-  - *Scatter mode*: Select from markers (31 proteins) or targets (hormone intensities)
-  - *Composition mode*: Three option groups (the previous "Immune Metrics" group of 5 hand-curated ratios was removed in Apr 2026 — use the Spatial tab's per-phenotype enrichment / proportion / distance views instead):
-    - **Phenotype Proportions** — the loaded root's phenotype groups and labels. All 20 donors in the uniform comparison roots use the recorded uniform workflow; the older original-versus-additions typing split is historical.
-    - **Peri-Islet Proportions** — proportions of those retained phenotypes in the 20 μm expansion zone around the islet
-    - **Core+Peri Proportions** — combined phenotype proportions using core and peri cell counts
+Both panels start collapsed. Open **Data Controls** to choose the data layer,
+population measure, core/peri region, metric, endocrine object classes, donor
+statuses, autoantibodies, age, sex and diameter range. The two zero-value filters
+apply independently to the left and right plots. Outlier removal is not exposed;
+all objects are retained unless an explicit filter excludes them.
 
-  QuPath threshold-based INS/GCG/SST measures remain in source artifacts for provenance, but are excluded from Population Measure because the original and added donors do not use the same threshold-counting method.
-- **Metric** (Composition / Microenvironment): Picks the y-axis unit. Labels spell out the denominator explicitly so "density" is never ambiguous — see [Density terminology](#density-terminology) below.
-- **Region**: Filter by tissue region (core only, peri-islet, or all)
-- **Donor Status**: Select disease groups to include (ND, Aab+, T1D)
-- **AAb Filter**: Filter by autoantibody positivity (when available)
-- **Age Range**: Slider to restrict donor age (H5AD only)
-- **Sex**: Checkbox filter (H5AD only)
-- **Endocrine objects** (first in the Data controls; the Spatial tab has a copy that stays in step): choose Islets and/or Clusters. Singles (whole-cell endocrine objects, not necessarily named endocrine cell identities) are not analyzed; the Endocrine objects per donor card at the bottom of the Plot tab counts them, and the segmentation map outlines them in orange. This replaced the Min cells/islet filter on 2026-10-17; every tab except Trajectory uses the selected classes (Trajectory fits every object with 10 or more core cells).
-- **Diameter Range**: Restrict islet diameter in μm
+**Cell Populations** offers proportions, counts and area-based densities.
+**Microenvironment** offers structural area proportions. Islets and Clusters are
+analysis objects; Singles are counted in **Endocrine Objects Per Donor** and drawn
+on the segmentation map, but do not enter islet-level analyses. Trajectory instead
+uses all endocrine objects with at least ten core cells.
 
-### Main Panel
+Open **View Controls** to set point coloring, donor palette, point size,
+transparency, axis ranges and plot-specific summaries. Each plot card has its own
+**Plot Type** selector. Both card headings identify the selected data layer, and
+both plot titles identify the selected measure. Count and density titles follow
+the chosen metric. Long dropdown labels wrap with space reserved for the arrow.
+Click a point to select its object and open the segmentation viewer.
 
-The pending November 3 layout update lets Plot selectors use the available card width and
-reserves space beside the arrow, so long selected labels can wrap without overlapping it.
-The selector values and calculations are unchanged.
+### Composition By Donor
 
-- **Scatter (left)**: Interactive Plotly scatter, diameter vs selected feature, with binned summary lines per donor status. Excluded outliers (see [Outlier Handling](#outlier-handling)) appear as faint gray × ghost markers.
-- **Distribution (right)**: Violin or box plot of the same feature, grouped by donor status. Has its own **independent** "Exclude zero values" checkbox — toggling it no longer affects the left scatter. Outlier ghost × markers render here too.
-- **View controls**: the point controls under *Both plots* (color by, point size, transparency, show individual points, log y-axis) apply to the scatter and the distribution alike; Trend line, log2 x-axis and the summary statistic apply to the scatter, Plot type to the distribution. Individual points are shown by default (since 2026-10-19).
-- **Outlier Table**: Lists excluded outliers for the selected feature. Hover the "Show excluded-outlier table" checkbox label in the sidebar for the rule.
-- **Click Interaction**: Click any data point to open the segmentation viewer (see [Single-Cell Drill-Down](#single-cell-drill-down))
+The card pools cell counts across each donor's selected objects. Choose **Region**
+(Core, Peri-islet Band or Core + Peri-islet), **Order Donors By**, and **Phenotype
+Colors** in its compact toolbar. The palette stays synchronized with Spatial and
+the cell viewer.
 
-### Tips
+Open **Include Phenotypes** to select populations using the same grouped checkboxes
+as Spatial. **All** and **None** apply to a group or the full list. The initial core
+selection omits the four endocrine types; the peri selection omits Exocrine; the
+combined selection omits both. Changing the region restores its defaults. An empty
+selection stays empty and gives an explicit empty plot.
 
-- The two "Exclude zero values" checkboxes (one per panel) are independent — set them differently when you want the violin/box to include zeros but the binned scatter to exclude them, or vice-versa.
-- Point positions on both panels use seeded jitter, so the cloud doesn't shuffle when you toggle other controls.
-- Use Cell Populations mode with "Peri-Islet Proportions" to visualize the cellular microenvironment around each islet. Use "Core+Peri — Phenotype Proportions" to pool both zones into a single per-islet value (cells from core + peri divided by the matching pooled cell count or pooled annotation area).
-- Use Spatial for per-phenotype enrichment, proportion, proximity, and distance views; the retired Plot "Immune Metrics" shortcut group is not part of the reviewer UI.
+The y-axis is **Proportion of selected phenotypes**. Each bar totals 100% of the
+included cells; hover also reports the proportion of all original cells. The
+Unclassified family has four disjoint subclasses. Parent aggregates never appear
+beside their subclasses in the stack, and hidden Conflict classes are excluded.
+
+The CSV contains the included categories and matches the plotted selection.
+`cells` and `total_cells` retain the original counts; `proportion` uses the original
+denominator, while `proportion_selected` gives the plotted percentage and
+`shown_cells` gives its denominator. Original-denominator proportions need not sum
+to 100%. Details and methods are in the card's **?** help.
+
+### Macrophage Selection
+
+The **Macrophage** checkbox is followed by **Separate by:** and four marker boxes:
+CD68, CD163, LGALS3 and CD4. No marker selected gives one macrophage category.
+Selecting markers shows the corresponding disjoint positive/negative profiles.
+The Macrophage checkbox selects or clears those children together; it is not an
+extra category in the plot. Individual profiles remain selectable. Marker choices
+stay synchronized across tabs. Single-measure dropdowns show the same **Separate
+by:** controls beneath the population selector.
 
 ### Density terminology
 
@@ -300,10 +321,9 @@ scanpy is unavailable. PAGA/ForceAtlas2 supplies the separate two-dimensional gr
 ### Layout
 
 The Trajectory tab uses a full-width layout (no sidebar). All controls are inline.
-The pending November 3 layout update aligns the pseudotime and UMAP cards, then
-places the Segmentation map in a full-width row with consistent spacing above and
-below. Its PAGA card title is “PAGA force-directed layout”; the method attribution
-remains in the help text.
+The pseudotime and UMAP cards align, followed by the Segmentation Map in its own
+full-width row with consistent spacing. Card headings capitalize every word;
+method explanations and attribution remain in the **?** help.
 
 ### Components
 
@@ -331,9 +351,14 @@ intensity is not an approved quantitative between-donor hypothesis endpoint; see
    selected Y measure. These coordinates provide a fixed reference and are not the PAGA
    layout.
 
-5. **PAGA Force-Directed Layout** — A separately computed two-dimensional graph initialized
-   from PAGA and drawn with ForceAtlas2. Coordinates are unitless; interpret relative
-   neighborhood structure, not axis magnitude.
+5. **PAGA Force-Directed Layout** — Two side-by-side views of the same graph,
+   initialized from PAGA and drawn with ForceAtlas2. Each **Color By** dropdown is
+   independent: Pseudotime, Donor Status, Donor, Selected Feature or Leiden Cluster.
+   The defaults are Pseudotime on the left and Donor Status on the right. Changing
+   coloring does not refit or move the graph. Legends and color bars sit below each
+   view. Hover and click are linked to the other trajectory plots and the
+   segmentation map. The CSV records both coloring choices. Coordinates are
+   unitless; interpret relative neighborhood structure, not axis magnitude.
 
 6. **Click Interaction** — Click a pseudotime point to:
    - Highlight the selected islet
@@ -468,45 +493,36 @@ experiment and its 7,493/11,136 object counts are superseded and are not this da
 Changing identities requires rebuilding these derived outputs from a coherent candidate;
 a diagnostic identity replay cannot be substituted for an assembled root.
 
-### 3-Panel Layout
+### Controls And Cards
 
-1. **Controls Sidebar** (left panel)
-   - Donor selector (the loaded root's donors, with disease status labels)
-   - Color by: Phenotype (root-specific labels) or Leiden cluster
-   - Leiden resolution dropdown (0.3, 0.5, 0.8, 1.0) — visible when Leiden coloring selected
-   - Region filter: All cells, Core + Peri only, or Core only
-   - **Color background cells**: Toggle to show tissue background cells in phenotype colors (dimmed) instead of gray
-   - **Phenotype filter**: Show/hide individual phenotypes with checkboxes. Use **All** / **None** links to quickly select or clear all types. Dynamically populated from the selected donor's cell types.
-   - Donor status checkboxes
-   - Phenotype and Donor Status palette selectors
-   - Download CSV button
+**Donor For Tissue And Immune Gradient** is always visible above the collapsed
+Data and View controls. It selects the donor in **Tissue Scatter Plot** and the
+dotted donor line in **Cell Distribution Around Islets**. It does not limit every
+card to that donor: other cohort summaries retain their own donor-status controls.
 
-2. **Tissue Scatter** (center, 800px height)
-   - Full tissue-wide scatter plot of ~177K cells per donor
-   - Background: tissue cells in light gray by default, or colored by phenotype when "Color background cells" is checked
-   - Foreground: core/peri cells colored by phenotype or Leiden cluster
-   - Spatial coordinate convention: `coord_fixed()` + `scale_y_reverse()` (microscopy standard)
-   - **Zoom**: Drag to select a region, then the view zooms in. Double-click or click **Reset Zoom** to restore the full view.
-   - Uses ggplot2 `renderPlot` (not plotly) for performance at >100K points
+Open **Data Controls** to choose endocrine object classes, donor statuses, Leiden
+resolution, tissue region and phenotype checkboxes. Open **View Controls** to set
+tissue coloring, background-cell coloring and the phenotype or donor-status palette.
+The macrophage **Separate by:** controls work as described above.
 
-3. **Leiden clusters** (right): **Show** switches between three views. *Composition* (the default) is a stacked
-   bar chart of each cluster's mean core phenotype proportions, clusters in numeric order: what each cluster is. Its
-   endocrine bars restate the proportions the clusters are built from. *Donor status* and *Donor* (since 2026-10-20) split
-   each cluster's objects by donor status or by donor, with each cluster's donor count above its bar: which
-   composition states are disease-associated, and whether a cluster belongs to a few donors.
-4. **Islet-Level UMAPs** (full-width row below, since 2026-10-19): the Leiden UMAP and, since 2026-10-20, the same
-   layout colored by each object's immune proportion in its 20 µm band, side by side at one size, both interactive (PNG
-   from each camera button). The layout by donor status is on the Trajectory tab.
-   - Built from each object's endocrine composition (the Beta, Alpha, Delta and CHGA+ hormone-negative proportions of
-     its core endocrine cells) for the objects with ten or more core cells, with no donor correction (2026-10-19).
-     Smaller objects have no point or cluster in this saved layout. Color patterns are
-     descriptive; the layout alone does not establish disease progression or classification accuracy.
-   - Hidden with message when Leiden data unavailable in H5AD
+- **Tissue Scatter Plot** draws the selected donor's cells with equal physical
+  scaling on x and y and the microscopy y-axis reversed. The map uses the available
+  card width. Its legend wraps into multiple columns below the map; the plot's
+  height adapts to tissue shape and legend size. Drag to zoom, then double-click or
+  use **Reset Zoom** to restore the whole section. CSV and PNG downloads stay below.
+- **Leiden Clusters** switches among mean phenotype composition, donor-status
+  composition and donor composition of each cluster. The endocrine bars restate
+  the proportions used to build these clusters. Counts above the bars give the
+  number of donors represented.
+- **Islet-Level UMAPs** shows the same saved coordinates twice, with independent
+  **Color By** menus. Defaults are Leiden Cluster and peri-islet immune proportion.
+  Donor demographics, clinical values and object measures provide other colorings.
+  Legends and color bars sit below the plots. Hover and click link both views and
+  open the selected object's segmentation map.
 
-The pending November 3 display update places the tissue-scatter legend and both
-UMAP legends or continuous color bars below their plots. Dense tissue labels wrap,
-and the plot grows vertically to preserve the map area while keeping downloads
-below it. Coloring choices, linked selection and exported values are unchanged.
+The saved layout uses endocrine composition for objects with at least ten core
+cells; smaller objects have no point or cluster. Color patterns are descriptive
+and do not establish disease progression or classification accuracy.
 
 ### Data Sources
 
@@ -537,7 +553,7 @@ islets with beta cells holds more immune cells (0.17–0.27) than around insulin
 (Core, 0–20 … 200–400, >400 µm), the chosen immune cells' proportion of all cells there divided by the donor's own tissue
 proportion (its cells outside every endocrine object and band). 1 is the donor's tissue level. Lines are the donor median
 per status with the IQR. Dividing by the donor's own tissue separates gathering at islets from a donor having more
-immune cells everywhere. The donor chosen in the Data controls (the tissue scatter's donor) is drawn as a dotted line over
+immune cells everywhere. The donor chosen in **Donor For Tissue And Immune Gradient** is drawn as a dotted line over
 the medians; hover gives its cell counts, and a point resting on fewer than 20 of the chosen cells is faded.
 
 **Phenotype composition & enrichment**: every immune phenotype at once (CD8a and CD4 T cells, B cells,

@@ -1,5 +1,10 @@
 # CLAUDE.md - Shiny App (Islet Explorer)
 
+**Local card/control successor:** read the [November 3 card update](../../docs/card_controls_update_20261103.md)
+for Composition Include controls, paired PAGA, responsive tissue rendering and shared macrophage controls.
+The [local runtime record](../../docs/local_duckdb_review_20261103.md) identifies the actual running source
+and image. Public release identities below are separate; local UI code is not implicitly deployed.
+
 **Current selected-component v2 release:** production `pubapps-2026-11-components-v1`
 is live and verified as of 2026-11-03 02:42 UTC (November 2 local), with all
 15 authenticated-access and 49 browser checks passing. The separate strict-DuckDB
@@ -145,7 +150,9 @@ Single selector does not apply to this tab and is hidden on it. Fitted on all cl
 the beta-cell ratio (ρ −0.20 vs −0.70 at the cutoff). `traj_pseudotime_column()` uses scanpy DPT when available and
 falls back explicitly to destiny; `traj_with_pseudotime()` carries the actual engine
 and fitted-islet count into the UI and CSV provenance. PAGA/ForceAtlas2 is the separate
-two-dimensional graph card, not the name of the one-dimensional axis. The Y axis switches
+two-dimensional graph card, not the name of the one-dimensional axis. Its two independent color selectors
+share one fitted coordinate table. `paga_layout` and `paga_layout_right` use the same linked-islet renderer and
+the Plotly 2.11-compatible `paired_plotly_guides()` helper; both coloring choices are recorded in CSV provenance. The Y axis switches
 between the 31 marker means and retained cell-type/endocrine-cell ratios. The legacy
 `dpt_pseudotime*` H5AD columns remain audit artifacts and are not selectable in the
 reviewer UI. See `docs/trajectory.md` §11.
@@ -178,7 +185,7 @@ reads `plot_df()` and the right `dist_data()`, so each keeps its own "Exclude ze
 plot); the added types leave out flagged outliers while the filter is on. Output ids stay `plt` / `dist` (linked-click
 sources) and the CSVs `dl_summary` / `dl_distribution_csv`, each exporting its card's current type (`card_export()`).
 Object types (Against diameter, By donor status, Against another measure, Against a donor clinical value) stay linked
-plots. The card title is the type's name.
+plots. The card title combines the selected data layer and plot type; both in-plot titles identify the selected measure and metric.
 
 **Direct plotly figures (Plan A Level 2, 2026-10-26).** Against diameter, By donor status and the Trajectory
 scatter are built with `plot_ly()` by the pure builders in `R/plot_figures.R` (`plot_diameter_figure()`,
@@ -210,14 +217,20 @@ zero in fewer than `PLOT_MIN_NONZERO_FRACTION` (1 %) of objects are not offered 
 ..., comp =)`; on v9 core B cell, CD4 Tcell, Exocrine and peri-islet CHGA+ hormone-negative): plotted they are a line
 of points at zero.
 
-The full-width **Composition by donor** card (`R/donor_composition.R`) stacks each donor's pooled phenotype proportions
-(cells of the phenotype over all cells of its selected objects) in the core, band or both, with the general classes'
-cells together as "No subtype" so bars sum to 100 %. It applies the Data controls' object, donor and diameter filters
-(`apply_plot_filters()`, shared with `raw_df_base()`), not the measure, zero or outlier settings. Its **Leave out**
-choice drops phenotypes and gives the rest as proportions of the remaining cells, defaulting per region to the four
-endocrine types (core, 99 % of cells on v9) or Exocrine (band, 93 %); phenotypes with no cells get no legend entry.
-CHGA+ hormone-negative is brown (#8D6E63) in the High Contrast palette since 2026-10-21; its deep purple was a shade
-from CD8a Tcell and Macrophage.
+The full-width **Composition By Donor** card (`R/donor_composition.R`) pools each donor's selected
+objects in core, peri or both. Its collapsed **Include Phenotypes** panel uses the shared grouped checkbox
+helper; defaults invert the former Leave Out selection. Region changes restore the region default; an empty
+selection stays empty. **Phenotype Colors** uses non-namespaced `composition_palette`, synchronized with
+Spatial and drill-down through the global palette reactive. The cache includes the actual palette and selection. Each new object-detail panel initializes its palette selector
+from the current palette name (isolated from reactive invalidation), so opening it or switching tabs cannot reset the global palette.
+The plot has no subtitle and its y-axis is `Proportion of selected phenotypes`. The CSV consumes the same
+selected table, retaining original `proportion` and adding `proportion_selected` and `shown_cells`.
+Unclassified subclasses remain disjoint; parent aggregates and hidden Conflict rows do not enter the stack.
+
+The shared grouped phenotype helper places the Macrophage checkbox above **Separate by:** and the four
+marker choices. When profiles are split, the Macrophage checkbox is a UI-only group toggle with no phenotype
+value; JavaScript selects only the input's child phenotype values and leaves marker state intact. This prevents
+parent/subclass double counting. `card_heading_text()` capitalizes heading words while preserving acronym casing.
 
 ### Phenotype Composition Explorer
 Plot tab Cell Populations mode exposes 21 cell-type proportions (`prop_*` from H5AD `.obs`) + 21 peri-islet proportions (`peri_prop_*`) + 21 core+peri combined proportions (`combined_prop_*`, computed on the fly in `raw_df_base()`) alongside 3 hormone fractions. Grouped `selectInput` with up to 4 option groups (Hormone Positivity, Core, Peri-Islet, Core+Peri). The Combined group's choices are the intersection of `prop_*` and `peri_prop_*` stems — one entry per phenotype that has both region values.

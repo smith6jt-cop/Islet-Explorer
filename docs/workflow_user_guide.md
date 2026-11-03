@@ -448,6 +448,22 @@ Browser checks establish runtime behavior; source/release parity establishes pac
 
 The [November 3 display changes](app_display_fixes_20261103.md) are packaged in the [local review candidate](local_duckdb_review_20261103.md), with app source `1596b03`, image `846962f7…`, and the separately accepted read-only `5e6580f` data bundle. The persistent local service is enabled, and Data/View panels start collapsed with clickable headings. Dev activation is paused pending the owner’s review and decision. They reserve arrow space for long dropdown labels, place Trajectory’s Segmentation card in its own full-width row with consistent spacing, remove the citation suffix from its PAGA title, and put Spatial legends below their plots. Dense tissue labels wrap, and the plot grows vertically to preserve the map area. These are presentation changes; scientific data and controls remain separate from the deployment status above.
 
+### Card Controls In The Local Review Candidate
+
+The [card controls guide](card_controls_update_20261103.md) documents the November 3
+successor. Composition By Donor uses grouped **Include Phenotypes** checkboxes and a
+shared phenotype palette. Its plotted percentages normalize over included categories;
+CSV also retains original-denominator percentages. The two PAGA plots share one fitted
+graph and have independent color menus. Spatial keeps the shared donor selection visible,
+sizes the tissue map to its card width, and uses a multicolumn legend. Distance profile
+controls separate view, grouping and axis choices. Macrophage **Separate by:** boxes sit
+below the Macrophage selection, and additive views contain disjoint leaf categories.
+
+These controls do not alter source cell labels, the accepted v19 endocrine identities,
+marker values, object membership or saved embeddings. Follow the linked local runtime
+record for the currently running source and image; a source edit or diagnostic overlay
+is not native image acceptance.
+
 ## 9. Production activation, rollback, and operations
 
 The selected-component production release is **active and verified** at

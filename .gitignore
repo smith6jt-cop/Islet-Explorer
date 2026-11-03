@@ -128,6 +128,8 @@ venv*/
 __pycache__/
 *.pyc
 node_modules/
+# Browser dependencies may be a shared-worktree symlink rather than a directory.
+/deploy/browser/node_modules
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/

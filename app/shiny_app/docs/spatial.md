@@ -2,10 +2,24 @@
 
 Detailed reference for the Spatial tab. Linked from `app/shiny_app/CLAUDE.md`.
 
-> **Source-artifact versus reviewer UI:** the stored artifacts retain 21 upstream
-> phenotype labels and systematic metrics for 20 after excluding Unknown. The reviewer
-> UI applies the shared nine-label retirement gate and exposes 12 active phenotypes.
-> Counts below describe artifact coverage unless a UI count is stated explicitly.
+## Current Local Card Controls — November 3, 2026
+
+The [card update](../../../docs/card_controls_update_20261103.md) and
+[user guide](../../../docs/user_guide.md#spatial-tab) describe current controls.
+**Donor For Tissue And Immune Gradient** is visible above the collapsed panels;
+it selects the tissue donor and dotted donor overlay, while other cards retain
+their own donor-status controls. Tissue and Leiden cards retain their relative
+widths. The tissue map uses its card's full interior width; measured raster
+height accommodates title, axes and a responsive multicolumn legend. Cached
+render dimensions use the exact card width. Distance-To-Islet Profile uses
+separate titled control groups. The shared **Separate by:** marker controls sit
+below Macrophage, and parent toggles never add a duplicate population.
+
+The label inventory comes from the accepted root and its presentation mapping.
+The Unclassified display family has four disjoint leaves; Conflict classes are
+hidden. Source labels and biological immune aggregates remain intact. The
+historical phenotype counts, sidebar layouts and cohort measurements below
+refer to their dated artifacts and are not the current UI inventory.
 
 ## Spatial Neighborhood Analysis (Phase 7, Feb 2026 — extended Apr 2026)
 

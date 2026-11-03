@@ -1,5 +1,20 @@
 # Trajectory / Pseudotime — Accuracy Reference
 
+## Current PAGA Presentation — November 3, 2026
+
+The local successor displays one fitted PAGA graph in two side-by-side panels,
+with independent **Color By** dropdowns for Pseudotime, Donor Status, Leiden
+Cluster, Donor and Selected Feature. Both use identical keyed coordinates and
+share hover/click selection with the trajectory plots. Coloring joins the
+feature by object identity; it does not change the fitted cohort or coordinates.
+The CSV records both choices. Supported Plotly paper coordinates place guides
+below the plots with equal reserved margins.
+
+See the [card update and verification](../../../docs/card_controls_update_20261103.md)
+and [local runtime record](../../../docs/local_duckdb_review_20261103.md).
+The following dated methods reviews retain their original datasets and results;
+this presentation change is not a new scientific fit or revalidation of them.
+
 > **2026-10-03 implementation:** the expanded cohort preserves the original source data and uses Harmony on protein PCA for spatial UMAP and Leiden. The live trajectory uses endocrine-normalized composition features; marker expression is the mean gate-rescaled protein signal. Earlier scVI descriptions below are historical. See the [current implementation record](../../../docs/protein_expansion_20261003.md).
 
 Companion to [`statistics.md`](statistics.md). Linked from `app/shiny_app/CLAUDE.md`.
