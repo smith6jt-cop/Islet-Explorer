@@ -833,36 +833,15 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
             colors <- rainbow(n_donors, s = 0.8, v = 0.8)
           }
 
-          # Split into two columns
-          mid_point <- ceiling(n_donors / 2)
-          col1_ids <- donor_ids[1:mid_point]
-          col2_ids <- if (n_donors > mid_point) donor_ids[(mid_point + 1):n_donors] else NULL
-
-          col1_items <- lapply(seq_along(col1_ids), function(i) {
-            div(style = "display: flex; align-items: center; margin-bottom: 6px;",
-              div(style = sprintf("width: 18px; height: 18px; background-color: %s; border-radius: 3px; margin-right: 6px;", colors[i])),
-              span(col1_ids[i], style = "font-size: 14px;")
+          # A compact responsive grid uses available width for several short
+          # columns instead of making the donor legend one tall card section.
+          items <- lapply(seq_along(donor_ids), function(i) {
+            div(style = "display: flex; align-items: center; min-width: 0; gap: 5px;",
+              div(style = sprintf("flex: 0 0 14px; width: 14px; height: 14px; background-color: %s; border-radius: 3px;", colors[i])),
+              span(donor_ids[i], style = "font-size: 13px; white-space: nowrap;")
             )
           })
-
-          col2_items <- if (!is.null(col2_ids)) {
-            lapply(seq_along(col2_ids), function(i) {
-              idx <- mid_point + i
-              div(style = "display: flex; align-items: center; margin-bottom: 6px;",
-                div(style = sprintf("width: 18px; height: 18px; background-color: %s; border-radius: 3px; margin-right: 6px;", colors[idx])),
-                span(col2_ids[i], style = "font-size: 14px;")
-              )
-            })
-          } else {
-            NULL
-          }
-
-          tagList(
-            div(style = "display: flex; gap: 10px;",
-              div(style = "flex: 1;", col1_items),
-              if (!is.null(col2_items)) div(style = "flex: 1;", col2_items)
-            )
-          )
+          div(style = "display: grid; grid-template-columns: repeat(auto-fit, minmax(58px, 1fr)); gap: 5px 8px;", items)
         } else {
           p("No data available", style = "font-size: 12px; color: var(--islet-fg-subtle);")
         }
@@ -1025,22 +1004,14 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       }
     )
 
-    # ---------- Heatmap: Dominant Status × Feature Intensity ----------
-    # Hue per pseudotime bin = dominant donor_status, computed as the
-    # argmax of per-status NORMALIZED density (count_in_bin / total_for_status).
-    # Normalization corrects for global cohort imbalance
-    # (ND ~2300, Aab+ ~1668, T1D ~1246 islets) so dominance reflects
-    # enrichment relative to each status's pool, not raw count.
-    # Intensity per bin = bin-mean of selected feature, normalized via
-    # 5–95th percentile clip, blended in [INTENSITY_FLOOR, 1] toward the
-    # donor color so even the dimmest bin is a clear tint (never white).
-    # Rendered with ggplot + geom_tile to guarantee bars span [0, 1].
-    INTENSITY_FLOOR <- 0.50  # minimum blend factor — bars never go pale-white
+    # ---------- Heatmap: islet distribution by disease status ----------
+    # Each row is one disease status; fill strength is the share of that
+    # status's fitted islets in each pseudotime bin. Hover reports the raw
+    # count and the status contribution within that bin.
     output$traj_heatmap <- renderPlotly({
       df <- traj_data_clean()
       if (is.null(df) || nrow(df) == 0) return(NULL)
 
-      feature_name <- df$feature_name[1]
       donor_cols   <- donor_colors_reactive()
       n_bins       <- 25
       # Bin over the data's actual pseudotime domain rather than an assumed [0, 1] — on
@@ -1059,45 +1030,22 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       bin_levels <- levels(df$pt_bin)
 
       status_levels <- c("ND", "Aab+", "T1D")
-      status_totals <- sapply(status_levels, function(s) sum(df$donor_status == s))
+      status_totals <- vapply(status_levels, function(s) sum(df$donor_status == s, na.rm = TRUE), numeric(1))
 
       bin_rows <- lapply(seq_along(bin_levels), function(i) {
         bd <- df[!is.na(df$pt_bin) & df$pt_bin == bin_levels[i], , drop = FALSE]
-        if (nrow(bd) == 0) {
-          return(data.frame(idx = i, x = mids[i], n = 0L,
-                            n_ND = 0L, n_Aab = 0L, n_T1D = 0L,
-                            dens_ND = 0, dens_Aab = 0, dens_T1D = 0,
-                            dominant = NA_character_, feat_mean = NA_real_,
-                            stringsAsFactors = FALSE))
-        }
-        counts <- c(ND = sum(bd$donor_status == "ND"),
-                    `Aab+` = sum(bd$donor_status == "Aab+"),
-                    T1D = sum(bd$donor_status == "T1D"))
-        dens <- ifelse(status_totals > 0, counts / status_totals, 0)
-        names(dens) <- status_levels
-        dominant <- names(dens)[which.max(dens)]
-        data.frame(idx = i, x = mids[i], n = nrow(bd),
-                   n_ND = counts[["ND"]], n_Aab = counts[["Aab+"]], n_T1D = counts[["T1D"]],
-                   dens_ND = dens[["ND"]], dens_Aab = dens[["Aab+"]], dens_T1D = dens[["T1D"]],
-                   dominant = dominant,
-                   feat_mean = mean(bd$value, na.rm = TRUE),
+        counts <- vapply(status_levels, function(s) sum(bd$donor_status == s, na.rm = TRUE), integer(1))
+        bin_total <- sum(counts)
+        data.frame(idx = i, x = mids[i], status = status_levels,
+                   n = as.integer(counts),
+                   status_total = as.integer(status_totals[status_levels]),
+                   status_share = ifelse(status_totals[status_levels] > 0,
+                                         counts / status_totals[status_levels], 0),
+                   bin_share = if (bin_total > 0) counts / bin_total else rep(0, length(status_levels)),
                    stringsAsFactors = FALSE)
       })
       hm <- do.call(rbind, bin_rows)
       if (is.null(hm) || nrow(hm) == 0) return(NULL)
-
-      # Intensity from feature value, robust 5–95th percentile clip
-      q   <- stats::quantile(hm$feat_mean, c(0.05, 0.95), na.rm = TRUE)
-      rng <- diff(q)
-      raw_intensity <- if (is.finite(rng) && rng > 0) {
-        pmax(0, pmin(1, (hm$feat_mean - q[1]) / rng))
-      } else {
-        rep(1, nrow(hm))
-      }
-      raw_intensity[!is.finite(raw_intensity)] <- INTENSITY_FLOOR
-      # Rescale so the lowest bin is INTENSITY_FLOOR-saturated (clearly tinted),
-      # the highest bin is fully saturated.
-      hm$intensity <- INTENSITY_FLOOR + (1 - INTENSITY_FLOOR) * raw_intensity
 
       blend_to_white <- function(hex, t) {
         rgb_full <- grDevices::col2rgb(hex) / 255
@@ -1105,41 +1053,37 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
                        green = t * rgb_full[2] + (1 - t) * 1,
                        blue  = t * rgb_full[3] + (1 - t) * 1)
       }
-      hm$fill <- mapply(function(dom, ity) {
-        if (is.na(dom) || is.null(donor_cols[[dom]])) return("#BBBBBB")
-        blend_to_white(donor_cols[[dom]], ity)
-      }, hm$dominant, hm$intensity, USE.NAMES = FALSE)
-
+      max_share <- ave(hm$status_share, hm$status, FUN = max)
+      hm$intensity <- ifelse(max_share > 0, hm$status_share / max_share, 0)
+      hm$fill <- mapply(function(status, intensity) {
+        base <- donor_cols[[status]] %||% "#777777"
+        blend_to_white(base, pmax(0, pmin(1, intensity)))
+      }, hm$status, hm$intensity, USE.NAMES = FALSE)
       hm$hover <- sprintf(
-        paste0(
-          "PT: %.2f<br>Dominant: %s<br>",
-          "n: %d (ND %d, Aab+ %d, T1D %d)<br>",
-          "Normalized density: ND %.1f%%, Aab+ %.1f%%, T1D %.1f%%<br>",
-          "%s mean: %.3f"
-        ),
-        hm$x, ifelse(is.na(hm$dominant), "n/a", hm$dominant),
-        hm$n, hm$n_ND, hm$n_Aab, hm$n_T1D,
-        100 * hm$dens_ND, 100 * hm$dens_Aab, 100 * hm$dens_T1D,
-        feature_name, hm$feat_mean
+        paste0("Pseudotime bin: %.3f<br>%s: %d of %d islets (%.1f%% of status)<br>",
+               "Status contribution within bin: %.1f%%"),
+        hm$x, hm$status, hm$n, hm$status_total, 100 * hm$status_share, 100 * hm$bin_share
       )
+      hm$status <- factor(hm$status, levels = rev(status_levels))
 
-      g <- ggplot(hm, aes(x = x, y = 0.5, fill = fill, text = hover)) +
-        geom_tile(width = bin_w, height = 1, na.rm = TRUE) +
+      g <- ggplot(hm, aes(x = x, y = status, fill = fill, text = hover)) +
+        geom_tile(width = bin_w * 0.98, height = 0.76, na.rm = TRUE) +
         scale_fill_identity(guide = "none") +
         scale_x_continuous(limits = hm_lim, expand = c(0, 0)) +
-        scale_y_continuous(limits = c(0, 1), expand = c(0, 0)) +
+        scale_y_discrete(expand = expansion(add = 0.12)) +
         guides(fill = "none") +
-        theme_void() +
+        labs(x = NULL, y = NULL) + theme_void() +
         theme(legend.position = "none",
-              plot.margin = margin(5, 20, 10, 60, "pt"))
+              axis.text.y = element_text(size = 9, color = islet_ink(), margin = margin(r = 5)),
+              axis.text.x = element_blank(), axis.ticks = element_blank(),
+              plot.margin = margin(2, 20, 2, 20, "pt"))
 
       ggplotly(g, tooltip = "text") %>%
         layout(
           showlegend = FALSE,
           xaxis = list(fixedrange = TRUE, showticklabels = FALSE,
                        zeroline = FALSE, range = hm_lim),
-          yaxis = list(fixedrange = TRUE, showticklabels = FALSE,
-                       zeroline = FALSE, range = c(0, 1))
+          yaxis = list(fixedrange = TRUE, zeroline = FALSE)
         ) %>%
         config(displayModeBar = FALSE)
     })

@@ -157,16 +157,9 @@ between the 31 marker means and retained cell-type/endocrine-cell ratios. The le
 `dpt_pseudotime*` H5AD columns remain audit artifacts and are not selectable in the
 reviewer UI. See `docs/trajectory.md` §11.
 
-### Pseudotime Heatmap: Dominant Status × Feature Intensity (May 2026)
+### Pseudotime Status Heatmap
 
-The strip heatmap below the trajectory scatter uses a 2-D encoding per pseudotime bin:
-
-- **Hue** = dominant donor_status, computed as the argmax of per-status NORMALIZED density (`count_in_bin / total_for_status`). Normalization corrects for cohort imbalance (ND ~2300, Aab+ ~1668, T1D ~1246 islets) so dominance reflects enrichment relative to each status's pool, not raw count.
-- **Intensity** = bin-mean of selected feature, normalized via 5–95th percentile clip, blended in `[INTENSITY_FLOOR, 1]` toward the donor color so even the dimmest bin is a clear tint (never white). `INTENSITY_FLOOR = 0.50`.
-- **Renderer**: ggplot + `geom_tile` + `scale_fill_identity` (NOT plotly heatmap). Guarantees bars span [0, 1]. Plotly previously misaligned bin widths with the scatter axis margins.
-- **Hover**: Shows pseudotime, dominant status, raw counts per status (n_ND, n_Aab, n_T1D), normalized density per status (%), and feature mean.
-
-Replaces the previous "average donor_status code (0/1/2)" heatmap, which conflated cohort-level imbalance with per-bin enrichment and produced a single colorscale gradient that hid expression intensity entirely.
+Three thin aligned rows below the trajectory scatter use the same 25 pseudotime bins, one row per ND, Aab+ and T1D. Color strength encodes that status's share of its own fitted islets in each bin. Hover reports the count, share of the status cohort and contribution within the bin. The separate rows show each status distribution instead of collapsing bins to a single dominant status. Describe this only as distribution along the modeled ordering, not disease progression. The ggplot tile renderer keeps bin edges aligned to the scatter's pseudotime domain.
 
 ### Multi-Feature Trajectory Heatmap
 Z-scored expression along pseudotime. Clamped [-2.5, 2.5], blue-white-red, dynamic height.

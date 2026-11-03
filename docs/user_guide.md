@@ -333,10 +333,7 @@ method explanations and attribution remain in the **?** help.
    against raw or rank-normalized diffusion pseudotime. Points can be colored by donor
    status, donor, or a retained H5AD Leiden assignment.
 
-2. **Pseudotime Strip (Dominant Status × Feature Intensity)** — A single horizontal strip below the UMAP scatter, divided into 25 pseudotime bins. Each bin encodes two variables at once:
-   - **Hue** = the *dominant* donor status in that bin, computed from per-status normalized density (count-in-bin divided by total islets for that status). Normalization corrects for cohort imbalance so dominance reflects enrichment relative to each status's pool, not raw count.
-   - **Intensity** (saturation toward white) = the bin-mean of the selected feature, robust 5–95th percentile clipped. Floor at 50% saturation so even the dimmest bin remains a clear tint, never white.
-   Hover for raw counts per status, normalized density per status, and the feature mean.
+2. **Pseudotime Status Heatmap** — Three thin aligned rows below the scatter, one for ND, Aab+ and T1D, divided into the same 25 pseudotime bins. Color strength shows each status's share of its own fitted islets in a bin. Hover a bin for its islet count, share of that status's cohort, and contribution to the bin. The rows make shifts in each status's distribution visible from left to right; pseudotime is a model ordering and does not establish disease progression.
 
 3. **Multi-Feature Heatmap** — Z-scored expression of user-selected markers along pseudotime bins. Default markers: INS, GCG, SST, CD3e, CD8a, CD68, CD45, HLADR. Blue-white-red diverging colormap, z-scores clamped to [-2.5, 2.5].
 

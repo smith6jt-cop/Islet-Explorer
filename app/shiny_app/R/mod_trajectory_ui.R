@@ -118,9 +118,9 @@ trajectory_ui <- function(id) {
       column(7,
         div(class = "card trajectory-controls trajectory-main-card", style = "padding: 15px;",
           card_title_help("Pseudotime", help = list(
-            tags$p("Each fitted object's Y-axis value (Data controls) against its pseudotime. The strip below",
-                   " cuts pseudotime into 25 bins: a bin's color is the donor status holding the largest proportion of",
-                   " its own objects there, and its depth is the feature's mean in the bin."),
+            tags$p("Each fitted object's selected value against pseudotime. The three strips below use the same 25 bins.",
+                   " Each row shows how that disease status's islets are distributed across pseudotime; hover for the",
+                   " islet count and the status contribution within each bin."),
             tags$p(tags$strong("Pseudotime."),
                    " Diffusion pseudotime (scanpy DPT) on each object's cell make-up, after Barlow et al. 2024: for",
                    " each listed phenotype, log(1 + cells / endocrine cells) in the core and in the 20 \u00b5m",
@@ -135,7 +135,7 @@ trajectory_ui <- function(id) {
             linked_help,
             unclassified_help_ui())),
           trajectory_linked_plotly(ns("traj_scatter"), height = 850),
-          plotlyOutput(ns("traj_heatmap"), height = 100)
+          plotlyOutput(ns("traj_heatmap"), height = 112)
         )
       ),
       # Keep the UMAP and pseudotime cards in one row; segmentation gets its own
