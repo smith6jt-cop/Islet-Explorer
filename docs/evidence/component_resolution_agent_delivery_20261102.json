@@ -207,5 +207,21 @@
     "both_readonly_sha256_verified": true,
     "immutable_package_unchanged": true,
     "original_pinned_helper_unchanged": true
+  },
+  "recipient_inventory_erratum_acknowledgement": {
+    "recorded_utc": "2026-11-03T03:01:24.933346+00:00",
+    "recipient_thread": "01a19ca5-0cff-7d81-8027-4868ab012b79",
+    "received_via": "Direct coordinator message from recipient after independently reading the adjacent local erratum",
+    "status": "independently_read_and_hash_verified_locally",
+    "sha256": "7a91a1907c74d1abeb46ade47185aaa99448ff22e068c07faac3228ada2707e7",
+    "confirmed_corrections": [
+      "14 metadata keys are not images; authoritative inventory contains 20 OME-TIFFs",
+      "80 release image-bundle files comprise 20 TIFFs and 60 sidecars",
+      "per_image.format_counts is a compact projection artifact to disregard"
+    ],
+    "original_acknowledgement_receipt_unchanged": true,
+    "hpg_delivery_independently_verified_by_recipient": false,
+    "future_helper_independently_tested_by_recipient": false,
+    "recipient_package_source_or_prior_delivery_modified": false
   }
 }
