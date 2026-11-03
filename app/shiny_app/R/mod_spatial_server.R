@@ -534,6 +534,15 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
             if (plots.some(function(plot) { return !plot || !plot._fullLayout; })) return;
             var tallest = 0;
             plots.forEach(function(plot) {
+              plot.querySelectorAll('g.colorbar').forEach(function(guide) {
+                var title = guide.querySelector('g.cbtitle > text');
+                var fill = guide.querySelector('.cbfill');
+                if (!title || !fill) return;
+                // Reset first: repeated draws must not accumulate an offset.
+                title.setAttribute('dy', '0');
+                var gap = fill.getBoundingClientRect().top - title.getBoundingClientRect().bottom;
+                title.setAttribute('dy', String(Math.min(0, gap - 6)));
+              });
               plot.querySelectorAll('g.legend, g.colorbar').forEach(function(guide) {
                 tallest = Math.max(tallest, guide.getBoundingClientRect().height);
               });
