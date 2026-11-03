@@ -271,6 +271,66 @@ test_that("donor Parquet preserves blank identifiers and numeric missingness", {
   expect_equal(result$max_absolute_difference, 0)
 })
 
+test_that("cell states tolerate decimal-parser distance rounding but retain exact states and multiplicity", {
+  builder <- new.env(parent = globalenv())
+  sys.source("scripts/build_release_data.R", envir = builder)
+  runtime <- new.env(parent = globalenv())
+  sys.source("app/shiny_app/R/01_runtime_data_backend.R", envir = runtime)
+  root <- tempfile("cell-state-decimal-parity-")
+  source_root <- file.path(root, "source")
+  release_root <- file.path(root, "release")
+  for (path in c(file.path(source_root, "donors"), file.path(source_root, "cells"),
+                 file.path(release_root, "cells"))) dir.create(path, recursive = TRUE)
+  con <- runtime$islet_duckdb_connection()
+  on.exit({ runtime$islet_disconnect_backend(); unlink(root, recursive = TRUE) }, add = TRUE)
+  jsonlite::write_json(list(cell_states = list(schema = "uniform.cell_states/1",
+    identity_and_embedding_inputs = FALSE, flags = list(Ki67_pos = list(
+      role = "state", marker = "Ki67", values = c(0, 1), by_image = list(control = list()))))),
+    file.path(source_root, "uniform_release.json"), auto_unbox = TRUE)
+  # This exact decimal from the real release exposed a one-ULP fread/DuckDB
+  # disagreement. The rows exercise storage/association only, not typing rules.
+  distance_source <- file.path(source_root, "cell_distance.csv")
+  writeLines(c("case_id,donor_status,cell_region,phenotype,signed_dist,Ki67_pos",
+               "control,control,core,control,41.347607,0",
+               "control,control,core,control,41.347607,1"), distance_source)
+  distance_target <- file.path(release_root, "spatial", "cell_distance.parquet")
+  builder$csv_to_parquet(con, distance_source, distance_target, character_case_id = TRUE)
+  donor_source <- file.path(source_root, "donors", "control.csv")
+  writeLines(c("Ki67_pos", "0", "1"), donor_source)
+  builder$csv_to_parquet(con, donor_source,
+    file.path(release_root, "spatial", "tissue", "case_id=control", "control.parquet"))
+  object_source <- file.path(source_root, "cells", "control.csv")
+  file.copy(donor_source, object_source)
+  file.copy(object_source, file.path(release_root, "cells", "control.csv"))
+  expected <- data.table::fread(distance_source, data.table = FALSE)
+  actual <- runtime$islet_read_parquet(distance_target)
+  difference <- max(abs(expected$signed_dist - actual$signed_dist))
+  expect_gt(difference, 0)
+  expect_lte(difference, 1e-12)
+  result <- parity_cell_states(source_root, release_root, runtime)
+  expect_identical(result$distance_rows, 2L)
+  expect_identical(result$donor_rows, 2L)
+  expect_identical(result$object_rows, 2L)
+  replace_distance <- function(frame) {
+    unlink(distance_target)
+    builder$write_frame_parquet(con, frame, distance_target, "state_distance_control")
+  }
+  altered <- actual
+  altered$Ki67_pos[2] <- 0
+  replace_distance(altered)
+  expect_error(parity_cell_states(source_root, release_root, runtime), "numeric_mismatch")
+  altered <- actual
+  altered$Ki67_pos[1] <- 1e-13
+  replace_distance(altered)
+  expect_error(parity_cell_states(source_root, release_root, runtime), "cell_state_not_binary")
+  replace_distance(actual[1, , drop = FALSE])
+  expect_error(parity_cell_states(source_root, release_root, runtime), "row_count_mismatch")
+  altered <- actual
+  altered$signed_dist[1] <- altered$signed_dist[1] + 1e-6
+  replace_distance(altered)
+  expect_error(parity_cell_states(source_root, release_root, runtime), "numeric_mismatch")
+})
+
 test_that("row order and duplicate-key order do not change scientific parity", {
   expected <- data.frame(id = c("a", "a", "b"), category = factor(c("x", "y", "x")),
                           n = c(2L, 3L, 4L), value = c(0.1, NA_real_, Inf))

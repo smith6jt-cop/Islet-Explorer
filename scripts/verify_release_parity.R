@@ -117,11 +117,15 @@ parity_cell_states <- function(source_root, release_root, release_env) {
   }
   # These keys also retain duplicate-row multiplicity; _pos columns are exact
   # count fields in parity_compare_frames, irrespective of numeric storage type.
-  keys <- c("case_id", "donor_status", "cell_region", "phenotype", "signed_dist")
+  keys <- c("case_id", "donor_status", "cell_region", "phenotype")
+  # Preserve distance associations and duplicate multiplicities through the
+  # canonical sort, but compare CSV-parser floating values at the established
+  # tolerance. Only categorical keys and the binary state are exact.
+  columns <- c(keys, "signed_dist", fields)
   expected <- data.table::fread(file.path(source_root, "cell_distance.csv"),
-    select = c(keys, fields), colClasses = c(case_id = "character"), data.table = FALSE)
+    select = columns, colClasses = c(case_id = "character"), data.table = FALSE)
   actual <- release_env$islet_read_parquet(file.path(release_root, "spatial", "cell_distance.parquet"),
-                                          columns = c(keys, fields))
+                                          columns = columns)
   parity_cell_state_values(expected, fields)
   parity_cell_state_values(actual, fields)
   distance <- parity_compare_frames(expected, actual, keys)
