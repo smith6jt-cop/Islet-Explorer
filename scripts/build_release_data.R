@@ -30,7 +30,11 @@ validate_release_components <- function(source_root, uniform) {
   if (is.null(meta) && !any(file.exists(paths))) return(invisible(NULL))
   fail <- function(message) stop("Invalid component evidence: ", message, call. = FALSE)
   if (is.null(meta) || !all(file.exists(paths))) fail("selection metadata and both evidence files are required")
-  if (!identical(meta$schema, "uniform.component_selection/1")) fail("unsupported selection schema")
+  versions <- c("uniform.component_selection/1", "uniform.component_selection/2")
+  if (!is.character(meta$schema) || length(meta$schema) != 1L || !(meta$schema %in% versions)) {
+    fail("unsupported selection schema")
+  }
+  resolved <- identical(meta$schema, "uniform.component_selection/2")
   for (kind in names(files)) {
     if (!identical(meta[[paste0(kind, "_file")]], unname(files[[kind]])) ||
         !identical(meta[[paste0(kind, "_sha256")]], sha256_file(file.path(source_root, files[[kind]])))) {
@@ -39,9 +43,20 @@ validate_release_components <- function(source_root, uniform) {
   }
   selection <- jsonlite::read_json(paths[[1]], simplifyVector = FALSE)
   audit <- jsonlite::read_json(paths[[2]], simplifyVector = FALSE)
-  if (!identical(selection$schema, "uniform.component_selection/1") ||
-      !identical(audit$schema, "uniform.component_selection_audit/1") ||
+  if (!identical(selection$schema, meta$schema) ||
+      !identical(audit$schema, if (resolved) "uniform.component_selection_audit/2" else "uniform.component_selection_audit/1") ||
       !identical(audit$manifest_sha256, meta$manifest_sha256)) fail("audit does not bind the selected manifest")
+  if (resolved && (!identical(selection$status, "assignments_resolved") ||
+                   !identical(audit$status, "assignments_resolved") ||
+                   !identical(meta$status, "assignments_resolved") ||
+                   !identical(selection$release_ready, FALSE) ||
+                   !identical(audit$release_ready, FALSE) || !identical(meta$release_ready, FALSE))) {
+    fail("resolved assignment contract or acceptance status differs")
+  }
+  policy <- "exact_v19_named_membership_existing_nonendocrine_rules"
+  if (resolved && (!identical(selection$resolution_policy, policy) || !identical(audit$resolution_policy, policy))) {
+    fail("resolution policy differs")
+  }
   tags <- names(selection$images)
   if (!length(tags) || anyDuplicated(tags) || !setequal(tags, names(audit$images)) ||
       !setequal(tags, names(uniform$identity_sha256)) ||
@@ -51,8 +66,10 @@ validate_release_components <- function(source_root, uniform) {
         value < 0 || value != floor(value)) fail("missing or invalid count")
     as.numeric(value)
   }
-  fields <- c("cells", "preserved_named_endocrine_cells", "preserved_unresolved_endocrine_cells",
-              "unresolved_endocrine_cells", "boundary_conflicts")
+  source_unresolved_field <- if (resolved) "source_unresolved_endocrine_cells" else "preserved_unresolved_endocrine_cells"
+  fields <- c("cells", "preserved_named_endocrine_cells", source_unresolved_field,
+              "unresolved_endocrine_cells", "boundary_conflicts",
+              if (resolved) c("resolved_nonselected_cells", "unclassified_cells"))
   for (field in fields) {
     total <- sum(vapply(audit$images, function(row) count(row[[field]]), numeric(1)))
     if (count(audit[[field]]) != total) fail(paste(field, "does not equal per-image counts"))
@@ -70,13 +87,24 @@ validate_release_components <- function(source_root, uniform) {
     if (!identical(row$selected_endocrine_hormone_evidence_replayed, TRUE) ||
         count(row$cells) != count(source$cells) ||
         count(row$preserved_named_endocrine_cells) != count(source$named_endocrine_cells) ||
-        count(row$preserved_unresolved_endocrine_cells) != count(source$unresolved_endocrine_cells)) {
+        count(row[[source_unresolved_field]]) != count(source$unresolved_endocrine_cells)) {
       fail(paste(tag, "does not preserve the selected endocrine source"))
     }
-    if (row$unresolved_endocrine_cells < row$preserved_unresolved_endocrine_cells ||
+    if ((!resolved && row$unresolved_endocrine_cells < row$preserved_unresolved_endocrine_cells) ||
+        row$preserved_named_endocrine_cells + row[[source_unresolved_field]] > row$cells ||
         row$preserved_named_endocrine_cells + row$unresolved_endocrine_cells +
-          row$boundary_conflicts > row$cells) {
+          row$boundary_conflicts > row$cells ||
+        (resolved && (row$resolved_nonselected_cells > row$cells - row$preserved_named_endocrine_cells ||
+                      row$unclassified_cells > row$cells - row$preserved_named_endocrine_cells))) {
       fail(paste(tag, "component counts contradict the eligible cell census"))
+    }
+    if (resolved && (!identical(row$status, "assignments_resolved") || !identical(row$release_ready, FALSE))) {
+      fail(paste(tag, "resolved assignment status differs"))
+    }
+    if (resolved && (!identical(row$resolution_policy, policy) ||
+                     !identical(row$resolution_marker_state_invariants_passed, TRUE) ||
+                     !identical(row$untargeted_identity_invariants_passed, TRUE))) {
+      fail(paste(tag, "resolution invariant proof differs"))
     }
   }
   if (count(audit$cells) != count(uniform$cells_analysed) + count(uniform$cells_excluded)) {
@@ -88,7 +116,83 @@ validate_release_components <- function(source_root, uniform) {
          " endocrine component boundary conflicts. Resolve the assignments upstream and regenerate the data.",
          call. = FALSE)
   }
+  if (resolved) validate_release_endocrine_objects(source_root, uniform, tags)
   invisible(audit)
+}
+
+#' A resolved cell assignment does not by itself validate its source objects.
+validate_release_endocrine_objects <- function(source_root, uniform, tags) {
+  fail <- function(message) stop("Invalid endocrine object proof: ", message, call. = FALSE)
+  meta <- uniform$endocrine_object_audit
+  path <- file.path(source_root, "endocrine_object_audit.json")
+  if (is.null(meta) || !file.exists(path) || !identical(meta$file, basename(path)) ||
+      !identical(meta$sha256, sha256_file(path))) fail("missing report or path/hash mismatch")
+  proof <- jsonlite::read_json(path, simplifyVector = FALSE)
+  if (!identical(meta$schema, "uniform.endocrine_object_audit/2") ||
+      !identical(proof$schema, meta$schema) || !identical(proof$audit_mode, "classifier_lineage") ||
+      !identical(meta$audit_mode, proof$audit_mode) || !identical(proof$passes, TRUE) ||
+      !identical(meta$passes, TRUE) || !identical(proof$classifier_lineage$passes, TRUE) ||
+      !identical(proof$run, uniform$run) ||
+      !identical(proof$corrected_cell_diagnostic_passes, meta$corrected_cell_diagnostic_passes) ||
+      !is.logical(proof$corrected_cell_diagnostic_passes) || length(proof$corrected_cell_diagnostic_passes) != 1L) {
+    fail("classifier-lineage result or assembly binding differs")
+  }
+  images <- proof$classifier_lineage$images
+  image_tags <- vapply(images, function(x) x$image %||% "", character(1))
+  if (length(image_tags) != length(tags) || anyDuplicated(image_tags) || !setequal(image_tags, tags) ||
+      !setequal(unlist(proof$images), tags) || !setequal(names(meta$geometry_sha256), tags)) {
+    fail("donor inventory differs")
+  }
+  valid_hash <- function(x) is.character(x) && length(x) == 1L && !is.na(x) && grepl("^[0-9a-f]{64}$", x)
+  expected_inputs <- c(file.path(uniform$run, "typing/levels.csv"),
+    unlist(lapply(tags, function(tag) c(file.path(uniform$run, "typing/redsea", paste0(tag, ".parquet")),
+      file.path(uniform$run, "typing/context", paste0(tag, ".parquet")),
+      file.path(uniform$run, "islets", paste0(tag, ".geojson"))))))
+  if (!setequal(names(meta$input_sha256), expected_inputs)) fail("audited input inventory differs")
+  for (input in expected_inputs) {
+    if (!valid_hash(meta$input_sha256[[input]]) ||
+        !identical(meta$input_sha256[[input]], proof$source_sha256[[input]])) fail("audited input hash differs")
+  }
+  if (!identical(meta$input_sha256[[file.path(uniform$run, "typing/levels.csv")]], uniform$levels_sha256)) {
+    fail("positivity levels differ from assembly")
+  }
+  for (row in images) {
+    expected <- meta$input_sha256[[file.path(uniform$run, "islets", paste0(row$image, ".geojson"))]]
+    if (length(row$failures) || !identical(row$final_islets_sha256, expected) ||
+        !identical(row$reference_islets_sha256, expected) ||
+        !identical(meta$geometry_sha256[[row$image]], expected)) fail("final geometry differs")
+    for (field in c("reference_islets_sha256", "cell_geometry_sha256", "original_outlines_sha256", "fit_sha256", "mask_sha256")) {
+      if (!valid_hash(row[[field]])) fail("missing classifier/geometry provenance hash")
+    }
+  }
+  count_fields <- c("objects", "objects_with_classifier_support", "singles", "singles_with_exact_cell_association",
+                    "singles_with_centroid_membership_difference", "split_descendants",
+                    "split_descendants_with_multiple_parent_candidates")
+  count <- function(x) {
+    if (!is.numeric(x) || length(x) != 1L || is.na(x) || !is.finite(x) || x < 0 || x != floor(x)) {
+      fail("missing or invalid classifier-lineage count")
+    }
+    as.numeric(x)
+  }
+  for (field in count_fields) {
+    total <- sum(vapply(images, function(row) count(row[[field]]), numeric(1)))
+    if (count(proof$classifier_lineage$totals[[field]]) != total) fail("classifier-lineage counts do not sum")
+  }
+  for (row in images) {
+    if (row$objects != row$objects_with_classifier_support || row$singles != row$singles_with_exact_cell_association ||
+        row$singles > row$objects || row$singles_with_centroid_membership_difference > row$singles ||
+        row$split_descendants_with_multiple_parent_candidates > row$split_descendants || row$split_descendants > row$objects) {
+      fail("classifier-lineage census contradicts a passing result")
+    }
+  }
+  if (count(proof$classifier_lineage$totals$failures) != 0 ||
+      count(proof$totals$objects) != count(proof$classifier_lineage$totals$objects)) fail("object census differs")
+  for (name in c("classifier_replay", "geometry_provenance")) {
+    item <- proof$classifier_lineage[[name]]
+    if (!is.character(item$path) || length(item$path) != 1L || !nzchar(item$path) || !valid_hash(item$sha256) ||
+        !identical(item$sha256, proof$source_sha256[[item$path]])) fail("missing classifier/geometry proof binding")
+  }
+  invisible(proof)
 }
 
 #' Check final-typing group definitions before materializing a release. Equality
@@ -133,6 +237,13 @@ validate_release_label_groups <- function(source_root, aggregate_members) {
          ". Resolve upstream typing and regenerate the candidate; changing aggregate membership is insufficient.",
          call. = FALSE)
   }
+  if (identical(uniform$component_selection$schema, "uniform.component_selection/2")) {
+    named <- c("Beta cell", "Alpha cell", "Delta cell", "CHGA+ hormone-negative")
+    if (!setequal(endocrine, named) || !all(named %in% labels) || "Islet" %in% labels) {
+      stop("Resolved component endocrine group must contain exactly the four named types, with no unnamed object labels.",
+           call. = FALSE)
+    }
+  }
   app_members <- aggregate_members("All endocrine cells", labels)
   if (!setequal(endocrine, app_members)) {
     stop("Endocrine group mismatch between upstream data and app aggregate. Upstream only: ",
@@ -168,7 +279,8 @@ release_passthrough_files <- function(schema, source_root) {
   list(required = c("adata_ins_root.h5ad", "barlow_islet_features.csv", "islet_spatial_lookup.csv",
                     "donor_metadata.csv", "uniform_release.json", "endocrine_objects_by_donor.csv",
                     "protein_phenotype_rules.csv"),
-       optional = c("phenotype_rules.csv", "component_selection.json", "component_selection_audit.json"))
+       optional = c("phenotype_rules.csv", "component_selection.json", "component_selection_audit.json",
+                    "endocrine_object_audit.json"))
 }
 
 # The image bundle: every file of the image tree plus, for each OME-TIFF that is a symlink, the XML and

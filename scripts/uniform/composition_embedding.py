@@ -68,13 +68,18 @@ def one_thread():
 
 
 def endocrine_labels(adata) -> list[str]:
-    return list(adata.uns['endocrine_labels']) if 'endocrine_labels' in adata.uns else list(ENDOCRINE)
+    labels = list(adata.uns['endocrine_labels']) if 'endocrine_labels' in adata.uns else list(ENDOCRINE)
+    if adata.uns.get('endocrine_group_contract') == 'named_four/1':
+        named = ('Beta cell', 'Alpha cell', 'Delta cell', 'CHGA+ hormone-negative')
+        if len(labels) != 4 or set(labels) != set(named):
+            raise ValueError('Resolved endocrine composition requires exactly the four named types')
+    return labels
 
 
 def endocrine_shares(adata) -> np.ndarray:
     """Each endocrine label's share of the object's core endocrine cells; NaN where the core has none. The labels are the
-    root's own endocrine group (uns['endocrine_labels'], written by assemble_uniform.py since v18: the final typing's
-    Beta, Alpha, Delta, CHGA+ hormone-negative and the unnamed cells of the endocrine objects), else ENDOCRINE."""
+    root's own endocrine group (uns['endocrine_labels']). Resolved component v2 roots require exactly the four
+    named types; historical roots retain their recorded group, or the legacy ENDOCRINE fallback."""
     names = list(adata.uns['phenotype_names'])
     labels = endocrine_labels(adata)
     counts = np.asarray(adata.obsm['phenotype_counts'], dtype=float)[:, [names.index(n) for n in labels]]

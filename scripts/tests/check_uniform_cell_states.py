@@ -35,6 +35,13 @@ def validate_assembled(args):
     levels = pd.read_csv(args.run / 'typing/levels.csv')
     manifest = json.loads((root / 'uniform_release.json').read_text())
     assert manifest['donors'] == len(rows) == 20
+    resolved = manifest.get('component_selection', {}).get('schema') == assembly.RESOLVED_COMPONENT_SCHEMA
+    named = list(assembly.NAMED_ENDOCRINE)
+    component_audit = None
+    if resolved:
+        assert set(manifest['label_groups']['endocrine']) == set(named)
+        assert len(manifest['label_groups']['endocrine']) == 4
+        component_audit = json.loads((root / 'component_selection_audit.json').read_text())
     expected_states, reports = {}, {}
     distance_columns = ['case_id', 'phenotype', 'cell_region', *fields]
     distance = pd.read_csv(root / 'cell_distance.csv', usecols=distance_columns,
@@ -51,6 +58,14 @@ def validate_assembled(args):
     object_ids = adata.obs['islet_id'].astype(str)
     assert not object_ids.isna().any() and not object_ids.duplicated().any()
     analysis_objects = set(object_ids)
+    if resolved:
+        assert adata.uns.get('endocrine_group_contract') == 'named_four/1'
+        assert set(adata.uns['endocrine_labels']) == set(named) and len(adata.uns['endocrine_labels']) == 4
+        phenotype_names = list(adata.uns['phenotype_names'])
+        core_counts = pd.DataFrame(np.asarray(adata.obsm['phenotype_counts']),
+                                   index=object_ids, columns=phenotype_names)[named]
+        features = pd.read_csv(root / 'barlow_islet_features.csv').set_index('islet_id')
+        assert set(features.index) == analysis_objects and not features.index.duplicated().any()
     adata.file.close()
     assert analysis_objects <= set(lookup.combined_islet_id)
     assert not lookup.combined_islet_id.duplicated().any()
@@ -74,6 +89,11 @@ def validate_assembled(args):
         assert set(member.object_id) == set(source.index)
         reference = source.loc[member.object_id]
         np.testing.assert_array_equal(member.phenotype, reference.label)
+        if resolved:
+            assert not member.phenotype.isin(['Islet', 'EndocrineCluster', 'EndocrineSingle', 'Endocrine']).any()
+            assert not member.phenotype.str.contains('component.boundary', regex=True, case=False).any()
+            assert int(member.phenotype.isin(named).sum()) == component_audit['images'][tag]['preserved_named_endocrine_cells']
+            assert int(member.phenotype.eq('Unclassified').sum()) == component_audit['images'][tag]['unclassified_cells']
         for field in fields:
             assert pd.api.types.is_numeric_dtype(member[field]) and member[field].isin([0, 1]).all()
             np.testing.assert_array_equal(member[field], reference[field])
@@ -108,6 +128,15 @@ def validate_assembled(args):
                                 usecols=[*key, 'cell_region', *fields], float_precision='round_trip')
             assert frame.cell_region.isin(['core', 'peri']).all()
             check_coordinates(frame)
+            if resolved:
+                for region in ('core', 'peri'):
+                    counts = frame.loc[frame.cell_region.eq(region), 'phenotype'].value_counts().reindex(named, fill_value=0)
+                    for label in named:
+                        assert counts[label] == features.loc[name, f'n_{region}_{label}']
+                        if region == 'core':
+                            assert counts[label] == core_counts.loc[name, label]
+                    if region == 'core':
+                        assert counts.sum() == features.loc[name, 'n_endocrine_core']
             object_rows += len(frame)
         # cell_distance has neither UUID nor coordinates. Assembly writes each
         # donor in the exact cell_types UUID order, then concatenates cohort order.
@@ -120,6 +149,10 @@ def validate_assembled(args):
                         'object_files': len(per_object), 'object_rows': object_rows,
                         'uuid_flags_and_labels_exact': True, 'coordinate_export_flags_exact': True,
                         'distance_row_associations_exact': True}
+        if resolved:
+            reports[tag].update(named_endocrine_cells=int(member.phenotype.isin(named).sum()),
+                                unclassified_cells=int(member.phenotype.eq('Unclassified').sum()),
+                                four_named_endocrine_counts_exact=True)
         total_object_rows += object_rows
     assert manifest['cell_states'] == assembly.cell_state_metadata(expected_states)
     report = {'result': 'pass', 'scope': 'All-20 completed cell-state exports; no assembly or classification run',
@@ -130,6 +163,12 @@ def validate_assembled(args):
               'fields': fields, 'measurement_and_level_metadata_exact': True,
               'embedding_marker_count': 31,
               'distance_row_contract': 'Within each donor, cell_types UUID order; phenotype/region/state matched exactly'}
+    if resolved:
+        report['named_endocrine_cells'] = sum(r['named_endocrine_cells'] for r in reports.values())
+        report['unclassified_cells'] = sum(r['unclassified_cells'] for r in reports.values())
+        assert report['named_endocrine_cells'] == manifest['component_selection']['preserved_named_endocrine_cells']
+        assert report['unclassified_cells'] == manifest['component_selection']['unclassified_cells']
+        report['four_named_endocrine_group_and_counts_exact'] = True
     (args.out / 'summary.json').write_text(json.dumps(report, indent=2) + '\n')
     print(json.dumps({key: report[key] for key in ('result', 'cells', 'object_files', 'object_rows')}))
 

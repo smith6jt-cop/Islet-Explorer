@@ -29,8 +29,9 @@ Every value is regenerated from the uniform workflow (`$OUT`, see README.md): th
 Regions: an object's core is the cells whose centroid lies in it; its peri band is the 20 um ring around it,
 inside Tissue, minus every endocrine object; a cell may sit in several bands. Cells ruled out of analysis (no
 nucleus) and Excluded cells are counted in `census.csv` and kept out of every composition, neighbourhood and display
-table. Label groups (agent choice 2026-10-29, recorded in uniform_release.json): endocrine = the Endocrine lineage's
-labels plus unnamed cells of the objects that are their endocrine cells (EndocrineCluster, EndocrineSingle); immune =
+table. Resolved component-selection v2 groups endocrine as exactly Beta, Alpha, Delta and CHGA+ hormone-negative.
+Earlier runs retain their recorded grouping: the Endocrine lineage's labels plus unnamed EndocrineCluster and
+EndocrineSingle cells (agent choice 2026-10-29). Immune =
 the labels the Hematopoietic compartment names (T, B, macrophage profiles, Hematopoietic CD45+), not Hematopoietic
 CD45-, conflicts or doublets.
 
@@ -84,6 +85,8 @@ MARKERS = ['CD31', 'CD8a', 'CD3e', 'SMA', 'CD4', 'CD34', 'HLADR', 'PDPN', 'panCK
 # The labels are the final typing's (typing/identity), read from the run (label_groups); until v17 a fixed list of the
 # old chain's classes.
 ENDOCRINE_STARTS = ('EndocrineCluster', 'EndocrineSingle')     # an unnamed cell of an object that is its endocrine cells
+NAMED_ENDOCRINE = ('Beta cell', 'Alpha cell', 'Delta cell', 'CHGA+ hormone-negative')
+RESOLVED_COMPONENT_SCHEMA = 'uniform.component_selection/2'
 IDENTITY_COLUMNS = ['object_id', 'label', 'excluded_reason', 'compartment', 'lineage', 'status', 'named_by', 'tags']
 # Registry state flags (currently Ki67_pos) are cell attributes, not additional
 # phenotype labels or columns of the 31-marker embedding input.
@@ -194,8 +197,11 @@ def component_selection_metadata(run: Path) -> dict | None:
     import component_selection as CS
     audit = CS.validate_audit(run)
     selection = json.loads(manifest.read_text())
-    counts = ('preserved_named_endocrine_cells', 'preserved_unresolved_endocrine_cells',
-              'unresolved_endocrine_cells', 'boundary_conflicts')
+    counts = ('preserved_named_endocrine_cells', 'unresolved_endocrine_cells', 'boundary_conflicts')
+    if selection['schema'] == RESOLVED_COMPONENT_SCHEMA:
+        counts += ('source_unresolved_endocrine_cells', 'resolved_nonselected_cells', 'unclassified_cells')
+    else:
+        counts += ('preserved_unresolved_endocrine_cells',)
     return {'schema': selection['schema'], 'status': selection['status'],
             'release_ready': selection['release_ready'],
             'manifest_file': 'component_selection.json', 'manifest_sha256': sha256(manifest),
@@ -203,7 +209,87 @@ def component_selection_metadata(run: Path) -> dict | None:
             **{key: int(audit[key]) for key in counts}}
 
 
+def endocrine_object_metadata(run: Path, report_path: Path | None, rows: list[dict],
+                              component: dict | None) -> dict | None:
+    """Bind the independent classifier/geometry proof to the actual assembly inputs."""
+    required = component is not None and component['schema'] == RESOLVED_COMPONENT_SCHEMA
+    if report_path is None:
+        if required:
+            raise ValueError('Resolved components require --endocrine-object-audit')
+        return None
+    run = run.resolve()
+    report = json.loads(report_path.read_text())
+    if (report.get('schema') != 'uniform.endocrine_object_audit/2'
+            or report.get('audit_mode') != 'classifier_lineage' or report.get('passes') is not True
+            or report.get('run') != str(run) or not isinstance(report.get('corrected_cell_diagnostic_passes'), bool)):
+        raise ValueError('Endocrine object report must pass the classifier-lineage audit for this run')
+    lineage = report.get('classifier_lineage', {})
+    images = lineage.get('images', [])
+    tags = [r['image_name'] for r in rows]
+    if (lineage.get('passes') is not True or len(images) != len(tags)
+            or {r.get('image') for r in images} != set(tags) or set(report.get('images', [])) != set(tags)):
+        raise ValueError('Endocrine object proof donor inventory differs')
+    sources = report.get('source_sha256', {})
+    def valid_hash(value):
+        return isinstance(value, str) and len(value) == 64 and all(c in '0123456789abcdef' for c in value)
+    for key in ('classifier_replay', 'geometry_provenance'):
+        record = lineage.get(key, {})
+        if not valid_hash(record.get('sha256')) or sources.get(record.get('path')) != record['sha256']:
+            raise ValueError(f'Endocrine object audit lacks its {key} proof binding')
+    inputs = [run / 'typing/levels.csv']
+    for tag in tags:
+        inputs.extend([run / 'typing/redsea' / f'{tag}.parquet',
+                       run / 'typing/context' / f'{tag}.parquet', run / 'islets' / f'{tag}.geojson'])
+    verified = {}
+    for path in inputs:
+        actual = sha256(path)
+        if sources.get(str(path)) != actual:
+            raise ValueError(f'Endocrine object proof input changed: {path}')
+        verified[str(path)] = actual
+    geometry = {}
+    for row in images:
+        tag = row['image']
+        actual = verified[str(run / 'islets' / f'{tag}.geojson')]
+        if (row.get('failures') or row.get('final_islets_sha256') != actual
+                or row.get('reference_islets_sha256') != actual):
+            raise ValueError(f'{tag}: endocrine object lineage or geometry mismatch')
+        for field in ('reference_islets_sha256', 'cell_geometry_sha256', 'original_outlines_sha256',
+                      'fit_sha256', 'mask_sha256'):
+            if not valid_hash(row.get(field)):
+                raise ValueError(f'{tag}: missing endocrine object provenance {field}')
+        geometry[tag] = actual
+    count_fields = ('objects', 'objects_with_classifier_support', 'singles', 'singles_with_exact_cell_association',
+                    'singles_with_centroid_membership_difference', 'split_descendants',
+                    'split_descendants_with_multiple_parent_candidates')
+    totals = lineage.get('totals', {})
+    for field in count_fields:
+        values = [row.get(field) for row in images]
+        if (any(type(value) is not int or value < 0 for value in values)
+                or totals.get(field) != sum(values)):
+            raise ValueError(f'Endocrine object proof has inconsistent {field} counts')
+    if (totals.get('failures') != 0 or report.get('totals', {}).get('objects') != totals['objects']
+            or any(row['objects'] != row['objects_with_classifier_support']
+                   or row['singles'] != row['singles_with_exact_cell_association'] for row in images)):
+        raise ValueError('Endocrine object proof contradicts its passing result')
+    return {'schema': report['schema'], 'audit_mode': report['audit_mode'],
+            'file': 'endocrine_object_audit.json', 'sha256': sha256(report_path), 'passes': True,
+            'corrected_cell_diagnostic_passes': report['corrected_cell_diagnostic_passes'],
+            'input_sha256': verified, 'geometry_sha256': geometry}
+
+
 # ------------------------------------------------------------------------------------------- the label
+def endocrine_group(lab: pd.DataFrame, labels: list[str], comp: dict, schema: str | None) -> list[str]:
+    """Use the explicit four-name contract for resolved components; preserve historical grouping otherwise."""
+    if schema == RESOLVED_COMPONENT_SCHEMA:
+        named = list(dict.fromkeys(lab.loc[lab.lineage.str.match(r'^Endocrine(?::|$)'), 'label']))
+        if set(named) != set(NAMED_ENDOCRINE) or not set(named).issubset(labels):
+            raise ValueError('Resolved component endocrine group must contain all four named registry types')
+        if set(labels) & {'Islet', 'EndocrineCluster', 'EndocrineSingle', 'Endocrine'}:
+            raise ValueError('Resolved component identities still contain unnamed endocrine object classes')
+        return named
+    return [x for x in labels if any(lin == 'Endocrine' for _, lin in comp.get(x, ())) or x in ENDOCRINE_STARTS]
+
+
 def label_groups(run: Path, rows: list[dict]) -> dict:
     """The cohort's labels (labels-file order first, then the rest sorted), their tissue-wide frequencies over every
     analysed cell (enrich_z's expectation) and the endocrine, immune and macrophage groups."""
@@ -221,7 +307,9 @@ def label_groups(run: Path, rows: list[dict]) -> dict:
     first = [x for x in dict.fromkeys(lab['label']) if x in total.index]
     labels = first + sorted(x for x in total.index if x not in first)
     pan_neg = set(lab.loc[lab['kind'] == 'pan_negative', 'label'])
-    endocrine = [x for x in labels if any(lin == 'Endocrine' for _, lin in comp.get(x, ())) or x in ENDOCRINE_STARTS]
+    selection_path = run / 'typing/component_selection.json'
+    schema = json.loads(selection_path.read_text()).get('schema') if selection_path.exists() else None
+    endocrine = endocrine_group(lab, labels, comp, schema)
     immune = [x for x in labels if x not in pan_neg and comp.get(x) and all(c == 'Hematopoietic' for c, _ in comp[x])]
     macrophages = [x for x in immune if any(lin == 'Myeloid' for _, lin in comp[x])]
     return {'labels': labels, 'frequencies': (total / total.sum()).reindex(labels).to_dict(),
@@ -585,12 +673,15 @@ def main() -> int:
     ap.add_argument('--workers', type=int, default=6)
     ap.add_argument('--include-collagen-iv', action='store_true',
                     help='include current all-tissue Collagen IV geometry and independent structural endpoints')
+    ap.add_argument('--endocrine-object-audit', type=Path,
+                    help='passing classifier-lineage object proof; required for resolved component v2')
     a = ap.parse_args()
     out, reports = a.output.resolve(), a.report_root.resolve()
     if out.exists() or reports.exists():
         raise FileExistsError('use fresh output and report roots')
     rows = CT.cohort_rows()
     component_selection = component_selection_metadata(a.run)
+    object_audit = endocrine_object_metadata(a.run, a.endocrine_object_audit, rows, component_selection)
     generation = SG.provenance(a.run)
     if generation is not None:
         for row in rows:
@@ -633,6 +724,8 @@ def main() -> int:
             combined.obs[col] = pd.Categorical(combined.obs[col])
     combined.uns['phenotype_names'] = np.asarray(LABELS, dtype=object)
     combined.uns['endocrine_labels'] = np.asarray(ENDOCRINE, dtype=object)      # composition_embedding.endocrine_shares
+    if component_selection and component_selection['schema'] == RESOLVED_COMPONENT_SCHEMA:
+        combined.uns['endocrine_group_contract'] = 'named_four/1'
     combined.uns['morphology_names'] = np.asarray(list(MORPHOLOGY), dtype=object)
     combined.uns['case_to_imageid'] = {r['case_id']: int(r['case_id']) for r in rows}
     combined.uns['reference_frequencies'] = freqs
@@ -716,12 +809,19 @@ def main() -> int:
             shutil.copy2(CT.typing_dir(a.run) / name, out / name)
             if sha256(out / name) != component_selection[f'{kind}_sha256']:
                 raise ValueError(f'Component {kind} changed while copying')
+    if object_audit is not None:
+        shutil.copy2(a.endocrine_object_audit, out / object_audit['file'])
+        if sha256(out / object_audit['file']) != object_audit['sha256']:
+            raise ValueError('Endocrine object audit changed while copying')
     rel = {'status': 'assembled_pending_owner_review', 'donors': len(rows), 'objects': int(combined.n_obs),
            'structure_generation': generation,
            'by_object_class': {str(k): int(v) for k, v in combined.obs.object_class.value_counts().items()},
            'singles_counted_not_analysed': int(census.singles.sum()),
            'labels': LABELS, 'label_groups': {k: groups[k] for k in ('endocrine', 'immune', 'macrophages')},
-           'label_groups_basis': 'agent choice 2026-10-29 (module docstring); owner review pending',
+           'label_groups_basis': ('resolved component v2: exactly the four named endocrine types; '
+                                  'Unclassified and object classes are not endocrine'
+                                  if component_selection and component_selection['schema'] == RESOLVED_COMPONENT_SCHEMA
+                                  else 'agent choice 2026-10-29 (module docstring); owner review pending'),
            'cell_typing': 'typing/identity (identity.py)', 'positivity': 'per-image level, typing/levels.csv',
            'cell_states': cell_state_metadata(results),
            'measurements': {m: str(v) for m, v in pd.read_csv(CT.typing_dir(a.run) / 'levels.csv')
@@ -748,6 +848,8 @@ def main() -> int:
         rel['component_selection'] = component_selection
         rel['unresolved_endocrine_cells'] = component_selection['unresolved_endocrine_cells']
         rel['component_boundary_conflicts'] = component_selection['boundary_conflicts']
+    if object_audit is not None:
+        rel['endocrine_object_audit'] = object_audit
     (out / 'uniform_release.json').write_text(json.dumps(rel, indent=2) + '\n')
     print(json.dumps(rel, indent=2))
     return 0

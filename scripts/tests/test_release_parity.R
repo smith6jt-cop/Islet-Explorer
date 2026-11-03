@@ -90,6 +90,125 @@ test_that("component release decisions use verified failures rather than a revie
   expect_error(builder$validate_release_label_groups(root, app_members), "component boundary conflicts")
 })
 
+test_that("resolved component contracts retain source uncertainty and require object provenance", {
+  builder <- new.env(parent = globalenv())
+  sys.source("scripts/build_release_data.R", envir = builder)
+  root <- tempfile("component-resolved-contract-")
+  dir.create(root)
+  on.exit(unlink(root, recursive = TRUE), add = TRUE)
+  named <- c("Beta cell", "Alpha cell", "Delta cell", "CHGA+ hormone-negative")
+  app_members <- function(aggregate, labels) intersect(named, labels)
+  hash <- paste(rep("a", 64), collapse = "")
+  write_json <- function(value, name) jsonlite::write_json(value, file.path(root, name), auto_unbox = TRUE)
+  make_contract <- function(unresolved = 0, boundary = 0, source_unresolved = 10, resolved = 20, unclassified = 15) {
+    selection <- list(schema = "uniform.component_selection/2", status = "assignments_resolved", release_ready = FALSE,
+      resolution_policy = "exact_v19_named_membership_existing_nonendocrine_rules",
+      images = list(one = list(cells = 100, named_endocrine_cells = 50, unresolved_endocrine_cells = source_unresolved)))
+    write_json(selection, "component_selection.json")
+    counts <- list(cells = 100, preserved_named_endocrine_cells = 50,
+      source_unresolved_endocrine_cells = source_unresolved, unresolved_endocrine_cells = unresolved,
+      boundary_conflicts = boundary, resolved_nonselected_cells = resolved, unclassified_cells = unclassified)
+    row <- c(counts, list(image = "one", status = "assignments_resolved", release_ready = FALSE,
+      resolution_policy = selection$resolution_policy, resolution_marker_state_invariants_passed = TRUE,
+      untargeted_identity_invariants_passed = TRUE,
+      identity = list(sha256 = hash), selected_endocrine_hormone_evidence_replayed = TRUE))
+    audit <- c(list(schema = "uniform.component_selection_audit/2", status = "assignments_resolved", release_ready = FALSE,
+      resolution_policy = selection$resolution_policy,
+      manifest_sha256 = builder$sha256_file(file.path(root, "component_selection.json")), images = list(one = row)), counts)
+    write_json(audit, "component_selection_audit.json")
+    meta <- c(list(schema = selection$schema, status = selection$status, release_ready = FALSE,
+      manifest_file = "component_selection.json", manifest_sha256 = audit$manifest_sha256,
+      audit_file = "component_selection_audit.json", audit_sha256 = builder$sha256_file(file.path(root, "component_selection_audit.json"))),
+      counts[names(counts) != "cells"])
+    inputs <- as.list(setNames(rep(hash, 4), c("/processing/typing/levels.csv", "/processing/typing/redsea/one.parquet",
+      "/processing/typing/context/one.parquet", "/processing/islets/one.geojson")))
+    object_counts <- list(objects = 2, objects_with_classifier_support = 2, singles = 1,
+      singles_with_exact_cell_association = 1, singles_with_centroid_membership_difference = 0,
+      split_descendants = 0, split_descendants_with_multiple_parent_candidates = 0)
+    proof <- list(schema = "uniform.endocrine_object_audit/2", audit_mode = "classifier_lineage", run = "/processing",
+      images = list("one"), passes = TRUE, corrected_cell_diagnostic_passes = FALSE,
+      totals = list(objects = 2),
+      source_sha256 = c(inputs, list("/replay.json" = hash, "/geometry.json" = hash)),
+      classifier_lineage = list(passes = TRUE,
+        classifier_replay = list(path = "/replay.json", sha256 = hash),
+        geometry_provenance = list(path = "/geometry.json", sha256 = hash),
+        totals = c(object_counts, list(failures = 0)),
+        images = list(c(object_counts, list(image = "one", final_islets_sha256 = hash, reference_islets_sha256 = hash,
+          cell_geometry_sha256 = hash, original_outlines_sha256 = hash, fit_sha256 = hash, mask_sha256 = hash,
+          failures = list())))))
+    write_json(proof, "endocrine_object_audit.json")
+    object_meta <- list(schema = proof$schema, audit_mode = proof$audit_mode, file = "endocrine_object_audit.json",
+      sha256 = builder$sha256_file(file.path(root, "endocrine_object_audit.json")), passes = TRUE,
+      corrected_cell_diagnostic_passes = FALSE, input_sha256 = inputs, geometry_sha256 = list(one = hash))
+    contract <- list(run = "/processing", labels = c(named, "Unclassified"), label_groups = list(endocrine = named),
+      component_selection = meta, endocrine_object_audit = object_meta, donors = 1, cells_analysed = 100, cells_excluded = 0,
+      identity_sha256 = list(one = hash), levels_sha256 = hash)
+    write_json(contract, "uniform_release.json")
+    contract
+  }
+  # Source uncertainty is provenance; the final assignment state is what gates release.
+  contract <- make_contract()
+  expect_true(builder$validate_release_label_groups(root, app_members)$applicable)
+  make_contract(resolved = 2, unclassified = 15)
+  expect_true(builder$validate_release_label_groups(root, app_members)$applicable)
+  make_contract(unresolved = 1)
+  expect_error(builder$validate_release_label_groups(root, app_members), "1 unresolved object-class")
+  make_contract(boundary = 1)
+  expect_error(builder$validate_release_label_groups(root, app_members), "1 endocrine component boundary")
+  for (field in c("source_unresolved", "resolved", "unclassified")) {
+    args <- setNames(list(51), field)
+    do.call(make_contract, args)
+    expect_error(builder$validate_release_label_groups(root, app_members), "component counts contradict")
+  }
+  for (scope in c("selection", "audit", "row")) {
+    contract <- make_contract()
+    selection <- jsonlite::read_json(file.path(root, "component_selection.json"), simplifyVector = FALSE)
+    audit <- jsonlite::read_json(file.path(root, "component_selection_audit.json"), simplifyVector = FALSE)
+    if (scope == "selection") selection$resolution_policy <- NULL
+    if (scope == "audit") audit$resolution_policy <- "other"
+    if (scope == "row") audit$images$one$resolution_policy <- NULL
+    write_json(selection, "component_selection.json")
+    audit$manifest_sha256 <- builder$sha256_file(file.path(root, "component_selection.json"))
+    write_json(audit, "component_selection_audit.json")
+    contract$component_selection$manifest_sha256 <- audit$manifest_sha256
+    contract$component_selection$audit_sha256 <- builder$sha256_file(file.path(root, "component_selection_audit.json"))
+    write_json(contract, "uniform_release.json")
+    expect_error(builder$validate_release_label_groups(root, app_members), "resolution (policy|invariant proof) differs")
+  }
+  for (field in c("resolution_marker_state_invariants_passed", "untargeted_identity_invariants_passed")) {
+    for (value in list(NULL, FALSE)) {
+      contract <- make_contract()
+      audit <- jsonlite::read_json(file.path(root, "component_selection_audit.json"), simplifyVector = FALSE)
+      audit$images$one[[field]] <- value
+      write_json(audit, "component_selection_audit.json")
+      contract$component_selection$audit_sha256 <- builder$sha256_file(file.path(root, "component_selection_audit.json"))
+      write_json(contract, "uniform_release.json")
+      expect_error(builder$validate_release_label_groups(root, app_members), "resolution invariant proof differs")
+    }
+  }
+  contract <- make_contract()
+  contract$label_groups$endocrine <- c(named, "Unclassified")
+  write_json(contract, "uniform_release.json")
+  expect_error(builder$validate_release_label_groups(root, app_members), "exactly the four")
+  for (defect in c("missing", "failed", "geometry", "reference_geometry", "source", "mode", "count")) {
+    contract <- make_contract()
+    proof_path <- file.path(root, "endocrine_object_audit.json")
+    if (defect == "missing") unlink(proof_path) else {
+      proof <- jsonlite::read_json(proof_path, simplifyVector = FALSE)
+      if (defect == "failed") proof$passes <- FALSE
+      if (defect == "geometry") proof$classifier_lineage$images[[1]]$final_islets_sha256 <- paste(rep("b", 64), collapse = "")
+      if (defect == "reference_geometry") proof$classifier_lineage$images[[1]]$reference_islets_sha256 <- paste(rep("b", 64), collapse = "")
+      if (defect == "source") proof$source_sha256[["/processing/typing/context/one.parquet"]] <- NULL
+      if (defect == "mode") proof$audit_mode <- "corrected_cell"
+      if (defect == "count") proof$classifier_lineage$totals$objects <- 3
+      write_json(proof, "endocrine_object_audit.json")
+      contract$endocrine_object_audit$sha256 <- builder$sha256_file(proof_path)
+      write_json(contract, "uniform_release.json")
+    }
+    expect_error(builder$validate_release_label_groups(root, app_members), "Invalid endocrine object proof")
+  }
+})
+
 test_that("releases reject unresolved endocrine calls and inconsistent aggregate definitions", {
   builder <- new.env(parent = globalenv())
   sys.source("scripts/build_release_data.R", envir = builder)
@@ -238,7 +357,8 @@ test_that("the passthrough list follows the schema and refuses the wrong schema 
   five <- builder$release_passthrough_files("5", uniform)
   expect_true(all(c("uniform_release.json", "endocrine_objects_by_donor.csv", "protein_phenotype_rules.csv",
                     "donor_metadata.csv", "adata_ins_root.h5ad") %in% five$required))
-  expect_identical(five$optional, c("phenotype_rules.csv", "component_selection.json", "component_selection_audit.json"))
+  expect_identical(five$optional, c("phenotype_rules.csv", "component_selection.json", "component_selection_audit.json",
+                                    "endocrine_object_audit.json"))
   expect_error(builder$release_passthrough_files("1", uniform), "--schema 5")
   expect_error(builder$release_passthrough_files("5", frozen), "uniform root")
   expect_error(builder$release_passthrough_files("4", frozen), "Unsupported --schema 4")
