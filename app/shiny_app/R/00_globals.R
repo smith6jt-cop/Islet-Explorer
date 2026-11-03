@@ -1656,6 +1656,8 @@ root_identity_typing_manifest <- local({
   }
 })
 root_has_identity_typing <- function() !is.null(root_identity_typing_manifest())
+root_has_selected_endocrine <- function() identical(
+  root_identity_typing_manifest()$component_selection$schema, "uniform.component_selection/2")
 
 # This is the recorded schema-5 positivity signature, not a version guessed
 # from a root's name. The current producer compares these four markers on the
@@ -1689,6 +1691,16 @@ IDENTITY_HORMONE_TEXT <- paste0(
   "An exact hormone tie or an object class retained without marker support is unresolved, not a named endocrine ",
   "cell type; current release checks require those unresolved definitions to be resolved.")
 
+identity_hormone_text <- function() {
+  if (!root_has_selected_endocrine()) return(IDENTITY_HORMONE_TEXT)
+  paste0("Endocrine membership and subtype calls are preserved from the selected v19 endocrine cells, ",
+    "with their original INS, GCG, SST and CHGA thresholds and independently checked hormone evidence. ",
+    "Beta, Alpha and Delta use the unique highest scaled positive hormone; CHGA-positive cells without ",
+    "a positive hormone are CHGA⁺ hormone-negative. These four named types alone define endocrine totals. ",
+    "Other cells use supported non-endocrine rules. Previously unresolved object-class calls without ",
+    "a supported identity are retained as Unclassified, outside endocrine totals and within total cell counts.")
+}
+
 identity_structure_text <- function() paste0(
   "Structure-qualified cell calls require the centroid inside the relevant structure, more than half the cell's ",
   "area inside that structure class, and its marker both positive and highest by fold over level among the cell's ",
@@ -1706,12 +1718,15 @@ identity_typing_help_ui <- function() shiny::tagList(
     "despeckled, spillover-corrected REDSEA measurements. The plotted marker scale is per image, from its level ",
     "to its 99.9th percentile, clipped to [0, 1]."),
   shiny::tags$p(identity_measurements_text(), " Ki67 is a proliferation flag, not an identity marker."),
-  shiny::tags$p(IDENTITY_HORMONE_TEXT, " Singles retain their cell identity but are counted as objects only; ",
+  shiny::tags$p(identity_hormone_text(), " Singles retain their cell identity but are counted as objects only; ",
     "they have no core or peri-islet analysis region."),
   shiny::tags$p(identity_structure_text()),
   shiny::tags$p("Canary evidence resolves competing compartments and lineages before their marker rules name ",
-    "the cell. Unresolved conflicts and suspected doublets retain explicit labels. Cells with insufficient ",
-    "evidence retain their starting object or Tissue class; they are not named after a top marker. Cells that ",
+    "the cell. Unresolved conflicts and suspected doublets retain explicit labels. ",
+    if (root_has_selected_endocrine())
+      "Unclassified cells retain their evidence and resolution reason; existing Tissue classifications are preserved. Cells are not named after a top marker. Cells that "
+    else
+      "Cells with insufficient evidence retain their starting object or Tissue class; they are not named after a top marker. Cells that ",
     "fail measurement or nucleus eligibility checks are outside the analyzed cell universe."))
 
 identity_phenotype_definitions_ui <- function() {
@@ -1730,6 +1745,15 @@ identity_phenotype_definitions_ui <- function() {
     "Exocrine" = "Epithelial compartment assigned to the exocrine lineage by the registry's epithelial evidence.",
     "Stromal" = "Mesenchymal compartment assigned to the mural lineage with SMA positive.",
     "Structure-qualified cells" = identity_structure_text())
+  if (root_has_selected_endocrine()) {
+    defs[c("Beta cell", "Alpha cell", "Delta cell", "CHGA+ hormone-negative")] <- c(
+      "Selected v19 endocrine membership with INS the unique highest scaled positive hormone.",
+      "Selected v19 endocrine membership with GCG the unique highest scaled positive hormone.",
+      "Selected v19 endocrine membership with SST the unique highest scaled positive hormone.",
+      "Selected v19 endocrine membership, CHGA positive and no positive INS, GCG or SST.")
+    defs["Unclassified"] <- paste0("A reconsidered object-class or component-boundary cell for which the existing rules ",
+      "provide no supported identity. Retained in total cell counts, with its evidence and reason; not an endocrine type.")
+  }
   shiny::tagList(
     shiny::tags$h6(style = "margin-top: 12px; font-weight: 700;", "Phenotype definitions"),
     shiny::tags$p("These definitions follow compartment and lineage assignment; a positive marker alone does not imply its cell type."),
