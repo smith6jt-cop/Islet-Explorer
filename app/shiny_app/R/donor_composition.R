@@ -13,25 +13,34 @@ DONOR_COMPOSITION_ORDERS <- c("Donor status, then beta-cell proportion" = "beta"
                               "Donor status, then donor ID" = "id")
 DONOR_COMPOSITION_OTHER <- unname(UNCLASSIFIED_KEYS[["subtype"]])
 
-# Leave out (owner, 2026-10-21: "the large proportions of endocrine obscure the other types for core, and exocrine does
-# the same thing in peri"): the phenotypes left out by default in each region; the bars then show the proportions of
-# the remaining cells. On v9 the four endocrine types are 99 % of core cells and Exocrine 93 % of band cells.
+# The Include selector preserves the established region defaults: the abundant endocrine types in the core
+# and Exocrine cells in the band start unchecked so the other populations remain visible.
 DONOR_COMPOSITION_ENDOCRINE <- c("Beta cell", "Alpha cell", "Delta cell", "CHGA+ hormone-negative")
-donor_composition_default_leave_out <- function(region) {
-  switch(region, core = DONOR_COMPOSITION_ENDOCRINE, peri = "Exocrine",
+donor_composition_default_include <- function(region, choices) {
+  omitted <- switch(region, core = DONOR_COMPOSITION_ENDOCRINE, peri = "Exocrine",
          both = c(DONOR_COMPOSITION_ENDOCRINE, "Exocrine"), character(0))
+  setdiff(choices, omitted)
 }
 
-#' Proportions among the cells shown: `tab` without the `leave_out` phenotypes, `proportion` recomputed over the
-#' cells that remain (`proportion_all` keeps the proportion of all cells).
-donor_composition_shown <- function(tab, leave_out = character(0)) {
+#' Proportions among the selected phenotypes. NULL includes every category; an empty vector includes none.
+#' The source count/denominator stays unchanged and `proportion_all` retains the original proportion.
+donor_composition_shown <- function(tab, include = NULL) {
   tab$proportion_all <- tab$proportion
-  tab <- tab[!(tab$phenotype %in% leave_out), , drop = FALSE]
+  if (!is.null(include)) tab <- tab[tab$phenotype %in% include, , drop = FALSE]
+  tab$shown_cells <- numeric(nrow(tab))
   if (!nrow(tab)) return(tab)
   shown <- stats::ave(tab$cells, tab$case_id, FUN = sum)
   tab$shown_cells <- shown
   tab$proportion <- ifelse(shown > 0, 100 * tab$cells / shown, NA_real_)
   tab
+}
+
+#' Export the plotted rows while retaining the existing original-denominator `proportion` column.
+donor_composition_export <- function(shown) {
+  shown$proportion_selected <- shown$proportion
+  shown$proportion <- shown$proportion_all
+  shown$proportion_all <- NULL
+  shown
 }
 
 #' Long table, one row per donor and phenotype: cells, the donor's total cells in the region, proportion (%), objects.
@@ -107,10 +116,9 @@ donor_composition_order <- function(tab, order = c("beta", "id")) {
   donors$case_id[order(match(donors$donor_status, c("ND", "Aab+", "T1D")), key2)]
 }
 
-donor_composition_figure <- function(tab, order_ids, palette, status_cols, region_label, leave_out = character(0)) {
-  if (!nrow(tab)) return(plotly_islet_empty("No donors for the current selection"))
-  tab <- donor_composition_shown(tab, leave_out)
-  if (!nrow(tab)) return(plotly_islet_empty("Every phenotype is left out"))
+#' Draw the same selected, normalized rows used by the CSV export.
+donor_composition_figure <- function(tab, order_ids, palette, status_cols, region_label) {
+  if (!nrow(tab)) return(plotly_islet_empty("No phenotypes selected or no donors match the filters"))
   status <- tab$donor_status[match(order_ids, tab$case_id)]
   labels <- paste0(order_ids, "<br>", status)
   tab$x <- factor(labels[match(tab$case_id, order_ids)], levels = labels)
@@ -128,7 +136,7 @@ donor_composition_figure <- function(tab, order_ids, palette, status_cols, regio
   for (ph in phenos) {
     t <- tab[tab$phenotype == ph, , drop = FALSE]
     g <- group_of(ph)
-    col <- if (ph == DONOR_COMPOSITION_OTHER) "#8f8f8f" else unname(palette[ph]) %||% "#8f8f8f"
+    col <- unname(palette[ph]) %||% "#8f8f8f"
     if (is.na(col)) col <- "#8f8f8f"
     p <- plotly::add_trace(p, type = "bar", x = t$x, y = t$proportion, name = phenotype_text(ph),
                            legendgroup = g, legendgrouptitle = if (!(g %in% titled)) list(text = g),
@@ -152,25 +160,22 @@ donor_composition_figure <- function(tab, order_ids, palette, status_cols, regio
   p %>%
     plotly::layout(
       barmode = "stack", font = fonts$global, bargap = 0.15,
-      title = list(text = plotly_title_with_sub(paste0("Cell make-up of each donor's objects (", region_label, ")"),
-                                                if (length(leave_out)) paste0("Leaving out ",
-                                                  paste(phenotype_text(leave_out), collapse = ", "), "; bars are proportions of the",
-                                                  " remaining cells") else NULL),
+      title = list(text = paste0("Cell make-up of each donor's objects (", region_label, ")"),
                    font = fonts$title, x = 0.02, xanchor = "left"),
       xaxis = list(title = list(text = "Donor", font = fonts$axis_title), tickfont = list(size = ISLET_FONT_SIZES$dense_min),
                    automargin = TRUE),
-      yaxis = list(title = list(text = "Proportion of the cells shown (%)", font = fonts$axis_title), tickfont = fonts$axis_tick,
+      yaxis = list(title = list(text = "Proportion of selected phenotypes", font = fonts$axis_title), tickfont = fonts$axis_tick,
                    range = c(0, 108), tickvals = seq(0, 100, 25)),
       legend = list(font = fonts$legend_text, title = list(text = "Phenotype", font = fonts$legend_title),
                     groupclick = "toggleitem", tracegroupgap = 6),
-      margin = list(t = 80, b = 80)) %>%
+      margin = list(t = 48, b = 80)) %>%
     plotly_islet_config("composition_by_donor")
 }
 
 donor_composition_card_ui <- function(ns) {
   div(class = "card", style = "margin-bottom: 20px; padding: 15px; overflow: visible;",
     div(style = "display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;",
-      card_title_help("Composition by donor", style = "margin: 0; color: var(--islet-fg);", help = list(
+      card_title_help("Composition By Donor", style = "margin: 0; color: var(--islet-fg);", help = list(
         tags$p("Each donor's cell make-up: the proportion of each phenotype among all the cells of the donor's",
                " selected endocrine objects, pooled over the objects (a large object counts for more cells), in the",
                " chosen region. The squares above the bars give each donor's status."),
@@ -178,28 +183,35 @@ donor_composition_card_ui <- function(ns) {
                " identity was not assigned. Hidden QC-conflict cells are excluded from these categories.",
                " Each bar sums to 100% of the cells shown; hover also reports the proportion",
                " of all original cells."),
-        tags$p(tags$strong("Leave out."), " One or two classes hold nearly every cell (the endocrine types in the",
-               " core, Exocrine in the band) and flatten the rest, so they are left out by default: the bars then",
-               " give each phenotype's proportion of the cells that remain, and hover also gives its proportion of",
-               " all cells. Changing the region restores its default; uncheck everything to see all retained categories."),
+        tags$p(tags$strong("Include."), " Open Include Phenotypes and check the populations to compare. Each bar",
+               " gives their proportions among the selected phenotypes. Endocrine types in the core and Exocrine",
+               " cells in the band start unchecked because they otherwise obscure the other populations. Changing",
+               " the region restores its default. All selects every retained category; None clears the selection.",
+               " Phenotype Colors controls the palette and stays synchronized with Spatial and the cell viewer."),
         tags$p(tags$strong("Filters."), " The Data controls' endocrine objects, donor status, autoantibody, age, sex",
                " and diameter filters apply. The Data layer, the measure, zero and outlier exclusions do not: they",
                " concern one measure, and this card shows every phenotype."),
-        tags$p("The CSV gives each retained category's cell count and proportion of all original cells. It includes",
-               " categories selected under Leave out. The original total_cells denominator includes hidden cells;",
-               " the CSV proportions therefore need not sum to 100%."),
+        tags$p("The CSV contains the plotted, included categories. cells and total_cells retain the original",
+               " counts; proportion retains the percentage of all original cells, while proportion_selected gives",
+               " the plotted percentage of the selected phenotypes and shown_cells its denominator. Original",
+               " proportions need not sum to 100%."),
         unclassified_help_ui())),
-      div(style = "display: flex; align-items: flex-end; gap: 14px;",
-        div(style = "width: 190px;", selectInput(ns("composition_region"), "Region", choices = DONOR_COMPOSITION_REGIONS,
-                                                 selected = "core", width = "100%")),
-        div(style = "width: 290px;", selectInput(ns("composition_order"), "Order donors by",
-                                                 choices = DONOR_COMPOSITION_ORDERS, selected = "beta", width = "100%")),
-        div(style = "padding-bottom: 6px;",
-          downloadButton(ns("dl_composition_csv"), "CSV", class = "btn-sm btn-outline-secondary",
-                         style = "font-size: 11px; padding: 2px 8px;")))
+      downloadButton(ns("dl_composition_csv"), "CSV", class = "btn-sm btn-outline-secondary")
     ),
-    # Grouped, with All | None per group and for the list (owner, 2026-10-27); drawn by the module server.
-    div(class = "composition-leave-out", style = "margin: 4px 0 6px;", uiOutput(ns("composition_leave_out_ui"))),
+    div(class = "composition-toolbar", style = "display: flex; align-items: center; gap: 8px 16px; flex-wrap: wrap; margin: 8px 0;",
+      div(class = "plot-type-select", style = "flex: 1 1 220px; min-width: 0;",
+        selectInput(ns("composition_region"), "Region", choices = DONOR_COMPOSITION_REGIONS,
+                    selected = "core", width = "100%")),
+      div(class = "plot-type-select", style = "flex: 1.6 1 330px; min-width: 0;",
+        selectInput(ns("composition_order"), "Order Donors By", choices = DONOR_COMPOSITION_ORDERS,
+                    selected = "beta", width = "100%")),
+      div(class = "plot-type-select", style = "flex: 1.2 1 280px; min-width: 0;",
+        selectInput("composition_palette", "Phenotype Colors", choices = names(PHENOTYPE_PALETTES),
+                    selected = "High Contrast", width = "100%"))
+    ),
+    # The same grouped selection as Spatial, kept collapsed to reserve room for the plot.
+    div(class = "composition-include", style = "margin: 0 0 4px;",
+        control_panel("Include Phenotypes", uiOutput(ns("composition_include_ui")))),
     plotlyOutput(ns("composition_by_donor"), height = "520px")
   )
 }

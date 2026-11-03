@@ -137,15 +137,76 @@ test_that("the fitted axis ends above the 99th percentile only when a few values
   expect_null(env$plot_axis_upper(1:10))
 })
 
-test_that("leaving out phenotypes gives proportions of the remaining cells", {
+test_that("included phenotypes share one displayed denominator without changing source proportions", {
   env <- .plot_types_env()
-  tab <- data.frame(case_id = "1", donor_status = "ND", phenotype = c("Beta cell", "Macrophage", "No subtype"),
+  tab <- data.frame(case_id = "1", donor_status = "ND", phenotype = c("Beta cell", "Macrophage", env$DONOR_COMPOSITION_OTHER),
                     cells = c(90, 6, 4), total_cells = 100, proportion = c(90, 6, 4), n_objects = 2)
-  shown <- env$donor_composition_shown(tab, "Beta cell")
-  expect_equal(shown$phenotype, c("Macrophage", "No subtype"))
+  original <- tab
+  included <- c("Macrophage", env$DONOR_COMPOSITION_OTHER)
+  shown <- env$donor_composition_shown(tab, included)
+  expect_equal(shown$phenotype, included)
   expect_equal(shown$proportion, c(60, 40))
   expect_equal(shown$proportion_all, c(6, 4))
-  expect_equal(env$donor_composition_default_leave_out("peri"), "Exocrine")
+  expect_equal(shown$shown_cells, c(10, 10))
+  expect_identical(tab, original)
+
+  # The CSV shares the plotted rows but keeps the historical original-denominator column.
+  exported <- env$donor_composition_export(shown)
+  expect_equal(exported$phenotype, included)
+  expect_equal(exported$proportion, c(6, 4))
+  expect_equal(exported$proportion_selected, c(60, 40))
+  expect_equal(exported$total_cells, c(100, 100))
+  expect_equal(exported$shown_cells, c(10, 10))
+
+  # All and None are distinct, including a well-formed empty CSV.
+  expect_equal(env$donor_composition_shown(tab)$proportion, tab$proportion)
+  empty <- env$donor_composition_shown(tab, character(0))
+  expect_equal(nrow(empty), 0L)
+  expect_equal(nrow(env$donor_composition_export(empty)), 0L)
+  expect_true(all(c("shown_cells", "proportion_selected") %in% names(env$donor_composition_export(empty))))
+
+  choices <- c(env$DONOR_COMPOSITION_ENDOCRINE, "Exocrine", included)
+  expect_equal(env$donor_composition_default_include("core", choices), c("Exocrine", included))
+  expect_equal(env$donor_composition_default_include("peri", choices), c(env$DONOR_COMPOSITION_ENDOCRINE, included))
+  expect_equal(env$donor_composition_default_include("both", choices), included)
+})
+
+test_that("composition inclusion normalizes each donor independently and handles zero selected cells", {
+  env <- .plot_types_env()
+  tab <- data.frame(case_id = rep(c("1", "2", "3"), each = 2), donor_status = rep(c("ND", "Aab+", "T1D"), each = 2),
+    phenotype = rep(c("Beta cell", "Macrophage"), 3), cells = c(90, 10, 25, 25, 10, 0),
+    total_cells = rep(c(100, 50, 10), each = 2), proportion = c(90, 10, 50, 50, 100, 0), n_objects = 1)
+  shown <- env$donor_composition_shown(tab, "Macrophage")
+  expect_equal(shown$proportion, c(100, 100, NA_real_))
+  expect_equal(shown$shown_cells, c(10, 25, 0))
+  expect_equal(shown$proportion_all, c(10, 50, 0))
+  expect_equal(shown$total_cells, c(100, 50, 10))
+})
+
+test_that("composition bars render only included rows and use the selected palette", {
+  skip_if_not_installed("plotly")
+  env <- .plot_types_env()
+  for (expr in parse(.find_source("R/00_globals.R"))) {
+    if (is.call(expr) && identical(expr[[1]], as.name("<-")) && is.symbol(expr[[2]]) &&
+        as.character(expr[[2]]) %in% c("ISLET_FONT_SIZES", "plotly_islet_fonts")) eval(expr, env)
+  }
+  env$plotly_islet_config <- function(p, ...) p
+  env$phenotype_text <- identity
+  tab <- data.frame(case_id = "1", donor_status = "ND", phenotype = c("Beta cell", "Macrophage", "B cell"),
+    cells = c(90, 6, 4), total_cells = 100, proportion = c(90, 6, 4), n_objects = 2)
+  shown <- env$donor_composition_shown(tab, c("Macrophage", "B cell"))
+  render <- function(pal) plotly::plotly_build(env$donor_composition_figure(
+    shown, "1", pal, c(ND = "#3366CC"), "core"))
+  first <- render(c(Macrophage = "#112233", `B cell` = "#445566"))
+  bars <- Filter(function(trace) identical(trace$type, "bar"), first$x$data)
+  expect_equal(vapply(bars, `[[`, "", "name"), c("Macrophage", "B cell"))
+  expect_equal(vapply(bars, function(trace) as.numeric(trace$y), numeric(1)), c(60, 40))
+  expect_equal(vapply(bars, function(trace) trace$marker$color, ""), c("#112233", "#445566"))
+  second <- render(c(Macrophage = "#778899", `B cell` = "#AABBCC"))
+  next_bars <- Filter(function(trace) identical(trace$type, "bar"), second$x$data)
+  expect_equal(vapply(next_bars, function(trace) trace$marker$color, ""), c("#778899", "#AABBCC"))
+  expect_equal(first$x$layout$yaxis$title$text, "Proportion of selected phenotypes")
+  expect_false(grepl("<br>|<sup>", first$x$layout$title$text))
 })
 
 test_that("a measure nonzero in under 1% of objects is not offered", {

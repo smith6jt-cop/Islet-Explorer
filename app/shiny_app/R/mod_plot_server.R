@@ -21,8 +21,8 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     # The macrophage markers (owner, 2026-10-27): in the Data controls under the measure, and under the Macrophage
-    # heading of the composition card's Leave out; both set the app-wide setting, which prepared() already applies.
-    bind_macrophage_marker_inputs(input, session, c("mac_markers", "mac_markers_leave_out"), macrophage_markers)
+    # group of the composition card's Include selector; both set the app-wide setting, which prepared() applies.
+    bind_macrophage_marker_inputs(input, session, c("mac_markers", "mac_markers_include"), macrophage_markers)
 
     # Build each selector vocabulary once from server-owned data, then use the
     # same values for both UI construction and browser-input validation. This
@@ -182,7 +182,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
           selectInput(ns("which"), "Population Measure", choices = choices,
                       selected = selected),
           if (root_has_marker_profile_labels())
-            macrophage_marker_checkboxes(ns("mac_markers"), isolate(macrophage_markers()), "Macrophage markers")
+            macrophage_marker_checkboxes(ns("mac_markers"), isolate(macrophage_markers()))
         )
       }
     })
@@ -679,8 +679,8 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         PLOT_CARD_DEFAULT[[card]] else value
     }
     card_type_label <- function(card) names(PLOT_TYPE_CHOICES)[match(card_type(card), PLOT_TYPE_CHOICES)]
-    output$left_title <- renderText(card_type_label("left"))
-    output$right_title <- renderText(card_type_label("right"))
+    output$left_title <- renderText(card_heading_text(card_type_label("left")))
+    output$right_title <- renderText(card_heading_text(card_type_label("right")))
 
     # A card's rows: flagged for outliers, binned by diameter, with link keys.
     card_rows <- function(card) {
@@ -868,60 +868,70 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       if (!islet_valid_scalar_choice(region, DONOR_COMPOSITION_REGIONS, "composition_region_invalid")) region <- "core"
       donor_composition_table(comp, pd$combined_pairs, region)
     })
-    # Leave out: the root's phenotypes as choices; each region's default selection when the region changes.
-    composition_leave_out_choices <- reactive({
+    # Include the root's disjoint phenotype categories, with each region's established default selection.
+    composition_include_choices <- reactive({
       labels <- prepared()$combined_pairs$label
       unique(c(phenotype_partition_labels(labels), DONOR_COMPOSITION_OTHER))
     })
     # Only the region resets the choice (toggling an object class must not); a new macrophage marker choice keeps it,
-    # with the macrophage categories left out together.
-    leave_out_region <- reactiveVal(NULL)
-    output$composition_leave_out_ui <- renderUI({
+    # with the macrophage categories included together. An empty choice stays empty when markers change.
+    include_region <- reactiveVal(NULL)
+    output$composition_include_ui <- renderUI({
       region <- input$composition_region %||% "core"
       markers <- macrophage_markers()
-      choices <- isolate(composition_leave_out_choices())
-      selected <- if (identical(isolate(leave_out_region()), region))
-        remap_macrophage_selection(isolate(input$composition_leave_out), choices)
-      else intersect(donor_composition_default_leave_out(region), choices)
-      leave_out_region(region)
-      phenotype_group_checkboxes(ns("composition_leave_out"), choices, label = "Leave out", selected = selected,
-                                 marker_input_id = if (root_has_marker_profile_labels()) ns("mac_markers_leave_out"),
+      choices <- isolate(composition_include_choices())
+      selected <- if (identical(isolate(include_region()), region))
+        remap_macrophage_selection(isolate(input$composition_include), choices)
+      else donor_composition_default_include(region, choices)
+      include_region(region)
+      phenotype_group_checkboxes(ns("composition_include"), choices, selected = selected,
+                                 marker_input_id = if (root_has_marker_profile_labels()) ns("mac_markers_include"),
                                  markers = markers)
     })
-    composition_leave_out <- function() {
-      v <- input$composition_leave_out
+    # The panel starts closed, but its defaults must bind before the first plot is drawn.
+    outputOptions(output, "composition_include_ui", suspendWhenHidden = FALSE)
+    composition_include <- function() {
+      v <- input$composition_include
       if (is.null(v)) return(character(0))
-      if (!islet_valid_choice_vector(v, composition_leave_out_choices(), "composition_leave_out_invalid"))
+      if (!islet_valid_choice_vector(v, composition_include_choices(), "composition_include_invalid"))
         return(character(0))
       v
     }
+    composition_selected_table <- reactive({
+      donor_composition_shown(composition_table(), composition_include())
+    })
     output$composition_by_donor <- bindCache(renderPlotly({
       req(plot_controls_mounted())
-      tab <- composition_table()
+      tab <- composition_selected_table()
+      all_categories <- composition_table()
       order <- input$composition_order %||% "beta"
       if (!islet_valid_scalar_choice(order, DONOR_COMPOSITION_ORDERS, "composition_order_invalid")) order <- "beta"
       region <- input$composition_region %||% "core"
       region_label <- names(DONOR_COMPOSITION_REGIONS)[match(region, DONOR_COMPOSITION_REGIONS)] %||% "Core"
       if (is.na(region_label)) region_label <- "Core"
-      donor_composition_figure(tab, if (nrow(tab)) donor_composition_order(tab, order) else character(0),
-                               palette(), donor_colors_reactive(), tolower(region_label), composition_leave_out())
+      donor_composition_figure(tab, if (nrow(all_categories)) donor_composition_order(all_categories, order) else character(0),
+                               palette(), donor_colors_reactive(), tolower(region_label))
     }),
       # Cached across sessions (B3): everything the figure reads.
-      composition_table(), input$composition_order, input$composition_region, composition_leave_out(), palette(),
+      composition_selected_table(), composition_table(), input$composition_order, input$composition_region, palette(),
       donor_colors_reactive(), islet_theme_mode(), plot_controls_mounted())
     output$dl_composition_csv <- downloadHandler(
       filename = function() paste0("composition_by_donor_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".csv"),
       content = function(file) {
-        tab <- composition_table()
+        tab <- donor_composition_export(composition_selected_table())
         desc <- tryCatch(get_selection_description(), error = function(e) character(0))
         desc <- desc[!grepl("^(Data Layer|Selection|Metric|Statistic|Bin Width|Zero-value|Outlier)", desc)]
         write_islet_csv(file, tab, c(
           "Plot \u2014 Composition by donor",
           paste("Region:", input$composition_region %||% "core"),
+          paste("Included phenotypes:", if (length(composition_include()))
+            paste(phenotype_text(composition_include()), collapse = "; ") else "None"),
           desc,
           "cells: the donor's cells of the phenotype, pooled over its selected objects; total_cells: all its cells there",
-          "proportion = 100 * cells / total_cells; Unclassified subclasses are mutually exclusive; the parent is not an extra population",
-          "Hidden QC-conflict cells remain in total_cells but are excluded from displayed categories; proportions may sum to less than 100%"))
+          "proportion = 100 * cells / total_cells; proportion_selected = 100 * cells / shown_cells (the plotted percentage)",
+          "shown_cells sums the included phenotypes per donor; only included categories are exported",
+          "Unclassified subclasses are mutually exclusive; the parent is not an extra population",
+          "Hidden QC-conflict cells remain in total_cells but are excluded from displayed categories; original proportions may sum to less than 100%"))
       }
     )
 
