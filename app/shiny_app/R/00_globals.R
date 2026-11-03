@@ -1105,6 +1105,11 @@ is_phenotype_aggregate <- function(x) as.character(x) %in% PHENOTYPE_GROUP_AGGRE
 phenotype_aggregate_members <- function(aggregate, labels) {
   group <- names(PHENOTYPE_GROUP_AGGREGATES)[match(aggregate, PHENOTYPE_GROUP_AGGREGATES)]
   labels <- unique(as.character(labels))
+  # Biological totals use source membership, independently of display groups.
+  # The unresolved raw T-cell label belongs to the Unclassified display leaf,
+  # but remains a T cell; neither CD45 residual is thereby added to this total.
+  if (identical(aggregate, "All T cells")) return(labels[labels %in%
+    c("CD8a Tcell", "CD4 Tcell", "T cell", "CD8 T cell", "CD4 T cell")])
   labels <- labels[!is.na(labels) & !phenotype_is_conflict(labels) &
            phenotype_group(labels) %in% group & !is_phenotype_aggregate(labels)]
   if (identical(aggregate, UNCLASSIFIED_PARENT)) {
@@ -1154,8 +1159,15 @@ add_phenotype_aggregate_columns <- function(comp) {
     members <- phenotype_aggregate_members(agg, labels)
     core <- total(paste0("prop_", members))
     peri <- total(paste0("peri_prop_", safe(members)))
-    if (!is.null(core)) comp[[paste0("prop_", agg)]] <- core
-    if (!is.null(peri)) comp[[paste0("peri_prop_", safe(agg))]] <- peri
+    core_name <- paste0("prop_", agg)
+    peri_name <- paste0("peri_prop_", safe(agg))
+    # Compute this total before projecting raw T cell into the shared subtype
+    # leaf. Afterwards that leaf also contains CD45 residuals, so neither it nor
+    # the remaining CD4/CD8 columns can reconstruct the original biological sum.
+    keep_core <- identical(agg, "All T cells") && core_name %in% names(comp) && !("prop_T cell" %in% names(comp))
+    keep_peri <- identical(agg, "All T cells") && peri_name %in% names(comp) && !("peri_prop_T_cell" %in% names(comp))
+    if (!is.null(core) && !keep_core) comp[[core_name]] <- core
+    if (!is.null(peri) && !keep_peri) comp[[peri_name]] <- peri
   }
   comp
 }

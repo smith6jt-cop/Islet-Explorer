@@ -120,3 +120,31 @@ test_that("wide export headers require pre-aggregated metrics instead of silentl
   expect_equal(unname(unlist(out)), c(0.2, 5))
   expect_true(any(grepl("Source column: peri_prop_Tissue ->", readLines(path), fixed = TRUE)))
 })
+
+test_that("All T cells retains biological membership before and after display projection", {
+  e <- .unclassified_env(); subtype <- unname(e$UNCLASSIFIED_KEYS["subtype"])
+  e$root_phenotype_labels <- function() c("CD4 Tcell", "CD8a Tcell", "T cell", "Hematopoietic CD45+",
+                                       "Hematopoietic CD45-", "Tissue", "Conflict T/B")
+  expect_setequal(e$phenotype_members("All T cells"), c("CD4 Tcell", "CD8a Tcell", "T cell"))
+  expect_identical(e$phenotype_group("T cell"), "Unclassified")
+  expect_identical(e$phenotype_members("T cell"), "T cell")
+  expect_setequal(e$phenotype_members(c("T cell", "Hematopoietic CD45+")), c("T cell", "Hematopoietic CD45+"))
+  raw <- data.frame(`prop_CD4 Tcell` = c(0.1, NA), `prop_CD8a Tcell` = c(0.2, NA),
+    `prop_T cell` = c(0.3, NA), `prop_Hematopoietic CD45+` = c(0.05, NA),
+    `prop_Hematopoietic CD45-` = c(0.07, NA), peri_prop_CD4_Tcell = c(0.01, NA),
+    peri_prop_CD8a_Tcell = c(0.02, NA), peri_prop_T_cell = c(0.03, NA),
+    peri_prop_Hematopoietic_CD45plus = c(0.04, NA), `peri_prop_Hematopoietic_CD45-` = c(0.05, NA),
+    check.names = FALSE)
+  original <- raw
+  biological <- e$add_phenotype_aggregate_columns(raw)
+  expect_equal(biological[["prop_All T cells"]], c(0.6, NA))
+  expect_equal(biological$peri_prop_All_T_cells, c(0.06, NA))
+  projected <- e$unclassified_collapse_comp(biological)
+  expect_false("prop_T cell" %in% names(projected))
+  expect_equal(projected[[paste0("prop_", subtype)]], c(0.42, NA))
+  final <- e$add_phenotype_aggregate_columns(projected)
+  expect_identical(final[["prop_All T cells"]], biological[["prop_All T cells"]])
+  expect_identical(final$peri_prop_All_T_cells, biological$peri_prop_All_T_cells)
+  expect_identical(e$add_phenotype_aggregate_columns(final), final)
+  expect_identical(raw, original)
+})
