@@ -14,6 +14,13 @@ spatial_ui <- function(id) {
     singleton(tags$script(src = islet_asset("trajectory-links.js"))),
     # ==== Data / View control panels (control_panel(), the same on every tab), frozen while the tab scrolls ====
     tab_controls(
+      div(class = "spatial-donor-selection",
+        style = "display: flex; align-items: center; flex-wrap: wrap; gap: 8px 18px; margin-bottom: 8px;",
+        card_title_help("Donor For Tissue And Immune Gradient", help = list(
+          tags$p("This donor supplies the cells in Tissue Scatter Plot and the dotted donor line in Cell Distribution",
+                 " Around Islets. The other cards continue to summarize the donor statuses selected in Data Controls."))),
+        div(style = "flex: 0 1 280px; min-width: 180px;", uiOutput(ns("donor_selector")))
+      ),
       control_panel("Data controls",
         help = list(
           phenotype_rules_button("show_phenotype_rules_spatial"),
@@ -36,7 +43,6 @@ spatial_ui <- function(id) {
             uiOutput(ns("leiden_res_selector"))
           ),
           control_group("Tissue scatter",
-            uiOutput(ns("donor_selector")),
             radioButtons(ns("region_filter"), "Show cells",
                          choices = c("All" = "all", "Core + Peri" = "core_peri", "Core Only" = "core"),
                          selected = "all", inline = TRUE),
@@ -81,7 +87,7 @@ spatial_ui <- function(id) {
                          style = "font-size: 12px; padding: 2px 10px;",
                          class = "btn-sm btn-outline-secondary")
           ),
-          plotOutput(ns("tissue_scatter"), height = "auto", fill = FALSE,
+          plotOutput(ns("tissue_scatter"), width = "100%", height = "auto", fill = FALSE,
                      dblclick = ns("scatter_dblclick"),
                      brush = brushOpts(id = ns("scatter_brush"), resetOnNew = TRUE)),
           div(style = "text-align: right; margin-top: 8px;",

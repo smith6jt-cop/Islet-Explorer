@@ -37,23 +37,62 @@ spatial_umap_colour_choices <- function(comp_cols) {
   groups[lengths(groups) > 0]
 }
 
-# Wrap display text only; scale breaks, cell labels and colors keep their source names.
-spatial_tissue_legend_labels <- function(labels) {
-  vapply(phenotype_text(labels), function(label) paste(strwrap(label, width = 28), collapse = "\n"),
-         character(1), USE.NAMES = FALSE)
+# Responsive raster geometry: preserve the map's spatial aspect while using
+# the card's full interior width. Legend columns consume the available width,
+# and the output grows only by the map and wrapped legend heights it needs.
+spatial_tissue_width <- function(width) {
+  if (length(width) != 1L || !is.finite(width) || width <= 0) return(800)
+  as.numeric(width)
 }
 
-# Two-column phenotype legends need room for each row's longest wrapped label.
-# Keep roughly 500 px for the map plus its axes/title instead of shrinking it
-# when the user shows every macrophage subtype. Cluster legends keep the floor.
-spatial_tissue_plot_height <- function(plot) {
-  scale <- plot$scales$get_scales("colour")
-  if (is.null(scale) || !is.character(scale$breaks) || !length(scale$breaks)) return(800L)
-  labels <- scale$get_labels(scale$breaks)
-  lines <- lengths(strsplit(labels, "\n", fixed = TRUE))
-  row_lines <- vapply(split(lines, ceiling(seq_along(lines) / 2)), max, integer(1))
-  legend_height <- 40 + sum(pmax(28, ISLET_FONT_SIZES$legend_text * 1.25 * row_lines) + 8)
-  as.integer(ceiling(max(800, 600 + legend_height)))
+spatial_tissue_legend_columns <- function(width) {
+  max(1L, min(4L, as.integer(floor((spatial_tissue_width(width) - 80) / 220))))
+}
+
+# Wrap display text only; scale breaks, cell labels and colors keep their source names.
+spatial_tissue_legend_labels <- function(labels, width = 800) {
+  columns <- spatial_tissue_legend_columns(width)
+  label_width <- max(80, (spatial_tissue_width(width) - 40) / columns - 52)
+  measure <- function(text) {
+    grob <- grid::textGrob(text, gp = grid::gpar(fontsize = ISLET_FONT_SIZES$legend_text))
+    grid::convertWidth(grid::grobWidth(grob), "in", valueOnly = TRUE) * 72
+  }
+  vapply(phenotype_text(labels), function(label) {
+    lines <- character(0)
+    current <- ""
+    for (word in strsplit(label, "[[:space:]]+")[[1]]) {
+      candidate <- if (nzchar(current)) paste(current, word) else word
+      if (nzchar(current) && measure(candidate) > label_width) {
+        lines <- c(lines, current)
+        current <- word
+      } else current <- candidate
+    }
+    paste(c(lines, current), collapse = "\n")
+  }, character(1), USE.NAMES = FALSE)
+}
+
+spatial_tissue_map_aspect <- function(plot) {
+  ranges <- lapply(c("X_centroid", "Y_centroid"), function(column) {
+    values <- unlist(lapply(plot$layers, function(layer) layer$data[[column]]), use.names = FALSE)
+    values <- values[is.finite(values)]
+    if (length(values)) diff(range(values)) else 0
+  })
+  if (!all(is.finite(unlist(ranges))) || any(unlist(ranges) <= 0)) return(0.75)
+  ranges[[2]] / ranges[[1]]
+}
+
+spatial_tissue_plot_height <- function(plot, width = 800) {
+  width <- spatial_tissue_width(width)
+  # Measure the real title, axes and wrapped legend with the same raster device
+  # used by Shiny. Text estimates left a dense legend squeezing the map even
+  # when the output itself occupied the entire card width.
+  ragg::agg_capture(width = width, height = 800, units = "px", res = 72)
+  on.exit(grDevices::dev.off(), add = TRUE)
+  grob <- ggplot2::ggplotGrob(plot)
+  fixed_width <- sum(grid::convertWidth(grob$widths, "in", valueOnly = TRUE)) * 72
+  fixed_height <- sum(grid::convertHeight(grob$heights, "in", valueOnly = TRUE)) * 72
+  map_height <- max(1, width - fixed_width) * spatial_tissue_map_aspect(plot)
+  as.integer(ceiling(fixed_height + map_height + 2))
 }
 
 spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
@@ -154,7 +193,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         }
       })
       choices <- setNames(donors, donor_labels)
-      selectInput(ns("donor"), "Donor", choices = choices, selected = donors[1])
+      selectInput(ns("donor"), "Donor", choices = choices, selected = donors[1], width = "100%")
     })
 
     # Browser input is accepted only when it is one of the donor partitions
@@ -301,7 +340,11 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
     })
 
     # ==== Card 2: Tissue Scatter Plot (ggplot2, rasterized) ====
+    tissue_scatter_width <- reactive({
+      spatial_tissue_width(session$clientData[[paste0("output_", ns("tissue_scatter"), "_width")]])
+    })
     spatial_tissue_scatter_plot <- reactive({
+      width <- tissue_scatter_width()
       cells <- donor_cells()
       req(cells)
 
@@ -414,9 +457,9 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
             size = 0.4, alpha = 0.6,
             inherit.aes = FALSE
           ) +
-          ggplot2::scale_color_manual(values = pal, breaks = legend_phenos, labels = spatial_tissue_legend_labels,
+          ggplot2::scale_color_manual(values = pal, breaks = legend_phenos, labels = function(x) spatial_tissue_legend_labels(x, width),
                                         name = "Phenotype", na.value = "#CCCCCC",
-                                        guide = ggplot2::guide_legend(ncol = 2, byrow = TRUE,
+                                        guide = ggplot2::guide_legend(ncol = spatial_tissue_legend_columns(width), byrow = TRUE,
                                                                      override.aes = list(size = 4)))
         }
       }
@@ -449,7 +492,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         ) +
         theme_islet() +
         ggplot2::theme(
-          # Keep the rightmost x-axis tick inside the narrow tissue PNG.
+          # Keep the rightmost x-axis tick inside the tissue PNG at every card width.
           plot.margin = ggplot2::margin_part(r = 24),
           legend.position = "bottom",
           legend.direction = "horizontal",
@@ -460,17 +503,17 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
 
     # Cached across sessions (Plan A Level 2, B3): the 170 k-cell PNG of a donor and drawing options is drawn once
     # per process. The key is everything spatial_tissue_scatter_plot() reads; the output size is part of it.
-    tissue_scatter_height <- reactive(spatial_tissue_plot_height(spatial_tissue_scatter_plot()))
+    tissue_scatter_height <- reactive(spatial_tissue_plot_height(spatial_tissue_scatter_plot(), tissue_scatter_width()))
     output$tissue_scatter <- bindCache(
-      shiny::renderPlot({ spatial_tissue_scatter_plot() }, height = function() tissue_scatter_height(), bg = "transparent"),
+      shiny::renderPlot({ spatial_tissue_scatter_plot() }, height = function() tissue_scatter_height(), res = 72, bg = "transparent"),
       selected_donor(), donor_status(), input$region_filter, input$color_by, input$pheno_filter,
-      input$color_background, palette(), has_leiden(), macrophage_markers(), tissue_scatter_height(),
+      input$color_background, palette(), has_leiden(), macrophage_markers(), tissue_scatter_width(), tissue_scatter_height(),
       if (identical(input$color_by, "leiden") && has_leiden()) list(input$leiden_res, islet_leiden_map()) else NULL,
       scatter_zoom$xmin, scatter_zoom$xmax, scatter_zoom$ymin, scatter_zoom$ymax, islet_theme_mode(),
       # bindCache supplies its own render dimensions; the auto-height container
-      # initially reports zero. Keep width bucketing, but use the calculated
-      # height instead of feeding that transient client height back into the PNG.
-      sizePolicy = function(size) c(shiny::sizeGrowthRatio()(c(size[1], 800))[1], tissue_scatter_height()))
+      # initially reports zero. Use the measured card width and calculated
+      # height together so a wider cache bucket cannot shrink the map again.
+      sizePolicy = function(size) c(tissue_scatter_width(), tissue_scatter_height()))
     output$dl_tissue_scatter <- shiny::downloadHandler(
       filename = function() {
         donor_id <- selected_donor()
@@ -545,73 +588,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       # the rendered guides (including wrapped donor legends) and reserve only
       # the space needed by the taller one, equally on both plots. Afterplot also
       # runs on resize and coloring changes; equal margins need no further draw.
-      htmlwidgets::onRender(p, "function(el, x, ids) {
-        var prior = el._isletGuideSync;
-        if (prior) {
-          el.removeListener('plotly_afterplot', prior.schedule);
-          if (prior.frame) window.cancelAnimationFrame(prior.frame);
-        }
-        var state = {frame: null};
-        state.schedule = function() {
-          if (state.frame) return;
-          state.frame = window.requestAnimationFrame(function() {
-            state.frame = null;
-            var plots = ids.map(function(id) { return document.getElementById(id); });
-            if (plots.some(function(plot) { return !plot || !plot._fullLayout; })) return;
-            var tallest = 0;
-            var clearance = 40;
-            plots.forEach(function(plot) {
-              plot.querySelectorAll('g.colorbar').forEach(function(guide) {
-                var title = guide.querySelector('g.cbtitle > text');
-                var fill = guide.querySelector('.cbfill');
-                if (!title || !fill) return;
-                // Reset first: repeated draws must not accumulate an offset.
-                title.setAttribute('dy', '0');
-                var gap = fill.getBoundingClientRect().top - title.getBoundingClientRect().bottom;
-                title.setAttribute('dy', String(Math.min(0, gap - 6)));
-              });
-              plot.querySelectorAll('g.legend, g.colorbar').forEach(function(guide) {
-                tallest = Math.max(tallest, guide.getBoundingClientRect().height);
-              });
-              var axisTitle = plot.querySelector('.g-xtitle');
-              if (axisTitle) {
-                var layout = plot._fullLayout;
-                var paperBottom = plot.getBoundingClientRect().top + layout._size.t + layout._size.h;
-                // Keep the guide clear of the actual axis title too; font and
-                // title offsets differ between the supported Plotly versions.
-                clearance = Math.max(clearance,
-                  axisTitle.getBoundingClientRect().bottom - paperBottom + 8 + 0.02 * layout.height);
-              }
-            });
-            var bottom = Math.ceil(Math.max(110, tallest + clearance));
-            plots.forEach(function(plot) {
-              var layout = plot._fullLayout;
-              // Both supported Plotly versions default to paper coordinates;
-              // Plotly.js 2.11 (the pinned image) has no yref attribute.
-              // Use paper coordinates to put each guide bottom 2% above the
-              // widget bottom, using the height AFTER the shared margin.
-              var height = layout.height - layout.margin.t - bottom;
-              if (height <= 0) return;
-              var y = (0.02 * layout.height - bottom) / height;
-              var update = {};
-              if (Math.abs(layout.margin.b - bottom) > 0.5) update['margin.b'] = bottom;
-              if (layout.legend && Math.abs(layout.legend.y - y) > 0.000001)
-                update['legend.y'] = y;
-              var bars = [];
-              plot.data.forEach(function(trace, index) {
-                if (trace.marker && trace.marker.colorbar &&
-                    Math.abs(trace.marker.colorbar.y - y) > 0.000001) bars.push(index);
-              });
-              if (bars.length)
-                Plotly.update(plot, {'marker.colorbar.y': y}, update, bars);
-              else if (Object.keys(update).length) Plotly.relayout(plot, update);
-            });
-          });
-        };
-        el._isletGuideSync = state;
-        el.on('plotly_afterplot', state.schedule);
-        state.schedule();
-      }", data = c(ns("leiden_umap"), ns("spatial_umap_immune")))
+      paired_plotly_guides(p, c(ns("leiden_umap"), ns("spatial_umap_immune")))
     }
 
     current_leiden_col <- function(comp) {
@@ -1248,7 +1225,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
 
       card_style <- "padding: 15px; margin-bottom: 15px; overflow: visible; height: 100%; box-sizing: border-box;"
       card_title <- function(txt, ...) div(style = "display: flex; align-items: center; gap: 4px; margin: 0 0 8px 0; align-self: center;",
-        h5(txt, style = "font-size: 15px; font-weight: 600; margin: 0;"),
+        h5(card_heading_text(txt), style = "font-size: 15px; font-weight: 600; margin: 0;"),
         card_help(paste(txt, "help"), ..., unclassified_help_ui()))
       ctrl_row   <- "display: flex; gap: 6px 18px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 4px;"
       dl_csv <- function(id) div(style = "margin-top: 6px;",
@@ -1309,7 +1286,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                        " cells outside every endocrine object and its band). 1, the dashed line, is the donor's",
                        " tissue level; above 1 the cells gather there. Lines are the median of donors with their",
                        " IQR. Core holds the cells inside objects."),
-                tags$p("The dotted line is the donor chosen in the Data controls (the tissue scatter's donor), so",
+                tags$p("The dotted line uses Donor For Tissue And Immune Gradient above the Data Controls, so",
                        " changing the donor shows where that donor sits against its status. Hover gives its cell",
                        " counts; a point resting on fewer than 20 of the chosen cells is faded, as one donor's B Cell or",
                        " T Cell CD4⁺ cells in a bin are often only a few."),
@@ -1410,32 +1387,43 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                        " dotted line the outer edge of the 20 \u00b5m peri-islet band."))
             ),
             tagList(
-              div(style = ctrl_row,
-                # Distance to the nearest Islet, or to the nearest Islet or Cluster (owner, 2026-10-20). Roots
-                # before v9 hold only the second.
-                if (cell_distance_has_islet_distance())
-                  radioButtons(ns("dist_to"), "Distance to",
-                               choices = c("Nearest Islet" = "signed_dist_islet",
-                                           "Nearest Islet or Cluster" = "signed_dist"),
-                               selected = "signed_dist_islet", inline = TRUE),
-                radioButtons(ns("dist_mode"), "Group by",
-                             choices = c("Phenotype" = "phenotype", "Marker+" = "marker"),
-                             selected = "phenotype", inline = TRUE),
-                radioButtons(ns("dist_norm"), "Y-axis",
-                             choices = c("Proportion" = "prop", "Raw count" = "count"),
-                             selected = "prop", inline = TRUE),
-                radioButtons(ns("dist_ptype"), "Plot",
-                             choices = c("Density curves" = "density",
-                                         "Composition bars" = "composition"),
-                             selected = "density", inline = TRUE),
-                checkboxGroupInput(ns("dist_status"), "Disease status",
-                                   choices = c("ND", "Aab+", "T1D"),
-                                   selected = c("ND", "Aab+", "T1D"), inline = TRUE),
-                # dist_group / dist_comp_items choices are populated server-side by
-                # observeEvent(input$dist_mode) (phenotypes vs markers).
-                conditionalPanel(
-                  condition = "input.dist_ptype == 'density'", ns = ns,
-                  selectInput(ns("dist_group"), "Show", choices = NULL, width = "260px")
+              div(class = "distance-profile-controls",
+                control_grid(columns = 3,
+                  control_group("Distance To",
+                    # Older roots carry only distance to Islet or Cluster.
+                    if (cell_distance_has_islet_distance())
+                      radioButtons(ns("dist_to"), NULL,
+                                   choices = c("Nearest Islet" = "signed_dist_islet",
+                                               "Nearest Islet or Cluster" = "signed_dist"),
+                                   selected = "signed_dist_islet", inline = TRUE)
+                  ),
+                  control_group("Plot",
+                    radioButtons(ns("dist_ptype"), NULL,
+                                 choices = c("Density curves" = "density",
+                                             "Composition bars" = "composition"),
+                                 selected = "density", inline = TRUE)
+                  ),
+                  control_group("Disease Status",
+                    checkboxGroupInput(ns("dist_status"), NULL,
+                                       choices = c("ND", "Aab+", "T1D"),
+                                       selected = c("ND", "Aab+", "T1D"), inline = TRUE)
+                  ),
+                  control_group("Group By",
+                    radioButtons(ns("dist_mode"), NULL,
+                                 choices = c("Phenotype" = "phenotype", "Marker+" = "marker"),
+                                 selected = "phenotype", inline = TRUE)
+                  ),
+                  control_group("Y-Axis",
+                    radioButtons(ns("dist_norm"), NULL,
+                                 choices = c("Proportion" = "prop", "Raw count" = "count"),
+                                 selected = "prop", inline = TRUE)
+                  ),
+                  conditionalPanel(
+                    condition = "input.dist_ptype == 'density'", ns = ns,
+                    control_group("Show",
+                      # Populated by the phenotype/marker mode observer below.
+                      selectInput(ns("dist_group"), NULL, choices = NULL, width = "100%"))
+                  )
                 )
               ),
               conditionalPanel(
@@ -1443,11 +1431,11 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                 # Flow the marker checkboxes into as many ~100px columns as fit, instead of one tall column; the
                 # phenotypes are grouped (phenotype_group_checkboxes()). output$dist_comp_items_ui draws either.
                 tags$style(HTML(paste0(
-                  ".cd-comp-cols,.cd-comp-cols .shiny-input-checkboxgroup,",
-                  ".cd-comp-cols .shiny-options-group{width:100%;max-width:none;",
+                  ".cd-marker-options,.cd-marker-options .shiny-input-checkboxgroup,",
+                  ".cd-marker-options .shiny-options-group{width:100%;max-width:none;",
                   "display:block;box-sizing:border-box;}",
-                  ".cd-comp-cols .shiny-options-group{column-width:100px;column-gap:16px;}",
-                  ".cd-comp-cols .checkbox{break-inside:avoid;margin:2px 0;}"))),
+                  ".cd-marker-options .shiny-options-group{column-width:100px;column-gap:16px;}",
+                  ".cd-marker-options .checkbox{break-inside:avoid;margin:2px 0;}"))),
                 tags$div(class = "cd-comp-cols", uiOutput(ns("dist_comp_items_ui")))
               )
             ),
@@ -1498,7 +1486,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       sel_c <- if (!is.null(cur_c) && length(cur_c) > 0) remap_macrophage_selection(cur_c, items) else def
       if (!length(sel_c)) sel_c <- def
       if (identical(mode, "marker")) {
-        return(tagList(
+        return(div(class = "cd-marker-options",
           div(style = "display: flex; align-items: center; gap: 6px;",
             tags$label("Show", style = "margin: 0;"),
             tags$span(class = "pheno-select-links",
@@ -1703,7 +1691,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                              hovertext = sprintf("%s, %s µm<br>Median %.2f× own tissue (IQR %.2f-%.2f), %d donors",
                                                  s, q$bin, q$med, q$lo, q$hi, q$n), hoverinfo = "text")
       }
-      # The donor chosen in the Data controls (the tissue scatter's donor), drawn over the status medians. A point
+      # The donor chosen above the Data controls, drawn over the status medians. A point
       # resting on fewer than GRADIENT_MIN_CELLS of the chosen cells is faded: one donor's B or CD4 T cells in a bin
       # are often a handful.
       sel <- selected_donor()
