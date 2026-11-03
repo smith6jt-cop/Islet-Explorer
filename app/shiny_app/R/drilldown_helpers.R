@@ -206,6 +206,32 @@ get_phenotype_palette <- function(name = "Original") {
   PHENOTYPE_PALETTES[[name]] %||% PHENOTYPE_COLORS
 }
 
+# Resolve colors for every visible class. Older roots and newly introduced
+# labels can lack an explicit palette entry; assigning the same neutral gray to
+# each missing name made every class in the "Other" group indistinguishable.
+phenotype_palette_for <- function(labels, palette = PHENOTYPE_COLORS) {
+  labels <- unique(as.character(labels[!is.na(labels) & nzchar(labels)]))
+  if (!length(labels)) return(stats::setNames(character(), character()))
+  colors <- unname(palette[labels])
+  names(colors) <- labels
+  used <- tolower(colors[!is.na(colors)])
+  missing <- labels[is.na(colors)]
+  duplicates <- labels[!is.na(colors) & (duplicated(tolower(colors)) |
+    duplicated(tolower(colors), fromLast = TRUE))]
+  needs_color <- unique(c(missing, setdiff(duplicates, labels[!is.na(colors)][1L])))
+  if (length(needs_color)) {
+    candidates <- grDevices::hcl(h = seq(7, 367, length.out = 361)[-361], c = 72, l = 52)
+    candidates <- candidates[!tolower(candidates) %in% used]
+    if (length(candidates) < length(needs_color))
+      candidates <- c(candidates, grDevices::hcl(h = seq(11, 371, length.out = 361)[-361], c = 58, l = 67))
+    for (i in seq_along(needs_color)) {
+      key <- needs_color[[i]]
+      colors[[key]] <- candidates[[i]]
+    }
+  }
+  colors[labels]
+}
+
 # ── Cell CSV cache (env-based, same pattern as geojson_cache) ──────────
 drilldown_cache <- new.env()
 
@@ -293,9 +319,7 @@ render_islet_drilldown_plot <- function(info, cells, color_by = "phenotype", sho
   if (color_by == "phenotype" && "phenotype" %in% colnames(cells)) {
     # Categorical coloring by phenotype (using fill to avoid color conflict with structures)
     pheno_present <- phenotype_keep(sort(unique(cells$phenotype)))
-    pal <- stats::setNames(unname(palette[pheno_present]), pheno_present)
-    # Fill missing phenotypes with gray
-    pal[is.na(pal)] <- "#CCCCCC"
+    pal <- phenotype_palette_for(pheno_present, palette)
 
     p <- base_plot +
       ggplot2::geom_point(
@@ -382,8 +406,7 @@ render_drilldown_summary <- function(cells, palette = PHENOTYPE_COLORS) {
 
   # Colors
   pheno_present <- levels(counts$phenotype)
-  pal <- stats::setNames(unname(palette[pheno_present]), pheno_present)
-  pal[is.na(pal)] <- "#CCCCCC"
+  pal <- phenotype_palette_for(pheno_present, palette)
 
   if ("cell_region" %in% colnames(cells) && length(unique(counts$region)) > 1) {
     ggplot2::ggplot(counts, ggplot2::aes(x = phenotype, y = count, fill = phenotype, colour = region)) +

@@ -399,7 +399,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         if (color_bg && !use_leiden) {
           # Color background cells by phenotype (dimmed)
           bg_phenos <- sort(unique(bg$phenotype))
-          bg_pal <- stats::setNames(unname(palette()[bg_phenos]), bg_phenos)
+          bg_pal <- phenotype_palette_for(bg_phenos, palette())
           bg_pal[is.na(bg_pal)] <- "#CCCCCC"
           p <- p + ggplot2::geom_point(
             data = bg,
@@ -448,7 +448,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           legend_phenos <- intersect(canonical_order, present)
           legend_phenos <- c(legend_phenos, setdiff(present, legend_phenos))
           legend_phenos <- legend_phenos[order(match(phenotype_group(legend_phenos), PHENOTYPE_GROUP_ORDER))]
-          pal <- stats::setNames(unname(palette()[legend_phenos]), legend_phenos)
+          pal <- phenotype_palette_for(legend_phenos, palette())
           pal[is.na(pal)] <- "#CCCCCC"
 
           p <- p + ggplot2::geom_point(
@@ -851,8 +851,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
 
       # Use active phenotype palette where available
       pheno_present <- unique(bar_df$phenotype)
-      pal <- stats::setNames(unname(palette()[pheno_present]), pheno_present)
-      pal[is.na(pal)] <- "#CCCCCC"
+      pal <- phenotype_palette_for(pheno_present, palette())
 
       canonical_order <- names(palette())
       ordered_phenos <- intersect(canonical_order, keep_phenos)
@@ -1894,7 +1893,10 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           present <- intersect(status_order, unique(comp$donor_status))
           items <- items[items %in% comp$item]
           req(length(items) > 0)
-          pcols <- item_colors[items]; pcols[is.na(pcols)] <- "#999999"; names(pcols) <- items
+          pcols <- if (identical(mode, "marker")) {
+            item_colors[items]
+          } else phenotype_palette_for(items, item_colors)
+          pcols[is.na(pcols)] <- "#999999"; names(pcols) <- items
           y_lab <- if (identical(norm, "prop")) "proportion of the cells at that distance" else "cells"
           height <- cd_composition_height(length(items))
           gap <- 30 / height
