@@ -245,7 +245,8 @@ def established(path: Path, tag: str, object_id: pd.Series, reg: RG.Registry, pl
     return keep, out, np.where(excl, why, '')
 
 
-def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED) -> tuple[pd.DataFrame, dict]:
+def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED, *,
+                   _component_natural: bool = False) -> tuple[pd.DataFrame, dict]:
     import structure_update as SU
     reg = RG.load()
     markers = used_markers(run, reg)
@@ -279,6 +280,18 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED) -> tu
                           if baseline is not None else np.zeros(len(d), bool))
     if component is not None:
         protected_endocrine = CS.source_identity(component, tag, d['object_id']).label.isin(CS.LABELS).to_numpy()
+    natural = None
+    resolution_target = np.zeros(len(d), bool)
+    if component is not None and not _component_natural:
+        # Preserve the unmodified current-policy counterfactual. Reconsider only
+        # the explicitly selected component's unresolved/boundary cells; do not
+        # remove endocrine marker evidence from canary or structure competition.
+        natural, _ = classify_image(run, tag, endocrine_from, _component_natural=True)
+        resolution_target = CS.resolution_mask(component, tag, natural)
+        if not natural.object_id.equals(d.object_id):
+            raise ValueError(f'{tag}: component counterfactual UUID order differs')
+    elif _component_natural and component is None:
+        raise ValueError('Natural component pass requires an explicit component binding')
     n = len(d)
     V = np.column_stack([np.log1p(np.clip(np.nan_to_num(d[d.attrs['columns'][m]].to_numpy(float), nan=0.0), 0, None))
                          for m in markers])
@@ -374,7 +387,7 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED) -> tu
     # don't undo that"): the object places the cell in its lineage; its markers name it, else it keeps the object class
     by_object = np.zeros(n, bool)
     for r in lab[lab['defined_by_object'] != ''].itertuples():
-        rows = np.flatnonzero(np.isin(start, RG.split(r.defined_by_object)))
+        rows = np.flatnonzero(np.isin(start, RG.split(r.defined_by_object)) & ~resolution_target)
         for i in rows[(compartment[rows] != r.compartment) & (compartment[rows] != '')]:
             tags[i].append(f'canary_top_{compartment[i]}')
         compartment[rows], lineage[rows] = r.compartment, r.lineage
@@ -553,6 +566,10 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED) -> tu
             # class; tagged either way
             barred = np.ones(len(rows), bool) if rule.get('named_by') == 'established' else \
                 (~np.isin(start[rows], list(only_in)) if only_in else np.zeros(len(rows), bool))
+            if lin == 'Endocrine':
+                # The selected v19 UUID set defines endocrine membership. Other
+                # cells use the existing barred-lineage residual evidence path.
+                barred |= resolution_target[rows]
             out_rows = rows[barred]
             for i in out_rows:
                 tags[i].append(f'{lin.lower()}_marker_positive' if start[i] in only_in else f'{lin.lower()}_outside_object')
@@ -655,8 +672,9 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED) -> tu
             if not out.loc[endocrine_union, col].equals(baseline.loc[endocrine_union, col]):
                 raise ValueError(f'{tag}: structure-only revision changed endocrine {col}')
     component_report = None
-    if component is not None:
-        out, component_report = CS.apply(run, tag, out, SC, ix, component)
+    if component is not None and not _component_natural:
+        out, component_report = CS.apply(run, tag, natural, SC, ix, component,
+                                         resolved=out, resolution_target=resolution_target)
     audit = {'image': tag, 'cells': n, 'markers': markers,
              'readings': {m: {'positivity': str(lv.loc[m, 'measurement']),
                               **({'differentiation': str(ld.loc[m, 'measurement'])} if m in diff else {})}

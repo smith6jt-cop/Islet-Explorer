@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bind and audit an explicit, diagnostic v19-endocrine component selection.
+"""Bind and audit an explicit v19-endocrine component selection and resolution.
 
 This is a separate operation from a Lymphatic-only revision. It never recalibrates,
 changes measurements, invents a named identity, or grants release acceptance.
@@ -19,7 +19,10 @@ import area_coverage as AC
 import calibration_context as CC
 import registry as RG
 
-SCHEMA = 'uniform.component_selection/1'
+SCHEMA = 'uniform.component_selection/2'
+AUDIT_SCHEMA = 'uniform.component_selection_audit/2'
+STATUS = 'assignments_resolved'
+RESOLUTION_POLICY = 'exact_v19_named_membership_existing_nonendocrine_rules'
 MANIFEST = 'typing/component_selection.json'
 AUDIT = 'typing/component_selection_audit.json'
 MARKERS = ('INS', 'GCG', 'SST', 'CHGA')
@@ -231,15 +234,15 @@ def pin(run: Path, endocrine_source: Path, nonendocrine_source: Path, structure_
                 inputs[f'{source}/{name}'] = file_record(root / name)
         rows[tag] = {**stats, 'inputs': inputs}
     record = {'schema': SCHEMA, 'scope': 'explicit endocrine component selection',
-              'status': 'diagnostic_pending_review', 'release_ready': False,
+              'status': STATUS, 'release_ready': False, 'resolution_policy': RESOLUTION_POLICY,
               'run': str(run), 'endocrine_source': str(old), 'nonendocrine_source': str(other),
               'structure_source': str(structures),
               'selection_reason': selection_reason, 'endocrine_markers': list(MARKERS),
               'endocrine_labels': list(LABELS), 'files': files, 'images': rows,
-              'decision_provenance': 'Archived v19 identity tuple for selected endocrine and existing unresolved cells; '
-                  'all original decision metadata is component_source__*. Current mixed-policy marker flags, '
+              'decision_provenance': 'Archived v19 identity tuple only for selected named endocrine cells; unresolved/boundary cells use '
+                  'existing nonendocrine rules or explicit Unclassified. Original decision metadata is component_source__*. Marker flags, '
                   'counts, competition diagnostics and Ki67 remain current. Natural decisions are natural__*. '
-                  'Selection basis/status is explicit; current confirmation is unset for selected rows.'}
+                  'Selection basis/status and resolution targets are explicit; current confirmation is unset for selected rows.'}
     with (run / MANIFEST).open('x') as stream:
         json.dump(record, stream, indent=2)
         stream.write('\n')
@@ -256,7 +259,8 @@ def validate(run: Path, image: str | None = None) -> dict | None:
     record = json.loads(path.read_text())
     if (record.get('schema') != SCHEMA or record.get('run') != str(run)
             or record.get('scope') != 'explicit endocrine component selection'
-            or record.get('status') != 'diagnostic_pending_review' or record.get('release_ready') is not False
+            or record.get('status') != STATUS or record.get('release_ready') is not False
+            or record.get('resolution_policy') != RESOLUTION_POLICY
             or record.get('endocrine_markers') != list(MARKERS) or record.get('endocrine_labels') != list(LABELS)):
         raise ValueError('Unsupported or relocated component-selection binding')
     if not record.get('images') or not record.get('files'):
@@ -306,9 +310,24 @@ def source_identity(record: dict, tag: str, object_ids: pd.Series) -> pd.DataFra
     return source.reindex(object_ids).reset_index()
 
 
+def resolution_mask(record: dict, tag: str, natural: pd.DataFrame) -> np.ndarray:
+    """Only unresolved source/current definitions and unselected endocrine calls."""
+    source = source_identity(record, tag, natural.object_id)
+    selected = source.label.isin(LABELS).to_numpy()
+    return ~selected & (source.label.isin(UNRESOLVED).to_numpy()
+                        | natural.label.isin((*LABELS, *UNRESOLVED)).to_numpy())
+
+
 def apply(run: Path, tag: str, natural: pd.DataFrame, scores: np.ndarray,
-          marker_indices: dict[str, int], record: dict) -> tuple[pd.DataFrame, dict]:
-    """Preserve source decisions only after independently checking hormone evidence."""
+          marker_indices: dict[str, int], record: dict, *, resolved: pd.DataFrame,
+          resolution_target: np.ndarray) -> tuple[pd.DataFrame, dict]:
+    """Preserve exact named source calls; resolve only the declared nonselected set.
+
+    Hormone measurements/flags stay intact. The caller reruns the existing rules
+    without object-forced endocrine placement or new endocrine names for this
+    set. Unsupported anatomical labels become explicit Unclassified, retaining
+    the original object class, source calls, natural calls and reasons.
+    """
     source = source_identity(record, tag, natural.object_id)
     if source.label.isna().any():
         raise ValueError(f'{tag}: missing source identity')
@@ -316,7 +335,7 @@ def apply(run: Path, tag: str, natural: pd.DataFrame, scores: np.ndarray,
     equal(source[fields], natural[fields], f'{tag}: archived endocrine positivity/canary/fold evidence')
     equal(source[['start_class']], natural[['start_class']], f'{tag}: endocrine start class')
     selected = source.label.isin(LABELS).to_numpy()
-    unresolved = source.label.isin(UNRESOLVED).to_numpy()
+    source_unresolved = source.label.isin(UNRESOLVED).to_numpy()
     p = natural[[f'pos__{m}' for m in MARKERS[:3]]].to_numpy(bool)
     values = np.where(p, np.nan_to_num(scores[:, [marker_indices[m] for m in MARKERS[:3]]], nan=0.0), -np.inf)
     ordered = np.sort(values, axis=1)
@@ -329,50 +348,76 @@ def apply(run: Path, tag: str, natural: pd.DataFrame, scores: np.ndarray,
     if np.any(expected[selected] != source.label.to_numpy()[selected]):
         bad = natural.loc[selected & (expected != source.label.to_numpy()), 'object_id'].tolist()
         raise ValueError(f'{tag}: {len(bad)} selected v19 identities fail hormone evidence replay; first {bad[:5]}')
-    result = natural.copy()
+    target = resolution_mask(record, tag, natural)
+    if not np.array_equal(target, resolution_target):
+        raise ValueError(f'{tag}: resolution target differs from the declared source/natural boundary')
+    if list(resolved.columns) != list(natural.columns):
+        raise ValueError(f'{tag}: resolution changed the identity schema')
+    immutable = [c for c in natural if c not in DECISIONS or c == 'start_class']
+    equal(natural[immutable], resolved[immutable], f'{tag}: resolution altered measurements or marker states')
+    equal(natural.loc[~target], resolved.loc[~target], f'{tag}: resolution altered an untargeted cell')
+    if resolved.loc[target, 'label'].isin(LABELS).any():
+        raise ValueError(f'{tag}: nonselected resolution created a new endocrine identity')
+    result = resolved.copy()
     for field in DECISIONS:
         result[f'natural__{field}'] = natural[field]
         result[f'component_source__{field}'] = source[field]
     result['component_source_label'] = source.label.to_numpy()
     result['component_source_compartment'] = source.compartment.to_numpy()
     result['component_source_lineage'] = source.lineage.to_numpy()
-    result['component_decision_source'] = 'current_mixed_policy'
-    kept = selected | unresolved
-    result.loc[kept, list(SELECTED_IDENTITY)] = source.loc[kept, list(SELECTED_IDENTITY)].to_numpy()
+    result['component_resolution_target'] = target.astype(np.int8)
+    result['component_decision_source'] = np.where(target, 'nonselected_existing_rules', 'current_mixed_policy')
+    result.loc[selected, list(SELECTED_IDENTITY)] = source.loc[selected, list(SELECTED_IDENTITY)].to_numpy()
     for field in ('compartment_basis', 'lineage_basis', 'compartment_status', 'lineage_status'):
         result.loc[selected, field] = 'v19_selected_component'
-        result.loc[unresolved, field] = 'v19_unresolved_component'
-    result.loc[kept, 'confirmed'] = np.nan
-    result.loc[kept, 'confirming_markers'] = ''
+    result.loc[selected, 'confirmed'] = np.nan
+    result.loc[selected, 'confirming_markers'] = ''
     result.loc[selected, 'component_decision_source'] = 'v19_named_endocrine'
-    result.loc[unresolved, 'component_decision_source'] = 'v19_unresolved_endocrine'
-    boundary = natural.label.isin(LABELS).to_numpy() & ~selected & ~unresolved
-    # An explicit unresolved record, not a new biological identity or a restored
-    # marker-only old Neural/Endothelial call.
-    result.loc[boundary, 'label'] = 'Conflict Endocrine component boundary'
-    for field in ('compartment', 'lineage', 'named_by', 'excluded_reason', 'confirming_markers'):
-        result.loc[boundary, field] = ''
-    for field in ('compartment_basis', 'lineage_basis', 'compartment_status', 'lineage_status', 'status'):
-        result.loc[boundary, field] = 'component_boundary_conflict'
-    result.loc[boundary, 'confirmed'] = np.nan
-    result.loc[boundary, 'component_decision_source'] = 'component_boundary_conflict'
-    result.loc[boundary, 'tags'] = result.loc[boundary, 'tags'].map(
-        lambda x: ';'.join(filter(None, [str(x), 'component_boundary_conflict'])))
+    unsupported = target & result.label.isin((*UNRESOLVED, 'Tissue')).to_numpy()
+    result.loc[unsupported, 'label'] = 'Unclassified'
+    # A context class or a non-naming compartment is not a final biological call.
+    # Its evidence remains in the original natural/source fields and marker flags.
+    for field in ('compartment', 'lineage', 'named_by', 'confirming_markers'):
+        result.loc[unsupported, field] = ''
+    for field in ('compartment_basis', 'lineage_basis', 'compartment_status', 'lineage_status'):
+        result.loc[unsupported, field] = 'unclassified'
+    result.loc[unsupported, 'confirmed'] = np.nan
+    result.loc[unsupported, 'component_decision_source'] = 'nonselected_unclassified'
+    result.loc[unsupported, 'tags'] = result.loc[unsupported, 'tags'].map(
+        lambda x: ';'.join(filter(None, [str(x), 'selected_endocrine_membership_other_identity_unsupported'])))
     actual = result.label.isin(LABELS).to_numpy()
     if not np.array_equal(actual, selected) or not result.loc[selected, 'label'].equals(source.loc[selected, 'label']):
         raise ValueError(f'{tag}: selected endocrine UUID/label contract failed')
-    report = {'image': tag, 'cells': len(result), 'status': 'diagnostic_pending_review', 'release_ready': False,
+    unresolved_final = int(result.label.isin(UNRESOLVED).sum())
+    boundary_conflicts = int(result.label.eq('Conflict Endocrine component boundary').sum())
+    if unresolved_final or boundary_conflicts:
+        raise ValueError(f'{tag}: unresolved endocrine definitions remain after component resolution')
+    report = {'image': tag, 'cells': len(result), 'status': STATUS, 'release_ready': False,
+              'resolution_policy': RESOLUTION_POLICY,
               'preserved_named_endocrine_cells': int(selected.sum()),
-              'preserved_unresolved_endocrine_cells': int(unresolved.sum()),
-              'unresolved_endocrine_cells': int(result.label.isin(UNRESOLVED).sum()),
-              'boundary_conflicts': int(boundary.sum()),
+              'source_unresolved_endocrine_cells': int(source_unresolved.sum()),
+              'unresolved_endocrine_cells': unresolved_final, 'boundary_conflicts': boundary_conflicts,
+              'resolved_nonselected_cells': int(target.sum()),
+              'unclassified_cells': int(result.label.eq('Unclassified').sum()),
+              'source_literal_unclassified_cells': int(source.label.eq('Unclassified').sum()),
+              'natural_literal_unclassified_cells': int(natural.label.eq('Unclassified').sum()),
+              'source_unnamed_anatomical_cells': int(source.label.isin((*UNRESOLVED, 'Tissue')).sum()),
+              'natural_unnamed_anatomical_cells': int(natural.label.isin((*UNRESOLVED, 'Tissue')).sum()),
+              'unclassified_reasons': [dict(source_label=str(a), natural_label=str(b), reason=str(c), cells=int(n))
+                  for (a, b, c), n in pd.DataFrame({'source': source.loc[unsupported, 'label'],
+                      'natural': natural.loc[unsupported, 'label'], 'reason': result.loc[unsupported, 'status']})
+                      .value_counts().items()],
               'natural_named_endocrine_cells': int(natural.label.isin(LABELS).sum()),
               'natural_vs_selected_label_changes': int(result.label.ne(natural.label).sum()),
               'natural_unselected_endocrine': int((natural.label.isin(LABELS).to_numpy() & ~selected).sum()),
-              'natural_policy': 'Current mixed-calibration policy with selected v19 endocrine protected from structure overwrite; before component selection',
-              'selected_endocrine_hormone_evidence_replayed': True}
+              'resolution_label_transitions': [dict(before=str(a), after=str(b), cells=int(n))
+                  for (a, b), n in pd.DataFrame({'before': natural.loc[target, 'label'],
+                                               'after': result.loc[target, 'label']}).value_counts().items()],
+              'natural_policy': 'Current mixed-calibration policy with selected v19 endocrine protected from structure overwrite; before component resolution',
+              'selected_endocrine_hormone_evidence_replayed': True,
+              'resolution_marker_state_invariants_passed': True,
+              'untargeted_identity_invariants_passed': True}
     return result, report
-
 
 def write_audit(run: Path, reports: list[dict]) -> dict:
     record = validate(run)
@@ -380,20 +425,22 @@ def write_audit(run: Path, reports: list[dict]) -> dict:
         raise ValueError('Component audit requires every bound image exactly once')
     if len(reports) != len(record['images']):
         raise ValueError('Duplicate image in component audit')
-    counts = ('cells', 'preserved_named_endocrine_cells', 'preserved_unresolved_endocrine_cells',
-              'unresolved_endocrine_cells', 'boundary_conflicts', 'natural_named_endocrine_cells',
+    counts = ('cells', 'preserved_named_endocrine_cells', 'source_unresolved_endocrine_cells',
+              'unresolved_endocrine_cells', 'boundary_conflicts', 'resolved_nonselected_cells', 'unclassified_cells',
+              'natural_named_endocrine_cells',
               'natural_vs_selected_label_changes', 'natural_unselected_endocrine')
     images = {}
     for report in reports:
         tag = report['image']
         validate(run, tag)
         images[tag] = {**report, 'identity': file_record(run / 'typing/identity' / f'{tag}.parquet')}
-    audit = {'schema': 'uniform.component_selection_audit/1', 'status': 'diagnostic_pending_review',
+    audit = {'schema': AUDIT_SCHEMA, 'status': STATUS,
              'release_ready': False, 'manifest_sha256': sha(run / MANIFEST), 'images': images,
              **{key: sum(r[key] for r in reports) for key in counts},
              'scientific_accuracy_established': False,
-             'note': 'Exact selected component preservation and mathematical replay; unresolved objects and '
-                     'component boundaries remain release blockers. This is not biological validation.'}
+             'resolution_policy': RESOLUTION_POLICY,
+             'note': 'Exact selected component preservation and mathematical replay; nonselected unresolved calls '
+                     'use existing nonendocrine rules or explicit Unclassified. This is not biological validation.'}
     with (run / AUDIT).open('x') as stream:
         json.dump(audit, stream, indent=2)
         stream.write('\n')
@@ -405,24 +452,36 @@ def validate_audit(run: Path) -> dict | None:
     if record is None:
         return None
     audit = json.loads((run / AUDIT).read_text())
-    if (audit.get('schema') != 'uniform.component_selection_audit/1'
+    if (audit.get('schema') != AUDIT_SCHEMA
             or audit.get('manifest_sha256') != sha(run / MANIFEST)
-            or audit.get('status') != 'diagnostic_pending_review' or audit.get('release_ready') is not False
+            or audit.get('status') != STATUS or audit.get('release_ready') is not False
             or audit.get('scientific_accuracy_established') is not False
+            or audit.get('resolution_policy') != RESOLUTION_POLICY
             or set(audit.get('images', {})) != set(record['images'])):
         raise ValueError('Incomplete or mismatched component-selection audit')
     for tag, row in audit['images'].items():
-        if (row.get('image') != tag or row.get('status') != 'diagnostic_pending_review'
+        if (row.get('image') != tag or row.get('status') != STATUS
                 or row.get('release_ready') is not False or row.get('cells') != record['images'][tag]['cells']):
             raise ValueError(f'{tag}: inconsistent per-image diagnostic audit')
         validate(run, tag)
         check_record(row['identity'], run / 'typing/identity' / f'{tag}.parquet')
+        if (row.get('resolution_policy') != RESOLUTION_POLICY
+                or row.get('resolution_marker_state_invariants_passed') is not True
+                or row.get('untargeted_identity_invariants_passed') is not True
+                or row.get('unresolved_endocrine_cells') != 0 or row.get('boundary_conflicts') != 0):
+            raise ValueError(f'{tag}: incomplete component resolution evidence')
         if row.get('selected_endocrine_hormone_evidence_replayed') is not True:
             raise ValueError(f'{tag}: missing independent hormone-evidence replay')
         if row['preserved_named_endocrine_cells'] != record['images'][tag]['named_endocrine_cells']:
             raise ValueError(f'{tag}: selected endocrine count differs from source binding')
-    for key in ('cells', 'preserved_named_endocrine_cells', 'preserved_unresolved_endocrine_cells',
-                'unresolved_endocrine_cells', 'boundary_conflicts', 'natural_named_endocrine_cells',
+        if row['source_unresolved_endocrine_cells'] != record['images'][tag]['unresolved_endocrine_cells']:
+            raise ValueError(f'{tag}: unresolved source census differs from binding')
+        if (row['preserved_named_endocrine_cells'] + row['resolved_nonselected_cells'] > row['cells']
+                or row['unclassified_cells'] > row['cells'] - row['preserved_named_endocrine_cells']):
+            raise ValueError(f'{tag}: component resolution census is inconsistent')
+    for key in ('cells', 'preserved_named_endocrine_cells', 'source_unresolved_endocrine_cells',
+                'unresolved_endocrine_cells', 'boundary_conflicts', 'resolved_nonselected_cells', 'unclassified_cells',
+              'natural_named_endocrine_cells',
                 'natural_vs_selected_label_changes', 'natural_unselected_endocrine'):
         if audit.get(key) != sum(row[key] for row in audit['images'].values()):
             raise ValueError(f'Component audit has an inconsistent {key} total')
@@ -441,7 +500,7 @@ def main() -> int:
     images = [r['image_name'] for r in RG.csv.DictReader(RG.COHORT.open())] if args.images == ['all'] else args.images
     record = pin(args.run, args.endocrine_source, args.nonendocrine_source, args.structure_source,
                  images, args.selection_reason)
-    print(f'Bound {len(record["images"])} images for diagnostic component selection; release_ready=false')
+    print(f'Bound {len(record["images"])} images for exact named endocrine component resolution; release_ready=false')
     return 0
 
 

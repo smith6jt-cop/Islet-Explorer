@@ -240,7 +240,8 @@ def audit_image(baseline: Path, candidate: Path, output: Path, image: str,
                 # permit a general natural__ prefix or change to source evidence.
                 natural_field = column.removeprefix("natural__") if column.startswith("natural__") else None
                 if component_scope and kind == "identity":
-                    allowed |= natural_field in IDENTITY_DERIVED or column == "component_decision_source"
+                    allowed |= natural_field in IDENTITY_DERIVED or column in {
+                        "component_decision_source", "component_resolution_target"}
                 if allowed:
                     unexpected[:, ci] &= ~allowed_area
                 if kind == "identity" and column in ENDOCRINE_PROTECTED:

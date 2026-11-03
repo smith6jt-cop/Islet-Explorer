@@ -2,8 +2,9 @@
 """Read-only real-data regression for explicit endocrine component selection.
 
 This replays archived hormone evidence and checks existing coverage receipts.
-The one-image boundary control composes actual archived fields; it is explicitly
-not a current-policy classifier integration run or a scientific accuracy test.
+The selection controls use actual archived rows and deliberate evidence-corruption
+negative controls. They are not a current-policy classifier integration run or a
+scientific accuracy test; fresh HPG control/candidate runs provide integration QA.
 """
 from __future__ import annotations
 
@@ -79,14 +80,18 @@ def check_image(old: Path, other: Path, tag: str, negative_control: bool) -> dic
     scores = np.clip((raw - rawlevel) / np.where(top > rawlevel, top - rawlevel, np.nan), 0, None)
     indices = {marker: j for j, marker in enumerate(CS.MARKERS)}
     binding = {'endocrine_source': str(old)}
-    selected, report = CS.apply(other.parent, tag, source, scores, indices, binding)
-    assert selected.label.equals(source.label)
+    target = CS.resolution_mask(binding, tag, source)
+    selected, report = CS.apply(other.parent, tag, source, scores, indices, binding,
+                                resolved=source.copy(), resolution_target=target)
+    assert selected.loc[~target, 'label'].equals(source.loc[~target, 'label'])
+    assert selected.loc[target, 'label'].eq('Unclassified').all()
+    assert selected.loc[source.label.isin(CS.LABELS), 'label'].equals(source.loc[source.label.isin(CS.LABELS), 'label'])
     evidence = [field for field in source if field.startswith(('pos__', 'canary__', 'fold__')) or field == 'Ki67_pos']
     assert selected[evidence].equals(source[evidence])
     for field in CS.DECISIONS:
         assert selected[f'component_source__{field}'].equals(source[field])
     result = {'image': tag, 'cells': len(source), 'named_endocrine_cells': report['preserved_named_endocrine_cells'],
-              'unresolved_endocrine_cells': report['preserved_unresolved_endocrine_cells'],
+              'source_unresolved_endocrine_cells': report['source_unresolved_endocrine_cells'],
               'all_four_marker_evidence_exact': True, 'selected_hormone_labels_exact': True,
               'all_input_marker_and_state_fields_preserved': True,
               'source_identity_sha256': CS.sha(source_path), 'source_redsea_sha256': CS.sha(redsea_path),
@@ -94,32 +99,34 @@ def check_image(old: Path, other: Path, tag: str, negative_control: bool) -> dic
     if negative_control:
         original = pd.read_parquet(other / 'identity' / f'{tag}.parquet').set_index('object_id').loc[source.object_id].reset_index()
         try:
-            CS.apply(other.parent, tag, original, scores, indices, binding)
+            CS.apply(other.parent, tag, original, scores, indices, binding, resolved=original.copy(),
+                     resolution_target=CS.resolution_mask(binding, tag, original))
         except ValueError as error:
             result['actual_mismatched_v20_evidence_rejected'] = str(error)
         else:
             raise AssertionError(f'{tag}: actual mismatched v20 endocrine evidence was accepted')
-        # Real rows/fields, deliberately composed to exercise selection policy.
-        # This does not claim these natural decisions were rerun with mixed levels.
-        composed = original.copy()
-        endocrine_fields = [f'{prefix}{m}' for m in CS.MARKERS for prefix in ('pos__', 'canary__', 'fold__')]
-        composed.loc[:, endocrine_fields] = source[endocrine_fields].to_numpy()
-        changed, details = CS.apply(other.parent, tag, composed, scores, indices, binding)
-        named = source.label.isin(CS.LABELS)
-        unresolved = source.label.isin(CS.UNRESOLVED)
-        boundary = composed.label.isin(CS.LABELS) & ~named & ~unresolved
-        assert boundary.any(), 'Real control image must exercise at least one component boundary'
-        assert changed.loc[boundary, 'label'].eq('Conflict Endocrine component boundary').all()
-        assert changed.loc[boundary, 'status'].eq('component_boundary_conflict').all()
-        assert changed.loc[unresolved, 'label'].equals(source.loc[unresolved, 'label'])
-        assert changed.loc[named, 'label'].equals(source.loc[named, 'label'])
-        assert changed[evidence].equals(composed[evidence])
-        unaffected = ~(named | unresolved | boundary)
-        assert changed.loc[unaffected, 'label'].equals(composed.loc[unaffected, 'label'])
-        result['boundary_field_composition_control'] = {
-            'not_natural_classifier_integration': True, 'boundary_conflicts': int(boundary.sum()),
-            'unchanged_current_Ki67_and_all_marker_fields': True,
-            'other_natural_labels_unchanged': True, 'details': details}
+        # Deliberate engineering corruptions on actual archived records. No new
+        # scientific marker pattern or expected biological identity is invented.
+        for name, change in (
+            ('marker_state', lambda x: x.__setitem__('Ki67_pos', 1 - x['Ki67_pos'])),
+            ('untargeted_label', lambda x: x.loc.__setitem__((~target, 'label'), 'Unclassified')),
+        ):
+            corrupted = source.copy()
+            change(corrupted)
+            try:
+                CS.apply(other.parent, tag, source, scores, indices, binding,
+                         resolved=corrupted, resolution_target=target)
+            except ValueError as error:
+                result[name + '_corruption_rejected'] = str(error)
+            else:
+                raise AssertionError(f'{tag}: {name} corruption accepted')
+        try:
+            CS.apply(other.parent, tag, source, scores, indices, binding,
+                     resolved=source.copy(), resolution_target=np.zeros(len(source), dtype=bool))
+        except ValueError as error:
+            result['stripped_resolution_target_rejected'] = str(error)
+        else:
+            raise AssertionError(f'{tag}: stripped target accepted')
     return result
 
 
@@ -140,11 +147,11 @@ def main() -> int:
         row = check_image(old, other, tag, tag == args.negative_control_image)
         rows.append(row)
         print(f'{tag}: {row["cells"]} eligible cells; {row["named_endocrine_cells"]} named endocrine; replay/coverage pass', flush=True)
-    result = {'schema': 'uniform.component_selection_real_data_check/1', 'passes': True,
+    result = {'schema': 'uniform.component_selection_real_data_check/2', 'passes': True,
               'not_full_pipeline_integration': True, 'scientific_accuracy_established': False,
               'images': rows, 'cells': sum(r['cells'] for r in rows),
               'named_endocrine_cells': sum(r['named_endocrine_cells'] for r in rows),
-              'unresolved_endocrine_cells': sum(r['unresolved_endocrine_cells'] for r in rows),
+              'source_unresolved_endocrine_cells': sum(r['source_unresolved_endocrine_cells'] for r in rows),
               'source_hashes': {str(p): CS.sha(p) for p in [Path(__file__), Path(CS.__file__),
                     ROOT / 'scripts/uniform/typing/identity.py', old / 'levels.csv', old / 'canary_levels.csv']}}
     assert result['cells'] == 3199606 and result['named_endocrine_cells'] == 110721
