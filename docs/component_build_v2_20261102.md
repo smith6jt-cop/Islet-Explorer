@@ -257,6 +257,11 @@ deadline; all other security, scientific and runtime checks still apply.
 
 The new implementation groups are `ade7c46`, `d946fab`, `9d9adc9`, `b3be57a`,
 `c93eebf`, `67ee6c9` and `e5689f6`. Deployment recovery fix `caf79f2` preserves
-a previously stopped service on activation failure. A new immutable Senior /
-monorepo / HPG / MultiPlex5000 supplement will carry these changes and final
-evidence; prior delivered packages remain intact.
+a previously stopped service on activation failure. Verifier `d3ec00e` and
+composite validator `c3dc494` provide the separately versioned release checks.
+The immutable Senior / monorepo / HPG / MultiPlex5000 supplement is delivered
+at both sites and independently verified/read by the Senior agent. The
+[delivery receipt](evidence/component_resolution_agent_delivery_20261102.json)
+records that acknowledgement, the compact inventory erratum and the boundary
+between receiving the fixes and applying a recipient-owned port. Prior packages
+and recipient scientific work remain intact.

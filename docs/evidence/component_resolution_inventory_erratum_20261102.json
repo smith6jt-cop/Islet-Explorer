@@ -1,0 +1,70 @@
+{
+  "schema": "islet.component_resolution_inventory_erratum/1",
+  "recorded_utc": "2026-11-03T02:56:38.301473+00:00",
+  "status": "compact_projection_correction",
+  "scope": "Correction to a derived compact handoff field only; authoritative inventory, immutable package, scientific data, release bundle and production remain unchanged.",
+  "package": {
+    "source_commit": "5b72a9b022766f5ddb828845e5789bfcf3f15063",
+    "workstation_path": "/home/smith6jt/IO60panc2nd/CODEX-handoff-20261102-component-resolution",
+    "hpg_path": "/blue/maigan/smith6jt/CODEX-handoff-20261102-component-resolution",
+    "SHA256SUMS_sha256": "7bac1f63c355c99db1045826f599c745a8b26a1767187c3c08f39e8921ee3901",
+    "manifest_sha256": "799514832288efa1ad2c574a6cecd47fbcc3447bd6a46dfb2a14b8e587b1ab85",
+    "compact_final_reports_sha256": "8c1071abf4cba6f615fe07abb8602dc7aef43497e508df70884903c6b3ca17e9"
+  },
+  "correction": {
+    "file": "evidence/compact_final_reports.json",
+    "key_path": "available_reports.release_inventory.image_count",
+    "recorded_value": 14,
+    "correct_value": 20,
+    "unit": "OME-TIFF image files",
+    "cause": "The generic projection used len(images) on the inventory metadata dictionary. Its 14 keys describe the images; they are not 14 images.",
+    "authoritative_key_paths": [
+      "images.files",
+      "images.tiff_files",
+      "images.ome_tiff_files"
+    ],
+    "authoritative_image_count_field_present": false,
+    "additional_projection_artifact": "The generated per_image.format_counts={} is also a metadata projection artifact, not a donor/image record; omit that per_image field for release inventories."
+  },
+  "authoritative_inventory": {
+    "path": "tmp/pubapps-component-release-20261102-v2/evidence/release-inventory-e5689f6.json",
+    "sha256": "6147832fc3ea1693ded18dff8ee05b8602db8542ff564a6dd8f92bcad11ae248",
+    "files": 20,
+    "tiff_files": 20,
+    "ome_tiff_files": 20,
+    "format_counts": {
+      ".tiff": 20
+    },
+    "tiff_pages": 690
+  },
+  "release_image_bundle": {
+    "data_manifest_sha256": "8ddeecf3639921d2e53538e2d86b6bb4278cc622d29a928a3136fdece3d9f6b1",
+    "total_files": 80,
+    "OME_TIFF_files": 20,
+    "sidecar_files": 60,
+    "note": "The 80-file release image bundle includes sidecars; it is a different count from 20 OME-TIFFs."
+  },
+  "sibling_count_projection_review": {
+    "component_assignments": 20,
+    "state_exports": 20,
+    "lymphatic_invariance": 20,
+    "endocrine_object_proof": 20,
+    "component_manifest": 20,
+    "other_identical_dictionary_length_errors_found": 0
+  },
+  "future_helper": {
+    "original_preserved_path": "tmp/component-build-20261102-v2/prepare_senior_package.py",
+    "original_preserved_sha256": "1b9e5a878b09d8b74de34fbd6b689f5b2273dc14512b0c716a8d32801ba51849",
+    "corrected_copy_path": "tmp/component-build-20261102-v2/prepare_senior_package_inventory_projection_fixed.py",
+    "corrected_copy_sha256": "2f224a07045d5448b303c9035dc754281aca138ed50ffd809836862c60d604cd",
+    "actual_inventory_projection_verified": true,
+    "correction": "For release_inventory, use explicit images.tiff_files and preserve files/ome_tiff_files/tiff_pages; do not project inventory metadata keys as per-image records."
+  },
+  "adjacent_delivery_paths": {
+    "workstation": "/home/smith6jt/IO60panc2nd/CODEX-handoff-20261102-component-resolution.inventory-erratum-20261102.json",
+    "hpg": "/blue/maigan/smith6jt/CODEX-handoff-20261102-component-resolution.inventory-erratum-20261102.json"
+  },
+  "immutable_package_modified": false,
+  "scientific_data_modified": false,
+  "production_modified": false
+}

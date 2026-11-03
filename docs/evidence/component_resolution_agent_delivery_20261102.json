@@ -1,0 +1,211 @@
+{
+  "schema": "islet.component_resolution_agent_delivery/1",
+  "status": "delivered_verified_and_read",
+  "recorded_utc": "2026-11-03T02:59:05.932146+00:00",
+  "completed_utc": "2026-11-03T02:52:12.531498+00:00",
+  "scope": "Immutable CODEX source/documentation and compact evidence delivered to workstation and HPG siblings, with independent local recipient verification/read acknowledgement. No recipient port or independent scientific replay inferred.",
+  "source_commit": "5b72a9b022766f5ddb828845e5789bfcf3f15063",
+  "history_base": "2150edd93ea379acd60cc36db3eb0b18eeb207d4",
+  "producer_and_validator_commits": {
+    "scientific": "67ee6c9d0b28f467eee589fea24829a6546e3d74",
+    "image_and_data_builder": "e5689f6453e68bc9e94cbe83689cb9db4d3d0b83",
+    "corrected_verifier": "d3ec00e113fbbdb8abb7eb4b57ee4ffc7ca46580",
+    "composite_validator": "c3dc4944afda1d257c4c73d69ccaaa3b00da8c72"
+  },
+  "workstation_package": "/home/smith6jt/IO60panc2nd/CODEX-handoff-20261102-component-resolution",
+  "hpg_package": "/blue/maigan/smith6jt/CODEX-handoff-20261102-component-resolution",
+  "hpg_publication": {
+    "mode": "atomic_nonoverwriting_symlink",
+    "path": "/blue/maigan/smith6jt/CODEX-handoff-20261102-component-resolution",
+    "target": "/blue/maigan/smith6jt/CODEX-handoff-20261102-component-resolution.partial-e3b6f36e42954461aa9d5b782edb9c73",
+    "backing_directory_is_permanent_published_content": true,
+    "backing_directory_is_cleanup_candidate": false,
+    "link_device": 1183019940,
+    "link_inode": 252215064709317311,
+    "link_mtime_ns": 1793674332000000000,
+    "link_ctime_ns": 1793674332000000000
+  },
+  "publication_fallback": {
+    "initial_method": "renameat2(RENAME_NOREPLACE)",
+    "errno": 22,
+    "meaning": "HPG filesystem rejected the no-replace rename flag; atomic symlink creation published the exact verified directory without replacing any existing destination."
+  },
+  "counts": {
+    "regular_files_including_SHA256SUMS": 19,
+    "payload_bytes_including_SHA256SUMS": 2017634,
+    "source_archive_members": 223,
+    "history_blobs_inspected": 105
+  },
+  "sha256sums_sha256": "7bac1f63c355c99db1045826f599c745a8b26a1767187c3c08f39e8921ee3901",
+  "payloads": {
+    "manifest.json": {
+      "sha256": "799514832288efa1ad2c574a6cecd47fbcc3447bd6a46dfb2a14b8e587b1ab85",
+      "bytes": 43532
+    },
+    "source.tar.gz": {
+      "sha256": "7d2d75be013c12c784b4f5fce463dfd448a5c561e906f0b293ccc8d8842596c5",
+      "bytes": 1087589
+    },
+    "code-history.git.bundle": {
+      "sha256": "5b6c2eb69fb6a55db26c35904e293359ffeac37813136b9570cab4a8feebfa90",
+      "bytes": 139085
+    },
+    "recent-commits.patch": {
+      "sha256": "546e9bf1c9e238ae0bf6238b246b84c2fb95983ba9bb69261b3a7adc14881246",
+      "bytes": 514420
+    },
+    "evidence/compact_final_reports.json": {
+      "sha256": "8c1071abf4cba6f615fe07abb8602dc7aef43497e508df70884903c6b3ca17e9",
+      "bytes": 43567
+    }
+  },
+  "final_committed_receipts": {
+    "docs/evidence/component_build_v2_20261102.json": "ba80b8aa34886bf6e28729a58dd0484cbf16b1a367ffe6cc19dd3ce1dbb77af8",
+    "docs/evidence/component_release_validation_20261102.json": "58823334c80ac1051dd8ff847e734f2b65489c02c6effff0daf6533705590110",
+    "docs/evidence/pubapps_live_20261102.json": "1f635a08d79f0ef1fcdff698bcce5671ce5ed7b049c42a5d6c59441560c5bf54"
+  },
+  "release_manifest_bindings": {
+    "data_manifest_sha256": "8ddeecf3639921d2e53538e2d86b6bb4278cc622d29a928a3136fdece3d9f6b1",
+    "outer_release_manifest_sha256": "67511303fc9759fcd1821556c3f2b732b2c61f31eda1d335b7ec86fdcf73442b"
+  },
+  "verification": {
+    "exact_file_roster_and_all_SHA256": true,
+    "exact_source_archive_roster_and_member_hashes": true,
+    "payload_file_modes_0400_and_directory_modes_0500": true,
+    "hpg_final_link_resolves_exact_verified_backing_directory": true,
+    "git_bundle_prerequisite_verified_against_HPG_CODEX_without_import": true,
+    "local_source_unchanged_during_transfer": true,
+    "required_science_release_live_receipts_in_selected_commit_and_package": true,
+    "prior_packages_preserved": true
+  },
+  "actions_not_performed": {
+    "recipient_checkout_modified": false,
+    "git_bundle_imported_or_patch_applied": false,
+    "source_or_scientific_data_modified": false,
+    "service_actions": false,
+    "recipient_notification_sent_by_delivery_agent": false
+  },
+  "recipient_read_acknowledgement": {
+    "status": "received_verified_locally_and_read_not_applied",
+    "recorded_utc": "2026-11-03T02:54:38.597859+00:00",
+    "recipient_thread": "01a19ca5-0cff-7d81-8027-4868ab012b79",
+    "recipient_commit": "dd6e0d2962b5b502c1db9f81c54e0d82cefa0499",
+    "receipt": {
+      "path": "/home/smith6jt/IO60panc2nd/Islet-Explorer-Senior/docs/evaluations/codex_component_resolution_receipt_20261102/receipt.json",
+      "sha256": "f2492d77449537e1ce32d42dc065b1c6f8774052bed2bf20a85e75e40e53e7ee"
+    },
+    "payload_files_excluding_SHA256SUMS": 18,
+    "regular_files_including_SHA256SUMS": 19,
+    "archived_regular_source_files": 223,
+    "source_report_byte_bindings_checked": 14,
+    "compact_content_checks": 51,
+    "read_resources": [
+      {
+        "path": "/home/smith6jt/IO60panc2nd/CODEX-handoff-20261102-component-resolution/typing_change_notice_20261102.md",
+        "sha256": "c10049bbb6776bbef475b194b28a502c28d966d730daf620b48e80ebed545870"
+      },
+      {
+        "path": "/home/smith6jt/IO60panc2nd/CODEX-handoff-20261102-component-resolution/workflow_user_guide.md",
+        "sha256": "d49d8a0f55592d6be6e3996494a21281a1b28fcf7f9ae66cdbc35292af884b0e"
+      },
+      {
+        "path": "/home/smith6jt/IO60panc2nd/CODEX-handoff-20261102-component-resolution/component_build_v2_20261102.md",
+        "sha256": "13cc4aaf5d17ece7a1f5dc169f105202db5583c79f6c581033520e824d847379"
+      },
+      {
+        "path": "/home/smith6jt/IO60panc2nd/CODEX-handoff-20261102-component-resolution/component_resolution_20261102.md",
+        "sha256": "4cfa4ec6a08fef92ce9d06bf8c57700f62c457d140bea638c3eaa0c52b6e56ab"
+      },
+      {
+        "path": "/home/smith6jt/IO60panc2nd/CODEX-handoff-20261102-component-resolution/evidence/component_build_v2_20261102.json",
+        "sha256": "ba80b8aa34886bf6e28729a58dd0484cbf16b1a367ffe6cc19dd3ce1dbb77af8"
+      },
+      {
+        "path": "/home/smith6jt/IO60panc2nd/CODEX-handoff-20261102-component-resolution/evidence/component_release_validation_20261102.json",
+        "sha256": "58823334c80ac1051dd8ff847e734f2b65489c02c6effff0daf6533705590110"
+      },
+      {
+        "path": "/home/smith6jt/IO60panc2nd/CODEX-handoff-20261102-component-resolution/evidence/pubapps_live_20261102.json",
+        "sha256": "1f635a08d79f0ef1fcdff698bcce5671ce5ed7b049c42a5d6c59441560c5bf54"
+      },
+      {
+        "path": "/home/smith6jt/IO60panc2nd/CODEX-handoff-20261102-component-resolution/evidence/compact_final_reports.json",
+        "sha256": "8c1071abf4cba6f615fe07abb8602dc7aef43497e508df70884903c6b3ca17e9"
+      }
+    ],
+    "scientific_replay_performed": false,
+    "service_verification_performed": false,
+    "hpg_copy_independently_verified_by_recipient": false,
+    "history_imported": false,
+    "port_completed": false,
+    "projection_caveat_explicitly_retained": true,
+    "evidence": {
+      "payload_archive_and_header_verification": {
+        "path": "/home/smith6jt/IO60panc2nd/Islet-Explorer-Senior/outputs/codex_component_resolution_receipt_20261102/integrity.json",
+        "sha256": "2fb695913015f57fd76331ed726272f42347985a1d7c1753badf889d603c2e32"
+      },
+      "content_and_report_byte_review": {
+        "path": "/home/smith6jt/IO60panc2nd/Islet-Explorer-Senior/outputs/codex_component_resolution_receipt_20261102/content_review.json",
+        "sha256": "d160a97d78234530fab5e52a0f323df4abc38b75f9bd39420e0f2836845f83f4"
+      },
+      "preserved_prior_delivery_verification": {
+        "path": "/home/smith6jt/IO60panc2nd/Islet-Explorer-Senior/outputs/codex_component_resolution_receipt_20261102/prior_delivery_verification.json",
+        "sha256": "aa7d6cfa333dfe905416987f72621d067a96c4e0f9731f61de71f01388341f44"
+      }
+    }
+  },
+  "recipient_port_completed": false,
+  "evidence": {
+    "local_package_receipt": {
+      "path": "tmp/component-build-20261102-v2/senior-package-build/local-package-receipt.json",
+      "sha256": "80474784fccd0d815b79dc9492b60fb618d12782ff9edadd661d3d4db76fc893"
+    },
+    "transport_receipt": {
+      "path": "tmp/component-build-20261102-v2/senior-package-transport/transport-receipt.json",
+      "sha256": "5e7d9856c8f97dd3b5747b6ae9d52aa0e6cdbe75898daab6170fe0873cc96947"
+    },
+    "verified_inventory": {
+      "path": "tmp/component-build-20261102-v2/senior-package-transport/verified-inventory.json",
+      "sha256": "749be251c376f58572e2d6d24d6b97713d29a5c9624b0b066c9bdaa15fb83f9b"
+    },
+    "initial_atomic_publication_error": {
+      "path": "tmp/component-build-20261102-v2/senior-package-transport/atomic-publication-error.log",
+      "sha256": "0bb9ec3a2bbc02dc3f03f81abc547b132d23ff0ffed69d5e58b2a7453aed468a"
+    },
+    "preparation_helper": {
+      "path": "tmp/component-build-20261102-v2/prepare_senior_package.py",
+      "sha256": "1b9e5a878b09d8b74de34fbd6b689f5b2273dc14512b0c716a8d32801ba51849"
+    },
+    "transport_helper": {
+      "path": "tmp/component-build-20261102-v2/transport_senior_package.py",
+      "sha256": "51655b66beed112db6792c56cbe2cb43eec04e9e6dacd79cd6bdc8c2528ef0d4"
+    },
+    "atomic_symlink_publication_helper": {
+      "path": "tmp/component-build-20261102-v2/publish_senior_symlink.py",
+      "sha256": "a30bc3856a198f6e12fd41e56a23a09fa97ed349354abd708b3442e716245c8f"
+    },
+    "inventory_erratum_delivery": {
+      "path": "tmp/component-build-20261102-v2/inventory-erratum-delivery.json",
+      "sha256": "914ae32c463d6eddd89f2e5b41160fe0a26a45872e6dc29b1f13d56f5dfe5e7d"
+    },
+    "future_inventory_projection_helper": {
+      "path": "tmp/component-build-20261102-v2/prepare_senior_package_inventory_projection_fixed.py",
+      "sha256": "2f224a07045d5448b303c9035dc754281aca138ed50ffd809836862c60d604cd"
+    }
+  },
+  "inventory_projection_erratum": {
+    "path": "docs/evidence/component_resolution_inventory_erratum_20261102.json",
+    "sha256": "7a91a1907c74d1abeb46ade47185aaa99448ff22e068c07faac3228ada2707e7",
+    "corrected_key_path": "available_reports.release_inventory.image_count",
+    "recorded_value": 14,
+    "correct_value": 20,
+    "unit": "OME-TIFF files",
+    "release_bundle_files_including_sidecars": 80,
+    "release_bundle_sidecars": 60,
+    "workstation_adjacent_file": "/home/smith6jt/IO60panc2nd/CODEX-handoff-20261102-component-resolution.inventory-erratum-20261102.json",
+    "hpg_adjacent_file": "/blue/maigan/smith6jt/CODEX-handoff-20261102-component-resolution.inventory-erratum-20261102.json",
+    "both_readonly_sha256_verified": true,
+    "immutable_package_unchanged": true,
+    "original_pinned_helper_unchanged": true
+  }
+}

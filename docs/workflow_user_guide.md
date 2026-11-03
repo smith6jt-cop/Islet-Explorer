@@ -484,6 +484,17 @@ Use `deploy/verify-reviewer-access.py` with the selected URL, a real TIFF `--ima
 
 ## 10. HPG processing, reproducible records, and handoff
 
+The completed current delivery is `CODEX-handoff-20261102-component-resolution`
+at the workstation and HPG sibling locations recorded in the
+[delivery receipt](evidence/component_resolution_agent_delivery_20261102.json).
+It carries source `5b72a9b`, the final guides and scientific/release/live receipts.
+Senior independently verified and read the local package; recipient adaptation
+is not applied. The [inventory erratum](evidence/component_resolution_inventory_erratum_20261102.json)
+corrects one compact image-count projection to 20 TIFFs without changing the
+already-correct source inventory or immutable package. HPG's named package
+links to a permanent read-only backing directory; preserve that directory.
+The older package names below identify earlier, preserved deliveries.
+
 The authoritative HPG workspace is `/blue/maigan/smith6jt/islet-explorer-hpg/root`. Its site wrapper presents the workstation path `/data/panc_CODEX/Islet-Explorer` inside the container and the sealed QuPath inputs read-only. Use [the HPG processing record](hpg_processing_20261031.md) for the current seal and environment. Do not repair a seal failure by weakening the guards or editing a protected scientific file.
 
 Workstation code is the editing authority. Commit a coherent change, transfer the explicit changed-file list and required Git metadata, verify remote hashes, and record the receipt before using it on HPG. Never perform a whole-tree `rsync`, `git checkout`, `reset`, or `stash` into the sealed HPG scientific tree. Administrative operations that change pinned file identities require the documented reseal procedure; they are not routine pipeline reruns.
@@ -511,7 +522,7 @@ Related Senior, monorepo, HPG, and multiplex5000 workspaces/agents receive the [
 | HPG Senior main | `/blue/maigan/smith6jt/Islet-Explorer-Senior-main`, `main` at `40fde07`, with local changes. |
 | HPG current typing | `/blue/maigan/smith6jt/IES-typing`, `typing/per-image-method` at `a9549cc`, clean at discovery. |
 
-The immutable handoff package locations are `/home/smith6jt/IO60panc2nd/CODEX-handoff-20261102-lymphatic-isolation` and HPG `/blue/maigan/smith6jt/CODEX-handoff-20261102-lymphatic-isolation`. Consult `docs/evidence/agent_delivery_20261102.json` for the checksum receipts and the Senior/MultiPlex5000 agent's explicit acknowledgement: it read the notice/workflow and independently verified all 17 payload files. The package is received/read; the port remains unapplied. This delivery must not edit active recipient checkouts. The Senior agent owns adapting and testing a port into `core/multiplex5000`; CODEX retains its candidate and app ownership. CODEX's own HPG source synchronization has its separate explicit changed-file receipt.
+The first immutable handoff package locations are `/home/smith6jt/IO60panc2nd/CODEX-handoff-20261102-lymphatic-isolation` and HPG `/blue/maigan/smith6jt/CODEX-handoff-20261102-lymphatic-isolation`. Consult `docs/evidence/agent_delivery_20261102.json` for the checksum receipts and the Senior/MultiPlex5000 agent's explicit acknowledgement: it read the notice/workflow and independently verified all 17 payload files. The package is received/read; the port remains unapplied. This delivery must not edit active recipient checkouts. The Senior agent owns adapting and testing a port into `core/multiplex5000`; CODEX retains its candidate and app ownership. CODEX's own HPG source synchronization has its separate explicit changed-file receipt.
 
 A supplemental package, `CODEX-handoff-20261102-component-build`, carries the
 completed component/Ki67/build fixes, release preflight correction and outcome

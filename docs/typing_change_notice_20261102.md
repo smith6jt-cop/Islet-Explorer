@@ -73,13 +73,31 @@ commit does not change the scientific producer `67ee6c9`, image/data producer
 `e5689f6`, or any built data. Its final acceptance evidence records the validator
 version separately.
 
-The new package will be named `CODEX-handoff-20261102-component-resolution` at
-the same workstation and HPG sibling locations as the prior packages. It uses
-the previous supplemental source `2150edd` as its incremental history base.
-Package preparation requires the final scientific, release and inventory
-evidence; announcement is not transfer or recipient verification. Its final
-receipt will distinguish delivery, read acknowledgement and any later port.
-No recipient scientific run or active checkout is modified by this handoff.
+The new package **`CODEX-handoff-20261102-component-resolution` is delivered and
+verified** at the workstation and HPG sibling locations. It contains source
+`5b72a9b`, incremental history from `2150edd`, 223 archived source files and
+18 checksummed payloads plus `SHA256SUMS` (19 files total). The checksum-file
+SHA256 is `7bac1f63c355c99db1045826f599c745a8b26a1767187c3c08f39e8921ee3901`.
+The [delivery receipt](evidence/component_resolution_agent_delivery_20261102.json)
+binds the exact paths, source/archive checks and final scientific, release and
+live-service receipts. HPG publishes the package through a link to the verified
+read-only backing directory recorded there; that backing directory is permanent
+published content and must not be cleaned up as a partial transfer.
+
+Senior / monorepo / MultiPlex5000 acknowledged **received, independently verified
+locally and read; not applied**, in recipient commit `dd6e0d2`. It verified all
+payloads, 223 archived sources, 14 report-byte bindings and 51 compact consistency
+checks, and read the full workflow, notices, current build and receipts. Its
+acknowledgement does not claim independent scientific replay, service tests or
+HPG-copy verification. No source history was imported or recipient port performed.
+
+The recipient found one convenience-summary error in the immutable package:
+`available_reports.release_inventory.image_count` counted 14 metadata keys.
+The [adjacent inventory correction](evidence/component_resolution_inventory_erratum_20261102.json)
+records the correct **20 OME-TIFFs**, with 80 total release image/sidecar files,
+and identifies a meaningless metadata-derived `per_image` entry to disregard. The original full
+inventory and production data were already correct. The immutable package and
+its original checksums remain unchanged.
 
 ### Historical first supplemental delivery
 
