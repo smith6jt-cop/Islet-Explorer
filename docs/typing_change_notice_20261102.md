@@ -18,6 +18,51 @@ overwritten by this delivery.
 
 ## Completed component build and supplemental delivery
 
+### New selected-component v2 supplement
+
+The owner subsequently delegated the remaining CODEX selection and live release.
+Scientific source `67ee6c9` preserves the exact 110,721 named v19 endocrine
+UUIDs/subtypes, resolves only declared nonselected endocrine/boundary rows
+through existing current rules, and retains unsupported outcomes as
+Unclassified with source/natural evidence. The image/release source `e5689f6`
+adds only the dynamic palette-name fix and its test.
+
+The all-20 final identity review passes: 3,199,606 UUIDs, 7,398 Unclassified
+outcomes (0.2312%), zero unnamed endocrine definitions or technical boundary
+placeholders. No prior mixed-app named non-endocrine identity is lost;
+716,451 Tissue calls and every Ki67 flag are unchanged. The controlled DG
+comparison has 353 permitted Lymphatic-related changes and zero unrelated
+changes. The classifier-lineage proof passes for all 10,080 objects and 5,227
+exact Single whole-cell associations. Corrected-cell and centroid diagnostics
+remain visible. See [the current build record](component_build_v2_20261102.md)
+and [full row review](unclassified_component_review_20261103.md) for scope,
+evidence hashes and remaining packaging/runtime checks.
+
+| Commit | Additional change to assess for the shared workflow |
+|---|---|
+| `ade7c46` | Resolve only declared component-boundary rows through the existing non-endocrine rules, preserving marker evidence, untargeted identities and explicit unsupported outcomes. |
+| `d946fab` | Require all complete build gates and hash-bound classifier-lineage evidence. |
+| `9d9adc9` | Describe selected endocrine membership from recorded component metadata in app method help. |
+| `c93eebf` | Apply the same four-name endocrine contract to assembly, composition inputs, export census and release/parity checks. |
+| `67ee6c9` | Prove original classifier lineage, preserved geometry ancestry and exact Single whole-cell association separately from corrected-cell and centroid diagnostics. |
+| `e5689f6` | Preserve phenotype names when a palette has no explicit color, so counts, points and legend entries remain aligned. |
+| `caf79f2` | Keep a previously stopped service stopped when release activation fails; do not restart an insecure old image during recovery. |
+
+These are implementation patterns and CODEX evidence. The exact v19 membership,
+numeric levels, endocrine panel and cohort remain CODEX-specific. Adapt through
+recipient-owned `core/multiplex5000` and `core/panels` with the receiving data's
+contracts; do not apply this history blindly to the completed Senior delivery.
+
+The new package will be named `CODEX-handoff-20261102-component-resolution` at
+the same workstation and HPG sibling locations as the prior packages. It uses
+the previous supplemental source `2150edd` as its incremental history base.
+Package preparation requires the final scientific, release and inventory
+evidence; announcement is not transfer or recipient verification. Its final
+receipt will distinguish delivery, read acknowledgement and any later port.
+No recipient scientific run or active checkout is modified by this handoff.
+
+### Historical first supplemental delivery
+
 The selected-v19 component build is now complete at `b15f0fc` (HPG job
 `49141854`). All eight stages and the all-20 app export checks pass. It preserves
 110,721 named v19 endocrine cells; its matched control→DG audit has **351**

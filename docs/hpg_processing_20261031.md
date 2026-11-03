@@ -1,5 +1,14 @@
 # Typing processing on HiPerGator (owner decisions of 2026-10-31)
 
+**Subsequent selected-component build, November 2:** the completed v2 app and
+QuPath builds use scientific source `67ee6c9`; the matched image/release builder
+uses `e5689f6`. Read [the v2 build record](component_build_v2_20261102.md),
+[resolution contract](component_resolution_20261102.md), and
+[actual deployment status](container_security_20261102.md) for current work.
+The version-specific source paths, failed diagnostics and prior service state
+below remain historical evidence; they do not reopen the delegated selection
+or production decision.
+
 **2026-11-02 correction:** the old `run_v20.py` full-calibration phase is historical
 and must not be used for a Lymphatic-only revision. Use the explicit calibration/context
 baseline and automatic invariant audit in [the workflow guide](workflow_user_guide.md).

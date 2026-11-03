@@ -1,0 +1,422 @@
+{
+  "schema": "islet.component_build_evidence/2",
+  "recorded_utc": "2026-11-03T00:57:08.662933+00:00",
+  "scope": "Completed scientific component build, verified app and QuPath returns, and independent current-rule consistency review. Production deployment and final release parity/security acceptance are recorded separately.",
+  "scientific_source_commit": "67ee6c9d0b28f467eee589fea24829a6546e3d74",
+  "image_and_release_builder_source_commit": "e5689f6453e68bc9e94cbe83689cb9db4d3d0b83",
+  "source_commit_scope": "The app data producer is 67ee6c9; e5689f6 identifies the matching image/release-builder source. This receipt does not attest an image build, release parity, or deployment.",
+  "producer_flags": {
+    "release_ready": false,
+    "scientific_accuracy_established": false,
+    "meaning": "Preserved verbatim from the diagnostic producer and component audit. The recorded proofs establish selected-component preservation, source lineage, bounded update scope, and export consistency; they do not independently establish biological truth or constitute a production authorization gate."
+  },
+  "post_build_source_protection": {
+    "completed_jobs": [
+      "49168359",
+      "49170425"
+    ],
+    "frozen_hpg_source": "67ee6c9d0b28f467eee589fea24829a6546e3d74",
+    "hpg_source_clean": true,
+    "all_seven_protected_records_unchanged_locally_and_on_hpg": true,
+    "checked_fields": [
+      "sha256",
+      "inode",
+      "size",
+      "mtime_ns",
+      "ctime_ns"
+    ]
+  },
+  "app_root": "data/development/uniform-20donor-20261102-component-app-v2",
+  "candidate_run": "data/development/uniform-20donor-20261102-component-candidate-v2",
+  "qupath_project": "data/development/qupath-review-20261102-components-v2/project.qpproj",
+  "build": {
+    "job_id": "49168359",
+    "status": "app_assembled",
+    "started_utc": "2026-11-03T00:11:44.298375+00:00",
+    "finished_utc": "2026-11-03T00:42:10.702925+00:00",
+    "completed_steps": [
+      {
+        "name": "materialize_initial_source",
+        "exit_code": 0
+      },
+      {
+        "name": "prepare_control_run",
+        "exit_code": 0
+      },
+      {
+        "name": "identity_control_run",
+        "exit_code": 0
+      },
+      {
+        "name": "prepare_candidate_run",
+        "exit_code": 0
+      },
+      {
+        "name": "identity_candidate_run",
+        "exit_code": 0
+      },
+      {
+        "name": "lymphatic_invariance",
+        "exit_code": 0
+      },
+      {
+        "name": "endocrine_classifier_lineage",
+        "exit_code": 0
+      },
+      {
+        "name": "assemble_app",
+        "exit_code": 0
+      },
+      {
+        "name": "verify_exported_states",
+        "exit_code": 0
+      }
+    ],
+    "explicit_all_20_gates": {
+      "lymphatic_invariance": {
+        "passed": true,
+        "sha256": "d04598815bd7bcb2c95ac8090783a29f8372006402277807de9441cd4997623a"
+      },
+      "endocrine_classifier_lineage": {
+        "passed": true,
+        "sha256": "1282fd48f76664ac3e69433b6cc0d09680e5f52e80f45096da6f0ec40702c209"
+      },
+      "exported_cell_states": {
+        "passed": true,
+        "sha256": "d703084e8bfeba1811b495446c83467f9f18c4bca478419ed5e293ed8e6257ea"
+      }
+    },
+    "note": "Nine successful producer steps contain three explicit all-donor scientific/export gates."
+  },
+  "counts": {
+    "donors": 20,
+    "all_detections": 3525977,
+    "analysis_eligible_cells": 3199606,
+    "not_analysis_eligible_detections": 326371,
+    "additional_assembly_excluded_cells": 0,
+    "paired_analysis_objects": 4848,
+    "paired_objects_by_class": {
+      "EndocrineCluster": 3380,
+      "Islet": 1468
+    },
+    "islet_and_cluster_geometry_objects": 4853,
+    "geometry_objects_by_class": {
+      "EndocrineCluster": 3385,
+      "EndocrineSingle": 5227,
+      "Islet": 1468
+    },
+    "unpaired_clusters_without_analysed_band_cells": 5,
+    "singles_counted_not_analysed": 5227,
+    "endocrine_composition_embedding_objects": 1392,
+    "embedding_marker_count": 31,
+    "Ki67_positive_eligible_cells": 78680,
+    "named_endocrine_cells": {
+      "Beta cell": 41429,
+      "Alpha cell": 49302,
+      "Delta cell": 18050,
+      "CHGA+ hormone-negative": 1940
+    },
+    "named_endocrine_total": 110721,
+    "Unclassified": 7398,
+    "unchanged_Tissue": 716451
+  },
+  "component_selection": {
+    "schema": "uniform.component_selection_audit/2",
+    "status": "assignments_resolved",
+    "release_ready": false,
+    "manifest_sha256": "4fc981c3f48a68bcd36f01b9496f4d5665129cc382c02f01cf00847aa51c614a",
+    "cells": 3199606,
+    "preserved_named_endocrine_cells": 110721,
+    "source_unresolved_endocrine_cells": 7151,
+    "unresolved_endocrine_cells": 0,
+    "boundary_conflicts": 0,
+    "resolved_nonselected_cells": 11101,
+    "unclassified_cells": 7398,
+    "natural_named_endocrine_cells": 113112,
+    "natural_vs_selected_label_changes": 10351,
+    "natural_unselected_endocrine": 2472,
+    "scientific_accuracy_established": false,
+    "resolution_policy": "exact_v19_named_membership_existing_nonendocrine_rules",
+    "all_20_hormone_evidence_replays_passed": true,
+    "all_20_marker_state_and_untargeted_identity_invariants_passed": true,
+    "selected_scope": "Exactly the 110,721 archived v19 named endocrine UUID/subtype calls; nonselected generic/boundary assignments use current nonendocrine rules or explicit Unclassified. The 7,151 source-unresolved count is provenance, not a final unnamed endocrine identity count."
+  },
+  "lymphatic_invariance": {
+    "passed": true,
+    "complete_donor_inventory_audited": true,
+    "issues": [],
+    "calibration_files_byte_identical": 9,
+    "immutable_positive_canary_fold_fields": 78,
+    "positive_canary_fold_changes": 0,
+    "final_label_changes": 353,
+    "natural_before_selection_label_changes": 351,
+    "labels_out_of_Lymphatic": 342,
+    "labels_into_Lymphatic": 11,
+    "Lymphatic_to_Unclassified": 2,
+    "totals": {
+      "context_baseline": 3525977,
+      "context_candidate": 3525977,
+      "identity_baseline": 3199606,
+      "identity_candidate": 3199606,
+      "redsea_baseline": 3525977,
+      "redsea_candidate": 3525977,
+      "lymphatic_footprint_union": 131983,
+      "lymphatic_membership_or_overlap_changed": 124427,
+      "baseline_named_endocrine": 110721,
+      "context_changed_cells": 124427,
+      "context_unexpected_cells": 0,
+      "label_changes_neither_lymphatic": 0,
+      "label_changes_with_unchanged_lymphatic_geometry": 0,
+      "natural__label_changes_neither_lymphatic": 0,
+      "natural__label_changes_with_unchanged_lymphatic_geometry": 0,
+      "identity_changed_cells": 5765,
+      "identity_unexpected_cells": 0,
+      "redsea_changed_cells": 0,
+      "redsea_unexpected_cells": 0
+    },
+    "scope": "Every changed label involves Endothelium Lymphatic and changed Lymphatic geometry; all other measurements, marker flags/folds, QC, coordinates, endocrine memberships and protected named endocrine identity tuples remain unchanged. Structure passthrough tags can change within the audited footprint."
+  },
+  "object_audit": {
+    "schema": "uniform.endocrine_object_audit/2",
+    "audit_mode": "classifier_lineage",
+    "passes": true,
+    "classifier_lineage_totals": {
+      "objects": 10080,
+      "objects_with_classifier_support": 10080,
+      "singles": 5227,
+      "singles_with_exact_cell_association": 5227,
+      "singles_with_centroid_membership_difference": 13,
+      "split_descendants": 178,
+      "split_descendants_with_multiple_parent_candidates": 3,
+      "failures": 0
+    },
+    "corrected_cell_diagnostic_passes": false,
+    "retained_corrected_cell_diagnostic_totals": {
+      "objects": 10080,
+      "objects_with_analysis_cells": 10078,
+      "objects_without_context_cells": 2,
+      "objects_without_analysis_cells": 2,
+      "single_membership_anomalies": 3,
+      "membership_anomalies": 3,
+      "objects_with_any_endocrine_positive_cell": 9125,
+      "objects_with_all_analysis_cells_negative": 953,
+      "context_cells": 141800,
+      "analysis_cells": 134488,
+      "any_endocrine_positive_cells": 118713,
+      "all_endocrine_negative_cells": 15775,
+      "analysis_cells_in_fully_negative_objects": 1006
+    },
+    "fully_negative_populated_objects_by_class": {
+      "EndocrineCluster": 38,
+      "EndocrineSingle": 915,
+      "Islet": 0
+    },
+    "single_membership_explanation": {
+      "exact_source_outline_associations": 5227,
+      "different_centroid_member_sets": 13,
+      "eligible_count_anomalies": {
+        "empty": 2,
+        "two_eligible_members": 1
+      },
+      "other_differences": 10,
+      "additional_QC_ineligible_centroid_detections": 11,
+      "additional_detections_exclusion_reason": "missing_nucleus_geometry",
+      "note": "The remaining ten each retain the exact associated source cell as their sole eligible member; nine have one additional ineligible centroid member and one has two. Geometry, centroid membership and QC are unchanged."
+    },
+    "support_scope": "The original classifier regions have actual INS/GCG/SST/CHGA support. Final descendants retain their complete supported spatial-parent candidate sets; three of 178 split descendants have multiple candidates. This does not assert positive classifier pixels in each descendant intersection or a hormone identity for every cell. Corrected whole-cell positivity remains a separate diagnostic."
+  },
+  "exported_states": {
+    "result": "pass",
+    "fields": [
+      "Ki67_pos"
+    ],
+    "eligible_cell_rows": 3199606,
+    "paired_object_files": 4848,
+    "paired_object_rows": 357658,
+    "Ki67_positive_eligible_cells": 78680,
+    "measurement_and_level_metadata_exact": true,
+    "all_20_UUID_labels_coordinates_distance_rows_and_state_flags_exact": true,
+    "four_named_endocrine_group_and_counts_exact": true,
+    "Ki67_is_embedding_input": false
+  },
+  "independent_row_review": {
+    "status": "current_rule_consistency_verified",
+    "eligible_cells": 3199606,
+    "unclassified_cells_reviewed": 7398,
+    "all_checks_passed": true,
+    "v1_to_v2_changed_cells": 11101,
+    "new_supported_nonendocrine_labels": 3672,
+    "new_explicit_conflict_or_doublet_labels": 31,
+    "prior_v1_named_nonendocrine_labels_changed": 0,
+    "unchanged_Tissue_cells": 716451,
+    "all_eligible_Ki67_flags_identical_to_v1": true,
+    "current_unclassified_reasons": {
+      "shared_marker_only": 2870,
+      "endocrine_marker_only": 1637,
+      "structure_marker_only": 1479,
+      "no_marker_above_background": 1412
+    },
+    "unclassified_prior_app_v1_labels": {
+      "Islet": 5171,
+      "Conflict Endocrine component boundary": 1637,
+      "EndocrineCluster": 437,
+      "EndocrineSingle": 153
+    },
+    "historical_named_immune_calls_reviewed": 9,
+    "control_to_DG_extra_unclassified": 2,
+    "two_extra_cells_reason": "The accepted DG geometry removes existing strict >0.5 Lymphatic overlap qualification for two PDPN-positive cells. Their prior app-v1 labels were EndocrineCluster and Islet; no previously supported named nonendocrine call was removed.",
+    "interpretation": "Unclassified is a narrow resolver outcome and remains in total-cell counts. Tissue and explicit conflict/doublet labels are separate; only the four named endocrine types enter endocrine aggregates."
+  },
+  "qupath": {
+    "job_id": "49170425",
+    "status": "complete",
+    "images": 20,
+    "all_native_imports_passed": true,
+    "detections": 3525977,
+    "analysis_eligible": 3199606,
+    "excluded": 326371,
+    "review_scope": "Project construction/import and hash-verified transfer completed; this is not a claim that a human visually reviewed every cell."
+  },
+  "combined_canonical_return": {
+    "regular_files": 5280,
+    "regular_bytes": 16091729844,
+    "symlinks": 20,
+    "all_regular_file_sha256_verified": true,
+    "all_completed_sources_unchanged_during_transfer": true
+  },
+  "artifact_return": {
+    "app_and_reports": {
+      "producer_job_id": "49168359",
+      "producer_state": "COMPLETED",
+      "producer_exit_code": "0:0",
+      "completed_utc": "2026-11-03T00:42:41.606349+00:00",
+      "source_unchanged_during_transfer": true,
+      "all_regular_file_sha256_verified": true,
+      "inventory_sha256": "ebc1203e58275c515f14f51043e2df102dc37c75d629d124a25bc08a40ef6984"
+    },
+    "typing_audits": {
+      "producer_job_id": "49168359",
+      "producer_state": "COMPLETED",
+      "producer_exit_code": "0:0",
+      "completed_utc": "2026-11-03T00:42:41.844941+00:00",
+      "source_unchanged_during_transfer": true,
+      "all_regular_file_sha256_verified": true,
+      "inventory_sha256": "7947722145319d3793aed2616a320b5fc60f9fcb915ca8776ec80fa912915697"
+    },
+    "qupath": {
+      "producer_job_id": "49170425",
+      "producer_state": "COMPLETED",
+      "producer_exit_code": "0:0",
+      "completed_utc": "2026-11-03T00:55:49.613470+00:00",
+      "source_unchanged_during_transfer": true,
+      "all_regular_file_sha256_verified": true,
+      "inventory_sha256": "75ca89d2bf57045eed557baa6a78ded70d94262f2a07437536671d21cbe852c9"
+    }
+  },
+  "evidence": {
+    "build_journal": {
+      "path": "output/component_candidate_build_20261102_v2/build_journal.json",
+      "sha256": "1c84ae77d06b485480ae027bb2e71eab5cef43187ace96ad2941f82af593a836"
+    },
+    "config": {
+      "path": "output/component_candidate_build_20261102_v2/config.json",
+      "sha256": "cc6085cd7a0d18528b67b9890552c7ce28ba082ab75ae91f8aa52b3eb3bd2457"
+    },
+    "post_build_source_protection": {
+      "path": "tmp/component-build-20261102-v2/post-build-source-protection.json",
+      "sha256": "ef990a5e2834c1939b913c4801b4c5a0d22a9766464d13f4d55d3f3fb797ab28"
+    },
+    "combined_artifact_return": {
+      "path": "tmp/component-build-20261102-v2/artifact-return-summary.json",
+      "sha256": "08f18fdf57ea6260fdce1df037d65eca4261197c068f62f9f42832eb6f9c4d57"
+    },
+    "app_manifest": {
+      "path": "data/development/uniform-20donor-20261102-component-app-v2/uniform_release.json",
+      "sha256": "7ff7c4d92cffa393b16f3118ef04855e959bda14d3862aecce0da95344e91082"
+    },
+    "component_binding": {
+      "path": "data/development/uniform-20donor-20261102-component-app-v2/component_selection.json",
+      "sha256": "4fc981c3f48a68bcd36f01b9496f4d5665129cc382c02f01cf00847aa51c614a"
+    },
+    "component_audit": {
+      "path": "data/development/uniform-20donor-20261102-component-app-v2/component_selection_audit.json",
+      "sha256": "3d6757e6427a4205976cb1e9b28ac6ba4ed9f1ef573922cb18f318b943746afb"
+    },
+    "lymphatic_invariance": {
+      "path": "output/component_candidate_build_20261102_v2/lymphatic_invariance/summary.json",
+      "sha256": "d04598815bd7bcb2c95ac8090783a29f8372006402277807de9441cd4997623a"
+    },
+    "invariance_field_counts": {
+      "path": "output/component_candidate_build_20261102_v2/lymphatic_invariance/field_changes_totals.csv",
+      "sha256": "0a7e4e275a23d18d7c50bc879e40d3348e47f9305bf45cbcf41f7e7f9c66c0b7"
+    },
+    "endocrine_object_audit": {
+      "path": "output/component_candidate_build_20261102_v2/endocrine_object_audit/summary.json",
+      "sha256": "1282fd48f76664ac3e69433b6cc0d09680e5f52e80f45096da6f0ec40702c209"
+    },
+    "classifier_replay": {
+      "path": "output/v20_classifier_support_20261102_r2/summary.json",
+      "sha256": "476fc65e42bbd521a12f67e6ecb2c875726d3e8b8c0e0ab4f4cbc6db098ce877"
+    },
+    "geometry_provenance": {
+      "path": "output/v20_classifier_trace_20261102/classifier-provenance.json",
+      "sha256": "597603c1db91bc92effc3f8ece6f745b7f80d4fb7ec7384e5b9ae6761bde6646"
+    },
+    "state_exports": {
+      "path": "output/component_candidate_build_20261102_v2/cell_state_exports/summary.json",
+      "sha256": "d703084e8bfeba1811b495446c83467f9f18c4bca478419ed5e293ed8e6257ea"
+    },
+    "unpaired_objects": {
+      "path": "output/component_candidate_build_20261102_v2/assembly/unpaired_objects.csv",
+      "sha256": "22f9a2de21fb04c2767a473d6bf723a8a3f27c62daf29e0f874017694e23bcf4"
+    },
+    "independent_row_review": {
+      "path": "docs/unclassified_component_review_20261103.json",
+      "sha256": "a76304996aa830de1e17129ca049361ae9c8dff9ba4597b3db864ccedd0989c5"
+    },
+    "single_association_review": {
+      "path": "output/single_association_review_20261103/summary.json",
+      "sha256": "c1f62f39072d68a7e26c9f1fbc45da20af2e9bc1a3e7b4d522709f1a18f78e0d"
+    },
+    "qupath_manifest": {
+      "path": "output/component_candidate_qupath_20261102_v2/review_manifest.json",
+      "sha256": "b0669e0abaa1f202676a6598607abc62d0272df4270d2dca1421b08478b05b2e"
+    },
+    "app_return_receipt": {
+      "path": "tmp/component-build-20261102-v2/return-app.receipt.json",
+      "sha256": "0e3fb4302a4c9593a479a4cfea9bace6b0f50dc6e650f5cf08f2190dabf70da6"
+    },
+    "app_return_inventory": {
+      "path": "tmp/component-build-20261102-v2/return-app.inventory.json",
+      "sha256": "ebc1203e58275c515f14f51043e2df102dc37c75d629d124a25bc08a40ef6984"
+    },
+    "typing_return_receipt": {
+      "path": "tmp/component-build-20261102-v2/return-typing-audits.receipt.json",
+      "sha256": "6fd1f66d4ef57b70290c39b0334f2a464f0c9c6eed54c14ee1cc5034999b31e8"
+    },
+    "typing_return_inventory": {
+      "path": "tmp/component-build-20261102-v2/return-typing-audits.inventory.json",
+      "sha256": "7947722145319d3793aed2616a320b5fc60f9fcb915ca8776ec80fa912915697"
+    },
+    "qupath_return_receipt": {
+      "path": "tmp/component-build-20261102-v2/return-qupath.receipt.json",
+      "sha256": "0571bb7a1d71a3a83198cde6090dd0e88e090432ea32b566b4d6dc6c9a29518f"
+    },
+    "qupath_return_inventory": {
+      "path": "tmp/component-build-20261102-v2/return-qupath.inventory.json",
+      "sha256": "75ca89d2bf57045eed557baa6a78ded70d94262f2a07437536671d21cbe852c9"
+    }
+  },
+  "verification": "Receipt, report, manifest and inventory hashes recomputed locally; donor/count/hash bindings checked against each other. Full returned-file SHA256 verification and source-stability checks are recorded in the linked transport receipts; the independent row review binds the same 20 identity hashes as the final app.",
+  "production_and_security_record": "docs/container_security_20261102.md",
+  "qupath_image_uri_delivery_check": {
+    "status": "pass",
+    "images": 20,
+    "hpg_only_image_uris": 0,
+    "all_image_uris_resolve_locally_to_expected_sources": true,
+    "repeated_tiff_byte_scan": false,
+    "project_modified": false,
+    "receipt": "tmp/component-build-20261102-v2/qupath-image-uri-check.json",
+    "sha256": "2f55e754e3cb2fc9456d19d2cc80d7cb6cf16daafd77aebd31bc9beba6002b62"
+  }
+}

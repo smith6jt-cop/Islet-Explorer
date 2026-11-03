@@ -9,7 +9,7 @@ classifier-lineage proof with unchanged geometry. Scientific source is
 owns [actual deployment status](../docs/container_security_20261102.md). The earlier v1 build counts,
 pending-decision language and service snapshots below are historical.
 
-**Current selection, 2026-11-02:** the owner selected frozen v19 endocrine calls,
+**Historical first-component selection, 2026-11-02:** the owner selected frozen v19 endocrine calls,
 with v19/v20 compared by component. Both roots share 3,199,606 eligible UUIDs and
 the same Tissue/cell/endocrine geometry. The DG Lymphatic-only rerun unintentionally
 changed shared calibration; corrected code now binds calibration independently

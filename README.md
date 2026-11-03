@@ -1,33 +1,37 @@
 # Islet Explorer
 
-Interactive R Shiny application for exploring pancreatic islet CODEX multiplexed imaging data from nPOD and HPAP donors. Compares ND, autoantibody-positive and T1D donor groups using cross-sectional measurements; autoantibody positivity is not treated as a clinical disease stage.
+Interactive R Shiny application for exploring pancreatic islet CODEX multiplexed imaging data from nPOD donors. Compares ND, autoantibody-positive and T1D donor groups using cross-sectional measurements; autoantibody positivity is not treated as a clinical disease stage.
 
 ## Current workflow and data status — 2026-11-02
 
 Start with the [complete workflow user guide](docs/workflow_user_guide.md),
-[app user guide](docs/user_guide.md), and [current component comparison](docs/v19_v20_component_comparison_20261102.md).
-The selected component app has now been assembled on HPG from `b15f0fc` (job `49141854`).
-It preserves all **110,721 named v19 endocrine cells**, uses the isolated v20 methods for
-other components, and contains 20 donors, 3,199,606 analysed cells and 4,848 paired objects.
-The all-component audit passes: the DG update changes 351 Lymphatic-related labels within
-the old/new Lymphatic footprint, with unrelated calibration, measurements and identities preserved.
-All exported Ki67 states and row associations pass; Ki67 remains outside the 31-marker embedding panel.
+[app user guide](docs/user_guide.md), and [selected-component v2 build record](docs/component_build_v2_20261102.md).
+The app and native QuPath builds are complete and checksum-verified for all 20
+donors: 3,199,606 eligible cells, 4,848 paired analysis objects and 5,227 Singles
+counted separately. All **110,721 selected named v19 endocrine calls** are
+preserved. The controlled DG update has 353 permitted Lymphatic-related label
+changes and no unrelated changes.
 
-The build still exposes **8,629 unresolved endocrine cells and 2,472 component boundary conflicts**.
-The corrected-cell endocrine-object audit fails: 953 populated objects (915 singles and
-38 clusters; no islets) have no INS/GCG/SST/CHGA-positive eligible member, and three singles
-have invalid membership. This is distinct from the original pixel-classifier masks, which replay
-correctly. The complete 20-image QuPath review is
-`data/development/qupath-review-20261102-components-v1/project.qpproj`.
-See the [component build record](docs/component_build_20261102.md) for exact roots and evidence.
+The final candidate has zero unnamed endocrine definitions or technical
+component-boundary placeholders. Its 7,398 explicit Unclassified cells retain
+their evidence; none replaces a prior mixed-app named non-endocrine identity.
+The 716,451 Tissue calls are unchanged and distinct. Every exported Ki67 state
+and four-type endocrine denominator passes verification. Ki67 remains separate
+from the 31-marker embedding panel. The original-classifier lineage proof
+passes for all 10,080 objects and 5,227 Single outlines, while retaining the
+corrected-cell and centroid diagnostics. See the [resolution contract](docs/component_resolution_20261102.md)
+and [compact scientific receipt](docs/evidence/component_build_v2_20261102.json).
 
-The matching released-fixes image `41e62a97…` is built from `b15f0fc`; package, dependency
-and installed Shiny/R runtime checks pass. The owner authorized live production once the actual
-data/release/runtime checks pass. The known DuckDB finding remains visible and nonblocking
-through **2026-11-10 UTC** under the [dated release decision](docs/duckdb_remediation_window_20261102.md),
-with the DuckDB fix developed separately for dev. The unresolved data checks still prevent release.
-No service was restarted: dev and production remain stopped and masked, and the in-house app is stopped.
-The older cohort and release sections below describe historical artifacts.
+Scientific source is `67ee6c9`; the matching image and release builder use
+`e5689f6`. Production image `89b3f840…` passes its recorded security and runtime
+checks and is loaded on PubApps. Immutable data packaging and final release
+validation are still running; **production has not yet been activated**.
+The owner has already authorized activation after those checks pass. See the
+[authoritative deployment record](docs/container_security_20261102.md).
+The known DuckDB finding remains nonblocking only within the
+[dated window through November 10 UTC](docs/duckdb_remediation_window_20261102.md);
+the separately validated development fix remains an independent artifact.
+Older cohort and release sections below describe historical artifacts.
 
 <div align="center">
 
@@ -60,8 +64,8 @@ This 15-donor artifact is retained as historical evidence and is not the selecte
 launch candidate; the current 20-donor component build is described above.
 
 Islet Explorer is a non-mutating R Shiny research application for exploring
-pancreatic-islet measurements from **15 nPOD donors** across three disease
-stages. The trajectory H5AD contains **5,214 observations**; prepared core-area
+pancreatic-islet measurements from **15 nPOD donors** across three donor
+groups. The trajectory H5AD contains **5,214 observations**; prepared core-area
 and composition tables each contain **5,382 rows**. It combines marker and cell-population plots, composition-based trajectory
 analysis, spatial analysis, single-cell segmentation drill-down, and browser-streamed
 OME-TIFF imagery. Reviewers can download generated CSV and PNG files, but cannot upload

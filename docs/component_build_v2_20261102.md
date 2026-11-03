@@ -97,9 +97,40 @@ from retained context and QC evidence. Both diagnostics remain explicit.
 Summary SHA256:
 `1282fd48f76664ac3e69433b6cc0d09680e5f52e80f45096da6f0ec40702c209`.
 
-Assembly began at 2026-11-03 00:26:10 UTC. Export checks, verified return and
-release parity remain in progress. Progress receipts are under
-`tmp/component-build-20261102-v2/progress/`.
+The complete scientific job finished at 2026-11-03 00:42:10 UTC, exit `0:0`,
+in 30 minutes 27 seconds. All nine stages and three hash-bound all-20 gates
+pass. The final app contains 4,848 paired analysis objects, 5,227 Singles
+counted separately, 1,392 composition-embedding objects and the unchanged
+31-marker panel. All 3,199,606 eligible cells, 4,848 object CSVs / 357,658
+rows, exact four-type endocrine counts and all 78,680 Ki67-positive states
+pass export verification. Export gate SHA256:
+`d703084e8bfeba1811b495446c83467f9f18c4bca478419ed5e293ed8e6257ea`.
+
+The fresh app return verifies 4,967 regular files / 1,195,349,441 bytes and
+20 preserved image links; reports add 98 files / 18,361,975 bytes. Source
+outputs remained unchanged during transfer. Return receipt
+`tmp/component-build-20261102-v2/return-app.receipt.json` SHA256:
+`0e3fb4302a4c9593a479a4cfea9bace6b0f50dc6e650f5cf08f2190dabf70da6`.
+
+Immutable schema-5 packaging began at 00:45:40 UTC from the clean `e5689f6`
+release worktree. It uses independent copied files and an image-tree
+expectation bound to the original seal and the verified 80-file host inventory.
+Full byte verification, source/release parity, inventory and production
+activation remain pending.
+
+QuPath job `49170425` completed `0:0` in 8 minutes 30 seconds. All 20 imports
+pass, reconciling all 3,525,977 detections as 3,199,606 eligible and 326,371
+excluded records. The complete app, reports, typing audit and QuPath return
+verifies **5,280 regular files / 16,091,729,844 bytes**, plus 20 preserved
+image links; source outputs did not change during transfer. All 20 image
+URIs inside the native QuPath project resolve to the expected local images,
+with no HPG-only image paths. The combined return summary is
+`tmp/component-build-20261102-v2/artifact-return-summary.json`, SHA256
+`08f18fdf57ea6260fdce1df037d65eca4261197c068f62f9f42832eb6f9c4d57`.
+The [compact scientific receipt](evidence/component_build_v2_20261102.json)
+binds completed gates, counts, diagnostics, source protection and returned
+artifacts. Its producer flags remain unchanged: these checks establish rule
+consistency and provenance, not independent biological ground truth.
 
 ## What the additional object proof establishes
 

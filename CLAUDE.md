@@ -1,6 +1,6 @@
 # CLAUDE.md - Islet Explorer
 
-**Latest owner delegation:** “Resolve the decision and get the pubapp live”; “There shouldn't be many unclassified cells.” The exact v19 named endocrine membership is now the selected rule; do not ask that question again. Read [the current v2 build](docs/component_build_v2_20261102.md) and [resolution contract](docs/component_resolution_20261102.md). Only unresolved/boundary rows are reconsidered through existing non-endocrine rules; unsupported cases retain explicit Unclassified evidence. The new object proof validates original classifier lineage and Single whole-cell association while preserving the old corrected-cell diagnostics and all geometry/memberships. Fresh component-v2 data are being rebuilt; the counts below describe the completed historical v1 diagnostic until replaced by actual v2 results. The security session owns matching-image/host staging and activation; this session owns scientific data/release parity.
+**Latest owner delegation:** “Resolve the decision and get the pubapp live”; “There shouldn't be many unclassified cells.” The exact v19 named endocrine membership is now the selected rule; do not ask that question again. Read [the current v2 build](docs/component_build_v2_20261102.md) and [resolution contract](docs/component_resolution_20261102.md). Only unresolved/boundary rows are reconsidered through existing non-endocrine rules; unsupported cases retain explicit Unclassified evidence. The new object proof validates original classifier lineage and Single whole-cell association while preserving the old corrected-cell diagnostics and all geometry/memberships. The v2 app and QuPath builds are complete and checksum-verified; the current build record contains their actual results, while the older v1 snapshots below remain historical. Immutable release packaging and deployment validation are tracked separately. The security session owns matching-image/host staging and activation; this session owns scientific data/release parity.
 
 **Latest owner direction, 2026-11-02:** the current build is intended for the live production PubApp once its actual data/release/runtime checks pass. The known DuckDB finding is nonblocking through the notice's **2026-11-10 UTC** patch deadline; develop/test our DuckDB fix separately for the dev PubApp. See [the dated release decision](docs/duckdb_remediation_window_20261102.md). This supersedes the earlier strict DuckDB hold and no-activation directions below. Historical failed reports remain unchanged; data checks and other security findings still apply.
 
@@ -306,7 +306,7 @@ App-specific UI conventions (CSS overflow, font minimums, large-scatter renderin
 
 ## Deployment Architecture
 
-- **Reviewer URL (live behind UFRC's Basic Auth since 2026-10-23)**: `https://islet-explorer.rc.ufl.edu/islet-explorer/`; staging `https://devislet-explorer.rc.ufl.edu/islet-explorer/`
+- **Provisioned reviewer URL (see [current deployment status](docs/container_security_20261102.md))**: `https://islet-explorer.rc.ufl.edu/islet-explorer/`; staging `https://devislet-explorer.rc.ufl.edu/islet-explorer/`
 - The UFRC high-availability proxy (`vpubweb.rc.ufl.edu`, a separate host) terminates HTTPS and Basic Auth and proxies to the VM's private address `10.13.41.21:3838` (`activate-release.sh --publish-address`; the loopback is only the default for smoke tests). UFRC's network filters that port (measured 2026-10-22: HPG login nodes reach the VM on port 22 only, campus not at all). The vhosts went live on 2026-10-23: the proxy mounts `/pubapps`, serves `/islet-explorer/{local_images,images,img_data}` itself from DocumentRoot symlinks into the active release (`--docroot`), and reads the project's `htpasswd` files (`deploy/README.md` § 4). A second, independent staging service (`--instance islet-explorer-dev --port 3839 --memory 4g`, for UFRC's `devislet-explorer.rc.ufl.edu`) can run beside production on the same VM; production keeps 9 GiB. See `deploy/README.md` § "Staging instance".
 - Rootless Podman/Quadlet runs one immutable, digest-pinned image; code, scientific data, and images are read-only.
 - Releases are checksummed and atomically activated. Never update a live review round from a mutable branch or symlink.
@@ -347,8 +347,11 @@ See `docs/user_guide.md` for end-user documentation.
 
 ## Handoffs & Archive
 
-- `docs/handoff_20261102.md` — **current** handoff (2026-11-02): v20 delivered and on the dev site, production
-  stopped since 2026-10-26, the open owner decisions, the release procedure and its lessons.
+- `docs/handoff_20261102.md` — handoff with a current v2 pointer and explicitly historical snapshots.
+  Read [the v2 build](docs/component_build_v2_20261102.md),
+  [resolved assignment contract](docs/component_resolution_20261102.md), and
+  [actual deployment state](docs/container_security_20261102.md) first. The former
+  v20-on-dev snapshot and pending owner-only production decision are superseded.
 - `docs/HANDOFF.md` — historical Jul/Aug 2026 development handoff. Its analysis-audit record remains useful,
   but its mutable nginx deployment notes are superseded by `deploy/README.md` and
   `PUBAPPS_UFRC_HANDOFF.md`.

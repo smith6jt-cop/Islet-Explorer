@@ -23,13 +23,19 @@ The first component build's unresolved assignments are historical diagnostics.
 | Scientific source | `67ee6c9`, HPG job `49168359`, fresh v2 paths. |
 | Image/release source | `e5689f6`, adding the app palette-name fix; release `pubapps-2026-11-components-v1` is being prepared. |
 
-All 20 control donors have completed: 3,199,606 cells, exact selected endocrine
-membership, zero unnamed endocrine definitions or boundary placeholders, and
-7,396 Unclassified cells (0.2312%). Candidate, proof, export and release checks
-are still running. Production activation is already authorized after the
-actual checks pass; no additional classification-permission question is pending.
-Production and dev remain stopped until their respective activation is verified.
-The local app service remains inactive/disabled.
+Both all-20 identity runs and the final row review have passed: 3,199,606 cells,
+exact selected endocrine membership, zero unnamed endocrine definitions or
+boundary placeholders, and 7,398 final Unclassified cells (0.2312%). No prior
+mixed-app named non-endocrine identity is lost; 716,451 Tissue labels remain
+unchanged. All 353 controlled DG label changes involve permitted Lymphatic
+geometry. The all-20 classifier-lineage proof, app assembly, every-cell export verification
+and native QuPath build also pass, and all outputs are returned with verified
+checksums. Release packaging and activation are still underway;
+[current results](component_build_v2_20261102.md) distinguish their outcomes.
+Production activation is already authorized after the actual checks pass;
+no additional classification-permission question is pending. Production and
+dev remain stopped until their respective activation is verified. The local
+app service remains inactive/disabled.
 
 The separate [dev DuckDB fix](dev_duckdb_fix_20261102.md) passes its strict
 validation and remains local. Production's known DuckDB finding is nonblocking
@@ -441,6 +447,6 @@ The handoff carries the actual commit range, changed-file list, evidence receipt
 5. The security owner stages and binds the matching pair, handles the production mask, activates, and verifies the real service, authenticated proxy, Viewer ranges, sidecars and browser interactions. Record the actual outcome in [the deployment record](container_security_20261102.md). A successful build alone does not mean the site is online.
 6. Complete the remaining outside-network and reboot acceptance work according to [UFRC readiness](ufrc_readiness.md), and coordinate the separately patched DuckDB dev build. Preserve prior evidence and recipient workspaces when delivering the new grouped changes.
 
-Hypothesis work remains a separate analysis stream. Retain its approved definitions and historical outputs under `output/app_hypotheses_20261026/`; the typing correction is not permission to rerun or reinterpret it against a new data root automatically. CODEX INS intensity is not an approved quantitative between-donor hypothesis endpoint under the owner's acquisition clarification. Report measurements and technical evidence without adding biological interpretations beyond the approved plan.
+Hypothesis work remains a separate analysis stream; follow the [app-based hypothesis plan](app_based_hypothesis_plan_20261026.md) and [research workflow](../scripts/research/README.md). Retain its approved definitions and historical outputs under `output/app_hypotheses_20261026/`; the typing correction is not permission to rerun or reinterpret it against a new data root automatically. CODEX INS intensity is not an approved quantitative between-donor hypothesis endpoint under the owner's acquisition clarification. Report measurements and technical evidence without adding biological interpretations beyond the approved plan.
 
 The practical stopping rule is simple: a reproducible inconsistency stays visible and blocks acceptance until its evidence-supported correction is recorded. Neither changing a label count nor successfully launching Shiny makes the scientific inputs accurate.
