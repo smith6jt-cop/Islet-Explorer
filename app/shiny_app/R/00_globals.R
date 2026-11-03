@@ -1645,7 +1645,7 @@ card_title_help <- function(title, help = NULL, style = "margin: 0;") {
                   heading, do.call(card_help, c(list(paste(title, "help")), help)))
 }
 
-#' A collapsible control group. Use control_panel("Data controls", open = TRUE, ...) and
+#' Control groups start collapsed. Use control_panel("Data controls", ...) and
 #' control_panel("View controls", ...) at the top of a tab or section. `help`, a list of tags, puts a "?" icon at
 #' the right of the panel's title bar, outside the <summary> so opening it does not open or close the panel.
 control_panel <- function(title, ..., open = FALSE, help = NULL) {

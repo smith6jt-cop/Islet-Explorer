@@ -16,7 +16,7 @@ plot_main_ui <- function(id, extra_panel = NULL) {
     singleton(tags$script(src = islet_asset("trajectory-links.js"))),
     # Frozen under the page header while the tab scrolls (tab_controls()); its parent row holds the whole tab.
     column(12, class = "tab-controls",
-      control_panel("Data controls", open = TRUE,
+      control_panel("Data controls",
         help = list(
           phenotype_rules_button("show_phenotype_rules_plot"),
           tags$p("Data controls choose what is plotted, in both plot cards. Click the panel's title to open or close it."),

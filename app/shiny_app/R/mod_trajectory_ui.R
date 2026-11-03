@@ -18,7 +18,7 @@ trajectory_ui <- function(id) {
     tags$style(HTML(".trajectory-linked-plot.html-widget.plotly { padding-top: 0; margin-top: 28px; }")),
     # Frozen under the page header while the tab scrolls (tab_controls()).
     tab_controls(
-      control_panel("Data controls", open = TRUE,
+      control_panel("Data controls",
       help = list(
         phenotype_rules_button("show_phenotype_rules_traj"),
         tags$p("Data controls choose what is fitted and plotted. Click the panel's title to open or close it. The",

@@ -18,7 +18,7 @@ Shiny.addCustomMessageHandler('islet_update_viewer_src', function(msg){
 });
 ")),
     # Frozen under the page header while the tab scrolls (tab_controls()).
-    tab_controls(control_panel("Data controls", open = TRUE,
+    tab_controls(control_panel("Data controls",
       help = list(
         phenotype_rules_button("show_phenotype_rules_viewer"),
         tags$p(tags$strong("Images."),

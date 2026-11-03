@@ -14,7 +14,7 @@ spatial_ui <- function(id) {
     singleton(tags$script(src = islet_asset("trajectory-links.js"))),
     # ==== Data / View control panels (control_panel(), the same on every tab), frozen while the tab scrolls ====
     tab_controls(
-      control_panel("Data controls", open = TRUE,
+      control_panel("Data controls",
         help = list(
           phenotype_rules_button("show_phenotype_rules_spatial"),
           tags$p("Data controls choose what the cards above Neighborhood Analysis plot. Click the panel's title to",
