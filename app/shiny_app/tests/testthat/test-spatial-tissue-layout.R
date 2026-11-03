@@ -47,8 +47,8 @@ test_that("responsive dense tissue legends preserve the full-width map and fit t
     "Unclassified — Insufficient evidence after reassessment",
     "Unclassified — Lineage or subtype unresolved",
     "Unclassified — Competing compartment or lineage evidence",
-    paste("Macrophage", c("CD68⁺ CD163⁺ CD206⁺ IBA1⁺", "CD68⁺ CD163⁺ CD206⁻ IBA1⁺",
-      "CD68⁺ CD163⁻ CD206⁺ IBA1⁺", "CD68⁻ CD163⁻ CD206⁻ IBA1⁺")))
+    paste("Macrophage", c("CD68⁺ CD163⁺ LGALS3⁺ CD4⁺", "CD68⁺ CD163⁺ LGALS3⁻ CD4⁺",
+      "CD68⁺ CD163⁻ LGALS3⁺ CD4⁺", "CD68⁻ CD163⁻ LGALS3⁻ CD4⁺")))
   for (width in c(600, 850, 1200)) {
     one <- .spatial_raster_dimensions(env, .spatial_layout_plot(env, basic, width), width)
     all <- .spatial_raster_dimensions(env, .spatial_layout_plot(env, dense, width), width)
@@ -69,4 +69,21 @@ test_that("initial hidden-output widths and empty tissue extents remain valid", 
   empty <- ggplot2::ggplot() + ggplot2::theme_minimal()
   expect_gt(env$spatial_tissue_plot_height(empty, 600), 0)
   expect_equal(env$spatial_tissue_map_aspect(empty), 0.75)
+})
+
+
+test_that("zoomed tissue panels size from the visible spatial aspect", {
+  env <- .spatial_layout_env()
+  labels <- c("Beta cell", "Alpha cell")
+  for (width in c(600, 850)) {
+    original <- .spatial_layout_plot(env, labels, width)
+    zoomed <- suppressMessages(original + ggplot2::coord_fixed(
+      xlim = c(1000, 5000), ylim = c(1000, 2000)))
+    one <- .spatial_raster_dimensions(env, original, width)
+    zoom <- .spatial_raster_dimensions(env, zoomed, width)
+    expect_equal(env$spatial_tissue_map_aspect(zoomed), 1 / 4)
+    expect_gt(unname(zoom["map_width"]), width - 140)
+    expect_equal(unname(zoom["map_height"] / zoom["map_width"]), 1 / 4, tolerance = 0.001)
+    expect_lt(unname(zoom["height"]), unname(one["height"]))
+  }
 })

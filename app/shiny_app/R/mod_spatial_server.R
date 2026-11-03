@@ -71,14 +71,12 @@ spatial_tissue_legend_labels <- function(labels, width = 800) {
   }, character(1), USE.NAMES = FALSE)
 }
 
-spatial_tissue_map_aspect <- function(plot) {
-  ranges <- lapply(c("X_centroid", "Y_centroid"), function(column) {
-    values <- unlist(lapply(plot$layers, function(layer) layer$data[[column]]), use.names = FALSE)
-    values <- values[is.finite(values)]
-    if (length(values)) diff(range(values)) else 0
-  })
-  if (!all(is.finite(unlist(ranges))) || any(unlist(ranges) <= 0)) return(0.75)
-  ranges[[2]] / ranges[[1]]
+spatial_tissue_map_aspect <- function(plot, built = ggplot2::ggplot_build(plot)) {
+  # coord_fixed() calculates from the displayed panel ranges, including zoom
+  # limits. Free-aspect coordinates and empty plots use a stable fallback.
+  aspect <- built$layout$coord$aspect(built$layout$panel_params[[1]])
+  if (length(aspect) != 1L || !is.finite(aspect) || aspect <= 0) return(0.75)
+  as.numeric(aspect)
 }
 
 spatial_tissue_plot_height <- function(plot, width = 800) {
@@ -88,10 +86,11 @@ spatial_tissue_plot_height <- function(plot, width = 800) {
   # when the output itself occupied the entire card width.
   ragg::agg_capture(width = width, height = 800, units = "px", res = 72)
   on.exit(grDevices::dev.off(), add = TRUE)
-  grob <- ggplot2::ggplotGrob(plot)
+  built <- ggplot2::ggplot_build(plot)
+  grob <- ggplot2::ggplot_gtable(built)
   fixed_width <- sum(grid::convertWidth(grob$widths, "in", valueOnly = TRUE)) * 72
   fixed_height <- sum(grid::convertHeight(grob$heights, "in", valueOnly = TRUE)) * 72
-  map_height <- max(1, width - fixed_width) * spatial_tissue_map_aspect(plot)
+  map_height <- max(1, width - fixed_width) * spatial_tissue_map_aspect(plot, built)
   as.integer(ceiling(fixed_height + map_height + 2))
 }
 
