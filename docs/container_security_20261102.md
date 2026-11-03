@@ -5,8 +5,8 @@
 This supersedes the planned next dev deployment. The new patched image and UI
 candidate runs only at [the local preview](http://127.0.0.1:3845/islet-explorer/);
 see its [review record](local_duckdb_review_20261103.md) and
-[receipt](evidence/local_duckdb_review_20261103.json). Its image source is
-`7ac421e`; the separately identified accepted dataset was produced by `5e6580f`
+[receipt](evidence/local_controls_review_20261103.json). Its image source is
+`1596b03`; the separately identified accepted dataset was produced by `5e6580f`
 and is mounted read-only. No new pubapp image import, data relocation or service
 activation occurred. Existing public dev `e704ac2a…` and production `89b3f840…`
 remain as recorded below. The local candidate does not authorize their replacement.

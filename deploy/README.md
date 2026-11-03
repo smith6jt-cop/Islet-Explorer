@@ -11,9 +11,12 @@ the strict decoder gate without a deferral. The older
 Use the [workflow guide](../docs/workflow_user_guide.md) and
 [current v2 build record](../docs/component_build_v2_20261102.md). Earlier masked-service,
 whole-v19 and v1 diagnostic records are historical. The [November 3 display fixes](../docs/app_display_fixes_20261103.md)
-are running in a separate transient [local review](http://127.0.0.1:3845/islet-explorer/)
-from source `7ac421e`, image `46b81d66…`, using the separately accepted data built
+are running in a separate persistent [local review](http://127.0.0.1:3845/islet-explorer/)
+from source `1596b03`, image `846962f7…`, using the separately accepted read-only data built
 from `5e6580f`; see the [local review record](../docs/local_duckdb_review_20261103.md).
+The persistent local user service is enabled on loopback port 3845. Data and View
+controls start collapsed; click a heading to show or hide them. The
+[controls review receipt](../docs/evidence/local_controls_review_20261103.json) records this successor’s checks.
 The owner's November 3 direction is **LOCAL REVIEW ONLY**: dev activation is
 paused pending the owner's review and decision. Both public services remain unchanged.
 

@@ -48,7 +48,11 @@ access checks pass **15/15**, and the authenticated browser suite passes
 15/15 access and 49/49 browser checks; see the [dev receipt](evidence/dev_duckdb_deployment_20261103.json).
 The older `islet-explorer-local.service` remains inactive/disabled. A separate
 [local review candidate](local_duckdb_review_20261103.md) runs at
-[http://127.0.0.1:3845/islet-explorer/](http://127.0.0.1:3845/islet-explorer/).
+[http://127.0.0.1:3845/islet-explorer/](http://127.0.0.1:3845/islet-explorer/), from
+source `1596b03` and image `846962f7…`, with the separately accepted read-only
+`5e6580f` data. Its persistent local user service is enabled. Data/View panels
+start collapsed; click their headings to open or close them. The
+[controls receipt](evidence/local_controls_review_20261103.json) records the successor’s checks.
 The owner's November 3 direction is local review only: dev activation is paused
 pending review and a decision. Neither public release has changed. The separate
 off-campus acceptance and reboot tests are still pending.
@@ -442,7 +446,7 @@ Inspect the same candidate yourself. Plot, Trajectory, Spatial, and Viewer are t
 
 Browser checks establish runtime behavior; source/release parity establishes packaging equivalence. Neither establishes correct scientific cell identities. Record scientific review separately.
 
-The [November 3 display changes](app_display_fixes_20261103.md) are packaged in the [local review candidate](local_duckdb_review_20261103.md), with app source `7ac421e` and the separately accepted read-only `5e6580f` data bundle. Dev activation is paused pending the owner’s review and decision. They reserve arrow space for long dropdown labels, place Trajectory’s Segmentation card in its own full-width row with consistent spacing, remove the citation suffix from its PAGA title, and put Spatial legends below their plots. Dense tissue labels wrap, and the plot grows vertically to preserve the map area. These are presentation changes; scientific data and controls remain separate from the deployment status above.
+The [November 3 display changes](app_display_fixes_20261103.md) are packaged in the [local review candidate](local_duckdb_review_20261103.md), with app source `1596b03`, image `846962f7…`, and the separately accepted read-only `5e6580f` data bundle. The persistent local service is enabled, and Data/View panels start collapsed with clickable headings. Dev activation is paused pending the owner’s review and decision. They reserve arrow space for long dropdown labels, place Trajectory’s Segmentation card in its own full-width row with consistent spacing, remove the citation suffix from its PAGA title, and put Spatial legends below their plots. Dense tissue labels wrap, and the plot grows vertically to preserve the map area. These are presentation changes; scientific data and controls remain separate from the deployment status above.
 
 ## 9. Production activation, rollback, and operations
 

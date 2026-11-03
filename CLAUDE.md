@@ -2,10 +2,13 @@
 
 **Current owner direction, 2026-11-03 — local review only:** “Instead of sending
 directly to pubapp, create a local version for review.” The corrected app runs at
-[the local review URL](http://127.0.0.1:3845/islet-explorer/), using image source
-`7ac421e` and the separately accepted read-only `5e6580f` data bundle. Read the
+[the local review URL](http://127.0.0.1:3845/islet-explorer/), using source
+`1596b03`, immutable image `846962f7…`, and the separately accepted read-only
+`5e6580f` data bundle. The persistent local user service is enabled. Data and View
+controls start collapsed; their headings open and close them. Read the
 [local review record](docs/local_duckdb_review_20261103.md) for exact identities
-and lifecycle commands. Dev activation is paused pending the owner's review
+and lifecycle commands, and the [controls receipt](docs/evidence/local_controls_review_20261103.json)
+for this successor’s checks. Dev activation is paused pending the owner's review
 and decision. Neither public release has changed. This direction governs the
 new UI candidate; the completed production decisions below remain historical.
 

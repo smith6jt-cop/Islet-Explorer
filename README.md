@@ -38,8 +38,11 @@ The known DuckDB finding remains nonblocking only within the
 [dated window through November 10 UTC](docs/duckdb_remediation_window_20261102.md);
 the dev fix has not been promoted to production. The [new display fixes](docs/app_display_fixes_20261103.md)
 are running for [local review](http://127.0.0.1:3845/islet-explorer/) from source
-`7ac421e`, image `46b81d66…`, using the separately accepted data built from
+`1596b03`, image `846962f7…`, using the separately accepted read-only data built from
 `5e6580f`; see the [local review record](docs/local_duckdb_review_20261103.md).
+The persistent local user service is enabled on loopback port 3845. Data and View
+controls start collapsed; click a heading to show or hide them. The
+[controls review receipt](docs/evidence/local_controls_review_20261103.json) records this successor’s checks.
 The owner's November 3 direction is **LOCAL REVIEW ONLY**: dev activation is
 paused pending the owner's review and decision. Both public services remain unchanged.
 Older cohort and release sections below describe historical artifacts.
@@ -110,8 +113,8 @@ and direct-lookup drill-down files in file formats suited to their access patter
 ## Quick Start
 
 > **Hosted production is live** at the link above. The older
-> `islet-explorer-local.service` remains inactive/disabled; the separate transient
-> [local review](http://127.0.0.1:3845/islet-explorer/) is running.
+> `islet-explorer-local.service` remains inactive/disabled; the separate persistent,
+> enabled [local review](http://127.0.0.1:3845/islet-explorer/) service is running.
 > These generic development commands do not select the
 > validated production bundle; use the workflow guide for explicit data-root
 > selection and release operations.

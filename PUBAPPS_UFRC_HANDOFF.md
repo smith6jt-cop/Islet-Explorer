@@ -3,8 +3,12 @@
 **Current owner direction, 2026-11-03:** the new display/security candidate is
 for [local review](docs/local_duckdb_review_20261103.md) only, at
 [http://127.0.0.1:3845/islet-explorer/](http://127.0.0.1:3845/islet-explorer/).
-Dev activation is paused pending the owner's review and decision; the existing
-public dev and production releases below remain unchanged.
+It uses source `1596b03`, image `846962f7…`, and the separately accepted read-only
+`5e6580f` data. The persistent local user service is enabled, and Data/View
+controls start collapsed. The [controls receipt](docs/evidence/local_controls_review_20261103.json)
+records this successor’s checks. Dev activation is paused pending the owner's
+review and decision; the existing public dev and production releases below
+remain unchanged.
 
 **Dated production direction, 2026-11-02:** the current build is intended for the live production PubApp once its actual data/release/runtime checks pass. The known DuckDB finding is nonblocking through the notice's **2026-11-10 UTC** patch deadline; develop/test our DuckDB fix separately for the dev PubApp. See [the dated release decision](docs/duckdb_remediation_window_20261102.md). This supersedes the earlier strict DuckDB hold and no-activation directions below. Historical failed reports remain unchanged; data checks and other security findings still apply.
 

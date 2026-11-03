@@ -5,7 +5,9 @@ classes, readable Plot dropdowns, removal of the Trajectory citation suffix,
 even Trajectory card spacing, and Spatial scatter legends below the plot.
 These are app changes against the accepted component-v2 scientific data.
 They do not retype cells or change the selected v19 endocrine evidence.
-The frozen app source is **`7ac421ed7d4b5ab5425d0130e8ff7445f4e87240`**.
+The current local app source is **`1596b0336096a949a954c9793fa6600ed09c7f1a`**.
+It makes Data/View controls start collapsed, extending the earlier rendering source
+`7ac421ed7d4b5ab5425d0130e8ff7445f4e87240`; click a panel’s heading to open or close it.
 It includes the reviewed DuckDB security patch and a metadata-only Containerfile
 change that permits dependency caching across future app releases. The patch,
 dependency installation and strict runtime security gates are unchanged.
@@ -14,14 +16,19 @@ The current live dev release is documented separately in
 [the strict DuckDB deployment receipt](dev_duckdb_deployment_20261103.md).
 Its `378843e` source predates these app corrections. The owner subsequently
 requested **local review only**, replacing the planned dev deployment. The
-corrected immutable image `46b81d66…` runs at
+successor immutable image `846962f7…` runs at
 [the local review URL](http://127.0.0.1:3845/islet-explorer/), with the separately
 accepted read-only `5e6580f` data bundle. The [local review record](local_duckdb_review_20261103.md)
-binds the actual image, data, runtime checks and lifecycle commands. Dev
-activation is paused pending owner review and a decision; neither public
-release contains these display changes.
-Local acceptance is complete: 49 browser checks, four targeted UI scopes and
-inspection of eight native tissue images passed on that exact image.
+binds the actual image, data, runtime checks and lifecycle commands. The persistent
+local user service is enabled on loopback port 3845. Dev activation is paused
+pending owner review and a decision; neither public release contains these
+display changes.
+The [controls review receipt](evidence/local_controls_review_20261103.json) records
+the successor’s focused native checks for initial rendering with collapsed panels,
+physical toggles and filtering. The earlier `7ac421e` image `46b81d66…` passed
+49 browser checks, four targeted UI scopes and inspection of eight native tissue
+images. Those results and the 601-assertion rendering records below remain tied
+to their original source and image; they are not reruns on this successor.
 
 The [review follow-up receipt](evidence/app_display_followup_20261103.json)
 records two corrections found by Senior's independent review of `5e6580f`:
@@ -152,9 +159,9 @@ the renderer with the client's initial zero/short auto height.
 Focused checks cover retained labels, exact parent membership, mutually
 exclusive macrophage splits, export filtering, original donor denominators,
 drilldown points, both CSV and DuckDB Spatial queries, and live trajectory
-invariance to hidden feature changes. Browser checks use the immutable accepted
-schema-5 data on a transient loopback app; no host service or source data is
-changed by that check. The [validation receipt](evidence/app_display_validation_20261103.json)
+invariance to hidden feature changes. Those historical browser checks used the
+immutable accepted schema-5 data on a transient loopback app; no host service or
+source data was changed by that check. The [validation receipt](evidence/app_display_validation_20261103.json)
 binds the frozen source, test logs and the separate scientific/presentation
 receipts. All 73 captured tracked app/test source files match the frozen commit;
 two ignored test reproducers are explicitly excluded from that binding.
@@ -182,8 +189,9 @@ receipts remain preserved and are superseded by the measured final check.
 
 The earlier transient `runApp` loopback smoke passed 45/49 checks. Its four
 Viewer/static-Range checks needed Shiny Server aliases unavailable in that
-process. The subsequent immutable local container passes all 49 browser checks,
-including those routes; its separate receipt records the actual runtime scope.
+process. The later `7ac421e` immutable local image `46b81d66…` passed all 49 browser
+checks, including those routes; its [original local receipt](evidence/local_duckdb_review_20261103.json)
+records that runtime scope. Successor `1596b03` has its separate controls receipt above.
 Local review does not establish public-proxy or authenticated-access acceptance.
 Dev activation is paused, and both public releases remain unchanged.
 

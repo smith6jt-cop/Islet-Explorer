@@ -1,0 +1,165 @@
+{
+  "schema": "islet.category_disease_status_counts/1",
+  "queried_at_utc": "2026-11-03 16:43:01 UTC",
+  "source": "1596b0336096a949a954c9793fa6600ed09c7f1a",
+  "image": "sha256:846962f791ed226fe22c50f8590eef6330fa76726fa616f78e4d9b106e6a0ddc",
+  "data_producer": "5e6580fe68af12dd18bee430988bc1ed64061526",
+  "data_manifest_sha256": "03038ebdcd172e82ff7afba1f2025cb905e5859bcee423b05618b04c993f7320",
+  "scope": "All tissue-cell rows including core, peri and remaining tissue, without UI filters. The composition chart itself is limited by selected objects, region and donor filters.",
+  "no_subtype_definition": "Current retired phenotype residuals, excluding Conflict labels. Only Hematopoietic CD45+, Hematopoietic CD45- and T cell are present in these data.",
+  "retired_labels": ["Endocrine", "Acinar", "Endothelial", "T cell", "Immune", "Hematopoietic CD45+", "Hematopoietic CD45-", "Unknown", "ECAD+", "Structural", "APCs"],
+  "totals_by_disease_status": [
+    {
+      "disease_status": "ND",
+      "all_cells": 1213869,
+      "doublet_suspected": 311,
+      "unclassified": 1701,
+      "no_subtype": 30061
+    },
+    {
+      "disease_status": "Aab+",
+      "all_cells": 1066037,
+      "doublet_suspected": 590,
+      "unclassified": 3190,
+      "no_subtype": 32679
+    },
+    {
+      "disease_status": "T1D",
+      "all_cells": 919700,
+      "doublet_suspected": 418,
+      "unclassified": 2507,
+      "no_subtype": 36039
+    }
+  ],
+  "no_subtype_breakdown": [
+    {
+      "disease_status": "Aab+",
+      "phenotype": "Hematopoietic CD45+",
+      "cells": 17219
+    },
+    {
+      "disease_status": "Aab+",
+      "phenotype": "Hematopoietic CD45-",
+      "cells": 14525
+    },
+    {
+      "disease_status": "Aab+",
+      "phenotype": "T cell",
+      "cells": 935
+    },
+    {
+      "disease_status": "ND",
+      "phenotype": "Hematopoietic CD45+",
+      "cells": 13625
+    },
+    {
+      "disease_status": "ND",
+      "phenotype": "Hematopoietic CD45-",
+      "cells": 15497
+    },
+    {
+      "disease_status": "ND",
+      "phenotype": "T cell",
+      "cells": 939
+    },
+    {
+      "disease_status": "T1D",
+      "phenotype": "Hematopoietic CD45+",
+      "cells": 19854
+    },
+    {
+      "disease_status": "T1D",
+      "phenotype": "Hematopoietic CD45-",
+      "cells": 14662
+    },
+    {
+      "disease_status": "T1D",
+      "phenotype": "T cell",
+      "cells": 1523
+    }
+  ],
+  "totals_by_region": [
+    {
+      "disease_status": "Aab+",
+      "cell_region": "core",
+      "all_cells": 61232,
+      "doublet_suspected": 134,
+      "unclassified": 3159,
+      "no_subtype": 503
+    },
+    {
+      "disease_status": "Aab+",
+      "cell_region": "peri",
+      "all_cells": 73761,
+      "doublet_suspected": 78,
+      "unclassified": 7,
+      "no_subtype": 2501
+    },
+    {
+      "disease_status": "Aab+",
+      "cell_region": "tissue",
+      "all_cells": 931044,
+      "doublet_suspected": 378,
+      "unclassified": 24,
+      "no_subtype": 29675
+    },
+    {
+      "disease_status": "ND",
+      "cell_region": "core",
+      "all_cells": 37183,
+      "doublet_suspected": 73,
+      "unclassified": 1673,
+      "no_subtype": 228
+    },
+    {
+      "disease_status": "ND",
+      "cell_region": "peri",
+      "all_cells": 74136,
+      "doublet_suspected": 85,
+      "unclassified": 2,
+      "no_subtype": 2123
+    },
+    {
+      "disease_status": "ND",
+      "cell_region": "tissue",
+      "all_cells": 1102550,
+      "doublet_suspected": 153,
+      "unclassified": 26,
+      "no_subtype": 27710
+    },
+    {
+      "disease_status": "T1D",
+      "cell_region": "core",
+      "all_cells": 30847,
+      "doublet_suspected": 86,
+      "unclassified": 2413,
+      "no_subtype": 459
+    },
+    {
+      "disease_status": "T1D",
+      "cell_region": "peri",
+      "all_cells": 61722,
+      "doublet_suspected": 95,
+      "unclassified": 28,
+      "no_subtype": 2670
+    },
+    {
+      "disease_status": "T1D",
+      "cell_region": "tissue",
+      "all_cells": 827131,
+      "doublet_suspected": 237,
+      "unclassified": 66,
+      "no_subtype": 32910
+    }
+  ],
+  "validation": [
+    {
+      "all_cells": 3199606,
+      "donors": 20,
+      "missing_status": 0,
+      "empty_phenotypes": 0,
+      "Ki67_positive": 78680
+    }
+  ],
+  "query": "SELECT disease_status, count(*) AS all_cells, count(*) FILTER (WHERE phenotype='Doublet suspected') AS doublet_suspected, count(*) FILTER (WHERE phenotype='Unclassified') AS unclassified, count(*) FILTER (WHERE phenotype IN ('Endocrine','Acinar','Endothelial','T cell','Immune','Hematopoietic CD45+','Hematopoietic CD45-','Unknown','ECAD+','Structural','APCs')) AS no_subtype FROM cells LEFT JOIN donors USING(case_id) GROUP BY disease_status ORDER BY CASE disease_status WHEN 'ND' THEN 1 WHEN 'Aab+' THEN 2 WHEN 'T1D' THEN 3 ELSE 4 END"
+} 

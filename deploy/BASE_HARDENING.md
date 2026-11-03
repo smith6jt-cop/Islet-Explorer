@@ -2,8 +2,11 @@
 
 **Latest owner direction, 2026-11-03: LOCAL REVIEW ONLY.** The display candidate
 is running for [local review](http://127.0.0.1:3845/islet-explorer/) from source
-`7ac421e`, image `46b81d66…`, using the separately accepted data built from
+`1596b03`, image `846962f7…`, using the separately accepted read-only data built from
 `5e6580f`; see the [local review record](../docs/local_duckdb_review_20261103.md).
+The persistent local user service is enabled on loopback port 3845. Data and View
+controls start collapsed; click a heading to show or hide them. The
+[controls review receipt](../docs/evidence/local_controls_review_20261103.json) records this successor’s checks.
 Dev activation is paused pending the owner's review and decision. Both public
 services remain unchanged.
 

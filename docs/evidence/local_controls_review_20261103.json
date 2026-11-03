@@ -1,0 +1,261 @@
+{
+  "schema": "islet.local_controls_review/1",
+  "status": "ready_for_owner_review",
+  "recorded_utc": "2026-11-03T16:47:14.472645+00:00",
+  "scope": "Local native review only; no code overlay, new data build, PubApps deployment or security-ticket reply.",
+  "url": "http://127.0.0.1:3845/islet-explorer/",
+  "code": {
+    "source_commit": "1596b0336096a949a954c9793fa6600ed09c7f1a",
+    "image_id": "sha256:846962f791ed226fe22c50f8590eef6330fa76726fa616f78e4d9b106e6a0ddc",
+    "worktree": "/data/panc_CODEX/Islet-Explorer-local-controls-20261103",
+    "change": "Four Data control panels now use the shared collapsed default; View panels already used it. Two comments were updated. Scientific code and data were not changed.",
+    "security_gate": "strict pass",
+    "high": 0,
+    "critical": 0,
+    "duckdb_deferral_used": false,
+    "duckdb_library_sha256": "af67918fcddc7486d2d33f9ae72c0eccca71f8c4a803013c8ea8656671fb371b",
+    "raw_decoder_result": 0,
+    "raw_decoder_error_code": -17,
+    "source_provenance": "pass"
+  },
+  "data": {
+    "producer_commit": "5e6580fe68af12dd18bee430988bc1ed64061526",
+    "consumer_source_commit": "1596b0336096a949a954c9793fa6600ed09c7f1a",
+    "root": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-dev-ui-release-20261103/final-5e6580f/artifacts/release-5e6580f/data",
+    "manifest_sha256": "03038ebdcd172e82ff7afba1f2025cb905e5859bcee423b05618b04c993f7320",
+    "mount_mode": "read-only",
+    "completion": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-dev-ui-release-20261103/final-5e6580f/evidence/release-data-completion.json",
+      "sha256": "750785a34c22ec75c43eb1c570bebb3f92c48c720425ade36f05a2ad0cb25246"
+    },
+    "prior_binding": {
+      "path": "/data/panc_CODEX/Islet-Explorer/docs/evidence/local_review_data_binding_20261103.json",
+      "sha256": "a54c02656fc548839b1a47d6d056c66ed2389bd3edb0e2129c1105091717cdf3"
+    },
+    "prior_binding_consumer_source_commit": "7ac421ed7d4b5ab5425d0130e8ff7445f4e87240",
+    "current_runtime_binding": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/local-app-review-20261103/collapsed-controls-native-1596-runtime-binding.json",
+      "sha256": "4d5a5d660beb744117afd173ca1bd90790cc887cfa67701e574e0e84f04c05fc"
+    },
+    "acceptance": "Accepted immutable 5e data reused read-only. Earlier acceptance and identity checks remain attached to their original producers and consumers. This receipt checks the evidence hashes and current recorded mounts; it does not rerun full data hashing, inventory, scientific parity or a same-source data build."
+  },
+  "fresh_checks": {
+    "native_build_and_strict_scan": "passed",
+    "baseline_browser": {
+      "checks": 49,
+      "passed": 49,
+      "failed": 0,
+      "page_errors": 0,
+      "console_messages": 1,
+      "missing_default_favicon": 1,
+      "application_http_failures": 0,
+      "external_requests": 0
+    },
+    "focused_controls": {
+      "first_visit_tabs": [
+        "Plot",
+        "Trajectory",
+        "Spatial",
+        "Viewer"
+      ],
+      "panels_initially_closed_and_contents_hidden": 7,
+      "physical_open_close_toggles": 7,
+      "post_render_screenshots_directly_inspected": 4,
+      "plot_objects_before": 4842,
+      "plot_objects_without_T1D": 3202,
+      "plot_objects_restored": 4842,
+      "filter_input_events_recorded": true,
+      "real_initial_outputs_while_closed": true,
+      "page_errors": 0
+    },
+    "closed_first_render": "Actual Plot markers/distribution, Trajectory islet traces (1398/1392/1392), complete Spatial raster and loaded Viewer UI/canvas were verified with panels closed.",
+    "category_counts": {
+      "evidence": {
+        "path": "/data/panc_CODEX/Islet-Explorer/docs/evidence/category_counts_by_disease_status_20261103.json",
+        "sha256": "13aa53e43e55a808b5635159104f6c19b79ee6b19bfda3208a469c903b4ee0cb"
+      },
+      "scope": "All tissue-cell rows across 20 donors, without composition-chart object, region or donor filters.",
+      "total_cells": 3199606,
+      "ki67_positive_cells": 78680,
+      "unclassified_cells": 7398
+    }
+  },
+  "inherited_evidence": {
+    "predecessor_source": "7ac421ed7d4b5ab5425d0130e8ff7445f4e87240",
+    "predecessor_image": "sha256:46b81d665cacb0f8abcd4b9fe34d7f8c786cb7916d6f9cd30e63a1223358b006",
+    "predecessor_receipt": {
+      "path": "/data/panc_CODEX/Islet-Explorer/docs/evidence/local_duckdb_review_20261103.json",
+      "sha256": "736f955c62009f3a3df2482c4dc24c29fb79baaa22b7f044e31fffde5e0cadc4"
+    },
+    "parquet": "Prior real-Parquet round trips retained because the actual DuckDB library SHA is identical; not rerun for 1596.",
+    "fonts": {
+      "installed_receipts_byte_identical": true,
+      "prior_renderer_validation": {
+        "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-local-review-20261103/r2/installed-raster-validation.json",
+        "sha256": "a6eff86aec58dcec5ab6ff9f7f3d21fe889130faaa904c48de4ac926fbfaecad"
+      },
+      "renderer_tests_rerun": false
+    },
+    "scientific_parity": "Original e568 accepted parity retains its original producer, d3ec verifier and c3 composer. The 5e completion records exact scientific equivalence except valid GeoPackage build timestamps; no fresh full parity execution is claimed.",
+    "prior_visual_suite": "Prior 7ac/46b four UI scopes and eight tissue-image inspections are preserved historical evidence; the new focused four-screen check does not repeat that broader suite."
+  },
+  "runtime": {
+    "container_id": "98bb18943d88a0e7d08d76f9be254fcd95c8f706eee13298bf1934fd9cdddcbd",
+    "started_at": "2026-11-03T11:29:29.319529657-05:00",
+    "container_pid": 32730,
+    "service_main_pid": "32326",
+    "service": "islet-explorer-local-review-20261103-r2.service",
+    "persistent_unit": true,
+    "enabled_for_user_default_target": true,
+    "user_lingering_enabled": true,
+    "root_filesystem_read_only": true,
+    "data_and_images_read_only": true,
+    "exclusive_loopback_port": 3845,
+    "reboot_recovery": "The 16:04 UTC workstation reboot exposed the predecessor transient-unit lifecycle problem. The replacement persistent enabled service was started and verified; no additional reboot test was performed.",
+    "health_monitoring": {
+      "timer": "islet-explorer-local-review-20261103-r2-health.timer",
+      "interval_seconds": 30,
+      "persistent": true,
+      "wanted_by_app": true,
+      "part_of_app": true,
+      "automatic_checks_after_installation": 2,
+      "result": "success",
+      "app_identity_unchanged": true,
+      "automatic_restart_on_unhealthy": false,
+      "private_socket_repaired": false,
+      "daemon_reexec_performed": false
+    }
+  },
+  "pubapps": {
+    "new_host_calls": false,
+    "new_deployment": false,
+    "security_ticket_reply_sent": false,
+    "public_dev_image_prefix": "e704ac2a",
+    "production_image_prefix": "89b3f840"
+  },
+  "evidence": {
+    "source_identity": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-local-controls-20261103/image-1596b03/source-identity.txt",
+      "sha256": "277b4fdd3c350c36655f843a5eb3a8383f71f785190bd1f6f8005be499422e13"
+    },
+    "build_inputs": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-local-controls-20261103/image-1596b03/build-inputs.sha256",
+      "sha256": "f81483e657ab55c8c8591956d8cc393f40639637ba0b0c8553750dab978c4aa6"
+    },
+    "build_procedure": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-local-controls-20261103/image-1596b03/build-and-validate.sh",
+      "sha256": "b82c9b134fc2d55614e5cea53f5bd62bf88a1c149991e2a22c9b7a8635843ca6"
+    },
+    "build_exit": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-local-controls-20261103/image-1596b03/build.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "validation": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-local-controls-20261103/image-1596b03/validation-status.json",
+      "sha256": "62be4ec81aace61d70c91ffc3d1680f323e8b5470ce4f702969d48f6bd646bf0"
+    },
+    "image_inspect": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-local-controls-20261103/image-1596b03/image-inspect.json",
+      "sha256": "a99935174653d08ca01b919a08696ca56a49e93a6a77b96b4f2b818cf6281c38"
+    },
+    "strict_scan": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-local-controls-20261103/image-1596b03/scan/sha256_846962f791ed226fe22c50f8590eef6330fa76726fa616f78e4d9b106e6a0ddc.scan.txt",
+      "sha256": "f3d44b8f9f51239ab9278a639fb0e9affdeab745e0fc598e35475a3672854917"
+    },
+    "vulnerability_scan": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-local-controls-20261103/image-1596b03/scan/sha256_846962f791ed226fe22c50f8590eef6330fa76726fa616f78e4d9b106e6a0ddc.grype.json",
+      "sha256": "d41def611ec3511fc2a746c09cc3db0830501833b60a5b33ca42b8851b0cc040"
+    },
+    "patched_decoder": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-local-controls-20261103/image-1596b03/scan/sha256_846962f791ed226fe22c50f8590eef6330fa76726fa616f78e4d9b106e6a0ddc.brotli.json",
+      "sha256": "376d3c40b92c39a184ad0c607f7f535e05c2659841fbdb4681ada511e8295f1a"
+    },
+    "installed_font_receipt": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-local-controls-20261103/image-1596b03/installed-raster-fonts.json",
+      "sha256": "0e996a89444209be54aeafdaba68e494d6b7ca1a6733cd905b670dce9f336ec6"
+    },
+    "baseline_browser": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-local-controls-20261103/runtime-1596b03/local-browser.json",
+      "sha256": "c60194e388f5fd9d06fd3f058e8ae24214691202d31c86d583f9d216918d6d01"
+    },
+    "focused_controls": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/local-app-review-20261103/collapsed-controls-native-1596-receipt.json",
+      "sha256": "26396d8358e4f46679f5bb5d6cb45609daf9b06ed31cf27fe694343ead037631"
+    },
+    "focused_runtime_binding": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/local-app-review-20261103/collapsed-controls-native-1596-runtime-binding.json",
+      "sha256": "4d5a5d660beb744117afd173ca1bd90790cc887cfa67701e574e0e84f04c05fc"
+    },
+    "focused_report": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/local-app-review-20261103/collapsed-controls-native-1596/report.json",
+      "sha256": "67ef7823d13c42d1f0ca5453af373fb888abd35f127c042c32e7d7a32fa56243"
+    },
+    "focused_visual_review": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/local-app-review-20261103/collapsed-controls-native-1596/visual-review.json",
+      "sha256": "a7644cc06b36a1b999deddad2fff057f32fb1ee7288b7b286280a284419ae41d"
+    },
+    "runtime_inspect_after_browser": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-local-controls-20261103/runtime-1596b03/container-after-browser.json",
+      "sha256": "a616b1c92095dd8c4cb371f29d77f1fc0a90fa9ae3cd0dd35dc7488842ac3d1e"
+    },
+    "runtime_verification_exit": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-local-controls-20261103/runtime-1596b03/runtime-verification.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "launcher": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-local-controls-20261103/runtime-1596b03/start-local-review.sh",
+      "sha256": "51408a13e15a6f5d2a95aa06865954347daf6c0262d9543d5f4a56ba5f4c67cb"
+    },
+    "persistent_service_unit": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-local-controls-20261103/runtime-1596b03/islet-explorer-local-review-20261103-r2.service",
+      "sha256": "114708bd1626d36c0215efc47b7544d5ac140095da63b083f4130d95b08ed914"
+    },
+    "service_configuration": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-local-controls-20261103/runtime-1596b03/service-configuration.txt",
+      "sha256": "ef8e459abdd33360bfc3f19d46e58a76e35e095d425c765d8f09eb0677400e7d"
+    },
+    "health_installation": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-local-controls-20261103/runtime-1596b03/health-monitoring/health-monitor-installation.json",
+      "sha256": "7cd5961fc562ac6ce27125135b50c4f83a1a4a3ae2b0ff05a17319abf62d4a5e"
+    },
+    "scheduled_health_verification": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-local-controls-20261103/runtime-1596b03/health-monitoring/scheduled-health-check-verification.json",
+      "sha256": "1df71f3735a2da8b04c27a8c37f8e75bb4d50ca1a8d1735845d68fa9e2207269"
+    },
+    "private_socket_disposition": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-local-controls-20261103/runtime-1596b03/health-monitoring/daemon-reexec-readonly-notes.json",
+      "sha256": "2e9045722dd5bfd16e99d23fdbd4152d042f5768923ad2fdf0c1b624f82930ef"
+    },
+    "category_counts": {
+      "path": "/data/panc_CODEX/Islet-Explorer/docs/evidence/category_counts_by_disease_status_20261103.json",
+      "sha256": "13aa53e43e55a808b5635159104f6c19b79ee6b19bfda3208a469c903b4ee0cb"
+    },
+    "prior_local_review": {
+      "path": "/data/panc_CODEX/Islet-Explorer/docs/evidence/local_duckdb_review_20261103.json",
+      "sha256": "736f955c62009f3a3df2482c4dc24c29fb79baaa22b7f044e31fffde5e0cadc4"
+    },
+    "outage_cause": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-local-review-20261103/r2/outage-cause-20261103T1602Z.json",
+      "sha256": "43000fff4602f26c957d4f68f2ee60cca9b3e7f7fe9bf0be92699ee5b5e359ba"
+    },
+    "category_query": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-local-controls-20261103/runtime-1596b03/category-counts.R",
+      "sha256": "e5319a095a14d296d7a35aa7dea2fc80fefced73cac7fe64bf6f136a55eb2af5"
+    }
+  },
+  "limitations": [
+    "Boot persistence is configured, not verified by another reboot.",
+    "The user manager private socket still refuses connections; Podman automatic health-timer creation/removal may fail. The dedicated timer uses the working user bus and has two verified scheduled passes. No manager reexecution was performed.",
+    "The cgroup-v1 delegated environment does not enforce the requested per-service 4 GiB and 2048-task limits.",
+    "Browser checks cover a subset of accessibility; color-contrast entries still require manual review. One missing default favicon produced a console message; application HTTP and page-error checks passed.",
+    "The focused check is not a pixel-level TIFF scientific audit, an exhaustive visual review, an external-authentication test, an off-campus-access test or public-deployment acceptance.",
+    "The superseded source-overlay diagnostic is qualified historical evidence only; current closed-first-render acceptance comes from the native focused receipt."
+  ],
+  "preserve_active_preview_backing": {
+    "data_root": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-dev-ui-release-20261103/final-5e6580f/artifacts/release-5e6580f/data",
+    "runtime_and_launchers": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-local-controls-20261103/runtime-1596b03",
+    "image_evidence": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-local-controls-20261103/image-1596b03",
+    "image": "sha256:846962f791ed226fe22c50f8590eef6330fa76726fa616f78e4d9b106e6a0ddc",
+    "instruction": "Preserve while the local preview is used or may be relaunched."
+  }
+}
