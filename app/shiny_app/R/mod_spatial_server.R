@@ -37,6 +37,25 @@ spatial_umap_colour_choices <- function(comp_cols) {
   groups[lengths(groups) > 0]
 }
 
+# Wrap display text only; scale breaks, cell labels and colors keep their source names.
+spatial_tissue_legend_labels <- function(labels) {
+  vapply(phenotype_text(labels), function(label) paste(strwrap(label, width = 28), collapse = "\n"),
+         character(1), USE.NAMES = FALSE)
+}
+
+# Two-column phenotype legends need room for each row's longest wrapped label.
+# Keep roughly 500 px for the map plus its axes/title instead of shrinking it
+# when the user shows every macrophage subtype. Cluster legends keep the floor.
+spatial_tissue_plot_height <- function(plot) {
+  scale <- plot$scales$get_scales("colour")
+  if (is.null(scale) || !is.character(scale$breaks) || !length(scale$breaks)) return(800L)
+  labels <- scale$get_labels(scale$breaks)
+  lines <- lengths(strsplit(labels, "\n", fixed = TRUE))
+  row_lines <- vapply(split(lines, ceiling(seq_along(lines) / 2)), max, integer(1))
+  legend_height <- 40 + sum(pmax(28, ISLET_FONT_SIZES$legend_text * 1.25 * row_lines) + 8)
+  as.integer(ceiling(max(800, 600 + legend_height)))
+}
+
 spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                            donor_colors_reactive = reactive(DONOR_COLORS_BRIGHT),
                            selected_islet = reactiveVal(NULL), active_tab = reactive("Spatial"),
@@ -395,7 +414,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
             size = 0.4, alpha = 0.6,
             inherit.aes = FALSE
           ) +
-          ggplot2::scale_color_manual(values = pal, breaks = legend_phenos, labels = phenotype_text,
+          ggplot2::scale_color_manual(values = pal, breaks = legend_phenos, labels = spatial_tissue_legend_labels,
                                         name = "Phenotype", na.value = "#CCCCCC",
                                         guide = ggplot2::guide_legend(ncol = 2, byrow = TRUE,
                                                                      override.aes = list(size = 4)))
@@ -439,12 +458,17 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
 
     # Cached across sessions (Plan A Level 2, B3): the 170 k-cell PNG of a donor and drawing options is drawn once
     # per process. The key is everything spatial_tissue_scatter_plot() reads; the output size is part of it.
+    tissue_scatter_height <- reactive(spatial_tissue_plot_height(spatial_tissue_scatter_plot()))
     output$tissue_scatter <- bindCache(
-      shiny::renderPlot({ spatial_tissue_scatter_plot() }, height = 800, bg = "transparent"),
+      shiny::renderPlot({ spatial_tissue_scatter_plot() }, height = function() tissue_scatter_height(), bg = "transparent"),
       selected_donor(), donor_status(), input$region_filter, input$color_by, input$pheno_filter,
-      input$color_background, palette(), has_leiden(), macrophage_markers(),
+      input$color_background, palette(), has_leiden(), macrophage_markers(), tissue_scatter_height(),
       if (identical(input$color_by, "leiden") && has_leiden()) list(input$leiden_res, islet_leiden_map()) else NULL,
-      scatter_zoom$xmin, scatter_zoom$xmax, scatter_zoom$ymin, scatter_zoom$ymax, islet_theme_mode())
+      scatter_zoom$xmin, scatter_zoom$xmax, scatter_zoom$ymin, scatter_zoom$ymax, islet_theme_mode(),
+      # bindCache supplies its own render dimensions; the auto-height container
+      # initially reports zero. Keep width bucketing, but use the calculated
+      # height instead of feeding that transient client height back into the PNG.
+      sizePolicy = function(size) c(shiny::sizeGrowthRatio()(c(size[1], 800))[1], tissue_scatter_height()))
     output$dl_tissue_scatter <- shiny::downloadHandler(
       filename = function() {
         donor_id <- selected_donor()

@@ -79,7 +79,7 @@ spatial_ui <- function(id) {
                          style = "font-size: 12px; padding: 2px 10px;",
                          class = "btn-sm btn-outline-secondary")
           ),
-          plotOutput(ns("tissue_scatter"), height = "700px",
+          plotOutput(ns("tissue_scatter"), height = "auto", fill = FALSE,
                      dblclick = ns("scatter_dblclick"),
                      brush = brushOpts(id = ns("scatter_brush"), resetOnNew = TRUE)),
           div(style = "text-align: right; margin-top: 8px;",
