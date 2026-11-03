@@ -128,3 +128,11 @@ Final native acceptance is recorded in the linked local runtime record and
 [card-controls receipt](evidence/card_controls_validation_20261103.json). Prior
 checks retain their original source/image identities; they are not relabeled as
 successor executions. These checks do not authorize or report a public deployment.
+
+## Recipient handoff
+
+The Senior agent coordinating Senior, the monorepo, HPG and MultiPlex5000 has
+received and verified the final fixes, guides and both native-proof receipts.
+Its committed acknowledgment is `2040a70`; the
+[delivery receipt](evidence/card_controls_agent_delivery_20261103.json) records
+the exact source and evidence hashes. Recipient adaptation remains unapplied.

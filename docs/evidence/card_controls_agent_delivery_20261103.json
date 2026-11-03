@@ -1,0 +1,74 @@
+{
+  "schema": "islet.card_controls_agent_delivery/1",
+  "status": "received_read_and_verified",
+  "recorded_utc": "2026-11-03T18:22:37.845608+00:00",
+  "scope": "Requested delivery of recent fixes and documentation to the Senior agent coordinating Senior, monorepo, HPG and MultiPlex5000. Recipient adaptation remains unapplied.",
+  "delivered_documentation_commit": "4bab4374c3e141a37e92338a6bcf8b0b2dbba7fc",
+  "app_image_producer": "3c81075307c97356cf6ded5df0ac10e810c8b9fa",
+  "image": "sha256:eb6f3c32779a22e4c1ca7a843bd9de5011de253ac42fb3fd4e574d7b34b2c920",
+  "recipient": {
+    "thread_id": "01a19ca5-0cff-7d81-8027-4868ab012b79",
+    "workspace": "/home/smith6jt/IO60panc2nd/Islet-Explorer-Senior",
+    "contexts": [
+      "Senior",
+      "monorepo",
+      "HPG",
+      "MultiPlex5000"
+    ],
+    "delivery": "Explicit messages with exact commits, paths and hashes; recipient saved immutable copies and completed independent saved-evidence review.",
+    "receipt_commit": "2040a70"
+  },
+  "delivered_proofs": [
+    {
+      "path": "/data/panc_CODEX/Islet-Explorer/docs/evidence/card_controls_validation_20261103.json",
+      "sha256": "e8fdccb78d24f77196fd598d3e3ee4d4fd4cec9bdb6a150cd5847c3497591bce",
+      "bytes": 14742
+    },
+    {
+      "path": "/data/panc_CODEX/Islet-Explorer/docs/evidence/local_unclassified_ui_review_20261103.json",
+      "sha256": "49d33cf7cd674db3ec58737892a8000e9023dcbcd463bd80ef641d9535f5a81b",
+      "bytes": 9165
+    }
+  ],
+  "recipient_receipts": {
+    "source_runtime_read.json": {
+      "path": "/home/smith6jt/IO60panc2nd/Islet-Explorer-Senior/outputs/codex_card_controls_final_receipt_20261103/source_runtime_read.json",
+      "sha256": "d2f74cd2c6a7c14ed4c88f395693abc479fb1a7c034d5d975b0fedf13e795ebc",
+      "bytes": 13069
+    },
+    "ui_evidence_read.json": {
+      "path": "/home/smith6jt/IO60panc2nd/Islet-Explorer-Senior/outputs/codex_card_controls_final_receipt_20261103/ui_evidence_read.json",
+      "sha256": "92e09316721a94992c7a59cf2aeda8291b128514ff8d424edf8ab98541898f1b",
+      "bytes": 42905
+    },
+    "combined_proof_capture.json": {
+      "path": "/home/smith6jt/IO60panc2nd/Islet-Explorer-Senior/outputs/codex_card_controls_final_receipt_20261103/combined_proof_capture.json",
+      "sha256": "5a8a23858098c6f5a5843f518b1813aed1848416870fd2ccf41b8cb65e70fb77",
+      "bytes": 13098
+    },
+    "committed_consolidated_receipt": {
+      "path": "/home/smith6jt/IO60panc2nd/Islet-Explorer-Senior/docs/evaluations/codex_card_controls_final_receipt_20261103/receipt.json",
+      "sha256": "23f6e2fbbf89fa2576cf55c7b220268bd26ca67cb01a7b7dfbe760897dcade62",
+      "bytes": 4689
+    }
+  },
+  "recipient_verified": [
+    "Git-object source bridge: 102 of 104 app files identical, three UI substitutions explain the entire delta.",
+    "Saved native image/container/read-only data bindings and separate ccda/3c result identities.",
+    "Card proof artifact hashes and combined runtime receipt consistency.",
+    "Bounded twelve-image review with no new blocker in the card-control scope; original screenshot exclusions remain recorded."
+  ],
+  "local_final_checks": {
+    "documentation_files_link_checked": 10,
+    "missing_local_links": 0,
+    "evidence_file_hashes_verified": 49,
+    "app_tree_equal_to_running_image_source": true
+  },
+  "limits": [
+    "This is a received/read/verified handoff, not a port or deployment in another repository.",
+    "Recipient ran no new scientific processing, browser tests, builds, security scan or service operations.",
+    "Both public services are unchanged by this UI handoff.",
+    "Preserve the referenced local and recipient evidence backing directories."
+  ],
+  "explicit_acknowledgment": "Recipient confirmed received/read/verified the final fixes, guides and both proofs for all four named contexts, with adaptation unapplied and no further execution."
+}
