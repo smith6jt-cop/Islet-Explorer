@@ -1068,7 +1068,12 @@ phenotype_choices_named <- function(labels) {
 }
 
 #' Display text as HTML for a checkbox label.
-phenotype_label_html <- function(x) lapply(phenotype_text(x), function(t) htmltools::HTML(htmltools::htmlEscape(t)))
+phenotype_label_html <- function(x) lapply(phenotype_text(x), function(t) {
+  # Wrap compact profiles between complete marker tokens, never inside CD4 or
+  # LGALS3. Only display markup changes; checkbox values retain the source key.
+  escaped <- htmltools::htmlEscape(t)
+  htmltools::HTML(gsub("([\u207A\u207B])(?=[A-Z])", "\\1<wbr>", escaped, perl = TRUE))
+})
 
 # ---- Phenotype groups (owner, 2026-10-27) ----
 # "Because of this change, wherever there are choices for phenotypes to display in the app, they need to be grouped
