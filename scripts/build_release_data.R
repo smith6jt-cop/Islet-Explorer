@@ -563,6 +563,8 @@ build_release <- function(options) {
                        "root_phenotype_labels", "root_has_marker_profile_labels", "TOP_MARKER_BASE",
                        "CD45_RULE_LABEL", "CD45_TOP_MARKER_LABEL", "root_has_top_marker_labels",
                        "root_cd45_is_rule_label", "top_marker_labels", "PHENOTYPE_GROUP_AGGREGATES",
+                       "UNCLASSIFIED_KEYS", "UNCLASSIFIED_PARENT", "UNCLASSIFIED_RAW_TO_KEY",
+                       "unclassified_collapse",
                        "phenotype_group", "phenotype_is_conflict", "is_phenotype_aggregate", "phenotype_aggregate_members",
                        "phenotype_aggregates_for", "add_phenotype_aggregate_columns")
   for (expr in parse(file.path(repo_root, "app", "shiny_app", "R", "00_globals.R"))) {
