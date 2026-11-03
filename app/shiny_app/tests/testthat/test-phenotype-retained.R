@@ -16,7 +16,8 @@
                             "Macrophage" = 1, "CD8a Tcell" = 1, "T cell" = 1,
                             "Immune" = 1, "Acinar" = 1)
   .load_defs("R/00_globals.R", c("PHENOTYPE_RETIRED", "phenotype_keep", "phenotype_retired",
-                                 "phenotype_is_kept", "phenotype_marker_definitions"), env)
+                                 "phenotype_is_kept", "phenotype_is_conflict", "phenotype_filter_conflict_columns",
+                                 "phenotype_filter_rows", "phenotype_marker_definitions", "write_islet_csv"), env)
   .load_defs("R/spatial_helpers.R", "canonical_phenotype_order", env)
 }
 
@@ -31,6 +32,64 @@ test_that("a top-marker root keeps ECAD+ (v17), other roots keep it retired", {
   expect_true(env$phenotype_is_kept("ECAD+"))
   env$root_has_top_marker_labels <- function() stop("no root")
   expect_false(env$phenotype_is_kept("ECAD+"))
+})
+
+test_that("Conflict labels and current pan residuals cannot enter app choices or rows", {
+  env <- .retained_env()
+  labels <- c("Conflict B/T", "Conflict_Endocrine/Exocrine", " conflict B/Myeloid", "Hematopoietic CD45+",
+              "Hematopoietic CD45-", "T cell", "CD4 Tcell", "Tissue", "Unclassified", NA, "")
+  expect_identical(env$phenotype_is_conflict(labels),
+    c(TRUE, TRUE, TRUE, rep(FALSE, 8)))
+  expect_identical(env$phenotype_keep(labels), c("CD4 Tcell", "Tissue", "Unclassified"))
+  frame <- data.frame(phenotype = labels, source_row = seq_along(labels))
+  out <- env$phenotype_filter_rows(frame)
+  expect_identical(out$source_row, 7:9)
+  expect_identical(frame$phenotype, labels)
+  expect_false(env$phenotype_is_conflict("NonConflict marker"))
+})
+
+test_that("wide app exports omit Conflict columns without changing source totals or unrelated fields", {
+  env <- .retained_env()
+  fields <- c("total_cells_core", "prop_Conflict B/T", "peri_prop_Conflict_B/T", "peri_count_Conflict_B/T",
+              "enrich_z_Conflict_B/T", "min_dist_Conflict_B/T", "core_Conflict B/T", "peri_Conflict B/T",
+              "Conflict B/T", "prop_Beta cell", "prop_T cell", "conflict_count_audit")
+  frame <- as.data.frame(stats::setNames(as.list(seq_along(fields)), fields), check.names = FALSE)
+  out <- env$phenotype_filter_conflict_columns(frame)
+  expect_identical(names(out), c("total_cells_core", "prop_Beta cell", "prop_T cell", "conflict_count_audit"))
+  expect_identical(out$total_cells_core, frame$total_cells_core)
+  expect_identical(names(frame), fields)
+})
+
+test_that("identity reference help lists retained leaves without the retired broad residual classes", {
+  env <- .retained_env()
+  .load_defs("R/00_globals.R", "identity_phenotype_definitions_ui", env)
+  env$root_has_selected_endocrine <- function() TRUE
+  env$identity_structure_text <- function() "Structure-qualified cell rules."
+  env$phenotype_text <- identity
+  html <- as.character(env$identity_phenotype_definitions_ui())
+  expect_false(grepl("Hematopoietic CD45", html, fixed = TRUE))
+  expect_false(grepl("<strong>T cell</strong>", html, fixed = TRUE))
+  expect_match(html, "<strong>CD4 Tcell</strong>", fixed = TRUE)
+  expect_match(html, "<strong>Unclassified</strong>", fixed = TRUE)
+})
+
+test_that("the shared CSV writer projects phenotype fields and retains unrelated provenance", {
+  env <- .retained_env()
+  frame <- data.frame(phenotype = c("Beta cell", "Conflict B/T", "Tissue"),
+                      label = c("Conflict review note", "other note", "source note"),
+                      total_cells = c(3, 3, 3), check.names = FALSE)
+  frame[["prop_Conflict B/T"]] <- c(0.1, 0.2, 0.3)
+  original <- frame
+  path <- tempfile(fileext = ".csv")
+  on.exit(unlink(path), add = TRUE)
+  env$write_islet_csv(path, frame, "Source provenance retained")
+  lines <- readLines(path)
+  expect_true(any(grepl("omitted 1 Conflict-labeled rows and 1 Conflict phenotype columns", lines, fixed = TRUE)))
+  actual <- read.csv(path, comment.char = "#", check.names = FALSE)
+  expect_identical(actual$phenotype, c("Beta cell", "Tissue"))
+  expect_identical(actual$label, c("Conflict review note", "source note"))
+  expect_identical(names(actual), c("phenotype", "label", "total_cells"))
+  expect_identical(frame, original)
 })
 
 test_that("observed retired labels do not re-enter the canonical order", {

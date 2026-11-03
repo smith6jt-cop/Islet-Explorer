@@ -25,6 +25,7 @@ module rather than inline R strings so it can be run and tested standalone:
 """
 
 import os
+import re
 from collections import OrderedDict
 import numpy as np
 import pandas as pd
@@ -41,7 +42,7 @@ N_DIFFMAP_COMPS = 10
 # construction in the additions, while Unknown absorbs unresolved cells.
 RETIRED_PHENOTYPES = frozenset({
     "Endocrine", "Acinar", "Endothelial", "T cell", "Immune", "Unknown",
-    "ECAD+", "Structural", "APCs",
+    "ECAD+", "Structural", "APCs", "Hematopoietic CD45+", "Hematopoietic CD45-",
 })
 
 _FEATURES_CSV = None
@@ -53,7 +54,8 @@ _FIT_CACHE_LIMIT = 2
 def composition_features(columns):
     """Use retained core/peri ratios, preserving the stored endocrine denominator."""
     return [c for c in columns if c.startswith(("core_", "peri_"))
-            and c.split("_", 1)[1] not in RETIRED_PHENOTYPES]
+            and c.split("_", 1)[1] not in RETIRED_PHENOTYPES
+            and not re.match(r"^Conflict($|[\s_])", c.split("_", 1)[1].strip(), re.IGNORECASE)]
 
 
 def _features_path():

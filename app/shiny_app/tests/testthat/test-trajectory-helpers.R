@@ -5,14 +5,15 @@ test_that("destiny uses the app's retained phenotype policy without changing rat
   definitions <- parse(.find_source("R/00_globals.R"))
   for (expr in definitions) {
     if (is.call(expr) && identical(expr[[1]], as.name("<-")) &&
-        as.character(expr[[2]]) %in% c("PHENOTYPE_RETIRED", "phenotype_keep", "phenotype_retired")) {
+        as.character(expr[[2]]) %in% c("PHENOTYPE_RETIRED", "phenotype_keep", "phenotype_retired",
+                                      "phenotype_is_kept", "phenotype_is_conflict")) {
       eval(expr, envir = env)
     }
   }
   sys.source(.find_source("R/barlow_pseudotime.R"), envir = env)
   columns <- c("n_endocrine_core", "n_core_Beta cell", "core_Beta cell", "peri_Beta cell",
                "core_Ductal", paste0("core_", env$PHENOTYPE_RETIRED),
-               paste0("peri_", env$PHENOTYPE_RETIRED))
+               paste0("peri_", env$PHENOTYPE_RETIRED), "core_Conflict B/T", "peri_Conflict_Endocrine/Exocrine")
   expect_identical(env$barlow_trajectory_features(columns),
                    c("core_Beta cell", "peri_Beta cell", "core_Ductal"))
 })

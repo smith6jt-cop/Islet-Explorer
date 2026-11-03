@@ -4,14 +4,16 @@ make_backend_env <- function(root) {
   env$data_path <- function(...) file.path(env$data_root, ...)
   env$PHENOTYPE_RETIRED <- c("Retired")
   env$PHENOTYPE_COLORS <- c("Beta cell" = "#000000", "Macrophage" = "#ffffff")
-  env$phenotype_keep <- function(x) setdiff(x, env$PHENOTYPE_RETIRED)
-  env$phenotype_filter_rows <- function(df) {
-    df[!(as.character(df$phenotype) %in% env$PHENOTYPE_RETIRED), , drop = FALSE]
-  }
+  env$phenotype_retired <- function() env$PHENOTYPE_RETIRED
   for (expr in parse(.find_source("R/00_globals.R"))) {
     if (is.call(expr) && identical(expr[[1]], as.name("<-")) &&
         as.character(expr[[2]]) %in% c("ISLET_EXCLUDED_DONORS", "islet_canonical_donor_id",
-                                       "islet_excluded_donors_in")) {
+                                       "islet_excluded_donors_in", "phenotype_is_conflict",
+                                       "phenotype_keep", "phenotype_is_kept", "phenotype_filter_rows",
+                                       "phenotype_filter_conflict_columns", "phenotype_partition_labels",
+                                       "is_phenotype_aggregate", "PHENOTYPE_GROUP_AGGREGATES",
+                                       "is_macrophage_label", "MACROPHAGE_LABEL_PATTERN",
+                                       "MACROPHAGE_KEY_PATTERN")) {
       eval(expr, envir = env)
     }
   }
@@ -130,6 +132,75 @@ test_that("DuckDB cell-distance queries preserve in-memory results", {
     tolerance = 1e-12, ignore_attr = TRUE
   )
   env$islet_disconnect_backend()
+})
+
+test_that("Spatial hides Conflict subsets without changing raw cells or denominators", {
+  skip_if_not_installed("DBI")
+  skip_if_not_installed("duckdb")
+
+  root <- tempfile("islet-conflict-backend-")
+  dir.create(file.path(root, "spatial"), recursive = TRUE)
+  frame <- data.frame(
+    case_id = rep("0112", 6), donor_status = rep("ND", 6),
+    cell_region = rep("core", 6),
+    phenotype = c("Beta cell", "Conflict Endocrine", " conflict_t ", "Conflict", "Retired", NA),
+    signed_dist = rep(1, 6), INS_pos = rep(1L, 6), stringsAsFactors = FALSE
+  )
+  write_test_parquet(file.path(root, "spatial", "cell_distance.parquet"), frame)
+  env <- make_backend_env(root)
+  sys.source(.find_source("R/spatial_helpers.R"), envir = env)
+  env$.cell_distance_cache$data <- frame
+  on.exit(env$islet_disconnect_backend(), add = TRUE)
+
+  for (group in c("INS", "__all__")) {
+    memory <- env$.query_cell_distance_hist_memory("marker", group, "ND", "prop", 24L)
+    duck <- env$.query_cell_distance_hist_duckdb("marker", group, "ND", "prop", 24L)
+    expect_equal(duck$hist, memory$hist, tolerance = 1e-12, ignore_attr = TRUE)
+    expect_equal(sum(memory$hist$n), 3)
+    count <- env$.query_cell_distance_hist_memory("marker", group, "ND", "count", 24L)
+    expect_equal(memory$hist$dens, count$hist$dens / 6)
+  }
+  memory <- env$.query_cell_distance_composition_memory("marker", "INS", "ND")
+  duck <- env$.query_cell_distance_composition_duckdb("marker", "INS", "ND")
+  expect_equal(duck$comp, memory$comp, tolerance = 1e-12, ignore_attr = TRUE)
+  expect_equal(memory$comp$n, 3)
+  expect_equal(memory$comp$total, 6)
+  expect_equal(memory$comp$val, 0.5)
+
+  # Additive categories reject parent totals and even manually supplied Conflict choices.
+  items <- c("Beta cell", "Conflict Endocrine", "All endocrine cells")
+  memory <- env$.query_cell_distance_composition_memory("phenotype", items, "ND")
+  duck <- env$.query_cell_distance_composition_duckdb("phenotype", items, "ND")
+  expect_equal(duck$comp, memory$comp, tolerance = 1e-12, ignore_attr = TRUE)
+  expect_identical(memory$comp$item, "Beta cell")
+  expect_equal(memory$comp$n, 1)
+  expect_equal(memory$comp$total, 6)
+  expect_null(env$.query_cell_distance_hist_memory("phenotype", "Conflict", "ND"))
+  expect_null(env$.query_cell_distance_hist_duckdb("phenotype", "Conflict", "ND"))
+  expect_identical(env$load_cell_distance(), frame)
+
+  # Exercise the actual development CSV path, whose cache must retain the same source rows.
+  csv_root <- tempfile("islet-conflict-csv-")
+  dir.create(file.path(csv_root, "donors"), recursive = TRUE)
+  utils::write.csv(frame, file.path(csv_root, "cell_distance.csv"), row.names = FALSE)
+  utils::write.csv(frame, file.path(csv_root, "donors", "0112.csv"), row.names = FALSE)
+  csv_env <- make_backend_env(csv_root)
+  csv_env$islet_is_production <- function() FALSE
+  sys.source(.find_source("R/spatial_helpers.R"), envir = csv_env)
+  expect_identical(csv_env$load_cell_distance(), frame)
+  expect_equal(csv_env$query_cell_distance_composition("marker", "INS", "ND")$comp,
+               env$query_cell_distance_composition("marker", "INS", "ND")$comp,
+               tolerance = 1e-12, ignore_attr = TRUE)
+  expect_equal(csv_env$query_cell_distance_hist("marker", "__all__", "ND")$hist,
+               env$query_cell_distance_hist("marker", "__all__", "ND")$hist,
+               tolerance = 1e-12, ignore_attr = TRUE)
+  expect_identical(csv_env$load_donor_tissue("0112")$phenotype, "Beta cell")
+
+  # The presentation/download helper drops wide Conflict fields without touching rows or values.
+  wide <- data.frame(object_id = c("a", "b"), prop_Beta = c(0.3, 0.5),
+                     prop_Conflict_Endocrine = c(0.1, 0.2), peri_count_Conflict = c(1, 2),
+                     check.names = FALSE)
+  expect_identical(env$phenotype_filter_conflict_columns(wide), wide[c("object_id", "prop_Beta")])
 })
 
 test_that("manifest hash verification detects a modified artifact", {

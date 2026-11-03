@@ -12,12 +12,15 @@
               "PHENOTYPE_GROUP_ORDER", "PHENOTYPE_GROUP_AGGREGATES", "phenotype_group", "is_phenotype_aggregate",
               "phenotype_aggregate_members", "phenotype_aggregates_for", "phenotype_groups_split",
               "phenotype_grouped_choices", "phenotype_group_checkboxes", "add_phenotype_aggregate_columns")
+  wanted <- c(wanted, "PHENOTYPE_RETIRED", "phenotype_retired", "phenotype_keep", "phenotype_is_kept",
+              "phenotype_is_conflict", "phenotype_partition_labels")
   for (e in exprs) {
     if (is.call(e) && identical(e[[1]], as.name("<-")) && as.character(e[[2]]) %in% wanted) eval(e, env)
   }
   env$root_has_marker_profile_labels <- function() TRUE
   env$root_has_top_marker_labels <- function() TRUE
   env$root_cd45_is_rule_label <- function() FALSE        # v15: "CD45+" is a top-marker label
+  env$root_phenotype_labels <- function() NULL
   env
 }
 
@@ -31,6 +34,35 @@ test_that("the twelve macrophage labels match the uniform typing (codex_typing.m
   expect_true(all(grepl(env$MACROPHAGE_LABEL_PATTERN, env$MACROPHAGE_LABELS)))
   expect_equal(env$is_macrophage_label(c("Macrophage", env$MACROPHAGE_LABELS[2], "CD8a Tcell", NA)),
                c(TRUE, TRUE, FALSE, FALSE))
+})
+
+test_that("additive choices contain leaves once while single-metric choices retain parent totals", {
+  env <- .label_env()
+  leaves <- c("Beta cell", "Alpha cell", "CD4 Tcell", env$MACROPHAGE_LABELS[1:2])
+  labels <- c("All endocrine cells", "All T cells", "All macrophages", "Macrophage", leaves,
+              "T cell", "Hematopoietic CD45+", "Hematopoietic CD45-", "Conflict B/T", leaves[1])
+  expect_identical(env$phenotype_partition_labels(labels), leaves)
+  html <- as.character(env$phenotype_group_checkboxes("exclusive", labels))
+  expect_false(grepl('value="All ', html, fixed = TRUE))
+  expect_false(grepl('value="Macrophage"', html, fixed = TRUE))
+  expect_false(grepl("Conflict|Hematopoietic", html))
+  expect_equal(lengths(regmatches(html, gregexpr('name="exclusive"', html))), length(leaves))
+  single <- unname(unlist(env$phenotype_grouped_choices(labels)))
+  expect_true(all(c("All endocrine cells", "All T cells", "All macrophages") %in% single))
+  expect_false(any(c("Macrophage", "T cell", "Conflict B/T") %in% single))
+})
+
+test_that("root-bound parent queries include residual source members once without exposing them as leaves", {
+  env <- .label_env()
+  raw <- c("Beta cell", "Alpha cell", "Delta cell", "CHGA+ hormone-negative", "T cell", "CD4 Tcell", "CD8a Tcell",
+           env$MACROPHAGE_LABELS[1:2], "Conflict T/Myeloid")
+  env$root_phenotype_labels <- function() raw
+  expect_setequal(env$phenotype_members("All endocrine cells"), raw[1:4])
+  expect_setequal(env$phenotype_members(c("All T cells", "CD4 Tcell", "T cell")), raw[5:7])
+  expect_setequal(env$phenotype_members(c("Macrophage", "All macrophages", env$MACROPHAGE_LABELS[1])), raw[8:9])
+  expect_length(env$phenotype_members("Conflict T/Myeloid"), 0)
+  expect_false("T cell" %in% env$phenotype_keep(raw))
+  expect_false("Conflict T/Myeloid" %in% unlist(env$phenotype_grouped_choices(raw)))
 })
 
 test_that("display names put the broad name first, with every marker sign a superscript; values stay ASCII", {
@@ -132,6 +164,19 @@ test_that("merged object columns sum the members and recompute the band enrichme
   expect_equal(out[["min_dist_Macrophage"]], c(5, NA))
   split <- env$macrophage_collapse_comp(comp, env$MACROPHAGE_MARKERS)
   expect_equal(split[[paste0("prop_", env$macrophage_collapse(L[1], env$MACROPHAGE_MARKERS))]], c(0.1, 0.2))
+})
+
+test_that("unsplit macrophage totals preserve a recorded residual leaf once", {
+  env <- .label_env()
+  profile <- env$MACROPHAGE_LABELS[1]
+  env$root_phenotype_labels <- function() c("Macrophage", profile)
+  comp <- data.frame(prop_Macrophage = 0.1, check.names = FALSE)
+  comp[[paste0("prop_", profile)]] <- 0.2
+  out <- env$macrophage_collapse_comp(comp)
+  expect_equal(out$prop_Macrophage, 0.3)
+  expect_equal(env$macrophage_collapse_comp(out)$prop_Macrophage, 0.3)
+  expect_setequal(env$phenotype_members("All macrophages"), c("Macrophage", profile))
+  expect_identical(env$phenotype_partition_labels(c("Macrophage", profile)), profile)
 })
 
 test_that("top-marker labels form their own group, last, with a superscript and no broad name", {

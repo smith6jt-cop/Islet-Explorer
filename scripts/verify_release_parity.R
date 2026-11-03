@@ -177,7 +177,8 @@ parity_runtime <- function(repo, root) {
   # Read only the canonical phenotype policy, the pixel constant and the definitions prep_data() needs for the
   # phenotype group aggregates (app commit 82ce23e), without running the UI/credential/package startup code in
   # 00_globals.R.
-  policy_names <- c("PHENOTYPE_RETIRED", "phenotype_keep", "phenotype_is_kept",
+  policy_names <- c("PHENOTYPE_RETIRED", "phenotype_keep", "phenotype_is_kept", "phenotype_retired",
+                    "phenotype_is_conflict", "phenotype_filter_conflict_columns", "phenotype_partition_labels",
                     "phenotype_filter_rows", "PIXEL_SIZE_UM",
                     "MACROPHAGE_LABEL_PATTERN", "MACROPHAGE_KEY_PATTERN", "is_macrophage_label",
                     "root_phenotype_labels", "root_has_marker_profile_labels", "TOP_MARKER_BASE",

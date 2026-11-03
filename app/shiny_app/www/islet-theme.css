@@ -153,6 +153,58 @@ html[data-theme="dark"] .form-control:focus { border-color: var(--islet-accent);
 html[data-theme="dark"] .form-control[disabled], html[data-theme="dark"] .form-control[readonly] { background-color: var(--islet-surface-2); }
 html[data-theme="dark"] input[type="checkbox"], html[data-theme="dark"] input[type="radio"] { accent-color: var(--islet-accent); }
 
+/* Reserve a separate arrow gutter, even for a wrapped phenotype name. This
+   includes both control panels and selectors within individual tab cards. */
+.tab-pane .selectize-control.single .selectize-input {
+  padding-right: 34px;
+}
+.tab-pane .selectize-control.single .selectize-input > .item {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.plot-type-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.plot-type-toolbar {
+  display: flex;
+  align-items: center;
+  flex: 1 1 360px;
+  min-width: 0;
+  max-width: 100%;
+  gap: 8px;
+}
+.plot-type-toolbar > .plot-type-select {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.plot-type-toolbar > .btn { flex: 0 0 auto; }
+.plot-type-select .form-group { min-width: 0; max-width: 100%; }
+.plot-type-select .selectize-control {
+  flex: 1 1 0;
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+/* Equal-height overview cards, followed by normal full-width card rows. */
+.trajectory-overview-row {
+  display: flex;
+  flex-wrap: wrap;
+  row-gap: 20px;
+  margin-bottom: 20px;
+}
+.trajectory-overview-row::before,
+.trajectory-overview-row::after { display: none; }
+.trajectory-overview-row > [class*="col-"] { display: flex; min-width: 0; }
+.trajectory-main-card { width: 100%; min-width: 0; margin-bottom: 0; }
+@media (max-width: 767px) {
+  .trajectory-overview-row > [class*="col-"] { width: 100%; }
+}
+
 /* selectize */
 html[data-theme="dark"] .selectize-input,
 html[data-theme="dark"] .selectize-input.full,

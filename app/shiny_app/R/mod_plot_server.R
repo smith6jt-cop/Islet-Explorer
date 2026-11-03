@@ -871,7 +871,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
     # Leave out: the root's phenotypes as choices; each region's default selection when the region changes.
     composition_leave_out_choices <- reactive({
       labels <- prepared()$combined_pairs$label
-      c(labels[phenotype_is_kept(labels) & !is_phenotype_aggregate(labels)], DONOR_COMPOSITION_OTHER)
+      c(phenotype_partition_labels(labels), DONOR_COMPOSITION_OTHER)
     })
     # Only the region resets the choice (toggling an object class must not); a new macrophage marker choice keeps it,
     # with the macrophage categories left out together.
@@ -920,7 +920,8 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
           paste("Region:", input$composition_region %||% "core"),
           desc,
           "cells: the donor's cells of the phenotype, pooled over its selected objects; total_cells: all its cells there",
-          "proportion = 100 * cells / total_cells; 'No subtype' holds the cells typed only to a general class"))
+          "proportion = 100 * cells / total_cells; 'No subtype' holds the cells typed only to a general class",
+          "Hidden QC-conflict cells remain in total_cells but are excluded from displayed categories and No subtype; proportions may sum to less than 100%"))
       }
     )
 

@@ -28,6 +28,7 @@ class LiveTrajectoryFeatures(unittest.TestCase):
                    "n_core_Beta cell", "n_endocrine_core"]
         columns += [f"{region}_{label}" for label in trajectory.RETIRED_PHENOTYPES
                     for region in ("core", "peri")]
+        columns += ["core_Conflict B/T", "peri_Conflict_Endocrine/Exocrine", "core_conflict T/Myeloid"]
         self.assertEqual(trajectory.composition_features(columns),
                          ["core_Beta cell", "peri_Beta cell", "core_Ductal"])
 
@@ -43,7 +44,7 @@ class LiveTrajectoryFeatures(unittest.TestCase):
         for label in ("Alpha cell", "Beta cell", "Delta cell", "Ductal"):
             for region in ("core", "peri"):
                 frame[f"{region}_{label}"] = rng.uniform(.05, .8, n)
-        for label in trajectory.RETIRED_PHENOTYPES:
+        for label in sorted(trajectory.RETIRED_PHENOTYPES | {"Conflict B/T", "Conflict T/Myeloid"}):
             for region in ("core", "peri"):
                 frame[f"{region}_{label}"] = rng.uniform(0, .1, n)
         altered = frame.copy()

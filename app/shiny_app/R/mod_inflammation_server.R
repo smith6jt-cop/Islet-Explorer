@@ -38,6 +38,22 @@ INFLAM_FDR_FAMILY <- c("CD8a Tcell", "CD4 Tcell", "B cell",
                        "T cell", "Macrophage", "APCs", "Immune")
 INFLAM_DEFAULT_PHENOTYPES <- INFLAM_FDR_FAMILY
 
+# Presentation projections only: statistical inputs, adjustment families and
+# original cell denominators stay in the unfiltered fitted objects.
+inflammation_display_rows <- function(frame, selected = NULL, column = "phenotype") {
+  if (is.null(frame) || !(column %in% names(frame))) return(frame)
+  allowed <- phenotype_partition_labels(frame[[column]])
+  if (!is.null(selected)) allowed <- intersect(allowed, phenotype_partition_labels(selected))
+  frame[frame[[column]] %in% allowed, , drop = FALSE]
+}
+
+inflammation_fit_display <- function(fit) {
+  allowed <- phenotype_partition_labels(c(fit$res$cell_type, fit$dropped))
+  fit$res <- fit$res[fit$res$cell_type %in% allowed, , drop = FALSE]
+  fit$dropped <- intersect(fit$dropped, allowed)
+  fit
+}
+
 inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLORS)) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
@@ -241,25 +257,29 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
            n_cells = ab$n_cells, group = grp)
     })
 
+    edger_display <- reactive(inflammation_fit_display(edger_fit()))
+
     output$edger_note <- renderUI({
-      e <- edger_fit()
+      e <- edger_display()
       tags$p(style = "font-size: 12px; color: #666; margin: 4px 0 10px 0; line-height: 1.5;",
         tags$strong(e$label), " — ",
         sprintf("%s cells from %d donors; %d cell type%s tested",
                 formatC(e$n_cells, format = "d", big.mark = ","),
                 length(e$group), e$n_tested, if (e$n_tested == 1) "" else "s"),
-        if (e$n_dropped > 0) sprintf(", %d dropped by filterByExpr (%s)",
-                                     e$n_dropped, paste(e$dropped, collapse = ", ")) else "",
+        if (e$n_dropped > 0) sprintf(", %d dropped by filterByExpr%s",
+                                     e$n_dropped, if (length(e$dropped))
+                                       paste0(" (visible classes: ", paste(e$dropped, collapse = ", "), ")") else "") else "",
         sprintf(". Common dispersion %.3f (BCV %.2f).", e$dispersion, sqrt(e$dispersion)),
         tags$br(),
         tags$span(style = "color: #888;",
           "logFC is on a log2 scale after library-size normalization, so it is a change in ",
           "abundance rather than in share of the tissue. FDR is Benjamini-Hochberg across ",
-          "the cell types tested in this contrast."))
+          "the cell types tested in this contrast. Hidden classes are omitted from the display; ",
+          "the fitted model and its correction family are unchanged."))
     })
 
     output$edger_table <- renderTable({
-      e <- edger_fit()
+      e <- edger_display()
       r <- e$res
       data.frame(
         `Cell type` = r$cell_type,
@@ -273,7 +293,7 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
     }, striped = TRUE, bordered = TRUE, spacing = "s", align = "lccccc")
 
     output$edger_volcano <- renderPlotly({
-      e <- edger_fit()
+      e <- edger_display()
       r <- e$res
       r$neglog10 <- -log10(pmax(r$FDR, .Machine$double.xmin))
       r$sig <- ifelse(r$FDR < 0.05,
@@ -318,7 +338,7 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
       filename = function() paste0("inflammation_edger_",
                                    format(Sys.time(), "%Y%m%d_%H%M%S"), ".csv"),
       content = function(file) {
-        e <- tryCatch(edger_fit(), error = function(err) NULL)
+        e <- tryCatch(edger_display(), error = function(err) NULL)
         if (is.null(e)) return(write_islet_csv(file, NULL, "edgeR results unavailable"))
         write_islet_csv(file, e$res, islet_csv_header(
           paste0("edgeR differential abundance — ", e$label),
@@ -337,7 +357,7 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
 
     output$infil_pheno_ui <- renderUI({
       df <- tryCatch(cells(), error = function(e) NULL)
-      avail <- if (is.null(df)) character(0) else phenotype_keep(sort(unique(as.character(df$phenotype))))
+      avail <- if (is.null(df)) character(0) else phenotype_partition_labels(sort(unique(as.character(df$phenotype))))
       sel <- intersect(INFLAM_DEFAULT_PHENOTYPES, avail)
       if (!length(sel)) sel <- head(avail, 5)
       checkboxGroupInput(ns("infil_phenos"), "Phenotypes",
@@ -435,10 +455,10 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
     })
 
     infil_selected <- reactive({
-      sel <- input$infil_phenos
+      sel <- phenotype_partition_labels(input$infil_phenos)
       shiny::validate(shiny::need(length(sel) > 0, "Select at least one phenotype."))
       s <- infiltration()
-      s[s$phenotype %in% sel, , drop = FALSE]
+      inflammation_display_rows(s, sel)
     })
 
     # Donor-level tests: Kruskal-Wallis across the three stages on donor scores,
@@ -505,10 +525,10 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
     # Display slice: the ticked phenotypes only. q-values come from the fixed
     # family above and do not change with the selection.
     infil_tests <- reactive({
-      sel <- input$infil_phenos
+      sel <- phenotype_partition_labels(input$infil_phenos)
       shiny::validate(shiny::need(length(sel) > 0, "Select at least one phenotype."))
       t <- infil_tests_all()
-      t[t$phenotype %in% sel, , drop = FALSE]
+      inflammation_display_rows(t, sel)
     })
 
     output$infil_table <- renderTable({
@@ -628,7 +648,7 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
                                    format(Sys.time(), "%Y%m%d_%H%M%S"), ".csv"),
       content = function(file) {
         s <- tryCatch(infil_selected(), error = function(e) NULL)
-        t <- tryCatch(infil_tests_all(), error = function(e) NULL)
+        t <- tryCatch(inflammation_display_rows(infil_tests_all()), error = function(e) NULL)
         if (is.null(s)) return(write_islet_csv(file, NULL, "No phenotypes selected"))
         hdr <- islet_csv_header(
           "Infiltration score (Steenbuck et al. 2025 definition)",
@@ -644,6 +664,7 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
           paste("FDR family (pre-specified, fixed in source):",
                 paste(INFLAM_FDR_FAMILY, collapse = "; ")),
           "in_family = FALSE rows are reported UNCORRECTED (q_kw is NA) and are exploratory",
+          "Hidden classes are omitted from these display tables; source cells, denominators and fitted tests are unchanged",
           "pairwise Wilcoxon columns are UNCORRECTED by design: at 5 donors per stage the best",
           "  attainable pairwise p is 0.0079, so any BH correction floors above alpha = 0.05")
         # Two blocks in one file. Written through a single open connection:
@@ -660,7 +681,7 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
                          con, row.names = FALSE)
         if (!is.null(t)) {
           writeLines("", con)
-          writeLines("# Donor-level tests (BH across all phenotypes present)", con)
+          writeLines("# Donor-level tests (BH within the pre-specified family)", con)
           utils::write.csv(t, con, row.names = FALSE)
         }
       }

@@ -112,10 +112,10 @@ trajectory_ui <- function(id) {
         )
       )
     ),
-    fluidRow(
+    fluidRow(class = "trajectory-overview-row",
       # Left card: Scatterplot and heatmaps (narrowed from col-8)
       column(7,
-        div(class = "card trajectory-controls", style = "padding: 15px; margin-bottom: 20px;",
+        div(class = "card trajectory-controls trajectory-main-card", style = "padding: 15px;",
           card_title_help("Pseudotime", help = list(
             tags$p("Each fitted object's Y-axis value (Data controls) against its pseudotime. The strip below",
                    " cuts pseudotime into 25 bins: a bin's color is the donor status holding the largest proportion of",
@@ -136,9 +136,10 @@ trajectory_ui <- function(id) {
           plotlyOutput(ns("traj_heatmap"), height = 100)
         )
       ),
-      # Right column: stacked UMAPs and a persistent segmentation card.
+      # Keep the UMAP and pseudotime cards in one row; segmentation gets its own
+      # full-width row so it cannot leave an empty column below pseudotime.
       column(5,
-        div(class = "card", style = "padding: 15px; margin-bottom: 20px;",
+        div(class = "card trajectory-main-card", style = "padding: 15px;",
           card_title_help("UMAPs", help = list(
             tags$p(tags$strong("UMAPs and Leiden clusters."),
                    " Built from each fitted object's endocrine composition (the Endocrine Beta, Alpha, Delta and CHGA⁺",
@@ -160,8 +161,12 @@ trajectory_ui <- function(id) {
                            class = "btn-sm btn-outline-secondary"),
             downloadButton(ns("dl_umap_feature"), "Download PNG",
                            class = "btn-sm btn-outline-primary"))
-        ),
-        div(class = "card", style = "padding: 15px; margin-bottom: 20px; min-height: 650px;",
+        )
+      )
+    ),
+    fluidRow(
+      column(12,
+        div(class = "card trajectory-segmentation-card", style = "padding: 15px; margin-bottom: 20px;",
           h5("Segmentation map", style = "margin-top: 0;"),
           uiOutput(ns("segmentation_viewer_panel"))
         )
@@ -194,7 +199,7 @@ trajectory_ui <- function(id) {
     fluidRow(
       column(12,
         div(class = "card", style = "padding: 15px; margin-bottom: 20px;",
-          card_title_help("PAGA force-directed layout (Barlow et al. 2024)",
+          card_title_help("PAGA force-directed layout",
             style = "color: var(--islet-heading); margin: 0 0 8px;",
             help = list(tags$p("Barlow et al.'s PAGA-initialized force-directed layout of the same graph (cosine,",
                                " 15 neighbors, Leiden resolution 1). Each point is an object; the axes are layout",

@@ -265,6 +265,13 @@ render_islet_drilldown_plot <- function(info, cells, color_by = "phenotype", sho
   if (!show_peri && "cell_region" %in% colnames(cells)) {
     cells <- cells[cells$cell_region == "core", , drop = FALSE]
   }
+  # Apply the presentation policy to points, not just the palette. Keep the
+  # loaded scientific table intact for original-denominator counts elsewhere.
+  if ("phenotype" %in% names(cells)) {
+    visible <- if (color_by == "phenotype") phenotype_is_kept(cells$phenotype) else
+      !phenotype_is_conflict(cells$phenotype)
+    cells <- cells[visible, , drop = FALSE]
+  }
   if (nrow(cells) == 0) return(base_plot)
 
   # Convert cell centroids from µm to pixels (matching GeoJSON coordinate space)

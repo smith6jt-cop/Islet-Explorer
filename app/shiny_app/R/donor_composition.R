@@ -3,7 +3,9 @@
 # retained phenotype among all the cells of the donor's selected objects, pooled (cells of the phenotype summed over
 # the objects, over all their cells), in the core, the 20 um peri-islet band or both. Cells of the general classes
 # (Endocrine, T cell, Immune: cells without a subtype) count in the total and are shown together as "No subtype", so
-# each bar sums to 100 %. It follows the Data controls' object classes, donor status, autoantibody, age, sex and
+# each bar sums to 100 % of the cells shown. Hidden QC-conflict cells are excluded from the displayed partition,
+# but remain in the original total_cells denominator. It follows the Data controls' object classes, donor status,
+# autoantibody, age, sex and
 # diameter filters; zero and outlier exclusions are per measure and do not apply.
 
 DONOR_COMPOSITION_REGIONS <- c("Core" = "core", "Peri-islet band" = "peri", "Core + peri-islet" = "both")
@@ -50,6 +52,16 @@ donor_composition_table <- function(comp, pairs, region = c("core", "peri", "bot
   use_core <- region %in% c("core", "both")
   use_peri <- region %in% c("peri", "both")
   total <- (if (use_core) core_total else 0) + (if (use_peri) peri_total else 0)
+  # The saved pair inventory can omit labels whose sanitized peri names cannot
+  # be reversed (notably a slash in a Conflict label). Count hidden cells from
+  # the original regional columns, independently of that display inventory.
+  hidden <- numeric(nrow(comp))
+  for (prefix in c(if (use_core) "prop_", if (use_peri) "peri_prop_")) {
+    columns <- names(comp)[startsWith(names(comp), prefix)]
+    columns <- columns[phenotype_is_conflict(substring(columns, nchar(prefix) + 1L))]
+    region_total <- if (prefix == "prop_") core_total else peri_total
+    for (column in columns) hidden <- hidden + num(column) * region_total
+  }
   cells <- sapply(seq_len(nrow(pairs)), function(k) {
     (if (use_core) num(pairs$core_col[k]) * core_total else 0) +
       (if (use_peri) num(pairs$peri_col[k]) * peri_total else 0)
@@ -57,13 +69,15 @@ donor_composition_table <- function(comp, pairs, region = c("core", "peri", "bot
   cells <- matrix(cells, nrow = nrow(comp), dimnames = list(NULL, pairs$label))
   ids <- as.character(comp$`Case ID`)
   status <- as.character(comp$`Donor Status`)
-  kept <- phenotype_is_kept(pairs$label)
+  kept <- pairs$label %in% phenotype_partition_labels(pairs$label)
   rows <- lapply(split(seq_len(nrow(comp)), ids), function(i) {
     tot <- sum(total[i])
     n <- colSums(cells[i, , drop = FALSE])
     listed <- n[kept]
     out <- data.frame(phenotype = c(names(listed), DONOR_COMPOSITION_OTHER),
-                      cells = c(unname(listed), max(tot - sum(listed), 0)), stringsAsFactors = FALSE)
+                      # Hidden QC-conflict cells must not silently become "No subtype".
+                      cells = c(unname(listed), max(tot - sum(listed) - sum(hidden[i]), 0)),
+                      stringsAsFactors = FALSE)
     out$case_id <- ids[i[1]]
     out$donor_status <- status[i[1]]
     out$total_cells <- tot
@@ -140,8 +154,7 @@ donor_composition_figure <- function(tab, order_ids, palette, status_cols, regio
                    font = fonts$title, x = 0.02, xanchor = "left"),
       xaxis = list(title = list(text = "Donor", font = fonts$axis_title), tickfont = list(size = ISLET_FONT_SIZES$dense_min),
                    automargin = TRUE),
-      yaxis = list(title = list(text = if (length(leave_out)) "Proportion of the cells shown (%)" else
-                     "Proportion of cells (%)", font = fonts$axis_title), tickfont = fonts$axis_tick,
+      yaxis = list(title = list(text = "Proportion of the cells shown (%)", font = fonts$axis_title), tickfont = fonts$axis_tick,
                    range = c(0, 108), tickvals = seq(0, 100, 25)),
       legend = list(font = fonts$legend_text, title = list(text = "Phenotype", font = fonts$legend_title),
                     groupclick = "toggleitem", tracegroupgap = 6),
@@ -157,16 +170,19 @@ donor_composition_card_ui <- function(ns) {
                " selected endocrine objects, pooled over the objects (a large object counts for more cells), in the",
                " chosen region. The squares above the bars give each donor's status."),
         tags$p(tags$strong("No subtype"), " (gray) holds the cells typed only to a general class (Endocrine, T cell",
-               " or immune cells without a subtype), so each bar sums to 100%."),
+               " or immune cells without a subtype). Hidden QC-conflict cells are excluded from these categories,",
+               " including No subtype. Each bar sums to 100% of the cells shown; hover also reports the proportion",
+               " of all original cells."),
         tags$p(tags$strong("Leave out."), " One or two classes hold nearly every cell (the endocrine types in the",
                " core, Exocrine in the band) and flatten the rest, so they are left out by default: the bars then",
                " give each phenotype's proportion of the cells that remain, and hover also gives its proportion of",
-               " all cells. Changing the region restores its default; uncheck everything to see all cells."),
+               " all cells. Changing the region restores its default; uncheck everything to see all retained categories."),
         tags$p(tags$strong("Filters."), " The Data controls' endocrine objects, donor status, autoantibody, age, sex",
                " and diameter filters apply. The Data layer, the measure, zero and outlier exclusions do not: they",
                " concern one measure, and this card shows every phenotype."),
-        tags$p("The CSV gives each donor's cells, total cells and proportion of all cells per phenotype, every",
-               " phenotype included."))),
+        tags$p("The CSV gives each retained category's cell count and proportion of all original cells. It includes",
+               " categories selected under Leave out. The original total_cells denominator includes hidden cells;",
+               " the CSV proportions therefore need not sum to 100%."))),
       div(style = "display: flex; align-items: flex-end; gap: 14px;",
         div(style = "width: 190px;", selectInput(ns("composition_region"), "Region", choices = DONOR_COMPOSITION_REGIONS,
                                                  selected = "core", width = "100%")),

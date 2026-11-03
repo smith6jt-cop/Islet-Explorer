@@ -1284,7 +1284,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
           pr$features,
           pr$scale,
           pr$range,
-          paste("Markers:", paste(input$multi_heatmap_markers %||% "(none)", collapse = ", ")),
+          paste("Markers:", paste(mm$marker_order %||% "(none)", collapse = ", ")),
           paste("Pseudotime bins:", if (is.null(mm)) NA else mm$n_bins),
           "z_clamped = (bin_mean - mean of that marker's bin means) / sd, clamped to [-2.5, 2.5]. Z-scoring is ACROSS BINS within a marker, not across islets."
         ))
@@ -1444,7 +1444,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
           d[, c("islet_id", "case_id", "donor_status", "leiden",
                 "fa_1", "fa_2", "pseudotime")]
         write_islet_csv(file, out, islet_csv_header(
-          "Trajectory — PAGA force-directed layout (Barlow et al. 2024)",
+          "Trajectory — PAGA force-directed layout",
           "Features: core + 20um peri cell-type counts / endocrine cells, log1p",
           sprintf("Neighbors: cosine, %d NN | Leiden resolution %g | layout %s",
                   15L, 1.0, attr(d, "layout_key") %||% "(n/a)"),

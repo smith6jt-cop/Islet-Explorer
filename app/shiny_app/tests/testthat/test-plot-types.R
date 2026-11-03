@@ -2,8 +2,13 @@
 
 .plot_types_env <- function() {
   env <- new.env(parent = globalenv())
-  env$PHENOTYPE_RETIRED <- c("Endocrine", "T cell", "Immune")
-  env$phenotype_is_kept <- function(x) !(as.character(x) %in% env$PHENOTYPE_RETIRED)
+  defs <- c("PHENOTYPE_RETIRED", "phenotype_is_kept", "phenotype_keep", "phenotype_retired",
+            "phenotype_is_conflict", "phenotype_partition_labels", "PHENOTYPE_GROUP_AGGREGATES",
+            "is_phenotype_aggregate", "MACROPHAGE_LABEL_PATTERN", "MACROPHAGE_KEY_PATTERN", "is_macrophage_label")
+  for (expr in parse(.find_source("R/00_globals.R"))) {
+    if (is.call(expr) && identical(expr[[1]], as.name("<-")) && is.symbol(expr[[2]]) &&
+        as.character(expr[[2]]) %in% defs) eval(expr, env)
+  }
   sys.source(.find_source("R/plot_types.R"), envir = env)
   sys.source(.find_source("R/donor_composition.R"), envir = env)
   env
@@ -80,6 +85,42 @@ test_that("donor composition pools cells over objects and closes each bar with N
   expect_equal(b1$cells[b1$phenotype == "Beta cell"], 21)
   expect_equal(sum(both$proportion[both$case_id == "2"]), 100)
   expect_equal(env$donor_composition_order(core, "beta"), c("1", "2"))
+})
+
+test_that("donor categories count leaves once and never turn hidden QC cells into No subtype", {
+  env <- .plot_types_env()
+  labels <- c("Beta cell", "T cell", "CD4 Tcell", "Hematopoietic CD45+", "Hematopoietic CD45-",
+              "Macrophage CD68+CD163-", "Macrophage CD68-CD163+", "Macrophage", "Conflict B/T", "All T cells")
+  core <- c(30, 10, 20, 5, 5, 10, 10, 20, 10, 30)
+  peri <- c(20, 20, 20, 30, 20, 20, 20, 40, 50, 40)
+  comp <- data.frame(`Case ID` = "1", `Donor Status` = "ND", total_cells_core = 100,
+                     total_cells_peri = 200, check.names = FALSE)
+  pairs <- data.frame(label = labels, core_col = paste0("prop_", labels),
+                     peri_col = paste0("peri_prop_", labels))
+  for (i in seq_along(labels)) {
+    comp[[pairs$core_col[i]]] <- core[i] / 100
+    comp[[pairs$peri_col[i]]] <- peri[i] / 200
+  }
+  original <- comp
+  tab <- env$donor_composition_table(comp, pairs, "both")
+  expect_identical(tab$phenotype, c(labels[c(1, 3, 6, 7)], "No subtype"))
+  expect_equal(tab$cells, c(50, 40, 30, 30, 90))
+  expect_true(all(tab$total_cells == 300))
+  expect_equal(sum(tab$proportion), 80) # 60 hidden cells stay in the original denominator.
+  shown <- env$donor_composition_shown(tab)
+  expect_equal(sum(shown$proportion), 100)
+  expect_true(all(shown$shown_cells == 240))
+  # Frozen releases may have no pair for labels with a sanitized slash. Hidden
+  # counts still come from the complete source regional columns.
+  without_conflict_pair <- pairs[pairs$label != "Conflict B/T", , drop = FALSE]
+  expect_equal(env$donor_composition_table(comp, without_conflict_pair, "both"), tab)
+  core_tab <- env$donor_composition_table(comp, without_conflict_pair, "core")
+  peri_tab <- env$donor_composition_table(comp, without_conflict_pair, "peri")
+  expect_equal(core_tab$cells[core_tab$phenotype == "No subtype"], 20)
+  expect_equal(peri_tab$cells[peri_tab$phenotype == "No subtype"], 70)
+  expect_equal(sum(core_tab$cells), 90)
+  expect_equal(sum(peri_tab$cells), 150)
+  expect_identical(comp, original)
 })
 
 test_that("the fitted axis ends above the 99th percentile only when a few values stretch it", {

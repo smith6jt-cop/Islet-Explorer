@@ -281,9 +281,17 @@ CELL_DIST_MARKER_COLORS <- c(
 # A merged macrophage category or a group aggregate covers its data labels (phenotype_members(), 00_globals.R).
 .cd_members <- function(labels) get0("phenotype_members", mode = "function", ifnotfound = identity)(labels)
 
+# Conflict cells remain in the cached measurements and all-cell denominators,
+# but are excluded from plotted subsets even when coloring/selecting by marker.
+.cd_visible_rows <- function(base) base[!phenotype_is_conflict(base$phenotype), , drop = FALSE]
+.cd_visible_predicate <- function() {
+  "NOT regexp_matches(coalesce(phenotype, ''), '^[[:space:]]*Conflict($|[[:space:]_])', 'i')"
+}
+
 # Split `base` into the plotted subset. `mode` is "phenotype" (d$phenotype ==
-# item) or "marker" (item's `{item}_pos` == 1). "__all__" returns everything.
+# item) or "marker" (item's `{item}_pos` == 1). "__all__" returns visible cells.
 .cd_subset <- function(base, mode, item) {
+  base <- .cd_visible_rows(base)
   if (is.null(item) || identical(item, "__all__")) return(base)
   if (identical(mode, "marker")) {
     pc <- paste0(item, "_pos")
@@ -291,7 +299,7 @@ CELL_DIST_MARKER_COLORS <- c(
     base[base[[pc]] == 1, , drop = FALSE]
   } else {
     # a merged macrophage category or an aggregate covers its data labels (phenotype_members())
-    base[base$phenotype %in% .cd_members(item), , drop = FALSE]
+    base[base$phenotype %in% .cd_members(phenotype_keep(item)), , drop = FALSE]
   }
 }
 
@@ -347,12 +355,15 @@ CELL_DIST_MARKER_COLORS <- c(
   if (is.null(df) || length(statuses) == 0 || length(items) == 0) return(NULL)
   base <- df[df$donor_status %in% statuses, , drop = FALSE]
   if (nrow(base) == 0) return(NULL)
+  if (!identical(mode, "marker")) items <- phenotype_partition_labels(items)
+  if (!length(items)) return(NULL)
+  visible <- .cd_visible_rows(base)
   if (identical(mode, "marker")) {
     pcs <- paste0(items, "_pos"); pcs <- pcs[pcs %in% colnames(base)]
     if (length(pcs) == 0) return(NULL)
-    sel <- base[rowSums(base[, pcs, drop = FALSE]) > 0, , drop = FALSE]
+    sel <- visible[rowSums(visible[, pcs, drop = FALSE]) > 0, , drop = FALSE]
   } else {
-    sel <- base[base$phenotype %in% .cd_members(items), , drop = FALSE]
+    sel <- visible[visible$phenotype %in% .cd_members(items), , drop = FALSE]
   }
   if (nrow(sel) == 0) return(NULL)
   lo <- max(as.numeric(stats::quantile(sel$signed_dist, 0.005, na.rm = TRUE)), -100)
@@ -381,14 +392,16 @@ CELL_DIST_MARKER_COLORS <- c(
 }
 
 .cd_item_predicate <- function(item, mode, columns, con) {
-  if (is.null(item) || identical(item, "__all__")) return("TRUE")
+  if (is.null(item) || identical(item, "__all__")) return(.cd_visible_predicate())
   if (identical(mode, "marker")) {
     col <- paste0(item, "_pos")
     if (!(col %in% columns)) return("FALSE")
-    paste0(islet_sql_identifier(col, con), " = 1")
+    paste0(.cd_visible_predicate(), " AND ", islet_sql_identifier(col, con), " = 1")
   } else {
-    members <- .cd_members(item)
-    paste0("phenotype IN (", paste(vapply(members, islet_sql_string, character(1), con = con), collapse = ", "), ")")
+    members <- .cd_members(phenotype_keep(item))
+    if (!length(members)) return("FALSE")
+    paste0(.cd_visible_predicate(), " AND phenotype IN (",
+           paste(vapply(members, islet_sql_string, character(1), con = con), collapse = ", "), ")")
   }
 }
 
@@ -462,6 +475,7 @@ CELL_DIST_MARKER_COLORS <- c(
 
 .query_cell_distance_composition_duckdb <- function(mode, items, statuses, norm = "prop",
                                                     dist_col = "signed_dist") {
+  if (!identical(mode, "marker")) items <- phenotype_partition_labels(items)
   if (!length(statuses) || !length(items)) return(NULL)
   con <- islet_duckdb_connection()
   rel <- islet_parquet_relation(CELL_DISTANCE_PARQUET_PATH, con)

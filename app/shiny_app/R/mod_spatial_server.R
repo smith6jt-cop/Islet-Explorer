@@ -218,7 +218,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
     pheno_choice_info <- reactive({
       cells <- tryCatch(donor_cells(), error = function(e) NULL)
       observed <- if (is.null(cells)) character(0) else cells$phenotype
-      phenos <- unique(macrophage_collapse(canonical_phenotype_order(observed), macrophage_markers()))
+      phenos <- phenotype_partition_labels(macrophage_collapse(canonical_phenotype_order(observed), macrophage_markers()))
       counts <- table(factor(observed, levels = phenos))
       list(phenos = phenos, counts = counts)
     })
@@ -309,7 +309,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       }
 
       # Phenotype filter (only in phenotype mode)
-      selected_phenos <- input$pheno_filter
+      selected_phenos <- phenotype_partition_labels(input$pheno_filter)
       if (!use_leiden && !is.null(selected_phenos) && length(selected_phenos) > 0) {
         plot_df <- plot_df[plot_df$phenotype %in% selected_phenos, , drop = FALSE]
       }
@@ -372,7 +372,8 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
             inherit.aes = FALSE
           ) +
           ggplot2::scale_color_manual(values = pal, name = "Cluster", na.value = "#d9d9d9",
-                                        guide = ggplot2::guide_legend(override.aes = list(size = 4)))
+                                        guide = ggplot2::guide_legend(ncol = 6, byrow = TRUE,
+                                                                     override.aes = list(size = 4)))
         } else {
           # Phenotype coloring — legend in canonical palette order
           canonical_order <- names(palette())
@@ -396,7 +397,8 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           ) +
           ggplot2::scale_color_manual(values = pal, breaks = legend_phenos, labels = phenotype_text,
                                         name = "Phenotype", na.value = "#CCCCCC",
-                                        guide = ggplot2::guide_legend(override.aes = list(size = 4)))
+                                        guide = ggplot2::guide_legend(ncol = 2, byrow = TRUE,
+                                                                     override.aes = list(size = 4)))
         }
       }
 
@@ -428,7 +430,9 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         ) +
         theme_islet() +
         ggplot2::theme(
-          legend.position = "right",
+          legend.position = "bottom",
+          legend.direction = "horizontal",
+          legend.title.position = "top",
           legend.key.size = ggplot2::unit(0.7, "cm")
         )
     })
@@ -465,9 +469,8 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
     })
 
     # One islet-level UMAP (points from islet_umap_plotly(), interleaved so no group hides another): the two
-    # Spatial UMAPs share this layout so they draw at one size --
-    # the same marker size, the plot area in the left 78% of the widget and the legend in the rest, wide enough for
-    # either legend (a legend that does not fit makes plotly widen the right margin and shrink that plot alone).
+    # Spatial UMAPs share their marker size and full-width layout. Legends and numeric color bars sit below
+    # the axes so either coloring mode can use the card's full width for the embedding.
     # Both are linked plots (trajectory_link_plot(), keyed by `.key`).
     spatial_umap_plotly <- function(plot_df, colour_col, pal, legend_title, title, filename_root,
                                     colorbar_title = NULL) {
@@ -475,16 +478,20 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       if (is.null(plot_df$.hover)) plot_df$.hover <- paste0(legend_title, ": ", plot_df[[colour_col]], "<br>",
                                if (colour_col != "donor_status") paste0("Status: ", plot_df$donor_status, "<br>") else "",
                                plot_df$islet_key)
+      # These titles previously wrapped beside a vertical bar. A horizontal
+      # bar needs one line so the second line does not cross its gradient.
+      if (!is.null(colorbar_title))
+        colorbar_title <- gsub("<br\\s*/?>", " ", colorbar_title, ignore.case = TRUE, perl = TRUE)
       p <- islet_umap_plotly(plot_df, "umap1", "umap2", colour_col, pal, ".hover", key = ".key",
                              colorbar_title = colorbar_title)
-      # A numeric color has a color bar instead of a legend; put it where the legend sits.
-      # Slim, so it fits the legend's strip without plotly widening the margin and shrinking this plot alone.
+      # Numeric colors use the same lower strip as categorical legends.
       if (is.numeric(plot_df[[colour_col]])) {
         p <- plotly::plotly_build(p)
         p$x$data <- lapply(p$x$data, function(tr) {
           if (!is.null(tr$marker$colorbar))
             tr$marker$colorbar <- utils::modifyList(tr$marker$colorbar, list(
-              x = 0.8, xanchor = "left", len = 0.8, thickness = 14,
+              orientation = "h", x = 0.5, xanchor = "center", yref = "container", y = 0.02, yanchor = "bottom",
+              len = 0.8, thickness = 14, title = list(side = "top"),
               tickfont = list(size = ISLET_FONT_SIZES$dense_min)))
           tr
         })
@@ -493,20 +500,55 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         layout(
           font = fonts$global,
           title = list(text = title, font = fonts$title),
-          margin = list(l = 30, r = 10, t = 50, b = 30),
-          xaxis = list(title = list(text = "UMAP 1", font = fonts$axis_title), domain = c(0, 0.78),
+          margin = list(l = 30, r = 10, t = 50, b = 110, autoexpand = FALSE),
+          xaxis = list(title = list(text = "UMAP 1", font = fonts$axis_title), domain = c(0, 1),
                        zeroline = FALSE, showgrid = FALSE, showticklabels = FALSE, ticks = "",
                        showline = FALSE, constrain = "domain"),
           yaxis = list(title = list(text = "UMAP 2", font = fonts$axis_title),
                        zeroline = FALSE, showgrid = FALSE, showticklabels = FALSE, ticks = "",
                        showline = FALSE, scaleanchor = "x", scaleratio = 1,
                        constrain = "domain"),
-          legend = list(title = list(text = legend_title, font = fonts$legend_title),
-                        font = fonts$legend_text, x = 0.8, xanchor = "left", y = 1, yanchor = "top",
+          legend = list(title = list(text = legend_title, font = fonts$legend_title, side = "top"),
+                        orientation = "h", font = fonts$legend_text,
+                        x = 0.5, xanchor = "center", yref = "container", y = 0.02, yanchor = "bottom",
                         itemsizing = "constant", tracegroupgap = 2)
         ) %>%
         plotly_islet_config(filename_root)
-      trajectory_link_plot(p, ns)
+      p <- trajectory_link_plot(p, ns)
+      # Plotly otherwise expands each plot's lower margin independently. Measure
+      # the rendered guides (including wrapped donor legends) and reserve only
+      # the space needed by the taller one, equally on both plots. Afterplot also
+      # runs on resize and coloring changes; equal margins need no further draw.
+      htmlwidgets::onRender(p, "function(el, x, ids) {
+        var prior = el._isletGuideSync;
+        if (prior) {
+          el.removeListener('plotly_afterplot', prior.schedule);
+          if (prior.frame) window.cancelAnimationFrame(prior.frame);
+        }
+        var state = {frame: null};
+        state.schedule = function() {
+          if (state.frame) return;
+          state.frame = window.requestAnimationFrame(function() {
+            state.frame = null;
+            var plots = ids.map(function(id) { return document.getElementById(id); });
+            if (plots.some(function(plot) { return !plot || !plot._fullLayout; })) return;
+            var tallest = 0;
+            plots.forEach(function(plot) {
+              plot.querySelectorAll('g.legend, g.colorbar').forEach(function(guide) {
+                tallest = Math.max(tallest, guide.getBoundingClientRect().height);
+              });
+            });
+            var bottom = Math.ceil(Math.max(110, tallest + 40));
+            plots.forEach(function(plot) {
+              if (Math.abs(plot._fullLayout.margin.b - bottom) > 0.5)
+                Plotly.relayout(plot, {'margin.b': bottom});
+            });
+          });
+        };
+        el._isletGuideSync = state;
+        el.on('plotly_afterplot', state.schedule);
+        state.schedule();
+      }", data = c(ns("leiden_umap"), ns("spatial_umap_immune")))
     }
 
     current_leiden_col <- function(comp) {
@@ -718,8 +760,8 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
 
       # Get phenotype proportion columns (prop_*), filtered by selected phenotypes
       prop_cols <- grep("^prop_", colnames(plot_comp), value = TRUE)
-      prop_cols <- prop_cols[phenotype_is_kept(sub("^prop_", "", prop_cols)) &
-                             !is_phenotype_aggregate(sub("^prop_", "", prop_cols))]
+      prop_labels <- sub("^prop_", "", prop_cols)
+      prop_cols <- prop_cols[prop_labels %in% phenotype_partition_labels(prop_labels)]
       if (length(prop_cols) == 0) {
         return(plotly_islet_empty("No phenotype proportion data"))
       }
@@ -906,7 +948,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       },
       content = function(file) {
         df <- tryCatch(nbr_comp(), error = function(e) NULL)
-        sel_phenos <- input$pheno_filter
+        sel_phenos <- phenotype_partition_labels(input$pheno_filter)
 
         nbr <- get_nbr_columns(colnames(df %||% data.frame()))
         metric_cols <- unlist(nbr, use.names = FALSE)
@@ -914,17 +956,15 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         # Restrict the per-phenotype metric families to the selected phenotypes,
         # matching the tissue scatter and Card B composition. Columns that carry
         # no phenotype (immune_frac_*, leiden_*, totals) always pass through.
-        if (!is.null(sel_phenos) && length(sel_phenos) > 0) {
-          metric_cols <- metric_cols[vapply(metric_cols, function(cl) {
-            ph <- extract_phenotype_from_column(cl)
-            is.null(ph) || identical(ph, cl) || ph %in% sel_phenos
-          }, logical(1))]
-        }
+        metric_cols <- metric_cols[vapply(metric_cols, function(cl) {
+          ph <- extract_phenotype_from_column(cl)
+          is.null(ph) || identical(ph, cl) || ph %in% sel_phenos
+        }, logical(1))]
 
         keep_cols <- c("Case ID", "Donor Status", "islet_key", "islet_diam_um",
                        "total_cells_core", "total_cells_peri", metric_cols)
         keep_cols <- intersect(unique(keep_cols), colnames(df %||% data.frame()))
-        out <- if (is.null(df)) NULL else df[, keep_cols, drop = FALSE]
+        out <- if (is.null(df)) NULL else phenotype_filter_conflict_columns(df[, keep_cols, drop = FALSE])
 
         write_islet_csv(file, out, islet_csv_header(
           "Spatial Neighborhood — per-islet metrics",
@@ -947,7 +987,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
     nbr_comp <- reactive({
       pd <- prepared()
       req(pd$comp)
-      comp <- pd$comp
+      comp <- phenotype_filter_conflict_columns(pd$comp)
       if (!is.null(input$groups) && "Donor Status" %in% colnames(comp))
         comp <- comp[comp$`Donor Status` %in% input$groups, , drop = FALSE]
       # No min-cells filter since 2026-10-17: the endocrine-object classes (prepared()) select the objects.
@@ -1028,7 +1068,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       own <- identical(region, "peri") && identical(input$enrich_baseline %||% "cohort", "own")
       profile <- if (own) donor_distance_profile() else NULL
       if (own) req(profile)
-      sel <- input$enrich_phenos
+      sel <- phenotype_partition_labels(input$enrich_phenos)
       rows <- list()
       for (itm in phenotype_options()) {
         if (!(itm$label %in% sel)) next
@@ -1103,7 +1143,8 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                              else "lo/hi = mean -/+ SEM of donor means"),
           paste("Donor groups:", paste(input$groups %||% "(all)", collapse = ", ")),
           paste("Endocrine objects:", paste(sort(unique(as.character(prepared()$comp$object_class %||% "Islet"))), collapse = ", ")),
-          paste("Phenotypes shown:", paste(phenotype_text(input$enrich_phenos) %||% "(none)", collapse = ", ")),
+          paste("Phenotypes shown:", paste(phenotype_text(intersect(phenotype_partition_labels(input$enrich_phenos),
+                                                                  names(phenotype_options()))) %||% "(none)", collapse = ", ")),
           paste("Object z outside [-5, 5] dropped before the donor mean:", if (isTRUE(input$enrich_clip)) "ON" else "OFF"),
           "Rows: level=donor is each donor's mean over its objects; the other level summarizes those donor means."
         ))
@@ -1111,7 +1152,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
     )
 
     # The card's phenotypes: the immune ones (NON_IMMUNE_LABELS left out; owner, 2026-10-20).
-    enrich_labels <- function() sort(setdiff(names(phenotype_options()), NON_IMMUNE_LABELS))
+    enrich_labels <- function() sort(phenotype_partition_labels(setdiff(names(phenotype_options()), NON_IMMUNE_LABELS)))
 
     # ---- Card B phenotype filter (checkbox group shared by bar chart + heatmap) ----
     # Mirrors the tissue-scatter output$phenotype_filter. Choices are the
@@ -1371,7 +1412,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       # Phenotype mode lists the immune phenotypes (owner, 2026-10-20: no endocrine or exocrine classes); marker
       # mode every marker the data root flags (all 31 panel markers from v8).
       if (identical(input$dist_mode %||% "phenotype", "marker")) cell_distance_markers()
-      else unique(macrophage_collapse(setdiff(cell_distance_phenotypes(), NON_IMMUNE_LABELS), macrophage_markers()))
+      else phenotype_partition_labels(macrophage_collapse(setdiff(cell_distance_phenotypes(), NON_IMMUNE_LABELS), macrophage_markers()))
     })
     observeEvent(list(input$dist_mode, macrophage_markers()), {
       mode <- input$dist_mode %||% "phenotype"
@@ -1508,7 +1549,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       }
       both <- table(d$case_id)
       p %>% layout(
-        font = fonts$global, margin = list(t = 110),
+        font = fonts$global, margin = list(t = 110, b = 100),
         title = list(text = paste0("Immune cells and beta-cell content<br><sup>Mean band immune proportion per donor<br>",
                                    sum(both == 2), " donors have both kinds of object</sup>"),
                      font = fonts$title),
@@ -1518,7 +1559,9 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                      tickangle = 0),
         yaxis = list(title = list(text = "Immune proportion of the 20 µm band", font = fonts$axis_title),
                      tickfont = fonts$axis_tick, rangemode = "tozero"),
-        legend = list(title = list(text = "Status", font = fonts$legend_title), font = fonts$legend_text)
+        legend = list(title = list(text = "Status", font = fonts$legend_title, side = "top"),
+                      orientation = "h", x = 0.5, xanchor = "center", y = -0.25, yanchor = "top",
+                      font = fonts$legend_text)
       ) %>% plotly_islet_config("spatial_immune_by_beta_content")
     })
 
@@ -1551,6 +1594,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       if (!any(is_macrophage_label(listed))) listed <- c(listed, "Macrophage")
       if (root_cd45_is_rule_label()) listed <- c(listed, CD45_RULE_LABEL)     # the CD45 rule's class (v16)
       if ("Hematopoietic CD45+" %in% root) listed <- c(listed, "Hematopoietic CD45+")
+      listed <- phenotype_partition_labels(listed)
       c(phenotype_aggregates_for(c(listed, "T cell")), listed)
     })
     gradient_choices <- reactive(c(list("All immune cells" = "all"), phenotype_grouped_choices(gradient_phenotypes())))
@@ -1566,6 +1610,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
     }, ignoreInit = TRUE)
     gradient_data <- reactive({
       choice <- input$gradient_phenotype %||% "all"
+      if (!(choice %in% unlist(gradient_choices(), use.names = FALSE))) choice <- "all"
       labels <- if (identical(choice, "all")) IMMUNE_LABELS
                 else if (is_phenotype_aggregate(choice)) phenotype_aggregate_members(choice, IMMUNE_LABELS)
                 else choice
@@ -1787,7 +1832,8 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           # ---- Composition: one row per phenotype or marker, one column per donor status ----
           # Owner, 2026-10-20: markers drawn side by side hid small proportions next to large ones, so each item has
           # its own row and y-axis, shared by the three statuses of that row (the same y scaling for each group).
-          items <- input$dist_comp_items
+          items <- intersect(input$dist_comp_items, dist_items())
+          if (!identical(mode, "marker")) items <- phenotype_partition_labels(items)
           req(length(items) > 0)
           res <- query_cell_distance_composition(mode, items, statuses, norm, dist_col)
           req(res, nrow(res$comp) > 0)
@@ -1849,6 +1895,9 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         } else {
           # ---- Density: symlog filled curves per status (pooled per cell) ----
           group <- input$dist_group %||% "__all__"
+          choices <- if (identical(mode, "marker")) dist_items() else
+            unlist(phenotype_grouped_choices(dist_items()), use.names = FALSE)
+          if (!(group %in% c("__all__", choices))) group <- "__all__"
           res <- query_cell_distance_hist(mode, group, statuses, norm, dist_col = dist_col)
           req(res, nrow(res$hist) > 0)
           hist <- res$hist

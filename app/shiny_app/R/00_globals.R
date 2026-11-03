@@ -509,6 +509,17 @@ islet_warm_png <- function() {
 # @param df      Data frame to write. NULL/empty writes the header alone.
 # @param header  Character vector of provenance lines (the "# " is added here).
 write_islet_csv <- function(file, df, header = character(0)) {
+  if (is.data.frame(df)) {
+    before <- c(nrow(df), ncol(df))
+    df <- phenotype_filter_conflict_columns(df)
+    for (column in intersect(c("phenotype", "cell_type", "Phenotype", "Cell type"), names(df))) {
+      df <- df[!phenotype_is_conflict(df[[column]]), , drop = FALSE]
+    }
+    omitted <- before - c(nrow(df), ncol(df))
+    if (any(omitted > 0)) header <- c(header, sprintf(
+      "Display projection: omitted %d Conflict-labeled rows and %d Conflict phenotype columns; source records are unchanged.",
+      omitted[1], omitted[2]))
+  }
   con <- base::file(file, open = "w", encoding = "UTF-8")
   on.exit(close(con), add = TRUE)
   if (length(header) > 0) {
@@ -768,17 +779,20 @@ macrophage_collapse <- function(labels, markers = character(0)) {
 
 #' The data labels behind each label: a key's macrophage labels, a group aggregate's members, else the label itself.
 phenotype_members <- function(labels) {
-  raw <- c("Beta cell", "Alpha cell", "Delta cell", "CHGA+ hormone-negative", "Endocrine", "CD8a Tcell", "CD4 Tcell",
-           "T cell", "Macrophage", MACROPHAGE_LABELS)
+  raw <- root_phenotype_labels()
+  if (is.null(raw)) raw <- c("Beta cell", "Alpha cell", "Delta cell", "CHGA+ hormone-negative", "Endocrine",
+                            "CD8a Tcell", "CD4 Tcell", "T cell", "Macrophage", MACROPHAGE_LABELS)
+  raw <- unique(as.character(raw[!phenotype_is_conflict(raw)]))
   out <- character(0)
-  for (l in as.character(labels)) {
+  for (l in as.character(labels[!is.na(labels) & !phenotype_is_conflict(labels)])) {
     out <- c(out, if (is_phenotype_aggregate(l)) {
-      raw[phenotype_group(raw) == names(PHENOTYPE_GROUP_AGGREGATES)[match(l, PHENOTYPE_GROUP_AGGREGATES)]]
+      phenotype_aggregate_members(l, raw)
     } else if (identical(l, "Macrophage")) {
-      c("Macrophage", MACROPHAGE_LABELS)
+      raw[is_macrophage_label(raw)]
     } else if (grepl(MACROPHAGE_KEY_PATTERN, l)) {
       s <- macrophage_signs(l)
-      MACROPHAGE_LABELS[vapply(MACROPHAGE_LABELS, function(m) all(macrophage_signs(m)[names(s)] == s), logical(1))]
+      profiles <- raw[grepl(MACROPHAGE_LABEL_PATTERN, raw)]
+      profiles[vapply(profiles, function(m) all(macrophage_signs(m)[names(s)] == s), logical(1))]
     } else l)
   }
   unique(out)
@@ -792,6 +806,9 @@ macrophage_collapse_comp <- function(comp, markers = character(0)) {
   if (is.null(comp) || !is.data.frame(comp)) return(comp)
   prof <- intersect(MACROPHAGE_LABELS, sub("^prop_", "", grep("^prop_", names(comp), value = TRUE)))
   if (!length(prof)) return(comp)
+  raw <- root_phenotype_labels()
+  if (!length(markers) && "prop_Macrophage" %in% names(comp) &&
+      (is.null(raw) || "Macrophage" %in% raw)) prof <- c(prof, "Macrophage")
   safe <- function(l) gsub("+", "plus", gsub(" ", "_", l, fixed = TRUE), fixed = TRUE)
   num <- function(col) if (col %in% names(comp)) suppressWarnings(as.numeric(comp[[col]])) else rep(NA_real_, nrow(comp))
   total <- function(cols) {
@@ -898,7 +915,10 @@ phenotype_text <- function(x) {
 }
 
 #' Named choices for a selector: values stay the data labels, names are their display text.
-phenotype_choices_named <- function(labels) stats::setNames(labels, phenotype_text(labels))
+phenotype_choices_named <- function(labels) {
+  labels <- phenotype_keep(labels)
+  stats::setNames(labels, phenotype_text(labels))
+}
 
 #' Display text as HTML for a checkbox label.
 phenotype_label_html <- function(x) lapply(phenotype_text(x), function(t) htmltools::HTML(htmltools::htmlEscape(t)))
@@ -936,7 +956,19 @@ is_phenotype_aggregate <- function(x) as.character(x) %in% PHENOTYPE_GROUP_AGGRE
 #' The labels among `labels` that an aggregate sums.
 phenotype_aggregate_members <- function(aggregate, labels) {
   group <- names(PHENOTYPE_GROUP_AGGREGATES)[match(aggregate, PHENOTYPE_GROUP_AGGREGATES)]
-  labels[phenotype_group(labels) %in% group & !is_phenotype_aggregate(labels)]
+  labels <- unique(as.character(labels))
+  labels[!is.na(labels) & !phenotype_is_conflict(labels) &
+           phenotype_group(labels) %in% group & !is_phenotype_aggregate(labels)]
+}
+
+#' Mutually exclusive categories for a multiple-selection or stacked view.
+#' Parent totals are available to single-metric queries, never additive leaves.
+#' With split macrophage children, the unsplit alias is the same population.
+phenotype_partition_labels <- function(labels) {
+  labels <- phenotype_keep(labels)
+  labels <- labels[!is_phenotype_aggregate(labels)]
+  if (any(is_macrophage_label(labels) & labels != "Macrophage")) labels <- setdiff(labels, "Macrophage")
+  labels
 }
 
 #' The aggregates offered beside `labels`: each group aggregate with two or more members, on a marker-profile root.
@@ -973,8 +1005,10 @@ add_phenotype_aggregate_columns <- function(comp) {
 }
 
 #' `labels` split by group, in PHENOTYPE_GROUP_ORDER, each group's aggregate first and the rest in the given order.
-phenotype_groups_split <- function(labels) {
-  labels <- as.character(labels)
+phenotype_groups_split <- function(labels, include_aggregates = TRUE) {
+  labels <- if (include_aggregates) phenotype_keep(labels) else phenotype_partition_labels(labels)
+  if (any(is_macrophage_label(labels) & labels != "Macrophage")) labels <- setdiff(labels, "Macrophage")
+  if ("Macrophage" %in% labels) labels <- setdiff(labels, "All macrophages")
   g <- phenotype_group(labels)
   # A macrophage key's plus before its minus, marker by marker ("Macrophage CD163+CD4+" first).
   sign_order <- chartr("+-", "01", labels)
@@ -1007,7 +1041,7 @@ phenotype_grouped_choices <- function(labels, values = labels, prefix = "") {
 #' update may change `selected` (updateCheckboxGroupInput(selected = )), not the choices: re-render instead.
 phenotype_group_checkboxes <- function(input_id, labels, selected = labels, label = NULL, counts = NULL,
                                        choice_names = NULL, marker_input_id = NULL, markers = character(0)) {
-  groups <- phenotype_groups_split(labels)
+  groups <- phenotype_groups_split(labels, include_aggregates = FALSE)
   box <- function(v) {
     n <- if (is.null(counts)) NA_integer_ else suppressWarnings(as.integer(counts[v]))
     empty <- !is.null(counts) && (is.na(n) || n == 0L)
@@ -1231,6 +1265,7 @@ phenotype_rules_table_df <- function() {
   # Order: known order first, then anything else alphabetical.
   ordered <- c(intersect(PHENOTYPE_DISPLAY_ORDER, all_names),
                sort(setdiff(all_names, PHENOTYPE_DISPLAY_ORDER)))
+  ordered <- ordered[phenotype_is_kept(vapply(ordered, phenotype_display_label, character(1)))]
   rows <- lapply(ordered, function(nm) {
     rule <- get_phenotype_rule(nm)
     # Display the app's canonical label (SMA+, Blood Vessel, CD8a Tcell, …),
@@ -1279,6 +1314,7 @@ phenotype_rules_modal_ui <- function() {
   if (file.exists(protein_path)) {
     rules <- utils::read.csv(protein_path, stringsAsFactors = FALSE, na.strings = "")
     rules[is.na(rules)] <- ""
+    if ("label" %in% names(rules)) rules <- rules[phenotype_is_kept(rules$label), , drop = FALSE]
     if ("label" %in% names(rules)) rules$label <- phenotype_text(rules$label)
     headings <- c("Parent", "Label", "All positive", "Any positive", "All negative", "Note")
     rows <- lapply(seq_len(nrow(rules)), function(i) {
@@ -1722,7 +1758,7 @@ identity_typing_help_ui <- function() shiny::tagList(
     "they have no core or peri-islet analysis region."),
   shiny::tags$p(identity_structure_text()),
   shiny::tags$p("Canary evidence resolves competing compartments and lineages before their marker rules name ",
-    "the cell. Unresolved conflicts and suspected doublets retain explicit labels. ",
+    "the cell. Competing-identity QC labels remain in the source audit and are hidden from app views and downloads. ",
     if (root_has_selected_endocrine())
       "Unclassified cells retain their evidence and resolution reason; existing Tissue classifications are preserved. Cells are not named after a top marker. Cells that "
     else
@@ -1754,6 +1790,7 @@ identity_phenotype_definitions_ui <- function() {
     defs["Unclassified"] <- paste0("A reconsidered object-class or component-boundary cell for which the existing rules ",
       "provide no supported identity. Retained in total cell counts, with its evidence and reason; not an endocrine type.")
   }
+  defs <- defs[phenotype_is_kept(names(defs))]
   shiny::tagList(
     shiny::tags$h6(style = "margin-top: 12px; font-weight: 700;", "Phenotype definitions"),
     shiny::tags$p("These definitions follow compartment and lineage assignment; a positive marker alone does not imply its cell type."),
@@ -1956,9 +1993,9 @@ phenotype_hint_ui <- function(name, prefix = "Markers:",
 }
 
 # ============================================================================
-# Retired phenotypes (Jul 2026)
+# Retired phenotype choices (historical policy, extended to current pan residuals)
 # ============================================================================
-# Nine labels are excluded from the app everywhere a phenotype is listed,
+# These labels are excluded from the app everywhere a phenotype is listed,
 # colored, selected or tested. Two reasons, and they are the same reason twice:
 #
 #   Endocrine, Immune, T cell, Endothelial   parents of other labels in the set,
@@ -1968,6 +2005,7 @@ phenotype_hint_ui <- function(name, prefix = "Markers:",
 #   Structural, Unknown                      `-rest` catch-alls, the same thing
 #                                            without children to give them away
 #   Acinar, ECAD+, APCs                      retired with them
+#   Hematopoietic CD45+ / CD45-               current pan-marker residuals, without a named lineage
 #
 # Excluded rather than deleted from PHENOTYPE_COLORS: the DATA still carries
 # these labels, and every lookup in this app is by exact name, so a palette
@@ -1980,10 +2018,13 @@ phenotype_hint_ui <- function(name, prefix = "Markers:",
 # "Endocrine", "T cell" and "Immune" are general classes whose subtypes are listed (Beta / Alpha / Delta cell;
 # CD8a / CD4 Tcell; T cell and Macrophage), so they are not offered beside them (owner, 2026-10-17: "There should
 # not be a phenotype listed that is a general class when there are subtypes"). In the uniform root they hold the
-# cells left without a subtype; those cells still count in every denominator. The rest are labels of the frozen
-# typing that the uniform root does not produce. Keep python/paga_pseudotime.py RETIRED_PHENOTYPES in step.
+# cells left without a subtype; these remain in source totals and the existing "No subtype" composition residual.
+# Conflict labels are different: hidden rows stay in scientific source totals, but are removed from displayed
+# categories rather than folded into "No subtype". Displayed-category proportions use the displayed cells.
+# This is an app presentation policy; it does not retype source cells or recompute the frozen embedding.
 PHENOTYPE_RETIRED <- c("Endocrine", "Acinar", "Endothelial", "T cell",
-                       "Immune", "Unknown", "ECAD+", "Structural", "APCs")
+                       "Immune", "Hematopoietic CD45+", "Hematopoietic CD45-",
+                       "Unknown", "ECAD+", "Structural", "APCs")
 
 # Endocrine object classes analyzed by the app (owner A5, 2026-10-16, with a filter). Singles (one endocrine cell)
 # are not analysis objects (owner, 2026-10-18: "Singles should not be included in any islet-level analysis except
@@ -2002,11 +2043,31 @@ object_class_arg <- function(object_classes) {
   if (is.null(object_classes)) NULL else as.list(as.character(object_classes))
 }
 
-#' Drop retired phenotypes from a character vector of labels.
-phenotype_keep <- function(x) setdiff(x, phenotype_retired())
+#' Conflict labels remain in the scientific source, but are hidden throughout the app.
+#' The underscore form also covers phenotype names in wide export columns.
+phenotype_is_conflict <- function(x) {
+  x <- trimws(as.character(x))
+  !is.na(x) & grepl("^Conflict($|[[:space:]_])", x, ignore.case = TRUE)
+}
+
+#' Drop retired and Conflict labels from visible choices, preserving their order.
+phenotype_keep <- function(x) unique(as.character(x[phenotype_is_kept(x)]))
 
 #' TRUE for rows whose phenotype is still in use. NA-safe.
-phenotype_is_kept <- function(x) !(as.character(x) %in% phenotype_retired())
+phenotype_is_kept <- function(x) {
+  x <- as.character(x)
+  !is.na(x) & nzchar(x) & !phenotype_is_conflict(x) & !(x %in% phenotype_retired())
+}
+
+#' Remove Conflict phenotype columns from an app-facing wide table or download.
+#' Row counts, source labels and source provenance are unchanged by this projection.
+phenotype_filter_conflict_columns <- function(df) {
+  if (is.null(df) || !is.data.frame(df)) return(df)
+  prefix <- "^(combined_prop_|peri_prop_|peri_count_|enrich_z_|min_dist_|prop_|core_|peri_|count_|n_)"
+  labels <- sub(prefix, "", names(df), perl = TRUE)
+  phenotype_field <- grepl(prefix, names(df), perl = TRUE) | grepl("^Conflict($|[[:space:]])", names(df))
+  df[, !(phenotype_field & phenotype_is_conflict(labels)), drop = FALSE]
+}
 
 #' The retired labels for the current root: on a root that names cells by their top marker, "ECAD+" is one of those
 #' labels (v17), not the frozen typing's retired E-cadherin-positive class.
