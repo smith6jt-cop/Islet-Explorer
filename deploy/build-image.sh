@@ -104,6 +104,13 @@ image_id="$(tr -d '[:space:]' < "${iid_file}")"
   exit 70
 }
 
+image_revision="$(podman image inspect --format '{{ index .Labels "org.opencontainers.image.revision" }}' "${image_id}")"
+image_version="$(podman image inspect --format '{{ index .Labels "org.opencontainers.image.version" }}' "${image_id}")"
+[[ "${image_revision}" == "${revision}" && "${image_version}" == "${version}" ]] || {
+  echo "ERROR: built image labels do not match the requested Git revision and release version." >&2
+  exit 70
+}
+
 podman run --rm --entrypoint /opt/islet-explorer-py/bin/python "${image_id}" -c \
   'import anndata, scanpy, igraph, leidenalg, fa2_modified; print("python dependency probe: ok")'
 podman run --rm --entrypoint Rscript "${image_id}" -e \

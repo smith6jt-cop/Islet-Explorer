@@ -148,6 +148,16 @@ ARG OCI_CREATED=""
 ARG OCI_REVISION="unknown"
 ARG OCI_VERSION="development"
 
+# Podman can reuse a config-only LABEL layer when only build ARG values change.
+# Materialize the release identity in a tiny layer so the immutable image ID and
+# the OCI labels always identify the requested source revision.
+USER root
+RUN printf 'GIT_COMMIT=%s\nOCI_CREATED=%s\nOCI_VERSION=%s\n' \
+      "${OCI_REVISION}" "${OCI_CREATED}" "${OCI_VERSION}" \
+      > /opt/islet-explorer-build/release-identity.txt \
+    && chmod 0444 /opt/islet-explorer-build/release-identity.txt
+USER shiny
+
 LABEL org.opencontainers.image.title="Islet Explorer" \
       org.opencontainers.image.description="Reviewer-facing pancreatic islet explorer for UFRC PubApps" \
       org.opencontainers.image.source="https://github.com/smith6jt-cop/Islet-Explorer" \
