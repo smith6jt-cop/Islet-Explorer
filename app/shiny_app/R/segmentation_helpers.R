@@ -731,7 +731,8 @@ render_islet_segmentation_plot <- function(info, show_peri_boundary = TRUE, show
 # are root-level and not namespaced, see app.R). `close_id` is the caller's namespaced Close button. "wide" puts the
 # controls, map and composition side by side in a card (Plot, Spatial); "stacked" puts the map over them (the
 # Trajectory tab's narrower column).
-segmentation_viewer_panel_ui <- function(info, close_id, layout = c("wide", "stacked")) {
+segmentation_viewer_panel_ui <- function(info, close_id, layout = c("wide", "stacked"),
+                                         selected_palette = "High Contrast") {
   layout <- match.arg(layout)
   wide <- identical(layout, "wide")
 
@@ -776,7 +777,7 @@ segmentation_viewer_panel_ui <- function(info, close_id, layout = c("wide", "sta
                       choices = marker_choices, selected = "phenotype"),
           selectInput("drilldown_palette", "Phenotype Palette",
                       choices = c("Original", "High Contrast", "Colorblind Safe", "Maximum Distinction"),
-                      selected = "High Contrast"),
+                      selected = selected_palette),
           checkboxInput("drilldown_show_peri", "Show peri-islet cells", value = TRUE)
         )
       )

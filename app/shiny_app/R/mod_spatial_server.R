@@ -97,7 +97,8 @@ spatial_tissue_plot_height <- function(plot, width = 800) {
 spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                            donor_colors_reactive = reactive(DONOR_COLORS_BRIGHT),
                            selected_islet = reactiveVal(NULL), active_tab = reactive("Spatial"),
-                           macrophage_markers = reactiveVal(character(0))) {
+                           macrophage_markers = reactiveVal(character(0)),
+                           phenotype_palette_name = reactive("High Contrast")) {
 
   moduleServer(id, function(input, output, session) {
     # The macrophage markers (owner, 2026-10-27) sit under the Macrophage heading of each grouped phenotype list
@@ -773,7 +774,8 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       if (!identical(active_tab(), "Spatial")) return(NULL)
       info <- selected_islet()
       if (is.null(info)) return(NULL)
-      segmentation_viewer_panel_ui(info, ns("clear_segmentation"), layout = "wide")
+      segmentation_viewer_panel_ui(info, ns("clear_segmentation"), layout = "wide",
+                                    selected_palette = isolate(phenotype_palette_name()))
     })
     observeEvent(input$clear_segmentation, { selected_islet(NULL) })
 
@@ -1431,6 +1433,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                 # Flow the marker checkboxes into as many ~100px columns as fit, instead of one tall column; the
                 # phenotypes are grouped (phenotype_group_checkboxes()). output$dist_comp_items_ui draws either.
                 tags$style(HTML(paste0(
+                  ".cd-comp-cols .pheno-groups{grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px 18px;}",
                   ".cd-marker-options,.cd-marker-options .shiny-input-checkboxgroup,",
                   ".cd-marker-options .shiny-options-group{width:100%;max-width:none;",
                   "display:block;box-sizing:border-box;}",

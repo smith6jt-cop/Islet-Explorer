@@ -669,12 +669,14 @@ server <- function(input, output, session) {
   plot_returns <- plot_server("plot", prepared, selected_islet, active_tab, active_donor_colors,
                               remove_outliers = remove_outliers_global,
                               outlier_threshold = outlier_z_global,
-                              palette = active_palette, macrophage_markers = macrophage_markers)
+                              palette = active_palette, macrophage_markers = macrophage_markers,
+                              phenotype_palette_name = palette_name)
 
   # Trajectory module
   trajectory_server("traj", prepared_all, selected_islet, forced_image, active_tab, active_donor_colors,
                     remove_outliers = remove_outliers_global,
-                    outlier_threshold = outlier_z_global, macrophage_markers = macrophage_markers)
+                    outlier_threshold = outlier_z_global, macrophage_markers = macrophage_markers,
+                    phenotype_palette_name = palette_name)
 
   # Viewer module
   viewer_server("viewer", forced_image, reactive(input$tabs))
@@ -701,7 +703,8 @@ server <- function(input, output, session) {
   # Spatial Neighborhood module
   # Its two UMAPs are linked plots like the Plot and Trajectory tabs' (owner, 2026-10-21), so it shares the selection.
   spatial_server("spatial", prepared, active_palette, active_donor_colors,
-                 selected_islet = selected_islet, active_tab = active_tab, macrophage_markers = macrophage_markers)
+                 selected_islet = selected_islet, active_tab = active_tab, macrophage_markers = macrophage_markers,
+                 phenotype_palette_name = palette_name)
 
   # Inflammation module — cohort-level edgeR abundance + infiltration score.
   # Reads the cell-distance artifact through spatial_helpers.R (Parquet/DuckDB

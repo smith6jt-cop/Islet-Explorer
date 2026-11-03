@@ -17,7 +17,8 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
                         donor_colors_reactive = reactive(DONOR_COLORS_BRIGHT),
                         remove_outliers = reactive(FALSE),
                         outlier_threshold = reactive(3.0),
-                        palette = reactive(PHENOTYPE_COLORS), macrophage_markers = reactiveVal(character(0))) {
+                        palette = reactive(PHENOTYPE_COLORS), macrophage_markers = reactiveVal(character(0)),
+                        phenotype_palette_name = reactive("High Contrast")) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     # The macrophage markers (owner, 2026-10-27): in the Data controls under the measure, and under the Macrophage
@@ -1040,7 +1041,8 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
       if (active_tab() != "Plot") return(NULL)
       info <- selected_islet()
       if (is.null(info)) return(NULL)
-      segmentation_viewer_panel_ui(info, ns("clear_segmentation"), layout = "wide")
+      segmentation_viewer_panel_ui(info, ns("clear_segmentation"), layout = "wide",
+                                    selected_palette = isolate(phenotype_palette_name()))
     })
 
     # ---- Clear segmentation viewer ----

@@ -121,7 +121,8 @@ paga_display_data <- function(d, colour_by, feature_data = NULL) {
 trajectory_server <- function(id, prepared, selected_islet, forced_image, active_tab = reactive("Trajectory"),
                               donor_colors_reactive = reactive(DONOR_COLORS_BRIGHT),
                               remove_outliers = reactive(FALSE),
-                              outlier_threshold = reactive(3.0), macrophage_markers = reactiveVal(character(0))) {
+                              outlier_threshold = reactive(3.0), macrophage_markers = reactiveVal(character(0)),
+                              phenotype_palette_name = reactive("High Contrast")) {
   # `remove_outliers` / `outlier_threshold` are accepted but UNUSED: app.R still
   # passes them to every analysis module, and changing that signature is a wider
   # edit than this tab. The Trajectory tab no longer exposes or applies them.
@@ -783,7 +784,8 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         return(div(style = "min-height: 275px; display: flex; align-items: center; justify-content: center; color: var(--islet-fg-muted);",
                    "No islet selected"))
       }
-      segmentation_viewer_panel_ui(info, ns("clear_segmentation"), layout = "stacked")
+      segmentation_viewer_panel_ui(info, ns("clear_segmentation"), layout = "stacked",
+                                    selected_palette = isolate(phenotype_palette_name()))
     })
 
     # ---------- Clear segmentation viewer ----------
