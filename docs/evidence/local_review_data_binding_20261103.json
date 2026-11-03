@@ -1,0 +1,131 @@
+{
+  "schema": "uniform.local_review_code_data_binding/1",
+  "status": "accepted_data_binding",
+  "recorded_utc": "2026-11-03T14:47:15.857576+00:00",
+  "scope": "Data evidence and unchanged filesystem identities for local review. No new full parity execution, code/data producer equivalence, runtime compatibility, pubapp staging or deployment is claimed.",
+  "code": {
+    "commit": "7ac421ed7d4b5ab5425d0130e8ff7445f4e87240",
+    "clean_worktree": "/data/panc_CODEX/Islet-Explorer-local-review-r2-20261103",
+    "image_identity_and_runtime_validation": "Root-owned; not claimed by this data-only binding."
+  },
+  "data": {
+    "producer_commit": "5e6580fe68af12dd18bee430988bc1ed64061526",
+    "root": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-dev-ui-release-20261103/final-5e6580f/artifacts/release-5e6580f/data",
+    "required_mount_mode": "read-only",
+    "manifest": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-dev-ui-release-20261103/final-5e6580f/artifacts/release-5e6580f/data/manifest.json",
+      "sha256": "03038ebdcd172e82ff7afba1f2025cb905e5859bcee423b05618b04c993f7320"
+    },
+    "completion": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-dev-ui-release-20261103/final-5e6580f/evidence/release-data-completion.json",
+      "sha256": "750785a34c22ec75c43eb1c570bebb3f92c48c720425ade36f05a2ad0cb25246"
+    },
+    "scientific_equivalence": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-dev-ui-release-20261103/final-5e6580f/evidence/scientific-equivalence-5e6580f.json",
+      "sha256": "3d7463fa161ae9ede7be3c7d647f252e16447d790049a8ceb7f716b16a523702"
+    },
+    "independent_files": 4987,
+    "all_file_identities_unchanged": true,
+    "science_reference_producer": "e5689f6453e68bc9e94cbe83689cb9db4d3d0b83",
+    "original_accepted_parity_verifier": "d3ec00e113fbbdb8abb7eb4b57ee4ffc7ca46580",
+    "original_accepted_parity_composer": "c3dc4944afda1d257c4c73d69ccaaa3b00da8c72"
+  },
+  "validation": {
+    "completion_evidence_hashes_checked": 18,
+    "all_completion_evidence_hashes_match": true,
+    "fresh_comparator_validation_passed": true,
+    "comparator": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-dev-ui-release-20261103/final-5e6580f/compare-release-data.py",
+      "sha256": "5a7949c47ffbceb9d39e70a8f407b78889bdaf1166346effa346ca35fa47f53b"
+    },
+    "full_image_rehash_repeated": false,
+    "image_validation_basis": "Actual completed 5e builder digest and seal, with complete unchanged inode/size/mtime/ctime/nlink identities checked now; no redundant 155 GB scan.",
+    "verified_completion_evidence": {
+      "dev_manifest": {
+        "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-dev-ui-release-20261103/final-5e6580f/artifacts/release-5e6580f/data/manifest.json",
+        "sha256": "03038ebdcd172e82ff7afba1f2025cb905e5859bcee423b05618b04c993f7320"
+      },
+      "scientific_equivalence": {
+        "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-dev-ui-release-20261103/final-5e6580f/evidence/scientific-equivalence-5e6580f.json",
+        "sha256": "3d7463fa161ae9ede7be3c7d647f252e16447d790049a8ceb7f716b16a523702"
+      },
+      "inventory": {
+        "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-dev-ui-release-20261103/final-5e6580f/evidence/release-inventory-5e6580f.json",
+        "sha256": "cda2c0b17218aaef1b80e7ae47d202e091254fd050bd3de0e656a766618293b9"
+      },
+      "core_receipt": {
+        "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-dev-ui-release-20261103/final-5e6580f/evidence/core-verification.json",
+        "sha256": "e88dd2e4c00f665a3672cf7a37778b9a81c26beb74c5e070718c037c1bec8af1"
+      },
+      "core_input_identities": {
+        "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-dev-ui-release-20261103/final-5e6580f/evidence/core-input-identities.json",
+        "sha256": "f5b7847ee891d64601cb62370e75ab4e7a7ff4b3738af0b5a66105e6f2f1104c"
+      },
+      "all_release_file_identities": {
+        "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-dev-ui-release-20261103/final-5e6580f/evidence/equivalence-file-identities.json",
+        "sha256": "2a7a278994cfaf158fad94c58e0b7c4dcfeb42ac247281a68551b7bbd824f5ff"
+      },
+      "image_seal_comparison": {
+        "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-dev-ui-release-20261103/final-5e6580f/evidence/release-image-seal-comparison.json",
+        "sha256": "197abf01402275b1dfb3da584f701896b8f8bd257cefdf9d269dbd76d776e1a0"
+      },
+      "geometry_corruption_controls": {
+        "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-dev-ui-release-20261103/final-5e6580f/evidence/geometry-comparator-controls.log",
+        "sha256": "426784aa7bc86b56619c5c453267b793aa878e2f80cfc547eb4c10516b1c39e6"
+      },
+      "comparison_code": {
+        "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-dev-ui-release-20261103/final-5e6580f/compare-release-data.py",
+        "sha256": "5a7949c47ffbceb9d39e70a8f407b78889bdaf1166346effa346ca35fa47f53b"
+      },
+      "frozen_helper_hashes": {
+        "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-dev-ui-release-20261103/final-5e6580f/acceptance-helpers.sha256",
+        "sha256": "52a88eeb3ccb43fb687c396c748bd24236f6eecbeeda1f390607d26fc04e9633"
+      },
+      "builder_log": {
+        "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-dev-ui-release-20261103/final-5e6580f/build-data.log",
+        "sha256": "5801b0dd7649e4dcbe72b5e58973962c0794bde11b470602b0166038f05eecd2"
+      },
+      "core_log": {
+        "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-dev-ui-release-20261103/final-5e6580f/verify-core.log",
+        "sha256": "900972fb75bfb3ddacfaf729f65a21dcdf5bb7ffa61f9f87d036acd7fc97a27c"
+      },
+      "acceptance_log": {
+        "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-dev-ui-release-20261103/final-5e6580f/accept-data.log",
+        "sha256": "7f6671efad32a7c71d9b05163afb4e0a7be179abdc7ee6c49a0db2da8ff30885"
+      },
+      "reference_parity": {
+        "path": "/data/panc_CODEX/Islet-Explorer/tmp/pubapps-component-release-20261102-v2/evidence/release-parity-e5689f6-revalidated-r3.json",
+        "sha256": "9fa22ceb122b2ab18cec4262aaf6f3bf3173ff11b72d732d5e90e4eebc5a9c5f"
+      },
+      "reference_inventory": {
+        "path": "/data/panc_CODEX/Islet-Explorer/tmp/pubapps-component-release-20261102-v2/evidence/release-inventory-e5689f6.json",
+        "sha256": "6147832fc3ea1693ded18dff8ee05b8602db8542ff564a6dd8f92bcad11ae248"
+      },
+      "source_code_preflight": {
+        "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-dev-ui-release-20261103/final-5e6580f/evidence/preflight-source-provenance.json",
+        "sha256": "71721fef9a18d7ce8c50c7526a6a90aa3d4511fc439073e11546d15bace9f726"
+      },
+      "completion_generator": {
+        "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-dev-ui-release-20261103/final-5e6580f/complete-data.py",
+        "sha256": "60eb436805b62c05cbbc5a1bfff0691472a1d73f1bff43ed7f25301a9ae8dd2b"
+      },
+      "prior_data_count_basis": {
+        "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-dev-release-20261103/evidence/release-data-completion.json",
+        "sha256": "6c684d789693c74be6f1f13238dad78f4299cc62a8983e05728c448af7a878d1"
+      }
+    },
+    "fresh_comparator_validation_result": {
+      "passed": true,
+      "report_sha256": "3d7463fa161ae9ede7be3c7d647f252e16447d790049a8ceb7f716b16a523702",
+      "producer_commit": "5e6580fe68af12dd18bee430988bc1ed64061526"
+    }
+  },
+  "canceled_redundant_81b_data_build": {
+    "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-dev-ui-release-20261103/final-81b3857/evidence/build-cancellation-81b3857.json",
+    "sha256": "1d2372a111f5171780584fee35b34a22bf4f4f77ec5f13d49bc7b6c85a35ec4d"
+  },
+  "prior_local_review_binding": {
+    "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-dev-ui-release-20261103/local-review-81b3857-code-5e6580f-data-binding.json",
+    "sha256": "ce8ceae0733c1db26262747b204692b5febbe8d9693af5faac5e76d3663e4dc1"
+  }
+}

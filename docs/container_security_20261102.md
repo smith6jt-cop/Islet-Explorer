@@ -1,6 +1,17 @@
 # PubApps container security remediation — 2026-11-02
 
-**Latest owner direction, 2026-11-02:** the current build is intended for the live production PubApp once its actual data/release/runtime checks pass. The known DuckDB finding is nonblocking through the notice's **2026-11-10 UTC** patch deadline; develop/test our DuckDB fix separately for the dev PubApp. See [the dated release decision](duckdb_remediation_window_20261102.md). This supersedes the earlier strict DuckDB hold and no-activation directions below. Historical failed reports remain unchanged; data checks and other security findings still apply.
+**Latest owner direction, 2026-11-03: LOCAL REVIEW ONLY.** The owner requested
+“Instead of sending directly to pubapp, create a local version for review.”
+This supersedes the planned next dev deployment. The new patched image and UI
+candidate runs only at [the local preview](http://127.0.0.1:3845/islet-explorer/);
+see its [review record](local_duckdb_review_20261103.md) and
+[receipt](evidence/local_duckdb_review_20261103.json). Its image source is
+`7ac421e`; the separately identified accepted dataset was produced by `5e6580f`
+and is mounted read-only. No new pubapp image import, data relocation or service
+activation occurred. Existing public dev `e704ac2a…` and production `89b3f840…`
+remain as recorded below. The local candidate does not authorize their replacement.
+
+**Earlier production direction, 2026-11-02:** the current build is intended for the live production PubApp once its actual data/release/runtime checks pass. The known DuckDB finding is nonblocking through the notice's **2026-11-10 UTC** patch deadline; develop/test our DuckDB fix separately for the dev PubApp. See [the dated release decision](duckdb_remediation_window_20261102.md). This supersedes the earlier strict DuckDB hold and no-activation directions below. Historical failed reports remain unchanged; data checks and other security findings still apply.
 
 ## Dev DuckDB fix live — 2026-11-03 12:42 UTC
 

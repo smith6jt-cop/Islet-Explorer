@@ -1,0 +1,542 @@
+{
+  "schema": "islet.local_review/1",
+  "status": "ready_for_owner_review",
+  "recorded_utc": "2026-11-03T14:56:20.919805+00:00",
+  "owner_direction": "Instead of sending directly to pubapp, create a local version for review",
+  "scope": "Local preview only. No pubapp deployment or public acceptance is claimed. Prior next-dev deployment GO is superseded.",
+  "url": "http://127.0.0.1:3845/islet-explorer/",
+  "code": {
+    "source_commit": "7ac421ed7d4b5ab5425d0130e8ff7445f4e87240",
+    "image_id": "sha256:46b81d665cacb0f8abcd4b9fe34d7f8c786cb7916d6f9cd30e63a1223358b006",
+    "worktree": "/data/panc_CODEX/Islet-Explorer-local-review-r2-20261103",
+    "security_gate": "strict pass",
+    "high": 0,
+    "critical": 0,
+    "duckdb_deferral_used": false,
+    "duckdb_version": "1.5.2",
+    "duckdb_library_sha256": "af67918fcddc7486d2d33f9ae72c0eccca71f8c4a803013c8ea8656671fb371b",
+    "raw_decoder_result": 0,
+    "raw_decoder_error_code": -17,
+    "source_provenance": "pass",
+    "build_cache": "23 native cache layers reused the completed dependency build. Final7ac image passed fresh strict decoder, security, real-Parquet and runtime gates; its font registration and rendering checks ran during this build. No new DuckDB compilation is claimed."
+  },
+  "data": {
+    "producer_commit": "5e6580fe68af12dd18bee430988bc1ed64061526",
+    "root": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-dev-ui-release-20261103/final-5e6580f/artifacts/release-5e6580f/data",
+    "manifest_sha256": "03038ebdcd172e82ff7afba1f2025cb905e5859bcee423b05618b04c993f7320",
+    "mount_mode": "read-only",
+    "completion": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-dev-ui-release-20261103/final-5e6580f/evidence/release-data-completion.json",
+      "sha256": "750785a34c22ec75c43eb1c570bebb3f92c48c720425ade36f05a2ad0cb25246"
+    },
+    "binding": {
+      "path": "/data/panc_CODEX/Islet-Explorer/docs/evidence/local_review_data_binding_20261103.json",
+      "sha256": "a54c02656fc548839b1a47d6d056c66ed2389bd3edb0e2129c1105091717cdf3"
+    },
+    "acceptance": "Actual scientific artifact equivalence: canonical and nongeometry hashes match; all20 GPKG schemas, tables and rows match except valid UTC build timestamps;8 corruption controls, fresh core/inventory and unchanged4987 file identities pass. Original accepted parity retains its original producer, verifier and composer; no fresh full parity execution is claimed."
+  },
+  "runtime": {
+    "container_id": "3f16b34afc3f81e8f8ca1d80d4ab64af34dbf4688ea4fec033c65f422a13e4ad",
+    "started_at": "2026-11-03T09:50:37.764839402-05:00",
+    "healthy": true,
+    "same_container_after_ui_checks": true,
+    "read_only_root": true,
+    "read_only_data_and_images": true,
+    "service": "islet-explorer-local-review-20261103-r2.service",
+    "persistence": "Transient user service; remains after agent/shell exit, not enabled at boot. Stop/relaunch commands are in the runbook.",
+    "binding": "127.0.0.1:3845 only",
+    "resource_limits": "Podman/systemd request4 GiB/2048 tasks, but this workstation does not enforce these per-service limits. See the independent kernel audit; no enforcement claim."
+  },
+  "scientific_census": {
+    "status": "passed",
+    "checked_at_utc": "2026-11-03T14:51:39.700068+00:00",
+    "all_phenotype_counts_match": true,
+    "cells": 3199606,
+    "donors": 20,
+    "Ki67_positive": 78680,
+    "unclassified": 7398,
+    "unclassified_percent": 0.2312159684661174
+  },
+  "checks": {
+    "runtime": "HTTP, health, exclusive loopback binding, flags, dependencies, read-only mounts and exact16-byte TIFF Range passed",
+    "baseline_browser": 49,
+    "browser_failures": 0,
+    "ui": {
+      "schema": "islet.local_ui_review/1",
+      "status": "passed",
+      "recorded_at_utc": "2026-11-03T14:55:20.735382+00:00",
+      "expected_source": "7ac421ed7d4b5ab5425d0130e8ff7445f4e87240",
+      "expected_data_producer": "5e6580fe68af12dd18bee430988bc1ed64061526",
+      "scope": "Local review only; no pubapp deployment or public acceptance is claimed.",
+      "url": "http://127.0.0.1:3845/islet-explorer/",
+      "viewports": [
+        1200,
+        1600
+      ],
+      "minimum_plot_dropdown_arrow_clearance_px": 7,
+      "trajectory_gaps_px": [
+        {
+          "width": 1200,
+          "segmentation": 20,
+          "next_card": 20
+        },
+        {
+          "width": 1600,
+          "segmentation": 20,
+          "next_card": 20
+        }
+      ],
+      "taxonomy_matches_reviewed_baseline": true,
+      "hidden_choices_checkbox_and_plot_text": "No retired broad residual or Conflict choices; additive checkbox lists contain only reviewed leaf categories; no Conflict text in inspected Plotly traces.",
+      "spatial_point_counts": [
+        1392
+      ],
+      "minimum_horizontal_colorbar_title_gap_px": 7.70001220703125,
+      "tissue_stress": {
+        "markers": 4,
+        "phenotypes": 27,
+        "stable_selections_and_rendering": true,
+        "panel_heights_css_px": [
+          {
+            "scenario": "default",
+            "viewport": 1200,
+            "height": 395.36286243743
+          },
+          {
+            "scenario": "default",
+            "viewport": 1600,
+            "height": 458.46223693000707
+          },
+          {
+            "scenario": "all27",
+            "viewport": 1200,
+            "height": 395.3619167425817
+          },
+          {
+            "scenario": "all27",
+            "viewport": 1600,
+            "height": 492.82328599740566
+          }
+        ],
+        "minimum_panel_height_css_px": 395.3619167425817,
+        "downloads_below": true,
+        "stable_output_element": true,
+        "brush": {
+          "inputEvent": {
+            "at": 14925.100000023842,
+            "name": "spatial-scatter_brush",
+            "value": {
+              "xmin": 1077.9466506637,
+              "xmax": 3175.2441711874,
+              "ymin": 810.89455795155,
+              "ymax": 2395.4629995051,
+              "coords_css": {
+                "xmin": 286,
+                "xmax": 549,
+                "ymin": 172.609375,
+                "ymax": 371.31434631347656
+              },
+              "coords_img": {
+                "xmin": 333.62828489861647,
+                "xmax": 640.426323109582,
+                "ymin": 201.353500610016,
+                "ymax": 433.1482195387029
+              },
+              "img_css_ratio": {
+                "x": 1.1665324646804773,
+                "y": 1.1665270244447383
+              },
+              "mapping": {
+                "x": "X_centroid",
+                "y": "Y_centroid"
+              },
+              "domain": {
+                "left": -233.3075,
+                "right": 5014.9575,
+                "bottom": 3760.23675,
+                "top": -169.77175
+              },
+              "range": {
+                "left": 141.8146785395494,
+                "right": 909.5442878365402,
+                "bottom": 632.7908096606234,
+                "top": 57.89912826899146
+              },
+              "log": {
+                "x": null,
+                "y": null
+              },
+              "direction": "xy",
+              "brushId": "spatial-scatter_brush",
+              "outputId": "spatial-tissue_scatter"
+            }
+          },
+          "inputEventCaptured": true,
+          "beforeDomain": {
+            "left": -233.3075,
+            "right": 5014.9575,
+            "bottom": 3760.23675,
+            "top": -169.77175
+          },
+          "zoomedDomain": {
+            "left": 973.081774637515,
+            "right": 3280.109047213585,
+            "bottom": 2474.691421582777,
+            "top": 731.6661358738726
+          },
+          "resetDomain": {
+            "left": -233.3075,
+            "right": 5014.9575,
+            "bottom": 3760.23675,
+            "top": -169.77175
+          },
+          "zoomChanged": true,
+          "resetRestored": true,
+          "stableOutputElement": true
+        },
+        "images": [
+          {
+            "scenario": "default",
+            "viewport": 1200,
+            "kind": "rawPng",
+            "path": "/data/panc_CODEX/Islet-Explorer/tmp/local-app-review-20261103/ui-checks-v2/results/screenshots/tissue-default-raw-1200.png",
+            "sha256": "e5e1e9c79652f6db554c23d3cd265268793fec6274c58ec8bd8f61b420c30e55"
+          },
+          {
+            "scenario": "default",
+            "viewport": 1200,
+            "kind": "browserCard",
+            "path": "/data/panc_CODEX/Islet-Explorer/tmp/local-app-review-20261103/ui-checks-v2/results/screenshots/tissue-default-card-1200.png",
+            "sha256": "a43be8703de2fd5d93abe2edb4403d5eada49e61407005246f633b6dc8152bb8"
+          },
+          {
+            "scenario": "default",
+            "viewport": 1600,
+            "kind": "rawPng",
+            "path": "/data/panc_CODEX/Islet-Explorer/tmp/local-app-review-20261103/ui-checks-v2/results/screenshots/tissue-default-raw-1600.png",
+            "sha256": "720ade77243a0d7a1c9a212fff4a4e3b60817c67b2e2592fa10018ffd98d3e23"
+          },
+          {
+            "scenario": "default",
+            "viewport": 1600,
+            "kind": "browserCard",
+            "path": "/data/panc_CODEX/Islet-Explorer/tmp/local-app-review-20261103/ui-checks-v2/results/screenshots/tissue-default-card-1600.png",
+            "sha256": "23885e70be906006a98f6fa08b485f8e19fb6f8ff40c46bb2b8f40c620d0e244"
+          },
+          {
+            "scenario": "all27",
+            "viewport": 1200,
+            "kind": "rawPng",
+            "path": "/data/panc_CODEX/Islet-Explorer/tmp/local-app-review-20261103/ui-checks-v2/results/screenshots/tissue-all27-raw-1200.png",
+            "sha256": "97e70495fd29e85c02b75cc5ff43b433236b28cf711dc0f74709feac15c2e40a"
+          },
+          {
+            "scenario": "all27",
+            "viewport": 1200,
+            "kind": "browserCard",
+            "path": "/data/panc_CODEX/Islet-Explorer/tmp/local-app-review-20261103/ui-checks-v2/results/screenshots/tissue-all27-card-1200.png",
+            "sha256": "7eeecdaaac2e7885c6e751e1ace7cdca3839a887db80e1ba64f827bd2e94ab9c"
+          },
+          {
+            "scenario": "all27",
+            "viewport": 1600,
+            "kind": "rawPng",
+            "path": "/data/panc_CODEX/Islet-Explorer/tmp/local-app-review-20261103/ui-checks-v2/results/screenshots/tissue-all27-raw-1600.png",
+            "sha256": "0ec63c3f1a39622aa16d7c1ca32f2ab8fbeb69748640c2e65d849efc7bbc9967"
+          },
+          {
+            "scenario": "all27",
+            "viewport": 1600,
+            "kind": "browserCard",
+            "path": "/data/panc_CODEX/Islet-Explorer/tmp/local-app-review-20261103/ui-checks-v2/results/screenshots/tissue-all27-card-1600.png",
+            "sha256": "962afe76b53470007b72e867695616828a620fbb515277d82051b00cacd7921a"
+          }
+        ],
+        "visual_review": {
+          "source": "7ac421ed7d4b5ab5425d0130e8ff7445f4e87240",
+          "reviewer": "/root/public_ui_checks",
+          "reviewed_at_utc": "2026-11-03T14:55:20.703124+00:00",
+          "method": "Inspected actual local review raw PNGs and browser card screenshots",
+          "images": [
+            {
+              "scenario": "default",
+              "viewport": 1200,
+              "kind": "rawPng",
+              "path": "/data/panc_CODEX/Islet-Explorer/tmp/local-app-review-20261103/ui-checks-v2/results/screenshots/tissue-default-raw-1200.png",
+              "sha256": "e5e1e9c79652f6db554c23d3cd265268793fec6274c58ec8bd8f61b420c30e55",
+              "all_legend_labels_visible": true,
+              "no_clipping": true,
+              "plot_area_preserved": true,
+              "axis_ticks_visible": true,
+              "notes": "Directly inspected this actual native image with view_image at original resolution. Full plot panel, all axis tick labels including rightmost 5000, and every legend entry fit within bounds. CHGA, CD8a and CD4 superscript + signs are visible."
+            },
+            {
+              "scenario": "default",
+              "viewport": 1200,
+              "kind": "browserCard",
+              "path": "/data/panc_CODEX/Islet-Explorer/tmp/local-app-review-20261103/ui-checks-v2/results/screenshots/tissue-default-card-1200.png",
+              "sha256": "a43be8703de2fd5d93abe2edb4403d5eada49e61407005246f633b6dc8152bb8",
+              "all_legend_labels_visible": true,
+              "no_clipping": true,
+              "plot_area_preserved": true,
+              "axis_ticks_visible": true,
+              "notes": "Directly inspected this actual native image with view_image at original resolution. Full plot panel, all axis tick labels including rightmost 5000, and every legend entry fit within bounds. CHGA, CD8a and CD4 superscript + signs are visible. Download CSV/PNG buttons are visible below the plot."
+            },
+            {
+              "scenario": "default",
+              "viewport": 1600,
+              "kind": "rawPng",
+              "path": "/data/panc_CODEX/Islet-Explorer/tmp/local-app-review-20261103/ui-checks-v2/results/screenshots/tissue-default-raw-1600.png",
+              "sha256": "720ade77243a0d7a1c9a212fff4a4e3b60817c67b2e2592fa10018ffd98d3e23",
+              "all_legend_labels_visible": true,
+              "no_clipping": true,
+              "plot_area_preserved": true,
+              "axis_ticks_visible": true,
+              "notes": "Directly inspected this actual native image with view_image at original resolution. Full plot panel, all axis tick labels including rightmost 5000, and every legend entry fit within bounds. CHGA, CD8a and CD4 superscript + signs are visible."
+            },
+            {
+              "scenario": "default",
+              "viewport": 1600,
+              "kind": "browserCard",
+              "path": "/data/panc_CODEX/Islet-Explorer/tmp/local-app-review-20261103/ui-checks-v2/results/screenshots/tissue-default-card-1600.png",
+              "sha256": "23885e70be906006a98f6fa08b485f8e19fb6f8ff40c46bb2b8f40c620d0e244",
+              "all_legend_labels_visible": true,
+              "no_clipping": true,
+              "plot_area_preserved": true,
+              "axis_ticks_visible": true,
+              "notes": "Directly inspected this actual native image with view_image at original resolution. Full plot panel, all axis tick labels including rightmost 5000, and every legend entry fit within bounds. CHGA, CD8a and CD4 superscript + signs are visible. Download CSV/PNG buttons are visible below the plot."
+            },
+            {
+              "scenario": "all27",
+              "viewport": 1200,
+              "kind": "rawPng",
+              "path": "/data/panc_CODEX/Islet-Explorer/tmp/local-app-review-20261103/ui-checks-v2/results/screenshots/tissue-all27-raw-1200.png",
+              "sha256": "97e70495fd29e85c02b75cc5ff43b433236b28cf711dc0f74709feac15c2e40a",
+              "all_legend_labels_visible": true,
+              "no_clipping": true,
+              "plot_area_preserved": true,
+              "axis_ticks_visible": true,
+              "notes": "Directly inspected this actual native image with view_image at original resolution. Full plot panel, all axis tick labels including rightmost 5000, and every legend entry fit within bounds. CHGA, CD8a and CD4 superscript + signs are visible. All 12 macrophage subtype labels retain their complete four-marker +/\u2212 polarity combinations, visibly distinct, in two-line labels; both legend columns fit."
+            },
+            {
+              "scenario": "all27",
+              "viewport": 1200,
+              "kind": "browserCard",
+              "path": "/data/panc_CODEX/Islet-Explorer/tmp/local-app-review-20261103/ui-checks-v2/results/screenshots/tissue-all27-card-1200.png",
+              "sha256": "7eeecdaaac2e7885c6e751e1ace7cdca3839a887db80e1ba64f827bd2e94ab9c",
+              "all_legend_labels_visible": true,
+              "no_clipping": true,
+              "plot_area_preserved": true,
+              "axis_ticks_visible": true,
+              "notes": "Directly inspected this actual native image with view_image at original resolution. Full plot panel, all axis tick labels including rightmost 5000, and every legend entry fit within bounds. CHGA, CD8a and CD4 superscript + signs are visible. All 12 macrophage subtype labels retain their complete four-marker +/\u2212 polarity combinations, visibly distinct, in two-line labels; both legend columns fit. Download CSV/PNG buttons are visible below the plot. Sticky collapsed control headers appear at the top of this tall card capture; they do not obscure the donor title, axes, plot panel, legend, or download controls. no_clipping describes this required plot/legend/axis content."
+            },
+            {
+              "scenario": "all27",
+              "viewport": 1600,
+              "kind": "rawPng",
+              "path": "/data/panc_CODEX/Islet-Explorer/tmp/local-app-review-20261103/ui-checks-v2/results/screenshots/tissue-all27-raw-1600.png",
+              "sha256": "0ec63c3f1a39622aa16d7c1ca32f2ab8fbeb69748640c2e65d849efc7bbc9967",
+              "all_legend_labels_visible": true,
+              "no_clipping": true,
+              "plot_area_preserved": true,
+              "axis_ticks_visible": true,
+              "notes": "Directly inspected this actual native image with view_image at original resolution. Full plot panel, all axis tick labels including rightmost 5000, and every legend entry fit within bounds. CHGA, CD8a and CD4 superscript + signs are visible. All 12 macrophage subtype labels retain their complete four-marker +/\u2212 polarity combinations, visibly distinct, in two-line labels; both legend columns fit."
+            },
+            {
+              "scenario": "all27",
+              "viewport": 1600,
+              "kind": "browserCard",
+              "path": "/data/panc_CODEX/Islet-Explorer/tmp/local-app-review-20261103/ui-checks-v2/results/screenshots/tissue-all27-card-1600.png",
+              "sha256": "962afe76b53470007b72e867695616828a620fbb515277d82051b00cacd7921a",
+              "all_legend_labels_visible": true,
+              "no_clipping": true,
+              "plot_area_preserved": true,
+              "axis_ticks_visible": true,
+              "notes": "Directly inspected this actual native image with view_image at original resolution. Full plot panel, all axis tick labels including rightmost 5000, and every legend entry fit within bounds. CHGA, CD8a and CD4 superscript + signs are visible. All 12 macrophage subtype labels retain their complete four-marker +/\u2212 polarity combinations, visibly distinct, in two-line labels; both legend columns fit. Download CSV/PNG buttons are visible below the plot. Sticky collapsed control headers appear at the top of this tall card capture; they do not obscure the donor title, axes, plot panel, legend, or download controls. no_clipping describes this required plot/legend/axis content."
+            }
+          ]
+        }
+      },
+      "limits": [
+        "Actual image/source/container identity is recorded separately by the local preview controller; app source and accepted data producer are intentionally distinct.",
+        "Taxonomy browser inspection covers Plot, Trajectory and Spatial; it is not an exhaustive audit of every tab, export, or interaction.",
+        "Raster legend completeness, complete axis tick labels and useful tissue plot area require the separately recorded inspection of all eight local review screenshots; automated rendering/count checks alone are insufficient.",
+        "No external authentication, public-URL access or pubapp deployment was tested or performed by this harness."
+      ],
+      "evidence": {
+        "layout": {
+          "path": "/data/panc_CODEX/Islet-Explorer/tmp/local-app-review-20261103/ui-checks-v2/results/layout-local.json",
+          "sha256": "f4f4b37f54988700457ab9819d66cdebd262ac1c4ffd9af4fde7bf46a1715ae6"
+        },
+        "taxonomy": {
+          "path": "/data/panc_CODEX/Islet-Explorer/tmp/local-app-review-20261103/ui-checks-v2/results/taxonomy-local.json",
+          "sha256": "f7740f6fac2b18cf9259f354563d5f22da62a08500eabcf35b261ad58ceafe09"
+        },
+        "spatial": {
+          "path": "/data/panc_CODEX/Islet-Explorer/tmp/local-app-review-20261103/ui-checks-v2/results/spatial-local.json",
+          "sha256": "f01839168926dd1c3c21ed199464527b2acdac897ca219a7c1bb8dc2e1f02149"
+        },
+        "tissue-stress": {
+          "path": "/data/panc_CODEX/Islet-Explorer/tmp/local-app-review-20261103/ui-checks-v2/results/tissue-stress-local.json",
+          "sha256": "2126234ae499dd906b8f19ff0f811a02b1d0669b40cfcb7520ace108ef141b2f"
+        }
+      }
+    },
+    "actual_running_decoder": "pass"
+  },
+  "pubapps": {
+    "new_candidate_imported": false,
+    "new_candidate_data_relocated": false,
+    "services_activated_for_this_candidate": false,
+    "current_public_dev_image": "sha256:e704ac2a7f01c0fdec5905cc5b1dff43041d45fb0ba7ebfe3c821a13da4a9e9e",
+    "current_production_image": "sha256:89b3f84070b1edb89124347572ed43f278b5a8478e243053957037ccb1ceff8e",
+    "prior_receipts_unchanged": {
+      "docs/evidence/pubapps_live_20261102.json": "1f635a08d79f0ef1fcdff698bcce5671ce5ed7b049c42a5d6c59441560c5bf54",
+      "docs/evidence/dev_duckdb_deployment_20261103.json": "9b70fae13e4db3a934bb3c4ac884239c8bdc7b99ff6c7e48a69956627862a825"
+    },
+    "earlier_preparation": "Before local-only steering: versioned5e/81b tooling staged and two proven unused archived image caches evicted. Both live app identities were verified unchanged. No host calls followed the local-only steering."
+  },
+  "evidence": {
+    "runtime_verification": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-local-review-20261103/r2/runtime-verification.log",
+      "sha256": "61181985f820c962b2153a8b453ec3f6f6f42f159ef22d6d11b9d36f309276e0"
+    },
+    "live_decoder": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-local-review-20261103/r2/live-brotli.json",
+      "sha256": "018629db835bce67bcd447aa7593bed589b41c9e52266375eddbd105947d1a2a"
+    },
+    "live_census": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-local-review-20261103/r2/runtime-census.json",
+      "sha256": "0e8bf95d277105be8e72fd2f891ada69a20bb86b9c5099be3b4964f4e9db9b24"
+    },
+    "browser": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-local-review-20261103/r2/local-browser.json",
+      "sha256": "dfbcc1a22eefeeb2239dcae7e14c1c1f78bb9760dd7aa6be7f650fb585c1de3e"
+    },
+    "local_runtime_audit": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-local-review-20261103/r2/local-runtime-audit.json",
+      "sha256": "e3b559eecfbeab8d7b3dc613feabea12dbdba56da50581abddde738b1fca8e4d"
+    },
+    "startup_inspect": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-local-review-20261103/r2/container-startup-inspect.json",
+      "sha256": "9015bfb769dea7c12bd6ce83673ac92a04604ca48d812995e9c77d8ef7d36928"
+    },
+    "final_inspect": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-local-review-20261103/r2/container-final-inspect.json",
+      "sha256": "044f9815c6b98b6d0dba59452971891f638bd52ac032441438e153b56c456c82"
+    },
+    "service_configuration": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-local-review-20261103/r2/service-configuration.txt",
+      "sha256": "30b82317e993138f49b876566278fccf22ce5c532edc2e10f57caf6487084c44"
+    },
+    "launcher": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-local-review-20261103/r2/start-local-review.sh",
+      "sha256": "c46ef5ec0db259bca398b7af1cae4e3897a3187939e11979cc011339e2a7f769"
+    },
+    "service_launcher": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-local-review-20261103/r2/start-local-service.sh",
+      "sha256": "9a74e3c3231b89e755730b7af3a2dce669478e2cbf87bfc4fbcb929f2f4099f6"
+    },
+    "ui_harness": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/local-app-review-20261103/ui-checks-v2/HARNESS.sha256",
+      "sha256": "bfceea47a6699f75e208c96582fc67e3577f80e239c4539795940a26ae261ab2"
+    },
+    "ui_summary": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/local-app-review-20261103/ui-checks-v2/results/summary.json",
+      "sha256": "c580086323d7c645683f31444d0b115cc7fb1f6f2c20a3245f81f6cbea682306"
+    },
+    "image_validation": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-local-review-20261103/r2-image/validation-status.json",
+      "sha256": "508c94a18d17a7034b376206b5e0be9db366e1a48a2761ab91a3de27602622e6"
+    },
+    "image_build_log": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-local-review-20261103/r2-image/build.log",
+      "sha256": "c307d21656fffc4aa270ffb4e1042bdd03283366a4adcecdcce74cdf9495ac41"
+    },
+    "image_build_inputs": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-local-review-20261103/r2-image/build-inputs.sha256",
+      "sha256": "f81483e657ab55c8c8591956d8cc393f40639637ba0b0c8553750dab978c4aa6"
+    },
+    "image_scan": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-local-review-20261103/r2-image/scan/sha256_46b81d665cacb0f8abcd4b9fe34d7f8c786cb7916d6f9cd30e63a1223358b006.grype.json",
+      "sha256": "e4a373542e630ac685fa2447d4c2ee967b7104484db39dea4f3e5dc26d156006"
+    },
+    "image_decoder_scan": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-local-review-20261103/r2-image/scan/sha256_46b81d665cacb0f8abcd4b9fe34d7f8c786cb7916d6f9cd30e63a1223358b006.brotli.json",
+      "sha256": "6354bf92888dcc550291e3f303389a652711ff2c5e6cc99c04a050f8e02d979e"
+    },
+    "image_pipeline": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-local-review-20261103/r2-image/pipeline.log",
+      "sha256": "5c9cae2eb7b71245c33dd8f44c80f23df7f461246d5a20f535229e5fed9ca7bd"
+    },
+    "current_source_review": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-local-review-20261103/r2-image/successor-source-review.json",
+      "sha256": "8c12fbddc87494262e6c7da56b8032335572d656bb4969d2d7ba4cb9941fb643"
+    },
+    "data_cancellation": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-dev-ui-release-20261103/final-81b3857/evidence/build-cancellation-81b3857.json",
+      "sha256": "1d2372a111f5171780584fee35b34a22bf4f4f77ec5f13d49bc7b6c85a35ec4d"
+    },
+    "raster_fonts": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-local-review-20261103/r2/installed-raster-fonts.json",
+      "sha256": "0e996a89444209be54aeafdaba68e494d6b7ca1a6733cd905b670dce9f336ec6"
+    },
+    "raster_validation": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-local-review-20261103/r2/installed-raster-validation.json",
+      "sha256": "a6eff86aec58dcec5ab6ff9f7f3d21fe889130faaa904c48de4ac926fbfaecad"
+    },
+    "activation": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-local-review-20261103/r2/activation.log",
+      "sha256": "051dca2d3313dc14f8947c04a6f2b50fb8548fa200dcfdea9d6e63e3d360662c"
+    },
+    "initial_ui_failure": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/local-app-review-20261103/local-ui-review-failure.json",
+      "sha256": "7962b3cbad7b067c9ac15fc03bd1e34f500fd1d34257d598a42a45c4c0e39ddc"
+    },
+    "brush_diagnostic": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/local-app-review-20261103/brush-diagnostic/brush-diagnostic.json",
+      "sha256": "ff6a2e724b2c581219dee0d385403b58ec3e2aa4c8bfd2eab4b4274e662abc10"
+    },
+    "ui_runtime_binding": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/local-app-review-20261103/v2-runtime-binding.json",
+      "sha256": "725672271da6895d082cd1374555dafa0cd8ab6431eb271ef590fa057a2f2a92"
+    },
+    "corrected_source_followup": {
+      "path": "/data/panc_CODEX/Islet-Explorer/docs/evidence/app_container_rendering_followup_20261103.json",
+      "sha256": "3dbe401f7886614f726adda97d3b71bf20d1eef26fd5755524feddc99a81252a"
+    },
+    "final_native_ui_receipt": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/local-app-review-20261103/final-native-v2-ui-receipt.json",
+      "sha256": "383474bf1b5bfe46dc9313210fb3a3486eb4455387c381c517899b851fcac3f6"
+    },
+    "completion_generator": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-local-review-20261103/r2/complete-local-review.py",
+      "sha256": "bfb4666f94b857aa748ca9fd785d5a9cff9501425c10ce3b43a3e7b02f4b5a81"
+    }
+  },
+  "limitations": [
+    "Local HTTP only; external authentication/public proxy/off-campus/reboot nottested.",
+    "Image7ac and accepted data5e have separate producer identities; no same-source deployable release or deployment approval is claimed.",
+    "UI checks cover specified screens and eight actual visual inspections, not exhaustive accessibility or every interaction.",
+    "No security ticket reply sent."
+  ],
+  "raster_fonts": {
+    "result": "pass",
+    "source": "Four DejaVu Sans faces and license already shipped by pinned Matplotlib, registered with fontconfig. No dependency upgrade.",
+    "validation": "Nonempty, distinct and raised plus/minus glyphs in four faces under ragg and Cairo;12 distinct macrophage profile bitmaps;Cairo PDF Unicode maps; eight actual native application screenshots reviewed."
+  },
+  "local_port_correction": {
+    "earlier_url": "http://127.0.0.1:3840/islet-explorer/",
+    "reason": "An existing unchanged nginx configuration forwards network port8080 to3840. This was discovered during final local routing review.",
+    "action": "Stopped the initial3840 local preview and started the corrected candidate on unproxied loopback3845. No nginx changes.",
+    "old_preview_restarted": false,
+    "old_service_status": "inactive"
+  },
+  "preserve_active_preview_backing": {
+    "data_root": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-dev-ui-release-20261103/final-5e6580f/artifacts/release-5e6580f/data",
+    "runtime_and_launchers": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-local-review-20261103/r2",
+    "image_evidence": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-local-review-20261103/r2-image",
+    "image": "sha256:46b81d665cacb0f8abcd4b9fe34d7f8c786cb7916d6f9cd30e63a1223358b006",
+    "instruction": "Preserve these while the preview is used or may be relaunched; they are active backing content, not generic cleanup candidates."
+  }
+}
