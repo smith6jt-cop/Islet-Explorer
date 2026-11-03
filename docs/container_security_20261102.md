@@ -12,9 +12,18 @@ dynamic phenotype names, including Unclassified, in plot legends. Actual
 classification counts and acceptance are recorded in the
 [component resolution record](component_resolution_20261102.md).
 
-**Not yet live:** the final image is building and the fresh data candidate is
-undergoing its checks. Both services remain stopped and masked until production
-activation. The machine-readable [deployment receipt](evidence/pubapps_live_20261102.json)
+**Not yet live:** the final image is built, validated, exported and loaded on
+PubApps as `sha256:89b3f84070b1edb89124347572ed43f278b5a8478e243053957037ccb1ceff8e`.
+Its package scan reports **0 High / 0 Critical**, every prior package finding
+is resolved, all 35 R files parse, and installed Shiny/R/static-range plus actual
+plot-scale checks pass. The security release decision is
+`pass-with-duckdb-remediation-window`; the raw DuckDB failure is retained.
+The OCI archive SHA-256 is
+`d68761c53f9b0d90678640e63b31cc3e6dac9d080b6c937f22a00f3859f85992`.
+
+The fresh app data is still being assembled and checked. Both services remain
+stopped and masked until production activation. The machine-readable
+[deployment receipt](evidence/pubapps_live_20261102.json)
 records the current state and will be updated after actual activation and public
 acceptance. The intended release is `pubapps-2026-11-components-v1`.
 
@@ -31,7 +40,7 @@ do not claim a running application.
 
 ## Earlier completed builds
 
-The matching production candidate is now image `41e62a97…`, source `b15f0fc`.
+The earlier production candidate was image `41e62a97…`, source `b15f0fc`.
 It passes package/dependency checks, the installed Shiny/R/static-image smoke,
 and the policy at `7941df1` with the dated DuckDB exception. Its failed raw
 DuckDB decoder report remains visible. It is built locally and has not been
