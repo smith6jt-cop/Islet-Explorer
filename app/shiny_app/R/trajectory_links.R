@@ -64,3 +64,76 @@ trajectory_link_plot <- function(p, ns) {
   }", data = list(group = ns("linked_plots"), input = ns("linked_click"),
                   ready = ns("linked_ready"), message = ns("linked_state")))
 }
+
+# Keep paired plots equally sized when one has a longer legend. The rendered
+# guides determine one shared bottom margin, in Plotly 2.11-compatible paper
+# coordinates; title clearance is measured again after color changes and resize.
+paired_plotly_guides <- function(p, ids) {
+  htmlwidgets::onRender(p, "function(el, x, ids) {
+        var prior = el._isletGuideSync;
+        if (prior) {
+          el.removeListener('plotly_afterplot', prior.schedule);
+          if (prior.frame) window.cancelAnimationFrame(prior.frame);
+        }
+        var state = {frame: null};
+        state.schedule = function() {
+          if (state.frame) return;
+          state.frame = window.requestAnimationFrame(function() {
+            state.frame = null;
+            var plots = ids.map(function(id) { return document.getElementById(id); });
+            if (plots.some(function(plot) { return !plot || !plot._fullLayout; })) return;
+            var tallest = 0;
+            var clearance = 40;
+            plots.forEach(function(plot) {
+              plot.querySelectorAll('g.colorbar').forEach(function(guide) {
+                var title = guide.querySelector('g.cbtitle > text');
+                var fill = guide.querySelector('.cbfill');
+                if (!title || !fill) return;
+                // Reset first: repeated draws must not accumulate an offset.
+                title.setAttribute('dy', '0');
+                var gap = fill.getBoundingClientRect().top - title.getBoundingClientRect().bottom;
+                title.setAttribute('dy', String(Math.min(0, gap - 6)));
+              });
+              plot.querySelectorAll('g.legend, g.colorbar').forEach(function(guide) {
+                tallest = Math.max(tallest, guide.getBoundingClientRect().height);
+              });
+              var axisTitle = plot.querySelector('.g-xtitle');
+              if (axisTitle) {
+                var layout = plot._fullLayout;
+                var paperBottom = plot.getBoundingClientRect().top + layout._size.t + layout._size.h;
+                // Keep the guide clear of the actual axis title too; font and
+                // title offsets differ between the supported Plotly versions.
+                clearance = Math.max(clearance,
+                  axisTitle.getBoundingClientRect().bottom - paperBottom + 8 + 0.02 * layout.height);
+              }
+            });
+            var bottom = Math.ceil(Math.max(110, tallest + clearance));
+            plots.forEach(function(plot) {
+              var layout = plot._fullLayout;
+              // Both supported Plotly versions default to paper coordinates;
+              // Plotly.js 2.11 (the pinned image) has no yref attribute.
+              // Use paper coordinates to put each guide bottom 2% above the
+              // widget bottom, using the height AFTER the shared margin.
+              var height = layout.height - layout.margin.t - bottom;
+              if (height <= 0) return;
+              var y = (0.02 * layout.height - bottom) / height;
+              var update = {};
+              if (Math.abs(layout.margin.b - bottom) > 0.5) update['margin.b'] = bottom;
+              if (layout.legend && Math.abs(layout.legend.y - y) > 0.000001)
+                update['legend.y'] = y;
+              var bars = [];
+              plot.data.forEach(function(trace, index) {
+                if (trace.marker && trace.marker.colorbar &&
+                    Math.abs(trace.marker.colorbar.y - y) > 0.000001) bars.push(index);
+              });
+              if (bars.length)
+                Plotly.update(plot, {'marker.colorbar.y': y}, update, bars);
+              else if (Object.keys(update).length) Plotly.relayout(plot, update);
+            });
+          });
+        };
+        el._isletGuideSync = state;
+        el.on('plotly_afterplot', state.schedule);
+        state.schedule();
+      }", data = ids)
+}

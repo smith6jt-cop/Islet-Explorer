@@ -73,3 +73,40 @@ test_that("pseudotime scale helper preserves raw values and stable ranks", {
   expect_equal(ranked$pt, c(0.5, 0.2, 0.9))
   expect_equal(ranked$pt_raw, c(4, 2, 8))
 })
+
+
+test_that("PAGA color choices share a cohort and preserve the fitted values", {
+  d <- data.frame(islet_id = c("0078_Islet_1", "112_Cluster_2", "6356_Islet_3"),
+                  case_id = c("0078", "112", "6356"), donor_status = c("ND", "Aab+", "T1D"),
+                  leiden = c("0", "1", "0"), fa_1 = c(1.125, -3.625, 7.75),
+                  fa_2 = c(-2.25, 0.5, 4.875), pseudotime = c(0, 0.25, 1))
+  original <- d
+  features <- data.frame(combined_islet_id = d$islet_id[c(3, 1)], value = c(9, 2),
+                         feature_name = "CD8a Tcell")
+  for (by in unname(PAGA_COLOR_CHOICES)) {
+    actual <- paga_display_data(d, by, features)
+    expect_identical(actual$data[, names(d)], original)
+    expect_identical(actual$data$.key, c("78|Islet_1", "112|Cluster_2", "6356|Islet_3"))
+    expect_identical(actual$colour_by, by)
+    if (by == "feature") {
+      expect_equal(actual$data$.colour, c(2, NA, 9))
+      expect_identical(actual$title, "CD8a Tcell")
+      expect_match(actual$data$.hover[2], "Unavailable", fixed = TRUE)
+    } else {
+      expect_identical(actual$data$.colour, original[[by]])
+    }
+  }
+  expect_identical(d, original)
+})
+
+test_that("missing PAGA features stay explicit instead of silently changing coloring", {
+  d <- data.frame(islet_id = "112_Islet_1", case_id = "112", donor_status = "ND", leiden = "0",
+                  fa_1 = 1, fa_2 = 2, pseudotime = 0.5)
+  missing <- paga_display_data(d, "feature")
+  expect_true(all(is.na(missing$data$.colour)))
+  expect_identical(missing$colour_by, "feature")
+  expect_identical(missing$data[, names(d)], d)
+  invalid <- paga_display_data(d, "unrecognized")
+  expect_identical(invalid$colour_by, "pseudotime")
+  expect_identical(invalid$data$.colour, d$pseudotime)
+})

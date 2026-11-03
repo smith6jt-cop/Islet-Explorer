@@ -170,7 +170,7 @@ trajectory_ui <- function(id) {
     fluidRow(
       column(12,
         div(class = "card trajectory-segmentation-card", style = "padding: 15px; margin-bottom: 20px;",
-          h5("Segmentation map", style = "margin-top: 0;"),
+          h5("Segmentation Map", style = "margin-top: 0;"),
           uiOutput(ns("segmentation_viewer_panel"))
         )
       )
@@ -202,35 +202,38 @@ trajectory_ui <- function(id) {
     # is the plot that actually separates islets -- 8.1% overplotted vs 84-96%.
     fluidRow(
       column(12,
-        div(class = "card", style = "padding: 15px; margin-bottom: 20px;",
-          card_title_help("PAGA force-directed layout",
+        div(class = "card paga-comparison-card", style = "padding: 15px; margin-bottom: 20px; overflow: visible;",
+          card_title_help("PAGA Force-Directed Layout",
             style = "color: var(--islet-heading); margin: 0 0 8px;",
             help = list(tags$p("Barlow et al.'s PAGA-initialized force-directed layout of the same graph (cosine,",
                                " 15 neighbors, Leiden resolution 1). Each point is an object; the axes are layout",
                                " coordinates with no units, so only relative position means anything. It is built on",
-                               " request, on the same objects as the pseudotime."),
+                               " request, on the same objects as the pseudotime. Both panels show that same fit, each with its own color choice."),
+                        tags$p("Hover over an object to highlight it in both PAGA panels and the other linked plots. Click to open its segmentation map."),
                         unclassified_help_ui())),
           checkboxInput(ns("paga_show_layout"), "Build and show PAGA layout",
                         value = FALSE),
           conditionalPanel(
             condition = "input.paga_show_layout", ns = ns,
           fluidRow(
-            column(3,
-              selectInput(ns("paga_color_by"), "Color islets by:",
-                          choices = c("Pseudotime" = "pseudotime",
-                                      "Donor status" = "donor_status",
-                                      "Leiden cluster" = "leiden",
-                                      "Donor" = "case_id",
-                                      "Selected feature" = "feature"),
-                          selected = "pseudotime")
-            ),
-            column(3,
-              sliderInput(ns("paga_point_size"), "Point size:",
+            column(4,
+              sliderInput(ns("paga_point_size"), "Point size",
                           min = 0.3, max = 4.0, value = 1.6, step = 0.1)
             ),
-            column(6, uiOutput(ns("paga_note")))
+            column(8, uiOutput(ns("paga_note")))
           ),
-          plotlyOutput(ns("paga_layout"), height = 620),
+          fluidRow(
+            column(6,
+              selectInput(ns("paga_color_by"), "Color by", choices = PAGA_COLOR_CHOICES,
+                          selected = "pseudotime", width = "100%"),
+              plotlyOutput(ns("paga_layout"), height = 520)
+            ),
+            column(6,
+              selectInput(ns("paga_color_right"), "Color by", choices = PAGA_COLOR_CHOICES,
+                          selected = "donor_status", width = "100%"),
+              plotlyOutput(ns("paga_layout_right"), height = 520)
+            )
+          ),
           div(style = "text-align: right; margin-top: 8px;",
             downloadButton(ns("dl_paga_csv"), "Download CSV",
                            class = "btn-sm btn-outline-secondary"))

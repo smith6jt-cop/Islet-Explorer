@@ -84,6 +84,40 @@ apply_pt_scale <- function(df, pt_scale) {
   df
 }
 
+# Both PAGA panels use one fitted layout, with independent display colorings.
+PAGA_COLOR_CHOICES <- c("Pseudotime" = "pseudotime", "Donor Status" = "donor_status",
+                       "Leiden Cluster" = "leiden", "Donor" = "case_id",
+                       "Selected Feature" = "feature")
+
+# Join a selected feature by immutable object identity; coloring must never
+# refit, filter or reorder the PAGA cohort. Missing feature values stay missing.
+paga_display_data <- function(d, colour_by, feature_data = NULL) {
+  if (is.null(d) || !nrow(d)) return(NULL)
+  if (!is.character(colour_by) || length(colour_by) != 1L ||
+      is.na(colour_by) || !(colour_by %in% unname(PAGA_COLOR_CHOICES))) colour_by <- "pseudotime"
+  d$.key <- trajectory_link_key(d$case_id, sub("^[0-9]+_", "", d$islet_id))
+  title <- names(PAGA_COLOR_CHOICES)[match(colour_by, PAGA_COLOR_CHOICES)]
+  if (identical(colour_by, "feature")) {
+    d$.colour <- rep(NA_real_, nrow(d))
+    if (!is.null(feature_data) && all(c("combined_islet_id", "value") %in% names(feature_data))) {
+      d$.colour <- feature_data$value[match(d$islet_id, feature_data$combined_islet_id)]
+      if (nrow(feature_data) && "feature_name" %in% names(feature_data) &&
+          !is.na(feature_data$feature_name[1]) && nzchar(feature_data$feature_name[1]))
+        title <- feature_data$feature_name[1]
+    }
+  } else {
+    d$.colour <- d[[colour_by]]
+  }
+  if (colour_by %in% c("donor_status", "leiden", "case_id")) d$.colour <- as.character(d$.colour)
+  d$.hover <- paste0("Object: ", d$islet_id,
+                     "<br>Donor: ", d$case_id, " (", d$donor_status, ")",
+                     "<br>Pseudotime: ", round(d$pseudotime, 4),
+                     "<br>Leiden: ", d$leiden,
+                     if (identical(colour_by, "feature")) paste0("<br>", title, ": ",
+                       ifelse(is.finite(d$.colour), round(d$.colour, 4), "Unavailable")) else "")
+  list(data = d, colour_by = colour_by, title = title)
+}
+
 trajectory_server <- function(id, prepared, selected_islet, forced_image, active_tab = reactive("Trajectory"),
                               donor_colors_reactive = reactive(DONOR_COLORS_BRIGHT),
                               remove_outliers = reactive(FALSE),
@@ -323,7 +357,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
           selectInput(ns("traj_ratio_type"), "Select cell type:",
                       choices = phenotype_grouped_choices(types), selected = sel),
           if (root_has_marker_profile_labels())
-            macrophage_marker_checkboxes(ns("mac_markers"), isolate(macrophage_markers()), "Macrophage markers")))
+            macrophage_marker_checkboxes(ns("mac_markers"), isolate(macrophage_markers()))))
       }
 
       # Get available features from AnnData
@@ -682,7 +716,17 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       trajectory_link_plot(fig, ns)
     })
 
-    # One validated selection route for all three linked plots. Hover stays in JS.
+    # One validated selection route for the scatter, UMAPs and both PAGA panels.
+    # PAGA keeps its complete fitted cohort when the selected Y feature is missing.
+    linked_cohort_keys <- reactive({
+      df <- traj_data_clean()
+      keys <- if (is.null(df)) character(0) else df$link_key
+      if (isTRUE(input$paga_show_layout)) {
+        d <- paga_data()
+        if (!is.null(d)) keys <- union(keys, trajectory_link_key(d$case_id, sub("^[0-9]+_", "", d$islet_id)))
+      }
+      keys[!is.na(keys)]
+    })
     linked_selection_key <- function() {
       info <- selected_islet()
       if (is.null(info)) return(NULL)
@@ -696,18 +740,17 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
     observeEvent(input$linked_click, {
       req(identical(active_tab(), "Trajectory"))
       event <- input$linked_click
-      df <- traj_data_clean()
       key <- event$key
-      sources <- ns(c("traj_scatter", "traj_umap_donor", "traj_umap_feature"))
+      sources <- ns(c("traj_scatter", "traj_umap_donor", "traj_umap_feature", "paga_layout", "paga_layout_right"))
       if (!is.character(key) || length(key) != 1L || is.na(key) ||
           !is.character(event$source) || length(event$source) != 1L ||
-          !(event$source %in% sources) || is.null(df) || !(key %in% df$link_key)) {
+          !(event$source %in% sources) || !(key %in% linked_cohort_keys())) {
         islet_log_validation_failure("trajectory_link_invalid")
         send_linked_state()
         return()
       }
-      row <- df[match(key, df$link_key), , drop = FALSE]
-      select_islet_from_key(row$case_id, row$islet_key, prepared, selected_islet)
+      parts <- strsplit(key, "|", fixed = TRUE)[[1]]
+      select_islet_from_key(parts[1], parts[2], prepared, selected_islet)
       send_linked_state()
     }, ignoreInit = TRUE)
     observeEvent(input$linked_ready, { send_linked_state() }, ignoreInit = TRUE)
@@ -717,9 +760,10 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       if (active && !is.null(key)) {
         df <- traj_data_clean()
         # A transient empty feature selector must not discard a pinned islet.
-        # Once a feature is valid, an empty result means the pin was filtered out.
-        if ((!is.null(df) && !(key %in% df$link_key)) ||
-            (is.null(df) && !is.null(traj_validate()))) {
+        # Once a feature is valid, retain any pin still present in a visible
+        # fitted layout, including PAGA objects missing that feature.
+        if ((!is.null(df) && !(key %in% linked_cohort_keys())) ||
+            (is.null(df) && !isTRUE(input$paga_show_layout) && !is.null(traj_validate()))) {
           selected_islet(NULL)
         }
       }
@@ -928,7 +972,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
 
     # ---------- UMAP: Selected Feature ----------
     output$traj_umap_feature_title <- renderText({
-      paste("UMAP:", selected_measure_label())
+      card_heading_text(paste("UMAP:", selected_measure_label()))
     })
     traj_umap_feature_plot <- reactive({
       df <- traj_data_clean()
@@ -1363,74 +1407,65 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
                   "ForceAtlas2" else sub("^X_draw_graph_", "", attr(d, "layout_key") %||% "")))
     })
 
-    output$paga_layout <- renderPlotly({
+    paga_figure <- function(colour_by, output_id) {
       d <- paga_data()
       if (is.null(d) || !nrow(d)) {
         return(plotly_islet_empty(
           if (paga_available()) "No PAGA layout for this cell-count range"
           else "PAGA unavailable — scanpy not installed for reticulate"))
       }
-      by <- input$paga_color_by %||% "pseudotime"
-      psz <- input$paga_point_size %||% 1.6
-
-      # "Selected feature" joins the Y-axis marker from the main scatter, so the
-      # layout can be read the way Barlow's Fig 2E is.
-      feat_label <- NULL
-      if (identical(by, "feature")) {
-        td <- tryCatch(traj_data_clean(), error = function(e) NULL)
-        if (!is.null(td) && "combined_islet_id" %in% names(td)) {
-          d$feature <- td$value[match(d$islet_id, td$combined_islet_id)]
-          feat_label <- td$feature_name[1]
+      feature_data <- if (identical(colour_by, "feature"))
+        tryCatch(traj_data_clean(), error = function(e) NULL) else NULL
+      display <- paga_display_data(d, colour_by, feature_data)
+      d <- display$data
+      if (identical(display$colour_by, "feature") && !any(is.finite(d$.colour)))
+        return(plotly_islet_empty("No values for the selected feature in the PAGA cohort"))
+      numeric_colour <- is.numeric(d$.colour)
+      pal <- if (numeric_colour) NULL else if (identical(display$colour_by, "donor_status"))
+        donor_colors_reactive() else {
+          groups <- sort(unique(d$.colour))
+          stats::setNames(scales::hue_pal()(length(groups)), groups)
         }
-        if (is.null(d$feature) || all(is.na(d$feature))) {
-          by <- "pseudotime"   # nothing to join; fail visible-but-usable
-        }
+      # The shared UMAP renderer gives both panels the same interleaved draw
+      # order and stable point keys. Only the color vector differs.
+      p <- islet_umap_plotly(d, "fa_1", "fa_2", ".colour", pal, ".hover", key = ".key",
+                            source = ns(output_id), colorbar_title = display$title,
+                            size = plotly_point_px(input$paga_point_size %||% 1.6))
+      if (numeric_colour) {
+        p <- plotly::plotly_build(p)
+        p$x$data <- lapply(p$x$data, function(tr) {
+          if (!is.null(tr$marker$colorbar))
+            tr$marker$colorbar <- utils::modifyList(tr$marker$colorbar, list(
+              orientation = "h", x = 0.5, xanchor = "center", y = -0.3, yanchor = "bottom",
+              len = 0.8, thickness = 14, title = list(side = "top"),
+              tickfont = list(size = ISLET_FONT_SIZES$dense_min)))
+          tr
+        })
       }
-
-      d$hover <- paste0("Islet: ", d$islet_id,
-                        "<br>Donor: ", d$case_id, " (", d$donor_status, ")",
-                        "<br>Pseudotime: ", round(d$pseudotime, 4),
-                        "<br>Leiden: ", d$leiden,
-                        if (!is.null(d$feature)) paste0("<br>", feat_label, ": ",
-                                                        round(d$feature, 4)) else "")
-
-      g <- ggplot(d, aes(x = fa_1, y = fa_2, text = hover))
-      if (by %in% c("pseudotime", "feature")) {
-        g <- g + geom_point(aes(colour = .data[[by]]), size = psz, alpha = 0.85, stroke = 0) +
-          scale_colour_viridis_c(option = "inferno",
-                                 name = if (identical(by, "pseudotime")) "Pseudotime"
-                                        else feat_label %||% "Feature")
-      } else if (identical(by, "donor_status")) {
-        cols <- donor_colors_reactive()
-        d$donor_status <- factor(d$donor_status, levels = names(cols))
-        g <- ggplot(d, aes(x = fa_1, y = fa_2, text = hover)) +
-          geom_point(aes(colour = donor_status), size = psz, alpha = 0.85, stroke = 0) +
-          scale_colour_manual(values = cols, name = "Donor status", drop = FALSE)
-      } else {
-        g <- g + geom_point(aes(colour = .data[[by]]), size = psz, alpha = 0.85, stroke = 0) +
-          scale_colour_discrete(name = if (identical(by, "leiden")) "Leiden" else "Donor")
-      }
-      g <- g +
-        labs(x = "Layout dim 1", y = "Layout dim 2",
-             title = sprintf("PAGA force-directed layout — %s objects (%s)",
-                             format(nrow(d), big.mark = ","), cohort_label())) +
-        theme_islet() +
-        # Layout coordinates are unitless and isotropic: 1 unit across must equal
-        # 1 unit up, or the graph structure is visually sheared.
-        coord_fixed() +
-        theme(axis.text = element_blank(), axis.ticks = element_blank(),
-              panel.grid.minor = element_blank())
-
       fonts <- plotly_islet_fonts()
-      ggplotly(g, tooltip = "text") %>%
-        layout(font = fonts$global,
-               title = list(font = fonts$title),
-               xaxis = list(title = list(font = fonts$axis_title), tickfont = fonts$axis_tick),
-               yaxis = list(title = list(font = fonts$axis_title), tickfont = fonts$axis_tick),
-               legend = list(font = fonts$legend_text,
-                             title = list(font = fonts$legend_title)),
-               margin = list(t = 70)) %>%
-        plotly_islet_config("trajectory_paga_layout")
+      p <- p %>% layout(
+        font = fonts$global,
+        title = list(text = display$title, font = fonts$title),
+        margin = list(l = 30, r = 10, t = 45, b = 110, autoexpand = FALSE),
+        xaxis = list(title = list(text = "Layout Dimension 1", font = fonts$axis_title), domain = c(0, 1),
+                     zeroline = FALSE, showgrid = FALSE, showticklabels = FALSE, ticks = "",
+                     showline = FALSE, constrain = "domain"),
+        yaxis = list(title = list(text = "Layout Dimension 2", font = fonts$axis_title),
+                     zeroline = FALSE, showgrid = FALSE, showticklabels = FALSE, ticks = "",
+                     showline = FALSE, scaleanchor = "x", scaleratio = 1, constrain = "domain"),
+        legend = list(title = list(text = display$title, font = fonts$legend_title, side = "top"),
+                      orientation = "h", font = fonts$legend_text,
+                      x = 0.5, xanchor = "center", y = -0.3, yanchor = "bottom",
+                      itemsizing = "constant", tracegroupgap = 2)
+      ) %>% plotly_islet_config(paste0("trajectory_", output_id))
+      p <- trajectory_link_plot(p, ns)
+      paired_plotly_guides(p, c(ns("paga_layout"), ns("paga_layout_right")))
+    }
+    output$paga_layout <- renderPlotly({
+      paga_figure(input$paga_color_by %||% "pseudotime", "paga_layout")
+    })
+    output$paga_layout_right <- renderPlotly({
+      paga_figure(input$paga_color_right %||% "donor_status", "paga_layout_right")
     })
 
     output$dl_paga_csv <- downloadHandler(
@@ -1450,6 +1485,9 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
                   15L, 1.0, attr(d, "layout_key") %||% "(n/a)"),
           "Root: ND islet nearest the ND centroid in diffusion space",
           sprintf("Fitted cohort: %s, any object class", cohort_label()),
+          paste("Color by — left:", input$paga_color_by %||% "pseudotime",
+                "| right:", input$paga_color_right %||% "donor_status"),
+          "Both panels share these fitted coordinates; coloring does not refit or subset the cohort",
           "fa_1 / fa_2 are unitless layout coordinates; only relative position is meaningful",
           paste("Rows:", nrow(out), "islets")
         ))
