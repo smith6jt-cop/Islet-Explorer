@@ -28,7 +28,10 @@ $(document).on('click', '.pheno-select', function (event) {
 
 // A Macrophage checkbox selects its displayed children without adding a parent
 // value to Shiny's phenotype input or changing the four marker selections.
-$(document).on('change', '.pheno-group-toggle', function () {
+// Click runs before the checkbox's change event reaches Shiny's ancestor
+// binding. Update children first, so synchronization cannot restore an old
+// indeterminate/unchecked state before this handler reads the new choice.
+$(document).on('click', '.pheno-group-toggle', function () {
   var group = $(this).closest('.pheno-group');
   var boxes = phenotypeBoxes(group);
   boxes.prop('checked', this.checked);
@@ -39,7 +42,7 @@ $(document).on('change', '.pheno-group-toggle', function () {
 $(document).on('change', '.pheno-group-checkboxes input:checkbox', function () {
   updateMacrophageToggles($(this).closest('.pheno-group-checkboxes'));
 });
-$(document).on('shiny:bound shiny:inputchanged', function (event) {
+$(document).on('shiny:bound', function (event) {
   updateMacrophageToggles($(event.target).closest('.pheno-group-checkboxes'));
 });
 $(function () { updateMacrophageToggles($(document)); });
