@@ -18,7 +18,8 @@ spatial_ui <- function(id) {
         style = "display: flex; align-items: center; flex-wrap: wrap; gap: 8px 18px; margin-bottom: 8px;",
         card_title_help("Donor For Tissue And Immune Gradient", help = list(
           tags$p("This donor supplies the cells in Tissue Scatter Plot and the dotted donor line in Cell Distribution",
-                 " Around Islets. The other cards continue to summarize the donor statuses selected in Data Controls."))),
+                 " Around Islets. This donor selection does not filter cohort summaries in the other cards;",
+                 " those retain their own donor-status controls."))),
         div(style = "flex: 0 1 280px; min-width: 180px;", uiOutput(ns("donor_selector")))
       ),
       control_panel("Data controls",

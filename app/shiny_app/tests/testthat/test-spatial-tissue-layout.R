@@ -47,8 +47,8 @@ test_that("responsive dense tissue legends preserve the full-width map and fit t
     "Unclassified — Insufficient evidence after reassessment",
     "Unclassified — Lineage or subtype unresolved",
     "Unclassified — Competing compartment or lineage evidence",
-    paste("Macrophage", c("CD68⁺ CD163⁺ LGALS3⁺ CD4⁺", "CD68⁺ CD163⁺ LGALS3⁻ CD4⁺",
-      "CD68⁺ CD163⁻ LGALS3⁺ CD4⁺", "CD68⁻ CD163⁻ LGALS3⁻ CD4⁺")))
+    paste("Macrophage", c("CD68⁺CD163⁺LGALS3⁺CD4⁺", "CD68⁺CD163⁺LGALS3⁻CD4⁺",
+      "CD68⁺CD163⁻LGALS3⁺CD4⁺", "CD68⁻CD163⁻LGALS3⁻CD4⁺")))
   for (width in c(600, 850, 1200)) {
     one <- .spatial_raster_dimensions(env, .spatial_layout_plot(env, basic, width), width)
     all <- .spatial_raster_dimensions(env, .spatial_layout_plot(env, dense, width), width)
