@@ -4,8 +4,9 @@ This guide describes the publication-profile interface. It does not describe dor
 development modules or certify a scientific data release.
 
 **Current status, 2026-11-02:** the [selected-component v2 build](component_build_v2_20261102.md)
-is being validated for the owner-authorized production release. It preserves the
-exact named v19 endocrine cells and the isolated DG Lymphatic revision. Consult
+is live as `pubapps-2026-11-components-v1`, verified at 2026-11-03 02:42 UTC
+(November 2 local) with 15/15 authenticated-access and 49/49 browser checks.
+It preserves the exact named v19 endocrine cells and the isolated DG Lymphatic revision. Consult
 the [deployment record](container_security_20261102.md) and the supplied review
 round's release/access notice for actual availability.
 
@@ -15,7 +16,7 @@ detail. A passing software, security or packaging check is not scientific accept
 
 ## Access and data handling
 
-- Provisioned URL: `https://islet-explorer.rc.ufl.edu/islet-explorer/` (currently stopped;
+- Live URL: `https://islet-explorer.rc.ufl.edu/islet-explorer/` (authentication required;
   use the access link and release notice supplied by the journal).
 - Username: supplied in the journal's confidential reviewer instructions.
 - Password: supplied separately through the confidential reviewer channel.

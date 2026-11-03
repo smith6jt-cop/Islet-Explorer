@@ -24,9 +24,12 @@ and [compact scientific receipt](docs/evidence/component_build_v2_20261102.json)
 
 Scientific source is `67ee6c9`; the matching image and release builder use
 `e5689f6`. Production image `89b3f840…` passes its recorded security and runtime
-checks and is loaded on PubApps. Immutable data packaging and final release
-validation are still running; **production has not yet been activated**.
-The owner has already authorized activation after those checks pass. See the
+checks and is running as **`pubapps-2026-11-components-v1`** at
+[the production app](https://islet-explorer.rc.ufl.edu/islet-explorer/).
+Full data verification, targeted parity and inventory pass; the actual running
+census matches all 3,199,606 cells and 78,680 Ki67-positive states. Authenticated
+access passes 15/15 checks and the browser suite passes 49/49, completed at
+2026-11-03 02:42 UTC (November 2 local). Dev remains stopped and masked. See the
 [authoritative deployment record](docs/container_security_20261102.md).
 The known DuckDB finding remains nonblocking only within the
 [dated window through November 10 UTC](docs/duckdb_remediation_window_20261102.md);
@@ -93,14 +96,15 @@ and direct-lookup drill-down files in file formats suited to their access patter
 | Group | Color (default) | Description |
 |-------|-----------------|-------------|
 | **ND** | Steel Blue (#4477AA) | Non-diabetic control donors |
-| **Aab+** | Burnt Umber (#CC6633) | Autoantibody-positive (pre-T1D) |
+| **Aab+** | Burnt Umber (#CC6633) | Autoantibody-positive donors |
 | **T1D** | Forest Green (#228833) | Type 1 diabetic donors |
 
 ## Quick Start
 
-> **Current launch gate:** the local app is offline pending acceptance of the
-> uniformly reprocessed 20-donor root. Do not use these generic development
-> commands to restart a candidate before that gate is cleared.
+> **Hosted production is live** at the link above. The local service remains
+> inactive/disabled. These generic development commands do not select the
+> validated production bundle; use the workflow guide for explicit data-root
+> selection and release operations.
 
 ```bash
 # Install R dependencies, including the local diffusion-pseudotime fallback
@@ -234,7 +238,7 @@ Available from both Plot and Trajectory tabs when clicking an islet:
 
 ## Data
 
-### Development sources
+### Historical development sources
 
 `data/islet_explorer.h5ad` is the enriched analytical source used to construct the
 reviewer summaries. It contains a 5,214-observation H5AD axis, 31 protein-marker
@@ -246,7 +250,9 @@ H5AD observation counts do not describe all embedded QuPath measurements. The
 2026-09-08 source preparation produces `core_area` and `comp` with 5,382 rows
 each, `targets_all` with 48,438 rows, `markers_all` with 64,584 rows, and
 21 `combined_pairs` definitions. See [the readiness evidence index](docs/ufrc_readiness.md)
-for these source measurements and the pending source-to-release parity check.
+for these historical source measurements. Current selected-component data and
+completed parity are recorded in the [v2 build record](docs/component_build_v2_20261102.md)
+and [release-validation receipt](docs/evidence/component_release_validation_20261102.json).
 
 The composition trajectory uses `data/barlow_islet_features.csv` plus the prepared app
 tables. `data/adata_ins_root.h5ad` is retained as a versioned scientific/provenance

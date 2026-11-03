@@ -1,7 +1,9 @@
 # CLAUDE.md - Pipeline Scripts
 
-**Current selected-component v2 work:** the owner delegated the remaining
-selection and production activation. Read [the current build](../docs/component_build_v2_20261102.md) and
+**Current selected-component v2 release:** production `pubapps-2026-11-components-v1`
+is live and verified as of 2026-11-03 02:42 UTC (November 2 local), with all
+15 authenticated-access and 49 browser checks passing. Dev remains stopped
+and masked. Read [the current build](../docs/component_build_v2_20261102.md) and
 [resolution contract](../docs/component_resolution_20261102.md): exact named v19 endocrine membership,
 evidence-preserving Unclassified outcomes, the four-type denominator, and
 classifier-lineage proof with unchanged geometry. Scientific source is

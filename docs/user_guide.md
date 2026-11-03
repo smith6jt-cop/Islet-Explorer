@@ -6,10 +6,12 @@ Interactive web application for exploring pancreatic islet CODEX multiplexed ima
 [the workflow user guide](workflow_user_guide.md). The
 [selected-component v2 build](component_build_v2_20261102.md) preserves the exact
 named v19 endocrine cells and applies current methods to the remaining cells.
-The owner has authorized production after validation; consult the
-[deployment record](container_security_20261102.md) for actual availability.
+Production `pubapps-2026-11-components-v1` is live and verified as of
+2026-11-03 02:42 UTC (November 2 local), with 15/15 authenticated-access and
+49/49 browser checks passing. Consult the [deployment record](container_security_20261102.md)
+for the exact image, data and validation evidence.
 
-**Provisioned reviewer URL (production currently stopped)**:
+**Live reviewer URL (authentication required)**:
 `https://islet-explorer.rc.ufl.edu/islet-explorer/`
 
 > **Publication profile:** The enabled tabs are Plot, Trajectory, Spatial and Viewer,

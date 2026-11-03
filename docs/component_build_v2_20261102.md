@@ -8,6 +8,13 @@ revision from other components. The [first component build](component_build_2026
 is retained as historical evidence; its boundary placeholders are not the
 final assignment policy.
 
+Production is live at
+[Islet Explorer](https://islet-explorer.rc.ufl.edu/islet-explorer/) with the
+selected-component v2 data. Activation and public endpoint checks completed
+successfully at 2026-11-03 02:42:27 UTC (November 2 local). Dev remains stopped
+and masked. The remaining off-campus acceptance and reboot tests are separate
+from this verified activation.
+
 ## Build and provenance
 
 HPG job `49168359` completed through the sealed site environment with scientific
@@ -199,8 +206,8 @@ the execution log is `inventory-revalidated-r2.log` in the release build root.
 Composite validation passed immediately before and after inventory execution.
 The [compact release-validation receipt](evidence/component_release_validation_20261102.json)
 binds the completed build, retained failure, accepted checks, tests and inventory.
-Production activation remains pending. These results establish packaging
-equivalence and inventory; they do not claim the site is live.
+These results establish packaging equivalence and inventory. The separate
+host and public endpoint evidence below establishes the live deployment.
 
 ## What the additional object proof establishes
 
@@ -226,11 +233,23 @@ names so their grey legend entry is not silently lost.
 
 ## Production and delivery
 
-The production release is being prepared as `pubapps-2026-11-components-v1`.
-The parallel security session owns image scans, installed-runtime checks,
-host staging, binding, activation and proxy verification. See the authoritative
-[security and deployment record](container_security_20261102.md). A build or
-copied artifact is not evidence that the site is live.
+Production release **`pubapps-2026-11-components-v1` is active and verified** at
+[Islet Explorer](https://islet-explorer.rc.ufl.edu/islet-explorer/). The security
+controller finished with exit 0 at **2026-11-03 02:42:27 UTC**. The healthy
+container runs image
+`sha256:89b3f84070b1edb89124347572ed43f278b5a8478e243053957037ccb1ceff8e`
+from producer `e5689f6`, with the exact verified data manifest and read-only
+scientific mounts. Public access checks pass **15/15**; the authenticated
+browser suite passes **49/49**, with no page, console or application HTTP errors.
+Evidence is `tmp/pubapps-live-20261102/live-host.json`, `public-access.json`
+and `public-browser.json`. See the authoritative
+[security and deployment record](container_security_20261102.md) for binding,
+service and proxy details. These runtime checks do not add a biological
+ground-truth claim to the scientific evidence.
+
+Dev remains **inactive and masked**; its separately patched DuckDB build was
+not activated. The off-campus acceptance run and reboot test remain pending,
+as recorded in [UFRC readiness](ufrc_readiness.md).
 
 The separate development DuckDB fix remains an independent build. The owner's
 dated production DuckDB exception expires at the recorded November 10 UTC

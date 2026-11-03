@@ -1,7 +1,9 @@
 # CODEX fixes for the Senior, monorepo, HPG and MultiPlex5000 agents
 
-**Current selected-component v2 work:** the owner delegated the remaining
-selection and production activation. Read [the current build](component_build_v2_20261102.md) and
+**Current selected-component v2 release:** production `pubapps-2026-11-components-v1`
+is live and verified as of 2026-11-03 02:42 UTC (November 2 local), with all
+15 authenticated-access and 49 browser checks passing. Dev remains stopped
+and masked. Read [the current build](component_build_v2_20261102.md) and
 [resolution contract](component_resolution_20261102.md): exact named v19 endocrine membership,
 evidence-preserving Unclassified outcomes, the four-type denominator, and
 classifier-lineage proof with unchanged geometry. Scientific source is
@@ -36,7 +38,12 @@ changes. The classifier-lineage proof passes for all 10,080 objects and 5,227
 exact Single whole-cell associations. Corrected-cell and centroid diagnostics
 remain visible. See [the current build record](component_build_v2_20261102.md)
 and [full row review](unclassified_component_review_20261103.md) for scope,
-evidence hashes and remaining packaging/runtime checks.
+evidence hashes and completed packaging/runtime checks. Production is now
+verified live: the actual census matches the built component data, and all
+15 access and 49 browser checks pass. The compact
+[release-validation receipt](evidence/component_release_validation_20261102.json)
+and [live-service receipt](evidence/pubapps_live_20261102.json) retain distinct
+producer, validator and operational evidence.
 
 | Commit | Additional change to assess for the shared workflow |
 |---|---|
@@ -47,6 +54,7 @@ evidence hashes and remaining packaging/runtime checks.
 | `67ee6c9` | Prove original classifier lineage, preserved geometry ancestry and exact Single whole-cell association separately from corrected-cell and centroid diagnostics. |
 | `e5689f6` | Preserve phenotype names when a palette has no explicit color, so counts, points and legend entries remain aligned. |
 | `d3ec00e` | Compare measured distances at the established tolerance during cell-state release parity; retain exact categorical and binary-state associations, row multiplicity and corruption controls. |
+| `c3dc494` | Bind targeted revalidation to the preserved original checks, complete unchanged input inventories and separately versioned corrected verifier; reject omitted or altered evidence. |
 | `caf79f2` | Keep a previously stopped service stopped when release activation fails; do not restart an insecure old image during recovery. |
 
 These are implementation patterns and CODEX evidence. The exact v19 membership,

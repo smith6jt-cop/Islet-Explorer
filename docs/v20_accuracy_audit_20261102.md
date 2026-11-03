@@ -2,14 +2,15 @@
 
 **Subsequent selected-component build, November 2:** the completed v2 app and
 QuPath builds use scientific source `67ee6c9`; the matched image/release builder
-uses `e5689f6`. Read [the v2 build record](component_build_v2_20261102.md),
+uses `e5689f6`. Production `pubapps-2026-11-components-v1` is now live and
+verified (2026-11-03 02:42 UTC); dev remains stopped and masked. Read [the v2 build record](component_build_v2_20261102.md),
 [resolution contract](component_resolution_20261102.md), and
 [actual deployment status](container_security_20261102.md) for current work.
 The version-specific source paths, failed diagnostics and prior service state
 below remain historical evidence; they do not reopen the delegated selection
 or production decision.
 
-**Status: not ready for production.** The audit found an app immune-list defect and an unresolved upstream typing issue. Production remains stopped. Neither a passing reconciliation nor a passing browser suite is scientific acceptance.
+**Historical frozen-v20 status: not ready for production.** The audit found an app immune-list defect and an unresolved upstream typing issue. Production remains stopped. Neither a passing reconciliation nor a passing browser suite is scientific acceptance.
 
 This records the frozen v20 audit. The subsequent selected-v19 component app,
 QuPath and matching container builds are complete; their passing export checks

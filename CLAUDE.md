@@ -1,10 +1,21 @@
 # CLAUDE.md - Islet Explorer
 
+**Verified live release:** production serves `pubapps-2026-11-components-v1`,
+image `89b3f840…`, from image/data producer `e5689f6` and scientific producer
+`67ee6c9`. Validation completed at 2026-11-03 02:42 UTC (November 2 local):
+full host bytes, actual running census, 15/15 authenticated-access checks and
+49/49 browser checks pass. Dev remains stopped/masked; the local service remains
+inactive/disabled. Read the [live receipt](docs/evidence/pubapps_live_20261102.json),
+[release-validation receipt](docs/evidence/component_release_validation_20261102.json)
+and [workflow guide](docs/workflow_user_guide.md). Parity validator `d3ec00e` and
+evidence composer `c3dc494` are separately versioned; do not relabel the unchanged
+producer artifacts. Earlier service-state snapshots below are historical.
+
 **Latest owner delegation:** “Resolve the decision and get the pubapp live”; “There shouldn't be many unclassified cells.” The exact v19 named endocrine membership is now the selected rule; do not ask that question again. Read [the current v2 build](docs/component_build_v2_20261102.md) and [resolution contract](docs/component_resolution_20261102.md). Only unresolved/boundary rows are reconsidered through existing non-endocrine rules; unsupported cases retain explicit Unclassified evidence. The new object proof validates original classifier lineage and Single whole-cell association while preserving the old corrected-cell diagnostics and all geometry/memberships. The v2 app and QuPath builds are complete and checksum-verified; the current build record contains their actual results, while the older v1 snapshots below remain historical. Immutable release packaging and deployment validation are tracked separately. The security session owns matching-image/host staging and activation; this session owns scientific data/release parity.
 
 **Latest owner direction, 2026-11-02:** the current build is intended for the live production PubApp once its actual data/release/runtime checks pass. The known DuckDB finding is nonblocking through the notice's **2026-11-10 UTC** patch deadline; develop/test our DuckDB fix separately for the dev PubApp. See [the dated release decision](docs/duckdb_remediation_window_20261102.md). This supersedes the earlier strict DuckDB hold and no-activation directions below. Historical failed reports remain unchanged; data checks and other security findings still apply.
 
-**Separate dev security build completed:** [dev image `b26558a9…`](docs/dev_duckdb_fix_20261102.md), source `92c63ba`, passes the strict actual decoder/security gate without a deferral and both real-table BROTLI round trips. Main documentation commit `9980d38` records its evidence. The exported image remains local; no host staging or activation occurred. It does not replace the production candidate below.
+**Separate dev security build completed:** [dev image `b26558a9…`](docs/dev_duckdb_fix_20261102.md), source `92c63ba`, passes the strict actual decoder/security gate without a deferral and both real-table BROTLI round trips. Main documentation commit `9980d38` records its evidence. The exported image remains local; no host staging or activation occurred. It does not replace the verified production release above.
 
 ## Historical November 2 build snapshots
 

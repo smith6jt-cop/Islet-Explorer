@@ -76,10 +76,12 @@ This checks the resolution implementation's safeguards; the new HPG run supplies
 the actual resolved labels and counts. Its fresh paths use the
 `20261102-component-*-v2` suffix. Historical v1 outputs remain immutable.
 
-The production deployment is owned by the parallel security session. It will
-use the matching frozen source/image and verified release data. The owner has
-already authorized activation once these actual checks pass; no further
-classification or production-permission question is pending.
+The security session completed the authorized production deployment as
+`pubapps-2026-11-components-v1` at 2026-11-03 02:42 UTC. The matching image/data
+producer is `e5689f6`; the scientific producer remains `67ee6c9`. Full host
+verification, the running census, 15/15 authenticated-access checks and 49/49
+browser checks pass. The [live receipt](evidence/pubapps_live_20261102.json)
+records the actual outcome. Dev remains stopped and masked.
 
 ## Measured v2 results
 
@@ -93,6 +95,6 @@ they were anatomical labels or component-boundary placeholders. Marker and
 Ki67 evidence replays exactly. The all-20 classifier-lineage proof passes for
 10,080 objects and all 5,227 exact Single whole-cell associations. It preserves
 13 centroid-versus-source-cell ownership differences, including the three
-old count anomalies. Remaining assembly and release outcomes
+old count anomalies. Completed assembly and release outcomes
 are maintained in [the v2 build record](component_build_v2_20261102.md) and
 [deployment status](container_security_20261102.md).

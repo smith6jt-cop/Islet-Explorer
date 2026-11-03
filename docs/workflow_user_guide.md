@@ -4,10 +4,12 @@ This guide follows the data from the source images to the reviewed app and its r
 
 ## Current state — 2026-11-02
 
-The owner has directed **“Resolve the decision and get the pubapp live.”** The
-selected-component v2 scientific build and native QuPath review are complete,
-using the exact named v19 endocrine membership and current non-endocrine
-methods. Read the
+**Production is live** at
+[Islet Explorer](https://islet-explorer.rc.ufl.edu/islet-explorer/) with
+`pubapps-2026-11-components-v1`, completing the owner's direction to resolve
+the selection and get the PubApp live. The selected-component v2 scientific
+build and native QuPath review use the exact named v19 endocrine membership
+and current non-endocrine methods. Read the
 [resolution contract](component_resolution_20261102.md),
 [current build and measured counts](component_build_v2_20261102.md), and
 [authoritative security/deployment status](container_security_20261102.md).
@@ -22,7 +24,7 @@ The first component build's unresolved assignments are historical diagnostics.
 | Endocrine totals | Exactly Beta, Alpha, Delta and CHGA+ hormone-negative; no anatomical object labels in cell denominators. |
 | Object proof | Hash-bound original classifier lineage and exact Single whole-cell association, with corrected-cell and centroid diagnostics retained separately. |
 | Scientific source | `67ee6c9`, HPG job `49168359`, fresh v2 paths. |
-| Image/release source | `e5689f6`, adding the app palette-name fix; release `pubapps-2026-11-components-v1` is being prepared. |
+| Image/release source | `e5689f6`, adding the app palette-name fix; release `pubapps-2026-11-components-v1` is active and verified. |
 | Corrected parity validator | `d3ec00e`; validation-only correction, with image/data and scientific producer commits retained. |
 | Composite verifier | `c3dc494`; binds the original 24 passing checks and corrected full state/UUID proofs to unchanged inputs. |
 
@@ -37,12 +39,13 @@ checksums. Immutable schema-5 packaging and full byte verification have passed.
 The original parity run passed 24 of 25 checks; its only failure was a floating
 distance treated as an exact key. The corrected full state gate and independent
 UUID/state check pass, and the final targeted composite parity and inventory
-are validated. Production activation remains pending; [current results](component_build_v2_20261102.md#release-parity-correction-and-remaining-checks)
-record the retained failed report and targeted revalidation.
-Production activation is already authorized after the actual checks pass;
-no additional classification-permission question is pending. Production and
-dev remain stopped until their respective activation is verified. The local
-app service remains inactive/disabled.
+are validated. The [current results](component_build_v2_20261102.md#release-parity-correction-and-remaining-checks)
+retain the failed report and targeted revalidation. Production activation and
+public checks completed at **2026-11-03 02:42:27 UTC**: the host is healthy,
+access checks pass **15/15**, and the authenticated browser suite passes
+**49/49**. Dev remains **stopped and masked**; the local app service remains
+inactive/disabled. The separate off-campus acceptance and reboot tests are
+still pending.
 
 The separate [dev DuckDB fix](dev_duckdb_fix_20261102.md) passes its strict
 validation and remains local. Production's known DuckDB finding is nonblocking
@@ -401,9 +404,9 @@ The final inventory then passed from clean `e5689f6` at 02:33:52 UTC, with
 composite validation passing both before and after it. The inventory report
 `evidence/release-inventory-e5689f6.json` under the same release build directory
 has SHA256 `6147832fc3ea1693ded18dff8ee05b8602db8542ff564a6dd8f92bcad11ae248`
-and binds the final r3 parity hash. Activation remains pending. Use the
-validated final report path when binding subsequent evidence; retain earlier
-drafts separately. The [compact completion receipt](evidence/component_release_validation_20261102.json)
+and binds the final r3 parity hash. Production was subsequently activated and
+verified as recorded in section 9. Use the validated final report path when
+binding subsequent evidence; retain earlier drafts separately. The [compact completion receipt](evidence/component_release_validation_20261102.json)
 records the build, test and inventory results with their exact evidence hashes.
 
 Use copied files for a reviewer bundle so later source edits cannot alter it through shared inodes. `--materialize hardlink` is only for disposable local tests. Keep image data and credentials outside the OCI image. Preserve the SBOM, vulnerability scan, dependency evidence, immutable image ID, data manifest, parity/inventory reports, and full logs. Current security validation also requires the image's Brotli library evidence from `deploy/verify-brotli.py`, invoked by `deploy/scan-image.sh`: patched Ubuntu/Node, Pillow linked to the system decoder, and DuckDB's actual decoder regression with its installed-library hash. New release manifests require the version-2 report; missing reports and older Pillow-only reports are rejected. A clean package scan alone missed the embedded decoders. Never rewrite the directory of an active release.
@@ -435,13 +438,23 @@ Browser checks establish runtime behavior; source/release parity establishes pac
 
 ## 9. Production activation, rollback, and operations
 
-The owner has explicitly directed **“Resolve the decision and get the pubapp live.”**
-Activation of the selected-component build is authorized once its actual scientific,
-release, security and runtime checks pass. The security session owns staging and
-activation. Record the selected release, source commit, image ID, manifest hash,
-validation evidence and rollback state. Dev's separately patched DuckDB build
-remains a separate artifact. Historical v20 and whole-v19 releases are not the
-selected production data.
+The selected-component production release is **active and verified** at
+[Islet Explorer](https://islet-explorer.rc.ufl.edu/islet-explorer/). The security
+controller completed successfully at 2026-11-03 02:42:27 UTC. It selected
+`pubapps-2026-11-components-v1`, producer `e5689f6`, and image
+`sha256:89b3f84070b1edb89124347572ed43f278b5a8478e243053957037ccb1ceff8e`.
+The host reports healthy production with read-only scientific mounts; all
+15 access checks and 49 authenticated browser checks pass. The retained host
+and endpoint reports are in `tmp/pubapps-live-20261102/`, with the final binding
+and service details in the [deployment record](container_security_20261102.md).
+This verifies deployment behavior separately from the scientific rule and
+provenance checks.
+
+For future activations, record the selected release, source commit, image ID,
+manifest hash, validation evidence and rollback state. The security owner
+coordinates staging and activation. Dev remains stopped and masked; its
+separately patched DuckDB image remains a separate artifact. Historical v20
+and whole-v19 releases are not the selected production data.
 
 For the existing helper workflow, the documented promotion command, run from `tmp/ufrc-release-20261022`, is:
 
@@ -461,7 +474,7 @@ tooling/deploy/rollback-release.sh --project-root /pubapps/maigan/islet-explorer
   --instance islet-explorer-dev
 ```
 
-Choose the intended instance. Rollback restores its recorded previous release, including the image aliases and local-data mounts; verify the destination's security and scientific acceptance first. Activation and rollback cannot restart the currently masked services. The obsolete image identified in the security alert must not be restarted or selected for rollback. The security owner handles a mask only after selecting the authorized image/data pair and completing its applicable gates, including the recorded production DuckDB window. The current masks also prevent automatic restart after reboot.
+Choose the intended instance. Rollback restores its recorded previous release, including the image aliases and local-data mounts; verify the destination's security and scientific acceptance first. Dev remains masked, so activation and rollback cannot restart it while that mask is present. The obsolete image identified in the security alert must not be restarted or selected for rollback. The security owner handles a mask only after selecting the authorized image/data pair and completing its applicable gates, including the recorded production DuckDB window. Dev's mask also prevents automatic restart after reboot.
 
 Operational evidence includes `systemctl --user status`, `journalctl --user -u <instance>.service`, the instance's runtime logs, deployment state under `runtime/deployments`, and proxy logs under `/pubapps/logs/maigan/`. Keep at least active and previous image/data pairs until the new release has passed the reboot test. Deleting old workstation bundles or VM releases is a separate owner decision.
 
@@ -518,7 +531,7 @@ The handoff carries the actual commit range, changed-file list, evidence receipt
 2. **Completed for v2:** hash-bound classifier-lineage proof and exact Single whole-cell checks, with the separate corrected-cell and centroid-membership diagnostics and original geometry preserved.
 3. **Completed for v2:** dependent app tables, spatial outputs, scales and embeddings, every exported UUID/label/Ki67 association and four-name endocrine census. App and native QuPath artifacts are returned with verified checksums and locally resolving image paths.
 4. **Packaging, full byte verification, targeted composite parity and inventory completed:** schema-5 data and image retain producer `e5689f6`, with scientific producer `67ee6c9` recorded separately. Validator `d3ec00e` passes the full actual cell-state check; composer `c3dc494` binds it to the original 24 passing checks and unchanged inputs. Preserve these final reports alongside installed-runtime tests and dated security evidence for release acceptance.
-5. The security owner stages and binds the matching pair, handles the production mask, activates, and verifies the real service, authenticated proxy, Viewer ranges, sidecars and browser interactions. Record the actual outcome in [the deployment record](container_security_20261102.md). A successful build alone does not mean the site is online.
+5. **Completed for production:** the security owner staged and bound the matching pair, handled the production mask, activated the healthy service and passed all 15 public access checks and 49 authenticated browser checks. The [deployment record](container_security_20261102.md) binds the actual live outcome; dev remains stopped and masked.
 6. Complete the remaining outside-network and reboot acceptance work according to [UFRC readiness](ufrc_readiness.md), and coordinate the separately patched DuckDB dev build. Preserve prior evidence and recipient workspaces when delivering the new grouped changes.
 
 Hypothesis work remains a separate analysis stream; follow the [app-based hypothesis plan](app_based_hypothesis_plan_20261026.md) and [research workflow](../scripts/research/README.md). Retain its approved definitions and historical outputs under `output/app_hypotheses_20261026/`; the typing correction is not permission to rerun or reinterpret it against a new data root automatically. CODEX INS intensity is not an approved quantitative between-donor hypothesis endpoint under the owner's acquisition clarification. Report measurements and technical evidence without adding biological interpretations beyond the approved plan.
