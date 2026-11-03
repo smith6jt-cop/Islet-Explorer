@@ -60,7 +60,7 @@ The two extra Unclassified outcomes occur in Aab_6090 and T1D_6551.
 
 The all-20 Lymphatic invariance audit passes: zero unexpected context, identity
 or REDSEA changes; marker positivity, canary and fold states are unchanged.
-Every final and natural label change involves Lymphatic and changed Lymphatic
+All **353 final label changes** and every natural label change involve Lymphatic and changed Lymphatic
 geometry. The two extra Unclassified outcomes are therefore permitted Lymphatic
 removals, not changes to another component. Summary SHA256:
 `d04598815bd7bcb2c95ac8090783a29f8372006402277807de9441cd4997623a`.
@@ -76,9 +76,30 @@ Islet labels in the prior mixed app; historical names are not current supported
 calls. Full evidence is retained in
 `output/unclassified_control_review_20261103/summary.json`.
 
-The final-candidate row review, all-20 classifier-lineage proof, assembly,
-export checks and release parity remain in progress. Progress receipts are
-under `tmp/component-build-20261102-v2/progress/`.
+The final-candidate review also passes across all 3,199,606 UUIDs. All 7,398
+Unclassified cells previously had an anatomical label or technical boundary
+conflict. Across the 11,101 reconsidered rows, 3,672 gain a supported
+non-endocrine label and 31 retain a real conflict/doublet outcome. No other
+prior label changes: all 716,451 Tissue calls, exact selected endocrine calls
+and every eligible Ki67 flag are preserved. See the
+[independent review](unclassified_component_review_20261103.md) and
+[hash-bound receipt](unclassified_component_review_20261103.json).
+
+The all-20 classifier-lineage gate passes: 10,080 supported final objects,
+5,227 exact Single whole-cell associations and zero failures. It records 178
+split descendants, including three with multiple supported parent candidates.
+There are 13 Single whole-cell associations that differ from centroid-based
+membership; this broader ownership comparison is distinct from the three
+wrong-count anomalies in the old diagnostic. The other ten contain eleven
+already excluded missing-nucleus detections; each still has exactly one eligible
+member matching its source cell. [All thirteen are explained](endocrine_classifier_discrepancy_20261102.md#complete-single-association-reconciliation-in-v2)
+from retained context and QC evidence. Both diagnostics remain explicit.
+Summary SHA256:
+`1282fd48f76664ac3e69433b6cc0d09680e5f52e80f45096da6f0ec40702c209`.
+
+Assembly began at 2026-11-03 00:26:10 UTC. Export checks, verified return and
+release parity remain in progress. Progress receipts are under
+`tmp/component-build-20261102-v2/progress/`.
 
 ## What the additional object proof establishes
 

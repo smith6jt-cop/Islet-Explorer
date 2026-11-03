@@ -90,6 +90,9 @@ placeholders. The control has 7,396 Unclassified cells; the DG candidate has
 additional outcomes in changed Lymphatic geometry. Independent control review
 finds zero prior mixed-app named non-endocrine identities among these rows;
 they were anatomical labels or component-boundary placeholders. Marker and
-Ki67 evidence replays exactly. Remaining proof, assembly and release outcomes
+Ki67 evidence replays exactly. The all-20 classifier-lineage proof passes for
+10,080 objects and all 5,227 exact Single whole-cell associations. It preserves
+13 centroid-versus-source-cell ownership differences, including the three
+old count anomalies. Remaining assembly and release outcomes
 are maintained in [the v2 build record](component_build_v2_20261102.md) and
 [deployment status](container_security_20261102.md).

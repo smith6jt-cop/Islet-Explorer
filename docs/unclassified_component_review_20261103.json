@@ -1,0 +1,602 @@
+{
+  "schema": "uniform.unclassified_rule_review/1",
+  "status": "current_rule_consistency_verified",
+  "scope": "Completed final DG component-candidate-v2 identities, plus actual immediately preceding assembled component-app-v1 UUID census. This is not independent biological validation or complete release acceptance.",
+  "producer_scientific_commit": "67ee6c9d0b28f467eee589fea24829a6546e3d74",
+  "hpg_build_job": "49168359",
+  "images": 20,
+  "eligible_cells": 3199606,
+  "literal_unclassified_cells": 7398,
+  "unchanged_Tissue_cells": 716451,
+  "named_endocrine_cells": 110721,
+  "checks": {
+    "all_returned_identity_hashes_match_completed_component_audit": true,
+    "component_audit_binds_manifest": true,
+    "source_v19_decision_metadata_matches_archive": true,
+    "current_flags_canary_fold_replay_all_unclassified": true,
+    "current_Ki67_replay_all_unclassified": true,
+    "all_eligible_Ki67_identical_to_v1": true,
+    "named_endocrine_UUID_subtype_identical_to_v1": true,
+    "no_supported_current_nonendocrine_call_lost": true,
+    "no_prior_v1_named_nonendocrine_label_changed": true,
+    "all_prior_v1_Tissue_UUIDs_unchanged": true,
+    "no_current_structure_qualified_call_among_unclassified": true,
+    "no_winning_nonendocrine_compartment_among_unclassified": true,
+    "no_positive_epithelial_residual_evidence_among_epithelial_winners": true
+  },
+  "current_reasons": {
+    "shared_marker_only": 2870,
+    "endocrine_marker_only": 1637,
+    "structure_marker_only": 1479,
+    "no_marker_above_background": 1412
+  },
+  "unclassified_prior_app_v1_labels": {
+    "Islet": 5171,
+    "Conflict Endocrine component boundary": 1637,
+    "EndocrineCluster": 437,
+    "EndocrineSingle": 153
+  },
+  "historical_named_immune_cells_reviewed": 9,
+  "historical_named_immune_prior_app_v1_labels": {
+    "Conflict Endocrine component boundary": 7,
+    "Islet": 2
+  },
+  "v1_to_v2_changed_cells": 11101,
+  "new_supported_nonendocrine_labels": 3672,
+  "new_explicit_conflict_or_doublet_labels": 31,
+  "v1_label_census": {
+    "Alpha cell": 49302,
+    "B cell": 1856,
+    "Beta cell": 41429,
+    "CD4 Tcell": 7116,
+    "CD68+CD163+Macrophage_LGALS3+CD4+": 12413,
+    "CD68+CD163+Macrophage_LGALS3+CD4-": 9029,
+    "CD68+CD163+Macrophage_LGALS3-CD4+": 32850,
+    "CD68+CD163+Macrophage_LGALS3-CD4-": 34520,
+    "CD68+CD163-Macrophage_LGALS3+CD4+": 2020,
+    "CD68+CD163-Macrophage_LGALS3+CD4-": 6028,
+    "CD68+CD163-Macrophage_LGALS3-CD4+": 3536,
+    "CD68+CD163-Macrophage_LGALS3-CD4-": 22119,
+    "CD68-CD163+Macrophage_LGALS3+CD4+": 4054,
+    "CD68-CD163+Macrophage_LGALS3+CD4-": 3754,
+    "CD68-CD163+Macrophage_LGALS3-CD4+": 26817,
+    "CD68-CD163+Macrophage_LGALS3-CD4-": 32643,
+    "CD8a Tcell": 26257,
+    "CHGA+ hormone-negative": 1940,
+    "Conflict B/Myeloid": 85,
+    "Conflict B/T": 53,
+    "Conflict Endocrine component boundary": 2472,
+    "Conflict Endocrine/Exocrine": 78,
+    "Conflict Epithelial/Hematopoietic": 2280,
+    "Conflict Epithelial/Mesenchymal": 649,
+    "Conflict Exocrine/Endocrine": 356,
+    "Conflict Hematopoietic/Epithelial": 821,
+    "Conflict Hematopoietic/Mesenchymal": 829,
+    "Conflict Mesenchymal/Epithelial": 501,
+    "Conflict Mesenchymal/Hematopoietic": 1056,
+    "Conflict Myeloid/B": 101,
+    "Conflict Myeloid/T": 825,
+    "Conflict T/B": 109,
+    "Conflict T/Myeloid": 1446,
+    "Delta cell": 18050,
+    "Doublet suspected": 1312,
+    "EndocrineCluster": 1712,
+    "EndocrineSingle": 915,
+    "Endothelium Blood Vessel": 47323,
+    "Endothelium Lymphatic": 2700,
+    "Exocrine": 1900270,
+    "Hematopoietic CD45+": 50635,
+    "Hematopoietic CD45-": 44613,
+    "Islet": 6002,
+    "Neural": 17341,
+    "Stromal": 59551,
+    "T cell": 3387,
+    "Tissue": 716451
+  },
+  "v2_label_census": {
+    "Alpha cell": 49302,
+    "B cell": 1858,
+    "Beta cell": 41429,
+    "CD4 Tcell": 7131,
+    "CD68+CD163+Macrophage_LGALS3+CD4+": 12447,
+    "CD68+CD163+Macrophage_LGALS3+CD4-": 9060,
+    "CD68+CD163+Macrophage_LGALS3-CD4+": 32891,
+    "CD68+CD163+Macrophage_LGALS3-CD4-": 34551,
+    "CD68+CD163-Macrophage_LGALS3+CD4+": 2031,
+    "CD68+CD163-Macrophage_LGALS3+CD4-": 6043,
+    "CD68+CD163-Macrophage_LGALS3-CD4+": 3539,
+    "CD68+CD163-Macrophage_LGALS3-CD4-": 22163,
+    "CD68-CD163+Macrophage_LGALS3+CD4+": 4060,
+    "CD68-CD163+Macrophage_LGALS3+CD4-": 3769,
+    "CD68-CD163+Macrophage_LGALS3-CD4+": 26860,
+    "CD68-CD163+Macrophage_LGALS3-CD4-": 32682,
+    "CD8a Tcell": 26336,
+    "CHGA+ hormone-negative": 1940,
+    "Conflict B/Myeloid": 85,
+    "Conflict B/T": 54,
+    "Conflict Endocrine/Exocrine": 78,
+    "Conflict Epithelial/Hematopoietic": 2284,
+    "Conflict Epithelial/Mesenchymal": 649,
+    "Conflict Exocrine/Endocrine": 356,
+    "Conflict Hematopoietic/Epithelial": 822,
+    "Conflict Hematopoietic/Mesenchymal": 830,
+    "Conflict Mesenchymal/Epithelial": 501,
+    "Conflict Mesenchymal/Hematopoietic": 1059,
+    "Conflict Myeloid/B": 101,
+    "Conflict Myeloid/T": 829,
+    "Conflict T/B": 109,
+    "Conflict T/Myeloid": 1456,
+    "Delta cell": 18050,
+    "Doublet suspected": 1319,
+    "Endothelium Blood Vessel": 47382,
+    "Endothelium Lymphatic": 2708,
+    "Exocrine": 1903195,
+    "Hematopoietic CD45+": 50698,
+    "Hematopoietic CD45-": 44684,
+    "Neural": 17372,
+    "Stromal": 59647,
+    "T cell": 3397,
+    "Tissue": 716451,
+    "Unclassified": 7398
+  },
+  "v1_to_v2_label_changes": [
+    {
+      "v1": "Conflict Endocrine component boundary",
+      "v2": "Exocrine",
+      "cells": 835
+    },
+    {
+      "v1": "Conflict Endocrine component boundary",
+      "v2": "Unclassified",
+      "cells": 1637
+    },
+    {
+      "v1": "EndocrineCluster",
+      "v2": "B cell",
+      "cells": 2
+    },
+    {
+      "v1": "EndocrineCluster",
+      "v2": "CD4 Tcell",
+      "cells": 11
+    },
+    {
+      "v1": "EndocrineCluster",
+      "v2": "CD68+CD163+Macrophage_LGALS3+CD4+",
+      "cells": 21
+    },
+    {
+      "v1": "EndocrineCluster",
+      "v2": "CD68+CD163+Macrophage_LGALS3+CD4-",
+      "cells": 13
+    },
+    {
+      "v1": "EndocrineCluster",
+      "v2": "CD68+CD163+Macrophage_LGALS3-CD4+",
+      "cells": 26
+    },
+    {
+      "v1": "EndocrineCluster",
+      "v2": "CD68+CD163+Macrophage_LGALS3-CD4-",
+      "cells": 17
+    },
+    {
+      "v1": "EndocrineCluster",
+      "v2": "CD68+CD163-Macrophage_LGALS3+CD4+",
+      "cells": 7
+    },
+    {
+      "v1": "EndocrineCluster",
+      "v2": "CD68+CD163-Macrophage_LGALS3+CD4-",
+      "cells": 8
+    },
+    {
+      "v1": "EndocrineCluster",
+      "v2": "CD68+CD163-Macrophage_LGALS3-CD4+",
+      "cells": 1
+    },
+    {
+      "v1": "EndocrineCluster",
+      "v2": "CD68+CD163-Macrophage_LGALS3-CD4-",
+      "cells": 32
+    },
+    {
+      "v1": "EndocrineCluster",
+      "v2": "CD68-CD163+Macrophage_LGALS3+CD4+",
+      "cells": 4
+    },
+    {
+      "v1": "EndocrineCluster",
+      "v2": "CD68-CD163+Macrophage_LGALS3+CD4-",
+      "cells": 5
+    },
+    {
+      "v1": "EndocrineCluster",
+      "v2": "CD68-CD163+Macrophage_LGALS3-CD4+",
+      "cells": 28
+    },
+    {
+      "v1": "EndocrineCluster",
+      "v2": "CD68-CD163+Macrophage_LGALS3-CD4-",
+      "cells": 16
+    },
+    {
+      "v1": "EndocrineCluster",
+      "v2": "CD8a Tcell",
+      "cells": 53
+    },
+    {
+      "v1": "EndocrineCluster",
+      "v2": "Conflict B/T",
+      "cells": 1
+    },
+    {
+      "v1": "EndocrineCluster",
+      "v2": "Conflict Epithelial/Hematopoietic",
+      "cells": 3
+    },
+    {
+      "v1": "EndocrineCluster",
+      "v2": "Conflict Hematopoietic/Epithelial",
+      "cells": 1
+    },
+    {
+      "v1": "EndocrineCluster",
+      "v2": "Conflict Mesenchymal/Hematopoietic",
+      "cells": 1
+    },
+    {
+      "v1": "EndocrineCluster",
+      "v2": "Conflict Myeloid/T",
+      "cells": 2
+    },
+    {
+      "v1": "EndocrineCluster",
+      "v2": "Conflict T/Myeloid",
+      "cells": 5
+    },
+    {
+      "v1": "EndocrineCluster",
+      "v2": "Doublet suspected",
+      "cells": 5
+    },
+    {
+      "v1": "EndocrineCluster",
+      "v2": "Endothelium Blood Vessel",
+      "cells": 44
+    },
+    {
+      "v1": "EndocrineCluster",
+      "v2": "Endothelium Lymphatic",
+      "cells": 6
+    },
+    {
+      "v1": "EndocrineCluster",
+      "v2": "Exocrine",
+      "cells": 795
+    },
+    {
+      "v1": "EndocrineCluster",
+      "v2": "Hematopoietic CD45+",
+      "cells": 38
+    },
+    {
+      "v1": "EndocrineCluster",
+      "v2": "Hematopoietic CD45-",
+      "cells": 50
+    },
+    {
+      "v1": "EndocrineCluster",
+      "v2": "Neural",
+      "cells": 22
+    },
+    {
+      "v1": "EndocrineCluster",
+      "v2": "Stromal",
+      "cells": 50
+    },
+    {
+      "v1": "EndocrineCluster",
+      "v2": "T cell",
+      "cells": 8
+    },
+    {
+      "v1": "EndocrineCluster",
+      "v2": "Unclassified",
+      "cells": 437
+    },
+    {
+      "v1": "EndocrineSingle",
+      "v2": "CD4 Tcell",
+      "cells": 4
+    },
+    {
+      "v1": "EndocrineSingle",
+      "v2": "CD68+CD163+Macrophage_LGALS3+CD4+",
+      "cells": 13
+    },
+    {
+      "v1": "EndocrineSingle",
+      "v2": "CD68+CD163+Macrophage_LGALS3+CD4-",
+      "cells": 18
+    },
+    {
+      "v1": "EndocrineSingle",
+      "v2": "CD68+CD163+Macrophage_LGALS3-CD4+",
+      "cells": 15
+    },
+    {
+      "v1": "EndocrineSingle",
+      "v2": "CD68+CD163+Macrophage_LGALS3-CD4-",
+      "cells": 14
+    },
+    {
+      "v1": "EndocrineSingle",
+      "v2": "CD68+CD163-Macrophage_LGALS3+CD4+",
+      "cells": 4
+    },
+    {
+      "v1": "EndocrineSingle",
+      "v2": "CD68+CD163-Macrophage_LGALS3+CD4-",
+      "cells": 7
+    },
+    {
+      "v1": "EndocrineSingle",
+      "v2": "CD68+CD163-Macrophage_LGALS3-CD4+",
+      "cells": 2
+    },
+    {
+      "v1": "EndocrineSingle",
+      "v2": "CD68+CD163-Macrophage_LGALS3-CD4-",
+      "cells": 9
+    },
+    {
+      "v1": "EndocrineSingle",
+      "v2": "CD68-CD163+Macrophage_LGALS3+CD4+",
+      "cells": 2
+    },
+    {
+      "v1": "EndocrineSingle",
+      "v2": "CD68-CD163+Macrophage_LGALS3+CD4-",
+      "cells": 4
+    },
+    {
+      "v1": "EndocrineSingle",
+      "v2": "CD68-CD163+Macrophage_LGALS3-CD4+",
+      "cells": 15
+    },
+    {
+      "v1": "EndocrineSingle",
+      "v2": "CD68-CD163+Macrophage_LGALS3-CD4-",
+      "cells": 9
+    },
+    {
+      "v1": "EndocrineSingle",
+      "v2": "CD8a Tcell",
+      "cells": 26
+    },
+    {
+      "v1": "EndocrineSingle",
+      "v2": "Conflict Epithelial/Hematopoietic",
+      "cells": 1
+    },
+    {
+      "v1": "EndocrineSingle",
+      "v2": "Conflict Hematopoietic/Mesenchymal",
+      "cells": 1
+    },
+    {
+      "v1": "EndocrineSingle",
+      "v2": "Conflict Mesenchymal/Hematopoietic",
+      "cells": 2
+    },
+    {
+      "v1": "EndocrineSingle",
+      "v2": "Conflict Myeloid/T",
+      "cells": 2
+    },
+    {
+      "v1": "EndocrineSingle",
+      "v2": "Conflict T/Myeloid",
+      "cells": 5
+    },
+    {
+      "v1": "EndocrineSingle",
+      "v2": "Doublet suspected",
+      "cells": 2
+    },
+    {
+      "v1": "EndocrineSingle",
+      "v2": "Endothelium Blood Vessel",
+      "cells": 15
+    },
+    {
+      "v1": "EndocrineSingle",
+      "v2": "Endothelium Lymphatic",
+      "cells": 1
+    },
+    {
+      "v1": "EndocrineSingle",
+      "v2": "Exocrine",
+      "cells": 490
+    },
+    {
+      "v1": "EndocrineSingle",
+      "v2": "Hematopoietic CD45+",
+      "cells": 25
+    },
+    {
+      "v1": "EndocrineSingle",
+      "v2": "Hematopoietic CD45-",
+      "cells": 20
+    },
+    {
+      "v1": "EndocrineSingle",
+      "v2": "Neural",
+      "cells": 9
+    },
+    {
+      "v1": "EndocrineSingle",
+      "v2": "Stromal",
+      "cells": 46
+    },
+    {
+      "v1": "EndocrineSingle",
+      "v2": "T cell",
+      "cells": 1
+    },
+    {
+      "v1": "EndocrineSingle",
+      "v2": "Unclassified",
+      "cells": 153
+    },
+    {
+      "v1": "Islet",
+      "v2": "CD68+CD163-Macrophage_LGALS3-CD4-",
+      "cells": 3
+    },
+    {
+      "v1": "Islet",
+      "v2": "CD68-CD163+Macrophage_LGALS3+CD4-",
+      "cells": 6
+    },
+    {
+      "v1": "Islet",
+      "v2": "CD68-CD163+Macrophage_LGALS3-CD4-",
+      "cells": 14
+    },
+    {
+      "v1": "Islet",
+      "v2": "Endothelium Lymphatic",
+      "cells": 1
+    },
+    {
+      "v1": "Islet",
+      "v2": "Exocrine",
+      "cells": 805
+    },
+    {
+      "v1": "Islet",
+      "v2": "Hematopoietic CD45-",
+      "cells": 1
+    },
+    {
+      "v1": "Islet",
+      "v2": "T cell",
+      "cells": 1
+    },
+    {
+      "v1": "Islet",
+      "v2": "Unclassified",
+      "cells": 5171
+    }
+  ],
+  "control_to_candidate_extra_unclassified": [
+    {
+      "image": "Aab_6090",
+      "object_id": "858e1f35-875a-41ff-8ce8-8941f1a29602",
+      "component_source_label": "EndocrineCluster",
+      "prior_app_v1_label": "EndocrineCluster",
+      "status": "shared_marker_only",
+      "in_Lymphatic": false,
+      "crossed_frac_lymphatic": 0.0,
+      "pos__PDPN": 1,
+      "fold__PDPN": 0.060384221374988556,
+      "control_label": "Endothelium Lymphatic",
+      "control_in_Lymphatic": true,
+      "control_crossed_frac_lymphatic": 0.5926048751043884
+    },
+    {
+      "image": "T1D_6551",
+      "object_id": "c8f2fcc8-eaad-4b74-99a3-9abb4958d065",
+      "component_source_label": "Endothelium Lymphatic",
+      "prior_app_v1_label": "Islet",
+      "status": "shared_marker_only",
+      "in_Lymphatic": true,
+      "crossed_frac_lymphatic": 0.4049615445463504,
+      "pos__PDPN": 1,
+      "fold__PDPN": 0.4237465560436249,
+      "control_label": "Endothelium Lymphatic",
+      "control_in_Lymphatic": true,
+      "control_crossed_frac_lymphatic": 0.5814611185536891
+    }
+  ],
+  "control_to_candidate_removed_unclassified": 0,
+  "candidate_identity_sha256": {
+    "Aab_6450": "63277be61194d00d7cf63e1e02744180ca6fdec03929ffcb938e36912f9f4d0f",
+    "Aab_6505": "36e55533eb0adcaec290ca2f776b6bd9838ba9922c55ad6c909b1b902f3b7080",
+    "Aab_6521": "2d93a464ab8298a652b7f5ee318724d03ee8da963d2e93888469d9a389c27cf7",
+    "Aab_6538": "4fe203b725cf601ee4184c88ce3211faaf009cc417f708097841489971263f47",
+    "Aab_6549": "eb38a92de0e0387f91bf93dcd749270abfc17b269a2491b47be2d27a0bf32e01",
+    "ND_0112": "fe7f377c7bf605d91f28cf1e7597dd5879ad06a4430190d12734c2251bd25193",
+    "ND_6356": "fa8da9cd0483c3c84bea5bad5f550ebe6675f530910b91fd16142a7ffe29c79c",
+    "ND_6479": "3b1656b6f72cba850d9956a349ba86fb0064e82071342f0799a082f2cd88583d",
+    "ND_6516": "40d0d34edb8220c5a3d9596bb4c337200ae3d8474f5f5bc78a5d7d00d889bbb5",
+    "ND_6548": "f80089fbe9b6353bd547b2a828f16f8faed8230389ee0769a56483c5522bfd08",
+    "T1D_6533": "aaa9e28de3883bdea8bf79558a2b6e3536fc0c94648dce3ba2077ba78d911955",
+    "T1D_6534": "de2c2d7d11ed4bc619b3182d825c5cff9a6ec300cf869938405f75e6982e4146",
+    "T1D_6550": "d74276f8dfe5b015f7dd2db0138ae30db0180ab6bae3223a2236f5a12c518c6a",
+    "T1D_6551": "5621e6ed30ea3a4e3e8d1de1bc6a4886d84fc25c5e5bc9aafc8b7399393c506d",
+    "T1D_6563": "a674c415d5cdca014273d5b8ba525c76e4839fb359de8483b4d7c349e9e0fb56",
+    "Aab_6090": "568f969e0fa97485fc01af0a665c39d85ae39c307fae83a5da7957044d420796",
+    "Aab_6558": "e48c03cff5d3366fb217445efe8ddf793c539eda47f81fa3210a73f218d85f0b",
+    "ND_6232": "7c472f9c9852b2de7e989b1a156fa7641d1c19cb468f93897dd244ba69fa9847",
+    "ND_6539": "4c440cb325aeac6c6fae763e9cc4b52106232cfc295db10cf2cd9f0d640d6463",
+    "T1D_6520": "57f572060f2260fadd081b234309bcd8b9d1e3c2d1ceb0caf6b93ecf9debb9c2"
+  },
+  "generated_evidence": {
+    "output/unclassified_candidate_review_20261103/summary.json": {
+      "sha256": "87efb9562f53e28b45fb2d53d4e3320c7a1bb66087910f3198376f4ec80bfe2b",
+      "bytes": 132939
+    },
+    "output/unclassified_candidate_review_20261103/review.py": {
+      "sha256": "885f2d15565b05d990b8181e85af22531ac18a64c456e83236ae9e5dfaf73f17",
+      "bytes": 12896
+    },
+    "output/unclassified_candidate_review_20261103/review.log": {
+      "sha256": "626d31ac9d224043ba39fea16766712252555192896d301ae3f7bebe82e70083",
+      "bytes": 83660
+    },
+    "output/unclassified_candidate_review_20261103/reviewed_cells.parquet": {
+      "sha256": "f953b3e083699c0fb4e0579b0500b4d60531a1358dc9160bb81e31ee42197d10",
+      "bytes": 2019066
+    },
+    "output/unclassified_candidate_review_20261103/named_immune_full_review.csv": {
+      "sha256": "0b1a3855df38a984f29bf6a1cf8612be1f73c87aa6af875a8da77ff5cf3e9e53",
+      "bytes": 18170
+    },
+    "output/unclassified_candidate_review_20261103/all_groups.csv": {
+      "sha256": "4fc09d29ef4a3e9cd7d16d5c24224795f5176914b46166a127c529d287360246",
+      "bytes": 4966
+    },
+    "output/unclassified_candidate_review_20261103/representative_rows.csv": {
+      "sha256": "85dccf194492219941bb96eb9b43be76ac3ddc5d43094f7107dd9f7ef8145e01",
+      "bytes": 92326
+    },
+    "output/unclassified_candidate_review_20261103/v1_to_v2_all_labels.csv": {
+      "sha256": "e29b72f3ed174a377d71cb6044efd5afa3de45a18af34eb83745f8b81214401d",
+      "bytes": 5173
+    },
+    "output/unclassified_candidate_review_20261103/v1_to_v2_by_image.csv": {
+      "sha256": "7a215c992a020c54aa665ba71eee6624911ee8489d40365c64b3b211ac364760",
+      "bytes": 73213
+    },
+    "output/unclassified_candidate_review_20261103/two_extra_cells.json": {
+      "sha256": "6c72beb6806f07515af3a2496593e644e983ad021a60730a19cff4b7d6516582",
+      "bytes": 973
+    }
+  },
+  "source_bindings": {
+    "output/unclassified_candidate_review_20261103/source/component_selection.json": "4fc981c3f48a68bcd36f01b9496f4d5665129cc382c02f01cf00847aa51c614a",
+    "output/unclassified_candidate_review_20261103/source/component_selection_audit.json": "3d6757e6427a4205976cb1e9b28ac6ba4ed9f1ef573922cb18f318b943746afb",
+    "output/unclassified_candidate_review_20261103/source/levels.csv": "d9c032464dbf4445f0e2e001e81a0785a24823997aa6ef7fdeaf18e05cea63a2",
+    "output/unclassified_candidate_review_20261103/source/canary_levels.csv": "15c4d22dbe67d5ad8ab2c4c3e9d4d63f09b340e4f9ed01c84f38339be8778e35",
+    "output/unclassified_candidate_review_20261103/source/levels_differentiation.csv": "d0815971c09ad0785beb8e9207965f426b79e7d27bbae6f603e4a6ba3d92dafc"
+  },
+  "limitations": [
+    "Literal Unclassified is a narrow resolver output, not the entire population without a specific biological identity; Tissue and explicit conflict/doublet labels remain separately visible.",
+    "Selected v19 membership prevents naming new endocrine cells, while hormone evidence remains active in compartment competition.",
+    "The two extra cells differ between the initial-Lymphatic control and accepted DG candidate; both already lacked a named biological phenotype in actual app-v1.",
+    "Object classifier lineage proof, assembled export verification, release packaging and runtime checks are separate gates."
+  ]
+}
