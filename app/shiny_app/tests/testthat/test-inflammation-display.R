@@ -3,7 +3,8 @@ inflammation_display_env <- function() {
   wanted <- c("PHENOTYPE_RETIRED", "phenotype_retired", "phenotype_keep", "phenotype_is_kept",
               "phenotype_is_conflict", "phenotype_partition_labels", "PHENOTYPE_GROUP_AGGREGATES",
               "is_phenotype_aggregate", "MACROPHAGE_LABEL_PATTERN", "MACROPHAGE_KEY_PATTERN",
-              "is_macrophage_label", "inflammation_display_rows", "inflammation_fit_display")
+              "is_macrophage_label", "inflammation_display_rows", "inflammation_fit_display",
+              "UNCLASSIFIED_KEYS", "UNCLASSIFIED_PARENT", "UNCLASSIFIED_RAW_TO_KEY", "unclassified_collapse")
   for (file in c("R/00_globals.R", "R/mod_inflammation_server.R")) {
     for (expr in parse(.find_source(file))) {
       if (is.call(expr) && identical(expr[[1]], as.name("<-")) && is.symbol(expr[[2]]) &&

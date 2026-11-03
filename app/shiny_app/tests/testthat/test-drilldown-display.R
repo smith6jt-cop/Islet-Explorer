@@ -1,9 +1,9 @@
-# A palette-only filter used to leave retired/QC cells on the map as gray points.
-test_that("drilldown removes hidden phenotype points without changing the loaded evidence", {
+# Display leaves retain unresolved cells; Conflict points remain hidden.
+test_that("drilldown projects unresolved leaves and removes conflicts without changing loaded evidence", {
   skip_if_not_installed("ggplot2")
   env <- new.env(parent = globalenv())
   defs <- c("PHENOTYPE_RETIRED", "phenotype_keep", "phenotype_retired", "phenotype_is_kept",
-            "phenotype_is_conflict")
+            "phenotype_is_conflict", "UNCLASSIFIED_KEYS", "UNCLASSIFIED_RAW_TO_KEY", "unclassified_collapse")
   for (expr in parse(.find_source("R/00_globals.R"))) {
     if (is.call(expr) && identical(expr[[1]], as.name("<-")) && is.symbol(expr[[2]]) &&
         as.character(expr[[2]]) %in% defs) eval(expr, env)
@@ -24,8 +24,10 @@ test_that("drilldown removes hidden phenotype points without changing the loaded
   original <- cells
   info <- list(islet_key = "Islet_1")
   categorical <- env$render_islet_drilldown_plot(info, cells)
-  expect_identical(categorical$layers[[1]]$data$phenotype, c("Beta cell", "CD4 Tcell", "Tissue"))
-  expect_equal(categorical$layers[[1]]$data$x_px, c(2, 8, 10))
+  expect_identical(categorical$layers[[1]]$data$phenotype,
+                   c("Beta cell", unname(env$UNCLASSIFIED_KEYS["subtype"]), "CD4 Tcell",
+                     unname(env$UNCLASSIFIED_KEYS["tissue"])))
+  expect_equal(categorical$layers[[1]]$data$x_px, c(2, 6, 8, 10))
   continuous <- env$render_islet_drilldown_plot(info, cells, color_by = "INS")
   expect_equal(continuous$layers[[1]]$data$marker_val, c(11, 13, 14, 15))
   core <- env$render_islet_drilldown_plot(info, cells, show_peri = FALSE)
