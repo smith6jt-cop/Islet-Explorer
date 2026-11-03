@@ -11,7 +11,11 @@ the [deployment record](container_security_20261102.md) and the supplied review
 round's release/access notice for actual availability. The strict-DuckDB
 [dev release](evidence/dev_duckdb_deployment_20261103.json) is independently live
 and verified. The [November 3 display fixes](app_display_fixes_20261103.md) are
-local changes pending a new dev build; they are not yet in either live image.
+running for [local review](http://127.0.0.1:3845/islet-explorer/) from source
+`7ac421e`, image `46b81d66…`, using the separately accepted data built from
+`5e6580f`; see the [local review record](local_duckdb_review_20261103.md).
+The owner's November 3 direction is **LOCAL REVIEW ONLY**: dev activation is
+paused pending the owner's review and decision. Both public services remain unchanged.
 
 The [workflow user guide](workflow_user_guide.md) explains data processing, component
 selection and release checks; the [user guide](user_guide.md) describes controls in more

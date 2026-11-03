@@ -1,6 +1,12 @@
 # Panc Floyd / Islet Explorer UFRC PubApps Request and Reviewer-Hosting Handoff
 
-**Latest owner direction, 2026-11-02:** the current build is intended for the live production PubApp once its actual data/release/runtime checks pass. The known DuckDB finding is nonblocking through the notice's **2026-11-10 UTC** patch deadline; develop/test our DuckDB fix separately for the dev PubApp. See [the dated release decision](docs/duckdb_remediation_window_20261102.md). This supersedes the earlier strict DuckDB hold and no-activation directions below. Historical failed reports remain unchanged; data checks and other security findings still apply.
+**Current owner direction, 2026-11-03:** the new display/security candidate is
+for [local review](docs/local_duckdb_review_20261103.md) only, at
+[http://127.0.0.1:3845/islet-explorer/](http://127.0.0.1:3845/islet-explorer/).
+Dev activation is paused pending the owner's review and decision; the existing
+public dev and production releases below remain unchanged.
+
+**Dated production direction, 2026-11-02:** the current build is intended for the live production PubApp once its actual data/release/runtime checks pass. The known DuckDB finding is nonblocking through the notice's **2026-11-10 UTC** patch deadline; develop/test our DuckDB fix separately for the dev PubApp. See [the dated release decision](docs/duckdb_remediation_window_20261102.md). This supersedes the earlier strict DuckDB hold and no-activation directions below. Historical failed reports remain unchanged; data checks and other security findings still apply.
 
 > **Current operational status — 2026-11-03 UTC:** [Production is live](https://islet-explorer.rc.ufl.edu/islet-explorer/) on release `pubapps-2026-11-components-v1`, image `89b3f840…`, clean source `e5689f6`. Full data/release parity and host verification passed; public access and all 49 browser checks passed. The running container serves all 20 donors and 3,199,606 cells with every phenotype count matching the accepted review: 7,398 Unclassified (0.23%), no prior named nonendocrine identities lost, and all 110,721 selected endocrine identities retained. The package scan reports 0 High / 0 Critical. Production DuckDB remains due November 10 under the dated owner direction. The separate strict-DuckDB [dev release](docs/evidence/dev_duckdb_deployment_20261103.json) is live and verified as of 12:42 UTC, source `378843e`, image `e704ac2a…`, without a deferral. The [security/deployment record](docs/container_security_20261102.md) and [deployment receipt](docs/evidence/pubapps_live_20261102.json) contain exact identities, hashes and verification limits. See also the [readiness index](docs/ufrc_readiness.md) and [workflow guide](docs/workflow_user_guide.md).
 

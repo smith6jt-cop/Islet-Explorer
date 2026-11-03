@@ -5,15 +5,23 @@ classes, readable Plot dropdowns, removal of the Trajectory citation suffix,
 even Trajectory card spacing, and Spatial scatter legends below the plot.
 These are app changes against the accepted component-v2 scientific data.
 They do not retype cells or change the selected v19 endocrine evidence.
-The frozen app source is **`81b3857b45e7870fd4d43dee3751c8d956619052`**.
+The frozen app source is **`7ac421ed7d4b5ab5425d0130e8ff7445f4e87240`**.
 It includes the reviewed DuckDB security patch and a metadata-only Containerfile
 change that permits dependency caching across future app releases. The patch,
 dependency installation and strict runtime security gates are unchanged.
 
 The current live dev release is documented separately in
 [the strict DuckDB deployment receipt](dev_duckdb_deployment_20261103.md).
-Its `378843e` source predates these app corrections. This record does not claim
-that the corrections are live until a new immutable image is built and verified.
+Its `378843e` source predates these app corrections. The owner subsequently
+requested **local review only**, replacing the planned dev deployment. The
+corrected immutable image `46b81d66…` runs at
+[the local review URL](http://127.0.0.1:3845/islet-explorer/), with the separately
+accepted read-only `5e6580f` data bundle. The [local review record](local_duckdb_review_20261103.md)
+binds the actual image, data, runtime checks and lifecycle commands. Dev
+activation is paused pending owner review and a decision; neither public
+release contains these display changes.
+Local acceptance is complete: 49 browser checks, four targeted UI scopes and
+inspection of eight native tissue images passed on that exact image.
 
 The [review follow-up receipt](evidence/app_display_followup_20261103.json)
 records two corrections found by Senior's independent review of `5e6580f`:
@@ -23,14 +31,16 @@ last tissue-map axis label inside the image at 1200 px. The accepted cohort has
 profile labels only, and all 16 marker selections remain bit-identical to the
 previous source. No scientific source records or frozen data changed.
 
-On the corrected source, all 35 R files parse and the full R suite passes
+At `81b3857`, all 35 R files parse and the full R suite passes
 **601 assertions**, with zero test-framework failures, warnings or skips.
 All 48 real-data donor-composition scenarios pass again. Four static tissue-map
 checks (default/all 27 labels at 1200/1600 px) show complete axes and legends,
 with visible maps **401–483 px** high. Brush zoom and exact reset were tested
 for the all-27, 1600 px case. Both download links remain available below the
 plot in all four cases; downloaded file contents were not tested in this check.
-The earlier `5e6580f` receipts below remain unchanged historical evidence.
+These measurements and the earlier `5e6580f` receipts below remain unchanged
+historical evidence; the installed-runtime follow-up below supersedes the
+affected rendering checks.
 
 Senior / MultiPlex5000 independently closed both findings in recipient commit
 `20f869ed839fe9874b99c4834dbbe58cb35191c0`: 138 focused assertions, 2,048
@@ -48,6 +58,35 @@ sources and all eight data inputs are bound before, during and after execution.
 All comparisons pass and all inputs remain unchanged. This closes the earlier
 report's execution-provenance gap with a new run; it does not retroactively
 change the old evidence or Senior's recorded review scope.
+
+## Installed-runtime rendering follow-up
+
+Testing the actual immutable image exposed two differences from the workstation
+R environment. Its pinned Plotly.js 2.11.1 does not support `yref = "container"`,
+so those guides overlaid the data. The corrected code uses the supported paper
+coordinates and measures the rendered axis title before choosing a shared
+bottom margin. Guides clear the axis titles by at least 8 px, including the
+complete 20-donor legend and repeated width changes.
+
+The minimal image's Nimbus Sans has no superscript plus/minus glyphs, making
+different marker profiles look identical in raster legends. A late build step
+registers four DejaVu Sans faces and their license already shipped with pinned
+Matplotlib. It adds no dependency or download. The build verifies nonempty,
+distinct and raised signs in ragg and Cairo PNGs, all 12 distinct macrophage profiles,
+and Cairo PDF Unicode mappings. The tissue plot's right margin is 24 pt to keep
+the wider font's final tick complete.
+
+The [container rendering follow-up](evidence/app_container_rendering_followup_20261103.json)
+binds source `7ac421e`, 601 passing R assertions, 35 parsed files, the exact
+font-registration checks and the diagnostic source/font overlays. Nine UMAP
+mode/resize checks and four tissue cases pass. Tissue map height is at least
+395 px; both 1200 px captures have six clear pixels after the last tick glyph.
+The real brush event, stable changed domain and exact reset were checked in
+the all-27, 1600 px case. The earlier brush harness sampled before the
+asynchronous redraw; its failed report is preserved, and no app zoom change
+was needed. Native rebuilt-image acceptance belongs to the separate local
+review receipt, not these overlay diagnostics. Data-loading and computation
+sources remain byte-identical to the previously verified `81b3857` versions.
 
 ## Presentation policy
 
@@ -141,11 +180,12 @@ element, and working brush zoom with exact reset restoration in the all-27,
 by the follow-up above. Failed intermediate layout
 receipts remain preserved and are superseded by the measured final check.
 
-The expanded loopback smoke passed 45/49 checks. Its four Viewer/static-Range
-checks need the production Shiny Server aliases, which the transient `runApp`
-process does not provide. Full container and public-dev acceptance are required
-before activation; this local receipt makes no deployment claim. Production
-remains on its separately recorded release while the replacement dev build runs.
+The earlier transient `runApp` loopback smoke passed 45/49 checks. Its four
+Viewer/static-Range checks needed Shiny Server aliases unavailable in that
+process. The subsequent immutable local container passes all 49 browser checks,
+including those routes; its separate receipt records the actual runtime scope.
+Local review does not establish public-proxy or authenticated-access acceptance.
+Dev activation is paused, and both public releases remain unchanged.
 
 The real-release donor totals below count object memberships, not distinct
 whole-cohort cells; a cell can belong to more than one object's neighborhood.

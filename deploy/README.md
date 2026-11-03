@@ -6,11 +6,16 @@ active and verified. Their exact source, image, data, checks and service state
 are bound by the [production receipt](../docs/evidence/pubapps_live_20261102.json)
 and [dev receipt](../docs/evidence/dev_duckdb_deployment_20261103.json).
 Production retains its dated DuckDB window through November 10 UTC; dev passes
-the strict decoder gate without a deferral. The in-house service remains inactive.
+the strict decoder gate without a deferral. The older
+`islet-explorer-local.service` remains inactive.
 Use the [workflow guide](../docs/workflow_user_guide.md) and
 [current v2 build record](../docs/component_build_v2_20261102.md). Earlier masked-service,
 whole-v19 and v1 diagnostic records are historical. The [November 3 display fixes](../docs/app_display_fixes_20261103.md)
-are local changes pending a new dev build, absent from both running images.
+are running in a separate transient [local review](http://127.0.0.1:3845/islet-explorer/)
+from source `7ac421e`, image `46b81d66…`, using the separately accepted data built
+from `5e6580f`; see the [local review record](../docs/local_duckdb_review_20261103.md).
+The owner's November 3 direction is **LOCAL REVIEW ONLY**: dev activation is
+paused pending the owner's review and decision. Both public services remain unchanged.
 
 Production runbook for the journal-review deployment requested at:
 
@@ -177,7 +182,7 @@ a zero-High/Critical package scan did not fix or detect both copies. The Python
 lock keeps Pillow **13.0.0** but builds it from source against the patched
 Ubuntu-managed FreeType/Brotli libraries, with two compilation workers.
 
-**Current owner direction:** deploy the current build to the live PubApp after its real data/release/runtime checks, within the notice's DuckDB patch window through **2026-11-10 UTC**. Develop/test our DuckDB fix separately for the dev PubApp. See [the dated decision](../docs/duckdb_remediation_window_20261102.md). Production retains pinned CRAN DuckDB **1.5.2** (archive SHA-256 `55f98a336513a94354f328791c8b94521b9f2e918a57d7e9fe6c0cb6b9a38db6`); the historical backport at `3a12daa` is preserved separately. The current isolated dev fix is deployed and strictly validated in the [dev receipt](../docs/evidence/dev_duckdb_deployment_20261103.json).
+**Production decision, 2026-11-02:** the owner directed the then-current build to the live PubApp after its real data/release/runtime checks, within the notice's DuckDB patch window through **2026-11-10 UTC**, and directed development/testing of our DuckDB fix separately for dev. See [the dated decision](../docs/duckdb_remediation_window_20261102.md). Production retains pinned CRAN DuckDB **1.5.2** (archive SHA-256 `55f98a336513a94354f328791c8b94521b9f2e918a57d7e9fe6c0cb6b9a38db6`); the historical backport at `3a12daa` is preserved separately. The current isolated dev fix is deployed and strictly validated in the [dev receipt](../docs/evidence/dev_duckdb_deployment_20261103.json). The November 3 display candidate is local review only under the direction at the top of this runbook.
 
 `scan-image.sh` runs this checkout's `verify-brotli.py` inside the immutable image, with no network or data mounts. The original production decoder has the known result `0`/error `-9`. `evaluate-brotli-report.py` accepts that single complete finding during the recorded window and emits `RESULT=pass-with-duckdb-remediation-window`, with the raw failure, authorization copy and deadline bound by hash. New fixed builds must return `0`/error `-17` and pass the reviewed source-provenance check without a deferral. Pillow/Ubuntu/Node failures, unknown decoder behavior, crashes, timeouts, missing evidence and other High/Critical findings still block. No general CVE suppression is added.
 

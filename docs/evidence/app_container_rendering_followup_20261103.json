@@ -1,0 +1,380 @@
+{
+  "schema": "islet.container_rendering_followup/1",
+  "created_at_utc": "2026-11-03T14:49:20.101927+00:00",
+  "source_commit": "7ac421ed7d4b5ab5425d0130e8ff7445f4e87240",
+  "status": "source_and_same_image_diagnostic_validation_passed",
+  "scope": "Diagnostic source/font overlays on the earlier immutable image; native rebuilt-image and local-service acceptance are recorded separately. No source-data changes or public deployment.",
+  "changed_source_sha256": {
+    "app/shiny_app/R/mod_spatial_server.R": "8a352a64511341d28a7805be5e16d1dd60928d240852f9ae47377d26e33e9715",
+    "deploy/Containerfile": "e1ac80e0975f053d1b0b61153c0bb61407cac2983a674e41eace14064f8654cf",
+    "deploy/containerignore": "a8532e80cbf5affa466206245d883cfe9c0224d348c7d3398c7885c44646e920",
+    "deploy/install-raster-fonts.py": "5507a9df61e2318ffd3801d8f72ad9f504b5ff0d2229f74acbb1b9b9b11736a4",
+    "deploy/tests/check-raster-fonts.R": "c7c219d36437296a837466a82f73922f8c76ba8ba5b1d51b7f1d6f331eb84bc5"
+  },
+  "r_validation": {
+    "pass": 601,
+    "fail": 0,
+    "framework_warn": 0,
+    "skip": 0,
+    "parsed_files": 35,
+    "log": {
+      "path": "tmp/app-display-validation-20261103/r-suite-container-final.log",
+      "sha256": "9f4b156adce28ff7185f3e3f027ffc0efd5a5e28d1092a7393479492af86613e"
+    },
+    "parse_log": {
+      "path": "tmp/app-display-validation-20261103/parse-container-final.log",
+      "sha256": "c63f87dda5ec4ba4b1b6c26302d2c8e9200ce754d9789176d5ed0bfd34df3609"
+    },
+    "outside_framework_warning": "tibble was built under R version 4.5.2"
+  },
+  "visual_receipt": {
+    "reference": {
+      "path": "tmp/ui-layout-review-20261103/spatial-container-correction-review.json",
+      "sha256": "e7d022c57a7d0bfd1d4f4f6a44fde3b8fcc303b4f178bda562528ab97518e2d5"
+    },
+    "content": {
+      "schema": "islet.local_container_spatial_correction/1",
+      "created_at_utc": "2026-11-03T14:47:39.263513+00:00",
+      "result": "pass",
+      "scope": "Diagnostic validation using the existinga6 image plus read-only final source and exact bundled-font overlays. This is not native7ac image acceptance, deployment acceptance, or scientific validation.",
+      "source": {
+        "final_commit": "7ac421ed7d4b5ab5425d0130e8ff7445f4e87240",
+        "spatial_source_file": "app/shiny_app/R/mod_spatial_server.R",
+        "spatial_source_sha256": "8a352a64511341d28a7805be5e16d1dd60928d240852f9ae47377d26e33e9715",
+        "snapshot_matches_committed_source": true,
+        "other_app_source_files_unchanged_from_base81b3857": true,
+        "font_installer_sha256": "5507a9df61e2318ffd3801d8f72ad9f504b5ff0d2229f74acbb1b9b9b11736a4",
+        "font_validator_sha256": "c7c219d36437296a837466a82f73922f8c76ba8ba5b1d51b7f1d6f331eb84bc5"
+      },
+      "runtime": {
+        "base_image": "sha256:a6ccaf902cbe164bf8efd1dce42fe1a7036207311364d53beefa8194ef9ab62f",
+        "base_image_source_commit": "81b3857b45e7870fd4d43dee3751c8d956619052",
+        "R_plotly": "4.11.0",
+        "Plotly_js": "2.11.1",
+        "htmlwidgets": "1.6.4",
+        "source_overlay": {
+          "path": "tmp/ui-layout-review-20261103/plotly-paper-r4/mod_spatial_server.R",
+          "sha256": "8a352a64511341d28a7805be5e16d1dd60928d240852f9ae47377d26e33e9715"
+        },
+        "font_overlay_matches_exact_installer_files": true,
+        "dependency_changes": false,
+        "native_final_image_validation_pending": true
+      },
+      "cause_and_correction": {
+        "guides": "Plotly.js2.11.1 lacks yref. Paper coordinates now position guides using the final shared margin and actual axis-title bounds; unsupported yref fields are omitted.",
+        "glyphs": "Already-pinned Matplotlib DejaVuSans regular/bold/oblique/boldoblique files plus license are registered through fontconfig; marker superscripts remain unchanged.",
+        "tick": "Tissue right margin is24pt to preserve the full5000tick with registered DejaVu font."
+      },
+      "umap": {
+        "report": {
+          "path": "tmp/ui-layout-review-20261103/plotly-paper-r3/spatial-paper-r3.json",
+          "sha256": "1f420d0dc205725ed0b3bc20d281a90f9c78bed1024b831671d38805813d1fbc"
+        },
+        "harness": {
+          "path": "tmp/ui-layout-review-20261103/plotly-paper-r3/check-spatial.mjs",
+          "sha256": "754f6e1ee6789f42cb30ec85ed6291810a29f124a6a2f10467a1a6303bcd6264"
+        },
+        "reuse_proof": {
+          "path": "tmp/ui-layout-review-20261103/plotly-paper-r4/reused-function-proof.json",
+          "sha256": "1dd53b81326f364fe7f64688fe09d5aeea1ca28a6a9888f6e35d236058378103"
+        },
+        "unique_mode_viewport_cases": 6,
+        "viewport_sequence": [
+          1200,
+          1600,
+          1200
+        ],
+        "all9_mode_checks_pass": true,
+        "paired_axes_equal": true,
+        "point_count_each": 1392,
+        "all20_donor_legend_entries_visible": true,
+        "repeated_afterplot_no_drift": true,
+        "minimum_guide_clearance_from_plot_px": 53.0,
+        "minimum_guide_clearance_from_axis_title_px": 8.0,
+        "minimum_colorbar_title_fill_gap_px": 7.70001220703125,
+        "all6_primary_screenshots_visually_inspected": true
+      },
+      "tissue": {
+        "report": {
+          "path": "tmp/ui-layout-review-20261103/plotly-paper-r4/tissue-font-paper-final-r2.json",
+          "sha256": "2c6209f8853f4fb996bd926adcd3de34cb0e1b77ac31c0a87e340cc530221ca4"
+        },
+        "harness": {
+          "path": "tmp/ui-layout-review-20261103/plotly-paper-r4/check-tissue-static.mjs",
+          "sha256": "b48e3a947f3a987aea2f7b3d4fcfa340e9b37ee9f2c8d6e3836eb2a0b93abf16"
+        },
+        "cases": [
+          {
+            "mode": "default",
+            "viewport_width": 1200,
+            "panel_height_px": 395.36286243743,
+            "output_height_px": 842.875
+          },
+          {
+            "mode": "default",
+            "viewport_width": 1600,
+            "panel_height_px": 458.46223693000707,
+            "output_height_px": 805.8125
+          },
+          {
+            "mode": "all27",
+            "viewport_width": 1200,
+            "panel_height_px": 395.3619167425817,
+            "output_height_px": 1111.875
+          },
+          {
+            "mode": "all27",
+            "viewport_width": 1600,
+            "panel_height_px": 492.82328599740566,
+            "output_height_px": 1062.984375
+          }
+        ],
+        "minimum_panel_height_px": 395.3619167425817,
+        "required_minimum_panel_height_px": 390,
+        "all4_raw_pngs_visually_inspected": true,
+        "complete_legends_and_superscript_signs": true,
+        "all12_macrophage_profile_sign_combinations_visible": true,
+        "CHGA_CD8a_CD4_superscript_positive_signs_visible": true,
+        "full5000tick_at_both_widths": true,
+        "tick_pixel_checks": {
+          "path": "tmp/ui-layout-review-20261103/plotly-paper-r4/tick-pixel-check.json",
+          "sha256": "67196f829aa9da9fd1ddef8c9311a5c6502b6755b0b2a47e30f0b2ef1c359b5c"
+        },
+        "1200px_clear_background_after_last_glyph_pixels": 6
+      },
+      "interaction": {
+        "report": {
+          "path": "tmp/ui-layout-review-20261103/plotly-paper-r3/tissue-font-paper-final-r2.json",
+          "sha256": "275540500105a27a165cc9da068030fff43cb0860cd8605c7e9adc67cc56cda0"
+        },
+        "harness": {
+          "path": "tmp/ui-layout-review-20261103/plotly-paper-r3/check-tissue-stable-r4.mjs",
+          "sha256": "5f0fc5c7de58cf0de955236abb6a8c8e13796a218c0b89349db237ad6a9dd78e"
+        },
+        "source_reuse_scope": "The only subsequent module change is tissue right margin18\u219224pt; zoom/reset handlers and all other module bytes are identical.",
+        "tested_case": "all27 at1600px",
+        "valid_actual_brush_event": true,
+        "changed_domain_stable_idle_samples": 3,
+        "idle_sample_interval_ms": 100,
+        "reset_restores_exact_domain": true,
+        "stable_output_element": true,
+        "downloads_scope": "CSV/PNG links remain below the plot with hrefs; downloaded contents were not tested."
+      },
+      "evidence": {
+        "launch": {
+          "path": "tmp/ui-layout-review-20261103/plotly-paper-r4/launch-source.json",
+          "sha256": "5f6fe1dc0953f484a9d0a1827d3a8f83a178b8ee7ce6314faf0ad0654816228d"
+        },
+        "container_inspect": {
+          "path": "tmp/ui-layout-review-20261103/plotly-paper-r4/container-inspect.json",
+          "sha256": "9736ce7ad4f78c88dd1e71d1092d762b78d5c016e77596b38dcb0303f54a67ef"
+        },
+        "runtime_fonts": {
+          "path": "tmp/ui-layout-review-20261103/plotly-paper-r3/runtime-font-check.json",
+          "sha256": "f99f993e0fb94a77457adc5741be08609238a7c4cf7b7cbe5f2fffa88bc7959a"
+        },
+        "exact_font_installer_validation": {
+          "path": "tmp/local-app-review-20261103/font-build-test-r2/evidence/result/receipt.json",
+          "sha256": "d7ef3fe094fa581986a51b9eb3bf7f11d15e8ae058823304989354e4b9ea8a1d"
+        },
+        "screenshots": [
+          {
+            "path": "tmp/ui-layout-review-20261103/plotly-paper-r3/screenshots/spatial-umaps-leiden-immune_frac_peri-1200-0-paper-r3.png",
+            "sha256": "bfc346d30614609aae63ac7b5a4d4ea4389eb511fc7731b233ca9c08ca151a90"
+          },
+          {
+            "path": "tmp/ui-layout-review-20261103/plotly-paper-r3/screenshots/spatial-umaps-donor-leiden-1200-0-paper-r3.png",
+            "sha256": "499ff6635874ca8594d13864b8d9c60436a1cf2174b5d5298c191acac8af7c8e"
+          },
+          {
+            "path": "tmp/ui-layout-review-20261103/plotly-paper-r3/screenshots/spatial-umaps-age-immune_frac_peri-1200-0-paper-r3.png",
+            "sha256": "f50f3e602bc7b414c5769404b85bc20b65237f763d2dcd81c9c21a6c89bcd681"
+          },
+          {
+            "path": "tmp/ui-layout-review-20261103/plotly-paper-r3/screenshots/spatial-umaps-leiden-immune_frac_peri-1600-1-paper-r3.png",
+            "sha256": "1ab7c66e65118dcf3e0494733e2a6d032a0f980f09e071063bede573b8871d1f"
+          },
+          {
+            "path": "tmp/ui-layout-review-20261103/plotly-paper-r3/screenshots/spatial-umaps-donor-leiden-1600-1-paper-r3.png",
+            "sha256": "d37c9bc02ae76aa601cc6b0be3b6ce16c38f4a64d504762d9b3aa26d091e0808"
+          },
+          {
+            "path": "tmp/ui-layout-review-20261103/plotly-paper-r3/screenshots/spatial-umaps-age-immune_frac_peri-1600-1-paper-r3.png",
+            "sha256": "40cd0efe10f58ed381ce31128ebccf5d7c0933d4757b36d63dd6bcc01f397c3b"
+          },
+          {
+            "path": "tmp/ui-layout-review-20261103/plotly-paper-r4/screenshots/spatial-tissue-default-1200-font-paper-r4-raw.png",
+            "sha256": "e5e1e9c79652f6db554c23d3cd265268793fec6274c58ec8bd8f61b420c30e55"
+          },
+          {
+            "path": "tmp/ui-layout-review-20261103/plotly-paper-r4/screenshots/spatial-tissue-default-1600-font-paper-r4-raw.png",
+            "sha256": "720ade77243a0d7a1c9a212fff4a4e3b60817c67b2e2592fa10018ffd98d3e23"
+          },
+          {
+            "path": "tmp/ui-layout-review-20261103/plotly-paper-r4/screenshots/spatial-tissue-all27-1200-font-paper-r4-raw.png",
+            "sha256": "97e70495fd29e85c02b75cc5ff43b433236b28cf711dc0f74709feac15c2e40a"
+          },
+          {
+            "path": "tmp/ui-layout-review-20261103/plotly-paper-r4/screenshots/spatial-tissue-all27-1600-font-paper-r4-raw.png",
+            "sha256": "0ec63c3f1a39622aa16d7c1ca32f2ab8fbeb69748640c2e65d849efc7bbc9967"
+          }
+        ],
+        "teardown": {
+          "path": "tmp/ui-layout-review-20261103/plotly-paper-r4/teardown.json",
+          "sha256": "c1ed6d1fae9943dabfa7ef9b30d01ff80d1d1efe64707619fde634fe69dba574"
+        }
+      },
+      "preserved_intermediate_evidence": {
+        "original_immutable_image_failure": {
+          "path": "tmp/local-app-review-20261103/ui-checks/results/spatial-local.json",
+          "sha256": "430cc362b410b2f9c6a1634a0b451f98db91d0dfa72e1ca60b90bc4e9d63fb48"
+        },
+        "paper_r1_axis_title_overlap": {
+          "path": "tmp/ui-layout-review-20261103/plotly-paper-r1/visual-review.json",
+          "sha256": "663278fc6bee0a30785eb881470311868fbab87b18b02bd8f12818ce319600c8"
+        },
+        "paper_r2_early_domain_sampling_failure": {
+          "path": "tmp/ui-layout-review-20261103/plotly-paper-r2/tissue-font-paper-final-r2.json",
+          "sha256": "5423e7069a5a7f5a254bae1d40a7eed24c9614776c7cc49d0611ead780725ca9"
+        },
+        "paper_r3_tick_clipping": {
+          "path": "tmp/ui-layout-review-20261103/plotly-paper-r3/visual-review.json",
+          "sha256": "5d4bc0f4adc5d3d6207850ac58a134e67e65facccb85053af31335cb2f04ffb9"
+        }
+      },
+      "no_scientific_data_writes": true,
+      "original_user_container3840_untouched_and_running": true,
+      "all_owned_diagnostic_containers3846_to3849_stopped": true
+    }
+  },
+  "font_validation": {
+    "base_image": "sha256:a6ccaf902cbe164bf8efd1dce42fe1a7036207311364d53beefa8194ef9ab62f",
+    "installer_sha256": "5507a9df61e2318ffd3801d8f72ad9f504b5ff0d2229f74acbb1b9b9b11736a4",
+    "receipt": {
+      "path": "tmp/local-app-review-20261103/font-build-test-r2/evidence/result/receipt.json",
+      "sha256": "d7ef3fe094fa581986a51b9eb3bf7f11d15e8ae058823304989354e4b9ea8a1d"
+    },
+    "content": {
+      "schema": "islet.raster_fonts/1",
+      "result": "pass",
+      "matplotlib_version": "3.11.1",
+      "matplotlib_data_path": "/opt/islet-explorer-py/lib/python3.12/site-packages/matplotlib/mpl-data",
+      "files": [
+        {
+          "name": "DejaVuSans.ttf",
+          "source": "/opt/islet-explorer-py/lib/python3.12/site-packages/matplotlib/mpl-data/fonts/ttf/DejaVuSans.ttf",
+          "installed": "/usr/local/share/fonts/islet-dejavu/DejaVuSans.ttf",
+          "sha256": "3fdf69cabf06049ea70a00b5919340e2ce1e6d02b0cc3c4b44fb6801bd1e0d22",
+          "bytes": 756072
+        },
+        {
+          "name": "DejaVuSans-Bold.ttf",
+          "source": "/opt/islet-explorer-py/lib/python3.12/site-packages/matplotlib/mpl-data/fonts/ttf/DejaVuSans-Bold.ttf",
+          "installed": "/usr/local/share/fonts/islet-dejavu/DejaVuSans-Bold.ttf",
+          "sha256": "b184b89e3c1075f22f6b71575b6fc20d4972b3cfd3b23322ca6fd596dcaef167",
+          "bytes": 704128
+        },
+        {
+          "name": "DejaVuSans-Oblique.ttf",
+          "source": "/opt/islet-explorer-py/lib/python3.12/site-packages/matplotlib/mpl-data/fonts/ttf/DejaVuSans-Oblique.ttf",
+          "installed": "/usr/local/share/fonts/islet-dejavu/DejaVuSans-Oblique.ttf",
+          "sha256": "ccdf74b350f11fd3dd5774de50e5e6346a1a5da1f5b7d5fb83590665e97a5213",
+          "bytes": 633840
+        },
+        {
+          "name": "DejaVuSans-BoldOblique.ttf",
+          "source": "/opt/islet-explorer-py/lib/python3.12/site-packages/matplotlib/mpl-data/fonts/ttf/DejaVuSans-BoldOblique.ttf",
+          "installed": "/usr/local/share/fonts/islet-dejavu/DejaVuSans-BoldOblique.ttf",
+          "sha256": "6edf0283160186af451cbee71e7b845f2e4cabf264bb992ce668c83c25465e6f",
+          "bytes": 641720
+        },
+        {
+          "name": "LICENSE_DEJAVU",
+          "source": "/opt/islet-explorer-py/lib/python3.12/site-packages/matplotlib/mpl-data/fonts/ttf/LICENSE_DEJAVU",
+          "installed": "/usr/local/share/fonts/islet-dejavu/LICENSE_DEJAVU",
+          "sha256": "d75938dec098f06f0ac3c00853065d94f020be1c3c62ef1dc2975ba15b4d9b0e",
+          "bytes": 4816
+        }
+      ],
+      "fontconfig_cache_exit_code": 0,
+      "installer_sha256": "5507a9df61e2318ffd3801d8f72ad9f504b5ff0d2229f74acbb1b9b9b11736a4",
+      "validation_script_sha256": "c7c219d36437296a837466a82f73922f8c76ba8ba5b1d51b7f1d6f331eb84bc5",
+      "raster_validation_sha256": "a6eff86aec58dcec5ab6ff9f7f3d21fe889130faaa904c48de4ac926fbfaecad",
+      "cairo_pdf_validation": [
+        {
+          "file": "cairo-plain.pdf",
+          "sha256": "88f921ffaf91d4da369188f24d04e0bb89d9c6c465b5db73c3ebaf218c56e6aa",
+          "superscript_unicode_maps": true
+        },
+        {
+          "file": "cairo-bold.pdf",
+          "sha256": "0dc09eec942dc9747746a1e3de8c3b34a32acd1605f9f38e7436dd3fabc51303",
+          "superscript_unicode_maps": true
+        },
+        {
+          "file": "cairo-italic.pdf",
+          "sha256": "6965285efd3807cbd2f2ee404d6085afbb18f926012b119487ad30d0d284bf62",
+          "superscript_unicode_maps": true
+        },
+        {
+          "file": "cairo-bolditalic.pdf",
+          "sha256": "ab8297e280573c2af86defe5d8077e3eff8e941082f3b8e7ae58c891ca6724c1",
+          "superscript_unicode_maps": true
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "cairo-bold.pdf",
+          "sha256": "0dc09eec942dc9747746a1e3de8c3b34a32acd1605f9f38e7436dd3fabc51303",
+          "bytes": 7493
+        },
+        {
+          "file": "cairo-bolditalic.pdf",
+          "sha256": "ab8297e280573c2af86defe5d8077e3eff8e941082f3b8e7ae58c891ca6724c1",
+          "bytes": 7663
+        },
+        {
+          "file": "cairo-italic.pdf",
+          "sha256": "6965285efd3807cbd2f2ee404d6085afbb18f926012b119487ad30d0d284bf62",
+          "bytes": 7503
+        },
+        {
+          "file": "cairo-plain.pdf",
+          "sha256": "88f921ffaf91d4da369188f24d04e0bb89d9c6c465b5db73c3ebaf218c56e6aa",
+          "bytes": 7151
+        },
+        {
+          "file": "profiles-cairo.png",
+          "sha256": "ff7c4c31374dc5feadb508e67fd9e8b5a30d0904188b07abd989c8095f9c4178",
+          "bytes": 124918
+        },
+        {
+          "file": "profiles-ragg.png",
+          "sha256": "74b310a0f4b183d4b3a47b5eeb2a33435e3c8eb5a913717d99165315bceb246a",
+          "bytes": 88152
+        },
+        {
+          "file": "validation.json",
+          "sha256": "a6eff86aec58dcec5ab6ff9f7f3d21fe889130faaa904c48de4ac926fbfaecad",
+          "bytes": 4860
+        }
+      ],
+      "dependency_changes": false
+    },
+    "old_image_missing_glyphs_rejected": true,
+    "rejection_log": {
+      "path": "tmp/local-app-review-20261103/font-old-image-rejection/run.log",
+      "sha256": "91c5334b1a0ceb5b9c09df8105652d77c6b948044fe7971dc25c27db193eebe0"
+    }
+  },
+  "scientific_evidence_reuse": {
+    "prior_source_commit": "81b3857b45e7870fd4d43dee3751c8d956619052",
+    "all_other_app_sources_unchanged": true,
+    "exception": "Only mod_spatial_server.R presentation code changes; donor computation and all data-loading/helper sources remain byte-identical.",
+    "execution_supplement": {
+      "path": "docs/evidence/app_donor_execution_supplement_20261103.json",
+      "sha256": "d95903db8f31bac357f552155f4f770c769315a82e77fa8a0466b7e6b3c3a16a"
+    }
+  },
+  "native_review_record": "docs/local_duckdb_review_20261103.md"
+}

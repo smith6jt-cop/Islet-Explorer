@@ -1,0 +1,56 @@
+{
+  "schema": "islet.local_rendering_agent_delivery/1",
+  "recorded_at_utc": "2026-11-03T14:52:41.090467+00:00",
+  "source_commit": "7ac421ed7d4b5ab5425d0130e8ff7445f4e87240",
+  "recipient_commit": "0fd8150cb5d035b231e0526835e12cc6c46b876b",
+  "status": "received_and_read_static_source_only",
+  "root_read_confirmation": true,
+  "recipient_commit_bytes_verified": true,
+  "artifacts": {
+    "README.md": {
+      "path": "/home/smith6jt/IO60panc2nd/Islet-Explorer-Senior/docs/evaluations/codex_local_display_fixes_receipt_20261103/README.md",
+      "sha256": "1d5d512d519150237649269acbbd8e44701df0dfea6005d118f9623f12a36f30",
+      "bytes": 2195
+    },
+    "receipt.json": {
+      "path": "/home/smith6jt/IO60panc2nd/Islet-Explorer-Senior/docs/evaluations/codex_local_display_fixes_receipt_20261103/receipt.json",
+      "sha256": "bb49174d7a86290b7a3da2fe96b956e46e6b82ff88b87b63492c5be19e008714",
+      "bytes": 2059
+    }
+  },
+  "recipient_receipt": {
+    "schema": "senior.codex_local_display_fixes_receipt/1",
+    "recorded_utc": "2026-11-03T14:48:59.005656+00:00",
+    "status": "received_and_read_static_source_only",
+    "app_commit": "6d57be1a7fc5b0bff17a0caf68d1b7842d762f05",
+    "candidate_source_commit": "7ac421ed7d4b5ab5425d0130e8ff7445f4e87240",
+    "baseline": "68c1cf6cc6dd9bdac004ee09f4243e258cacfac1",
+    "scope": "LOCAL REVIEW ONLY; no port or broad review and no waiting for forthcoming actual-runtime evidence.",
+    "app_read": {
+      "path": "/home/smith6jt/IO60panc2nd/Islet-Explorer-Senior/outputs/codex_local_display_fixes_receipt_20261103/app_source_read.json",
+      "sha256": "46b0caf2ee80872778e14f65953ea199d93e9a6a40b4a574b12e78c8679da648",
+      "bytes": 4051
+    },
+    "font_read": {
+      "path": "/home/smith6jt/IO60panc2nd/Islet-Explorer-Senior/outputs/codex_local_display_fixes_receipt_20261103/font_source_read.json",
+      "sha256": "d78f9e5fa96715f6b442058883fe581ac7991cf395575fdce39868ae4e9dfed2",
+      "bytes": 5287
+    },
+    "changed_file_count": 5,
+    "dependency_change": "No new dependency declarations or package installation in the reviewed commits; existing font/package availability is not runtime-verified here.",
+    "verification_scope": "Exact Git parent chain, committed source bytes and static reading only. Renderer and full-suite/image results are sender-reported, not independently repeated.",
+    "font_check_scope": "Four faces and12 distinct profile PNG bitmaps in ragg/Cairo; four PDF fixtures check embedded font and superscript Unicode maps, not12-profile PDF distinctness.",
+    "forthcoming": "New native-image gates, evidence and runbook; this receipt does not certify their completion.",
+    "mutation_scope": {
+      "source_changed": false,
+      "scientific_outputs_changed": false,
+      "prior_receipts_changed": false,
+      "tests_executed": false,
+      "image_built": false,
+      "service_changed": false,
+      "production_or_dev_activation_approved": false
+    },
+    "notification": "Recorded locally; internal outbound messaging transport was unavailable on preceding deliveries."
+  },
+  "limits": "No recipient runtime verification, port, build, service change or deployment authorization. Native local acceptance is recorded separately."
+}

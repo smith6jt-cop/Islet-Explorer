@@ -17,7 +17,13 @@ The separate strict-DuckDB dev release `pubapps-2026-11-dev-duckdb-v1` is live
 from `378843e`, image `e704ac2a…`. Their separate receipts bind the actual data,
 image and validation: [production](evidence/pubapps_live_20261102.json),
 [dev](evidence/dev_duckdb_deployment_20261103.json). The [November 3 display changes](app_display_fixes_20261103.md)
-remain local pending a new dev build. The in-house service remains inactive.
+are running for [local review](http://127.0.0.1:3845/islet-explorer/) from source
+`7ac421e`, image `46b81d66…`, using the separately accepted data built from
+`5e6580f`; see the [local review record](local_duckdb_review_20261103.md).
+The owner's November 3 direction is **LOCAL REVIEW ONLY**: dev activation is
+paused pending the owner's review and decision. Both public services remain unchanged.
+The older `islet-explorer-local.service` remains inactive, separate from this
+transient local review service.
 
 **Live reviewer URL (authentication required):**
 `https://islet-explorer.rc.ufl.edu/islet-explorer/`
@@ -194,8 +200,9 @@ ISLET_DATA_ROOT=/absolute/path/to/explicit-review-root Rscript -e 'shiny::runApp
 ```
 
 Port 7777 is for local testing only. Select the data root explicitly and retain its
-scientific status in review notes. This does not change the inactive in-house service or either active PubApps
-service, or establish an unaccepted root as a release.
+scientific status in review notes. These example commands do not change the older,
+inactive `islet-explorer-local.service`, the separate transient review service on
+port 3840, or either active PubApps service, or establish an unaccepted root as a release.
 
 ### R Dependencies
 

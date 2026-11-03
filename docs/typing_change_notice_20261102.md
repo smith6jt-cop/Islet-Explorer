@@ -49,6 +49,18 @@ the exact source binding. No recipient scientific port, browser rerun or
 deployment was performed. The previously published HPG handoff packages and
 their permanent backing directories are unchanged.
 
+The subsequent actual-image rendering corrections are in `6d57be1` and
+`7ac421e`: supported Plotly paper coordinates, measured guide/title clearance,
+and registration of the already bundled DejaVu font faces so marker-state
+superscripts remain visible. The owner changed the candidate scope to
+**local review only**; neither public service changes. Senior received and read
+these five changed source/build files in recipient commit `0fd8150`, recorded
+in the [delivery receipt](evidence/app_local_rendering_delivery_20261103.json).
+That acknowledgement covers static source reading, without a port or runtime
+retest. The [rendering evidence](evidence/app_container_rendering_followup_20261103.json)
+and [local review runbook](local_duckdb_review_20261103.md) retain separate
+diagnostic and native-runtime acceptance scopes.
+
 ### New selected-component v2 supplement
 
 The owner subsequently delegated the remaining CODEX selection and live release.

@@ -1,6 +1,13 @@
 # Shiny Server base remediation
 
-**Latest owner direction, 2026-11-02:** the current build is intended for the live production PubApp once its actual data/release/runtime checks pass. The known DuckDB finding is nonblocking through the notice's **2026-11-10 UTC** patch deadline; develop/test our DuckDB fix separately for the dev PubApp. See [the dated release decision](../docs/duckdb_remediation_window_20261102.md). This supersedes the earlier strict DuckDB hold and no-activation directions below. Historical failed reports remain unchanged; data checks and other security findings still apply.
+**Latest owner direction, 2026-11-03: LOCAL REVIEW ONLY.** The display candidate
+is running for [local review](http://127.0.0.1:3845/islet-explorer/) from source
+`7ac421e`, image `46b81d66…`, using the separately accepted data built from
+`5e6580f`; see the [local review record](../docs/local_duckdb_review_20261103.md).
+Dev activation is paused pending the owner's review and decision. Both public
+services remain unchanged.
+
+**Production decision, 2026-11-02:** the owner directed the then-current build to the live production PubApp after its actual data/release/runtime checks passed. The known DuckDB finding is nonblocking through the notice's **2026-11-10 UTC** patch deadline; the owner directed development/testing of our DuckDB fix separately for dev. See [the dated release decision](../docs/duckdb_remediation_window_20261102.md). This superseded the earlier strict DuckDB hold and no-activation directions below for that release. Historical failed reports remain unchanged; data checks and other security findings still apply.
 
 **Current outcome, 2026-11-03:** production and the separate strict-DuckDB dev
 release are active and verified. The [production receipt](../docs/evidence/pubapps_live_20261102.json)
