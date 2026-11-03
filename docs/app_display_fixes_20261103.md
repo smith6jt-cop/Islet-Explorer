@@ -32,6 +32,23 @@ for the all-27, 1600 px case. Both download links remain available below the
 plot in all four cases; downloaded file contents were not tested in this check.
 The earlier `5e6580f` receipts below remain unchanged historical evidence.
 
+Senior / MultiPlex5000 independently closed both findings in recipient commit
+`20f869ed839fe9874b99c4834dbbe58cb35191c0`: 138 focused assertions, 2,048
+synthetic helper cases and inspection of all four final tissue images. The
+[recipient closure receipt](evidence/app_display_senior_closure_20261103.json)
+binds that review and its limits. Senior reviewed the supplied real-cohort
+results without independently recomputing them, and did not approve or perform
+a deployment. The image, installed-runtime and public-site acceptance are
+separate release gates.
+
+A subsequent [execution-provenance supplement](evidence/app_donor_execution_supplement_20261103.json)
+repeats all 48 real-data scenarios against exact `81b3857` source snapshots,
+with 960 donor-keyed comparisons. The runner, all ten consumed application
+sources and all eight data inputs are bound before, during and after execution.
+All comparisons pass and all inputs remain unchanged. This closes the earlier
+report's execution-provenance gap with a new run; it does not retroactively
+change the old evidence or Senior's recorded review scope.
+
 ## Presentation policy
 
 The older retirement list covered Endocrine, T cell and Immune, but omitted the

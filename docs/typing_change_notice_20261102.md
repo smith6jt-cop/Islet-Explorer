@@ -41,6 +41,14 @@ CODEX cohort is profile-only; all 16 marker selections remain bit-identical,
 and all 48 donor-composition scenarios pass. This is a generic helper repair,
 not a new biological selection or permission to relabel recipient data.
 
+Senior received and read the final source and documentation and independently
+closed both reported findings in recipient commit `20f869ed839fe9874b99c4834dbbe58cb35191c0`.
+The [closure receipt](evidence/app_display_senior_closure_20261103.json) records
+138 focused assertions, 2,048 synthetic cases, four inspected screenshots and
+the exact source binding. No recipient scientific port, browser rerun or
+deployment was performed. The previously published HPG handoff packages and
+their permanent backing directories are unchanged.
+
 ### New selected-component v2 supplement
 
 The owner subsequently delegated the remaining CODEX selection and live release.

@@ -1,0 +1,93 @@
+{
+  "schema": "uniform.donor_composition_execution_supplement_receipt/1",
+  "status": "passed",
+  "completed_utc": "2026-11-03T14:19:16Z",
+  "receipt_created_utc": "2026-11-03T14:20:10.893245+00:00",
+  "source_commit": "81b3857b45e7870fd4d43dee3751c8d956619052",
+  "command": "Rscript /data/panc_CODEX/Islet-Explorer/tmp/macrophage-mixed-fix-20261103-supplement-v3/runner.R",
+  "exit_code": 0,
+  "scope": "New exact-81b Git-blob-snapshot rerun of real immutable release donor composition. No retrospective assertion about execution of the earlier report.",
+  "scenario_count": 48,
+  "donor_count": 20,
+  "donor_keyed_rows": 960,
+  "object_rows": 4853,
+  "scenario_inventory": "All 16 macrophage marker combinations crossed with core, peri and both regions.",
+  "expected_actual_comparisons": [
+    "original total memberships",
+    "displayed memberships",
+    "No subtype memberships",
+    "hidden Conflict memberships (actual inferred as original minus displayed)",
+    "default-leave-out displayed memberships",
+    "original-denominator percentage sums",
+    "shown/default percentage sums"
+  ],
+  "numerical_tolerance": 1e-07,
+  "unchanged_before_after_files": 31,
+  "executed_application_source_files": 10,
+  "consumed_data_files": 8,
+  "six_runtime_source_files": [
+    "00_audit.R",
+    "utils_safe_join.R",
+    "01_runtime_data_backend.R",
+    "data_loading.R",
+    "drilldown_helpers.R",
+    "spatial_helpers.R"
+  ],
+  "builder_helper_extraction_count": 18,
+  "builder_label_groups_passed": true,
+  "builder_aggregate_max_absolute_difference": 0,
+  "report": {
+    "path": "/data/panc_CODEX/Islet-Explorer/tmp/macrophage-mixed-fix-20261103-supplement-v3/report.json",
+    "sha256": "127e0dfe424e369f41df00978a903e65dbc37d5dbb1727e314f161dd55c44df9",
+    "bytes": 26674
+  },
+  "execution_bindings": {
+    "path": "/data/panc_CODEX/Islet-Explorer/tmp/macrophage-mixed-fix-20261103-supplement-v3/execution_bindings.json",
+    "sha256": "5cc497dd3abb861d780e9771eff7191cd72c23bdf9c0e8746e92732bc533b809",
+    "bytes": 25309
+  },
+  "donor_details": {
+    "path": "/data/panc_CODEX/Islet-Explorer/tmp/macrophage-mixed-fix-20261103-supplement-v3/donor_totals.json",
+    "sha256": "d00f1783847adbd7e7afc8c9ad850da1693c5d6a1c5abf9789f1e0f22552196e",
+    "bytes": 603949
+  },
+  "runner": {
+    "path": "/data/panc_CODEX/Islet-Explorer/tmp/macrophage-mixed-fix-20261103-supplement-v3/runner.R",
+    "sha256": "d46debae16e8b6ec3aeb0c150a5aecb94711047b306339bda87c3c5ff42f7ec9",
+    "bytes": 16664
+  },
+  "source_snapshot_manifest": {
+    "path": "/data/panc_CODEX/Islet-Explorer/tmp/macrophage-mixed-fix-20261103-supplement-v3/source_snapshot_manifest.json",
+    "sha256": "332ddfc86c07515c232f67a753487c8da061224de2dcf1dbe79e0db36004e589",
+    "bytes": 5016
+  },
+  "run_log": {
+    "path": "/data/panc_CODEX/Islet-Explorer/tmp/macrophage-mixed-fix-20261103-supplement-v3/run.log",
+    "sha256": "de480a520da9c96dff7671c4f101086ace64987d1bdf66f26a11c2e6e4150383",
+    "bytes": 1240
+  },
+  "preserved_original_report": {
+    "path": "/data/panc_CODEX/Islet-Explorer/tmp/macrophage-mixed-fix-20261103/donor-composition-equivalence.json",
+    "sha256": "1a0bf01bcf95f00d65cf122ff67bc88712b7b1bbd75d817918c249a87317a87f",
+    "bytes": 25947
+  },
+  "failed_preparation_attempts_preserved": [
+    {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/macrophage-mixed-fix-20261103-supplement-v1",
+      "reason": "Evidence runner R string escaping error; no passing output."
+    },
+    {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/macrophage-mixed-fix-20261103-supplement-v2",
+      "reason": "Evidence trace correctly refused an unbound installed-package bootstrap source; dependencies preloaded before tracing in the successful v3 runner."
+    }
+  ],
+  "mutations": {
+    "application_source": false,
+    "scientific_data": false,
+    "earlier_evidence": false,
+    "new_implementation_tests": false,
+    "builds": false,
+    "services": false
+  },
+  "limitations": "Source-level real-data evidence only; does not certify an immutable image, public runtime, Viewer or Range behavior."
+}
