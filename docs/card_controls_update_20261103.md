@@ -96,5 +96,35 @@ inspected screenshots. Composition diagnostics exposed the master-toggle timing
 and dynamic palette-reset defects described above. Failed application checks and
 harness-preparation failures are preserved alongside their successors.
 
-Final native acceptance is recorded in the linked local runtime record. These
-diagnostic checks do not authorize or report a public deployment.
+Native image `c7608905…`, built from `ccda497`, passed **15 PAGA checks** and
+**20 Plot-title checks**, with 10 PAGA and 20 Plot screenshots directly inspected.
+The title checks select two populations across proportion, count and density,
+two structural measures, both data layers and swapped plot types at 1200 and
+1600 pixels. They wait for the actual requested titles and rendered dimensions.
+Earlier title-harness attempts used the wrong Selectize label field or sampled
+stale reactive outputs; those failed attempts remain preserved.
+
+The same native image exposed two final presentation defects: the Distance
+grouping selector lacked an accessible label, and excess Region-control width
+forced the Composition ordering selector onto an avoidable extra row. `d6405d6`
+adds a screen-reader label; `3c81075` reallocates the Composition toolbar width.
+The latter removes 40 pixels above the plot at 1200 pixels in the browser probe
+and the final native run; both tested widths now have a 34-pixel toolbar.
+The full source comparison proves these three UI substitutions explain the
+entire difference from `ccda497`: the other 102 tracked app files are identical.
+The intermediate `d6405d6` image was built but never activated.
+
+The final native `3c81075` / `eb6f3c32…` build passes the strict security gate
+with **zero High/Critical findings**, **49/49 standard browser checks**, **12/12
+Composition checks** and **12/12 Spatial checks**. Composition validates the
+actual selected colors through first detail creation and Plot/Spatial remounts.
+Spatial validates default and dense legends, brush/reset, the shared donor
+selector's exact scope and compact Distance controls at both widths. A prior
+concurrent Spatial attempt timed out waiting for raster stability; its cause
+was not established. The final isolated run passes the unchanged stability
+criterion and records stable pixels, dimensions and marker-input copies.
+
+Final native acceptance is recorded in the linked local runtime record and
+[card-controls receipt](evidence/card_controls_validation_20261103.json). Prior
+checks retain their original source/image identities; they are not relabeled as
+successor executions. These checks do not authorize or report a public deployment.

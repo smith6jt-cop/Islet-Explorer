@@ -1,0 +1,290 @@
+{
+  "schema": "islet.card_controls_validation/1",
+  "status": "passed_local_review",
+  "recorded_utc": "2026-11-03T18:14:18.466741+00:00",
+  "scope": "Requested card controls and titles; native local review only. No data rebuild, scientific retyping, public deployment or git push.",
+  "url": "http://127.0.0.1:3845/islet-explorer/",
+  "current_runtime": {
+    "source": "3c81075307c97356cf6ded5df0ac10e810c8b9fa",
+    "image": "sha256:eb6f3c32779a22e4c1ca7a843bd9de5011de253ac42fb3fd4e574d7b34b2c920",
+    "container_id": "cfbd33fba2b7c53d2a607f2e09120e66cb2c9df462940994355e531bc6a325d9",
+    "container_inspection": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/unclassified-ui-accessibility-20261103/runtime-3c81075307c97356cf6ded5df0ac10e810c8b9fa/container-startup-inspect.json",
+      "sha256": "9ae25129e863fc1f3666a90edec5004864db621790d88b164ab85d8e89ca9a07",
+      "bytes": 25881
+    },
+    "image_inspection": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/unclassified-ui-accessibility-20261103/image-3c81075307c97356cf6ded5df0ac10e810c8b9fa/image-inspect.json",
+      "sha256": "00c9f97351ef89293c38d3e37802214e3e23349e7e326c5f32370ef598c27016",
+      "bytes": 34652
+    },
+    "source_identity": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/unclassified-ui-accessibility-20261103/image-3c81075307c97356cf6ded5df0ac10e810c8b9fa/source-identity.txt",
+      "sha256": "d203e0659b8853c98e35fbca0ac4c4d603c38e71d80eb3e64eff1af1d9747669",
+      "bytes": 200
+    },
+    "authoritative_runtime_receipt": "docs/evidence/local_unclassified_ui_review_20261103.json"
+  },
+  "prior_native_runtime": {
+    "source": "ccda49712c7df0e28634d843155c98977c961eae",
+    "image": "sha256:c7608905e097dc4573cf6566b9848bb9fc8ff827d4da5eff3e2657c29ec2431d",
+    "container_inspection": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/unclassified-ui-combined-20261103/runtime-ccda49712c7df0e28634d843155c98977c961eae/container-startup-inspect.json",
+      "sha256": "bed842c1b4b227141120ea4c9575b899e29e05c767e19cbdb8d79029cf052625",
+      "bytes": 25841
+    },
+    "image_inspection": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/unclassified-ui-combined-20261103/image-ccda49712c7df0e28634d843155c98977c961eae/image-inspect.json",
+      "sha256": "9faa27da9fb67d6fa1f711183435e9b577d869917d36713613be8499645787ae",
+      "bytes": 34595
+    }
+  },
+  "data": {
+    "producer_commit": "5e6580fe68af12dd18bee430988bc1ed64061526",
+    "manifest_sha256": "03038ebdcd172e82ff7afba1f2025cb905e5859bcee423b05618b04c993f7320",
+    "mount": "read-only accepted existing data; no new scientific acceptance claimed"
+  },
+  "security": {
+    "high": 0,
+    "critical": 0,
+    "duckdb_deferral": false,
+    "validation": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/unclassified-ui-accessibility-20261103/image-3c81075307c97356cf6ded5df0ac10e810c8b9fa/validation-status.json",
+      "sha256": "dddfb676d633162906d7686d689d81ccba0539480627b3bdb2b8875342ea5944",
+      "bytes": 578
+    }
+  },
+  "native_standard_browser": {
+    "checks": 49,
+    "passed": 49,
+    "page_errors": 0,
+    "application_http_errors": 0,
+    "report": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/unclassified-ui-accessibility-20261103/runtime-3c81075307c97356cf6ded5df0ac10e810c8b9fa/local-browser.json",
+      "sha256": "8d1900a799af857780c5d50e75a26afa08326d4eccfaa7d4d8a1352fc55fddf1",
+      "bytes": 7365
+    }
+  },
+  "native_focused_runs": {
+    "composition": {
+      "source": "3c81075307c97356cf6ded5df0ac10e810c8b9fa",
+      "image": "sha256:eb6f3c32779a22e4c1ca7a843bd9de5011de253ac42fb3fd4e574d7b34b2c920",
+      "runtime_kind": "native-image",
+      "checks": 12,
+      "passed": 12,
+      "failed": 0,
+      "report": {
+        "path": "/data/panc_CODEX/Islet-Explorer-ui-cards-20261103/tmp/ui-cards-validation-20261103/composition-native-3c81075/report.json",
+        "sha256": "53bd7f2f90bffc26ec95686ef402f3a9635e297766195d17d5f7c214f4d8a60e",
+        "bytes": 17246
+      },
+      "visual_review": {
+        "path": "/data/panc_CODEX/Islet-Explorer-ui-cards-20261103/tmp/ui-cards-validation-20261103/composition-native-3c81075/visual-review.json",
+        "sha256": "a45db60ccac2daee2595362ecafdd26b82cb54f300d248d1c96c3bf771558ec7",
+        "bytes": 6166
+      }
+    },
+    "spatial": {
+      "source": "3c81075307c97356cf6ded5df0ac10e810c8b9fa",
+      "image": "sha256:eb6f3c32779a22e4c1ca7a843bd9de5011de253ac42fb3fd4e574d7b34b2c920",
+      "runtime_kind": "native-image",
+      "checks": 12,
+      "passed": 12,
+      "failed": 0,
+      "report": {
+        "path": "/data/panc_CODEX/Islet-Explorer-ui-cards-20261103/tmp/ui-cards-validation-20261103/spatial-native-3c81075/report.json",
+        "sha256": "35f74ee764da57bb6b64c88416cbe2a43de6e3472b60bf3dd0b0ee8c8155eed3",
+        "bytes": 105475
+      },
+      "visual_review": {
+        "path": "/data/panc_CODEX/Islet-Explorer-ui-cards-20261103/tmp/ui-cards-validation-20261103/spatial-native-3c81075/visual-review.json",
+        "sha256": "8e3cca5dcf30944631a8104d4c0d68c58c29d15477b02ece9583ab9de34697bc",
+        "bytes": 11284
+      }
+    },
+    "paga": {
+      "source": "ccda49712c7df0e28634d843155c98977c961eae",
+      "image": "sha256:c7608905e097dc4573cf6566b9848bb9fc8ff827d4da5eff3e2657c29ec2431d",
+      "runtime_kind": "native-image",
+      "checks": 15,
+      "passed": 15,
+      "failed": 0,
+      "report": {
+        "path": "/data/panc_CODEX/Islet-Explorer-ui-cards-20261103/tmp/ui-cards-validation-20261103/paga-native-ccda497/report.json",
+        "sha256": "c4890a950fbf22af262c8425979bf417d081de9bb375dff45e243b6c1506086a",
+        "bytes": 74697
+      },
+      "visual_review": {
+        "path": "/data/panc_CODEX/Islet-Explorer-ui-cards-20261103/tmp/ui-cards-validation-20261103/paga-native-ccda497/visual-review.json",
+        "sha256": "2159128f38b46fb6f27fc9a7a8f9093484d6e0b5d04ec958a02877e1b684ebcf",
+        "bytes": 4901
+      }
+    },
+    "plot_titles": {
+      "source": "ccda49712c7df0e28634d843155c98977c961eae",
+      "image": "sha256:c7608905e097dc4573cf6566b9848bb9fc8ff827d4da5eff3e2657c29ec2431d",
+      "runtime_kind": "native-image",
+      "checks": 20,
+      "passed": 20,
+      "failed": 0,
+      "report": {
+        "path": "/data/panc_CODEX/Islet-Explorer-ui-cards-20261103/tmp/ui-cards-validation-20261103/plot-titles-native-ccda497-r3/report.json",
+        "sha256": "564931d6a2ed77272ff9c78b74813e4888661d104fcabc1343ad9710662b16f2",
+        "bytes": 88783
+      },
+      "visual_review": {
+        "path": "/data/panc_CODEX/Islet-Explorer-ui-cards-20261103/tmp/ui-cards-validation-20261103/plot-titles-native-ccda497-r3/visual-review.json",
+        "sha256": "39271ff1ea218b67aa2ffda2a46d4f0ac35b5aa2a0ace335e55ea30804ba2433",
+        "bytes": 8700
+      }
+    }
+  },
+  "source_equivalence": {
+    "evidence": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/unclassified-native-20261103/ccda497-to-3c81075-source-bridge.json",
+      "sha256": "5a7df6eaf293a9309a30c89836bea1e590df5cdacf93015738861ee8a7fd6f6f",
+      "bytes": 13191
+    },
+    "unchanged_files": 102,
+    "total_app_files": 104,
+    "delta": "Exactly one accessible selector label and two Composition toolbar flex values.",
+    "interpretation": "PAGA/title and full R evidence remain bound to ccda497; their relevant implementation is unchanged. Final Composition, Spatial and standard browser checks ran on 3c81075."
+  },
+  "R_suite": {
+    "source": "ccda49712c7df0e28634d843155c98977c961eae",
+    "files_parsed": 36,
+    "tests": 121,
+    "assertions": 795,
+    "failed": 0,
+    "errors": 0,
+    "test_framework_warnings": 0,
+    "skipped": 0,
+    "report": {
+      "path": "/data/panc_CODEX/Islet-Explorer-ui-cards-20261103/tmp/ui-cards-validation-20261103/full-r-ccda497.json",
+      "sha256": "abfcebd6c7a5130ad950052b04dd06fab39745400d8ac773f84535d41b0d0ed1",
+      "bytes": 175
+    },
+    "log": {
+      "path": "/data/panc_CODEX/Islet-Explorer-ui-cards-20261103/tmp/ui-cards-validation-20261103/full-r-ccda497.log",
+      "sha256": "8dee7c5b1e3c0f9fe825f6809582e32d5b7776a2556ef66a65c6da1438cdaed9",
+      "bytes": 1484
+    },
+    "note": "Not rerun for the three presentation-only substitutions; source equivalence and fresh native checks cover that successor. The tibble build-version startup note is outside test-framework warnings."
+  },
+  "actual_data_projection": {
+    "checks": 131,
+    "source": "337513e4ed2a4ac5775faf71fbf4590c559f7864",
+    "report": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/unclassified-local-review-20261103/actual-data-run3-production-loader/actual-data-integration.json",
+      "sha256": "7da3f3f7e421a6737b7ded509cefa99919541341089609c68c0d3fe53dc174ab",
+      "bytes": 127062
+    },
+    "note": "Prior actual-data production-loader checks retained with their original source identity; no new typing or data build."
+  },
+  "preserved_failed_attempts": [
+    {
+      "name": "composition_master_event_order",
+      "report": {
+        "path": "/data/panc_CODEX/Islet-Explorer/tmp/ui-cards-validation-20261103/composition-r1/report.json",
+        "sha256": "ec0b5582f37e533ee925b81af7a4fc458c9190e13782e841bd9060aabfcff9dd",
+        "bytes": 4376
+      },
+      "resolution": "Fixed by fb0906c; final native physical mouse and keyboard toggles pass."
+    },
+    {
+      "name": "composition_palette_dynamic_mount",
+      "report": {
+        "path": "/data/panc_CODEX/Islet-Explorer/tmp/ui-cards-validation-20261103/composition-r2/report.json",
+        "sha256": "122806908ff41c986a57aae0793293710b155aefe2ecf801dacab09292211ec5",
+        "bytes": 15994
+      },
+      "resolution": "Fixed by 7f1503d; final native first mount and Spatial/Plot remounts preserve all palette values and actual bar colors."
+    },
+    {
+      "name": "composition_toolbar_spacing",
+      "report": {
+        "path": "/data/panc_CODEX/Islet-Explorer-ui-cards-20261103/tmp/ui-cards-validation-20261103/composition-native-ccda497/report.json",
+        "sha256": "1ff5d507c6ac0221c2fbffe3d87661b3f64f4e9af9b1d31e2f2345ba7b5ad8a9",
+        "bytes": 20794
+      },
+      "resolution": "Native ccda497 exposed an avoidable 40-pixel toolbar row; 3c81075 fixes the two flex widths. The original 190-pixel bound is unchanged in the passing successor check."
+    },
+    {
+      "name": "plot_title_label_field",
+      "report": {
+        "path": "/data/panc_CODEX/Islet-Explorer-ui-cards-20261103/tmp/ui-cards-validation-20261103/plot-titles-native-ccda497/report.json",
+        "sha256": "b6581e2d8ea99186d9c0eec9f15cd255ab357655543fa752cb904a090dc81c44",
+        "bytes": 1348
+      },
+      "resolution": "Harness used the wrong Selectize label field; corrected without application changes."
+    },
+    {
+      "name": "plot_title_reactive_timing",
+      "report": {
+        "path": "/data/panc_CODEX/Islet-Explorer-ui-cards-20261103/tmp/ui-cards-validation-20261103/plot-titles-native-ccda497-r2/report.json",
+        "sha256": "be6a42c5f7d714b808a5fa70c77e760b21f01e20a6a4bc284e5bdd6a32b705c8",
+        "bytes": 16222
+      },
+      "resolution": "Harness sampled stale output and a detached control. Successor waits for the requested measure/metric and actual rendered width; requirements were strengthened."
+    },
+    {
+      "name": "spatial_concurrent_readiness",
+      "report": {
+        "path": "/data/panc_CODEX/Islet-Explorer-ui-cards-20261103/tmp/ui-cards-validation-20261103/spatial-native-ccda497/report.json",
+        "sha256": "12de35ff8d9e12f4113c5b85c68b76f9246b66f4de5a8bfd7c900c2fc2a7d2cd",
+        "bytes": 8075
+      },
+      "resolution": "Concurrent run timed out waiting for a stable dense raster. Cause was not established. Final isolated run retained the exact source/dimension stability rule, passed every marker transition, and recorded pixel/geometry/marker-input histories without ping-pong."
+    },
+    {
+      "name": "spatial_accessible_label",
+      "report": {
+        "path": "/data/panc_CODEX/Islet-Explorer/tmp/unclassified-ui-combined-20261103/runtime-ccda49712c7df0e28634d843155c98977c961eae/local-browser.json",
+        "sha256": "a3a28fdfa6a78ed84ca67499ab62fa6a10352b19820e55da84bfe7dff23117e5",
+        "bytes": 7482
+      },
+      "resolution": "Predecessor standard suite passed 48/49; d6405d6 supplied the missing grouping-selector label. Final standard suite passes 49/49."
+    }
+  ],
+  "composition_spacing_probe": {
+    "path": "/data/panc_CODEX/Islet-Explorer-ui-cards-20261103/tmp/ui-cards-validation-20261103/composition-native-ccda497/geometry-probe.json",
+    "sha256": "8b4f8054011941c3e2503d8a094031fd820d8ec4db21cd70c3a81366ee62435c",
+    "bytes": 15703
+  },
+  "harness_commit": "c0ede7b1042d7176bd9b48585c6dcd21079c99f8",
+  "harnesses": [
+    {
+      "path": "/data/panc_CODEX/Islet-Explorer-ui-cards-20261103/deploy/browser/check-composition-controls.mjs",
+      "sha256": "f42dbcca098b7369bf40c6cafc467550b803b67af830bb3ea9c42bbc84d324e3",
+      "bytes": 25994
+    },
+    {
+      "path": "/data/panc_CODEX/Islet-Explorer-ui-cards-20261103/deploy/browser/check-paired-paga.mjs",
+      "sha256": "84f2595d7f57fe992c6912d9c034bd57614fdbc1bd3fc45ba2c9b7ee70ad373f",
+      "bytes": 17740
+    },
+    {
+      "path": "/data/panc_CODEX/Islet-Explorer-ui-cards-20261103/deploy/browser/check-spatial-card-layout.mjs",
+      "sha256": "4824cafb37953219002fbc07af14c8aecbe22ad4a46d85d2ddfd6e97c6864110",
+      "bytes": 21986
+    },
+    {
+      "path": "/data/panc_CODEX/Islet-Explorer-ui-cards-20261103/deploy/browser/check-plot-titles.mjs",
+      "sha256": "64fc0d73c2b73c02a1e692e69a031a537e47413af0e7f22d9fef96ae3245f054",
+      "bytes": 13113
+    }
+  ],
+  "limits": [
+    "Prior source-overlay diagnostics are historical and are not native acceptance.",
+    "PAGA two ancillary segmentation screenshots have sticky-header occlusion and are excluded from visual-pass claims; actual interaction checks pass separately.",
+    "Dense Spatial browser element captures have sticky-control occlusion from automatic scrolling; the visual receipt distinguishes those captures from the directly inspected complete raw maps and Distance controls.",
+    "Spatial download control placement/href is checked; downloaded file contents are not part of that focused run.",
+    "Automated accessibility is not a full assistive-technology audit. External access and reboot recovery are not tested here.",
+    "Existing accepted scientific data and prior provenance receipts retain their original producer/source identities."
+  ],
+  "receipt_generator": {
+    "path": "/data/panc_CODEX/Islet-Explorer-ui-cards-20261103/tmp/ui-cards-validation-20261103/write-final-receipt.py",
+    "sha256": "0fd1fd095f650456c2df7805abceb70d10ccea741440e1485dd70ad77f847143",
+    "bytes": 8863
+  }
+}
