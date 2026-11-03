@@ -1,0 +1,491 @@
+{
+  "schema": "islet.dev_duckdb_deployment/1",
+  "status": "live_verified",
+  "recorded_at_utc": "2026-11-03T12:44:28.172309+00:00",
+  "verification_completed_at_utc": "2026-11-03T12:42:17Z",
+  "url": "https://devislet-explorer.rc.ufl.edu/islet-explorer/",
+  "host": "pubmaigan1.ufhpc",
+  "source": {
+    "commit": "378843e06c0cd66d8dfff5e3b60664f8a45569ee",
+    "branch": "security/dev-duckdb-current-20261103",
+    "worktree": "/data/panc_CODEX/Islet-Explorer-duckdb-dev-20261103",
+    "scientific_producer": "67ee6c9d0b28f467eee589fea24829a6546e3d74"
+  },
+  "deployment": {
+    "recorded_at": "2026-11-03T12:41:40.987510+00:00",
+    "status": "dev_active_verified",
+    "release": "pubapps-2026-11-dev-duckdb-v1",
+    "image_id": "sha256:e704ac2a7f01c0fdec5905cc5b1dff43041d45fb0ba7ebfe3c821a13da4a9e9e",
+    "git_commit": "378843e06c0cd66d8dfff5e3b60664f8a45569ee",
+    "security_result": "pass-no-high-or-critical",
+    "duckdb_deferral_used": false,
+    "container_id": "cbf2b32e36645fd34bf5761e8e43dabeb77c7d8446e45bfc3312236fbca3143f",
+    "health": "healthy",
+    "memory_limit_bytes": 4294967296,
+    "services": {
+      "islet-explorer": {
+        "MainPID": "622172",
+        "ActiveState": "active",
+        "UnitFileState": "generated"
+      },
+      "islet-explorer-dev": {
+        "MainPID": "649812",
+        "ActiveState": "active",
+        "UnitFileState": "generated"
+      }
+    },
+    "static_image_aliases": {
+      "local_images": "/pubapps/maigan/islet-explorer/releases/pubapps-2026-11-dev-duckdb-v1/data/images",
+      "images": "/pubapps/maigan/islet-explorer/releases/pubapps-2026-11-dev-duckdb-v1/data/images",
+      "img_data": "/pubapps/maigan/islet-explorer/releases/pubapps-2026-11-dev-duckdb-v1/data/images"
+    },
+    "read_only_scientific_mounts": [
+      {
+        "source": "/local/maigan/releases/pubapps-2026-11-dev-duckdb-v1/data/spatial",
+        "destination": "/srv/islet-explorer/data/spatial",
+        "read_write": false
+      },
+      {
+        "source": "/pubapps/maigan/islet-explorer/releases/pubapps-2026-11-dev-duckdb-v1/data/images",
+        "destination": "/srv/islet-explorer/app/shiny_app/www/local_images",
+        "read_write": false
+      },
+      {
+        "source": "/pubapps/maigan/islet-explorer/releases/pubapps-2026-11-dev-duckdb-v1/data",
+        "destination": "/srv/islet-explorer/data",
+        "read_write": false
+      },
+      {
+        "source": "/local/maigan/releases/pubapps-2026-11-dev-duckdb-v1/data/geometry",
+        "destination": "/srv/islet-explorer/data/geometry",
+        "read_write": false
+      },
+      {
+        "source": "/local/maigan/releases/pubapps-2026-11-dev-duckdb-v1/data/cells",
+        "destination": "/srv/islet-explorer/data/cells",
+        "read_write": false
+      }
+    ],
+    "release_manifest_sha256": "c0ce0656aea0f3e164019381f0a66480c02e054290d97b6584ff0980552b0bb6",
+    "data_manifest_sha256": "e4b2dbd3bf709513bc6a1d5f8cfdb76ac856efacec25940e13c9975f03936b41",
+    "deployment_state": {
+      "RELEASE": "pubapps-2026-11-dev-duckdb-v1",
+      "IMAGE_REF": "sha256:e704ac2a7f01c0fdec5905cc5b1dff43041d45fb0ba7ebfe3c821a13da4a9e9e",
+      "INSTANCE": "islet-explorer-dev",
+      "PUBLISH_ADDRESS": "10.13.41.21",
+      "PORT": "3839",
+      "MEMORY": "4g",
+      "DOCROOT": "/pubapps/maigan/islet-explorer/dev/html",
+      "LOCAL_DATA": "/local/maigan/releases",
+      "ACTIVATED_AT": "2026-11-03T12:41:40Z"
+    }
+  },
+  "archive": {
+    "path": "tmp/duckdb-dev-live-20261103/islet-explorer-pubapps-2026-11-dev-duckdb-v1.oci.tar",
+    "sha256": "392c9b69d33cd124142c90713036a7898cde2faff688893d04e681d071824988",
+    "bytes": 2188275200,
+    "verification": "Local export and guarded host load checked archive SHA-256 and imported immutable image/source identity."
+  },
+  "security": {
+    "result": "pass-no-high-or-critical",
+    "package_high": 0,
+    "package_critical": 0,
+    "duckdb_deferral_used": false,
+    "cve": "CVE-2026-111497",
+    "duckdb_version": "1.5.2",
+    "actual_running_decoder_result": 0,
+    "actual_running_decoder_error_code": -17,
+    "installed_library_sha256": "554342ee815993564529021db383f81038538d1b992f3a99e074894c7b9ce4f6",
+    "installed_source_receipt_sha256": "dede86ef818b7ac112d2ccf41a3a5fa0cdd88eef3a4dfa90dd55c71b70fa7e8a",
+    "port_commit": "2b942af6319783a5cc3c21d76a8e560e191978b2",
+    "port_pr": "https://github.com/duckdb/duckdb/pull/27791",
+    "patch_sha256": "d00033af815fcb214daa9630d9da11b39a191dfab17b0f8cff367157af5806ca",
+    "method": "Reviewed two-file Brotli source backport into the pinned CRAN DuckDB 1.5.2 nested archive; fresh compilation; actual installed decoder regression and source-provenance verification.",
+    "upstream_status_at_review": "PR 27791 open and unmerged on 2026-11-03; this is a locally compiled backport, not an upstream released DuckDB fix."
+  },
+  "data_acceptance": {
+    "status": "passed",
+    "completion_receipt": {
+      "path": "docs/evidence/dev_release_data_20261103.json",
+      "sha256": "6c684d789693c74be6f1f13238dad78f4299cc62a8983e05728c448af7a878d1"
+    },
+    "method": "Fresh full-copy build; actual copied-image digest matches frozen seal; fresh core byte/schema/row-count verification with unchanged file identities; exact canonical sources and nongeometry artifact metadata/hashes; complete twenty-file GPKG schema/table/row equality except valid UTC build timestamps; fresh inventory. Existing accepted scientific parity is referenced with its original producer and is not represented as a new execution.",
+    "dev_manifest_sha256": "e4b2dbd3bf709513bc6a1d5f8cfdb76ac856efacec25940e13c9975f03936b41",
+    "scientific_equivalence": {
+      "path": "tmp/duckdb-dev-release-20261103/evidence/scientific-equivalence-378843e.json",
+      "sha256": "a1ab4c537475141d77087db2642953b0becb97b00c0defe2ba1a6559208c5886"
+    },
+    "inventory": {
+      "path": "tmp/duckdb-dev-release-20261103/evidence/release-inventory-378843e.json",
+      "sha256": "464528108af8ce875aae4f842536b2c20f3c49f06594326d59f86f77271851de"
+    },
+    "accepted_parity_execution": "Original accepted production parity retains original producer/verifier identities; no new full parity execution is claimed.",
+    "host_verification": "Full release byte verification before activation and verified local geometry/cells/spatial copies."
+  },
+  "runtime_census": {
+    "totals": {
+      "cells": 3199606,
+      "donors": 20,
+      "Ki67_positive": 78680
+    },
+    "all_phenotype_counts_match_accepted": true,
+    "phenotype_counts": {
+      "Alpha cell": 49302,
+      "B cell": 1858,
+      "Beta cell": 41429,
+      "CD4 Tcell": 7131,
+      "CD68+CD163+Macrophage_LGALS3+CD4+": 12447,
+      "CD68+CD163+Macrophage_LGALS3+CD4-": 9060,
+      "CD68+CD163+Macrophage_LGALS3-CD4+": 32891,
+      "CD68+CD163+Macrophage_LGALS3-CD4-": 34551,
+      "CD68+CD163-Macrophage_LGALS3+CD4+": 2031,
+      "CD68+CD163-Macrophage_LGALS3+CD4-": 6043,
+      "CD68+CD163-Macrophage_LGALS3-CD4+": 3539,
+      "CD68+CD163-Macrophage_LGALS3-CD4-": 22163,
+      "CD68-CD163+Macrophage_LGALS3+CD4+": 4060,
+      "CD68-CD163+Macrophage_LGALS3+CD4-": 3769,
+      "CD68-CD163+Macrophage_LGALS3-CD4+": 26860,
+      "CD68-CD163+Macrophage_LGALS3-CD4-": 32682,
+      "CD8a Tcell": 26336,
+      "CHGA+ hormone-negative": 1940,
+      "Conflict B/Myeloid": 85,
+      "Conflict B/T": 54,
+      "Conflict Endocrine/Exocrine": 78,
+      "Conflict Epithelial/Hematopoietic": 2284,
+      "Conflict Epithelial/Mesenchymal": 649,
+      "Conflict Exocrine/Endocrine": 356,
+      "Conflict Hematopoietic/Epithelial": 822,
+      "Conflict Hematopoietic/Mesenchymal": 830,
+      "Conflict Mesenchymal/Epithelial": 501,
+      "Conflict Mesenchymal/Hematopoietic": 1059,
+      "Conflict Myeloid/B": 101,
+      "Conflict Myeloid/T": 829,
+      "Conflict T/B": 109,
+      "Conflict T/Myeloid": 1456,
+      "Delta cell": 18050,
+      "Doublet suspected": 1319,
+      "Endothelium Blood Vessel": 47382,
+      "Endothelium Lymphatic": 2708,
+      "Exocrine": 1903195,
+      "Hematopoietic CD45+": 50698,
+      "Hematopoietic CD45-": 44684,
+      "Neural": 17372,
+      "Stromal": 59647,
+      "T cell": 3397,
+      "Tissue": 716451,
+      "Unclassified": 7398
+    },
+    "unclassified_percent": 0.2312159684661174
+  },
+  "compatibility": {
+    "current_release_brotli_roundtrips": [
+      {
+        "artifact": "summary/islets.parquet",
+        "rows": 4853,
+        "columns": 286,
+        "input_sha256": "cc1737e9d0801dfea08935885be8ad314415522ee356878205d58cddbf34008b",
+        "result": "pass",
+        "evidence": {
+          "path": "tmp/duckdb-dev-live-20261103/parquet-current-islets.json",
+          "sha256": "cb8048df6a6904ec29d2e872a155234c5974d5bf9a8e8a3d438ff54a07e28441"
+        }
+      },
+      {
+        "artifact": "spatial/cell_distance.parquet",
+        "rows": 3199606,
+        "columns": 37,
+        "input_sha256": "c64c6af5f6fe0e2ac7ef4aeba84beff6bfc7171e64bb00fa18841626a7114feb",
+        "result": "pass",
+        "evidence": {
+          "path": "tmp/duckdb-dev-live-20261103/parquet-current-distance.json",
+          "sha256": "e74b0bc7407dbc13ea93294317b026621d016669756ebdb1de10ece87bd1e962"
+        }
+      }
+    ],
+    "installed_shiny_smoke": "passed",
+    "dependency_smoke": "pass",
+    "app_r_source_files_parsed": 35,
+    "palette_retention_test": "passed"
+  },
+  "public_verification": {
+    "dev_access": {
+      "checks": 15,
+      "passed": 15,
+      "failed": 0
+    },
+    "dev_browser": {
+      "checks": 49,
+      "passed": 49,
+      "failed": 0,
+      "browser_errors": {
+        "page": 0,
+        "console": 0
+      },
+      "application_http_errors": 0
+    },
+    "production_access": {
+      "checks": 15,
+      "passed": 15,
+      "failed": 0
+    },
+    "scope": "Workstation through public HTTPS URLs, including authentication, image byte ranges/sidecars, WebSocket and browser interactions.",
+    "limitations": [
+      "Independent off-campus access and host reboot were not tested.",
+      "Automated browser checks are not a full accessibility audit; reported color-contrast needs-review findings remain.",
+      "No institutional approval is claimed."
+    ]
+  },
+  "production_preservation": {
+    "unchanged": true,
+    "comparison_fields": [
+      "production_container_id",
+      "production_started_at",
+      "production_image_id",
+      "production_health",
+      "production_memory_cap_bytes",
+      "production_quadlet_sha256",
+      "production_active_state_sha256",
+      "production_outer_manifest_sha256",
+      "production_data_manifest_sha256",
+      "production_aliases",
+      "production_read_only_scientific_mounts",
+      "services.islet-explorer"
+    ],
+    "before_and_after": {
+      "production_container_id": "e2f4fbe6fc5bc5d2a593ac05df87b07f4f112adc5b24f64dc83e48e05694eee8",
+      "production_started_at": "2026-11-02T21:40:39.037182445-05:00",
+      "production_image_id": "sha256:89b3f84070b1edb89124347572ed43f278b5a8478e243053957037ccb1ceff8e",
+      "production_health": "healthy",
+      "production_memory_cap_bytes": 9663676416,
+      "production_quadlet_sha256": "076f25d8f2c5078fa8f7200cc75c50e122e07d3dbea20900213b5b6219a4f82a",
+      "production_active_state_sha256": "6102922368de7670bf2458e8daf2359cfd875ea87be0bf26d3f2e21aba3202b7",
+      "production_outer_manifest_sha256": "67511303fc9759fcd1821556c3f2b732b2c61f31eda1d335b7ec86fdcf73442b",
+      "production_data_manifest_sha256": "8ddeecf3639921d2e53538e2d86b6bb4278cc622d29a928a3136fdece3d9f6b1",
+      "production_aliases": {
+        "local_images": "/pubapps/maigan/islet-explorer/releases/pubapps-2026-11-components-v1/data/images",
+        "images": "/pubapps/maigan/islet-explorer/releases/pubapps-2026-11-components-v1/data/images",
+        "img_data": "/pubapps/maigan/islet-explorer/releases/pubapps-2026-11-components-v1/data/images"
+      },
+      "production_read_only_scientific_mounts": [
+        {
+          "source": "/pubapps/maigan/islet-explorer/releases/pubapps-2026-11-components-v1/data",
+          "destination": "/srv/islet-explorer/data",
+          "read_write": false
+        },
+        {
+          "source": "/local/maigan/releases/pubapps-2026-11-components-v1/data/geometry",
+          "destination": "/srv/islet-explorer/data/geometry",
+          "read_write": false
+        },
+        {
+          "source": "/local/maigan/releases/pubapps-2026-11-components-v1/data/cells",
+          "destination": "/srv/islet-explorer/data/cells",
+          "read_write": false
+        },
+        {
+          "source": "/local/maigan/releases/pubapps-2026-11-components-v1/data/spatial",
+          "destination": "/srv/islet-explorer/data/spatial",
+          "read_write": false
+        },
+        {
+          "source": "/pubapps/maigan/islet-explorer/releases/pubapps-2026-11-components-v1/data/images",
+          "destination": "/srv/islet-explorer/app/shiny_app/www/local_images",
+          "read_write": false
+        }
+      ]
+    },
+    "service": {
+      "MainPID": "622172",
+      "ActiveState": "active",
+      "UnitFileState": "generated"
+    },
+    "historical_receipt_unchanged": {
+      "path": "docs/evidence/pubapps_live_20261102.json",
+      "sha256": "1f635a08d79f0ef1fcdff698bcce5671ce5ed7b049c42a5d6c59441560c5bf54"
+    },
+    "duckdb_status": "Production remains on its separate pass-with-duckdb-remediation-window image; its DuckDB patch is still due 2026-11-10 UTC."
+  },
+  "evidence": {
+    "deployment-progress.log": {
+      "path": "tmp/duckdb-dev-live-20261103/deployment-progress.log",
+      "sha256": "4eae13abef0c24714322304290a3b15d7794da1f3844554d32ae9c30ca660d05"
+    },
+    "host-release-stage.log": {
+      "path": "tmp/duckdb-dev-live-20261103/host-release-stage.log",
+      "sha256": "da1e4695b0c353dd09d3051d3b06e549c912fd3b09a3d168bdd34b4e76beabb9"
+    },
+    "host-activation.log": {
+      "path": "tmp/duckdb-dev-live-20261103/host-activation.log",
+      "sha256": "2a7a39b62ae7f60ab726028f08ff3f975a12b55d2d90d56111b1f493dbd51f37"
+    },
+    "live-verification.log": {
+      "path": "tmp/duckdb-dev-live-20261103/live-verification.log",
+      "sha256": "746f4c8c251316dcfa944aff506ecb034652a08905120e0d94fa5d67076fadbf"
+    },
+    "live-dev-host.json": {
+      "path": "tmp/duckdb-dev-live-20261103/live-dev-host.json",
+      "sha256": "bda69b7c80e82755f15476a64ba94345464bb0f204ad677220592eeb6271a86e"
+    },
+    "running-decoder.json": {
+      "path": "tmp/duckdb-dev-live-20261103/running-decoder.json",
+      "sha256": "1d8ecac85583bd1fa2d06a2d338016182ae5616adf4adb226f2fd7a667d20c25"
+    },
+    "runtime-census.json": {
+      "path": "tmp/duckdb-dev-live-20261103/runtime-census.json",
+      "sha256": "0e8bf95d277105be8e72fd2f891ada69a20bb86b9c5099be3b4964f4e9db9b24"
+    },
+    "public-access.json": {
+      "path": "tmp/duckdb-dev-live-20261103/public-access.json",
+      "sha256": "47ed1da6d6a67db1881af360b9b5925f62d5b92ceb28d8099fcf67f9fe849289"
+    },
+    "public-browser.json": {
+      "path": "tmp/duckdb-dev-live-20261103/public-browser.json",
+      "sha256": "4ada08d233bf7c18038cb800c7f8b7980f3b982e66b6b96a243701a5ae1aa464"
+    },
+    "production-public-access.json": {
+      "path": "tmp/duckdb-dev-live-20261103/production-public-access.json",
+      "sha256": "47ed1da6d6a67db1881af360b9b5925f62d5b92ceb28d8099fcf67f9fe849289"
+    },
+    "production-before-activation.json": {
+      "path": "tmp/duckdb-dev-live-20261103/production-before-activation.json",
+      "sha256": "a87ba0667008c84f41530f9556412220263ce5140ea0046067c8102d5868e364"
+    },
+    "production-after-activation.json": {
+      "path": "tmp/duckdb-dev-live-20261103/production-after-activation.json",
+      "sha256": "d02d0ca6112a4d343a4d9742c78efccc9fbdae2b1cd5b7db663667277b6e875a"
+    },
+    "production-final.json": {
+      "path": "tmp/duckdb-dev-live-20261103/production-final.json",
+      "sha256": "d7739e606cb6a70dd0b8711aa923145b1ab78e3af6a0ae9b46247ac2ce935b8c"
+    },
+    "host-preparation/production-before-preparation.json": {
+      "path": "tmp/duckdb-dev-live-20261103/host-preparation/production-before-preparation.json",
+      "sha256": "ae742999a7ae95db0933cecbf760b475e50f1f6f61748aa47428e4975769c266"
+    },
+    "host-preparation/production-after-preparation.json": {
+      "path": "tmp/duckdb-dev-live-20261103/host-preparation/production-after-preparation.json",
+      "sha256": "f1b7ce9a1af56aad350bcfe4af3ff90d0463787bfa84dd9e54ac5c09c18b5775"
+    },
+    "host-preparation/image-relocation.json": {
+      "path": "tmp/duckdb-dev-live-20261103/host-preparation/image-relocation.json",
+      "sha256": "be4a4d1bfab6aa501a175f14806f8ede292602bc943bdb19134325f8f8376024"
+    },
+    "host-preparation/cache-eviction.log": {
+      "path": "tmp/duckdb-dev-live-20261103/host-preparation/cache-eviction.log",
+      "sha256": "9e2ee66d5f1138568693389eaa757983acc9f264fc6ca90cc4c181e754593628"
+    },
+    "installed-source-receipt.json": {
+      "path": "tmp/duckdb-dev-live-20261103/installed-source-receipt.json",
+      "sha256": "dede86ef818b7ac112d2ccf41a3a5fa0cdd88eef3a4dfa90dd55c71b70fa7e8a"
+    },
+    "dependency-smoke.json": {
+      "path": "tmp/duckdb-dev-live-20261103/dependency-smoke.json",
+      "sha256": "6d9fcb7c7f96aadf0bdb3592ab845913478d662263b8e77472b853dec7aaf404"
+    },
+    "installed-shiny-smoke.json": {
+      "path": "tmp/duckdb-dev-live-20261103/installed-shiny-smoke.json",
+      "sha256": "592cbce3f2d219e8b4484d24c2c86c81469410260817ee5c24c7ba51123c7b2c"
+    },
+    "image-palette-test.log": {
+      "path": "tmp/duckdb-dev-live-20261103/image-palette-test.log",
+      "sha256": "dd426f1713945105d6f1461172ff5dea8dbf5e70dd17972fabfb389c3d213f6c"
+    },
+    "image-evidence-tests-shell.log": {
+      "path": "tmp/duckdb-dev-live-20261103/image-evidence-tests-shell.log",
+      "sha256": "4e4f26d0f7a3a9eca85060a652a61aa279b1b645e72cb105de9ddc46095ab7f9"
+    },
+    "validation-status.json": {
+      "path": "tmp/duckdb-dev-live-20261103/validation-status.json",
+      "sha256": "a94358bf3f4224394806144c8cae9ef96faf2bce37305b01b3e55f93705a1b06"
+    },
+    "build-inputs.sha256": {
+      "path": "tmp/duckdb-dev-live-20261103/build-inputs.sha256",
+      "sha256": "0fe67c9c48c110de4e9f5d75a01c4235fe6a8457801da9d8a05e8e5d14f0bdae"
+    },
+    "deployment-helpers.sha256": {
+      "path": "tmp/duckdb-dev-live-20261103/deployment-helpers.sha256",
+      "sha256": "343c70507b07f2ae7a881b7c5148f5490dea2dae01b0ea1f0b36a5e26ff93502"
+    },
+    "pipeline.log": {
+      "path": "tmp/duckdb-dev-live-20261103/pipeline.log",
+      "sha256": "5198f699bb614411959f32b876ea227419d25b07e8ee384346c2712ea8aa373c"
+    },
+    "host-image-stage.log": {
+      "path": "tmp/duckdb-dev-live-20261103/host-image-stage.log",
+      "sha256": "cb797b99694eed0bf23c707adbd7de0e57ed5dc227e3c57f4b779985a20d7cab"
+    },
+    "host-tooling-stage.log": {
+      "path": "tmp/duckdb-dev-live-20261103/host-tooling-stage.log",
+      "sha256": "c5cb05181c65fdf779616a76efe7ecdce073f2563bcc2598b369eaefaada59b6"
+    },
+    "data-acceptance-gate.log": {
+      "path": "tmp/duckdb-dev-live-20261103/data-acceptance-gate.log",
+      "sha256": "59c2757ff89beccc6429272800108558de262eeb7b9644dce632a46dc2c0ce3c"
+    },
+    "bind-release.log": {
+      "path": "tmp/duckdb-dev-live-20261103/bind-release.log",
+      "sha256": "1a3b89a48e87289a4b979159eea183013252c545c004e4212048b382e0422535"
+    },
+    "write-final-receipt.py": {
+      "path": "tmp/duckdb-dev-live-20261103/write-final-receipt.py",
+      "sha256": "f6df2da22feac74b3a009ab633382c2decd666fd62a18406590c6fa745455543"
+    },
+    "islet-explorer-pubapps-2026-11-dev-duckdb-v1.oci.tar.metadata": {
+      "path": "tmp/duckdb-dev-live-20261103/islet-explorer-pubapps-2026-11-dev-duckdb-v1.oci.tar.metadata",
+      "sha256": "a921e008510ecc6ed486cea7fb69f92395f8a2c1270e0cf1092b43c348e18ae2"
+    },
+    "islet-explorer-pubapps-2026-11-dev-duckdb-v1.oci.tar.sha256": {
+      "path": "tmp/duckdb-dev-live-20261103/islet-explorer-pubapps-2026-11-dev-duckdb-v1.oci.tar.sha256",
+      "sha256": "5406b42a903e9e422f3d15f95bc523634af05a206ca186418938bbe15836a340"
+    },
+    "scan/published-image.txt": {
+      "path": "tmp/duckdb-dev-live-20261103/scan/published-image.txt",
+      "sha256": "58468b7c91e2c1705d77032c6f615550d94d18b8c5438039e05425f234c09ac6"
+    },
+    "scan/sha256_e704ac2a7f01c0fdec5905cc5b1dff43041d45fb0ba7ebfe3c821a13da4a9e9e.R-packages.tsv": {
+      "path": "tmp/duckdb-dev-live-20261103/scan/sha256_e704ac2a7f01c0fdec5905cc5b1dff43041d45fb0ba7ebfe3c821a13da4a9e9e.R-packages.tsv",
+      "sha256": "c689784588aff4c7bd275d4d6ae98db6e07ee59078a788016d328cebf46911fc"
+    },
+    "scan/sha256_e704ac2a7f01c0fdec5905cc5b1dff43041d45fb0ba7ebfe3c821a13da4a9e9e.brotli.json": {
+      "path": "tmp/duckdb-dev-live-20261103/scan/sha256_e704ac2a7f01c0fdec5905cc5b1dff43041d45fb0ba7ebfe3c821a13da4a9e9e.brotli.json",
+      "sha256": "f5afb7740f04e396a67a6bd78616bd7bb381038c8ebd569caa75e9b7d9939b15"
+    },
+    "scan/sha256_e704ac2a7f01c0fdec5905cc5b1dff43041d45fb0ba7ebfe3c821a13da4a9e9e.cyclonedx.json": {
+      "path": "tmp/duckdb-dev-live-20261103/scan/sha256_e704ac2a7f01c0fdec5905cc5b1dff43041d45fb0ba7ebfe3c821a13da4a9e9e.cyclonedx.json",
+      "sha256": "316f2759af090b0c73a8c0ce4dcccb8f41a5497eccf7444f50276e834ef5cbcf"
+    },
+    "scan/sha256_e704ac2a7f01c0fdec5905cc5b1dff43041d45fb0ba7ebfe3c821a13da4a9e9e.grype-db.json": {
+      "path": "tmp/duckdb-dev-live-20261103/scan/sha256_e704ac2a7f01c0fdec5905cc5b1dff43041d45fb0ba7ebfe3c821a13da4a9e9e.grype-db.json",
+      "sha256": "df651a1637ced0f43ed6afc120b72e581bbc6c29cd6589acb05258c2ffad0d69"
+    },
+    "scan/sha256_e704ac2a7f01c0fdec5905cc5b1dff43041d45fb0ba7ebfe3c821a13da4a9e9e.grype.json": {
+      "path": "tmp/duckdb-dev-live-20261103/scan/sha256_e704ac2a7f01c0fdec5905cc5b1dff43041d45fb0ba7ebfe3c821a13da4a9e9e.grype.json",
+      "sha256": "b211905b54301f1ed38262248096f2358187f86dd9c5716b54da20f17f09f991"
+    },
+    "scan/sha256_e704ac2a7f01c0fdec5905cc5b1dff43041d45fb0ba7ebfe3c821a13da4a9e9e.python-packages.txt": {
+      "path": "tmp/duckdb-dev-live-20261103/scan/sha256_e704ac2a7f01c0fdec5905cc5b1dff43041d45fb0ba7ebfe3c821a13da4a9e9e.python-packages.txt",
+      "sha256": "86c73a12682130e701daafb087b7a8e906cff81467dd8163ee40404e165344f5"
+    },
+    "scan/sha256_e704ac2a7f01c0fdec5905cc5b1dff43041d45fb0ba7ebfe3c821a13da4a9e9e.sbom-corrections.json": {
+      "path": "tmp/duckdb-dev-live-20261103/scan/sha256_e704ac2a7f01c0fdec5905cc5b1dff43041d45fb0ba7ebfe3c821a13da4a9e9e.sbom-corrections.json",
+      "sha256": "4dd9c6e026f54982ef61defdb33dd159bfe444699d3a6902bbf6e010d504a269"
+    },
+    "scan/sha256_e704ac2a7f01c0fdec5905cc5b1dff43041d45fb0ba7ebfe3c821a13da4a9e9e.scan.txt": {
+      "path": "tmp/duckdb-dev-live-20261103/scan/sha256_e704ac2a7f01c0fdec5905cc5b1dff43041d45fb0ba7ebfe3c821a13da4a9e9e.scan.txt",
+      "sha256": "7d9458e05afc935ae67817e0926f51ce946db5d174e959b1eca5f52d3cd326d3"
+    },
+    "scan/sha256_e704ac2a7f01c0fdec5905cc5b1dff43041d45fb0ba7ebfe3c821a13da4a9e9e.syft.cyclonedx.json": {
+      "path": "tmp/duckdb-dev-live-20261103/scan/sha256_e704ac2a7f01c0fdec5905cc5b1dff43041d45fb0ba7ebfe3c821a13da4a9e9e.syft.cyclonedx.json",
+      "sha256": "efefd2cc2fd53b2df6eb93bf79f5bf88234c9b6e67c615f94490013053608e9c"
+    },
+    "release.env": {
+      "path": "tmp/duckdb-dev-release-20261103/artifacts/release-378843e/release.env",
+      "sha256": "cda5fd26b6cb3b2b9da751ec1999b075e8951357632c8560e061533041dae680"
+    },
+    "MANIFEST.sha256": {
+      "path": "tmp/duckdb-dev-release-20261103/artifacts/release-378843e/MANIFEST.sha256",
+      "sha256": "c0ce0656aea0f3e164019381f0a66480c02e054290d97b6584ff0980552b0bb6"
+    }
+  },
+  "ticket_reply_sent": false
+}

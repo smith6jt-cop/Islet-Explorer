@@ -2,12 +2,32 @@
 
 **Latest owner direction, 2026-11-02:** the current build is intended for the live production PubApp once its actual data/release/runtime checks pass. The known DuckDB finding is nonblocking through the notice's **2026-11-10 UTC** patch deadline; develop/test our DuckDB fix separately for the dev PubApp. See [the dated release decision](duckdb_remediation_window_20261102.md). This supersedes the earlier strict DuckDB hold and no-activation directions below. Historical failed reports remain unchanged; data checks and other security findings still apply.
 
+## Dev DuckDB fix live — 2026-11-03 12:42 UTC
+
+Following the owner's instruction to continue the dev fix, the
+[dev PubApp](https://devislet-explorer.rc.ufl.edu/islet-explorer/) now runs
+`pubapps-2026-11-dev-duckdb-v1`, clean source `378843e`, immutable image
+`sha256:e704ac2a7f01c0fdec5905cc5b1dff43041d45fb0ba7ebfe3c821a13da4a9e9e`.
+The reviewed source backport is compiled into DuckDB 1.5.2. The actual running
+decoder returns `0 / -17`, its source provenance passes, and its library hash
+matches the scanned image. The strict security gate passes with **0 High /
+0 Critical and no DuckDB deferral**. Dev is healthy with a 4 GiB limit.
+
+Fresh data acceptance, full host release verification, the complete running cell
+census, 15 public-access checks and 49 browser checks passed. Production's
+container, start time, image, service, state, manifests, mounts and aliases stayed
+unchanged; its 15 public-access checks passed again. See the
+[deployment record](dev_duckdb_deployment_20261103.md) and
+[hash-bound receipt](evidence/dev_duckdb_deployment_20261103.json).
+Production's separate DuckDB finding remains due **2026-11-10 UTC**. Earlier
+stopped/masked-dev observations below describe historical states.
+
 ## Production live — 2026-11-03 UTC
 
 [The production PubApp](https://islet-explorer.rc.ufl.edu/islet-explorer/) is
 running release `pubapps-2026-11-components-v1`. Production was activated under
-the owner's explicit direction after full release/data checks passed; dev remains
-stopped and persistently masked. The [deployment receipt](evidence/pubapps_live_20261102.json)
+the owner's explicit direction after full release/data checks passed; dev was
+stopped and persistently masked at that time. The [deployment receipt](evidence/pubapps_live_20261102.json)
 records the actual image, data, service state and public acceptance.
 
 The deployed immutable image is
@@ -52,8 +72,8 @@ were not tested, and this record does not claim UFIT approval.
 `pass-with-duckdb-remediation-window`, with the raw failing decoder result
 retained and a **2026-11-10 UTC** patch deadline. This is the owner's dated
 deployment direction, not a patched-decoder claim or institutional exception.
-The separate dev fix is validated locally, as recorded below; dev has not been
-restarted. No vulnerable old image was started during activation or recovery.
+The separate dev fix subsequently went live at 12:41:40 UTC, as recorded above.
+No vulnerable old image was started during activation or recovery.
 
 ## Earlier completed builds
 
@@ -239,7 +259,7 @@ to reject accidental reuse. The committed historical source remains unchanged.
 These are deferred technical evidence, not the active implementation or a
 completed security release.
 
-## Active released-fixes-only scope and gate
+## Historical released-fixes-only scope and gate
 
 `deploy/requirements-python.lock` now requires a source build of Pillow 13.0.0;
 the Containerfile explicitly installs FreeType and zlib development headers and
@@ -315,16 +335,22 @@ contract test log is `tmp/security-build-current-20261102/test-image-evidence.lo
 Actual old-image probe/scan and Pillow evidence remain under
 `tmp/security-remediation-20261102/`.
 
-Both services remain stopped and persistently masked. Successful source checks
-or mock tests do not permit restarting an old image. An offline artifact marked
+At that earlier stage, both services remained stopped and persistently masked.
+Successful source checks or mock tests do not permit restarting an old image. An offline artifact marked
 `remediation-incomplete` is not deployable. A future deployable replacement still
 needs its actual binary, valid-data and security checks, followed by separate
 release/data acceptance and activation.
 
 ## Ticket reply (draft only; not sent)
 
-> We have stopped `maigan/islet-explorer-dev` on `pubmaigan1.ufhpc` and
-> persistently masked its service against automatic restart.
+> `maigan/islet-explorer-dev` on `pubmaigan1.ufhpc` has been rebuilt with our
+> reviewed DuckDB/Brotli source backport and activated as
+> `pubapps-2026-11-dev-duckdb-v1`, source `378843e`, immutable image
+> `sha256:e704ac2a7f01c0fdec5905cc5b1dff43041d45fb0ba7ebfe3c821a13da4a9e9e`.
+> Its actual running decoder passes the CVE-2026-111497 regression check;
+> source provenance and strict security checks pass without a DuckDB deferral.
+> The package scan reports 0 High / 0 Critical. Full data/host verification,
+> runtime cell census, 15 public-access checks and 49 browser checks passed.
 >
 > Production `maigan/islet-explorer` has been rebuilt and activated as release
 > `pubapps-2026-11-components-v1`, source `e5689f6`, immutable image
@@ -334,8 +360,9 @@ release/data acceptance and activation.
 > identified High/Critical package findings are no longer detected. Full data,
 > release, running-container and public-access checks passed.
 >
-> CVE-2026-111497 in DuckDB's bundled Brotli decoder remains open and is tracked
-> for the notice's November 10 patch deadline. The project owner directed this
-> production deployment within that remediation window. A separate dev fix has
-> passed local decoder and data compatibility checks but has not been deployed.
-> We are not claiming complete DuckDB remediation or an institutional exception.
+> CVE-2026-111497 in production's DuckDB bundled Brotli decoder remains open and
+> is tracked for the notice's November 10 patch deadline. The project owner directed this
+> production deployment within that remediation window. The dev deployment did
+> not change production; its health, identity and public access were verified
+> again. We are not claiming production DuckDB remediation or an institutional
+> exception.

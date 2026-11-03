@@ -1,0 +1,100 @@
+{
+  "schema": "uniform.dev_release_data_completion/1",
+  "status": "passed",
+  "completed_utc": "2026-11-03T12:31:34Z",
+  "recorded_utc": "2026-11-03T12:33:30.758598+00:00",
+  "scope": "Local data build and scientific acceptance only; patched-image, host and public-runtime acceptance are separate.",
+  "method": "Fresh full-copy build; actual copied-image digest matches frozen seal; fresh core byte/schema/row-count verification with unchanged file identities; exact canonical sources and nongeometry artifact metadata/hashes; complete twenty-file GPKG schema/table/row equality except valid UTC build timestamps; fresh inventory. Existing accepted scientific parity is referenced with its original producer and is not represented as a new execution.",
+  "commits": {
+    "scientific_producer": "67ee6c9d0b28f467eee589fea24829a6546e3d74",
+    "reference_data_producer": "e5689f6453e68bc9e94cbe83689cb9db4d3d0b83",
+    "dev_data_producer": "378843e06c0cd66d8dfff5e3b60664f8a45569ee",
+    "accepted_parity_verifier": "d3ec00e113fbbdb8abb7eb4b57ee4ffc7ca46580",
+    "accepted_parity_composer": "c3dc4944afda1d257c4c73d69ccaaa3b00da8c72"
+  },
+  "release_root": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-dev-release-20261103/artifacts/release-378843e/data",
+  "counts": {
+    "independent_files": 4987,
+    "donors": 20,
+    "eligible_cells": 3199606,
+    "object_csv_files": 4848,
+    "object_rows": 357658,
+    "ki67_positive_cells": 78680,
+    "count_basis": "Identical accepted scientific artifact content; the actual running dev census is a separate deployment check."
+  },
+  "geometry": {
+    "files": 20,
+    "all_schemas_tables_rows_equal": true,
+    "only_allowed_difference": "gpkg_contents.last_change UTC build timestamp",
+    "corruption_controls_passed": 8
+  },
+  "images": {
+    "files": 80,
+    "ome_tiffs": 20,
+    "bytes": 155515691675,
+    "tree_sha256": "eff7617270dd3b6f10d67d3519f0293401c463681f81ae7d80e9751cf9d15804",
+    "verification": "Fresh builder full copied-tree digest; root independently verifies transferred host bytes."
+  },
+  "evidence": {
+    "dev_manifest": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-dev-release-20261103/artifacts/release-378843e/data/manifest.json",
+      "sha256": "e4b2dbd3bf709513bc6a1d5f8cfdb76ac856efacec25940e13c9975f03936b41"
+    },
+    "scientific_equivalence": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-dev-release-20261103/evidence/scientific-equivalence-378843e.json",
+      "sha256": "a1ab4c537475141d77087db2642953b0becb97b00c0defe2ba1a6559208c5886"
+    },
+    "inventory": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-dev-release-20261103/evidence/release-inventory-378843e.json",
+      "sha256": "464528108af8ce875aae4f842536b2c20f3c49f06594326d59f86f77271851de"
+    },
+    "core_receipt": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-dev-release-20261103/evidence/core-verification.json",
+      "sha256": "c066165735fc5f7f8e75d7b75ea049c620e70bcd2551ad8a4ac39ef853065e7e"
+    },
+    "core_input_identities": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-dev-release-20261103/evidence/core-input-identities.json",
+      "sha256": "77149af00b606c1af87cf0bcb4cd4ea113ec44b8dc1a9aeace4b82b4ebe48050"
+    },
+    "all_release_file_identities": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-dev-release-20261103/evidence/equivalence-file-identities.json",
+      "sha256": "fea59e313af50bd3d308d858df95eea488fde9366fa67bbb1e07a2c00b1e5b84"
+    },
+    "image_seal_comparison": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-dev-release-20261103/evidence/release-image-seal-comparison.json",
+      "sha256": "08f496cd6bcda777ffe23f3eadc71800c432c06bae585c46ec6817d608fb9c15"
+    },
+    "geometry_corruption_controls": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-dev-release-20261103/evidence/geometry-comparator-controls.log",
+      "sha256": "426784aa7bc86b56619c5c453267b793aa878e2f80cfc547eb4c10516b1c39e6"
+    },
+    "comparison_code": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-dev-release-20261103/compare-release-data.py",
+      "sha256": "f7bf890d6efc73471b3faabd87c099fa07c6ac0eab910d8e66d417ffcd42c39e"
+    },
+    "frozen_helper_hashes": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-dev-release-20261103/acceptance-helpers.sha256",
+      "sha256": "903fc09685dc9e52ab1fb44d74eac3f8fda912fd11d54f2186ca87f56d5b7fd7"
+    },
+    "builder_log": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-dev-release-20261103/build-data.log",
+      "sha256": "3aad56c530d713e2a52e37adb53b07f0e4fea9d3142372e4a7d7cda986419120"
+    },
+    "core_log": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-dev-release-20261103/verify-core.log",
+      "sha256": "d9d70dfbb1719b6919f485cbcb3537577f17b19d2502fd627abf5b4e805c702c"
+    },
+    "acceptance_log": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/duckdb-dev-release-20261103/accept-data.log",
+      "sha256": "0a93bf9806c6911ff350ce2161b9c498642d8f0a373167e07b6d33cc0b3459a3"
+    },
+    "reference_parity": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/pubapps-component-release-20261102-v2/evidence/release-parity-e5689f6-revalidated-r3.json",
+      "sha256": "9fa22ceb122b2ab18cec4262aaf6f3bf3173ff11b72d732d5e90e4eebc5a9c5f"
+    },
+    "reference_inventory": {
+      "path": "/data/panc_CODEX/Islet-Explorer/tmp/pubapps-component-release-20261102-v2/evidence/release-inventory-e5689f6.json",
+      "sha256": "6147832fc3ea1693ded18dff8ee05b8602db8542ff564a6dd8f92bcad11ae248"
+    }
+  }
+}

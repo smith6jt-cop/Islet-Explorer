@@ -1,5 +1,11 @@
 # Dev DuckDB fix — validated 2026-11-02
 
+**Update, 2026-11-03 12:42 UTC:** the current-app dev build is now live and
+verified without a DuckDB deferral. See the
+[new deployment record](dev_duckdb_deployment_20261103.md), source `378843e`, image
+`e704ac2a…`. The older image and validation below are preserved as history;
+production stayed unchanged during the dev deployment.
+
 The owner directed the current component build to the live production PubApp
 within the DuckDB patch window, with our DuckDB fix developed separately for
 dev. The dev backport is now **built and validated**, without using that deferral.
