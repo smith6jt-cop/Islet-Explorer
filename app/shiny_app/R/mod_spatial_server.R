@@ -258,7 +258,8 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       if (!any(donor_mask)) return(NULL)
 
       sub <- comp[donor_mask, c("islet_key", leiden_col), drop = FALSE]
-      setNames(as.character(sub[[leiden_col]]), as.character(sub$islet_key))
+      keys <- base::sub("^Islet_Islet_", "Islet_", as.character(sub$islet_key))
+      setNames(as.character(sub[[leiden_col]]), keys)
     })
 
     # ---- Phenotype filter ----
@@ -361,13 +362,12 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       if (use_leiden) {
         # Map islet_name -> leiden cluster
         lmap <- islet_leiden_map()
-        if (!is.null(lmap)) {
-          plot_df$cluster <- lmap[plot_df$islet_name]
-          # Tissue cells with no islet get NA cluster
-          plot_df$cluster[is.na(plot_df$cluster)] <- "tissue"
-        } else {
-          plot_df$cluster <- "tissue"
-        }
+        plot_df$cluster <- if (!is.null(lmap)) {
+          lmap[sub("^Islet_Islet_", "Islet_", as.character(plot_df$islet_name))]
+        } else rep(NA_character_, nrow(plot_df))
+        actual_tissue <- !is.na(plot_df$cell_region) & plot_df$cell_region == "tissue"
+        plot_df$cluster[actual_tissue] <- "Tissue"
+        plot_df$cluster[!actual_tissue & is.na(plot_df$cluster)] <- "No Leiden assignment"
       }
 
       # Phenotype filter (only in phenotype mode)
@@ -420,12 +420,16 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       # Foreground layer: colored by phenotype or leiden
       if (nrow(fg) > 0) {
         if (use_leiden && "cluster" %in% colnames(fg)) {
-          cluster_levels <- leiden_levels(fg$cluster[fg$cluster != "tissue"])
-          fg$cluster <- factor(fg$cluster, levels = c(cluster_levels, "tissue"))
-          n_clusters <- length(cluster_levels)
-          pal_colors <- rep_len(leiden_palette, n_clusters)
-          pal <- setNames(pal_colors, cluster_levels)
-          pal["tissue"] <- "#d9d9d9"
+          # Keep every cluster assigned to this donor in the legend, even when
+          # the current region contains no cells from one of its clusters.
+          cluster_levels <- leiden_levels(if (!is.null(lmap)) unname(lmap) else fg$cluster)
+          special_levels <- intersect(c("No Leiden assignment", "Tissue"), unique(as.character(fg$cluster)))
+          fg$cluster <- factor(fg$cluster, levels = c(cluster_levels, "No Leiden assignment", "Tissue"))
+          extra_colors <- if (length(cluster_levels) > length(leiden_palette))
+            grDevices::hcl.colors(length(cluster_levels) - length(leiden_palette), "Dynamic") else character()
+          pal <- c(stats::setNames(c(leiden_palette, extra_colors)[seq_along(cluster_levels)], cluster_levels),
+                   "No Leiden assignment" = "#7A7A7A", "Tissue" = "#D9D9D9")
+          legend_breaks <- c(cluster_levels, special_levels)
 
           p <- p + ggplot2::geom_point(
             data = fg,
@@ -433,8 +437,9 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
             size = 0.4, alpha = 0.6,
             inherit.aes = FALSE
           ) +
-          ggplot2::scale_color_manual(values = pal, name = "Cluster", na.value = "#d9d9d9",
-                                        guide = ggplot2::guide_legend(ncol = 6, byrow = TRUE,
+          ggplot2::scale_color_manual(values = pal, breaks = legend_breaks, limits = legend_breaks,
+                                        drop = FALSE, name = "Cluster", na.value = "#7A7A7A",
+                                        guide = ggplot2::guide_legend(ncol = 4, byrow = TRUE,
                                                                      override.aes = list(size = 4)))
         } else {
           # Phenotype coloring — legend in canonical palette order
@@ -910,8 +915,11 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
     })
 
     output$cluster_composition <- renderPlotly({
-      by <- input$cluster_view %||% "composition"
-      if (identical(by, "composition")) return(cluster_composition_plot())
+      cluster_composition_plot()
+    })
+
+    output$cluster_membership <- renderPlotly({
+      by <- input$cluster_view %||% "status"
       m <- cluster_membership_data()
       fonts <- plotly_islet_fonts()
       donors <- m$donors

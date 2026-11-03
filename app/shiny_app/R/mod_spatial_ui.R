@@ -1,7 +1,7 @@
 # ---------- Spatial Tab module UI ----------
 # Exports: spatial_ui(id)
 # Layout: Data / View control panels (control_panel(), frozen by tab_controls()), then Tissue Scatter (col-7) + Leiden
-# clusters (col-5: composition / membership), then the two linked islet-level UMAPs side by side in a full-width row
+# clusters (col-5: composition over membership), then the two linked islet-level UMAPs side by side in a full-width row
 # and the segmentation panel of the object clicked in them
 # + Neighborhood Analysis cards below (rendered server-side in output$neighborhood_cards): insulitis prevalence /
 #   immune cells and beta-cell content / immune gradient row, composition card, distance-to-islet profile card
@@ -115,10 +115,14 @@ spatial_ui <- function(id) {
                    " controls."),
             unclassified_help_ui())),
           uiOutput(ns("leiden_not_available")),
-          radioButtons(ns("cluster_view"), "Show",
-                       c("Composition" = "composition", "Donor status" = "status", "Donor" = "donor"),
-                       selected = "composition", inline = TRUE),
-          plotlyOutput(ns("cluster_composition"), height = "650px")
+          tags$h5("Composition", class = "control-subtitle"),
+          plotlyOutput(ns("cluster_composition"), height = "300px"),
+          tags$div(style = "margin-top: 8px;",
+            radioButtons(ns("cluster_view"), "Membership By",
+                         c("Donor Status" = "status", "Donor" = "donor"),
+                         selected = "status", inline = TRUE),
+            plotlyOutput(ns("cluster_membership"), height = "300px")
+          )
         )
       )
     ),
