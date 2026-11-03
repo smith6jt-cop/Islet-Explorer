@@ -1,0 +1,296 @@
+{
+  "schema": "islet.local_tissue_axis_margin_review/1",
+  "created_at_utc": "2026-11-03T14:05:52.848116+00:00",
+  "passed": true,
+  "scope": "Local browser display validation on immutable schema5 release data; no deployment or biological acceptance.",
+  "source": {
+    "base_commit": "81b3857b45e7870fd4d43dee3751c8d956619052",
+    "tested_runtime_has_uncommitted_changes": false,
+    "changed_from_base": [],
+    "launch_receipt": {
+      "path": "tmp/ui-layout-review-20261103/launch-axis-margin-r1.json",
+      "sha256": "ded6a8ce720e792f5a876340dd240a89ceaf2155c258a60c75dc271062fe43ab"
+    },
+    "tracked_source_files_checked": 73,
+    "all_launched_tracked_source_hashes_match_current": true,
+    "excluded_untracked_generated_files": [
+      "app/shiny_app/tests/testthat/_problems/test-phenotype-retained-25.R",
+      "app/shiny_app/tests/testthat/_problems/test-phenotype-retained-42.R"
+    ],
+    "changed_file_sha256": {},
+    "tested_commit": "81b3857b45e7870fd4d43dee3751c8d956619052",
+    "all_launched_tracked_source_hashes_match_commit": true
+  },
+  "change": {
+    "file": "app/shiny_app/R/mod_spatial_server.R",
+    "right_plot_margin_pt": 18,
+    "previous_right_margin_pt": 9,
+    "other_inherited_margins_pt": 9,
+    "data_axes_labels_output_ids_zoom_cache_and_height_logic_unchanged": true
+  },
+  "evidence": {
+    "browser_report": {
+      "path": "tmp/ui-layout-review-20261103/tissue-axis-margin-final-r1.json",
+      "sha256": "c2ec173efdb25dd0e3408891e83ed37cb3b178ba5b99557af1d1ca905662af7e"
+    },
+    "harness": {
+      "path": "tmp/ui-layout-review-20261103/check-tissue-axis-margin-r1.mjs",
+      "sha256": "6caa9a0860793a8917f7a07a20a0dc8e9e2f214d09473379deecf16c00309c0b"
+    },
+    "screenshots": [
+      {
+        "path": "tmp/ui-layout-review-20261103/screenshots/spatial-tissue-default-1200-axis-margin-r1.png",
+        "sha256": "f3f476bc4bb2746c6f62d890c1d81ad0f272564cba68edf9bac25a81f2f1696f"
+      },
+      {
+        "path": "tmp/ui-layout-review-20261103/screenshots/spatial-tissue-default-1200-axis-margin-r1-raw.png",
+        "sha256": "49306711d42819f28434a044a9ef6dcc9b29fd3c711a9dbdf5bdf71808ce08b5"
+      },
+      {
+        "path": "tmp/ui-layout-review-20261103/screenshots/spatial-tissue-default-1600-axis-margin-r1.png",
+        "sha256": "b8f89fe2155c0f836bdfa1eb39952426917d37be57608d90906715a784a126ed"
+      },
+      {
+        "path": "tmp/ui-layout-review-20261103/screenshots/spatial-tissue-default-1600-axis-margin-r1-raw.png",
+        "sha256": "a6a2b10e09c91388f0d84dec787da7afdfd6dbdab61f40c2e22d950edec2d33f"
+      },
+      {
+        "path": "tmp/ui-layout-review-20261103/screenshots/spatial-tissue-all27-1200-axis-margin-r1.png",
+        "sha256": "eaf8746766ad80295bf5f1561bdd81628118f2e15cc3048b00d3046950616908"
+      },
+      {
+        "path": "tmp/ui-layout-review-20261103/screenshots/spatial-tissue-all27-1200-axis-margin-r1-raw.png",
+        "sha256": "42d7e5146c78998a814c2335ba8c06580689c86bc4f49e8344eabcda5a81ac63"
+      },
+      {
+        "path": "tmp/ui-layout-review-20261103/screenshots/spatial-tissue-all27-1600-axis-margin-r1.png",
+        "sha256": "ad22356d818837a0790126f0b0af55734cd52d65a1da50f952b5167fb21e753f"
+      },
+      {
+        "path": "tmp/ui-layout-review-20261103/screenshots/spatial-tissue-all27-1600-axis-margin-r1-raw.png",
+        "sha256": "3590d10adda49f20e482d4d7e729b0ff43160b2e0ee0c710fae4146667de7a47"
+      }
+    ]
+  },
+  "static_checks": {
+    "cases": [
+      {
+        "width": 1200,
+        "mode": "default",
+        "image": {
+          "width": 620.484375,
+          "height": 842.875,
+          "naturalWidth": 692,
+          "naturalHeight": 940
+        },
+        "output": {
+          "width": 620.5,
+          "height": 842.875
+        },
+        "panel": {
+          "x": 115.17172600144352,
+          "y": 327.43836358457,
+          "width": 535.2331800274294,
+          "height": 400.80333467378364
+        },
+        "stableOutputElement": true,
+        "downloads": [
+          {
+            "id": "spatial-download_spatial",
+            "below": true,
+            "hrefPresent": true
+          },
+          {
+            "id": "spatial-dl_tissue_scatter",
+            "below": true,
+            "hrefPresent": true
+          }
+        ]
+      },
+      {
+        "width": 1600,
+        "mode": "default",
+        "image": {
+          "width": 853.8125,
+          "height": 805.8125,
+          "naturalWidth": 996,
+          "naturalHeight": 940
+        },
+        "output": {
+          "width": 853.828125,
+          "height": 805.8125
+        },
+        "panel": {
+          "x": 195.02670389570102,
+          "y": 280.02449872154955,
+          "width": 606.517688500287,
+          "height": 454.1760002278794
+        },
+        "stableOutputElement": true,
+        "downloads": [
+          {
+            "id": "spatial-download_spatial",
+            "below": true,
+            "hrefPresent": true
+          },
+          {
+            "id": "spatial-dl_tissue_scatter",
+            "below": true,
+            "hrefPresent": true
+          }
+        ]
+      },
+      {
+        "width": 1200,
+        "mode": "all27",
+        "image": {
+          "width": 620.484375,
+          "height": 1111.875,
+          "naturalWidth": 692,
+          "naturalHeight": 1240
+        },
+        "output": {
+          "width": 620.5,
+          "height": 1111.875
+        },
+        "panel": {
+          "x": 115.17172600144352,
+          "y": 248.27103973317048,
+          "width": 535.2331800274294,
+          "height": 400.80237596550626
+        },
+        "stableOutputElement": true,
+        "downloads": [
+          {
+            "id": "spatial-download_spatial",
+            "below": true,
+            "hrefPresent": true
+          },
+          {
+            "id": "spatial-dl_tissue_scatter",
+            "below": true,
+            "hrefPresent": true
+          }
+        ]
+      },
+      {
+        "width": 1600,
+        "mode": "all27",
+        "image": {
+          "width": 853.8125,
+          "height": 1062.984375,
+          "naturalWidth": 996,
+          "naturalHeight": 1240
+        },
+        "output": {
+          "width": 853.828125,
+          "height": 1062.984375
+        },
+        "panel": {
+          "x": 176.08945413410467,
+          "y": 218.02439006133767,
+          "width": 644.39218802348,
+          "height": 482.5363404328895
+        },
+        "stableOutputElement": true,
+        "downloads": [
+          {
+            "id": "spatial-download_spatial",
+            "below": true,
+            "hrefPresent": true
+          },
+          {
+            "id": "spatial-dl_tissue_scatter",
+            "below": true,
+            "hrefPresent": true
+          }
+        ]
+      }
+    ],
+    "minimum_visible_panel_height_px": 400.80237596550626,
+    "required_minimum_panel_height_px": 390,
+    "all_four_complete_axis_labels_and_legends_visually_inspected": true,
+    "rightmost_tick_pixel_checks": [
+      {
+        "mode": "default",
+        "viewport_width": 1200,
+        "raw_png_width": 692,
+        "glyph_pixel_bounds": [
+          655,
+          554,
+          689,
+          565
+        ],
+        "clear_right_pixels": 2,
+        "pixel_check_scope": "Non-background grayscale pixels in visually identified rightmost 5000 label band; all four full raw PNGs also visually inspected."
+      },
+      {
+        "mode": "all27",
+        "viewport_width": 1200,
+        "raw_png_width": 692,
+        "glyph_pixel_bounds": [
+          655,
+          571,
+          689,
+          582
+        ],
+        "clear_right_pixels": 2,
+        "pixel_check_scope": "Non-background grayscale pixels in visually identified rightmost 5000 label band; all four full raw PNGs also visually inspected."
+      }
+    ]
+  },
+  "interaction_checks": {
+    "tested_case": {
+      "mode": "all27",
+      "viewport_width": 1600
+    },
+    "brush_reset": {
+      "beforeDomain": {
+        "left": -233.3075,
+        "right": 5014.9575,
+        "bottom": 3760.23675,
+        "top": -169.77175
+      },
+      "zoomedDomain": {
+        "left": 972.5745624941051,
+        "right": 3275.030338767395,
+        "bottom": 2472.426784023226,
+        "top": 728.0788954998644
+      },
+      "resetDomain": {
+        "left": -233.3075,
+        "right": 5014.9575,
+        "bottom": 3760.23675,
+        "top": -169.77175
+      },
+      "zoomChanged": true,
+      "resetRestored": true,
+      "stableOutputElement": true
+    },
+    "download_scope": "Both CSV/PNG links remain below output and have hrefs in all four cases. Downloaded contents were not tested.",
+    "other_three_cases_brush_reset_tested": false
+  },
+  "runtime": {
+    "url": "http://127.0.0.1:3845/",
+    "pid": 8796,
+    "log": "/data/panc_CODEX/Islet-Explorer/tmp/ui-layout-review-20261103/app-axis-margin-r1.log",
+    "data_root": "/data/panc_CODEX/Islet-Explorer/tmp/pubapps-component-release-20261102-v2/artifacts/release-e5689f6/data",
+    "data_schema": 5,
+    "teardown": {
+      "path": "tmp/ui-layout-review-20261103/teardown-axis-margin-r1.json",
+      "sha256": "e59a31bb67f519714db00963a0b378f3edc0d36472bf10666fa50c396aa06f8c"
+    },
+    "running": false
+  },
+  "prior_evidence": {
+    "display_review_r2": {
+      "path": "tmp/ui-layout-review-20261103/display-review-r2.json",
+      "sha256": "0417464c5d8ebbd9f819aa0bf899e54f771c6a8bbadc5420510108dad846cc84"
+    },
+    "prior_screenshots_preserved": true,
+    "supersession": "This narrow correction closes the clipped 5000 tick finding in the prior 1200px captures. Other prior review scopes remain as recorded."
+  },
+  "limitations": [
+    "The public/container browser and installed-runtime gates remain separate."
+  ]
+}

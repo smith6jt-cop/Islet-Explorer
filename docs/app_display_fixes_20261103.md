@@ -5,7 +5,7 @@ classes, readable Plot dropdowns, removal of the Trajectory citation suffix,
 even Trajectory card spacing, and Spatial scatter legends below the plot.
 These are app changes against the accepted component-v2 scientific data.
 They do not retype cells or change the selected v19 endocrine evidence.
-The frozen build source is **`5e6580fe68af12dd18bee430988bc1ed64061526`**.
+The frozen app source is **`81b3857b45e7870fd4d43dee3751c8d956619052`**.
 It includes the reviewed DuckDB security patch and a metadata-only Containerfile
 change that permits dependency caching across future app releases. The patch,
 dependency installation and strict runtime security gates are unchanged.
@@ -14,6 +14,23 @@ The current live dev release is documented separately in
 [the strict DuckDB deployment receipt](dev_duckdb_deployment_20261103.md).
 Its `378843e` source predates these app corrections. This record does not claim
 that the corrections are live until a new immutable image is built and verified.
+
+The [review follow-up receipt](evidence/app_display_followup_20261103.json)
+records two corrections found by Senior's independent review of `5e6580f`:
+mixed raw/profile macrophage inputs now retain all merged metrics and calculate
+enrichment from the original member counts; a wider right plot margin keeps the
+last tissue-map axis label inside the image at 1200 px. The accepted cohort has
+profile labels only, and all 16 marker selections remain bit-identical to the
+previous source. No scientific source records or frozen data changed.
+
+On the corrected source, all 35 R files parse and the full R suite passes
+**601 assertions**, with zero test-framework failures, warnings or skips.
+All 48 real-data donor-composition scenarios pass again. Four static tissue-map
+checks (default/all 27 labels at 1200/1600 px) show complete axes and legends,
+with visible maps **401–483 px** high. Brush zoom and exact reset were tested
+for the all-27, 1600 px case. Both download links remain available below the
+plot in all four cases; downloaded file contents were not tested in this check.
+The earlier `5e6580f` receipts below remain unchanged historical evidence.
 
 ## Presentation policy
 
@@ -86,8 +103,10 @@ binds the frozen source, test logs and the separate scientific/presentation
 receipts. All 73 captured tracked app/test source files match the frozen commit;
 two ignored test reproducers are explicitly excluded from that binding.
 
-All 35 R files parse; the complete R suite passes **588 assertions, zero
-failures, warnings or skips**. The three Python trajectory tests pass. A
+At `5e6580f`, all 35 R files parse; the complete R suite passes **588 assertions,
+zero test-framework failures, warnings or skips**. The three Python trajectory
+tests pass. Logs retain a tibble R-build-version startup warning and an
+anndata/zarr deprecation warning outside those summaries. A
 read-only check of the real release covers **48 donor-composition scenarios**
 (all 16 macrophage marker selections × core/peri/both), with original
 denominators and displayed proportions verified for every donor. Recomputed
@@ -99,8 +118,10 @@ The [visual receipt](evidence/app_display_visual_20261103.json) records the
 Trajectory gaps, no hidden phenotype choices or Conflict plot text, and six
 paired Spatial color/width cases with equal areas and 1,392 points per plot.
 Default and full 27-phenotype tissue legends retain a **407–483 px visible map**,
-complete labels, downloads below the output, the same output element, and
-working brush zoom with exact reset restoration. Failed intermediate layout
+complete legend labels, download links below the output, the same output
+element, and working brush zoom with exact reset restoration in the all-27,
+1600 px case. The subsequent review found the clipped 1200 px axis tick closed
+by the follow-up above. Failed intermediate layout
 receipts remain preserved and are superseded by the measured final check.
 
 The expanded loopback smoke passed 45/49 checks. Its four Viewer/static-Range

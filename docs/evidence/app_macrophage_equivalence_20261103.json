@@ -1,0 +1,159 @@
+{
+  "schema": "uniform.macrophage_collapse_equivalence/1",
+  "passed": true,
+  "checked_utc": "2026-11-03T14:01:45Z",
+  "reference_commit": "5e6580fe68af12dd18bee430988bc1ed64061526",
+  "scope": "All 16 marker splits on the actual profile-only immutable release composition. Mixed residual/profile regression is separate; no source records or frozen data changed.",
+  "scenarios": [
+    {
+      "markers": [],
+      "rows": 4853,
+      "columns": 229,
+      "all_values_types_missingness_column_order_identical": true
+    },
+    {
+      "markers": [
+        "CD68"
+      ],
+      "rows": 4853,
+      "columns": 236,
+      "all_values_types_missingness_column_order_identical": true
+    },
+    {
+      "markers": [
+        "CD163"
+      ],
+      "rows": 4853,
+      "columns": 236,
+      "all_values_types_missingness_column_order_identical": true
+    },
+    {
+      "markers": [
+        "CD68",
+        "CD163"
+      ],
+      "rows": 4853,
+      "columns": 241,
+      "all_values_types_missingness_column_order_identical": true
+    },
+    {
+      "markers": [
+        "LGALS3"
+      ],
+      "rows": 4853,
+      "columns": 236,
+      "all_values_types_missingness_column_order_identical": true
+    },
+    {
+      "markers": [
+        "CD68",
+        "LGALS3"
+      ],
+      "rows": 4853,
+      "columns": 246,
+      "all_values_types_missingness_column_order_identical": true
+    },
+    {
+      "markers": [
+        "CD163",
+        "LGALS3"
+      ],
+      "rows": 4853,
+      "columns": 246,
+      "all_values_types_missingness_column_order_identical": true
+    },
+    {
+      "markers": [
+        "CD68",
+        "CD163",
+        "LGALS3"
+      ],
+      "rows": 4853,
+      "columns": 256,
+      "all_values_types_missingness_column_order_identical": true
+    },
+    {
+      "markers": [
+        "CD4"
+      ],
+      "rows": 4853,
+      "columns": 236,
+      "all_values_types_missingness_column_order_identical": true
+    },
+    {
+      "markers": [
+        "CD68",
+        "CD4"
+      ],
+      "rows": 4853,
+      "columns": 246,
+      "all_values_types_missingness_column_order_identical": true
+    },
+    {
+      "markers": [
+        "CD163",
+        "CD4"
+      ],
+      "rows": 4853,
+      "columns": 246,
+      "all_values_types_missingness_column_order_identical": true
+    },
+    {
+      "markers": [
+        "CD68",
+        "CD163",
+        "CD4"
+      ],
+      "rows": 4853,
+      "columns": 256,
+      "all_values_types_missingness_column_order_identical": true
+    },
+    {
+      "markers": [
+        "LGALS3",
+        "CD4"
+      ],
+      "rows": 4853,
+      "columns": 246,
+      "all_values_types_missingness_column_order_identical": true
+    },
+    {
+      "markers": [
+        "CD68",
+        "LGALS3",
+        "CD4"
+      ],
+      "rows": 4853,
+      "columns": 266,
+      "all_values_types_missingness_column_order_identical": true
+    },
+    {
+      "markers": [
+        "CD163",
+        "LGALS3",
+        "CD4"
+      ],
+      "rows": 4853,
+      "columns": 266,
+      "all_values_types_missingness_column_order_identical": true
+    },
+    {
+      "markers": [
+        "CD68",
+        "CD163",
+        "LGALS3",
+        "CD4"
+      ],
+      "rows": 4853,
+      "columns": 286,
+      "all_values_types_missingness_column_order_identical": true
+    }
+  ],
+  "inputs_and_code_sha256": {
+    "/data/panc_CODEX/Islet-Explorer/tmp/macrophage-mixed-fix-20261103/globals-5e6580f.R": "0844f958e1d77b965300746a7574956fd20b8df10e2ee6022ecae574841577ae",
+    "/data/panc_CODEX/Islet-Explorer/app/shiny_app/R/00_globals.R": "e91ac4869c47e90cc672d7f1c2ffa70a41b37b99fc58c34f0b3ee7966ddb97dc",
+    "/data/panc_CODEX/Islet-Explorer/data/development/uniform-20donor-20261102-component-app-v2/uniform_release.json": "7ff7c4d92cffa393b16f3118ef04855e959bda14d3862aecce0da95344e91082",
+    "/data/panc_CODEX/Islet-Explorer/tmp/pubapps-component-release-20261102-v2/artifacts/release-e5689f6/data/summary/islets.parquet": "cc1737e9d0801dfea08935885be8ad314415522ee356878205d58cddbf34008b"
+  },
+  "all_input_files_unchanged": true
+}

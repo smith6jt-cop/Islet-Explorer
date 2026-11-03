@@ -21,6 +21,26 @@ overwritten by this delivery.
 
 ## Completed component build and supplemental delivery
 
+### App display and mixed-input follow-up — 2026-11-03
+
+The app corrections through `81b3857` enforce the same parent/subtype and
+Conflict-display rules across controls, plots and exports, and correct the
+requested Plot, Trajectory and Spatial layouts. The
+[display record](app_display_fixes_20261103.md) and
+[follow-up evidence](evidence/app_display_followup_20261103.json) bind the
+implementation and validation separately from live deployment.
+
+Senior's independent review also identified a portable helper defect when raw
+`Macrophage` residuals coexist with marker-profile labels: writing the merged
+destination before calculating enrichment reread an overwritten source count,
+and column removal discarded four destination metric families. The corrected
+helper reads an immutable original frame and retains all five destination
+families. Regression checks cover proportions, counts, enrichment, distance,
+missingness, idempotence and marker-split residual preservation. The accepted
+CODEX cohort is profile-only; all 16 marker selections remain bit-identical,
+and all 48 donor-composition scenarios pass. This is a generic helper repair,
+not a new biological selection or permission to relabel recipient data.
+
 ### New selected-component v2 supplement
 
 The owner subsequently delegated the remaining CODEX selection and live release.

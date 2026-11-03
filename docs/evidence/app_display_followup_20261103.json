@@ -1,0 +1,104 @@
+{
+  "schema": "islet.app_display_review_followup/1",
+  "created_at_utc": "2026-11-03T14:08:27.175159+00:00",
+  "source_commit": "81b3857b45e7870fd4d43dee3751c8d956619052",
+  "prior_app_commit": "5e6580fe68af12dd18bee430988bc1ed64061526",
+  "status": "local_implementation_validation_passed",
+  "scope": "Two narrow corrections identified in Senior review; no deployment claim or source-data mutation.",
+  "changed_source_sha256": {
+    "app/shiny_app/R/00_globals.R": "e91ac4869c47e90cc672d7f1c2ffa70a41b37b99fc58c34f0b3ee7966ddb97dc",
+    "app/shiny_app/R/mod_spatial_server.R": "cd46149cdbd79a780982b52fb86c4889e3a7c8260728895205d6657d3f60fd55",
+    "app/shiny_app/tests/testthat/test-macrophage-labels.R": "901f957c86a5f51ceb9db1d27a35520cf3d0ac0ab119dc290dee5220dcf7e00b"
+  },
+  "mixed_macrophage_fix": {
+    "original_member_columns_immutable": true,
+    "retained_destination_families": [
+      "prop_",
+      "peri_prop_",
+      "peri_count_",
+      "enrich_z_",
+      "min_dist_"
+    ],
+    "current_cohort_profile_only": true,
+    "current_root_16_selections_bit_identical_to_prior": true,
+    "equivalence_receipt": {
+      "path": "docs/evidence/app_macrophage_equivalence_20261103.json",
+      "sha256": "e8b9d6fe2e4642ffc3068ee4085ed21932dde2d361320234ca22c8f8f67fa009"
+    },
+    "focused_r_assertions": 88,
+    "focused_r_log": {
+      "path": "tmp/macrophage-mixed-fix-tests-20261103.log",
+      "sha256": "7b3f3a93237edec60800271af26c0af1961ce5e27833ee7a0554fd49818539ab"
+    }
+  },
+  "r_validation": {
+    "parsed_files": 35,
+    "pass": 601,
+    "fail": 0,
+    "test_framework_warn": 0,
+    "skip": 0,
+    "command": "Rscript app/shiny_app/tests/run_tests.R",
+    "log": {
+      "path": "tmp/app-display-validation-20261103/r-suite-review-addendum.log",
+      "sha256": "a304ff09287f248cf0412b123f417bdd1d7f1c44d35ca7e0c97f5cf50aa00325"
+    },
+    "parse_log": {
+      "path": "tmp/app-display-validation-20261103/parse-review-addendum.log",
+      "sha256": "c63f87dda5ec4ba4b1b6c26302d2c8e9200ce754d9789176d5ed0bfd34df3609"
+    },
+    "outside_test_framework_warning": "tibble was built under R version 4.5.2"
+  },
+  "real_donor_composition": {
+    "scenarios": 48,
+    "all_passed": true,
+    "original_denominators_unchanged": true,
+    "receipt": {
+      "path": "tmp/macrophage-mixed-fix-20261103/donor-composition-equivalence.json",
+      "sha256": "1a0bf01bcf95f00d65cf122ff67bc88712b7b1bbd75d817918c249a87317a87f"
+    }
+  },
+  "visual": {
+    "receipt": {
+      "path": "docs/evidence/app_tissue_axis_review_20261103.json",
+      "sha256": "decd2797c17f41a4d1e750c7cec7b59cc3615385f0dc5e17889954aedae3fc04"
+    },
+    "static_cases": 4,
+    "viewport_widths": [
+      1200,
+      1600
+    ],
+    "modes": [
+      "default",
+      "all27"
+    ],
+    "minimum_visible_map_height_px": 400.80237596550626,
+    "axis_and_legend_labels_complete": true,
+    "brush_reset_tested_case": {
+      "mode": "all27",
+      "viewport_width": 1600
+    },
+    "download_scope": "Both link hrefs and placement checked; downloaded contents not tested.",
+    "tracked_launch_files_bound_to_commit": 73,
+    "validation_app_stopped": true
+  },
+  "prior_receipts_unchanged": {
+    "app_display_validation_20261103": {
+      "path": "docs/evidence/app_display_validation_20261103.json",
+      "sha256": "d41b6816b4acf24ecbd002819a5c3673190b24d152fc9619516478db0a4c9fd0"
+    },
+    "app_display_visual_20261103": {
+      "path": "docs/evidence/app_display_visual_20261103.json",
+      "sha256": "0417464c5d8ebbd9f819aa0bf899e54f771c6a8bbadc5420510108dad846cc84"
+    },
+    "app_donor_composition_20261103": {
+      "path": "docs/evidence/app_donor_composition_20261103.json",
+      "sha256": "1dd5258424f93b20f566bc0e8672bbd5a01025dfc02d145230b544d76b3cb957"
+    },
+    "app_phenotype_hierarchy_20261103": {
+      "path": "docs/evidence/app_phenotype_hierarchy_20261103.json",
+      "sha256": "e9fbbd392d54a66c51fd89d11c05cbf9cc641a89a5c1def54578d3068ada4918"
+    }
+  },
+  "reused_evidence_scope": "Earlier Plot, Trajectory, UMAP and Python checks retain their original 5e source binding; the three-file follow-up does not modify those implementations. New R/real-data/tissue tests cover the affected paths.",
+  "deployment_acceptance": "Pending separate immutable image/data build, security gates and container/public-dev acceptance. Existing dev and production unchanged by these local checks."
+}
