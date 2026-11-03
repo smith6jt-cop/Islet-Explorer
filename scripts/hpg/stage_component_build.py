@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare fresh, hash-pinned inputs for a diagnostic endocrine component build.
+"""Prepare fresh, hash-pinned inputs for an endocrine component build.
 
 Capture runs on the workstation; materialize and prepare run through the sealed
 HPG site wrapper. No command submits a job, extracts pixels, assigns identities,
@@ -241,12 +241,12 @@ def prepare(args):
                               'package_manifest_sha256': materialized['package_manifest_sha256']})
     CS.pin(run, endocrine, initial, structures, tags, args.selection_reason)
     write_json(run / 'component_staging.json', {
-        'schema': 'uniform.component_staging/1', 'run': str(run),
+        'schema': 'uniform.component_staging/2', 'status': 'inputs_prepared', 'run': str(run),
         'classification_control_only': args.classification_control,
         'source_package_manifest_sha256': materialized['package_manifest_sha256'],
         'structure_source': str(structures), 'source_generation_sha256': sha(generation),
         'release_ready': False, 'scientific_accuracy_established': False})
-    print(f'Prepared fresh diagnostic component run {run}; identities have not run', flush=True)
+    print(f'Prepared fresh component inputs {run}; identities and build gates have not run', flush=True)
 
 
 def main():
