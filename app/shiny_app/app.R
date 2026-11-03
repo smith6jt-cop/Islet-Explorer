@@ -582,22 +582,21 @@ server <- function(input, output, session) {
   active_tab <- reactive(input$tabs)
 
   # Active phenotype palette (global, consumed by root renders + spatial module)
-  # Two non-namespaced inputs update this: spatial_palette (Spatial tab) and drilldown_palette (drill-down panel)
+  # All phenotype plots share one palette, including the donor composition card.
   palette_name <- reactiveVal("High Contrast")
-
-  observeEvent(input$spatial_palette, {
-    if (!identical(input$spatial_palette, palette_name())) {
-      palette_name(input$spatial_palette)
-      updateSelectInput(session, "drilldown_palette", selected = input$spatial_palette)
-    }
-  }, ignoreInit = TRUE)
-
-  observeEvent(input$drilldown_palette, {
-    if (!identical(input$drilldown_palette, palette_name())) {
-      palette_name(input$drilldown_palette)
-      updateSelectInput(session, "spatial_palette", selected = input$drilldown_palette)
-    }
-  }, ignoreInit = TRUE)
+  phenotype_palette_inputs <- c("spatial_palette", "drilldown_palette", "composition_palette")
+  for (palette_input in phenotype_palette_inputs) local({
+    id <- palette_input
+    observeEvent(input[[id]], {
+      value <- input[[id]]
+      if (length(value) == 1L && value %in% names(PHENOTYPE_PALETTES) &&
+          !identical(value, palette_name())) {
+        palette_name(value)
+        for (other in setdiff(phenotype_palette_inputs, id))
+          updateSelectInput(session, other, selected = value)
+      }
+    }, ignoreInit = TRUE)
+  })
 
   active_palette <- reactive({
     get_phenotype_palette(palette_name())

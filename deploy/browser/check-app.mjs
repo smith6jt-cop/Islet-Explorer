@@ -210,8 +210,8 @@ try {
       const helpTitles = [...(plotTab?.querySelectorAll('details.card-help > summary') || [])]
         .map(summary => summary.title);
       // Since 2026-10-21 each plot card's title is its chosen plot type, so its help is named by side.
-      const wanted = ['Data controls help', 'View controls help', 'Left plot help', 'Right plot help',
-        'Composition by donor help'];
+      const wanted = ['Data Controls help', 'View Controls help', 'Left plot help', 'Right plot help',
+        'Composition By Donor help'];
       return labels.length > 0 && !labels.some(label => hormoneLabels.includes(label)) &&
         !labels.some(label => retired.includes(label)) && metrics.length === 3 &&
         wanted.every(title => helpTitles.includes(title)) &&
@@ -225,13 +225,13 @@ try {
     const panelOpen = () => page.evaluate(() =>
       document.querySelector('.tab-pane[data-value="Plot"] .control-panel-wrap > details.control-panel').open);
     const before = await panelOpen();
-    await page.click('.tab-pane[data-value="Plot"] summary[title="Data controls help"]');
+    await page.click('.tab-pane[data-value="Plot"] summary[title="Data Controls help"]');
     // An open panel is moved to <body> (www/card-help.js) and returns to its <details> when closed.
     // The toggle event is asynchronous: wait for the panel to arrive.
     await page.waitForSelector('body > .card-help-panel p', { visible: true, timeout: 10000 });
     await page.click('body > .card-help-panel p');
     const opened = await page.evaluate(() => {
-      const help = document.querySelector('.tab-pane[data-value="Plot"] summary[title="Data controls help"]')
+      const help = document.querySelector('.tab-pane[data-value="Plot"] summary[title="Data Controls help"]')
         .parentElement;
       const panel = document.querySelector('body > .card-help-panel');
       const box = panel.getBoundingClientRect();
@@ -459,7 +459,7 @@ try {
           separate_dist_point_controls: Boolean(document.querySelector('#plot-dist_pt_size')),
           visible_logos: logos.map(img => img.getAttribute('src')),
         };
-        result.passed = result.plot_selector_panel === 'Data controls' && result.spatial_selector_panel === 'Data controls'
+        result.passed = result.plot_selector_panel === 'Data Controls' && result.spatial_selector_panel === 'Data Controls'
           && result.scatter_points && result.distribution_points && !result.separate_dist_point_controls
           && logos.length === 1;
         return result;

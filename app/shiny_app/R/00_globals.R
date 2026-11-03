@@ -989,7 +989,7 @@ macrophage_collapse_comp <- function(comp, markers = character(0)) {
 }
 
 #' The four marker checkboxes that split the macrophages (shown under a Macrophage heading or in a tab's controls).
-macrophage_marker_checkboxes <- function(input_id, selected = character(0), label = NULL) {
+macrophage_marker_checkboxes <- function(input_id, selected = character(0), label = "Separate by:") {
   shiny::tags$div(class = "pheno-mac-markers",
     shiny::checkboxGroupInput(input_id, label, choices = MACROPHAGE_MARKERS, inline = TRUE,
                               selected = MACROPHAGE_MARKERS[MACROPHAGE_MARKERS %in% selected]))
@@ -1223,14 +1223,25 @@ phenotype_group_checkboxes <- function(input_id, labels, selected = labels, labe
     if (!is.null(label)) shiny::tags$label(class = "control-label", id = paste0(input_id, "-label"), label),
     shiny::tags$div(class = "pheno-groups-overall", links("pheno-scope-all", "phenotypes")),
     shiny::tags$div(class = "pheno-groups",
-      lapply(names(groups), function(g) shiny::tags$div(
+      lapply(names(groups), function(g) {
+        members <- groups[[g]]
+        split_controls <- g == "Macrophage" && !is.null(marker_input_id)
+        split_children <- split_controls && !identical(members, "Macrophage")
+        shiny::tags$div(
         class = paste0("pheno-group pheno-group-", tolower(gsub("[^A-Za-z]", "", g)),
                        if (length(groups[[g]]) > 6) " pheno-group-wide"),
         shiny::tags$div(class = "pheno-group-head", shiny::tags$span(class = "pheno-group-title", g),
                         links("pheno-scope-group", g)),
-        # The four markers that split the macrophages, under the Macrophage heading (owner, 2026-10-27).
-        if (g == "Macrophage" && !is.null(marker_input_id)) macrophage_marker_checkboxes(marker_input_id, markers),
-        shiny::tags$div(class = "pheno-group-boxes", lapply(groups[[g]], box))))))
+        # The master is a UI-only toggle over disjoint children, never another
+        # phenotype value. It therefore cannot double-count the parent.
+        if (split_children) shiny::tags$div(class = "checkbox pheno-mac-toggle", shiny::tags$label(
+          shiny::tags$input(type = "checkbox", class = "pheno-group-toggle",
+            checked = if (all(members %in% selected)) "checked" else NULL,
+            `aria-label` = "Include all macrophages"), shiny::tags$span("Macrophage"))),
+        if (!split_children) shiny::tags$div(class = "pheno-group-boxes", lapply(members, box)),
+        if (split_controls) macrophage_marker_checkboxes(marker_input_id, markers),
+        if (split_children) shiny::tags$div(class = "pheno-group-boxes pheno-mac-children", lapply(members, box)))
+      })))
 }
 
 # Phenotypes with no CSV row — residuals from the upstream pipeline.
@@ -1745,7 +1756,12 @@ CONTROL_PANEL_CSS <- paste0(
   ".pheno-select-links { font-size: 12px; white-space: nowrap; } ",
   ".pheno-select-links a { color: var(--islet-link); cursor: pointer; } ",
   ".pheno-select-sep { color: var(--islet-fg-muted); margin: 0 4px; } ",
-  ".pheno-mac-markers .form-group { margin: 0 0 2px; width: auto; } ",
+  ".pheno-mac-markers { margin: 5px 0 6px 18px; } ",
+  ".pheno-mac-markers .form-group { margin: 0; width: auto; } ",
+  ".pheno-mac-markers .control-label { display: block; margin: 0 0 4px; font-size: 13px; color: var(--islet-fg-muted); } ",
+  ".pheno-mac-markers .shiny-options-group { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 10px; } ",
+  ".pheno-mac-toggle { margin: 2px 0; } ",
+  ".pheno-mac-children { margin-top: 6px; } ",
   ".pheno-mac-markers .checkbox-inline { margin: 0 10px 0 0; padding-left: 18px; color: var(--islet-fg-muted); } ",
   ".pheno-mac-markers .checkbox-inline + .checkbox-inline { margin-left: 0; } ",
   # The macrophage labels have no spaces (owner, 2026-10-27: "CD68+CD163+Macrophage_LGALS3+CD4+"), so a long label
@@ -1790,8 +1806,15 @@ card_help <- function(title, ...) {
     shiny::tags$div(class = "card-help-panel", ...))
 }
 
+#' Capitalize each heading word without changing acronyms or marker spelling.
+card_heading_text <- function(title) {
+  if (!is.character(title)) return(title)
+  gsub("(^|[[:space:]-])([[:lower:]])", "\\1\\U\\2", title, perl = TRUE)
+}
+
 #' A card title (h5) with its help icon beside it. `help` is a list of tags; NULL gives the bare title.
 card_title_help <- function(title, help = NULL, style = "margin: 0;") {
+  title <- card_heading_text(title)
   heading <- shiny::h5(title, style = style)
   if (is.null(help)) return(heading)
   shiny::tags$div(style = "display: flex; align-items: center; gap: 4px;",
@@ -1802,6 +1825,7 @@ card_title_help <- function(title, help = NULL, style = "margin: 0;") {
 #' control_panel("View controls", ...) at the top of a tab or section. `help`, a list of tags, puts a "?" icon at
 #' the right of the panel's title bar, outside the <summary> so opening it does not open or close the panel.
 control_panel <- function(title, ..., open = FALSE, help = NULL) {
+  title <- card_heading_text(title)
   panel <- shiny::tags$details(class = "control-panel", open = if (isTRUE(open)) NA else NULL,
                                shiny::tags$summary(title), ...)
   if (is.null(help)) return(panel)

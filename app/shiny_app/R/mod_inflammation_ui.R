@@ -33,7 +33,7 @@ inflammation_ui <- function(id) {
              style = paste0("display: inline-block; background: linear-gradient(135deg, #4477AA, #5599CC);",
                             " color: white; font-weight: 700; font-size: 14px; padding: 2px 10px;",
                             " border-radius: 12px; min-width: 24px; text-align: center;")),
-        span(title, style = "font-weight: 700; font-size: 17px; color: #333;"),
+        span(card_heading_text(title), style = "font-weight: 700; font-size: 17px; color: #333;"),
         tip_icon
       ),
       p(subtitle, style = "margin: 4px 0 0 0; color: #777; font-size: 13px;")
@@ -43,7 +43,7 @@ inflammation_ui <- function(id) {
   tagList(
 
     tab_help("Inflammation help", "show_phenotype_rules_inflam",
-      h4("About this tab", style = "margin: 0 0 6px 0; font-size: 16px; color: #2c4760;"),
+      h4("About This Tab", style = "margin: 0 0 6px 0; font-size: 16px; color: #2c4760;"),
       p(style = "margin: 0 0 6px 0; font-size: 13px; line-height: 1.5; color: #333;",
         tags$strong("What it does."), " Two cohort-level analyses adapted from ",
         tags$em("Steenbuck et al. 2025"), " (Bodenmiller lab, bioRxiv 2025.03.05.641526), ",

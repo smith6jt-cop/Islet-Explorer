@@ -36,7 +36,7 @@ statistics_ui <- function(id) {
              style = paste0("display: inline-block; background: linear-gradient(135deg, #4477AA, #5599CC);",
                             " color: white; font-weight: 700; font-size: 14px; padding: 2px 10px;",
                             " border-radius: 12px; min-width: 24px; text-align: center;")),
-        span(title, style = "font-weight: 700; font-size: 17px; color: #333;"),
+        span(card_heading_text(title), style = "font-weight: 700; font-size: 17px; color: #333;"),
         tip_icon
       ),
       p(subtitle, style = "margin: 4px 0 0 0; color: #777; font-size: 13px;")
@@ -46,7 +46,7 @@ statistics_ui <- function(id) {
   tagList(
 
     tab_help("Statistics help", "show_phenotype_rules_stats",
-      h4("About this tab",
+      h4("About This Tab",
          style = "margin: 0 0 6px 0; font-size: 16px; color: #2c4760;"),
       p(style = "margin: 0 0 6px 0; font-size: 13px; line-height: 1.5; color: #333;",
         tags$strong("What it does."), " Compares the selected feature across ",
@@ -235,7 +235,7 @@ statistics_ui <- function(id) {
       fluidRow(style = "display: flex; flex-wrap: wrap;",
         column(4,
           div(class = "card", style = "padding: 15px; margin-bottom: 15px; height: 100%;",
-            h5("Area Under Curve by Donor Group"),
+            h5("Area Under Curve By Donor Group"),
             tags$small(style = "color: #888; display: block; margin-bottom: 8px;",
               "Trapezoidal integral of the binned mean feature value across islet diameters, ",
               "per group. Descriptive summary — no inferential test."),
@@ -247,7 +247,7 @@ statistics_ui <- function(id) {
         ),
         column(4,
           div(class = "card", style = "padding: 15px; margin-bottom: 15px; height: 100%;",
-            h5("Stratified Tests by Islet Diameter"),
+            h5("Stratified Tests By Islet Diameter"),
             tags$small(style = "color: #888; display: block; margin-bottom: 8px;",
               "Donor-level means within each fixed 50 µm size bin, BH-corrected across bins. ",
               "Hover a cell for the per-group coverage behind that specific test. ",

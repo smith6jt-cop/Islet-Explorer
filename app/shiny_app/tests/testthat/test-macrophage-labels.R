@@ -125,6 +125,18 @@ test_that("aggregate columns sum the members' proportions of the same cells", {
   expect_equal(out[["peri_prop_All_T_cells"]], c(0.05, 0))
 })
 
+test_that("the macrophage master toggle adds no additive phenotype value", {
+  env <- .label_env()
+  children <- env$macrophage_collapse(env$MACROPHAGE_LABELS, "CD68") |> unique()
+  html <- as.character(env$phenotype_group_checkboxes("include", c("B cell", children),
+    selected = c("B cell", children[1]), marker_input_id = "split_markers", markers = "CD68"))
+  expect_match(html, 'class="pheno-group-toggle"', fixed = TRUE)
+  expect_false(grepl('value="Macrophage"', html, fixed = TRUE))
+  expect_equal(lengths(regmatches(html, gregexpr('name="include"', html))), 3L)
+  expect_equal(lengths(regmatches(html, gregexpr('name="split_markers"', html))), 4L)
+  expect_match(html, 'value="CD68" checked="checked"', fixed = TRUE)
+})
+
 test_that("macrophages merge by the checked markers; a merged category expands back to its data labels", {
   env <- .label_env()
   L <- env$MACROPHAGE_LABELS
