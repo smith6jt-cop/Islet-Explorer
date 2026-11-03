@@ -809,8 +809,12 @@ macrophage_collapse_comp <- function(comp, markers = character(0)) {
   raw <- root_phenotype_labels()
   if (!length(markers) && "prop_Macrophage" %in% names(comp) &&
       (is.null(raw) || "Macrophage" %in% raw)) prof <- c(prof, "Macrophage")
+  # A destination can also be a genuine source member (the raw Macrophage
+  # residual). All calculations must read its original count/z/distance,
+  # including after the merged destination count has been written.
+  original <- comp
   safe <- function(l) gsub("+", "plus", gsub(" ", "_", l, fixed = TRUE), fixed = TRUE)
-  num <- function(col) if (col %in% names(comp)) suppressWarnings(as.numeric(comp[[col]])) else rep(NA_real_, nrow(comp))
+  num <- function(col) if (col %in% names(original)) suppressWarnings(as.numeric(original[[col]])) else rep(NA_real_, nrow(original))
   total <- function(cols) {
     m <- vapply(cols, num, numeric(nrow(comp)))
     if (!is.matrix(m)) m <- matrix(m, nrow = nrow(comp))
@@ -820,11 +824,14 @@ macrophage_collapse_comp <- function(comp, markers = character(0)) {
   }
   keys <- macrophage_collapse(prof, markers)
   drop <- character(0)
+  destinations <- character(0)
   for (k in unique(keys)) {
     mem <- prof[keys == k]
+    destinations <- c(destinations, paste0("prop_", k),
+                      paste0(c("peri_prop_", "peri_count_", "enrich_z_", "min_dist_"), safe(k)))
     comp[[paste0("prop_", k)]] <- total(paste0("prop_", mem))
     for (pre in c("peri_prop_", "peri_count_")) comp[[paste0(pre, safe(k))]] <- total(paste0(pre, safe(mem)))
-    if (any(paste0("enrich_z_", safe(mem)) %in% names(comp))) {
+    if (any(paste0("enrich_z_", safe(mem)) %in% names(original))) {
       observed <- 0; expected <- 0
       for (m in mem) {
         z <- num(paste0("enrich_z_", safe(m))); n <- num(paste0("peri_count_", safe(m)))
@@ -834,15 +841,16 @@ macrophage_collapse_comp <- function(comp, markers = character(0)) {
       }
       comp[[paste0("enrich_z_", safe(k))]] <- ifelse(expected > 0, (observed - expected) / sqrt(expected), NA_real_)
     }
-    dist <- intersect(paste0("min_dist_", safe(mem)), names(comp))
+    dist <- intersect(paste0("min_dist_", safe(mem)), names(original))
     if (length(dist)) {
       d <- do.call(pmin, c(lapply(dist, num), na.rm = TRUE))
       comp[[paste0("min_dist_", safe(k))]] <- d
     }
-    drop <- c(drop, setdiff(c(paste0("prop_", mem), paste0(c("peri_prop_", "peri_count_", "enrich_z_", "min_dist_"),
-                                                         rep(safe(mem), each = 4))), paste0("prop_", k)))
+    drop <- c(drop, paste0("prop_", mem),
+              paste0(c("peri_prop_", "peri_count_", "enrich_z_", "min_dist_"), rep(safe(mem), each = 4)))
   }
   if (!length(markers)) drop <- c(drop, "prop_All macrophages", "peri_prop_All_macrophages")
+  drop <- setdiff(drop, destinations)
   comp[, setdiff(names(comp), drop), drop = FALSE]
 }
 

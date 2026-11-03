@@ -449,6 +449,8 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         ) +
         theme_islet() +
         ggplot2::theme(
+          # Keep the rightmost x-axis tick inside the narrow tissue PNG.
+          plot.margin = ggplot2::margin_part(r = 18),
           legend.position = "bottom",
           legend.direction = "horizontal",
           legend.title.position = "top",

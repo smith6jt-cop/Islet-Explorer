@@ -166,15 +166,36 @@ test_that("merged object columns sum the members and recompute the band enrichme
   expect_equal(split[[paste0("prop_", env$macrophage_collapse(L[1], env$MACROPHAGE_MARKERS))]], c(0.1, 0.2))
 })
 
-test_that("unsplit macrophage totals preserve a recorded residual leaf once", {
+test_that("mixed raw and profile macrophages retain every merged family and use original member counts", {
   env <- .label_env()
   profile <- env$MACROPHAGE_LABELS[1]
   env$root_phenotype_labels <- function() c("Macrophage", profile)
-  comp <- data.frame(prop_Macrophage = 0.1, check.names = FALSE)
-  comp[[paste0("prop_", profile)]] <- 0.2
+  families <- c("peri_prop_", "peri_count_", "enrich_z_", "min_dist_")
+  safe <- function(x) gsub("+", "plus", gsub(" ", "_", x, fixed = TRUE), fixed = TRUE)
+  comp <- data.frame(prop_Macrophage = c(0.1, 0.3, NA), peri_prop_Macrophage = c(0.1, 0.3, NA),
+                     peri_count_Macrophage = c(10, 30, NA), enrich_z_Macrophage = c(5 / sqrt(5), 0, NA),
+                     min_dist_Macrophage = c(4, NA, NA), source_row = 1:3, check.names = FALSE)
+  comp[[paste0("prop_", profile)]] <- c(0.2, 0.1, NA)
+  profile_values <- list(c(0.2, 0.1, NA), c(20, 10, NA), c(10 / sqrt(10), 5 / sqrt(5), NA), c(8, 6, NA))
+  for (i in seq_along(families)) comp[[paste0(families[i], safe(profile))]] <- profile_values[[i]]
+  original <- comp
   out <- env$macrophage_collapse_comp(comp)
-  expect_equal(out$prop_Macrophage, 0.3)
-  expect_equal(env$macrophage_collapse_comp(out)$prop_Macrophage, 0.3)
+  destinations <- c("prop_Macrophage", paste0(families, "Macrophage"))
+  expect_true(all(destinations %in% names(out)))
+  expect_equal(out$prop_Macrophage, c(0.3, 0.4, NA))
+  expect_equal(out$peri_prop_Macrophage, c(0.3, 0.4, NA))
+  expect_equal(out$peri_count_Macrophage, c(30, 40, NA))
+  # Counts 10 + 20, expected 5 + 10: z = (30 - 15) / sqrt(15).
+  expect_equal(out$enrich_z_Macrophage, c(15 / sqrt(15), 5 / sqrt(35), NA), tolerance = 1e-12)
+  expect_equal(out$min_dist_Macrophage, c(4, 6, NA))
+  expect_identical(out$source_row, original$source_row)
+  expect_identical(comp, original)
+  expect_identical(env$macrophage_collapse_comp(out), out)
+  expect_false(any(grepl("Macrophage_LGALS3", names(out), fixed = TRUE)))
+  split <- env$macrophage_collapse_comp(comp, "CD4")
+  expect_identical(split[destinations], comp[destinations])
+  key <- safe(env$macrophage_collapse(profile, "CD4"))
+  for (i in seq_along(families)) expect_equal(split[[paste0(families[i], key)]], profile_values[[i]])
   expect_setequal(env$phenotype_members("All macrophages"), c("Macrophage", profile))
   expect_identical(env$phenotype_partition_labels(c("Macrophage", profile)), profile)
 })
