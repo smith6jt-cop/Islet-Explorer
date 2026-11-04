@@ -423,9 +423,8 @@ R -q -e "shiny::runApp('app/shiny_app', launch.browser=FALSE)"
 
 The reviewer deployment is an immutable, rootless Podman service managed by a
 user-mode Quadlet unit. Shiny listens on container port 3838; Podman publishes it
-to the requested PubApps VM loopback address `127.0.0.1:3838`, subject to UFRC
-confirming the final reachable backend address and port. UFRC supplies TLS,
-whole-site Basic Auth, and the public reverse proxy. Code is baked into the OCI
+to the PubApps VM private address `10.13.41.21:3838` for UFRC's reverse proxy.
+UFRC supplies TLS, whole-site Basic Auth, and the public reverse proxy. Code is baked into the OCI
 image. The manifest-backed data root and its `images/` subtree are mounted read-only;
 only bounded temp and log directories are writable.
 
@@ -453,7 +452,7 @@ Rscript scripts/verify_release_data.R --root /path/to/release --mode full
 |----------|---------|
 | `ISLET_RUNTIME_MODE` | `development` or fail-closed `production` |
 | `ISLET_DATA_ROOT` | Manifest-backed release root; production default mount is `/srv/islet-explorer/data` |
-| `ISLET_DATA_SCHEMA` | Expected release schema version (currently `1`) |
+| `ISLET_DATA_SCHEMA` | Expected release schema version (production currently uses `5` for the 20-donor bundle; schema `1` is the frozen 15-donor contract) |
 | `ISLET_VERIFY_RELEASE_HASHES` | `none`, `core`, or `full`; production defaults to `core` at startup |
 | `ISLET_DUCKDB_THREADS` | Embedded DuckDB threads (production default `2`) |
 | `ISLET_DUCKDB_MEMORY_LIMIT` | DuckDB memory cap (production default `1GB`) |
