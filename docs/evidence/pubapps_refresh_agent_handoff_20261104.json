@@ -70,7 +70,6 @@
   },
   "status_correction_followup_r2": {
     "status": "reviewed_patch_unapplied",
-    "published_utc": "2026-11-04T14:05:00Z",
     "base_commit": "a2f945ac4c20d06a1354a38cfb93d5491f1f8cef",
     "tip_commit": "276822242c78c50d77d1e1323e767939db50d9b0",
     "workstation_path": "/home/smith6jt/IO60panc2nd/CODEX-handoff-20261104-status-correction-r2",
@@ -81,7 +80,6 @@
     "sha256sums_sha256": "0b9baf8ed5c11a084e97dea64ce3f82befb48f773a7179fdc5f7988fd7a4710d",
     "checksums_verified_on_workstation": true,
     "checksums_verified_on_hpg": true,
-    "checksums_verified_on_hpg_utc": "2026-11-04T14:05:00Z",
     "corrects": "Labels the package index separately from project-README.md; corrects current backend bind and production schema 5 in root README and current status files.",
     "recipient_message_sent": true,
     "reviewed_utc": "2026-11-04T13:50:11Z",
@@ -96,11 +94,14 @@
       "all_four_guides_match_tip",
       "backend_bind_and_schema_match_production_receipt"
     ],
-    "open_finding": "prior recipient receipt hash corrected in this follow-up commit",
-    "patch_applied_by_recipient": false
+    "open_finding": null,
+    "patch_applied_by_recipient": false,
+    "listed_payload_files": 10,
+    "total_files_including_SHA256SUMS": 11,
+    "timestamp_note": "Earlier publication and HPG verification timestamps were recorded as 14:05Z but postdate the 13:50:11Z recipient review and recording commit. Exact publication/verification time is not established; no replacement time inferred."
   },
   "status_correction_followup_r3": {
-    "status": "published_review_pending",
+    "status": "acknowledged_review_only_patch_unapplied",
     "published_utc": "2026-11-04T14:10:00Z",
     "base_commit": "276822242c78c50d77d1e1323e767939db50d9b0",
     "tip_commit": "532af6c982830f7f2b71f454b4cd0d4f75c5806b",
@@ -113,6 +114,12 @@
     "checksums_verified_on_hpg": true,
     "recipient_receipt_digest_corrected_to": "9404460d11edb025f60f6b4277706ac9e128f9c603374e4fdf3ede7f184b4438",
     "patch_applied_by_recipient": false,
-    "recipient_message_sent": true
+    "recipient_message_sent": true,
+    "total_files_including_SHA256SUMS": 5,
+    "listed_payload_files": 4,
+    "recipient_commit": "658a6cd6fa7c2d4cf11c82fe32ddce0450031ba2",
+    "recipient_receipt": "docs/evaluations/codex_pubapps_status_correction_r3_20261104/receipt.json",
+    "recipient_receipt_sha256": "97f26bb3483dd19524fc6e54cc7fa1fb872931c8e5dc3d8a055981193f117a0e",
+    "recipient_acknowledgement": "all HPG/workstation files and checksums match; bundle fsck and direct replay passed; PRIOR-RECEIPT-DIGEST closed"
   }
 }
