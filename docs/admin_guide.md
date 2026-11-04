@@ -12,21 +12,17 @@ remain unchanged. Zero unnamed endocrine definitions or boundary placeholders
 remain. The classifier-lineage proof passes while corrected-cell and centroid
 diagnostics remain visible; they are not evidence of negative original pixels.
 
-Production `pubapps-2026-11-components-v1` is live from `e5689f6`, image `89b3f840…`.
-The separate strict-DuckDB dev release `pubapps-2026-11-dev-duckdb-v1` is live
-from `378843e`, image `e704ac2a…`. Their separate receipts bind the actual data,
-image and validation: [production](evidence/pubapps_live_20261102.json),
-[dev](evidence/dev_duckdb_deployment_20261103.json). The [November 3 display changes](app_display_fixes_20261103.md)
-are running for [local review](http://127.0.0.1:3845/islet-explorer/) from source
-`1596b03`, image `846962f7…`, using the separately accepted read-only data built from
-`5e6580f`; see the [local review record](local_duckdb_review_20261103.md).
-The persistent local user service is enabled on loopback port 3845. Data and View
-controls start collapsed; click a heading to show or hide them. The
-[controls review receipt](evidence/local_controls_review_20261103.json) records this successor’s checks.
-The owner's November 3 direction is **LOCAL REVIEW ONLY**: dev activation is
-paused pending the owner's review and decision. Both public services remain unchanged.
-The older `islet-explorer-local.service` remains inactive, separate from this
-persistent, enabled local review service.
+Production `pubapps-2026-11-ui-refresh-1659c9d` is live from `1659c9d`, image
+`16c4979f…`. Its full data parity passed 25/25 and authenticated proxy access
+passed 15/15; the current service, hashes and checks are bound in the
+[production receipt](evidence/pubapps_live_20261104_ui_refresh.json). The
+separate strict-DuckDB dev release `pubapps-2026-11-dev-duckdb-v1` remains live
+from `378843e`, image `e704ac2a…`; see its [receipt](evidence/dev_duckdb_deployment_20261103.json).
+The November 3 display fixes and card controls are included in production. The
+local preview has been stopped; its image, tests and visual observations are
+preserved in the [local review record](local_duckdb_review_20261103.md). The
+older `islet-explorer-local.service` remains inactive. A designated clean
+off-campus acceptance run and VM reboot test remain pending.
 
 **Live reviewer URL (authentication required):**
 `https://islet-explorer.rc.ufl.edu/islet-explorer/`

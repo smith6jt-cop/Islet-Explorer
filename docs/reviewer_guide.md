@@ -3,22 +3,18 @@
 This guide describes the publication-profile interface. It does not describe dormant
 development modules or certify a scientific data release.
 
-**Current status, 2026-11-02:** the [selected-component v2 build](component_build_v2_20261102.md)
-is live as `pubapps-2026-11-components-v1`, verified at 2026-11-03 02:42 UTC
-(November 2 local) with 15/15 authenticated-access and 49/49 browser checks.
-It preserves the exact named v19 endocrine cells and the isolated DG Lymphatic revision. Consult
-the [deployment record](container_security_20261102.md) and the supplied review
-round's release/access notice for actual availability. The strict-DuckDB
-[dev release](evidence/dev_duckdb_deployment_20261103.json) is independently live
-and verified. The [November 3 display fixes](app_display_fixes_20261103.md) are
-running for [local review](http://127.0.0.1:3845/islet-explorer/) from source
-`1596b03`, image `846962f7…`, using the separately accepted read-only data built from
-`5e6580f`; see the [local review record](local_duckdb_review_20261103.md).
-The persistent local user service is enabled on loopback port 3845. Data and View
-controls start collapsed; click a heading to show or hide them. The
-[controls review receipt](evidence/local_controls_review_20261103.json) records this successor’s checks.
-The owner's November 3 direction is **LOCAL REVIEW ONLY**: dev activation is
-paused pending the owner's review and decision. Both public services remain unchanged.
+**Current status, 2026-11-04:** production is live as
+`pubapps-2026-11-ui-refresh-1659c9d`. Its schema-5 data passed 25/25 parity
+checks, host verification passed, and authenticated public-proxy acceptance
+passed 15/15. The release preserves the exact named v19 endocrine cells and
+the isolated DG Lymphatic revision. The November 3 display and card-control
+changes are included. Consult the [deployment record](container_security_20261102.md),
+[live receipt](evidence/pubapps_live_20261104_ui_refresh.json), and the review
+round's release/access notice for availability. The strict-DuckDB
+[dev release](evidence/dev_duckdb_deployment_20261103.json) is independently
+live and unchanged. The local preview has been stopped; its historical checks
+are in the [local review record](local_duckdb_review_20261103.md). A designated
+clean off-campus acceptance run and host reboot test remain pending.
 
 The [workflow user guide](workflow_user_guide.md) explains data processing, component
 selection and release checks; the [user guide](user_guide.md) describes controls in more

@@ -1,5 +1,11 @@
 # App display corrections — 2026-11-03
 
+**Deployment update, 2026-11-04:** these requested display changes are included
+in production release `pubapps-2026-11-ui-refresh-1659c9d`. The local preview
+described in the historical review sections has been stopped. See the
+[live receipt](evidence/pubapps_live_20261104_ui_refresh.json) for the activated
+image, data parity, host verification and public access checks.
+
 The owner requested consistent parent/subtype categories, no visible Conflict
 classes, readable Plot dropdowns, removal of the Trajectory citation suffix,
 even Trajectory card spacing, and Spatial scatter legends below the plot.

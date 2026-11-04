@@ -2,14 +2,16 @@
 
 This guide follows the data from the source images to the reviewed app and its release. It is for the owner, analysts, and operators who need to know which inputs are being used, what each stage changes, and what must pass before the app goes online. For the app controls themselves, use the [reviewer guide](reviewer_guide.md). For scientific decisions, the [typing rulings ledger](typing_rulings_ledger.md) and latest owner directions in [CLAUDE.md](../CLAUDE.md) take precedence over historical examples.
 
-## Current state — 2026-11-03
+## Current state — 2026-11-04
 
 **Production is live** at
 [Islet Explorer](https://islet-explorer.rc.ufl.edu/islet-explorer/) with
-`pubapps-2026-11-components-v1`, completing the owner's direction to resolve
-the selection and get the PubApp live. The selected-component v2 scientific
-build and native QuPath review use the exact named v19 endocrine membership
-and current non-endocrine methods. Read the
+`pubapps-2026-11-ui-refresh-1659c9d`. Its schema-5 20-donor data passed all
+25 parity checks against the canonical component-app-v2 sources; the release
+retains the exact named v19 endocrine membership and the accepted current
+non-endocrine methods. The image/UI source is `1659c9d`; the final data and
+release manifest are hash-bound in the [live receipt](evidence/pubapps_live_20261104_ui_refresh.json).
+Read the
 [resolution contract](component_resolution_20261102.md),
 [current build and measured counts](component_build_v2_20261102.md), and
 [authoritative security/deployment status](container_security_20261102.md).
@@ -24,8 +26,8 @@ The first component build's unresolved assignments are historical diagnostics.
 | Endocrine totals | Exactly Beta, Alpha, Delta and CHGA+ hormone-negative; no anatomical object labels in cell denominators. |
 | Object proof | Hash-bound original classifier lineage and exact Single whole-cell association, with corrected-cell and centroid diagnostics retained separately. |
 | Scientific source | `67ee6c9`, HPG job `49168359`, fresh v2 paths. |
-| Image/release source | `e5689f6`, adding the app palette-name fix; release `pubapps-2026-11-components-v1` is active and verified. |
-| Corrected parity validator | `d3ec00e`; validation-only correction, with image/data and scientific producer commits retained. |
+| Image/release source | `1659c9d`; release `pubapps-2026-11-ui-refresh-1659c9d` is active and verified. |
+| Corrected parity validators | `d3ec00e` fixes the distance tolerance; `7ffa7a1` loads the new selector helpers and binds the validator-only commit separately from the release producer. |
 | Composite verifier | `c3dc494`; binds the original 24 passing checks and corrected full state/UUID proofs to unchanged inputs. |
 
 Both all-20 identity runs and the final row review have passed: 3,199,606 cells,
@@ -37,27 +39,24 @@ geometry. The all-20 classifier-lineage proof, app assembly, every-cell export v
 and native QuPath build also pass, and all outputs are returned with verified
 checksums. Immutable schema-5 packaging and full byte verification have passed.
 The original parity run passed 24 of 25 checks; its only failure was a floating
-distance treated as an exact key. The corrected full state gate and independent
-UUID/state check pass, and the final targeted composite parity and inventory
-are validated. The [current results](component_build_v2_20261102.md#release-parity-correction-and-remaining-checks)
-retain the failed report and targeted revalidation. Production activation and
-public checks completed at **2026-11-03 02:42:27 UTC**: the host is healthy,
-access checks pass **15/15**, and the authenticated browser suite passes
-**49/49**. The separate strict-DuckDB dev release was activated and verified at
-**2026-11-03 12:42 UTC**, from source `378843e`, image `e704ac2a…`, with its own
-15/15 access and 49/49 browser checks; see the [dev receipt](evidence/dev_duckdb_deployment_20261103.json).
-The older `islet-explorer-local.service` remains inactive/disabled. A separate
-[local review candidate](local_duckdb_review_20261103.md) runs at
-[http://127.0.0.1:3845/islet-explorer/](http://127.0.0.1:3845/islet-explorer/), from
-source `3c81075` and image `eb6f3c32…`, with the separately accepted read-only
-`5e6580f` data. Its persistent local user service is enabled. Data/View panels
-start collapsed; click their headings to open or close them. The
-[combined review receipt](evidence/local_unclassified_ui_review_20261103.json)
-records native standard checks passing 49/49 and Composition/Spatial checks
-each passing 12/12, with completed visual reviews and their recorded limits.
-The owner's November 3 direction is local review only: dev activation is paused
-pending review and a decision. Neither public release has changed. The separate
-off-campus acceptance and reboot tests are still pending.
+distance treated as an exact key. Corrected validators retain the tolerance,
+the failed historical report and the final validations. See the
+[component-build record](component_build_v2_20261102.md#release-parity-correction-and-remaining-checks).
+The current production release was activated at **2026-11-04 13:18 UTC** as
+`pubapps-2026-11-ui-refresh-1659c9d`. Its complete release parity passed **25/25**,
+full host verification and schema-5 checks passed, and authenticated proxy
+acceptance passed **15/15**. The specific build, data and reports are bound in
+the [live receipt](evidence/pubapps_live_20261104_ui_refresh.json). The
+separate strict-DuckDB dev release remains active and unchanged; see its
+[receipt](evidence/dev_duckdb_deployment_20261103.json). The prior 49/49
+browser reports apply to the earlier accepted app version and are not claimed
+as a fresh browser run of this release.
+
+The November 3 [local review record](local_duckdb_review_20261103.md) documents
+the preview and its visual/browser checks. That preview is now stopped. The
+November 3 local-review-only direction was superseded by the owner's later
+instruction to transfer and activate after parity and host checks. A designated
+clean off-campus acceptance run and VM reboot test remain pending.
 
 The separate [dev DuckDB fix](dev_duckdb_fix_20261102.md) passes strict
 validation without a deferral and is running on dev. It has not been promoted to production. Production's known DuckDB finding is nonblocking
@@ -421,9 +420,9 @@ verified as recorded in section 9. Use the validated final report path when
 binding subsequent evidence; retain earlier drafts separately. The [compact completion receipt](evidence/component_release_validation_20261102.json)
 records the build, test and inventory results with their exact evidence hashes.
 
-Use copied files for a reviewer bundle so later source edits cannot alter it through shared inodes. `--materialize hardlink` is only for disposable local tests. Keep image data and credentials outside the OCI image. Preserve the SBOM, vulnerability scan, dependency evidence, immutable image ID, data manifest, parity/inventory reports, and full logs. Current security validation also requires the image's Brotli library evidence from `deploy/verify-brotli.py`, invoked by `deploy/scan-image.sh`: patched Ubuntu/Node, Pillow linked to the system decoder, and DuckDB's actual decoder regression with its installed-library hash. New release manifests require the version-2 report; missing reports and older Pillow-only reports are rejected. A clean package scan alone missed the embedded decoders. Never rewrite the directory of an active release.
+Use copied files for a portable reviewer bundle so later source edits cannot alter it through shared inodes. `--materialize hardlink` is suitable only when every linked input is treated as immutable. For a PubApps update, after verifying that the complete candidate image tree has exactly the same hashes as a current release on the same Qumulo filesystem, `cp -al` can reuse those immutable TIFF files in the new release; retain both directories and keep image mounts read-only. Rehash the complete release on the host immediately before activation. This avoids recopying image bytes and preserves normal viewer file access. Keep image data and credentials outside the OCI image. Preserve the SBOM, vulnerability scan, dependency evidence, immutable image ID, data manifest, parity/inventory reports, and full logs. Current security validation also requires the image's Brotli library evidence from `deploy/verify-brotli.py`, invoked by `deploy/scan-image.sh`: patched Ubuntu/Node, Pillow linked to the system decoder, and DuckDB's actual decoder regression with its installed-library hash. New release manifests require the version-2 report; missing reports and older Pillow-only reports are rejected. A clean package scan alone missed the embedded decoders. Never rewrite the directory of an active release.
 
-The owner's latest November 2 direction is to deploy the current validated build to the live PubApp within the DuckDB remediation window through **2026-11-10 UTC**, then develop and test our DuckDB fix separately for dev. The active production release retains the original hash-pinned CRAN DuckDB 1.5.2. The retained production validation records the real failed binary report plus a distinct dated nonblocking release decision; its manifest and full/quick release checks enforce that deadline. Current build source includes the reviewed dev patch (`b5fae5c`) and requires its source receipt plus the strict installed-decoder check. Other package findings and scientific/data validation are not waived. The isolated dev fix is now live under its [separate deployment receipt](evidence/dev_duckdb_deployment_20261103.json); `3a12daa` remains historical backport evidence. Follow the [dated decision](duckdb_remediation_window_20261102.md), [build commands](../deploy/README.md) and [security evidence](container_security_20261102.md). The real-Parquet test for the dev fix writes only temporary BROTLI-compressed output and compares schema, values, missingness, duplicates and aggregates. An older read-only payload can support a diagnostic smoke, but cannot supply the matching release/data acceptance.
+Production's DuckDB remediation window remains open through **2026-11-10 UTC**; the separate strict-DuckDB fix is active in dev. The current production image passed its strict package gate with 0 High / 0 Critical findings. Follow the [dated decision](duckdb_remediation_window_20261102.md), [build commands](../deploy/README.md), and [security evidence](container_security_20261102.md). The real-Parquet check for the dev fix compares schema, values, missingness, duplicates and aggregates. An older read-only payload can support a diagnostic smoke, but cannot supply matching release/data acceptance.
 
 A verified release can first be smoke-tested with the production runtime using `deploy/run.sh`. It takes environment variables `PROJECT_ROOT`, `RELEASE`, `PORT`, `CONTAINER_NAME`, and `MEMORY`; it binds loopback and verifies the release before launching. The documented local smoke port is 3843. Check the container's health and `trajectory_warm_ok` in its log, then run the expanded browser suite. Do not substitute a development-mode launch for this test.
 
@@ -448,7 +447,7 @@ Inspect the same candidate yourself. Plot, Trajectory, Spatial, and Viewer are t
 
 Browser checks establish runtime behavior; source/release parity establishes packaging equivalence. Neither establishes correct scientific cell identities. Record scientific review separately.
 
-The [November 3 display changes](app_display_fixes_20261103.md) are packaged in the [local review candidate](local_duckdb_review_20261103.md), with app source `3c81075`, image `eb6f3c32…`, and the separately accepted read-only `5e6580f` data bundle. The persistent local service is enabled, and Data/View panels start collapsed with clickable headings. Dev activation is paused pending the owner’s review and decision. They reserve arrow space for long dropdown labels, place Trajectory’s Segmentation card in its own full-width row with consistent spacing, remove the citation suffix from its PAGA title, and put Spatial legends below their plots. Dense tissue labels wrap, and the plot grows vertically to preserve the map area. These are presentation changes; scientific data and controls remain separate from the deployment status above.
+The November 3 display and card-control changes are included in the production image: dropdown text clears the arrow, Trajectory card spacing and PAGA controls are corrected, Spatial legends use the plot area efficiently, and the requested phenotype, palette, macrophage and title controls are applied. The local preview has been stopped. These are presentation changes; the production release uses the parity-verified schema-5 data described above.
 
 ### Card Controls In The Local Review Candidate
 
@@ -468,17 +467,21 @@ is not native image acceptance.
 
 ## 9. Production activation, rollback, and operations
 
-The selected-component production release is **active and verified** at
-[Islet Explorer](https://islet-explorer.rc.ufl.edu/islet-explorer/). The security
-controller completed successfully at 2026-11-03 02:42:27 UTC. It selected
-`pubapps-2026-11-components-v1`, producer `e5689f6`, and image
-`sha256:89b3f84070b1edb89124347572ed43f278b5a8478e243053957037ccb1ceff8e`.
-The host reports healthy production with read-only scientific mounts; all
-15 access checks and 49 authenticated browser checks pass. The retained host
-and endpoint reports are in `tmp/pubapps-live-20261102/`, with the final binding
-and service details in the [deployment record](container_security_20261102.md).
-This verifies deployment behavior separately from the scientific rule and
-provenance checks.
+Production release `pubapps-2026-11-ui-refresh-1659c9d` is **active and verified**
+at [Islet Explorer](https://islet-explorer.rc.ufl.edu/islet-explorer/). It was
+activated at `2026-11-04T13:18:01Z` with image
+`sha256:16c4979fff4d7e8d72befbaade013ce668153dc6161f938c8bc6a49a60e5ae24`.
+The producer commit is `1659c9d`; the parity-only validator commit is
+`7ffa7a1`. All 25 data parity checks passed, the full local and host manifests
+matched (20 OME-TIFFs and 4,907 other data files), and the in-container schema-5
+check passed. Host verification confirmed the release before activation and
+read-only scientific mounts after startup. The authenticated public-proxy
+reviewer verifier passed 15/15 checks, including HTTP Basic Auth, TIFF range,
+sidecars and WebSocket. The full release manifest SHA-256 is
+`a097742540f8bbcc7bb532ecd031dc7f27b650dd03613a3148ef0abca710d50b`.
+The TIFF tree shares hard-linked files with the previous production release;
+no TIFF bytes were copied during transfer. The previous release remains
+recorded for rollback. The separate dev instance was not changed.
 
 For future activations, record the selected release, source commit, image ID,
 manifest hash, validation evidence and rollback state. The security owner

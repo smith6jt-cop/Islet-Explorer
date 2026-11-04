@@ -2,26 +2,20 @@
 
 Interactive web application for exploring pancreatic islet CODEX multiplexed imaging data from nPOD donors. Compares endocrine composition, immune cells and spatial microenvironments across ND, Aab+ and T1D donor groups; these cross-sectional observations do not establish disease progression.
 
-**2026-11-02:** this guide covers app features. For the complete data-to-app process, use
+**2026-11-04:** this guide covers app features. For the complete data-to-app process, use
 [the workflow user guide](workflow_user_guide.md). The
 [selected-component v2 build](component_build_v2_20261102.md) preserves the exact
 named v19 endocrine cells and applies current methods to the remaining cells.
-Production `pubapps-2026-11-components-v1` is live and verified as of
-2026-11-03 02:42 UTC (November 2 local), with 15/15 authenticated-access and
-49/49 browser checks passing. Consult the [deployment record](container_security_20261102.md)
-for the exact image, data and validation evidence. The separate strict-DuckDB
-[dev release](evidence/dev_duckdb_deployment_20261103.json) is also live and verified.
-The [November 3 display fixes](app_display_fixes_20261103.md) described below are
-running for [local review](http://127.0.0.1:3845/islet-explorer/) from source
-`3c81075`, image `eb6f3c32…`, using the separately accepted read-only data built from
-`5e6580f`; see the [local review record](local_duckdb_review_20261103.md).
-The persistent local user service is enabled on loopback port 3845. Data and View
-controls start collapsed; click a heading to show or hide them. The
-[combined review receipt](evidence/local_unclassified_ui_review_20261103.json)
-records native standard checks passing 49/49 and Composition/Spatial checks
-each passing 12/12, with completed visual reviews and their recorded limits.
-The owner's November 3 direction is **LOCAL REVIEW ONLY**: dev activation is
-paused pending the owner's review and decision. Both public services remain unchanged.
+Production `pubapps-2026-11-ui-refresh-1659c9d` is live; all 25 data parity
+checks and 15 authenticated public-proxy checks passed. Consult the
+[deployment record](container_security_20261102.md) and
+[live receipt](evidence/pubapps_live_20261104_ui_refresh.json) for the exact
+image, data, and validation evidence. The separate strict-DuckDB
+[dev release](evidence/dev_duckdb_deployment_20261103.json) is also live and
+unchanged. The November 3 display and card-control fixes are included in the
+production image. The local preview has been stopped; its native and visual
+checks remain documented in the [local review record](local_duckdb_review_20261103.md).
+A designated clean off-campus acceptance run and host reboot test remain pending.
 
 **Live reviewer URL (authentication required)**:
 `https://islet-explorer.rc.ufl.edu/islet-explorer/`

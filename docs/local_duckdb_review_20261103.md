@@ -1,14 +1,20 @@
 # Local DuckDB and display review — 2026-11-03
 
+**Historical status:** this local preview was stopped on 2026-11-03 after its
+UI changes were incorporated into the production release
+`pubapps-2026-11-ui-refresh-1659c9d` on 2026-11-04. The final deployed state
+and release checks are recorded in the [live receipt](evidence/pubapps_live_20261104_ui_refresh.json)
+and [final build record](pubapps_ui_refresh_20261103.md). The runtime and visual
+checks below describe the review candidate identified in this document.
+
 The current app at [the local preview](http://127.0.0.1:3845/islet-explorer/)
 is source `26b66131668c01326d4b95bdb1efbf1d37ef7527`, image
 `sha256:2931955ab95330c7804bfea7f9ca25774aa4813f7c9db645a3fd63e35f99035e`.
 It includes the follow-on Trajectory and Spatial changes. The strict image
-gate, read-only mounts and local runtime are verified; the browser and visual
+gate, read-only mounts and local runtime were verified; the browser and visual
 acceptance receipts below are for the earlier `3c81075` review baseline and are
-not relabeled as fresh checks of this successor. The current UI is packaged in
-the fully verified [PubApps build candidate](pubapps_ui_refresh_20261103.md),
-which uses accepted production data and has not been transferred or activated.
+not relabeled as fresh checks of this successor. Its final successor is now
+deployed as described in the production build record.
 
 | Component | Earlier native review baseline |
 |---|---|

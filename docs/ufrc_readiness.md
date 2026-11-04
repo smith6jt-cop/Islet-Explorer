@@ -1,31 +1,39 @@
 # Islet Explorer UFRC readiness and evidence index
 
-**Latest owner direction, 2026-11-02:** the current build is intended for the live production PubApp once its actual data/release/runtime checks pass. The known DuckDB finding is nonblocking through the notice's **2026-11-10 UTC** patch deadline; develop/test our DuckDB fix separately for the dev PubApp. See [the dated release decision](duckdb_remediation_window_20261102.md). This supersedes the earlier strict DuckDB hold and no-activation directions below. Historical failed reports remain unchanged; data checks and other security findings still apply.
+**Latest owner direction, 2026-11-04:** transfer and activate the complete UI release after its data parity and host checks pass. Production `pubapps-2026-11-ui-refresh-1659c9d` is active. Keep the separate strict-DuckDB fix in dev; the production remediation window ends **2026-11-10 UTC**. See [the dated release decision](duckdb_remediation_window_20261102.md). Historical failed reports remain unchanged; data checks and other security findings still apply.
 
-## Current production release — live 2026-11-03 UTC
+## Current production release — live 2026-11-04 UTC
 
 [The production PubApp](https://islet-explorer.rc.ufl.edu/islet-explorer/) runs
-`pubapps-2026-11-components-v1`, immutable image `89b3f840…`, clean source
-`e5689f6`. Full data verification, release parity/inventory and host byte
-verification passed. Production is healthy; public-access checks and all
-49 browser checks passed. The running-container census exactly matches
-every accepted phenotype count across 20 donors and 3,199,606 eligible cells.
+`pubapps-2026-11-ui-refresh-1659c9d`, immutable image
+`16c4979fff4d7e8d72befbaade013ce668153dc6161f938c8bc6a49a60e5ae24`, source
+`1659c9d`. All 25 release parity checks passed. Local and host full-hash
+verification passed, the in-container schema-5 check passed, and the container
+is healthy with read-only scientific mounts. Authenticated public-proxy
+acceptance passed 15/15. The separate dev instance was not changed; the prior
+production release remains recorded for rollback.
+
+This release contains 20 TIFFs and 4,907 other data files. Its TIFF tree was
+byte-identical to the previous release and was hard-linked on PubApps, so no
+TIFF bytes were copied during transfer. The viewer still serves the same image
+paths with a valid 16-byte HTTP 206 response.
 
 There are 7,398 explicitly Unclassified cells (0.23%), no prior named
 nonendocrine identities lost, and all 110,721 selected endocrine identities
 retained. See the [independent row review](unclassified_component_review_20261103.md)
 and [component v2 build record](component_build_v2_20261102.md).
 
-The available package fixes are deployed, with 0 High / 0 Critical findings
-in the final image's package scan. DuckDB remains open within the dated
-November 10 window. The separate strict-DuckDB dev release is live and verified
-as of 12:42 UTC, from source `378843e`, image `e704ac2a…`, without a deferral; its
-[deployment receipt](evidence/dev_duckdb_deployment_20261103.json) records its own
-15/15 access and 49/49 browser checks. The
-[security/deployment record](container_security_20261102.md) and
-[machine-readable receipt](evidence/pubapps_live_20261102.json) bind the actual
-deployed image, data and public acceptance. Independent off-campus access and a
-host reboot were not tested; this is an operational record, not UFIT approval.
+The final production image passed the package security gate with 0 High and 0
+Critical findings. The dated DuckDB remediation window ends November 10 UTC.
+The separate strict-DuckDB dev release remains live and unchanged, from source
+`378843e`, image `e704ac2a…`, without a deferral; its
+[deployment receipt](evidence/dev_duckdb_deployment_20261103.json) records its
+own 15/15 access and 49/49 browser checks. The production
+[deployment record](container_security_20261102.md) and
+[November 4 receipt](evidence/pubapps_live_20261104_ui_refresh.json) bind the
+current release. Public-proxy checks passed 15/15 from the workstation, but a
+designated clean off-campus run and host reboot test remain pending. This is an
+operational record, not UFIT approval.
 
 ## Earlier component v1 result — superseded by the v2 work above
 
@@ -418,12 +426,11 @@ verification record are retained in the restricted release record; earlier
    `Authorization` header to the backend (`RequestHeader unset Authorization`
    would stop the credential crossing the private hop). UFRC's own account for
    its availability checks is a separate `htpasswd` entry, removed afterwards.
-2. External acceptance from a clean non-UF network with
-   `deploy/verify-reviewer-access.py` (`deploy/EXTERNAL_ACCEPTANCE.md`; passed
-   from campus on 2026-10-23 with the test account on both hostnames) and the
-   browser check through the proxy (`deploy/browser/check-app.mjs
-   --auth-file`), then the four tabs by hand. Record the evidence in the
-   candidate table above.
+2. Repeat `deploy/verify-reviewer-access.py` from a designated clean non-UF
+   network and run the authenticated browser check through the production
+   proxy (`deploy/browser/check-app.mjs --auth-file`), then review the four
+   tabs by hand. The verifier passed 15/15 from the workstation on 2026-11-04;
+   this is not recorded as the independent off-campus acceptance run.
 3. Institutional items still open: confirm that the August 31 instance form is
    linked to the main PubApps assessment and whether UFRC wants an amendment
    for the 20-donor inventory (individual assessment `IRM-456246` was canceled

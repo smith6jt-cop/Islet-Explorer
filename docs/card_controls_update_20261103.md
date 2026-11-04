@@ -1,5 +1,10 @@
 # Card controls update — 2026-11-03
 
+**Deployment update, 2026-11-04:** this control set was promoted in
+`pubapps-2026-11-ui-refresh-1659c9d`. The local-review and no-public-deployment
+statements below describe the scope at the time this record was written. The
+current production binding is in the [live receipt](evidence/pubapps_live_20261104_ui_refresh.json).
+
 This local review successor implements the owner's November 3 card-layout request.
 The [user guide](user_guide.md) explains how to use it; the
 [local runtime record](local_duckdb_review_20261103.md) identifies the running image.

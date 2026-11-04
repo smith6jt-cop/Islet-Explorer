@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "status": "passed",
+  "counts": {
+    "checks": 15,
+    "passed": 15,
+    "failed": 0
+  },
+  "checks": [
+    {
+      "check": "anonymous_app",
+      "status": "passed",
+      "http_status": 401,
+      "body_bytes_read": 0
+    },
+    {
+      "check": "anonymous_avivator",
+      "status": "passed",
+      "http_status": 401,
+      "body_bytes_read": 0
+    },
+    {
+      "check": "anonymous_local_images",
+      "status": "passed",
+      "http_status": 401,
+      "body_bytes_read": 0
+    },
+    {
+      "check": "anonymous_images",
+      "status": "passed",
+      "http_status": 401,
+      "body_bytes_read": 0
+    },
+    {
+      "check": "anonymous_img_data",
+      "status": "passed",
+      "http_status": 401,
+      "body_bytes_read": 0
+    },
+    {
+      "check": "anonymous_download",
+      "status": "passed",
+      "http_status": 401,
+      "body_bytes_read": 0
+    },
+    {
+      "check": "anonymous_sidecar_1",
+      "status": "passed",
+      "http_status": 401,
+      "body_bytes_read": 0
+    },
+    {
+      "check": "anonymous_sidecar_2",
+      "status": "passed",
+      "http_status": 401,
+      "body_bytes_read": 0
+    },
+    {
+      "check": "anonymous_websocket",
+      "status": "passed",
+      "http_status": 401,
+      "body_bytes_read": 0
+    },
+    {
+      "check": "authenticated_app",
+      "status": "passed",
+      "http_status": 200,
+      "body_bytes_read": 8192
+    },
+    {
+      "check": "authenticated_avivator",
+      "status": "passed",
+      "http_status": 200,
+      "body_bytes_read": 993
+    },
+    {
+      "check": "authenticated_image_range",
+      "status": "passed",
+      "http_status": 206,
+      "body_bytes_read": 16
+    },
+    {
+      "check": "authenticated_sidecar_1",
+      "status": "passed",
+      "http_status": 200,
+      "body_bytes_read": 0
+    },
+    {
+      "check": "authenticated_sidecar_2",
+      "status": "passed",
+      "http_status": 200,
+      "body_bytes_read": 0
+    },
+    {
+      "check": "authenticated_websocket",
+      "status": "passed",
+      "http_status": 101,
+      "body_bytes_read": 0
+    }
+  ]
+}

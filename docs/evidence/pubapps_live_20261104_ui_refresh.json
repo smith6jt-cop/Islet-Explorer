@@ -1,0 +1,83 @@
+{
+  "schema": "islet.pubapps_live_release/1",
+  "status": "active_verified",
+  "recorded_utc": "2026-11-04T13:20:00Z",
+  "activation": {
+    "host": "pubmaigan1.ufhpc",
+    "instance": "islet-explorer",
+    "service": "active_healthy",
+    "release": "pubapps-2026-11-ui-refresh-1659c9d",
+    "activated_at_utc": "2026-11-04T13:18:01Z",
+    "publish_address": "10.13.41.21",
+    "port": 3838,
+    "memory_limit": "9g",
+    "docroot": "/pubapps/maigan/islet-explorer/prod/html",
+    "local_data": "/local/maigan/releases/pubapps-2026-11-ui-refresh-1659c9d",
+    "previous_release": "pubapps-2026-11-components-v1",
+    "dev_service_changed": false
+  },
+  "image": {
+    "id": "sha256:16c4979fff4d7e8d72befbaade013ce668153dc6161f938c8bc6a49a60e5ae24",
+    "source_commit": "1659c9dd01d8d409030cfb4618eb9f3edf56488e",
+    "security_result": "pass-no-high-or-critical",
+    "scanner_versions": {
+      "syft": "1.51.1",
+      "grype": "0.118.0"
+    },
+    "scan_time_utc": "2026-11-03T23:06:31Z"
+  },
+  "data": {
+    "schema": 5,
+    "producer_commit": "1659c9dd01d8d409030cfb4618eb9f3edf56488e",
+    "parity_validator_commit": "7ffa7a1f38a95a23f311e62892df857f2f16b466",
+    "canonical_h5ad_sha256": "0455c3f702546881055e83d5bd6daa9aa02af4e8c6cfefbbda56c4b176c70c6c",
+    "donor_metadata_sha256": "7b057140ed04857c58d26c718042e762164e80fb3cf2ba0b88bdf8da33255415",
+    "canonical_sources_manifest_sha256": "5febfdd23bde75c0af37bbf417d1d789e1d599766b8116eb99cb59d5a85c0e5e",
+    "data_manifest_sha256": "fd21101e781d1b713d3f5a26f65cf2249e7591240498cd5238510bd2608e2f15",
+    "release_manifest_sha256": "a097742540f8bbcc7bb532ecd031dc7f27b650dd03613a3148ef0abca710d50b",
+    "donors": 20,
+    "ome_tiffs": 20,
+    "other_data_files": 4907,
+    "non_image_bytes": 1744867857,
+    "image_tree_bytes": 155515689224,
+    "image_tree_sha256": "eff7617270dd3b6f10d67d3519f0293401c463681f81ae7d80e9751cf9d15804",
+    "endocrine_definition": [
+      "Beta cell",
+      "Alpha cell",
+      "Delta cell",
+      "CHGA+ hormone-negative"
+    ],
+    "image_tree_transfer": "Hard-linked to previous release after exact tree parity; sampled file device and inode matched. No TIFF file bytes were recopied."
+  },
+  "verification": {
+    "release_parity": {
+      "status": "passed",
+      "checks_passed": 25,
+      "checks_failed": 0,
+      "report": "release_parity_pubapps_ui_refresh_20261104.json",
+      "report_sha256": "13159511e628ebd68fc7c2604606b300f18384cc0a0881706ae49fbaf3a7abf7"
+    },
+    "full_release_hashes": "passed_locally_and_on_host",
+    "container_schema_check": "passed_schema_5",
+    "private_backend": {
+      "status": "passed_healthy",
+      "image_id_matched": true,
+      "bind_address_exclusive": true,
+      "read_only_scientific_mounts": true,
+      "ome_tiff_range": "206 bytes 0-15/7792217538"
+    },
+    "authenticated_public_proxy": {
+      "status": "passed",
+      "checks_passed": 15,
+      "checks_failed": 0,
+      "anonymous_basic_auth_challenge": 401,
+      "report": "reviewer_access_pubapps_ui_refresh_20261104.json",
+      "report_sha256": "47ed1da6d6a67db1881af360b9b5925f62d5b92ceb28d8099fcf67f9fe849289"
+    }
+  },
+  "pending_operations": [
+    "clean off-campus acceptance run",
+    "VM reboot persistence test",
+    "confidential delivery of reviewer credentials"
+  ]
+}

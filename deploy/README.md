@@ -1,25 +1,22 @@
 # Islet Explorer on UFRC PubApps
 
-**Current status, 2026-11-03:** production `pubapps-2026-11-components-v1`
+**Current status, 2026-11-04:** production `pubapps-2026-11-ui-refresh-1659c9d`
 and the separate strict-DuckDB dev release `pubapps-2026-11-dev-duckdb-v1` are
-active and verified. Their exact source, image, data, checks and service state
-are bound by the [production receipt](../docs/evidence/pubapps_live_20261102.json)
-and [dev receipt](../docs/evidence/dev_duckdb_deployment_20261103.json).
-Production retains its dated DuckDB window through November 10 UTC; dev passes
-the strict decoder gate without a deferral. The older
-`islet-explorer-local.service` remains inactive.
-Use the [workflow guide](../docs/workflow_user_guide.md) and
-[current v2 build record](../docs/component_build_v2_20261102.md). Earlier masked-service,
-whole-v19 and v1 diagnostic records are historical. The November 3 UI changes
-are running in the persistent [local review](http://127.0.0.1:3845/islet-explorer/)
-from source `26b6613`, image `2931955a…`. The fully verified candidate
-`pubapps-2026-11-ui-refresh-26b6613` pairs this app with the unchanged accepted
-production schema-5 data. Its OCI archive is prepared locally and has not been
-transferred or activated on PubApps; production and public dev remain unchanged.
-See the [build record](../docs/pubapps_ui_refresh_20261103.md) and the
-[local review record](../docs/local_duckdb_review_20261103.md) for details.
-The owner's November 3 direction remains **LOCAL REVIEW ONLY** for service
-changes: dev activation is paused pending the owner's review and decision.
+active and healthy. Production uses image
+`sha256:16c4979fff4d7e8d72befbaade013ce668153dc6161f938c8bc6a49a60e5ae24`,
+source `1659c9d`, and the fully parity-checked schema-5 20-donor bundle. Local
+and host full-hash checks passed, the TIFF tree was reused by hard link from
+the previous production release, and authenticated public-proxy acceptance
+passed 15/15 checks. See the [live receipt](../docs/evidence/pubapps_live_20261104_ui_refresh.json)
+and [build record](../docs/pubapps_ui_refresh_20261103.md). Dev was not changed;
+its [receipt](../docs/evidence/dev_duckdb_deployment_20261103.json) remains
+authoritative. Production's dated DuckDB remediation window remains open through
+2026-11-10 UTC. The local preview has been stopped.
+
+Use the [workflow guide](../docs/workflow_user_guide.md) for source-to-release
+steps and the [current v2 scientific build record](../docs/component_build_v2_20261102.md)
+for the selected data decisions. Earlier masked-service, whole-v19, v1
+diagnostic, and local-preview records are historical.
 
 Production runbook for the journal-review deployment requested at:
 
@@ -186,7 +183,7 @@ a zero-High/Critical package scan did not fix or detect both copies. The Python
 lock keeps Pillow **13.0.0** but builds it from source against the patched
 Ubuntu-managed FreeType/Brotli libraries, with two compilation workers.
 
-**Production decision, 2026-11-02:** the owner directed the then-current build to the live PubApp after its real data/release/runtime checks, within the notice's DuckDB patch window through **2026-11-10 UTC**, and directed development/testing of our DuckDB fix separately for dev. See [the dated decision](../docs/duckdb_remediation_window_20261102.md). Production retains pinned CRAN DuckDB **1.5.2** (archive SHA-256 `55f98a336513a94354f328791c8b94521b9f2e918a57d7e9fe6c0cb6b9a38db6`); the historical backport at `3a12daa` is preserved separately. The current isolated dev fix is deployed and strictly validated in the [dev receipt](../docs/evidence/dev_duckdb_deployment_20261103.json). The November 3 display candidate is local review only under the direction at the top of this runbook.
+**Production decision, 2026-11-02; final UI release activated 2026-11-04:** production is within the notice's DuckDB patch window through **2026-11-10 UTC**, and the separate strict DuckDB fix remains in dev. See [the dated decision](../docs/duckdb_remediation_window_20261102.md). Production retains pinned CRAN DuckDB **1.5.2** (archive SHA-256 `55f98a336513a94354f328791c8b94521b9f2e918a57d7e9fe6c0cb6b9a38db6`); the historical backport at `3a12daa` is preserved separately. The isolated dev fix is deployed and strictly validated in the [dev receipt](../docs/evidence/dev_duckdb_deployment_20261103.json). The November 3 display and card-control changes are included in the production UI release recorded at the top of this runbook; the local preview is stopped.
 
 `scan-image.sh` runs this checkout's `verify-brotli.py` inside the immutable image, with no network or data mounts. The original production decoder has the known result `0`/error `-9`. `evaluate-brotli-report.py` accepts that single complete finding during the recorded window and emits `RESULT=pass-with-duckdb-remediation-window`, with the raw failure, authorization copy and deadline bound by hash. New fixed builds must return `0`/error `-17` and pass the reviewed source-provenance check without a deferral. Pillow/Ubuntu/Node failures, unknown decoder behavior, crashes, timeouts, missing evidence and other High/Critical findings still block. No general CVE suppression is added.
 
@@ -387,9 +384,14 @@ A candidate staged beside a running release needs a release name of its own:
 under the same name would rewrite the files under the live container. The name
 is free text (the Plan A Level 1 candidate of 2026-10-25 used
 `pubapps-2026-10-uniform-v10-perf1`); the earlier release stays in place for
-rollback. When the image tree is unchanged, copy it on the VM from the earlier
-release first (`cp -a .../data/images`, about 15 minutes for 145 GB on the share)
-so the upload only has to match it by checksum. Copy the `deploy/` tooling of the
+rollback. When the image tree is byte-identical to a verified release on the
+same Qumulo filesystem, hard-link it on the VM before transferring the other
+files. First compare the complete image subtree hash/manifest entries. Hard
+links share inodes, so treat both release trees as immutable and keep their
+container mounts read-only. If the tree is not identical, transfer the
+candidate images normally. After staging, run full release verification;
+activation repeats it immediately before replacing the service. A hard link
+does not change the viewer's path or read behavior. Copy the `deploy/` tooling of the
 new commit to `tooling/deploy/` before activating with a flag the VM's copy does
 not know yet, and record the commit in `tooling/DEPLOY_TOOLING_COMMIT`.
 
@@ -422,11 +424,13 @@ HOP="ssh hpg ssh"   # the workstation's HPG control session, then the VM
 ssh hpg ssh pubmaigan1 mkdir -p "${RELEASE_DIR}/data" "${RELEASE_DIR}/attestations" \
   "${PROJECT_ROOT}/incoming"
 
-# From the workstation, substituting the staged source paths.
-rsync -a --partial --info=progress2 -e "${HOP}" <generated-release-data>/ \
-  pubmaigan1:"${RELEASE_DIR}/data/"
-rsync -a -e "${HOP}" /staging/islet-explorer-evidence/"${RELEASE}"/ \
-  pubmaigan1:"${RELEASE_DIR}/attestations/"
+# From the workstation, substituting the staged release root. Only reuse the
+# previous image tree after confirming its entire hash matches the candidate.
+PREVIOUS='pubapps-2026-11-components-v1'
+ssh hpg ssh pubmaigan1 cp -al \
+  "${PROJECT_ROOT}/releases/${PREVIOUS}/data/images" "${RELEASE_DIR}/data/images"
+rsync -a --partial --info=progress2 --exclude='data/images/***' -e "${HOP}" \
+  <generated-release-root>/ pubmaigan1:"${RELEASE_DIR}/"
 rsync -a -e "${HOP}" /staging/islet-explorer-"${RELEASE}".oci.tar{,.metadata,.sha256} \
   pubmaigan1:"${PROJECT_ROOT}/incoming/"
 ```

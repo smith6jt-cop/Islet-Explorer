@@ -232,11 +232,14 @@ unavailable composition. Unclassified cells remain in overall counts,
 phenotype controls, plots and downloads; palette lookups now preserve their
 names so their grey legend entry is not silently lost.
 
-## Production and delivery
+## Production and delivery — initial v2 baseline (superseded 2026-11-04)
 
-Production release **`pubapps-2026-11-components-v1` is active and verified** at
+The component release **`pubapps-2026-11-components-v1` was active and verified** at
 [Islet Explorer](https://islet-explorer.rc.ufl.edu/islet-explorer/). The security
-controller finished with exit 0 at **2026-11-03 02:42:27 UTC**. The healthy
+controller finished with exit 0 at **2026-11-03 02:42:27 UTC**. It was later
+superseded by the UI refresh release on November 4; the current state is in the
+[current live receipt](evidence/pubapps_live_20261104_ui_refresh.json). At the
+time of this baseline record, the healthy
 container runs image
 `sha256:89b3f84070b1edb89124347572ed43f278b5a8478e243053957037ccb1ceff8e`
 from producer `e5689f6`, with the exact verified data manifest and read-only

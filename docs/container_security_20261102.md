@@ -1,15 +1,14 @@
 # PubApps container security remediation — 2026-11-02
 
-**Latest owner direction, 2026-11-03: LOCAL REVIEW ONLY.** The owner requested
-“Instead of sending directly to pubapp, create a local version for review.”
-This supersedes the planned next dev deployment. The new patched image and UI
-candidate runs only at [the local preview](http://127.0.0.1:3845/islet-explorer/);
-see its [review record](local_duckdb_review_20261103.md) and
-[receipt](evidence/local_controls_review_20261103.json). Its image source is
-`1596b03`; the separately identified accepted dataset was produced by `5e6580f`
-and is mounted read-only. No new pubapp image import, data relocation or service
-activation occurred. Existing public dev `e704ac2a…` and production `89b3f840…`
-remain as recorded below. The local candidate does not authorize their replacement.
+**Current production status, 2026-11-04:** after the data parity and host
+checks passed, the owner instructed transfer and activation. Production now runs
+`pubapps-2026-11-ui-refresh-1659c9d` with image
+`sha256:16c4979fff4d7e8d72befbaade013ce668153dc6161f938c8bc6a49a60e5ae24`.
+See the [live receipt](evidence/pubapps_live_20261104_ui_refresh.json) and its
+25-check parity and 15-check public-access reports. The dev instance remains on
+its separate strict-DuckDB release. The November 3 local-review-only decision
+was superseded; its [preview record](local_duckdb_review_20261103.md) remains a
+historical record, and the preview has since been stopped.
 
 **Earlier production direction, 2026-11-02:** the current build is intended for the live production PubApp once its actual data/release/runtime checks pass. The known DuckDB finding is nonblocking through the notice's **2026-11-10 UTC** patch deadline; develop/test our DuckDB fix separately for the dev PubApp. See [the dated release decision](duckdb_remediation_window_20261102.md). This supersedes the earlier strict DuckDB hold and no-activation directions below. Historical failed reports remain unchanged; data checks and other security findings still apply.
 
@@ -33,7 +32,26 @@ unchanged; its 15 public-access checks passed again. See the
 Production's separate DuckDB finding remains due **2026-11-10 UTC**. Earlier
 stopped/masked-dev observations below describe historical states.
 
-## Production live — 2026-11-03 UTC
+## Production UI refresh live — 2026-11-04 UTC
+
+[The production PubApp](https://islet-explorer.rc.ufl.edu/islet-explorer/)
+activated `pubapps-2026-11-ui-refresh-1659c9d` at 13:18:01 UTC with immutable
+image `sha256:16c4979fff4d7e8d72befbaade013ce668153dc6161f938c8bc6a49a60e5ae24`
+from source `1659c9d`. The package security gate passed with **0 High / 0
+Critical** findings. The schema-5 component-app-v2 data release passed 25/25
+parity checks, local and host full hashes, and the in-container schema check.
+The host verifier confirmed a healthy service, expected image ID, read-only
+scientific mounts and an exact 16-byte TIFF range response. Authenticated public
+proxy access passed 15/15 checks. The dev instance was unchanged, and the
+previous production release remains available for rollback.
+
+The complete binding and check reports are in the
+[November 4 receipt](evidence/pubapps_live_20261104_ui_refresh.json). The
+November 3 local preview used the same final UI line before packaging and has
+been stopped. The designated clean off-campus run, reviewer credential
+delivery, and VM reboot test remain pending.
+
+## Previous production release — superseded 2026-11-04
 
 [The production PubApp](https://islet-explorer.rc.ufl.edu/islet-explorer/) is
 running release `pubapps-2026-11-components-v1`. Production was activated under

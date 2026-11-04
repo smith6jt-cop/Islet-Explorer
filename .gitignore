@@ -118,6 +118,9 @@ app/shiny_app/R/APP_LOADED_FLAG
 
 # Temporary files
 tmp/
+# Full-release verification stamps are generated on each machine/host and must
+# be recreated by the verifier; do not track a workstation-specific stamp.
+**/.verified
 *.log
 *.log.*
 *.pid
