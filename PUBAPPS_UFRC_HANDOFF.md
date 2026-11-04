@@ -1,18 +1,22 @@
 # Panc Floyd / Islet Explorer UFRC PubApps Request and Reviewer-Hosting Handoff
 
-**Current owner direction, 2026-11-03:** the new display/security candidate is
-for [local review](docs/local_duckdb_review_20261103.md) only, at
-[http://127.0.0.1:3845/islet-explorer/](http://127.0.0.1:3845/islet-explorer/).
-It uses source `1596b03`, image `846962f7…`, and the separately accepted read-only
-`5e6580f` data. The persistent local user service is enabled, and Data/View
-controls start collapsed. The [controls receipt](docs/evidence/local_controls_review_20261103.json)
-records this successor’s checks. Dev activation is paused pending the owner's
-review and decision; the existing public dev and production releases below
-remain unchanged.
+**Current operational status, 2026-11-04:** production is live as
+`pubapps-2026-11-ui-refresh-1659c9d` at
+[Islet Explorer](https://islet-explorer.rc.ufl.edu/islet-explorer/). Data parity
+passed 25/25 checks, host hashes and schema verification passed, and authenticated
+proxy access passed 15/15. The active image is
+`sha256:16c4979fff4d7e8d72befbaade013ce668153dc6161f938c8bc6a49a60e5ae24`.
+The separate strict-DuckDB dev release was not changed. The local review
+preview has been stopped. See the [November 4 live receipt](docs/evidence/pubapps_live_20261104_ui_refresh.json)
+and [workflow guide](docs/workflow_user_guide.md). A designated clean off-campus
+acceptance run, reviewer credential delivery and VM reboot test remain pending.
+
+The November 3 local-review-only direction below was superseded after the
+release passed its data and host checks.
 
 **Dated production direction, 2026-11-02:** the current build is intended for the live production PubApp once its actual data/release/runtime checks pass. The known DuckDB finding is nonblocking through the notice's **2026-11-10 UTC** patch deadline; develop/test our DuckDB fix separately for the dev PubApp. See [the dated release decision](docs/duckdb_remediation_window_20261102.md). This supersedes the earlier strict DuckDB hold and no-activation directions below. Historical failed reports remain unchanged; data checks and other security findings still apply.
 
-> **Current operational status — 2026-11-03 UTC:** [Production is live](https://islet-explorer.rc.ufl.edu/islet-explorer/) on release `pubapps-2026-11-components-v1`, image `89b3f840…`, clean source `e5689f6`. Full data/release parity and host verification passed; public access and all 49 browser checks passed. The running container serves all 20 donors and 3,199,606 cells with every phenotype count matching the accepted review: 7,398 Unclassified (0.23%), no prior named nonendocrine identities lost, and all 110,721 selected endocrine identities retained. The package scan reports 0 High / 0 Critical. Production DuckDB remains due November 10 under the dated owner direction. The separate strict-DuckDB [dev release](docs/evidence/dev_duckdb_deployment_20261103.json) is live and verified as of 12:42 UTC, source `378843e`, image `e704ac2a…`, without a deferral. The [security/deployment record](docs/container_security_20261102.md) and [deployment receipt](docs/evidence/pubapps_live_20261102.json) contain exact identities, hashes and verification limits. See also the [readiness index](docs/ufrc_readiness.md) and [workflow guide](docs/workflow_user_guide.md).
+> **Previous production status — superseded 2026-11-04:** production had been running `pubapps-2026-11-components-v1`, image `89b3f840…`, source `e5689f6`. Its data and access checks are retained in [the November 2 receipt](docs/evidence/pubapps_live_20261102.json). The current production release is `pubapps-2026-11-ui-refresh-1659c9d`; see the current status and receipt above. The separate strict-DuckDB [dev release](docs/evidence/dev_duckdb_deployment_20261103.json) remains active and unchanged. Production's dated DuckDB remediation window ends November 10 UTC.
 
 > **Historical available-fixes artifact:** image `2bbb928d…` from `23bd2fd` and its original failed strict DuckDB report remain archived. Its unused host cache entry was removed after verifying the retained OCI archive; it is superseded by the final production build. The dated DuckDB decision and separate strict dev fix are recorded in the current security record above.
 

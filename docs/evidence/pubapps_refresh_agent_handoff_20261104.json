@@ -1,6 +1,6 @@
 {
   "schema": "islet.incremental_agent_handoff/1",
-  "status": "published_recipient_review_in_progress",
+  "status": "received_verified_read_not_applied",
   "published_utc": "2026-11-04T13:33:05Z",
   "recipient": "Senior / monorepo / HPG / MultiPlex5000 agent",
   "recipient_thread_id": "01a19ca5-0cff-7d81-8027-4868ab012b79",
@@ -23,8 +23,27 @@
   "recipient_notification": {
     "sent": true,
     "message_scope": "Package location, base/tip commits, active production release, parity/access results, exclusions, and request to verify/read without applying to the recipient checkout.",
-    "thread_status_at_last_check": "active_review_in_progress",
-    "read_acknowledgement": "pending"
+    "thread_status_at_last_check": "completed",
+    "read_acknowledgement": {
+      "status": "received_verified_read_not_applied",
+      "recipient_commit": "1ce6007c234acfb01614d39127b14f83021b956b",
+      "recipient_receipt": "docs/evaluations/codex_pubapps_refresh_receipt_20261104/receipt.json",
+      "recipient_receipt_sha256": "9404460d11edb025f60f6b4277706ac9e128f9c603374e4fdf3ede7f184b4434",
+      "checks": {
+        "workstation_and_hpg_payload_files_match": true,
+        "git_bundle_reproduced_58_commit_history": true,
+        "three_way_replay_matches_tip_tree": true,
+        "direct_patch_replay_clean": false,
+        "receipt_data_matches_recorded_reports": true
+      },
+      "stale_status_files_identified": [
+        "README.md",
+        "CLAUDE.md",
+        "PUBAPPS_UFRC_HANDOFF.md",
+        "deploy/BASE_HARDENING.md"
+      ],
+      "adaptation_applied_by_recipient": false
+    }
   },
   "production_release": "pubapps-2026-11-ui-refresh-1659c9d",
   "parity_checks_passed": 25,

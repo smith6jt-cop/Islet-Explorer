@@ -1,26 +1,23 @@
 # Shiny Server base remediation
 
-**Latest owner direction, 2026-11-03: LOCAL REVIEW ONLY.** The display candidate
-is running for [local review](http://127.0.0.1:3845/islet-explorer/) from source
-`1596b03`, image `846962f7…`, using the separately accepted read-only data built from
-`5e6580f`; see the [local review record](../docs/local_duckdb_review_20261103.md).
-The persistent local user service is enabled on loopback port 3845. Data and View
-controls start collapsed; click a heading to show or hide them. The
-[controls review receipt](../docs/evidence/local_controls_review_20261103.json) records this successor’s checks.
-Dev activation is paused pending the owner's review and decision. Both public
-services remain unchanged.
+**Current production status, 2026-11-04:** the display changes are active in
+`pubapps-2026-11-ui-refresh-1659c9d` at
+[Islet Explorer](https://islet-explorer.rc.ufl.edu/islet-explorer/). The image
+security gate passed with 0 High / 0 Critical; data parity passed 25/25; full
+host hashes, the in-container schema check, and authenticated public access
+(15/15) passed. The exact deployment binding is in the
+[live receipt](../docs/evidence/pubapps_live_20261104_ui_refresh.json). The
+local review preview has been stopped, and dev remains on its separate
+strict-DuckDB release. The clean off-campus acceptance run and VM reboot test
+remain pending.
 
 **Production decision, 2026-11-02:** the owner directed the then-current build to the live production PubApp after its actual data/release/runtime checks passed. The known DuckDB finding is nonblocking through the notice's **2026-11-10 UTC** patch deadline; the owner directed development/testing of our DuckDB fix separately for dev. See [the dated release decision](../docs/duckdb_remediation_window_20261102.md). This superseded the earlier strict DuckDB hold and no-activation directions below for that release. Historical failed reports remain unchanged; data checks and other security findings still apply.
 
-**Current outcome, 2026-11-03:** production and the separate strict-DuckDB dev
-release are active and verified. The [production receipt](../docs/evidence/pubapps_live_20261102.json)
-and [dev receipt](../docs/evidence/dev_duckdb_deployment_20261103.json) bind the
-actual images and their gates. Production uses the dated DuckDB window; dev
-passes strict validation without it. Current build source now includes the
-reviewed source patch and strict receipt check, cherry-picked as `b5fae5c`;
-this does not change the bytes of the already-running production image.
-Neither live image includes the subsequent
-[local display changes](../docs/app_display_fixes_20261103.md).
+**Earlier outcome, 2026-11-03:** production and the separate strict-DuckDB dev
+release were active and verified at that time. The production image has since
+been replaced by the November 4 UI refresh; its receipt is linked above. Dev
+remains on its strict release. The following dated base-build records document
+the security method and remain historical evidence for the source build.
 
 Historical review date: 2026-09-08, with the 2026-10-22 dependency pins below.
 These source-build records are not a substitute for each new image’s build,

@@ -1,30 +1,26 @@
 # CLAUDE.md - Islet Explorer
 
-**Current owner direction, 2026-11-03 — local review only:** “Instead of sending
-directly to pubapp, create a local version for review.” The corrected app runs at
-[the local review URL](http://127.0.0.1:3845/islet-explorer/), using source
-`3c81075`, immutable image `eb6f3c32…`, and the separately accepted read-only
-`5e6580f` data bundle. The persistent local user service is enabled. Data and View
-controls start collapsed; their headings open and close them. Read the
-[local review record](docs/local_duckdb_review_20261103.md) for exact identities
-and lifecycle commands. Native standard checks passed 49/49 and focused
-Composition/Spatial checks each passed 12/12, with the recorded visual reviews
-complete. The
-[combined review receipt](docs/evidence/local_unclassified_ui_review_20261103.json)
-records the successor’s completed checks and their limits. Dev activation is paused pending the owner's review
-and decision. Neither public release has changed. This direction governs the
-new UI candidate; the completed production decisions below remain historical.
+**Current release, 2026-11-04:** production serves
+`pubapps-2026-11-ui-refresh-1659c9d` at
+[the authenticated production URL](https://islet-explorer.rc.ufl.edu/islet-explorer/).
+Its schema-5 data passed 25/25 parity checks, full host hashes and the container
+schema check passed, and authenticated proxy acceptance passed 15/15. The
+active image is `sha256:16c4979fff4d7e8d72befbaade013ce668153dc6161f938c8bc6a49a60e5ae24`
+from source `1659c9d`; the exact binding is in the
+[live receipt](docs/evidence/pubapps_live_20261104_ui_refresh.json). The
+November 3 local preview is stopped. A designated off-campus acceptance run,
+reviewer credential delivery and VM reboot test remain pending.
 
-**Verified live release:** production serves `pubapps-2026-11-components-v1`,
-image `89b3f840…`, from image/data producer `e5689f6` and scientific producer
-`67ee6c9`. Validation completed at 2026-11-03 02:42 UTC (November 2 local):
-full host bytes, actual running census, 15/15 authenticated-access checks and
-49/49 browser checks pass. Dev now serves the separately verified strict-DuckDB
-release described below; the older `islet-explorer-local.service` remains inactive/disabled, separate from the new local review service above. Read the [live receipt](docs/evidence/pubapps_live_20261102.json),
-[release-validation receipt](docs/evidence/component_release_validation_20261102.json)
-and [workflow guide](docs/workflow_user_guide.md). Parity validator `d3ec00e` and
-evidence composer `c3dc494` are separately versioned; do not relabel the unchanged
-producer artifacts. Earlier service-state snapshots below are historical.
+**Verified live release:** production serves the UI refresh above. Its data is
+the schema-5 component build: source `67ee6c9` selected exact named v19
+endocrine membership and isolated the permitted Lymphatic update. The release
+producer commit is `1659c9d`; the parity-only validator is `7ffa7a1`. Read the
+[live receipt](docs/evidence/pubapps_live_20261104_ui_refresh.json),
+[release parity report](docs/evidence/release_parity_pubapps_ui_refresh_20261104.json),
+[release-validation receipt](docs/evidence/component_release_validation_20261102.json),
+and [workflow guide](docs/workflow_user_guide.md). The previous production
+release is preserved as rollback state; earlier service snapshots below are
+historical.
 
 **Completed cross-repository handoff:** the final package at source `5b72a9b`
 is delivered to workstation and HPG siblings. Senior / MultiPlex5000 verified
@@ -33,12 +29,16 @@ and read it, with recipient adaptation still unapplied. The
 records the acknowledgement, permanent HPG backing directory and adjacent
 compact-inventory correction. Preserve the immutable package and its backing
 directory; the authoritative inventory and live data already contain 20 TIFFs.
+The November 4 incremental [PubApps refresh handoff](docs/evidence/pubapps_refresh_agent_handoff_20261104.json)
+was checksummed on the workstation and HPG; Senior verified all package files,
+the Git history and the attached parity/access reports. Recipient adaptation
+remains unapplied.
 
-**Completed production delegation:** “Resolve the decision and get the pubapp live”; “There shouldn't be many unclassified cells.” The exact v19 named endocrine membership is now the selected rule; do not ask that question again. Read [the current v2 build](docs/component_build_v2_20261102.md) and [resolution contract](docs/component_resolution_20261102.md). Only unresolved/boundary rows are reconsidered through existing non-endocrine rules; unsupported cases retain explicit Unclassified evidence. The new object proof validates original classifier lineage and Single whole-cell association while preserving the old corrected-cell diagnostics and all geometry/memberships. The v2 app and QuPath builds are complete and checksum-verified; the current build record contains their actual results, while the older v1 snapshots below remain historical. Immutable release packaging and deployment validation are tracked separately. The security session owns matching-image/host staging and activation; this session owns scientific data/release parity.
+**Completed production delegation:** “Resolve the decision and get the pubapp live”; “There shouldn't be many unclassified cells.” The exact v19 named endocrine membership is now the selected rule; do not ask that question again. Read [the current v2 build](docs/component_build_v2_20261102.md) and [resolution contract](docs/component_resolution_20261102.md). Only unresolved/boundary rows are reconsidered through existing non-endocrine rules; unsupported cases retain explicit Unclassified evidence. The object proof validates original classifier lineage and Single whole-cell association while preserving corrected-cell diagnostics and all geometry/memberships. The v2 app and QuPath builds are complete and checksum-verified. Production image/data packaging, parity, host verification and activation completed on November 4 and are bound in the live receipt. The separate strict-DuckDB dev fix remains live; production's dated remediation window ends November 10 UTC.
 
 **Dated production direction, 2026-11-02:** the current build is intended for the live production PubApp once its actual data/release/runtime checks pass. The known DuckDB finding is nonblocking through the notice's **2026-11-10 UTC** patch deadline; develop/test our DuckDB fix separately for the dev PubApp. See [the dated release decision](docs/duckdb_remediation_window_20261102.md). This supersedes the earlier strict DuckDB hold and no-activation directions below. Historical failed reports remain unchanged; data checks and other security findings still apply.
 
-**Separate dev security release is live:** `pubapps-2026-11-dev-duckdb-v1`, image `e704ac2a…`, source `378843e`, was verified at 2026-11-03 12:42 UTC. Its strict actual decoder/security gate passes without a deferral; access and browser checks pass 15/15 and 49/49. Read the [dev deployment receipt](docs/evidence/dev_duckdb_deployment_20261103.json) and [fix record](docs/dev_duckdb_fix_20261102.md). Production remains the independently verified release above. The subsequent [display fixes](docs/app_display_fixes_20261103.md) are running in the local review candidate above; they are not included in either public image.
+**Separate dev security release is live:** `pubapps-2026-11-dev-duckdb-v1`, image `e704ac2a…`, source `378843e`, was verified at 2026-11-03 12:42 UTC. Its strict actual decoder/security gate passes without a deferral; access and browser checks pass 15/15 and 49/49. Read the [dev deployment receipt](docs/evidence/dev_duckdb_deployment_20261103.json) and [fix record](docs/dev_duckdb_fix_20261102.md). It remains unchanged; the display fixes are now in production, not dev.
 
 ## Historical November 2 build snapshots
 

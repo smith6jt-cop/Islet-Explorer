@@ -2,7 +2,7 @@
 
 Interactive R Shiny application for exploring pancreatic islet CODEX multiplexed imaging data from nPOD donors. Compares ND, autoantibody-positive and T1D donor groups using cross-sectional measurements; autoantibody positivity is not treated as a clinical disease stage.
 
-## Current workflow and data status — 2026-11-03
+## Current workflow and data status — 2026-11-04
 
 Start with the [complete workflow user guide](docs/workflow_user_guide.md),
 [app user guide](docs/user_guide.md), and [selected-component v2 build record](docs/component_build_v2_20261102.md).
@@ -22,30 +22,29 @@ passes for all 10,080 objects and 5,227 Single outlines, while retaining the
 corrected-cell and centroid diagnostics. See the [resolution contract](docs/component_resolution_20261102.md)
 and [compact scientific receipt](docs/evidence/component_build_v2_20261102.json).
 
-Scientific source is `67ee6c9`; the matching image and release builder use
-`e5689f6`. Production image `89b3f840…` passes its recorded security and runtime
-checks and is running as **`pubapps-2026-11-components-v1`** at
-[the production app](https://islet-explorer.rc.ufl.edu/islet-explorer/).
-Full data verification, targeted parity and inventory pass; the actual running
-census matches all 3,199,606 cells and 78,680 Ki67-positive states. Authenticated
-access passes 15/15 checks and the browser suite passes 49/49, completed at
-2026-11-03 02:42 UTC (November 2 local). The separate strict-DuckDB dev release
-`pubapps-2026-11-dev-duckdb-v1` is also live, verified at 12:42 UTC from source
-`378843e`, image `e704ac2a…`, with no DuckDB deferral; see its
-[deployment receipt](docs/evidence/dev_duckdb_deployment_20261103.json) and the
-[authoritative deployment record](docs/container_security_20261102.md).
-The known DuckDB finding remains nonblocking only within the
-[dated window through November 10 UTC](docs/duckdb_remediation_window_20261102.md);
-the dev fix has not been promoted to production. The [new display fixes](docs/app_display_fixes_20261103.md)
-are running for [local review](http://127.0.0.1:3845/islet-explorer/) from source
-`1596b03`, image `846962f7…`, using the separately accepted read-only data built from
-`5e6580f`; see the [local review record](docs/local_duckdb_review_20261103.md).
-The persistent local user service is enabled on loopback port 3845. Data and View
-controls start collapsed; click a heading to show or hide them. The
-[controls review receipt](docs/evidence/local_controls_review_20261103.json) records this successor’s checks.
-The owner's November 3 direction is **LOCAL REVIEW ONLY**: dev activation is
-paused pending the owner's review and decision. Both public services remain unchanged.
-Older cohort and release sections below describe historical artifacts.
+Scientific source `67ee6c9` supplies the selected component data: exact named
+v19 endocrine membership, the isolated DG Lymphatic revision, and the reviewed
+current rules for other cells. It retains 3,199,606 eligible cells, 4,848
+paired objects, 5,227 Singles, 110,721 selected endocrine identities, 7,398
+explicit Unclassified cells, and unchanged Tissue labels. See the
+[resolution contract](docs/component_resolution_20261102.md),
+[scientific receipt](docs/evidence/component_build_v2_20261102.json), and
+[current component build record](docs/component_build_v2_20261102.md).
+
+Production is live as **`pubapps-2026-11-ui-refresh-1659c9d`** at
+[Islet Explorer](https://islet-explorer.rc.ufl.edu/islet-explorer/), with image
+`sha256:16c4979fff4d7e8d72befbaade013ce668153dc6161f938c8bc6a49a60e5ae24`.
+All 25 data parity checks passed; full host verification, the schema-5 check,
+and authenticated proxy access (15/15) passed. The display and card-control
+fixes are included. The dev release remains separate and unchanged at
+`pubapps-2026-11-dev-duckdb-v1`; production's dated DuckDB window ends
+2026-11-10 UTC. The local preview is stopped. See the
+[live receipt](docs/evidence/pubapps_live_20261104_ui_refresh.json),
+[deployment record](docs/container_security_20261102.md), and
+[workflow guide](docs/workflow_user_guide.md). A designated clean off-campus
+acceptance run, reviewer credential delivery, and VM reboot persistence test
+remain pending. Older cohort and release sections below describe historical
+artifacts.
 
 <div align="center">
 
@@ -113,8 +112,7 @@ and direct-lookup drill-down files in file formats suited to their access patter
 ## Quick Start
 
 > **Hosted production is live** at the link above. The older
-> `islet-explorer-local.service` remains inactive/disabled; the separate persistent,
-> enabled [local review](http://127.0.0.1:3845/islet-explorer/) service is running.
+> `islet-explorer-local.service` and the temporary local review preview are stopped.
 > These generic development commands do not select the
 > validated production bundle; use the workflow guide for explicit data-root
 > selection and release operations.
