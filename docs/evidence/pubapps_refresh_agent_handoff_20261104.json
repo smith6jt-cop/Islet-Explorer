@@ -67,5 +67,22 @@
     "checksums_verified_on_workstation": true,
     "checksums_verified_on_hpg": true,
     "recipient_message_sent": true
+  },
+  "status_correction_followup_r2": {
+    "status": "published_review_pending",
+    "published_utc": "2026-11-04T14:05:00Z",
+    "base_commit": "a2f945ac4c20d06a1354a38cfb93d5491f1f8cef",
+    "tip_commit": "276822242c78c50d77d1e1323e767939db50d9b0",
+    "workstation_path": "/home/smith6jt/IO60panc2nd/CODEX-handoff-20261104-status-correction-r2",
+    "hpg_public_path": "/blue/maigan/smith6jt/CODEX-handoff-20261104-status-correction-r2",
+    "hpg_content_directory": "/blue/maigan/smith6jt/CODEX-handoff-20261104-status-correction-r2.content",
+    "regular_files": 10,
+    "bytes": 184972,
+    "sha256sums_sha256": "0b9baf8ed5c11a084e97dea64ce3f82befb48f773a7179fdc5f7988fd7a4710d",
+    "checksums_verified_on_workstation": true,
+    "checksums_verified_on_hpg": true,
+    "checksums_verified_on_hpg_utc": "2026-11-04T14:05:00Z",
+    "corrects": "Labels the package index separately from project-README.md; corrects current backend bind and production schema 5 in root README and current status files.",
+    "recipient_message_sent": false
   }
 }
