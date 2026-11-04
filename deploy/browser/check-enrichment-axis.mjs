@@ -38,9 +38,9 @@ async function snapshot() {
     const heat = document.getElementById('spatial-enrichment_heatmap')?.data?.find(t => t.type === 'heatmap');
     const traces = plot?.data || [];
     return { bars: traces.filter(t => t.type === 'bar').map(t => ({
-      name: t.name, x: t.x, y: t.y, text: t.text, plus: t.error_y?.array, minus: t.error_y?.arrayminus })),
-    points: traces.filter(t => t.type === 'scatter').map(t => ({ x: t.x, y: t.y, text: t.text, symbol: t.marker?.symbol })),
-    xaxis: plot?.layout?.xaxis, yRange: plot?._fullLayout?.yaxis?.range,
+      name: t.name, group: t.legendgroup, x: t.x, y: t.y, text: t.text, plus: t.error_y?.array, minus: t.error_y?.arrayminus })),
+    points: traces.filter(t => t.type === 'scatter').map(t => ({ group: t.legendgroup, x: t.x, y: t.y, text: t.text, symbol: t.marker?.symbol })),
+    xaxis: plot?.layout?.xaxis, legend: plot?.layout?.legend, yRange: plot?._fullLayout?.yaxis?.range,
     fittedRange: plot?.layout?.yaxis?.autorange === false ? plot.layout.yaxis.range : null,
     heat: heat && { x: heat.x, y: heat.y, z: heat.z } };
   });
@@ -74,7 +74,8 @@ async function checkScenario(name) {
   assert(JSON.stringify(all.heat) === JSON.stringify(bulk.heat), 'Axis choice changed the donor heatmap');
   assert(secondCsv === firstCsv, 'Axis choice changed CSV data rows');
   assert.equal(all.xaxis.type, 'linear');
-  assert.deepEqual(all.xaxis.ticktext, all.heat.x, 'Phenotype labels differ between charts');
+  assert(JSON.stringify(all.xaxis.ticktext) === JSON.stringify(all.heat.x), 'Phenotype labels differ between charts');
+  assert.equal(all.legend?.groupclick, 'togglegroup');
   assert(all.points.length && all.points.every(t => t.symbol === 'circle'), 'Full range must show every donor point');
   const values = all.points.flatMap(t => asArray(t.y));
   assert.equal(values.length, all.heat.z.flat().filter(Number.isFinite).length, 'Donor points missing');
@@ -86,6 +87,7 @@ async function checkScenario(name) {
       const status = donor.match(/\(([^)]+)\)/)?.[1], bar = all.bars.find(t => t.name === status);
       const index = bar && asArray(bar.text).indexOf(phenotype);
       assert(bar && index >= 0 && Math.abs(xs[i] - asArray(bar.x)[index]) <= 0.071, 'Donor point is not aligned with its bar');
+      assert.equal(trace.group, bar.group, 'Donor point must follow its status legend');
     }
   }
   const clipped = bulk.points.filter(t => ['triangle-up-open', 'triangle-down-open'].includes(t.symbol));
@@ -151,6 +153,26 @@ try {
   await checkScenario('core_proportion');
   await setRadio('spatial-enrich_region', 'peri_prop');
   await checkScenario('peri_proportion');
+  await setRadio('spatial-enrich_region', 'peri');
+  for (const width of [1200, 1600]) {
+    await page.setViewport({ width, height: 1100, deviceScaleFactor: 1 });
+    const controls = await page.evaluate(() => {
+      const ids = ['spatial-enrich_region', 'spatial-enrich_baseline', 'spatial-enrich_stat', 'spatial-enrich_axis_range'];
+      const card = document.getElementById(ids[0]).closest('.card').getBoundingClientRect();
+      return ids.map(id => {
+        const r = document.getElementById(id).getBoundingClientRect();
+        return { x: r.x, y: r.y, right: r.right, bottom: r.bottom,
+          fits: r.width > 0 && r.left >= card.left && r.right <= card.right + 1 };
+      });
+    });
+    assert(controls.every(control => control.fits), 'Enrichment controls exceed the card');
+    for (let i = 0; i < controls.length; i++) for (let j = i + 1; j < controls.length; j++) {
+      const a = controls[i], b = controls[j];
+      assert(a.right <= b.x + 1 || b.right <= a.x + 1 || a.bottom <= b.y + 1 || b.bottom <= a.y + 1,
+        'Enrichment controls overlap');
+    }
+    report.checks.push({ name: `controls_fit_${width}`, passed: true });
+  }
   assert.equal(report.pageErrors, 0);
   assert.equal(report.externalRequestsBlocked, 0);
   report.status = 'passed';

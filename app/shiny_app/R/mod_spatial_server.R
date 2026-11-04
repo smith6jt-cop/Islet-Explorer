@@ -1790,6 +1790,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         if (nrow(sub) == 0) next
         p <- p %>% add_trace(
           x = match(sub$cell_type, cell_order) - 1 + status_offset(s), y = sub$z_summary, name = s,
+          legendgroup = paste0("status-", s),
           type = "bar", width = 0.8 / length(statuses) * 0.92, text = phenotype_text(sub$cell_type),
           marker = list(color = dcols[s]),
           error_y = list(
@@ -1830,6 +1831,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                          if (clipped) "<br>Outside the displayed axis range" else "")
           p <- p %>% add_trace(
             x = x[i], y = y, type = "scatter", mode = "markers", showlegend = FALSE,
+            legendgroup = paste0("status-", s),
             marker = list(symbol = symbol, size = if (clipped) 11 else 7, color = color,
                           line = list(color = if (clipped) color else "#222222", width = if (clipped) 1.5 else 1)),
             text = text, hoverinfo = "text")
@@ -1857,7 +1859,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                        tickfont = fonts$axis_tick, automargin = TRUE),
                   if (!is.null(axis)) list(range = axis$range, autorange = FALSE)),
         legend = list(title = list(text = "Status", font = fonts$legend_title),
-                      font = fonts$legend_text),
+                      font = fonts$legend_text, groupclick = "togglegroup"),
         shapes = shapes
       ) %>%
         plotly_islet_config("spatial_enrichment_bars")
