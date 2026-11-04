@@ -1,0 +1,32 @@
+{
+  "schema": "islet.incremental_agent_handoff/1",
+  "status": "published_recipient_review_in_progress",
+  "published_utc": "2026-11-04T13:33:05Z",
+  "recipient": "Senior / monorepo / HPG / MultiPlex5000 agent",
+  "recipient_thread_id": "01a19ca5-0cff-7d81-8027-4868ab012b79",
+  "base_commit": "5b72a9b022766f5ddb828845e5789bfcf3f15063",
+  "tip_commit": "a2f945ac4c20d06a1354a38cfb93d5491f1f8cef",
+  "package": {
+    "workstation_path": "/home/smith6jt/IO60panc2nd/CODEX-handoff-20261104-pubapps-refresh",
+    "hpg_public_path": "/blue/maigan/smith6jt/CODEX-handoff-20261104-pubapps-refresh",
+    "hpg_content_directory": "/blue/maigan/smith6jt/CODEX-handoff-20261104-pubapps-refresh.content",
+    "regular_files": 8,
+    "bytes": 1528598,
+    "sha256sums_sha256": "eaa9497a6b25c80a6fce24bec9c5a44ff8b5915c80e8f4e471e0170b4b2b27ef",
+    "checksums_verified_on_workstation": true,
+    "checksums_verified_on_hpg": true,
+    "git_bundle_verified": true,
+    "contains_credentials": false,
+    "contains_raw_scientific_data_or_tiffs": false,
+    "contains_oci_image": false
+  },
+  "recipient_notification": {
+    "sent": true,
+    "message_scope": "Package location, base/tip commits, active production release, parity/access results, exclusions, and request to verify/read without applying to the recipient checkout.",
+    "thread_status_at_last_check": "active_review_in_progress",
+    "read_acknowledgement": "pending"
+  },
+  "production_release": "pubapps-2026-11-ui-refresh-1659c9d",
+  "parity_checks_passed": 25,
+  "reviewer_access_checks_passed": 15
+}
