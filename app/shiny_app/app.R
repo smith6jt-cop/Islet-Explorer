@@ -475,17 +475,16 @@ ui <- fluidPage(
       id = "main-content", role = "main", tabindex = "-1",
       # Theme switch (www/islet-theme.js) and the hidden text input that carries the theme to the server as
       # input$app_theme; its value is set from the page theme before Shiny binds it, so plots draw once.
-      # The Panc Floyd logo heads the page (owner, 2026-10-19); the light-text copy is shown on the dark theme
-      # (both made by scripts/app_assets/make_logo_variants.py from www/logo.png).
-      # The Panc Floyd logo heads the page (owner, 2026-10-19); the light-text copy is shown on the dark theme
-      # (both made by scripts/app_assets/make_logo_variants.py from www/logo.png). The tab list sits in the same
-      # row, right of the logo, so each tab's Data controls start just under the logo (owner, 2026-10-26: "too much
-      # wasted space in the top panel/header area"); the tab content follows below. Theme switch
-      # (www/islet-theme.js) and the hidden text input that carries the theme to the server as input$app_theme;
-      # its value is set from the page theme before Shiny binds it, so plots draw once.
+      # Keep the existing prism mark and render the title as accessible text. The tabs share the header row,
+      # and each tab's controls begin directly below it.
       div(class = "app-header",
-        tags$img(src = islet_asset("logo-header-light.png"), class = "brand-logo brand-logo-light", alt = "Panc Floyd"),
-        tags$img(src = islet_asset("logo-header-dark.png"), class = "brand-logo brand-logo-dark", alt = "Panc Floyd"),
+        div(class = "brand-lockup", role = "img", `aria-label` = "Panc Floyd's Islet Explorer",
+          div(class = "brand-mark", `aria-hidden` = "true",
+            tags$img(src = islet_asset("logo-header-light.png"), class = "brand-logo brand-logo-light", alt = ""),
+            tags$img(src = islet_asset("logo-header-dark.png"), class = "brand-logo brand-logo-dark", alt = "")),
+          div(class = "brand-name", `aria-hidden` = "true",
+            span(class = "brand-name-line", "Panc Floyd's"),
+            span(class = "brand-name-line", "Islet Explorer"))),
         app_tabset$children[[1]],
         tags$button(id = "theme_toggle", type = "button", class = "theme-toggle", "Light theme")),
       tags$input(id = "app_theme", type = "text", value = "dark", style = "display: none;",

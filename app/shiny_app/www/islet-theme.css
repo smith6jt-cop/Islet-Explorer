@@ -97,10 +97,23 @@ html[data-theme="dark"] {
   position: sticky; top: 0; z-index: 1032; background: var(--islet-surface);
   border-bottom: 1px solid var(--islet-border-strong);
 }
-.app-header .brand-logo { align-self: center; }
+.app-header .brand-lockup { align-self: center; }
 .app-header #tabs { margin-left: auto; position: static; border-bottom: 0; }
 .app-header .theme-toggle { float: none; margin: 0 0 6px; align-self: center; }
-.brand-logo { height: 64px; width: auto; }
+.brand-lockup { display: flex; align-items: center; flex: 0 0 auto; gap: 4px; }
+.brand-mark { position: relative; width: 73px; height: 64px; overflow: hidden; flex: 0 0 73px; }
+/* The existing header assets include lettering. Show only the prism, including its sloping right edge. */
+.brand-logo { position: absolute; left: 0; top: 0; height: 64px; width: auto; max-width: none;
+  clip-path: polygon(0 0, 40% 0, 40% 45%, 48% 100%, 0 100%); }
+.brand-name { font-size: 23px; font-weight: 700; letter-spacing: -0.035em; line-height: 1.08; white-space: nowrap; }
+.brand-name-line { display: block; color: #075665; }
+html[data-theme="dark"] .brand-name-line {
+  color: #ededed; background: linear-gradient(#fff, #aaa); background-clip: text;
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+@media (forced-colors: active) {
+  html[data-theme="dark"] .brand-name-line { background: none; -webkit-text-fill-color: currentColor; }
+}
 html[data-theme="dark"] .brand-logo-light, html:not([data-theme="dark"]) .brand-logo-dark { display: none; }
 
 /* ---- Dark overrides of the app stylesheet and Bootstrap 3 ------------------------------------------------------ */

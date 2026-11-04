@@ -452,16 +452,25 @@ try {
           .some(t => String(t.mode || '').includes('markers') && (t.x?.length || 0) > 50);
         const logos = [...document.querySelectorAll('img.brand-logo')]
           .filter(img => img.offsetParent !== null && img.naturalWidth > 0);
+        const brand = document.querySelector('.brand-lockup');
+        const brandLines = [...document.querySelectorAll('.brand-name-line')];
+        const lineBoxes = brandLines.map(line => line.getBoundingClientRect());
+        const tabs = document.querySelector('.app-header #tabs')?.getBoundingClientRect();
         const result = {
           plot_selector_panel: panelOf('#object_classes'),
           spatial_selector_panel: panelOf('#spatial_object_classes'),
           scatter_points: points('#plot-plt'), distribution_points: points('#plot-dist'),
           separate_dist_point_controls: Boolean(document.querySelector('#plot-dist_pt_size')),
           visible_logos: logos.map(img => img.getAttribute('src')),
+          brand_label: brand?.getAttribute('aria-label'), brand_lines: brandLines.map(line => line.textContent),
+          brand_two_lines: lineBoxes.length === 2 && lineBoxes[0].bottom <= lineBoxes[1].top + 1,
+          brand_fits: Boolean(brand && tabs && brand.getBoundingClientRect().right <= tabs.left),
         };
         result.passed = result.plot_selector_panel === 'Data Controls' && result.spatial_selector_panel === 'Data Controls'
           && result.scatter_points && result.distribution_points && !result.separate_dist_point_controls
-          && logos.length === 1;
+          && logos.length === 1 && result.brand_label === "Panc Floyd's Islet Explorer"
+          && JSON.stringify(result.brand_lines) === JSON.stringify(["Panc Floyd's", 'Islet Explorer'])
+          && result.brand_two_lines && result.brand_fits;
         return result;
       });
     });
