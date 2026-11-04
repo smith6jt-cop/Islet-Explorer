@@ -83,6 +83,6 @@
     "checksums_verified_on_hpg": true,
     "checksums_verified_on_hpg_utc": "2026-11-04T14:05:00Z",
     "corrects": "Labels the package index separately from project-README.md; corrects current backend bind and production schema 5 in root README and current status files.",
-    "recipient_message_sent": false
+    "recipient_message_sent": true
   }
 }
