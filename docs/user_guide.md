@@ -551,13 +551,16 @@ the medians; hover gives its cell counts, and a point resting on fewer than 20 o
 
 **Phenotype composition & enrichment**: every immune phenotype at once (CD8a and CD4 T cells, B cells,
 macrophages; the endocrine and exocrine classes are left out since 2026-10-20). Left, the status summary (median and IQR,
-or mean and SEM, of donor means); right, one row per donor grouped by status, so the spread behind each bar shows.
+or mean and SEM, of donor means), with one point per donor; right, one row per donor grouped by status, so the spread
+behind each bar shows.
 - *Region*: Peri-islet enrichment z (diverging colors), Core proportion, Peri-islet proportion.
 - *Baseline* (enrichment z only): **Cohort** compares each band with the phenotype's proportion of all analyzed cells in
   the cohort, so it measures how many are near islets, and a donor with more of a cell type everywhere scores high.
   **Own tissue** compares each band with the donor's own tissue proportion, so it measures gathering at islets. On v7
   the cohort-baseline donor means rank-correlate 0.80–0.91 with the donors' tissue proportions.
-- *Drop object z beyond ±5* removes those objects' values before each donor mean.
+- *Axis range* fits 99% of donor values or shows every donor value on the bar chart. Off-scale donor means are
+  marked with open triangles; hover shows their true values. Every finite object value contributes to its donor
+  mean, and the heatmap and CSV retain the full values regardless of the axis setting.
 
 **Distance-to-islet profile**: the per-cell view of every cell's signed distance to the nearest islet border across
 the tissue (symlog axis), as density curves or composition bars, by immune phenotype or by marker positivity (all 31

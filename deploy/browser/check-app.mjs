@@ -462,14 +462,15 @@ try {
           scatter_points: points('#plot-plt'), distribution_points: points('#plot-dist'),
           separate_dist_point_controls: Boolean(document.querySelector('#plot-dist_pt_size')),
           visible_logos: logos.map(img => img.getAttribute('src')),
-          brand_label: brand?.getAttribute('aria-label'), brand_lines: brandLines.map(line => line.textContent),
+          brand_label_matches: brand?.getAttribute('aria-label') === "Panc Floyd's Islet Explorer",
+          brand_lines_match: JSON.stringify(brandLines.map(line => line.textContent)) ===
+            JSON.stringify(["Panc Floyd's", 'Islet Explorer']),
           brand_two_lines: lineBoxes.length === 2 && lineBoxes[0].bottom <= lineBoxes[1].top + 1,
           brand_fits: Boolean(brand && tabs && brand.getBoundingClientRect().right <= tabs.left),
         };
         result.passed = result.plot_selector_panel === 'Data Controls' && result.spatial_selector_panel === 'Data Controls'
           && result.scatter_points && result.distribution_points && !result.separate_dist_point_controls
-          && logos.length === 1 && result.brand_label === "Panc Floyd's Islet Explorer"
-          && JSON.stringify(result.brand_lines) === JSON.stringify(["Panc Floyd's", 'Islet Explorer'])
+          && logos.length === 1 && result.brand_label_matches && result.brand_lines_match
           && result.brand_two_lines && result.brand_fits;
         return result;
       });

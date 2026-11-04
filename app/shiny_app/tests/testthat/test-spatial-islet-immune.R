@@ -7,6 +7,10 @@
     lv[order(suppressWarnings(as.numeric(lv)), lv)]
   }
   sys.source(.find_source("R/spatial_islet_immune.R"), envir = env)
+  for (expr in parse(.find_source("R/plot_types.R"))) {
+    if (is.call(expr) && identical(expr[[1]], as.name("<-")) && is.symbol(expr[[2]]) &&
+        as.character(expr[[2]]) %in% c("PLOT_AXIS_QUANTILE", "plot_axis_upper")) eval(expr, env)
+  }
   env
 }
 
@@ -20,6 +24,31 @@
              peri_count_CD8a_Tcell = c(0, 2, 4, 1, 0, 3), total_cells_peri = c(100, 100, 200, 50, 50, 100),
              check.names = FALSE, stringsAsFactors = FALSE)
 }
+
+test_that("enrichment donor means retain finite extremes before summarizing", {
+  env <- .immune_env()
+  values <- c(1, 9, 100, -20, 4, NA_real_, Inf)
+  donors <- c("1", "1", "1", "2", "2", "2", "2")
+  result <- env$enrichment_donor_means(values, donors, c(rep("ND", 3), rep("T1D", 4)))
+  expect_identical(result$case_id, c("1", "2"))
+  expect_identical(result$donor_status, c("ND", "T1D"))
+  expect_equal(result$value, c(mean(c(1, 9, 100)), mean(c(-20, 4))))
+  expect_null(env$enrichment_donor_means(c(NA_real_, Inf), c("1", "2"), c("ND", "T1D")))
+})
+
+test_that("enrichment axis range changes display only and handles both tails", {
+  env <- .immune_env()
+  values <- c(seq(-2, 2, length.out = 100), -100, 100)
+  summaries <- c(-3, 0, 3)
+  axis <- env$enrichment_axis_limits(values, summaries, "bulk")
+  expect_true(axis$lower < min(summaries) && axis$upper > max(summaries))
+  expect_true(axis$lower > min(values) && axis$upper < max(values))
+  expect_lt(axis$range[1], axis$lower)
+  expect_gt(axis$range[2], axis$upper)
+  expect_null(env$enrichment_axis_limits(values, summaries, "all"))
+  expect_null(env$enrichment_axis_limits(1:10, c(2, 3), "bulk"))
+  expect_identical(values[c(101, 102)], c(-100, 100))
+})
 
 test_that("v20 all-immune gradient includes unnamed CD45-positive cells but not CD45-negative or conflicts", {
   env <- .immune_env()

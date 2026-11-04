@@ -1113,7 +1113,6 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
     enrich_donor_values <- reactive({
       comp <- nbr_comp()
       req(comp, "Donor Status" %in% colnames(comp), "Case ID" %in% colnames(comp))
-      clip <- isTRUE(input$enrich_clip)
       region <- input$enrich_region %||% "peri"
       own <- identical(region, "peri") && identical(input$enrich_baseline %||% "cohort", "own")
       profile <- if (own) donor_distance_profile() else NULL
@@ -1126,14 +1125,11 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
         col <- switch(region, peri = itm$enrich, core = itm$prop_core, itm$peri_prop)
         if (is.null(col) || is.na(col) || !(col %in% colnames(comp))) next
         vals <- if (own) own_tissue_enrich_z(comp, itm$safe, itm$label, profile) else comp[[col]]
-        keep <- is.finite(vals)
-        if (region == "peri" && clip) keep <- keep & vals >= -5 & vals <= 5
-        if (!any(keep)) next
-        m <- tapply(vals[keep], as.character(comp$`Case ID`[keep]), mean)
-        st <- tapply(as.character(comp$`Donor Status`[keep]), as.character(comp$`Case ID`[keep]), `[`, 1)
+        means <- enrichment_donor_means(vals, comp$`Case ID`, comp$`Donor Status`)
+        if (is.null(means)) next
         rows[[length(rows) + 1]] <- data.frame(
-          col = if (own) paste0("own_tissue_", col) else col, cell_type = itm$label, case_id = names(m),
-          donor_status = as.character(st[names(m)]), value = as.numeric(m), stringsAsFactors = FALSE)
+          col = if (own) paste0("own_tissue_", col) else col, cell_type = itm$label,
+          means, stringsAsFactors = FALSE)
       }
       if (length(rows) == 0) return(NULL)
       do.call(rbind, rows)
@@ -1195,7 +1191,9 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           paste("Endocrine objects:", paste(sort(unique(as.character(prepared()$comp$object_class %||% "Islet"))), collapse = ", ")),
           paste("Phenotypes shown:", paste(phenotype_text(intersect(phenotype_partition_labels(input$enrich_phenos),
                                                                   names(phenotype_options()))) %||% "(none)", collapse = ", ")),
-          paste("Object z outside [-5, 5] dropped before the donor mean:", if (isTRUE(input$enrich_clip)) "ON" else "OFF"),
+          paste("Bar-chart axis range:", if (identical(input$enrich_axis_range %||% "bulk", "all"))
+                  "Fit every donor value" else "Fit 99% of donor values (display only)"),
+          "All finite object values are included in each donor mean, including extreme enrichment z scores.",
           "Rows: level=donor is each donor's mean over its objects; the other level summarizes those donor means."
         ))
       }
@@ -1320,7 +1318,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           div(class = "card", style = card_style,
             div(style = ctrl_row,
               card_title("Phenotype composition & enrichment",
-                tags$p("The selected phenotypes, including the Unclassified subclasses, in the core or the 20 \u00b5m band. The left chart summarizes",
+                tags$p("The selected phenotypes in the core or the 20 \u00b5m band. The left chart summarizes",
                        " each donor status across its donors; the heatmap shows each donor, grouped by status, so the",
                        " spread behind each bar is visible. Each donor's value is the mean over its objects."),
                 tags$p(tags$strong("Enrichment z"),
@@ -1331,9 +1329,12 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                        " Own tissue uses the donor's own proportion outside every endocrine object and its band: it",
                        " measures whether they gather at islets. Proportion modes show the raw fraction (0\u20131)",
                        " of each compartment's cells."),
-                tags$p("The endocrine and exocrine classes are left out.",
-                       " Drop object z beyond \u00b15 removes those objects' values before each donor mean. The",
-                       " phenotype checkboxes and the Region / Summary choices apply to both plots.")),
+                tags$p("The endocrine and exocrine classes are left out. All finite object values are included in",
+                       " each donor mean; the points on the bars show those donor means. Axis range changes only",
+                       " the bar chart's display: Fit 99% of donor values",
+                       " marks off-scale donor means with open triangles whose hover gives their actual values;",
+                       " Fit every donor value shows the full range. The heatmap and CSV retain the full values.",
+                       " The phenotype checkboxes and Region / Summary choices apply to both plots.")),
               radioButtons(ns("enrich_region"), "Region",
                            c("Peri-islet (enrichment z)" = "peri",
                              "Core (proportion)" = "core",
@@ -1346,10 +1347,9 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
               ),
               radioButtons(ns("enrich_stat"), "Summary", c("Median", "Mean"),
                            selected = "Median", inline = TRUE),
-              conditionalPanel(
-                condition = paste0("input['", ns("enrich_region"), "'] == 'peri'"),
-                checkboxInput(ns("enrich_clip"), "Drop object z beyond \u00b15", value = TRUE)
-              )
+              radioButtons(ns("enrich_axis_range"), "Axis range",
+                           choices = c("Fit 99% of donor values" = "bulk", "Fit every donor value" = "all"),
+                           selected = "bulk", inline = TRUE)
             ),
             uiOutput(ns("enrich_pheno_filter")),
             fluidRow(
@@ -1762,7 +1762,8 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
     # ==== Card B-Left: Enrichment/Proportion Grouped Bar Chart ====
     output$enrichment_bars <- renderPlotly({
       es <- enrich_summary()
-      req(es)
+      dv <- enrich_donor_values()
+      req(es, dv)
 
       status_order <- c("ND", "Aab+", "T1D")
       es$donor_status <- factor(es$donor_status, levels = intersect(status_order, unique(es$donor_status)))
@@ -1776,14 +1777,20 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       # Axis label and title depend on region
       y_label <- enrich_measure_label()
       title_prefix <- paste(stat_mode, y_label)
+      axis_mode <- input$enrich_axis_range %||% "bulk"
+      if (!islet_valid_scalar_choice(axis_mode, c("bulk", "all"), "enrich_axis_range_invalid")) axis_mode <- "bulk"
+      axis <- enrichment_axis_limits(dv$value, c(es$z_summary, es$z_lo, es$z_hi), axis_mode)
+      cell_order <- unique(es$cell_type)
+      statuses <- levels(es$donor_status)
+      status_offset <- function(s) (match(s, statuses) - (length(statuses) + 1) / 2) * 0.8 / length(statuses)
 
       p <- plot_ly()
-      for (s in levels(es$donor_status)) {
+      for (s in statuses) {
         sub <- es[es$donor_status == s, , drop = FALSE]
         if (nrow(sub) == 0) next
         p <- p %>% add_trace(
-          x = phenotype_text(sub$cell_type), y = sub$z_summary, name = s,
-          type = "bar",
+          x = match(sub$cell_type, cell_order) - 1 + status_offset(s), y = sub$z_summary, name = s,
+          type = "bar", width = 0.8 / length(statuses) * 0.92, text = phenotype_text(sub$cell_type),
           marker = list(color = dcols[s]),
           error_y = list(
             type = "data",
@@ -1792,8 +1799,41 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
             arrayminus = sub$z_summary - sub$z_lo,
             color = "#666", thickness = 1
           ),
-          hovertemplate = paste0("%{x}<br>", s, "<br>", y_label, " = %{y:.3f}<extra></extra>")
+          hovertemplate = paste0("%{text}<br>", s, "<br>", y_label, " = %{y:.3f}<extra></extra>")
         )
+      }
+
+      # Show each donor mean as a point, as in the Plot tab. Donors outside a fitted display
+      # range remain in the summaries and heatmap, and appear as triangles at the edge.
+      off_scale <- 0L
+      for (s in statuses) {
+        d <- dv[dv$donor_status == s, , drop = FALSE]
+        if (!nrow(d)) next
+        # Spread each status's donors within its grouped bar without changing their values.
+        within <- ave(seq_len(nrow(d)), d$cell_type, FUN = seq_along)
+        count <- ave(seq_len(nrow(d)), d$cell_type, FUN = length)
+        jitter <- ifelse(count > 1, 0.14 * ((within - 1) / pmax(count - 1, 1) - 0.5), 0)
+        x <- match(d$cell_type, cell_order) - 1 + status_offset(s) + jitter
+        direction <- if (is.null(axis)) rep("within", nrow(d)) else
+          ifelse(d$value > axis$upper, "above", ifelse(d$value < axis$lower, "below", "within"))
+        for (part in c("within", "above", "below")) {
+          i <- which(direction == part)
+          if (!length(i)) next
+          clipped <- part != "within"
+          off_scale <- off_scale + if (clipped) length(i) else 0L
+          y <- if (part == "above") rep(axis$upper, length(i)) else if (part == "below")
+            rep(axis$lower, length(i)) else d$value[i]
+          symbol <- switch(part, within = "circle", above = "triangle-up-open", below = "triangle-down-open")
+          color <- if (clipped) islet_ink() else "#FFFFFF"
+          text <- paste0(phenotype_text(d$cell_type[i]), "<br>Donor ", d$case_id[i], " (", s, ")<br>",
+                         y_label, " = ", signif(d$value[i], 6),
+                         if (clipped) "<br>Outside the displayed axis range" else "")
+          p <- p %>% add_trace(
+            x = x[i], y = y, type = "scatter", mode = "markers", showlegend = FALSE,
+            marker = list(symbol = symbol, size = if (clipped) 11 else 7, color = color,
+                          line = list(color = if (clipped) color else "#222222", width = if (clipped) 1.5 else 1)),
+            text = text, hoverinfo = "text")
+        }
       }
 
       # Reference line at 0 for enrichment z-scores only
@@ -1805,15 +1845,17 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
       fonts <- plotly_islet_fonts()
       p %>% layout(
         font = fonts$global,
-        barmode = "group",
-        title = list(text = paste0(title_prefix, "<br><sup>Donor-level means, ", error_label, " (N=donors)</sup>"),
+        barmode = "overlay",
+        title = list(text = paste0(title_prefix, "<br><sup>Donor-level means, ", error_label, " (N=donors)",
+                                  if (off_scale) paste0("; ", off_scale, " donor values off scale") else "", "</sup>"),
                      font = fonts$title),
-        xaxis = list(title = list(text = "", font = fonts$axis_title),
-                     tickfont = fonts$axis_tick, tickangle = -30, automargin = TRUE,
-                     categoryorder = "array",
-                     categoryarray = phenotype_text(unique(es$cell_type))),
-        yaxis = list(title = list(text = y_label, font = fonts$axis_title),
-                     tickfont = fonts$axis_tick, automargin = TRUE),
+        xaxis = list(title = list(text = "", font = fonts$axis_title), type = "linear", tickmode = "array",
+                     tickvals = seq_along(cell_order) - 1, ticktext = phenotype_text(cell_order),
+                     range = c(-0.5, length(cell_order) - 0.5),
+                     tickfont = fonts$axis_tick, tickangle = -30, automargin = TRUE),
+        yaxis = c(list(title = list(text = y_label, font = fonts$axis_title),
+                       tickfont = fonts$axis_tick, automargin = TRUE),
+                  if (!is.null(axis)) list(range = axis$range, autorange = FALSE)),
         legend = list(title = list(text = "Status", font = fonts$legend_title),
                       font = fonts$legend_text),
         shapes = shapes

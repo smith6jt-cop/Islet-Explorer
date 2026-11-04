@@ -24,6 +24,11 @@ node deploy/browser/check-spatial-card-layout.mjs \
   --source "$REVIEW_SOURCE" --runtime-kind native-image --image "$REVIEW_IMAGE" \
   --output "$REVIEW_EVIDENCE/spatial.json" --shots "$REVIEW_EVIDENCE/spatial-shots"
 
+node deploy/browser/check-enrichment-axis.mjs \
+  --url http://127.0.0.1:3845/islet-explorer/ \
+  --source "$REVIEW_SOURCE" --runtime-kind native-image --image "$REVIEW_IMAGE" \
+  --output "$REVIEW_EVIDENCE/enrichment-axis.json"
+
 node deploy/browser/check-plot-titles.mjs \
   --url http://127.0.0.1:3845/islet-explorer/ \
   --source "$REVIEW_SOURCE" --runtime-kind native-image --image "$REVIEW_IMAGE" \
@@ -39,6 +44,11 @@ interaction and CSV parity. Spatial checks card-width maps, dense legends,
 brush/reset, the donor selector's precise scope and grouped Distance controls at
 1200/1600px. Its optional `--scope distance` is a focused follow-up, not a replacement
 for the default full run.
+The enrichment-axis check compares the donor points, summaries, heatmap and CSV
+across both axis settings for each region and enrichment baseline; an optional
+`--reference` JSON file can independently check the CD8 donor means against the
+unfiltered source. Scientific rows and CSV bodies are compared in memory, not
+written to its report.
 The title check switches data layers, populations, metrics and plot types, requiring
 both Plot cards to identify the selected layer and measure without overlapping controls.
 

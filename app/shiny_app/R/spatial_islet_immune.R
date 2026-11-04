@@ -33,6 +33,32 @@ donor_kw_p <- function(value, status) {
   tryCatch(stats::kruskal.test(value[ok], factor(status[ok]))$p.value, error = function(e) NA_real_)
 }
 
+#' One mean per donor, using every finite object value, including extreme enrichment z scores.
+enrichment_donor_means <- function(values, case_id, donor_status) {
+  ok <- is.finite(values) & !is.na(case_id)
+  if (!any(ok)) return(NULL)
+  ids <- as.character(case_id[ok])
+  means <- tapply(values[ok], ids, mean)
+  status <- tapply(as.character(donor_status[ok]), ids, `[`, 1)
+  data.frame(case_id = names(means), donor_status = as.character(status[names(means)]),
+             value = as.numeric(means), stringsAsFactors = FALSE)
+}
+
+#' Display limits for donor means; summary bars and their intervals must remain visible.
+#' NULL means Plotly's full automatic range. The same 99th-percentile rule as the Plot tab
+#' is applied separately to both tails because enrichment z scores may be negative.
+enrichment_axis_limits <- function(values, summaries, mode = "bulk") {
+  if (!identical(mode, "bulk")) return(NULL)
+  upper <- plot_axis_upper(values, keep = summaries)
+  lower <- plot_axis_upper(-values, keep = -summaries)
+  if (is.null(upper) && is.null(lower)) return(NULL)
+  finite <- c(values[is.finite(values)], summaries[is.finite(summaries)], 0)
+  low <- if (is.null(lower)) min(finite) else -lower
+  high <- if (is.null(upper)) max(finite) else upper
+  pad <- 0.03 * (high - low)
+  list(lower = low, upper = high, range = c(low - pad, high + pad))
+}
+
 #' Insulitis prevalence: each donor's share of objects with `threshold` or more immune cells in the core and the
 #' 20 um band (all immune labels, subtyped or not). A cell-count criterion in the spirit of nPOD's 15 CD45+ cells.
 insulitis_prevalence <- function(comp, threshold = 15) {
