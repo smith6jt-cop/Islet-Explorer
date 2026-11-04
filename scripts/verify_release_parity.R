@@ -164,6 +164,9 @@ parity_cell_states <- function(source_root, release_root, release_env) {
 parity_builder <- function(repo) {
   env <- new.env(parent = globalenv())
   sys.source(file.path(repo, "scripts", "build_release_data.R"), envir = env)
+  # Use the same byte-for-byte SHA-256 check for large source files without
+  # the much slower R digest implementation; small files keep the R path.
+  env$sha256_file <- parity_hash
   env
 }
 
@@ -209,12 +212,29 @@ parity_runtime <- function(repo, root) {
                   "data_loading.R", "drilldown_helpers.R")) {
     sys.source(file.path(repo, "app", "shiny_app", "R", file), envir = env)
   }
+  # The release runtime still supplies tree ordering and comparison; only the
+  # per-file SHA-256 implementation changes for large files in this validator.
+  env$.islet_sha256_file <- parity_hash
   env$SF_AVAILABLE <- TRUE
   sys.source(file.path(repo, "app", "shiny_app", "R", "spatial_helpers.R"), envir = env)
   env
 }
 
-parity_hash <- function(path) digest::digest(file = path, algo = "sha256", serialize = FALSE)
+parity_hash <- function(path) {
+  size <- file.info(path)$size
+  sha256sum <- if (length(size) == 1L && is.finite(size) && size >= 64 * 1024^2)
+    Sys.which("sha256sum") else ""
+  if (!nzchar(sha256sum)) return(digest::digest(file = path, algo = "sha256", serialize = FALSE))
+  result <- suppressWarnings(system2(sha256sum, c("--", shQuote(path)), stdout = TRUE, stderr = TRUE))
+  status <- attr(result, "status")
+  if ((!is.null(status) && status != 0L) || length(result) != 1L) {
+    stop("Could not hash large parity input with sha256sum.", call. = FALSE)
+  }
+  # GNU sha256sum prefixes a backslash if it had to escape a file name.
+  line <- if (startsWith(result[[1]], "\\")) substring(result[[1]], 2L) else result[[1]]
+  if (!grepl("^[0-9a-f]{64} [ *]", line)) stop("Invalid sha256sum output.", call. = FALSE)
+  substr(line, 1L, 64L)
+}
 
 parity_read_stored_parquet <- function(env, path) {
   # Compare stored CSV-derived columns, excluding case_id synthesized by
