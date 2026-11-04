@@ -185,6 +185,7 @@ parity_runtime <- function(repo, root) {
                     # compares the new canonical aggregate values instead of failing on an unknown helper.
                     "UNCLASSIFIED_KEYS", "UNCLASSIFIED_PARENT", "UNCLASSIFIED_RAW_TO_KEY",
                     "unclassified_collapse", "unclassified_collapse_comp",
+                    "phenotype_is_unclassified", "phenotype_selectable",
                     "MACROPHAGE_LABEL_PATTERN", "MACROPHAGE_KEY_PATTERN", "is_macrophage_label",
                     "root_phenotype_labels", "root_has_marker_profile_labels", "TOP_MARKER_BASE",
                     "CD45_RULE_LABEL", "CD45_TOP_MARKER_LABEL", "root_has_top_marker_labels",
@@ -308,7 +309,18 @@ parity_run <- function(options, repo) {
       jsonlite::toJSON(manifest$canonical_sources, auto_unbox = TRUE, digits = 16),
       algo = "sha256", serialize = FALSE)
     record("release_source_identity", {
-      if (!identical(manifest$git_commit, report$identity$git_commit)) parity_fail("source_commit_mismatch")
+      validator_commit <- report$identity$git_commit
+      if (!identical(manifest$git_commit, validator_commit)) {
+        # A validator-only correction can be checked against the unchanged
+        # producer release without rebuilding application/data artifacts. The
+        # exception is intentionally limited to this verifier's own file.
+        changed <- system2("git", c("-C", shQuote(repo), "diff", "--name-only",
+                                   paste0(manifest$git_commit, "..", validator_commit)),
+                          stdout = TRUE, stderr = FALSE)
+        if (!identical(changed, "scripts/verify_release_parity.R")) parity_fail("source_commit_mismatch")
+      }
+      report$identity$validator_git_commit <- validator_commit
+      report$identity$git_commit <- manifest$git_commit
       if (!identical(manifest$git_dirty, FALSE) || isTRUE(report$identity$git_dirty)) {
         parity_fail("uncommitted_source_changes")
       }
@@ -488,6 +500,7 @@ parity_write_report <- function(report, prefix) {
   jsonlite::write_json(report, paths[[1]], auto_unbox = TRUE, pretty = TRUE, null = "null", digits = 16)
   lines <- c("# Release data parity", "", paste("Status:", report$status), "",
              paste("Source commit:", report$identity$git_commit),
+             paste("Parity validator commit:", report$identity$validator_git_commit %||% report$identity$git_commit),
              paste("Source H5AD SHA-256:", report$identity$canonical_h5ad_sha256),
              paste("Release manifest SHA-256:", report$identity$release_manifest_sha256 %||% "not supplied"), "",
              "Numeric tolerance: absolute 1e-12. Categories, counts, missingness and infinities: exact.", "",
