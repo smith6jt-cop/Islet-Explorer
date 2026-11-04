@@ -14,7 +14,7 @@
               "phenotype_grouped_choices", "phenotype_group_checkboxes", "add_phenotype_aggregate_columns")
   wanted <- c(wanted, "UNCLASSIFIED_KEYS", "UNCLASSIFIED_PARENT", "UNCLASSIFIED_RAW_TO_KEY",
               "unclassified_collapse", "phenotype_collapse", "unclassified_collapse_comp", "PHENOTYPE_RETIRED", "phenotype_retired", "phenotype_keep", "phenotype_is_kept",
-              "phenotype_is_conflict", "phenotype_partition_labels")
+              "phenotype_is_conflict", "phenotype_partition_labels", "phenotype_is_unclassified", "phenotype_selectable")
   for (e in exprs) {
     if (is.call(e) && identical(e[[1]], as.name("<-")) && as.character(e[[2]]) %in% wanted) eval(e, env)
   }
@@ -42,12 +42,12 @@ test_that("additive choices contain leaves once while single-metric choices reta
   leaves <- c("Beta cell", "Alpha cell", "CD4 Tcell", env$MACROPHAGE_LABELS[1:2])
   labels <- c("All endocrine cells", "All T cells", "All macrophages", "Macrophage", leaves,
               "T cell", "Hematopoietic CD45+", "Hematopoietic CD45-", "Conflict B/T", leaves[1])
-  expect_identical(env$phenotype_partition_labels(labels), c(leaves, unname(env$UNCLASSIFIED_KEYS["subtype"])))
+  expect_identical(env$phenotype_partition_labels(labels), leaves)
   html <- as.character(env$phenotype_group_checkboxes("exclusive", labels))
   expect_false(grepl('value="All ', html, fixed = TRUE))
   expect_false(grepl('value="Macrophage"', html, fixed = TRUE))
   expect_false(grepl("Conflict|Hematopoietic", html))
-  expect_equal(lengths(regmatches(html, gregexpr('name="exclusive"', html))), length(leaves) + 1L)
+  expect_equal(lengths(regmatches(html, gregexpr('name="exclusive"', html))), length(leaves))
   single <- unname(unlist(env$phenotype_grouped_choices(labels)))
   expect_true(all(c("All endocrine cells", "All T cells", "All macrophages") %in% single))
   expect_false(any(c("Macrophage", "T cell", "Conflict B/T") %in% single))

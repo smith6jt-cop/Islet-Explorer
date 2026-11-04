@@ -131,13 +131,13 @@ donor_composition_figure <- function(tab, order_ids, palette, status_cols, regio
   group_of <- get0("phenotype_group", mode = "function", ifnotfound = function(x) rep("Phenotype", length(x)))
   order_groups <- get0("PHENOTYPE_GROUP_ORDER", ifnotfound = "Phenotype")
   phenos <- phenos[order(match(group_of(phenos), order_groups))]
+  colors <- phenotype_palette_for(phenos, palette)
   titled <- character(0)
   p <- plotly::plot_ly()
   for (ph in phenos) {
     t <- tab[tab$phenotype == ph, , drop = FALSE]
     g <- group_of(ph)
-    col <- unname(palette[ph]) %||% "#8f8f8f"
-    if (is.na(col)) col <- "#8f8f8f"
+    col <- unname(colors[ph])
     p <- plotly::add_trace(p, type = "bar", x = t$x, y = t$proportion, name = phenotype_text(ph),
                            legendgroup = g, legendgrouptitle = if (!(g %in% titled)) list(text = g),
                            marker = list(color = col), hoverinfo = "text",

@@ -15,6 +15,7 @@ make_backend_env <- function(root) {
                                        "is_macrophage_label", "MACROPHAGE_LABEL_PATTERN",
                                        "MACROPHAGE_KEY_PATTERN", "UNCLASSIFIED_KEYS", "UNCLASSIFIED_PARENT",
                                        "UNCLASSIFIED_RAW_TO_KEY", "unclassified_collapse",
+                                       "phenotype_is_unclassified", "phenotype_selectable",
                                        "unclassified_collapse_comp", "phenotype_group",
                                        "phenotype_aggregate_members", "phenotype_aggregates_for",
                                        "add_phenotype_aggregate_columns")) {

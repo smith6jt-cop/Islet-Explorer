@@ -5,13 +5,39 @@
   defs <- c("PHENOTYPE_RETIRED", "phenotype_is_kept", "phenotype_keep", "phenotype_retired",
             "phenotype_is_conflict", "phenotype_partition_labels", "PHENOTYPE_GROUP_AGGREGATES",
             "is_phenotype_aggregate", "MACROPHAGE_LABEL_PATTERN", "MACROPHAGE_KEY_PATTERN", "is_macrophage_label",
-            "UNCLASSIFIED_KEYS", "UNCLASSIFIED_PARENT", "UNCLASSIFIED_RAW_TO_KEY", "unclassified_collapse")
+            "UNCLASSIFIED_KEYS", "UNCLASSIFIED_PARENT", "UNCLASSIFIED_RAW_TO_KEY", "unclassified_collapse",
+            "phenotype_is_unclassified", "phenotype_selectable")
   for (expr in parse(.find_source("R/00_globals.R"))) {
     if (is.call(expr) && identical(expr[[1]], as.name("<-")) && is.symbol(expr[[2]]) &&
         as.character(expr[[2]]) %in% defs) eval(expr, env)
   }
+  for (expr in parse(.find_source("R/drilldown_helpers.R"))) {
+    if (is.call(expr) && identical(expr[[1]], as.name("<-")) &&
+        identical(expr[[2]], as.name("phenotype_palette_for"))) eval(expr, env)
+  }
   sys.source(.find_source("R/plot_types.R"), envir = env)
   sys.source(.find_source("R/donor_composition.R"), envir = env)
+  env
+}
+
+.composition_palette_env <- function() {
+  env <- .plot_types_env()
+  globals <- c("MACROPHAGE_LABELS", "MACROPHAGE_MARKERS", "macrophage_signs", "macrophage_collapse",
+               "TOP_MARKER_BASE", "TOP_MARKER_LABELS", "CD45_RULE_LABEL", "CD45_TOP_MARKER_LABEL")
+  for (expr in parse(.find_source("R/00_globals.R"))) {
+    if (is.call(expr) && identical(expr[[1]], as.name("<-")) && is.symbol(expr[[2]]) &&
+        as.character(expr[[2]]) %in% globals) eval(expr, env)
+  }
+  env$root_has_top_marker_labels <- function() FALSE
+  env$root_cd45_is_rule_label <- function() FALSE
+  palette_defs <- c("PHENOTYPE_COLORS", "PHENOTYPE_COLORS_HIGH_CONTRAST", "PHENOTYPE_COLORS_COLORBLIND",
+                    "PHENOTYPE_COLORS_MAX_DISTINCT", "macrophage_family", "macrophage_key_colors",
+                    "with_macrophage_family", "top_marker_family", "with_top_marker_family",
+                    "with_unclassified_family", "PHENOTYPE_PALETTES")
+  for (expr in parse(.find_source("R/drilldown_helpers.R"))) {
+    if (is.call(expr) && identical(expr[[1]], as.name("<-")) && is.symbol(expr[[2]]) &&
+        as.character(expr[[2]]) %in% palette_defs) eval(expr, env)
+  }
   env
 }
 
@@ -104,8 +130,8 @@ test_that("donor categories count leaves once and never turn hidden QC cells int
   }
   original <- comp
   tab <- env$donor_composition_table(comp, pairs, "both")
-  expect_identical(tab$phenotype, c(labels[1], env$DONOR_COMPOSITION_OTHER, labels[c(3, 6, 7)]))
-  expect_equal(tab$cells, c(50, 90, 40, 30, 30))
+  expect_identical(tab$phenotype, c(labels[c(1, 3, 6, 7)], env$DONOR_COMPOSITION_OTHER))
+  expect_equal(tab$cells, c(50, 40, 30, 30, 90))
   expect_true(all(tab$total_cells == 300))
   expect_equal(sum(tab$proportion), 80) # 60 hidden cells stay in the original denominator.
   shown <- env$donor_composition_shown(tab)
@@ -209,10 +235,58 @@ test_that("composition bars render only included rows and use the selected palet
   expect_false(grepl("<br>|<sup>", first$x$layout$title$text))
 })
 
+test_that("deployed phenotypes have distinct stable colors across palettes and macrophage splits", {
+  env <- .composition_palette_env()
+  # Deployed component labels, plus the four unclassified leaves used by other views.
+  fixed <- c("Alpha cell", "Beta cell", "CHGA+ hormone-negative", "Delta cell", "CD4 Tcell", "CD8a Tcell",
+             "B cell", unname(env$UNCLASSIFIED_KEYS), "Endothelium Blood Vessel", "Endothelium Lymphatic",
+             "Exocrine", "Neural", "Stromal")
+  for (palette in env$PHENOTYPE_PALETTES) {
+    for (mask in 0:15) {
+      markers <- env$MACROPHAGE_MARKERS[as.logical(intToBits(mask)[1:4])]
+      labels <- c(fixed, unique(env$macrophage_collapse(env$MACROPHAGE_LABELS, markers)))
+      colors <- env$phenotype_palette_for(labels, palette)
+      expect_false(anyNA(palette[labels]))
+      expect_equal(anyDuplicated(tolower(colors)), 0L)
+      expect_identical(unname(colors), unname(palette[labels]))
+      # A phenotype keeps its color in a different view or a narrower selection.
+      expect_identical(env$phenotype_palette_for(rev(labels), palette)[labels], colors)
+      expect_identical(env$phenotype_palette_for(labels[c(1, 12, 13, 16)], palette), colors[c(1, 12, 13, 16)])
+    }
+  }
+})
+
+test_that("composition uses the shared palette for deployed and new phenotype labels", {
+  skip_if_not_installed("plotly")
+  env <- .composition_palette_env()
+  for (expr in parse(.find_source("R/00_globals.R"))) {
+    if (is.call(expr) && identical(expr[[1]], as.name("<-")) && is.symbol(expr[[2]]) &&
+        as.character(expr[[2]]) %in% c("ISLET_FONT_SIZES", "plotly_islet_fonts")) eval(expr, env)
+  }
+  env$plotly_islet_config <- function(p, ...) p
+  env$phenotype_text <- identity
+  labels <- c("Endothelium Blood Vessel", "Endothelium Lymphatic", "Stromal", "New phenotype A", "New phenotype B")
+  tab <- data.frame(case_id = "1", donor_status = "ND", phenotype = labels, cells = 1,
+                    total_cells = 5, proportion = 20, n_objects = 1)
+  shown <- env$donor_composition_shown(tab)
+  for (palette in env$PHENOTYPE_PALETTES) {
+    plot <- plotly::plotly_build(env$donor_composition_figure(shown, "1", palette, c(ND = "#3366CC"), "core"))
+    bars <- Filter(function(trace) identical(trace$type, "bar"), plot$x$data)
+    actual <- stats::setNames(vapply(bars, function(trace) trace$marker$color, ""),
+                              vapply(bars, `[[`, "", "name"))
+    expect_identical(actual[labels], env$phenotype_palette_for(labels, palette))
+    expect_equal(anyDuplicated(tolower(actual)), 0L)
+    expect_false(any(tolower(actual) == "#8f8f8f"))
+    fallback_rgb <- grDevices::col2rgb(actual[c("New phenotype A", "New phenotype B")])
+    expect_gt(sum(abs(diff(t(fallback_rgb)))), 75)
+  }
+})
+
 test_that("a measure nonzero in under 1% of objects is not offered", {
   env <- new.env(parent = globalenv())
   env$`%||%` <- function(x, y) if (is.null(x)) y else x
   env$phenotype_is_kept <- function(x) TRUE
+  env$phenotype_is_unclassified <- function(x) rep(FALSE, length(x))
   env$extract_phenotype_from_column <- function(x) sub("^(peri_prop_|prop_)", "", x)
   env$phenotype_text <- function(x) x
   sys.source(.find_source("R/plot_helpers.R"), envir = env)

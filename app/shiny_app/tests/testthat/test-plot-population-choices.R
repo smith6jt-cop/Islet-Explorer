@@ -5,6 +5,7 @@ test_that("Plot Cell Populations applies the short phenotype list to every regio
     !(as.character(x) %in% c("Endocrine", "Acinar", "Endothelial", "T cell",
                               "Immune", "Unknown", "ECAD+", "Structural", "APCs"))
   }
+  env$phenotype_is_unclassified <- function(x) rep(FALSE, length(x))
   env$extract_phenotype_from_column <- function(x) {
     stem <- sub("^(peri_prop_|prop_)", "", x)
     gsub("_", " ", gsub("plus", "+", stem, fixed = TRUE), fixed = TRUE)

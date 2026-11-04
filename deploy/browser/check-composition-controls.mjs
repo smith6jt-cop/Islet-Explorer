@@ -131,6 +131,12 @@ async function snapshot() {
 function normalized(state) {
   return state.barCount > 0 && state.donorCount >= 15 && state.sums.every(sum => Math.abs(sum - 100) < 1e-6);
 }
+const affectedPhenotypes = ['Endothelium Blood Vessel', 'Endothelium Lymphatic', 'Stromal'];
+function distinctPhenotypeColors(state) {
+  const colors = state.colors.map(color => String(color || '').toLowerCase());
+  return colors.length === state.barCount && colors.every(color => color && color !== '#8f8f8f') &&
+    new Set(colors).size === colors.length && affectedPhenotypes.every(name => state.names.includes(name));
+}
 async function scrollCard() {
   await page.evaluate(() => {
     const card = document.getElementById('plot-composition_by_donor').closest('.card');
@@ -206,17 +212,17 @@ try {
     await waitBars();
     const state = await snapshot();
     const closed = await page.$eval(panel, element => !element.open);
-    return { passed: closed && normalized(state), closed, ...state };
+    return { passed: closed && normalized(state) && distinctPhenotypeColors(state), closed, ...state };
   });
   await check('include_groups_axis_and_no_subtitle', async () => {
     await setPanel(true);
     const state = await snapshot();
     const groups = await page.$$eval(`${include} .pheno-group-title`, elements => elements.map(el => el.textContent.trim()));
     const labels = await page.$$eval(ownBoxes, boxes => boxes.map(box => box.value));
-    return { passed: groups.length >= 4 && groups.includes('Macrophage') && groups.includes('Unclassified') &&
+    return { passed: groups.length >= 4 && groups.includes('Macrophage') && groups.includes('Other') &&
       state.yTitle === 'Proportion of selected phenotypes' && !/<br>|<sup>/.test(state.title) &&
-      !labels.some(label => /^Conflict(?:\s|_|$)/i.test(label) || ['All unclassified cells', 'All macrophages', 'No subtype'].includes(label)) &&
-      labels.filter(label => /^Unclassified /.test(label)).length === 4,
+      !labels.some(label => /^(?:Conflict(?:\s|_|$)|Unclassified )/i.test(label) ||
+        ['All unclassified cells', 'All macrophages', 'No subtype'].includes(label)),
     groups, yTitle: state.yTitle, title: state.title, unclassifiedSubclasses: labels.filter(label => /^Unclassified /.test(label)).length };
   });
   await check('none_clears_plot_and_stays_empty_across_marker_rerender', async () => {
@@ -261,7 +267,7 @@ try {
     await waitBars();
     const state = await snapshot();
     const choiceCount = await page.$$eval(ownBoxes, boxes => boxes.length);
-    return { passed: normalized(state) && state.selected.length === choiceCount && state.markers.join() === 'CD68' &&
+    return { passed: normalized(state) && distinctPhenotypeColors(state) && state.selected.length === choiceCount && state.markers.join() === 'CD68' &&
       !state.selected.includes('Macrophage') && !state.selected.includes('All unclassified cells') &&
       !state.selected.some(label => /^Conflict(?:\s|_|$)/i.test(label)), choiceCount, ...state };
   });
@@ -296,13 +302,20 @@ try {
       return (element?.selectize?.getValue() || element?.value) === value;
     }, {}, next);
     const spatial = await page.$eval('#spatial_palette', element => element.selectize?.getValue() || element.value);
+    const expectedColors = Object.fromEntries(affectedPhenotypes.map(name => [name, after.colors[after.names.indexOf(name)]]));
+    await page.waitForFunction(expected => {
+      const bars = (document.getElementById('spatial-cluster_composition')?.data || []).filter(trace => trace.type === 'bar');
+      return Object.entries(expected).every(([name, color]) => bars.some(trace =>
+        trace.name === name && trace.marker?.color?.toLowerCase() === color?.toLowerCase()));
+    }, {}, expectedColors);
     await page.click('#tabs a[data-value="Plot"]');
     await page.waitForFunction(() => document.querySelector('#tabs li.active a')?.dataset.value === 'Plot');
     await waitBars();
     return { passed: JSON.stringify(before.colors) !== JSON.stringify(after.colors) &&
-      JSON.stringify(before.sums) === JSON.stringify(after.sums) && spatial === next && normalized(after),
+      JSON.stringify(before.sums) === JSON.stringify(after.sums) && spatial === next && normalized(after) &&
+      distinctPhenotypeColors(before) && distinctPhenotypeColors(after),
     beforePalette: current, afterPalette: next, spatialPalette: spatial,
-    beforeColors: before.colors, afterColors: after.colors, donorCount: after.donorCount };
+    beforeColors: before.colors, afterColors: after.colors, spatialColors: expectedColors, donorCount: after.donorCount };
   });
   await check('palette_persists_when_linked_object_mounts_drilldown', async () => {
     const before = await snapshot();

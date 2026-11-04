@@ -8,7 +8,8 @@
     "PHENOTYPE_GROUP_AGGREGATES", "PHENOTYPE_GROUP_ORDER", "phenotype_group", "is_phenotype_aggregate",
     "phenotype_aggregate_members", "phenotype_partition_labels", "phenotype_aggregates_for",
     "add_phenotype_aggregate_columns", "phenotype_groups_split", "phenotype_grouped_choices",
-    "phenotype_is_conflict", "PHENOTYPE_RETIRED", "phenotype_retired", "phenotype_is_kept", "phenotype_keep",
+    "phenotype_is_conflict", "phenotype_is_unclassified", "phenotype_selectable",
+    "PHENOTYPE_RETIRED", "phenotype_retired", "phenotype_is_kept", "phenotype_keep",
     "phenotype_filter_rows", "phenotype_filter_conflict_columns", "write_islet_csv")
   for (expr in parse(.find_source("R/00_globals.R")))
     if (is.call(expr) && identical(expr[[1]], as.name("<-")) && as.character(expr[[2]]) %in% wanted) eval(expr, env)
@@ -43,9 +44,9 @@ test_that("cell projections and additive selections retain each row once and exc
   expect_identical(out$cell_id, c(1:6, 8L))
   expect_identical(df, original)
   expect_identical(e$phenotype_filter_rows(out), out)
-  expect_setequal(e$phenotype_partition_labels(c(raw, k, "No subtype", e$UNCLASSIFIED_PARENT)), c(k, "Beta cell"))
+  expect_identical(e$phenotype_partition_labels(c(raw, k, "No subtype", e$UNCLASSIFIED_PARENT)), "Beta cell")
   choices <- e$phenotype_grouped_choices(c(e$UNCLASSIFIED_PARENT, raw, k))
-  expect_identical(unname(unlist(choices$Unclassified)), c(e$UNCLASSIFIED_PARENT, k))
+  expect_null(choices$Unclassified)
   expect_false(any(c("Tissue", "Unclassified", "Doublet suspected", "No subtype", "T cell") %in% unlist(choices)))
   e$root_has_marker_profile_labels <- function() FALSE
   expect_identical(e$phenotype_aggregates_for(k), e$UNCLASSIFIED_PARENT)

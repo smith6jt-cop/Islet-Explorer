@@ -13,6 +13,9 @@ PHENOTYPE_COLORS <- c(
   "Endocrine"     = "#D4A373",  # tan
   "Acinar"        = "#A8DADC",  # light teal
   "Exocrine"     = "#A8DADC",  # Senior's residual class: the Acinar color
+  "Endothelium Blood Vessel" = "#CC5E27",
+  "Endothelium Lymphatic" = "#1D8259",
+  "Stromal"       = "#977D20",
   "Ductal"        = "#457B9D",  # steel blue
   "ECAD+"         = "#6A994E",  # olive green
   "Structural"    = "#9B9B9B",  # gray
@@ -40,6 +43,9 @@ PHENOTYPE_COLORS_HIGH_CONTRAST <- c(
   "Endocrine"     = "#8D6E63",  # brown
   "Acinar"        = "#00ACC1",  # cyan
   "Exocrine"     = "#00ACC1",  # Senior's residual class: the Acinar color
+  "Endothelium Blood Vessel" = "#F46D43",
+  "Endothelium Lymphatic" = "#1B9E77",
+  "Stromal"       = "#A6A000",
   "Ductal"        = "#43A047",  # green
   "ECAD+"         = "#7CB342",  # lime green
   "Structural"    = "#9E9E9E",  # gray
@@ -67,6 +73,9 @@ PHENOTYPE_COLORS_COLORBLIND <- c(
   "Endocrine"     = "#AA4499",  # purple
   "Acinar"        = "#44AA99",  # teal
   "Exocrine"     = "#44AA99",  # Senior's residual class: the Acinar color
+  "Endothelium Blood Vessel" = "#CC7733",
+  "Endothelium Lymphatic" = "#228855",
+  "Stromal"       = "#BB9955",
   "Ductal"        = "#332288",  # indigo
   "ECAD+"         = "#117733",  # green
   "Structural"    = "#888888",  # gray
@@ -94,6 +103,9 @@ PHENOTYPE_COLORS_MAX_DISTINCT <- c(
   "Endocrine"     = "#F38400",  # vivid orange
   "Acinar"        = "#A1CAF1",  # very light blue
   "Exocrine"     = "#A1CAF1",  # Senior's residual class: the Acinar color
+  "Endothelium Blood Vessel" = "#D15C45",
+  "Endothelium Lymphatic" = "#00A78E",
+  "Stromal"       = "#8F863D",
   "Ductal"        = "#008856",  # vivid green
   "ECAD+"         = "#C2B280",  # dark yellowish brown
   "Structural"    = "#848482",  # medium gray
@@ -220,10 +232,12 @@ phenotype_palette_for <- function(labels, palette = PHENOTYPE_COLORS) {
     duplicated(tolower(colors), fromLast = TRUE))]
   needs_color <- unique(c(missing, setdiff(duplicates, labels[!is.na(colors)][1L])))
   if (length(needs_color)) {
-    candidates <- grDevices::hcl(h = seq(7, 367, length.out = 361)[-361], c = 72, l = 52)
+    # Spread successive fallback hues around the color wheel instead of giving
+    # adjacent missing labels nearly identical shades.
+    hues <- (7 + (seq_len(360) - 1L) * 137.50776405) %% 360
+    candidates <- unique(c(grDevices::hcl(h = hues, c = 72, l = 52),
+                           grDevices::hcl(h = hues, c = 58, l = 67)))
     candidates <- candidates[!tolower(candidates) %in% used]
-    if (length(candidates) < length(needs_color))
-      candidates <- c(candidates, grDevices::hcl(h = seq(11, 371, length.out = 361)[-361], c = 58, l = 67))
     for (i in seq_along(needs_color)) {
       key <- needs_color[[i]]
       colors[[key]] <- candidates[[i]]

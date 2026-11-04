@@ -9,8 +9,8 @@ test_that("drilldown projects unresolved leaves and removes conflicts without ch
         as.character(expr[[2]]) %in% defs) eval(expr, env)
   }
   for (expr in parse(.find_source("R/drilldown_helpers.R"))) {
-    if (is.call(expr) && identical(expr[[1]], as.name("<-")) &&
-        identical(expr[[2]], as.name("render_islet_drilldown_plot"))) eval(expr, env)
+    if (is.call(expr) && identical(expr[[1]], as.name("<-")) && is.symbol(expr[[2]]) &&
+        as.character(expr[[2]]) %in% c("phenotype_palette_for", "render_islet_drilldown_plot")) eval(expr, env)
   }
   env$build_segmentation_base_plot <- function(...) ggplot2::ggplot()
   env$theme_islet <- ggplot2::theme_minimal
