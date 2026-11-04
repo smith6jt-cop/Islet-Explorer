@@ -6,15 +6,14 @@ Interactive web application for exploring pancreatic islet CODEX multiplexed ima
 [the workflow user guide](workflow_user_guide.md). The
 [selected-component v2 build](component_build_v2_20261102.md) preserves the exact
 named v19 endocrine cells and applies current methods to the remaining cells.
-Production `pubapps-2026-11-ui-refresh-1659c9d` is live; all 25 data parity
+Production `pubapps-2026-11-ui-corrections-22bb011` is live; all 25 data parity
 checks and 15 authenticated public-proxy checks passed. Consult the
 [deployment record](container_security_20261102.md) and
-[live receipt](evidence/pubapps_live_20261104_ui_refresh.json) for the exact
+[live receipt](evidence/pubapps_live_20261104_ui_corrections.json) for the exact
 image, data, and validation evidence. The separate strict-DuckDB
-[dev release](evidence/dev_duckdb_deployment_20261103.json) is also live and
-unchanged. The November 3 display and card-control fixes are included in the
-production image. The local preview has been stopped; its native and visual
-checks remain documented in the [local review record](local_duckdb_review_20261103.md).
+[dev release](evidence/dev_duckdb_deployment_20261103.json) is unchanged. The
+production release includes the phenotype-color, two-line logo and Spatial
+axis updates. The local preview has been stopped.
 A designated clean off-campus acceptance run and host reboot test remain pending.
 
 **Live reviewer URL (authentication required)**:

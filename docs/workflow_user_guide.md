@@ -6,15 +6,14 @@ This guide follows the data from the source images to the reviewed app and its r
 
 **Production is live** at
 [Islet Explorer](https://islet-explorer.rc.ufl.edu/islet-explorer/) with
-`pubapps-2026-11-ui-refresh-1659c9d`. Its schema-5 20-donor data passed all
-25 parity checks against the canonical component-app-v2 sources; the release
-retains the exact named v19 endocrine membership and the accepted current
-non-endocrine methods. The image/UI source is `1659c9d`; the final data and
-release manifest are hash-bound in the [live receipt](evidence/pubapps_live_20261104_ui_refresh.json).
-Read the
+`pubapps-2026-11-ui-corrections-22bb011`. Its schema-5 20-donor data passed all
+25 parity checks against the canonical component-app-v2 sources; it retains the
+accepted endocrine membership and non-endocrine methods. The image/UI source is
+`22bb011`; the data and release manifest are bound in the
+[live receipt](evidence/pubapps_live_20261104_ui_corrections.json). Read the
 [resolution contract](component_resolution_20261102.md),
 [current build and measured counts](component_build_v2_20261102.md), and
-[authoritative security/deployment status](container_security_20261102.md).
+[security/deployment status](container_security_20261102.md).
 The first component build's unresolved assignments are historical diagnostics.
 
 | Component | Selected rule |
@@ -26,7 +25,7 @@ The first component build's unresolved assignments are historical diagnostics.
 | Endocrine totals | Exactly Beta, Alpha, Delta and CHGA+ hormone-negative; no anatomical object labels in cell denominators. |
 | Object proof | Hash-bound original classifier lineage and exact Single whole-cell association, with corrected-cell and centroid diagnostics retained separately. |
 | Scientific source | `67ee6c9`, HPG job `49168359`, fresh v2 paths. |
-| Image/release source | `1659c9d`; release `pubapps-2026-11-ui-refresh-1659c9d` is active and verified. |
+| Image/release source | `22bb011`; release `pubapps-2026-11-ui-corrections-22bb011` is active and verified. |
 | Corrected parity validators | `d3ec00e` fixes the distance tolerance; `7ffa7a1` loads the new selector helpers and binds the validator-only commit separately from the release producer. |
 | Composite verifier | `c3dc494`; binds the original 24 passing checks and corrected full state/UUID proofs to unchanged inputs. |
 
@@ -42,15 +41,13 @@ The original parity run passed 24 of 25 checks; its only failure was a floating
 distance treated as an exact key. Corrected validators retain the tolerance,
 the failed historical report and the final validations. See the
 [component-build record](component_build_v2_20261102.md#release-parity-correction-and-remaining-checks).
-The current production release was activated at **2026-11-04 13:18 UTC** as
-`pubapps-2026-11-ui-refresh-1659c9d`. Its complete release parity passed **25/25**,
-full host verification and schema-5 checks passed, and authenticated proxy
-acceptance passed **15/15**. The specific build, data and reports are bound in
-the [live receipt](evidence/pubapps_live_20261104_ui_refresh.json). The
-separate strict-DuckDB dev release remains active and unchanged; see its
-[receipt](evidence/dev_duckdb_deployment_20261103.json). The prior 49/49
-browser reports apply to the earlier accepted app version and are not claimed
-as a fresh browser run of this release.
+The current production release `pubapps-2026-11-ui-corrections-22bb011` was
+activated at **2026-11-04T16:19:41Z**. Its release parity passed **25/25**, full local
+and host verification passed, and authenticated proxy access passed **15/15**.
+The candidate passed 49 application, 12 composition and 7 Spatial axis browser
+checks; the targeted composition and Spatial checks passed again on the live service. See the [live receipt](evidence/pubapps_live_20261104_ui_corrections.json).
+The separate strict-DuckDB dev release remains unchanged; see its
+[receipt](evidence/dev_duckdb_deployment_20261103.json).
 
 The November 3 [local review record](local_duckdb_review_20261103.md) documents
 the preview and its visual/browser checks. That preview is now stopped. The
@@ -467,21 +464,15 @@ is not native image acceptance.
 
 ## 9. Production activation, rollback, and operations
 
-Production release `pubapps-2026-11-ui-refresh-1659c9d` is **active and verified**
+Production release `pubapps-2026-11-ui-corrections-22bb011` is **active and verified**
 at [Islet Explorer](https://islet-explorer.rc.ufl.edu/islet-explorer/). It was
-activated at `2026-11-04T13:18:01Z` with image
-`sha256:16c4979fff4d7e8d72befbaade013ce668153dc6161f938c8bc6a49a60e5ae24`.
-The producer commit is `1659c9d`; the parity-only validator commit is
-`7ffa7a1`. All 25 data parity checks passed, the full local and host manifests
-matched (20 OME-TIFFs and 4,907 other data files), and the in-container schema-5
-check passed. Host verification confirmed the release before activation and
-read-only scientific mounts after startup. The authenticated public-proxy
-reviewer verifier passed 15/15 checks, including HTTP Basic Auth, TIFF range,
-sidecars and WebSocket. The full release manifest SHA-256 is
-`a097742540f8bbcc7bb532ecd031dc7f27b650dd03613a3148ef0abca710d50b`.
-The TIFF tree shares hard-linked files with the previous production release;
-no TIFF bytes were copied during transfer. The previous release remains
-recorded for rollback. The separate dev instance was not changed.
+activated at `2026-11-04T16:19:41Z` from producer commit `22bb011` and parity-validator commit `071f957`,
+using image `sha256:fd6c9a990028892d43f45af53756a81b6f6ac13acaf7e10a75f61c1725dd483b`.
+All 25 parity checks, full local and host verification, the schema-5 check and
+15 authenticated public-proxy checks passed. The TIFF files are hard-linked to
+the previous production release, which remains available for rollback. The
+separate dev instance was not changed. See the
+[live receipt](evidence/pubapps_live_20261104_ui_corrections.json).
 
 For future activations, record the selected release, source commit, image ID,
 manifest hash, validation evidence and rollback state. The security owner

@@ -41,3 +41,5 @@ selection and Spatial agreement, and checked all 192 region, palette and
 macrophage-split combinations against the production composition summaries.
 These checks are local source-overlay checks, not evidence that a new image
 has been built or that production has been updated.
+
+**Deployment update, 2026-11-04:** the native image and data bundle were subsequently verified and activated on PubApps; see the [live receipt](evidence/pubapps_live_20261104_ui_corrections.json). The local-only observations above retain their original scope.

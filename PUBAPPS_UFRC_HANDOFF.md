@@ -1,22 +1,22 @@
 # Panc Floyd / Islet Explorer UFRC PubApps Request and Reviewer-Hosting Handoff
 
 **Current operational status, 2026-11-04:** production is live as
-`pubapps-2026-11-ui-refresh-1659c9d` at
-[Islet Explorer](https://islet-explorer.rc.ufl.edu/islet-explorer/). Data parity
-passed 25/25 checks, host hashes and schema verification passed, and authenticated
-proxy access passed 15/15. The active image is
-`sha256:16c4979fff4d7e8d72befbaade013ce668153dc6161f938c8bc6a49a60e5ae24`.
-The separate strict-DuckDB dev release was not changed. The local review
-preview has been stopped. See the [November 4 live receipt](docs/evidence/pubapps_live_20261104_ui_refresh.json)
-and [workflow guide](docs/workflow_user_guide.md). A designated clean off-campus
-acceptance run, reviewer credential delivery and VM reboot test remain pending.
+`pubapps-2026-11-ui-corrections-22bb011` at
+[Islet Explorer](https://islet-explorer.rc.ufl.edu/islet-explorer/). The
+schema-5 20-donor release passed 25/25 data-parity checks, full local and host
+verification, and 15/15 authenticated public-proxy checks. The image is
+`sha256:fd6c9a990028892d43f45af53756a81b6f6ac13acaf7e10a75f61c1725dd483b`;
+see the [live receipt](docs/evidence/pubapps_live_20261104_ui_corrections.json)
+and [workflow guide](docs/workflow_user_guide.md). The separate strict-DuckDB
+dev release was not changed. A designated clean off-campus acceptance run,
+reviewer credential delivery, and VM reboot test remain pending.
 
 The November 3 local-review-only direction below was superseded after the
 release passed its data and host checks.
 
 **Dated production direction, 2026-11-02:** the current build is intended for the live production PubApp once its actual data/release/runtime checks pass. The known DuckDB finding is nonblocking through the notice's **2026-11-10 UTC** patch deadline; develop/test our DuckDB fix separately for the dev PubApp. See [the dated release decision](docs/duckdb_remediation_window_20261102.md). This supersedes the earlier strict DuckDB hold and no-activation directions below. Historical failed reports remain unchanged; data checks and other security findings still apply.
 
-> **Previous production status — superseded 2026-11-04:** production had been running `pubapps-2026-11-components-v1`, image `89b3f840…`, source `e5689f6`. Its data and access checks are retained in [the November 2 receipt](docs/evidence/pubapps_live_20261102.json). The current production release is `pubapps-2026-11-ui-refresh-1659c9d`; see the current status and receipt above. The separate strict-DuckDB [dev release](docs/evidence/dev_duckdb_deployment_20261103.json) remains active and unchanged. Production's dated DuckDB remediation window ends November 10 UTC.
+> **Previous production status — superseded 2026-11-04:** production had been running `pubapps-2026-11-components-v1`, image `89b3f840…`, source `e5689f6`. Its data and access checks are retained in [the November 2 receipt](docs/evidence/pubapps_live_20261102.json). The later `pubapps-2026-11-ui-refresh-1659c9d` release is also superseded; see the current status and receipt above. The separate strict-DuckDB [dev release](docs/evidence/dev_duckdb_deployment_20261103.json) remains active and unchanged. Production's dated DuckDB remediation window ends November 10 UTC.
 
 > **Historical available-fixes artifact:** image `2bbb928d…` from `23bd2fd` and its original failed strict DuckDB report remain archived. Its unused host cache entry was removed after verifying the retained OCI archive; it is superseded by the final production build. The dated DuckDB decision and separate strict dev fix are recorded in the current security record above.
 

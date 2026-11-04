@@ -1,0 +1,84 @@
+{
+  "schema": "islet.pubapps_live_release/1",
+  "status": "active_verified",
+  "recorded_utc": "2026-11-04T16:21:36Z",
+  "activation": {
+    "host": "pubmaigan1.ufhpc",
+    "instance": "islet-explorer",
+    "service": "active_healthy",
+    "release": "pubapps-2026-11-ui-corrections-22bb011",
+    "activated_at_utc": "2026-11-04T16:19:41Z",
+    "publish_address": "10.13.41.21",
+    "port": 3838,
+    "memory_limit": "9g",
+    "docroot": "/pubapps/maigan/islet-explorer/prod/html",
+    "local_data": "/local/maigan/releases/pubapps-2026-11-ui-corrections-22bb011",
+    "previous_release": "pubapps-2026-11-ui-refresh-1659c9d",
+    "dev_service_changed": false
+  },
+  "image": {
+    "id": "sha256:fd6c9a990028892d43f45af53756a81b6f6ac13acaf7e10a75f61c1725dd483b",
+    "source_commit": "22bb011e33803b736d0b63604afd1ca7aa2aab60",
+    "security_result": "pass-no-high-or-critical",
+    "scanner_versions": {
+      "syft": "1.51.1",
+      "grype": "0.118.0"
+    },
+    "scan_time_utc": "2026-11-04T15:07:55Z"
+  },
+  "data": {
+    "schema": 5,
+    "producer_commit": "22bb011e33803b736d0b63604afd1ca7aa2aab60",
+    "parity_validator_commit": "071f9571a95d682506cfe60508ac6c8823747d8e",
+    "data_manifest_sha256": "ae0fcaed717d72e6dd26326e85d58b37ab5368471a0e764cda88751b6af8a0e5",
+    "release_manifest_sha256": "43d101b2096a39bdef985eba49c6d2dde44b0d68126cc8aa49f8653338e5d490",
+    "donors": 20,
+    "ome_tiffs": 20,
+    "image_files": 80,
+    "image_tree_sha256": "eff7617270dd3b6f10d67d3519f0293401c463681f81ae7d80e9751cf9d15804",
+    "image_tree_transfer": "Hard-linked to previous production release; all 80 file hashes matched the previous verified host manifest.",
+    "non_image_transfer": "4,917 non-image data and attestation files matched the built candidate by SHA-256."
+  },
+  "changes": {
+    "donor_composition": "Uses the shared phenotype palette; adds explicit colors for the previously gray deployed classes.",
+    "header": "Panc Floyd's / Islet Explorer, on two lines.",
+    "spatial_enrichment": "All finite object values contribute to donor means; axis range changes display only."
+  },
+  "verification": {
+    "release_parity": {
+      "status": "passed",
+      "checks_passed": 25,
+      "checks_failed": 0,
+      "report": "release_parity_pubapps_ui_corrections_20261104.json",
+      "report_sha256": "428321bc36e21ff262cf05f2294f2c3d38993544b27f2e2b7892fb991a9cf653"
+    },
+    "full_release_hashes": "passed_locally_and_on_host",
+    "container_schema_check": "passed_schema_5",
+    "private_backend": "passed_healthy_image_binding_read_only_mounts_and_tiff_range",
+    "authenticated_public_proxy": {
+      "status": "passed",
+      "checks_passed": 15,
+      "checks_failed": 0,
+      "report": "reviewer_access_pubapps_ui_corrections_20261104.json",
+      "report_sha256": "47ed1da6d6a67db1881af360b9b5925f62d5b92ceb28d8099fcf67f9fe849289"
+    },
+    "browser": {
+      "native_application_checks": 49,
+      "native_composition_checks": 12,
+      "native_enrichment_checks": 7,
+      "public_application_checks": 49,
+      "live_composition_checks": 12,
+      "live_enrichment_checks": 7,
+      "live_targeted_transport": "Private SSH tunnel to the active production backend; authenticated public access was tested separately."
+    }
+  },
+  "host_cache_maintenance": {
+    "removed_inactive_cached_image": "sha256:1065d532fe7bc57ca72eb7cbecd2557b5dc645195e22c4b09d0db8c0b41d6d5a",
+    "recovery": "Its retained OCI archive and checksum were verified before removal; current and immediate rollback images were retained."
+  },
+  "pending_operations": [
+    "clean off-campus acceptance run",
+    "VM reboot persistence test",
+    "confidential delivery of reviewer credentials"
+  ]
+}

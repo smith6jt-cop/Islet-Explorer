@@ -1,17 +1,15 @@
 # Islet Explorer on UFRC PubApps
 
-**Current status, 2026-11-04:** production `pubapps-2026-11-ui-refresh-1659c9d`
+**Current status, 2026-11-04:** production `pubapps-2026-11-ui-corrections-22bb011`
 and the separate strict-DuckDB dev release `pubapps-2026-11-dev-duckdb-v1` are
 active and healthy. Production uses image
-`sha256:16c4979fff4d7e8d72befbaade013ce668153dc6161f938c8bc6a49a60e5ae24`,
-source `1659c9d`, and the fully parity-checked schema-5 20-donor bundle. Local
-and host full-hash checks passed, the TIFF tree was reused by hard link from
-the previous production release, and authenticated public-proxy acceptance
-passed 15/15 checks. See the [live receipt](../docs/evidence/pubapps_live_20261104_ui_refresh.json)
-and [build record](../docs/pubapps_ui_refresh_20261103.md). Dev was not changed;
-its [receipt](../docs/evidence/dev_duckdb_deployment_20261103.json) remains
-authoritative. Production's dated DuckDB remediation window remains open through
-2026-11-10 UTC. The local preview has been stopped.
+`sha256:fd6c9a990028892d43f45af53756a81b6f6ac13acaf7e10a75f61c1725dd483b`,
+source `22bb011`, and a schema-5 20-donor bundle that passed 25/25 data-parity
+checks. Local and host full hashes passed, the TIFF tree was reused by hard link,
+and authenticated public-proxy access passed 15/15 checks. See the
+[live receipt](../docs/evidence/pubapps_live_20261104_ui_corrections.json).
+Dev was not changed. The dated production DuckDB direction remains recorded in
+the [remediation decision](../docs/duckdb_remediation_window_20261102.md).
 
 Use the [workflow guide](../docs/workflow_user_guide.md) for source-to-release
 steps and the [current v2 scientific build record](../docs/component_build_v2_20261102.md)

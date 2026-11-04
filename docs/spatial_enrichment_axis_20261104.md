@@ -26,3 +26,5 @@ computed from those unfiltered source values. It also verified identical bars,
 heatmaps and CSV rows across the two axis settings for cohort and own-tissue
 enrichment, core proportion and peri-islet proportion. This is local preview
 evidence and does not establish a new public deployment.
+
+**Deployment update, 2026-11-04:** the native image and data bundle were subsequently verified and activated on PubApps; see the [live receipt](evidence/pubapps_live_20261104_ui_corrections.json). The local-only observations above retain their original scope.

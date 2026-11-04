@@ -1,14 +1,12 @@
 # PubApps container security remediation — 2026-11-02
 
-**Current production status, 2026-11-04:** after the data parity and host
-checks passed, the owner instructed transfer and activation. Production now runs
-`pubapps-2026-11-ui-refresh-1659c9d` with image
-`sha256:16c4979fff4d7e8d72befbaade013ce668153dc6161f938c8bc6a49a60e5ae24`.
-See the [live receipt](evidence/pubapps_live_20261104_ui_refresh.json) and its
-25-check parity and 15-check public-access reports. The dev instance remains on
-its separate strict-DuckDB release. The November 3 local-review-only decision
-was superseded; its [preview record](local_duckdb_review_20261103.md) remains a
-historical record, and the preview has since been stopped.
+**Current production status, 2026-11-04:** production runs
+`pubapps-2026-11-ui-corrections-22bb011`, image
+`sha256:fd6c9a990028892d43f45af53756a81b6f6ac13acaf7e10a75f61c1725dd483b`.
+Its package and decoder security gate passed with no High or Critical findings;
+the data-parity, host and authenticated public-access checks passed. See the
+[live receipt](evidence/pubapps_live_20261104_ui_corrections.json). The separate
+strict-DuckDB dev release was unchanged.
 
 **Earlier production direction, 2026-11-02:** the current build is intended for the live production PubApp once its actual data/release/runtime checks pass. The known DuckDB finding is nonblocking through the notice's **2026-11-10 UTC** patch deadline; develop/test our DuckDB fix separately for the dev PubApp. See [the dated release decision](duckdb_remediation_window_20261102.md). This supersedes the earlier strict DuckDB hold and no-activation directions below. Historical failed reports remain unchanged; data checks and other security findings still apply.
 
@@ -32,7 +30,7 @@ unchanged; its 15 public-access checks passed again. See the
 Production's separate DuckDB finding remains due **2026-11-10 UTC**. Earlier
 stopped/masked-dev observations below describe historical states.
 
-## Production UI refresh live — 2026-11-04 UTC
+## Previous production UI refresh — 2026-11-04 UTC
 
 [The production PubApp](https://islet-explorer.rc.ufl.edu/islet-explorer/)
 activated `pubapps-2026-11-ui-refresh-1659c9d` at 13:18:01 UTC with immutable
