@@ -12,6 +12,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
+import tifffile
 
 TYPING = Path(__file__).resolve().parents[1] / 'uniform' / 'typing'
 sys.path.insert(0, str(TYPING))
@@ -19,6 +20,7 @@ import registry as RG  # noqa: E402
 import identity as ID  # noqa: E402
 import levels as LV  # noqa: E402
 import area_coverage as AC  # noqa: E402
+from interior_signal import compare_signals  # noqa: E402
 
 CHAIN = ('registry.py', 'levels.py', 'canary.py', 'identity.py', 'acceptance_checks.py')
 
@@ -167,7 +169,7 @@ def synthetic_run(tmp_path):
     pd.DataFrame({'object_id': ids, 'cell_class': [(c[3] or ('Exocrine', ''))[0] for c in CELLS],
                   'excluded_reason': [(c[3] or ('', ''))[1] for c in CELLS]}).to_parquet(calls / f'{tag}.parquet')
     lv = pd.DataFrame({'image': tag, 'marker': markers, 'measurement': [reg.measurement(m) for m in markers],
-                       'level_log': np.log1p(LEVEL_RAW)})
+                       'level_log': np.log1p(LEVEL_RAW), 'level_raw': LEVEL_RAW})
     lv.to_csv(typ / 'levels.csv', index=False)
     # the reading competing groups are compared on (owner 2026-10-30): same values in every compartment here
     diff = [m for m in markers if reg.differentiation(m)]
@@ -176,18 +178,71 @@ def synthetic_run(tmp_path):
     pd.DataFrame({'marker': markers, 'decision': 'use'}).to_csv(typ / 'levels_selection.csv', index=False)
     lv.assign(canary_log=np.log1p(CANARY_RAW))[['image', 'marker', 'canary_log']].to_csv(
         typ / 'canary_levels.csv', index=False)
-    # Tiny provenance sources; identity tests do not render pixels from this synthetic image.
+    # Cells occupy disjoint 9 by 6 rectangles: their eroded interiors contain 5 by 2 pixels.
+    features = []
+    channels = np.zeros((len(markers), 12, 12 * n), dtype=np.uint16)
+    for i, (_, _, values, _) in enumerate(CELLS):
+        x = 12 * i + 1
+        coords = [[x,2],[x+8,2],[x+8,7],[x,7],[x,2]]
+        features.append(dict(id=ids[i], geometry=dict(type='Polygon',coordinates=[coords])))
+        for m, val in values.items():
+            if m in markers:
+                channels[markers.index(m), 2:8, x:x+9] = val
+        if i in (27, 28):
+            # Both markers clear the old cell-mean gate in every interior pixel.
+            # In cell 27 T wins; cell 28 has an exact calibrated tie.
+            channels[markers.index('CD3e'), 2:8, x:x+9] = 8000 if i == 27 else 0
+            channels[markers.index('CD163'), 2:8, x:x+9] = 1000 if i == 27 else 0
+
     image = tmp_path / 'image.tiff'
-    image.write_bytes(b'synthetic-image')
+    tifffile.imwrite(image, channels, photometric='minisblack', metadata={'axes':'CYX'})
     (tmp_path / 'project_manifest.json').write_text(json.dumps({'entries': [
         {'image_name': tag, 'entry_id': 1, 'image_path': str(image)}]}))
     server = tmp_path / 'qupath' / 'data' / '1'
     server.mkdir(parents=True)
     (server / 'server.json').write_text(json.dumps({'metadata': {'channels': [{'name': m} for m in markers]}}))
     (tmp_path / 'cell_geojson').mkdir()
-    (tmp_path / 'cell_geojson' / f'{tag}.geojson').write_text('{}')
+    (tmp_path / 'cell_geojson' / f'{tag}.geojson').write_text(json.dumps(features))
     AC.write_coverage(tmp_path, tag, coverage)
     return tmp_path, tag
+
+
+def test_exclusive_signal_counts_and_medians():
+    # Counts from the three case-6533 interior masks. Both markers are positive everywhere.
+    for n, sst in [(108, 86), (69, 55), (125, 123)]:
+        left = np.ones((1, n))
+        right = np.full((1, n), .5)
+        right[:, :sst] = 2.
+        assert compare_signals(left, right) == (n, n - sst, sst, 1., 2.)
+    assert compare_signals([[1., 1., -1.]], [[1., 2., -2.]])[:3] == (3, 0, 1)
+    assert compare_signals([[1., np.nan]], [[2., 0.]]) is None
+
+
+def test_tied_hormones_reach_spatial_rule(synthetic_run):
+    run, tag = synthetic_run
+    # Keep the insulin/glucagon cell scores exactly tied and change only glucagon pixels in c25.
+    image = run / 'image.tiff'
+    data = tifffile.imread(image)
+    markers = RG.load().measured_markers()
+    x = 12 * 25 + 1
+    data[markers.index('GCG'), 2:8, x:x+9] = 6000
+    tifffile.imwrite(image, data, photometric='minisblack', metadata={'axes':'CYX'})
+    frame = pd.read_parquet(run / 'typing/coverage' / f'{tag}.parquet')
+    AC.write_coverage(run, tag, frame)
+    out, _ = ID.classify_image(run, tag)
+    row = out.set_index('object_id').loc['c25']
+    assert row['label'] == 'Alpha cell' and 'hormone_tie_spatial_dominance' in row['tags']
+    evidence = json.loads(row['spatial_tie_evidence'])['hormone']
+    assert evidence['interior_pixels'] == 10
+    assert sorted(evidence['winner_pixels']) == [0, 10]
+
+
+def test_spatial_review_displays_the_actual_competing_groups(accuracy_tiles):
+    comparison = {'markers': [['INS'], ['SST']], 'interior_pixels': 69,
+                  'winner_pixels': [14, 55], 'median_scaled': [0.6, 1.1]}
+    row = pd.Series({'group': 'hormone_tie', 'spatial_tie_evidence': json.dumps({'hormone': comparison})})
+    assert accuracy_tiles.spatial_comparison(row) == comparison
+    assert accuracy_tiles.shown_markers(row, {}, [], None) == (['SST'], ['INS'])
 
 
 def test_identity_rules(synthetic_run):

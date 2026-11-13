@@ -200,7 +200,7 @@ def pin(run: Path, endocrine_source: Path, nonendocrine_source: Path, structure_
             files[f'endocrine/{name}'] = file_record(old / name)
     for p in sorted(RG.REGISTRY_DIR.glob('*.csv')):
         files[f'registry/{p.name}'] = file_record(p)
-    for name in ('identity.py', 'component_selection.py', 'area_coverage.py', 'calibration_context.py'):
+    for name in ('identity.py', 'component_selection.py', 'area_coverage.py', 'interior_signal.py', 'calibration_context.py'):
         files[f'code/{name}'] = file_record(Path(__file__).parent / name)
     # Context is explicitly frozen independently of live DG geometry, even though
     # this operation selects existing thresholds and does not refit them.
@@ -272,7 +272,7 @@ def validate(run: Path, image: str | None = None) -> dict | None:
     expected_files.update({f'endocrine/{x}': old / x for x in MIXED})
     expected_files.update({f'registry/{p.name}': p for p in sorted(RG.REGISTRY_DIR.glob('*.csv'))})
     expected_files.update({f'code/{x}': Path(__file__).parent / x for x in
-                          ('identity.py', 'component_selection.py', 'area_coverage.py', 'calibration_context.py')})
+                          ('identity.py', 'component_selection.py', 'area_coverage.py', 'interior_signal.py', 'calibration_context.py')})
     expected_files['calibration_context'] = run / 'typing/calibration_context.json'
     expected_files['coverage_derivation'] = run / 'typing/coverage/component_derivation.json'
     for name in ('structure_generation.json', 'structure_metrics_manifest.json'):
@@ -353,12 +353,14 @@ def apply(run: Path, tag: str, natural: pd.DataFrame, scores: np.ndarray,
         raise ValueError(f'{tag}: resolution target differs from the declared source/natural boundary')
     if list(resolved.columns) != list(natural.columns):
         raise ValueError(f'{tag}: resolution changed the identity schema')
-    immutable = [c for c in natural if c not in DECISIONS or c == 'start_class']
+    immutable = [c for c in natural if c not in (*DECISIONS, 'spatial_tie_evidence') or c == 'start_class']
     equal(natural[immutable], resolved[immutable], f'{tag}: resolution altered measurements or marker states')
     equal(natural.loc[~target], resolved.loc[~target], f'{tag}: resolution altered an untargeted cell')
     if resolved.loc[target, 'label'].isin(LABELS).any():
         raise ValueError(f'{tag}: nonselected resolution created a new endocrine identity')
     result = resolved.copy()
+    if 'spatial_tie_evidence' in natural:
+        result['natural__spatial_tie_evidence'] = natural['spatial_tie_evidence']
     for field in DECISIONS:
         result[f'natural__{field}'] = natural[field]
         result[f'component_source__{field}'] = source[field]

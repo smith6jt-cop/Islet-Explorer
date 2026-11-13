@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Tile sheets for checking the final typing against the image (owner 2026-10-29: "then do what you suggested").
 
-Samples cells (seed 0) from the final typing run's typing/identity, in five groups:
+Samples cells (seed 0) from the final typing run's typing/identity, in these groups:
   compartment_tie  cells two compartments tied on depth, settled by brightness and area coverage (the six most
                    frequent pairs, 16 each): green = the placed compartment's canary-positive defining markers,
                    magenta = the runner-up's
   lineage_tie      the same between the lineages of one compartment (the four most frequent pairs, 16 each)
+  hormone_tie      two equally ranked cell-positive hormones settled by interior area and brightness
   hema_cd45neg     Hematopoietic CD45- (CD4 alone, CD8a alone, CD20 alone; 16 each): CD45, CD3e and the positive marker
   no_marker        status no_marker_above_background (24): the four markers closest to their levels
   shared_only      status shared_marker_only (24): the positive shared markers and the two defining markers closest
@@ -16,7 +17,8 @@ white = twice the level. The cell's outline is white, its neighbors' gray (compo
 
 Writes <out>/sheets/<group>_<nn>.png (8 rows each) and <out>/manifest.csv (per row: the cell, its call, the markers
 shown with their cell value, level, fold over level, area coverage (typing/coverage) and the coverage of the cell's
-interior, 2 px in from its outline).
+interior, 2 px in from its outline). A recorded spatial comparison also supplies the exclusive pixel counts,
+full denominator and scaled median brightness of both groups. The blinded sheet conceals this evidence.
 
     python scripts/research/typing_accuracy_tiles_20261029.py --workers 5
 """
@@ -139,13 +141,16 @@ def candidates(reg, plan, run: Path = RUN) -> pd.DataFrame:
         b['pair'] = b.apply(lambda x: f"{x['lineage']} over "
                                       f"{lineage_runner(x, plan['comp'][x['compartment']], x['lineage'])}", axis=1) \
             if len(b) else pd.Series(dtype=object)
+        t = d[d['tags'].str.contains('hormone_tie_spatial_dominance', regex=False)].copy()
+        t['group'] = 'hormone_tie'
+        t['pair'] = t['label']
         h = d[d['label'] == 'Hematopoietic CD45-'].copy()
         hm = ['CD3e', 'CD8a', 'CD4', 'CD20', 'CD68', 'CD163']
         h['pair'] = h[[f'pos__{m}' for m in hm]].apply(lambda s: '+'.join(m for m, v in zip(hm, s) if v) or '-', axis=1)
         h = h[h['pair'].isin(['CD4', 'CD8a', 'CD20'])].assign(group='hema_cd45neg')
         n = d[d['status'] == 'no_marker_above_background'].assign(group='no_marker', pair='')
         s = d[d['status'] == 'shared_marker_only'].assign(group='shared_only', pair='')
-        rows.append(pd.concat([a, b, h, n, s]))
+        rows.append(pd.concat([a, b, t, h, n, s]))
     return pd.concat(rows, ignore_index=True)
 
 
@@ -163,7 +168,8 @@ def sample(c: pd.DataFrame, seed: int = SEED) -> pd.DataFrame:
     rng = np.random.default_rng(seed)
     out = []
     seen = set()
-    for group, n_pairs, n in (('compartment_tie', 6, 16), ('lineage_tie', 4, 16), ('hema_cd45neg', 3, 16),
+    for group, n_pairs, n in (('compartment_tie', 6, 16), ('lineage_tie', 4, 16), ('hormone_tie', 3, 16),
+                              ('hema_cd45neg', 3, 16),
                               ('no_marker', 1, 24), ('shared_only', 1, 24)):
         g = c[c['group'] == group]
         for pair in g['pair'].value_counts().index[:n_pairs]:
@@ -175,11 +181,27 @@ def sample(c: pd.DataFrame, seed: int = SEED) -> pd.DataFrame:
     return pd.concat(out, ignore_index=True) if out else c.iloc[:0].copy()
 
 
+def spatial_comparison(row):
+    """Return the recorded comparison for this review category, when present."""
+    evidence = row.get('spatial_tie_evidence')
+    if isinstance(evidence, str) and evidence:
+        prefix = row['group'].removesuffix('_tie')
+        for stage, pair in json.loads(evidence).items():
+            if stage == prefix or stage.startswith(prefix + '_'):
+                return pair
+    return None
+
+
 def shown_markers(row: pd.Series, plan: dict, markers: list[str], reg) -> tuple[list[str], list[str]]:
     """(green markers, magenta markers): at most two each, the highest fold over level first."""
     def top(ms, k=2, col='canary__'):
         ms = [m for m in ms if row.get(col + m, 0)] or [m for m in ms if row.get('pos__' + m, 0)]
         return sorted(ms, key=lambda m: -row.get('fold__' + m, -9))[:k]
+    comparison = spatial_comparison(row)
+    if comparison:
+        winner = int(np.argmax(comparison['winner_pixels']))
+        return tuple(sorted(comparison['markers'][i], key=lambda m: -row.get('fold__' + m, -9))[:2]
+                     for i in (winner, 1 - winner))
     if row['group'] == 'compartment_tie':
         return top(plan['comp'][row['compartment']]['defining']), top(plan['comp'][row['runner_up_compartment']]['defining'])
     if row['group'] == 'lineage_tie':
@@ -285,7 +307,7 @@ def render_image(tag: str, rows: pd.DataFrame, run: Path = RUN) -> list[dict]:
                     'green': ';'.join(r['green']), 'magenta': ';'.join(r['magenta']),
                     'panel_names': ['composite'] + [m for m, _ in panels] + ['DAPI'],
                     'tiles': [cv2.resize(t, None, fx=ZOOM, fy=ZOOM, interpolation=cv2.INTER_NEAREST) for t in tiles],
-                    'markers': info})
+                    'markers': info, 'spatial_comparison': spatial_comparison(r)})
     return out
 
 
@@ -307,6 +329,12 @@ def sheets(done: list[dict], out: Path = OUT, blind: bool = False) -> pd.DataFra
                 y = k * (size + head)
                 nums = '  '.join(f"{m}: x{np.expm1(v['fold']) + 1 if np.isfinite(v['fold']) else float('nan'):.2f} "
                                  f"cov {v['coverage']:.2f}/{v['coverage_interior']:.2f}" for m, v in d['markers'].items())
+                comparison = d.get('spatial_comparison')
+                if comparison:
+                    n = comparison['interior_pixels']
+                    nums = '   '.join(f"{'+'.join(group)} {won}/{n} interior pixels  median {median:.3g}"
+                                      for group, won, median in zip(comparison['markers'], comparison['winner_pixels'],
+                                                                    comparison['median_scaled']))
                 if blind:
                     draw.text((4, y + 2), f"row {k + 1}  {d['review_id']}  green {d['green'] or '-'} | "
                                           f"magenta {d['magenta'] or '-'}", fill=(255, 255, 255))
@@ -323,7 +351,8 @@ def sheets(done: list[dict], out: Path = OUT, blind: bool = False) -> pd.DataFra
                                  'blind_color_swap': d['blind_color_swap'], **{x: d[x] for x in (
                     'group', 'pair', 'image', 'object_id', 'label', 'status', 'tags', 'compartment',
                     'runner_up_compartment', 'lineage', 'green', 'magenta')},
-                    'markers': json.dumps(d['markers'])})
+                    'markers': json.dumps(d['markers']),
+                    'spatial_comparison': json.dumps(comparison) if comparison else ''})
             sheet.save(sheet_dir / f'{name}.png')
     m = pd.DataFrame(manifest)
     key_dir = out / 'key' if blind else out
