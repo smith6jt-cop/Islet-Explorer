@@ -153,10 +153,13 @@ def main() -> int:
             out.loc[hit, 'immune_subtype_resolved_by'] = f'higher_of_{m8}_{m4}'
         # the macrophage label (codex_typing.MACROPHAGE_PROFILE), on every Imm-macrophage cell
         prof = [m for pair in CT.MACROPHAGE_PROFILE for m in pair]
-        pos = {m: scaled[m].to_numpy() > 0 for m in prof}
-        out['macrophage_profile'] = [CT.macrophage_label({m: bool(pos[m][i]) for m in prof})
-                                     if out['immune_class'].iat[i] == 'Imm-macrophage' else ''
-                                     for i in range(n)]
+        measured = scaled.reindex(columns=prof)
+        out['macrophage_profile'] = ''
+        mac = out['immune_class'].eq('Imm-macrophage')
+        anchor = measured.loc[:, ['CD68','CD163']].gt(0).any(axis=1)
+        valid = mac & anchor & np.isfinite(measured.LGALS3)
+        out.loc[valid, 'macrophage_profile'] = np.where(measured.loc[valid, 'LGALS3'] > 0,
+                                                        'Macrophage_Gal3+', 'Macrophage_Gal3-')
         out.to_parquet(typ / 'immune' / f'{t}.parquet', index=False)
         summary[t] = {'n_immune': n,
                       'immune_class': {str(k): int(v) for k, v in out['immune_class'].fillna('(no rule fired)')

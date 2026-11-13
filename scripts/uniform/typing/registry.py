@@ -22,7 +22,7 @@ Positivity is read on the whole cell for every marker, Ki67 on the nucleus; `dif
 marker is compared on when groups compete for a cell (owner, 2026-10-30: "Use membrane for differentiating, but then
 the whole cell still needs to be used for positivity").
 Lineage: 'Lineage' for a marker that identifies the lineage by itself (CD3e: T), 'Lineage:subtype' for a subtype marker
-(INS: Endocrine:Beta, CD8a: T:CD8), several entries for a marker on several lineages (CD4: T:CD4;Myeloid). Typing code
+(INS: Endocrine:Beta, CD8a: T:CD8), a subtype marker on its assigned lineage (CD4: T:CD4). Typing code
 names lineages, never markers; the markers come from these entries.
 Level method: `background_method` fixes a marker's level method where the owner decided it (2026-10-28: SMA
 negative_p99, CD20 negative_p999); `validation` names the check of such a level ('reported' = shown, not a gate);
@@ -85,7 +85,7 @@ class Registry:
         return split(self.table.loc[marker, 'lineage'])
 
     def lineage_entries(self, marker: str) -> list[tuple[str, str]]:
-        """(lineage, subtype) pairs of a marker, e.g. 'T:CD4;Myeloid' -> [('T', 'CD4'), ('Myeloid', '')]."""
+        """(lineage, subtype) pairs of a marker, e.g. 'T:CD4' -> [('T', 'CD4')]."""
         return [tuple((e.split(':', 1) + [''])[:2]) for e in self.lineages(marker)]
 
     def broad(self, lineage: str) -> list[str]:

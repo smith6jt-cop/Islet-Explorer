@@ -105,7 +105,7 @@ CELLS = [  # (expected label, start class, {marker: raw value}, established endo
     ('T cell', None, {'CD3e': HIGH, 'CD45': HIGH}, None),                                     # neither: interim status
     ('Hematopoietic CD45-', None, {'CD20': HIGH}, None),                                      # CD20 alone: never a B cell
     ('B cell', None, {'CD20': HIGH, 'CD45': HIGH}, None),
-    ('CD68+CD163-Macrophage_LGALS3-CD4-', None, {'CD68': HIGH, 'CD45': HIGH}, None),
+    ('Macrophage_Gal3-', None, {'CD68': HIGH, 'CD45': HIGH}, None),
     ('Hematopoietic CD45+', None, {'CD45': HIGH}, None),
     ('Conflict T/Myeloid', None, {'CD163': HIGH, 'CD8a': 2 * HIGH}, None),                   # no CD8a+CD163+ cell type
     ('Exocrine', None, {'ECAD': HIGH, 'panCK': HIGH}, None),
@@ -130,6 +130,7 @@ CELLS = [  # (expected label, start class, {marker: raw value}, established endo
     ('T cell', None, {'CD3e': 2 * HIGH, 'CD45': HIGH, 'CD163': HIGH}, None),                  # tie: brighter, covers more
     ('Conflict T/Myeloid', None, {'CD3e': 2 * HIGH, 'CD45': HIGH, 'CD163': HIGH}, None),      # tie: brighter, covers less
     ('Hematopoietic CD45-', None, {'CD4': HIGH, 'CD8a': HIGH}, None),                         # no lineage, CD45 negative
+    ('Macrophage_Gal3-', None, {'CD68': HIGH, 'CD45': HIGH, 'CD4': HIGH}, None),
 ]
 # area coverage (area_coverage.py): a positive marker covers 0.8 of the cell unless given here; index -> {marker: coverage}
 COVERAGE = {27: {'CD3e': 0.9, 'CD163': 0.2}, 28: {'CD3e': 0.2, 'CD163': 0.9}}
@@ -372,3 +373,14 @@ def test_blinded_review_hides_calls_and_keeps_separate_key(accuracy_tiles, tmp_p
     assert key.loc[0, 'label'] == 'secret-value'
     assert all('secret-value' not in label and 'call:' not in label for label in text)
     assert (tmp_path / 'blinded' / 'review_01.png').exists()
+
+
+def test_macrophage_state_uses_either_anchor_and_measured_gal3():
+    import codex_typing as ct
+    for cd68, cd163 in [(True, False), (False, True), (True, True), (True, None), (None, True)]:
+        for gal3, state in [(True, '+'), (False, '-')]:
+            calls = {'CD68': cd68, 'CD163': cd163, 'LGALS3': gal3}
+            assert ct.macrophage_label(calls) == 'Macrophage_Gal3' + state
+            assert ct.macrophage_label(dict(calls, CD4=True)) == 'Macrophage_Gal3' + state
+    assert ct.macrophage_label({'CD68': True, 'LGALS3': None}) == ''
+    assert ct.macrophage_label({'CD68': False, 'CD163': False, 'LGALS3': True}) == ''

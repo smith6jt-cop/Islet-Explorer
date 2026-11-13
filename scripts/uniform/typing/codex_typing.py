@@ -317,30 +317,22 @@ IMMUNE_LEVEL2 = ('Imm-B-cell', 'Imm-NK-cell', 'Imm-T-cell', 'Imm-dendritic-cell'
 # Owner, 2026-10-27: no M1/M2-like labels; a macrophage is described by its marker profile instead (MACROPHAGE_PROFILE).
 IMMUNE_LEVEL3 = {'Imm-T-cell': ('T-regulatory', 'T-exhausted', 'T-progenitor-memory', 'T-CD8-cytotoxic',
                                 'T-CD8', 'T-CD4-helper')}
-# Owner, 2026-10-27: "CD68+CD163+Macrophage_LGALS3+CD4+ with each plus also able to be a minus" (LGALS3 as Senior's
-# galectin+ macrophage; CD4+ macrophages). Each marker is + at scaled >= IMMUNE_REQUIRE_MIN, else -. In text the
-# plus and minus are superscripts; the data label keeps ASCII + and -.
-MACROPHAGE_PROFILE = (('CD68', 'CD163'), ('LGALS3', 'CD4'))
+# Either anchor establishes macrophage; Gal3 is its only subtype marker.
+MACROPHAGE_PROFILE = (('CD68', 'CD163'), ('LGALS3',))
 
 
 def macrophage_label(positive: dict) -> str:
-    """The macrophage label from {marker: bool}, e.g. 'CD68+CD163-Macrophage_LGALS3+CD4-'."""
-    head, tail = MACROPHAGE_PROFILE
-    sign = lambda m: m + ('+' if positive[m] else '-')
-    return ''.join(map(sign, head)) + 'Macrophage_' + ''.join(map(sign, tail))
+    """Name an anchor-positive macrophage only when Gal3 has been assessed."""
+    anchors, (gal3,) = MACROPHAGE_PROFILE
+    if not any(positive.get(marker) == True for marker in anchors) or positive.get(gal3) is None:
+        return ''
+    return 'Macrophage_Gal3' + ('+' if positive[gal3] else '-')
 
 
 def macrophage_labels() -> list[str]:
-    """Every label a macrophage can take (CD68 or CD163 is positive by definition), in a fixed order."""
-    import itertools
-    head, tail = MACROPHAGE_PROFILE
-    out = []
-    for h in itertools.product((True, False), repeat=len(head)):
-        if not any(h):
-            continue
-        for t in itertools.product((True, False), repeat=len(tail)):
-            out.append(macrophage_label(dict(zip(head + tail, h + t))))
-    return out
+    return ['Macrophage_Gal3+', 'Macrophage_Gal3-']
+
+
 # Owner, 2026-10-27: Senior's T-CD8 forbids CD4 and T-CD4-helper forbids CD8, so a T cell positive for both kept
 # no subtype; and "once there is positivity for a broad defining marker, we do not need the 0.10 positivity level".
 # A T cell (CD3e+) that neither rule names takes the subtype of the higher of the two markers, at any level, compared

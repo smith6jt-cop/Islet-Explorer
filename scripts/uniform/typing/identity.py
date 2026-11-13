@@ -562,6 +562,16 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED, *,
             t_status[none_] = f'{lin}_subtype_not_shown'
             both = rows[P[np.ix_(rows, cols)].sum(axis=1) > 1]
             t_status[both] = 'both_subtype_markers_higher_named'
+        elif srule == 'macrophage_gal3':
+            anchors, state = rule['profile'].split('|')
+            cols = [ix[m] for m in RG.split(anchors) if m in ix]
+            supported = P[np.ix_(rows, cols)].any(axis=1)
+            label[rows] = 'Macrophage'
+            if state in ix:
+                measured = np.isfinite(d[d.attrs['columns'][state]].to_numpy(float)[rows])
+                keep = rows[supported & measured]
+                label[keep] = np.where(P[keep, ix[state]], 'Macrophage_Gal3+', 'Macrophage_Gal3-')
+            named_by[rows] = anchors
         elif srule == 'profile':
             head, tail = (RG.split(x.replace(',', ';')) for x in rule['profile'].split('|'))
             sign = lambda m: np.where(P[rows, ix[m]], f'{m}+', f'{m}-') if m in ix else np.full(len(rows), f'{m}?')

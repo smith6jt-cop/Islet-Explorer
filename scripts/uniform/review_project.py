@@ -117,8 +117,11 @@ def display(label: str) -> str:
     if label in FIXED:
         return FIXED[label]
     if 'Macrophage_' in label:
-        head, tail = label.split('Macrophage_')
-        return 'Macrophage ' + ''.join(SUP.get(c, c) for c in head + tail)
+        tail = label.rsplit('Macrophage_', 1)[1]
+        for marker in ('Gal3', 'LGALS3'):
+            if tail.startswith(marker) and tail[len(marker):len(marker)+1] in SUP:
+                return 'Macrophage Gal3' + SUP[tail[len(marker)]]
+
     if label.endswith('+') and ' ' not in label:
         return label[:-1] + '⁺'
     return label
@@ -133,8 +136,8 @@ def color(name: str) -> str:
         return '#FF1493'
     if name.startswith('Macrophage '):                       # as import_review.groovy colors them
         p, m = SUP['+'], SUP['-']
-        hue = 0.58 if f'CD68{p}CD163{p}' in name else (0.50 if f'CD68{p}' in name else 0.75)
-        k = (f'LGALS3{m}' in name) + (f'CD4{m}' in name)
+        hue = 0.58
+        k = int(f'Gal3{m}' in name)
         r, g, b = colorsys.hsv_to_rgb(hue, 1 - 0.3 * k, 1 - 0.15 * k)
         return '#%02X%02X%02X' % (round(r * 255), round(g * 255), round(b * 255))
     return '#808080'

@@ -48,13 +48,12 @@ def colors = [
     "CD45\u207a": "#1B9E77",
     "Capillary": "#FF2D2D", "Nerve": "#FFD700", "Lymphatic": "#E6994D", "Collagen IV": "#D82DBD"]
 // Class names are the display names (owner, 2026-10-27: broad name first, superscript plus and minus), e.g.
-// "Macrophage CD68\u207aCD163\u207bLGALS3\u207aCD4\u207b"; the data label is kept in the metadata (phenotype_label).
-// Macrophages: hue by CD68 / CD163 (both blue, CD68 only cyan, CD163 only violet), lighter for each of LGALS3 and CD4
-// that is negative.
+// "Macrophage CD68\u207aCD163\u207bLGALS3\u207a"; the data label is kept in the metadata (phenotype_label).
+// Macrophages share a hue; a lighter shade marks Gal3-negative cells.
 String PLUS = "\u207a", MINUS = "\u207b"
 def macrophageColor = { String name ->
-    float hue = name.contains("CD68" + PLUS + "CD163" + PLUS) ? 0.58f : (name.contains("CD68" + PLUS) ? 0.50f : 0.75f)
-    int negatives = (name.contains("LGALS3" + MINUS) ? 1 : 0) + (name.contains("CD4" + MINUS) ? 1 : 0)
+    float hue = 0.58f
+    int negatives = name.contains("Gal3" + MINUS) ? 1 : 0
     Color.getHSBColor(hue, (float) (1.0f - 0.3f * negatives), (float) (1.0f - 0.15f * negatives))
 }
 // colors written by write_assignments.py into the project's classes.json win (final typing run, 2026-10-28)

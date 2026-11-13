@@ -1,4 +1,4 @@
-# Macrophages by marker profile (owner, 2026-10-27): twelve ASCII data labels, shown with superscript plus and minus.
+# Macrophages by marker profile (owner, 2026-10-27): six ASCII data labels, shown with superscript plus and minus.
 # The helpers are read out of R/00_globals.R by name, so the test needs none of the app's packages or data.
 .label_env <- function() {
   env <- new.env(parent = globalenv())
@@ -22,16 +22,13 @@
   env$root_has_top_marker_labels <- function() TRUE
   env$root_cd45_is_rule_label <- function() FALSE        # v15: "CD45+" is a top-marker label
   env$root_phenotype_labels <- function() NULL
+  if (!exists("root_phenotype_labels", envir=env, inherits=FALSE)) env$root_phenotype_labels <- function() NULL
   env
 }
 
-test_that("the twelve macrophage labels match the uniform typing (codex_typing.macrophage_labels)", {
+test_that("the two macrophage labels match the uniform typing (codex_typing.macrophage_labels)", {
   env <- .label_env()
-  expect_length(env$MACROPHAGE_LABELS, 12)
-  expect_equal(env$MACROPHAGE_LABELS[c(1, 8, 12)],
-               c("CD68+CD163+Macrophage_LGALS3+CD4+", "CD68+CD163-Macrophage_LGALS3-CD4-",
-                 "CD68-CD163+Macrophage_LGALS3-CD4-"))
-  expect_false(any(grepl("^CD68-CD163-", env$MACROPHAGE_LABELS)))
+  expect_identical(env$MACROPHAGE_LABELS, c("Macrophage_Gal3+", "Macrophage_Gal3-"))
   expect_true(all(grepl(env$MACROPHAGE_LABEL_PATTERN, env$MACROPHAGE_LABELS)))
   expect_equal(env$is_macrophage_label(c("Macrophage", env$MACROPHAGE_LABELS[2], "CD8a Tcell", NA)),
                c(TRUE, TRUE, FALSE, FALSE))
@@ -68,16 +65,16 @@ test_that("root-bound parent queries include residual source members once withou
 
 test_that("display names put the broad name first, with every marker sign a superscript; values stay ASCII", {
   env <- .label_env()
-  expect_equal(env$phenotype_text(c("CD68+CD163-Macrophage_LGALS3+CD4-", "CHGA+ hormone-negative", "Beta cell",
+  expect_equal(env$phenotype_text(c("CD68+CD163-Macrophage_LGALS3+", "CHGA+ hormone-negative", "Beta cell",
                                     "CD8a Tcell", "CD4 Tcell", "T cell", "B cell", "Macrophage", "Immune", "Exocrine",
                                     "All macrophages", "SMA+", NA)),
-               c("Macrophage CD68\u207aCD163\u207bLGALS3\u207aCD4\u207b", "Endocrine CHGA\u207a hormone-negative",
+               c("Macrophage Gal3\u207a", "Endocrine CHGA\u207a hormone-negative",
                  "Endocrine Beta", "T Cell CD8a\u207a", "T Cell CD4\u207a",
                  "Unclassified \u2014 Lineage or subtype unresolved", "B Cell", "Macrophage",
                  "Immune", "Exocrine", "Macrophage (all)", "SMA\u207a", NA))
-  ch <- env$phenotype_choices_named(c("Beta cell", "CD68-CD163+Macrophage_LGALS3-CD4+"))
-  expect_equal(unname(ch), c("Beta cell", "CD68-CD163+Macrophage_LGALS3-CD4+"))
-  expect_equal(names(ch), c("Endocrine Beta", "Macrophage CD68\u207bCD163\u207aLGALS3\u207bCD4\u207a"))
+  ch <- env$phenotype_choices_named(c("Beta cell", "CD68-CD163+Macrophage_LGALS3-"))
+  expect_equal(unname(ch), c("Beta cell", "CD68-CD163+Macrophage_LGALS3-"))
+  expect_equal(names(ch), c("Endocrine Beta", "Macrophage Gal3\u207b"))
 })
 
 test_that("a sanitized column name maps back to the macrophage label, underscore kept", {
@@ -100,7 +97,7 @@ test_that("phenotypes are grouped, each group's aggregate first; one-label group
   expect_true(is.list(ch[["Core \u2014 B Cell"]]))
   expect_equal(unname(unlist(ch[["Core \u2014 Macrophage"]]))[1], "All macrophages")
   expect_equal(names(ch[["Core \u2014 Macrophage"]])[1], "Macrophage (all)")
-  expect_equal(names(ch[["Core \u2014 Macrophage"]])[2], "Macrophage CD68\u207aCD163\u207aLGALS3\u207aCD4\u207a")
+  expect_equal(names(ch[["Core \u2014 Macrophage"]])[2], "Macrophage Gal3\u207a")
 })
 
 test_that("the grouped checkbox input is one Shiny checkbox group with All | None per group and overall", {
@@ -112,7 +109,7 @@ test_that("the grouped checkbox input is one Shiny checkbox group with All | Non
   expect_equal(lengths(regmatches(html, gregexpr("pheno-select-all pheno-scope-group", html))), 3L)
   expect_equal(lengths(regmatches(html, gregexpr("pheno-scope-all", html))), 2L)
   expect_match(html, 'value="B cell" checked="checked"', fixed = TRUE)
-  expect_match(html, "Macrophage CD68", fixed = TRUE)
+  expect_match(html, "Macrophage Gal3", fixed = TRUE)
 })
 
 test_that("aggregate columns sum the members' proportions of the same cells", {
@@ -127,32 +124,30 @@ test_that("aggregate columns sum the members' proportions of the same cells", {
 
 test_that("the macrophage master toggle adds no additive phenotype value", {
   env <- .label_env()
-  children <- env$macrophage_collapse(env$MACROPHAGE_LABELS, "CD68") |> unique()
+  children <- env$macrophage_collapse(env$MACROPHAGE_LABELS, "Gal3") |> unique()
   html <- as.character(env$phenotype_group_checkboxes("include", c("B cell", children),
-    selected = c("B cell", children[1]), marker_input_id = "split_markers", markers = "CD68"))
+    selected = c("B cell", children[1]), marker_input_id = "split_markers", markers = "Gal3"))
   expect_match(html, 'class="pheno-group-toggle"', fixed = TRUE)
   expect_false(grepl('value="Macrophage"', html, fixed = TRUE))
   expect_equal(lengths(regmatches(html, gregexpr('name="include"', html))), 3L)
-  expect_equal(lengths(regmatches(html, gregexpr('name="split_markers"', html))), 4L)
-  expect_match(html, 'value="CD68" checked="checked"', fixed = TRUE)
+  expect_equal(lengths(regmatches(html, gregexpr('name="split_markers"', html))), 1L)
+  expect_match(html, 'value="Gal3" checked="checked"', fixed = TRUE)
 })
 
 test_that("macrophages merge by the checked markers; a merged category expands back to its data labels", {
   env <- .label_env()
   L <- env$MACROPHAGE_LABELS
   expect_equal(unique(env$macrophage_collapse(L)), "Macrophage")
-  keys <- env$macrophage_collapse(L, c("CD4", "CD163"))
-  expect_setequal(unique(keys), c("Macrophage CD163+CD4+", "Macrophage CD163+CD4-", "Macrophage CD163-CD4+",
-                                  "Macrophage CD163-CD4-"))
-  expect_equal(length(unique(env$macrophage_collapse(L, env$MACROPHAGE_MARKERS))), 12L)
-  expect_equal(env$macrophage_collapse(c("B cell", L[1]), "CD68"), c("B cell", "Macrophage CD68+"))
+  keys <- env$macrophage_collapse(L, "Gal3")
+  expect_identical(keys, c("Macrophage Gal3+", "Macrophage Gal3-"))
+  expect_identical(env$macrophage_collapse(c("B cell", L[1]), "CD68"), c("B cell", "Macrophage"))
   # every data label in exactly one category, and a category's members are those that merge into it
   for (k in unique(keys)) expect_setequal(env$phenotype_members(k), L[keys == k])
   expect_setequal(env$phenotype_members("Macrophage"), c("Macrophage", L))
-  expect_equal(env$phenotype_text("Macrophage CD163-CD4+"), "Macrophage CD163\u207bCD4\u207a")
-  expect_equal(env$remap_macrophage_selection(c("B cell", "Macrophage"), c("B cell", "Macrophage CD4+", "Macrophage CD4-")),
-               c("B cell", "Macrophage CD4+", "Macrophage CD4-"))
-  expect_equal(env$remap_macrophage_selection("B cell", c("B cell", "Macrophage CD4+")), "B cell")
+  expect_equal(env$phenotype_text("Macrophage CD163-LGALS3+"), "Macrophage CD163\u207bLGALS3\u207a")
+  expect_equal(env$remap_macrophage_selection(c("B cell", "Macrophage"), c("B cell", "Macrophage LGALS3+", "Macrophage LGALS3-")),
+               c("B cell", "Macrophage LGALS3+", "Macrophage LGALS3-"))
+  expect_equal(env$remap_macrophage_selection("B cell", c("B cell", "Macrophage LGALS3+")), "B cell")
 })
 
 test_that("merged object columns sum the members and recompute the band enrichment from summed counts", {
@@ -206,9 +201,9 @@ test_that("mixed raw and profile macrophages retain every merged family and use 
   expect_identical(comp, original)
   expect_identical(env$macrophage_collapse_comp(out), out)
   expect_false(any(grepl("Macrophage_LGALS3", names(out), fixed = TRUE)))
-  split <- env$macrophage_collapse_comp(comp, "CD4")
+  split <- env$macrophage_collapse_comp(comp, "Gal3")
   expect_identical(split[destinations], comp[destinations])
-  key <- safe(env$macrophage_collapse(profile, "CD4"))
+  key <- safe(env$macrophage_collapse(profile, "Gal3"))
   for (i in seq_along(families)) expect_equal(split[[paste0(families[i], key)]], profile_values[[i]])
   expect_setequal(env$phenotype_members("All macrophages"), c("Macrophage", profile))
   expect_identical(env$phenotype_partition_labels(c("Macrophage", profile)), profile)
@@ -239,4 +234,18 @@ test_that("v16: CD45+ is the CD45 rule's class in the Immune group; CD45+ (top m
   expect_equal(env$phenotype_text(c("CD45+", "CD45+ (top marker)")), c("CD45\u207a", "CD45\u207a (top marker)"))
   expect_equal(env$extract_phenotype_from_column("enrich_z_CD45plus_(top_marker)"), "CD45+ (top marker)")
   expect_equal(env$extract_phenotype_from_column("prop_CD45+ (top marker)"), "CD45+ (top marker)")
+})
+
+test_that("historical macrophage CD4 subdivisions pool to one modern profile", {
+  env <- .label_env()
+  label <- env$MACROPHAGE_LABELS[1]
+  old <- c("CD68+CD163-Macrophage_LGALS3+CD4+", "CD68-CD163+Macrophage_LGALS3+CD4-")
+  env$root_phenotype_labels <- function() old
+  key <- env$macrophage_collapse(label, env$MACROPHAGE_MARKERS)
+  expect_identical(env$macrophage_collapse(old, env$MACROPHAGE_MARKERS), rep(key, 2))
+  expect_setequal(env$phenotype_members(key), old)
+  comp <- data.frame(x = 1)
+  comp[[paste0("prop_", old[1])]] <- .2
+  comp[[paste0("prop_", old[2])]] <- .3
+  expect_equal(env$macrophage_collapse_comp(comp, env$MACROPHAGE_MARKERS)[[paste0("prop_", key)]], .5)
 })

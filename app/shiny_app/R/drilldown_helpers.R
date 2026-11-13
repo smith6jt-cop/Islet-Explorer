@@ -125,10 +125,7 @@ PHENOTYPE_COLORS_MAX_DISTINCT <- c(
 )
 
 # ── Macrophage marker-profile labels (owner, 2026-10-27; MACROPHAGE_LABELS in 00_globals.R) ──
-# Twelve shades from each palette's Macrophage color: the CD68/CD163 group turns the hue (CD68+CD163+ the base,
-# CD68+CD163- one way, CD68-CD163+ the other) and LGALS3/CD4 set the lightness (LGALS3+CD4+ darkest, LGALS3-CD4-
-# lightest), so the family reads as macrophages and each label differs from its neighbors in lightness, which survives
-# color-vision deficiency. Each palette's single "Macrophage" (the frozen root) stays as it is.
+# A dark and light shade distinguish the two Gal3 states.
 macrophage_family <- function(base) {
   hsv0 <- grDevices::rgb2hsv(grDevices::col2rgb(base))[, 1]
   mix <- function(col, t) {          # t < 0 toward black, t > 0 toward white
@@ -136,17 +133,10 @@ macrophage_family <- function(base) {
     rgb <- if (t < 0) rgb * (1 + t) else rgb + (1 - rgb) * t
     grDevices::rgb(rgb[1], rgb[2], rgb[3])
   }
-  heads <- c(0, 0.09, -0.09)                     # hue turn, CD68+CD163+, CD68+CD163-, CD68-CD163+
-  tails <- c(-0.35, -0.08, 0.25, 0.5)            # LGALS3+CD4+, LGALS3+CD4-, LGALS3-CD4+, LGALS3-CD4-
-  cols <- unlist(lapply(heads, function(dh) {
-    hue <- grDevices::hsv((hsv0[["h"]] + dh) %% 1, max(hsv0[["s"]], 0.35), max(min(hsv0[["v"]], 0.85), 0.45))
-    vapply(tails, function(t) mix(hue, t), character(1))
-  }))
+  cols <- vapply(c(-0.25, 0.35), function(t) mix(base, t), character(1))
   stats::setNames(cols, MACROPHAGE_LABELS)
 }
-# The merged categories of every marker choice (MACROPHAGE_MARKERS, owner 2026-10-27): with all four the twelve shades
-# above; with fewer, the choice's categories ramp from dark to light around the Macrophage color, in key order;
-# with none the one "Macrophage" keeps its color. Only one choice is shown at a time.
+# The aggregate keeps its base color when Gal3 is collapsed.
 macrophage_key_colors <- function(base, family) {
   out <- character(0)
   for (k in seq_along(MACROPHAGE_MARKERS)) {
