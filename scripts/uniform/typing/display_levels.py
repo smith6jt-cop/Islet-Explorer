@@ -12,6 +12,8 @@ they do not apply): the first option, in the order whole cell / membrane and edg
 image and leaves both positive and negative cells on every image.
 
 Writes typing/display_levels.csv (levels.csv's columns) and typing/display_levels_options.csv (every option).
+With no display-role markers in the registry (owner 2026-11-06: the former display markers are state markers,
+whose levels levels.py now writes into typing/levels.csv), both tables are written header-only.
 
     python scripts/uniform/typing/display_levels.py --run data/development/uniform-20donor-20261027 --workers 10
 """
@@ -60,13 +62,19 @@ def main() -> int:
     ap.add_argument('--run', type=Path, required=True)
     ap.add_argument('--workers', type=int, default=10)
     a = ap.parse_args()
+    typ = a.run / 'typing'
+    reg = RG.load()
+    if not reg.markers('display'):
+        for name in ('display_levels_options.csv', 'display_levels.csv'):
+            pd.DataFrame(columns=COLUMNS).to_csv(typ / name, index=False)
+        print('no display-role markers in the registry; the former display markers are state markers whose '
+              'levels are in typing/levels.csv (owner 2026-11-06)', flush=True)
+        return 0
     tags = [r['image_name'] for r in CT.cohort_rows()]
     nulls = LV.empty_nulls(a.run)
     with ProcessPoolExecutor(a.workers) as ex:
         opts = pd.DataFrame([r for rs in ex.map(one, repeat(a.run), tags, repeat(nulls)) for r in rs])
-    typ = a.run / 'typing'
     opts.to_csv(typ / 'display_levels_options.csv', index=False)
-    reg = RG.load()
     chosen = []
     for m in reg.markers('display'):
         for meas, method in LV.options(reg, m):

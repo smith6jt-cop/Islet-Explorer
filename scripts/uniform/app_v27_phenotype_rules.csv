@@ -1,0 +1,18 @@
+parent,label,all_positive,any_positive,all_negative,note
+all,Beta cell,,,,"Endocrine cell within an accepted endocrine object assigned by insulin evidence, with competing lineage evidence reviewed."
+all,Alpha cell,,,,Endocrine cell within an accepted endocrine object assigned by glucagon evidence.
+all,Delta cell,,,,Endocrine cell within an accepted endocrine object assigned by somatostatin evidence.
+all,CHGA+ hormone-negative,,,,Endocrine cell within an accepted endocrine object with chromogranin A evidence and no positive measured hormone.
+all,Acinar cell,,,,Exocrine epithelial cell supported by epithelial markers and the acinar classification.
+all,Ductal cell,,,,Exocrine epithelial cell supported by ductal cytokeratin evidence.
+all,CD4 Tcell,,,,"CD4 T-cell subtype. For residual T cells, CD4 and CD8a above-threshold measurements take priority. Below both levels, the subtype is inferred from the marker profile and other donors’ cluster votes."
+all,CD8a Tcell,,,,"CD8a T-cell subtype. For residual T cells, CD4 and CD8a above-threshold measurements take priority. Below both levels, the subtype is inferred from the marker profile and other donors’ cluster votes."
+all,B cell,,,,B-lineage cell supported by CD20 and the reviewed lineage evidence.
+all,Macrophage_LGALS3+,,,,Myeloid macrophage with CD68 or CD163 evidence and LGALS3 above the image threshold.
+all,Macrophage_LGALS3-,,,,Myeloid macrophage with CD68 or CD163 evidence and LGALS3 below or at the image threshold.
+all,Stromal,,,,Includes mural stromal cells and cells with structural marker evidence only.
+all,Fibroblast,,,,Fibroblast phenotype supported by mesenchymal marker evidence and the reviewed classifier.
+all,Endothelium Blood Vessel,,,,Vascular endothelial phenotype supported by vessel-associated marker and spatial evidence.
+all,Neural,,,,Neural phenotype supported by neural marker and nerve-associated spatial evidence.
+all,Endothelium Lymphatic,,,,Lymphatic endothelial phenotype supported by marker and lymphatic spatial evidence.
+all,Panel undected,,,,No typing marker exceeded its assigned threshold. These cells are included in the cohort and excluded from trajectory features.

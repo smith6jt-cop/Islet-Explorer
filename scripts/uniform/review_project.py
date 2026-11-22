@@ -11,7 +11,6 @@ logs and the completion manifest live in a separate fresh directory.
 from __future__ import annotations
 
 import argparse
-import colorsys
 import csv
 import json
 import os
@@ -25,6 +24,8 @@ from pathlib import Path
 
 import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent / 'typing'))
+import codex_typing as CT
 import structure_generation as SG
 
 REPO = Path(__file__).resolve().parents[2]
@@ -33,15 +34,20 @@ PROJECT = HERE.parent / 'qupath-review-20261027'
 QUPATH = '/home/smith6jt/QuPath/bin/QuPath'
 SUP = {'+': '⁺', '-': '⁻'}
 FIXED = {'Beta cell': 'Endocrine Beta', 'Alpha cell': 'Endocrine Alpha', 'Delta cell': 'Endocrine Delta',
+         'Macrophage_LGALS3+': 'Macrophage Gal3⁺', 'Macrophage_LGALS3-': 'Macrophage Gal3⁻',
+         'Acinar cell': 'Exocrine Acinar', 'Ductal cell': 'Exocrine Ductal',
          'CHGA+ hormone-negative': 'Endocrine CHGA⁺ hormone-negative', 'Endocrine': 'Endocrine',
          'CD8a Tcell': 'T Cell CD8a⁺', 'CD4 Tcell': 'T Cell CD4⁺', 'T cell': 'T Cell', 'B cell': 'B Cell',
          'Immune': 'Immune', 'CD45+': 'CD45⁺', 'Hematopoietic CD45+': 'Hematopoietic CD45⁺', 'Hematopoietic CD45-': 'Hematopoietic CD45⁻', 'CD45+ (top marker)': 'CD45⁺ (top marker)',
          'Exocrine': 'Exocrine'}
-COLORS = {'T Cell CD8a⁺': '#E41A1C', 'T Cell CD4⁺': '#FF7F00', 'T Cell': '#F781BF', 'B Cell': '#FFFF33',
+COLORS = {'Panel undected': '#3A3A3A', 'Conflicting markers - excluded': '#B8860B',
+          'T Cell CD8a⁺': '#E41A1C', 'T Cell CD4⁺': '#FF7F00', 'T Cell': '#F781BF', 'B Cell': '#FFFF33',
+          'Macrophage Gal3⁺': '#0085FF', 'Macrophage Gal3⁻': '#76A7D1',
           'Immune': '#1B9E77', 'CD45⁺': '#1B9E77', 'Hematopoietic CD45⁺': '#1B9E77',
           'Hematopoietic CD45⁻': '#74C476', 'Endocrine Beta': '#9ECAE1', 'Endocrine Alpha': '#A1D99B',
           'Endocrine Delta': '#BCBDDC', 'Endocrine CHGA⁺ hormone-negative': '#8D6E63', 'Endocrine': '#BDBDBD',
-          'Exocrine': '#E0E0E0', 'Excluded - cell QC': '#555555', 'Excluded - exocrine inside islet border': '#A0522D',
+          'Exocrine': '#E0E0E0', 'Exocrine Acinar': '#E0E0E0', 'Exocrine Ductal': '#C8A165', 'Fibroblast': '#8AA17C',
+          'Excluded - cell QC': '#555555', 'Excluded - exocrine inside islet border': '#A0522D',
           'Excluded - hormone under 2x runner-up': '#9932CC', 'Excluded - single without usable hormone': '#6A5ACD',
           'Excluded - ColIV top marker': '#8B7D6B', 'Excluded - lineage ambiguous': '#B8860B',
           'Excluded - doublet suspected': '#FF1493',
@@ -74,7 +80,7 @@ for _start in ('Tissue', 'Islet', 'EndocrineCluster', 'EndocrineSingle'):
         COLORS.setdefault(f'{_start} cell - {_st}', _col)
 # classes earlier typing imports added; a class of this kind that no cell carries now is taken off the project's list
 TYPING_CLASS = ('Macrophage ', 'Excluded - ', 'Conflict ', 'T Cell', 'B Cell', 'Endocrine ', 'Exocrine', 'Immune',
-                'Doublet suspected', 'Endothelial', 'Stromal', 'Neural', 'Hematopoietic')
+                'Doublet suspected', 'Endothelial', 'Stromal', 'Fibroblast', 'Neural', 'Hematopoietic')
 IDENTITY_META = ['start_class', 'compartment', 'compartment_status', 'lineage', 'lineage_status', 'subtype_status',
                  'status', 'named_by', 'tags', 'confirmed', 'confirming_markers', 'established_label']
 
@@ -103,7 +109,8 @@ def identity_tables(run: Path, t: str) -> tuple[pd.DataFrame, pd.DataFrame]:
                       pd.DataFrame({'object_id': qc['object_id'], 'class': 'Excluded - cell QC',
                                     'reason': qc['qc_reasons'].astype(str).str.replace(',', ';')})])
     return out, excl
-EXCLUDED = {'exocrine_inside_islet_border': 'Excluded - exocrine inside islet border',
+EXCLUDED = {'conflicting_markers': 'Conflicting markers - excluded',
+            'exocrine_inside_islet_border': 'Excluded - exocrine inside islet border',
             'hormone_unresolved_margin': 'Excluded - hormone under 2x runner-up',
             'endocrine_single_hormone_margin_below_2x': 'Excluded - hormone under 2x runner-up',
             'endocrine_single_no_usable_hormone': 'Excluded - single without usable hormone',
@@ -114,14 +121,12 @@ COLS = ['object_id', 'phenotype', 'phenotype_label', 'cell_class', 'refined_clas
 
 
 def display(label: str) -> str:
+    label = CT.LEGACY_MACROPHAGE_LABELS.get(label, label)
     if label in FIXED:
         return FIXED[label]
     if 'Macrophage_' in label:
-        tail = label.rsplit('Macrophage_', 1)[1]
-        for marker in ('Gal3', 'LGALS3'):
-            if tail.startswith(marker) and tail[len(marker):len(marker)+1] in SUP:
-                return 'Macrophage Gal3' + SUP[tail[len(marker)]]
-
+        head, tail = label.split('Macrophage_')
+        return 'Macrophage ' + ''.join(SUP.get(c, c) for c in head + tail)
     if label.endswith('+') and ' ' not in label:
         return label[:-1] + '⁺'
     return label
@@ -134,12 +139,6 @@ def color(name: str) -> str:
         return '#B8860B'
     if name == 'Doublet suspected':
         return '#FF1493'
-    if name.startswith('Macrophage '):                       # as import_review.groovy colors them
-        p, m = SUP['+'], SUP['-']
-        hue = 0.58
-        k = int(f'Gal3{m}' in name)
-        r, g, b = colorsys.hsv_to_rgb(hue, 1 - 0.3 * k, 1 - 0.15 * k)
-        return '#%02X%02X%02X' % (round(r * 255), round(g * 255), round(b * 255))
     return '#808080'
 
 

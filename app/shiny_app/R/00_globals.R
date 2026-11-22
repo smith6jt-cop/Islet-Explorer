@@ -258,14 +258,9 @@ SHOW_STATISTICS_TAB <- identical(Sys.getenv("SHOW_STATISTICS_TAB", "0"), "1")
 # (rho -0.70 to -0.73 above 25 cells/islet, against -0.57 for the scVI variants)
 # and the least compressed axis. See app/shiny_app/docs/trajectory.md.
 #
-# The pseudotime is fitted on every endocrine object with at least TRAJ_MIN_CELLS core cells, whatever its
-# class (Islet / Cluster); the app-wide class selection does not apply to it. Barlow et al. 2024 fitted
-# islets of ten or more cells. On the uniform root that is 1,265 objects (1,242 Islets, 23 Clusters), with
-# rho(pseudotime, beta-cell ratio) -0.70; fitted on every object it was -0.20, because one- to few-cell objects
-# carry almost no composition to order. The user-set cells-per-islet range slider was removed on 2026-10-17;
-# the fixed cutoff replaced the class selection on 2026-10-18 (owner: "Use 10 or more cells as the cutoff
-# instead of a category").
-TRAJ_MIN_CELLS <- 10L
+# Total measured core cells of any phenotype define trajectory size eligibility for both
+# Islets and EndocrineClusters. Core endocrine count is the feature denominator.
+TRAJ_MIN_CELLS <- 4L
 
 
 # AI chat card: OFF, so it is both disabled and hidden. Gating rather than
@@ -643,7 +638,7 @@ islet_umap_order <- function(n) order((seq_len(n) * 0.6180339887498949) %% 1)
 #' `color` names a discrete column (colored by `pal`, a named vector) or a numeric one (inferno, scaled to its
 #' range, with a color bar titled `colorbar_title`; NA gray).
 islet_umap_plotly <- function(df, x, y, colour, pal = NULL, text, key = NULL, source = NULL,
-                              colorbar_title = NULL, size = ISLET_UMAP_MARKER$size) {
+                              colorbar_title = NULL, size = ISLET_UMAP_MARKER$size, colorbar_ticks = list()) {
   numeric_colour <- is.numeric(df[[colour]])
   levels <- if (numeric_colour) character(0) else if (is.factor(df[[colour]]))
     levels(droplevels(df[[colour]])) else sort(unique(as.character(df[[colour]])))
@@ -654,10 +649,10 @@ islet_umap_plotly <- function(df, x, y, colour, pal = NULL, text, key = NULL, so
   if (numeric_colour) {
     v <- df[[colour]]
     lim <- if (any(is.finite(v))) range(v, na.rm = TRUE) else c(0, 1)
-    stops <- viridisLite::inferno(11)
+    stops <- substr(viridisLite::inferno(11), 1, 7)
     scale <- lapply(seq_along(stops), function(i) list((i - 1) / (length(stops) - 1), stops[i]))
     marker <- c(marker, list(color = ifelse(is.finite(v), v, NA), colorscale = scale, cmin = lim[1], cmax = lim[2],
-                             showscale = TRUE, colorbar = list(title = list(text = colorbar_title %||% colour))))
+                             showscale = TRUE, colorbar = c(list(title = list(text = colorbar_title %||% colour)), colorbar_ticks)))
   } else {
     col <- unname(pal[as.character(df[[colour]])])
     col[is.na(col)] <- "#9d9d9d"
@@ -764,40 +759,43 @@ phenotype_display_label <- function(name) {
   name
 }
 
-# A macrophage has CD68 or CD163 and one of two LGALS3 states.
-MACROPHAGE_LABELS <- c("Macrophage_Gal3+", "Macrophage_Gal3-")
-MACROPHAGE_LABEL_PATTERN <- "^(Macrophage_Gal3[+-]|CD68[+-]CD163[+-]Macrophage_LGALS3[+-](CD4[+-])?)$"
+# CD68 or CD163 positivity identifies the macrophage lineage. Gal3 (LGALS3) determines its subtype.
+MACROPHAGE_LABELS <- c("Macrophage_LGALS3+", "Macrophage_LGALS3-")
+MACROPHAGE_MARKERS <- "LGALS3"
+# Read the two current labels and older three- or four-marker data labels from immutable releases.
+MACROPHAGE_LABEL_PATTERN <- "^(Macrophage_Gal3[+-]|(CD68[+]CD163[+-]|CD68-CD163[+])?Macrophage_LGALS3[+-](CD4[+-])?)$"
+MACROPHAGE_KEY_PATTERN <- "^Macrophage ((CD68|CD163|LGALS3|CD4)[+-])+$"
+MACROPHAGE_LEGACY_LABELS <- local({
+  heads <- c("CD68+CD163+", "CD68+CD163-", "CD68-CD163+")
+  six <- paste0(rep(heads, each = 2), MACROPHAGE_LABELS)
+  c(six, paste0(rep(six, each = 2), c("CD4+", "CD4-")), "Macrophage_Gal3+", "Macrophage_Gal3-")
+})
 
-#' TRUE for a macrophage label of either root ("Macrophage" or a marker-profile label).
 is_macrophage_label <- function(x) {
   x <- as.character(x)
   !is.na(x) & (x == "Macrophage" | grepl(MACROPHAGE_LABEL_PATTERN, x) | grepl(MACROPHAGE_KEY_PATTERN, x))
 }
 
-# Summaries pool historical anchor and CD4 subdivisions by Gal3 sign.
-MACROPHAGE_MARKERS <- "Gal3"
-MACROPHAGE_KEY_PATTERN <- "^Macrophage ((CD68|CD163|LGALS3|Gal3|CD4)[+-])+$"
-
-#' A label's macrophage marker signs, c(CD68 = "+", ...), from a data label or a key.
-macrophage_signs <- function(label) {
-  marker <- regmatches(label, regexpr("(Gal3|LGALS3)[+-]", label))
-  if (!length(marker)) return(character(0))
-  c(Gal3 = substring(marker, nchar(marker)))
+# Normalize source labels and saved selections before displaying categories or fitting an abundance model.
+# An old checkbox key without a Gal3 sign refers to pooled macrophages under the current definition.
+macrophage_profile <- function(labels) {
+  labels <- as.character(labels)
+  types <- unique(labels)
+  mac <- types[is_macrophage_label(types)]
+  if (!length(mac)) return(labels)
+  marker <- sub("Gal3", "LGALS3", mac, fixed = TRUE)
+  has_gal3 <- grepl("LGALS3[+-]", marker)
+  normalized <- rep("Macrophage", length(mac))
+  normalized[has_gal3] <- sub("^.*(LGALS3[+-]).*$", "Macrophage_\\1", marker[has_gal3])
+  raw <- match(labels, mac)
+  hit <- !is.na(raw)
+  labels[hit] <- normalized[raw[hit]]
+  labels
 }
 
-#' The marker-profile macrophage labels as their key for the checked `markers` (other labels unchanged).
 macrophage_collapse <- function(labels, markers = character(0)) {
-  labels <- as.character(labels)
-  markers <- MACROPHAGE_MARKERS[MACROPHAGE_MARKERS %in% markers]
-  hit <- !is.na(labels) & grepl(MACROPHAGE_LABEL_PATTERN, labels)
-  if (!any(hit)) return(labels)
-  u <- unique(labels[hit])
-  key <- vapply(u, function(l) {
-    if (!length(markers)) return("Macrophage")
-    s <- macrophage_signs(l)
-    paste0("Macrophage ", paste0(markers, s[markers], collapse = ""))
-  }, character(1))
-  labels[hit] <- unname(key[labels[hit]])
+  labels <- macrophage_profile(labels)
+  if (!("LGALS3" %in% markers)) labels[labels %in% MACROPHAGE_LABELS] <- "Macrophage"
   labels
 }
 
@@ -895,21 +893,19 @@ unclassified_collapse_comp <- function(comp) {
 phenotype_members <- function(labels) {
   raw <- root_phenotype_labels()
   if (is.null(raw)) raw <- c("Beta cell", "Alpha cell", "Delta cell", "CHGA+ hormone-negative", "Endocrine",
-                            "CD8a Tcell", "CD4 Tcell", "T cell", "Macrophage", MACROPHAGE_LABELS,
+                            "CD8a Tcell", "CD4 Tcell", "T cell", "Macrophage", MACROPHAGE_LABELS, MACROPHAGE_LEGACY_LABELS,
                             names(UNCLASSIFIED_RAW_TO_KEY))
   raw <- unique(as.character(raw[!phenotype_is_conflict(raw)]))
   out <- character(0)
-  for (l in as.character(labels[!is.na(labels) & !phenotype_is_conflict(labels)])) {
+  for (l in unique(macrophage_profile(labels[!is.na(labels) & !phenotype_is_conflict(labels)]))) {
     out <- c(out, if (is_phenotype_aggregate(l)) {
       phenotype_aggregate_members(l, raw)
     } else if (l %in% unname(UNCLASSIFIED_KEYS) || identical(l, "No subtype")) {
       raw[unclassified_collapse(raw) == unclassified_collapse(l)]
     } else if (identical(l, "Macrophage")) {
       raw[is_macrophage_label(raw)]
-    } else if (grepl(MACROPHAGE_KEY_PATTERN, l) || l %in% MACROPHAGE_LABELS) {
-      s <- macrophage_signs(l)
-      profiles <- raw[grepl(MACROPHAGE_LABEL_PATTERN, raw)]
-      profiles[vapply(profiles, function(m) all(macrophage_signs(m)[names(s)] == s), logical(1))]
+    } else if (l %in% MACROPHAGE_LABELS) {
+      raw[macrophage_profile(raw) == l]
     } else l)
   }
   unique(out)
@@ -921,12 +917,23 @@ phenotype_members <- function(labels) {
 #' "All macrophages" aggregate when no marker is checked (it is then the one "Macrophage").
 macrophage_collapse_comp <- function(comp, markers = character(0)) {
   if (is.null(comp) || !is.data.frame(comp)) return(comp)
-  source_labels <- sub("^prop_", "", grep("^prop_", names(comp), value = TRUE))
-  prof <- source_labels[grepl(MACROPHAGE_LABEL_PATTERN, source_labels)]
-  if (!length(prof)) return(comp)
+  markers <- intersect(MACROPHAGE_MARKERS, markers)
+  core_labels <- sub("^prop_", "", grep("^prop_", names(comp), value = TRUE))
+  profiles <- grep(MACROPHAGE_LABEL_PATTERN, core_labels, value = TRUE)
+  if (!length(profiles)) return(comp)
   raw <- root_phenotype_labels()
-  if (!length(markers) && "prop_Macrophage" %in% names(comp) &&
-      (is.null(raw) || "Macrophage" %in% raw)) prof <- c(prof, "Macrophage")
+  # Some prepared tables carry derived columns beside their raw members. Sum source labels once.
+  prof <- intersect(profiles, raw)
+  if (!length(prof)) {
+    # Metadata-free inputs and already projected tables: prefer detailed members to a cached total.
+    detail <- profiles[startsWith(profiles, "CD68")]
+    aliases <- setdiff(profiles, detail)
+    aliases <- aliases[!macrophage_profile(aliases) %in% macrophage_profile(detail)]
+    aliases <- c(intersect(MACROPHAGE_LABELS, aliases), setdiff(aliases, MACROPHAGE_LABELS))
+    prof <- c(detail, aliases[!duplicated(macrophage_profile(aliases))])
+  }
+  general <- "prop_Macrophage" %in% names(comp) && (is.null(raw) || "Macrophage" %in% raw)
+  if (!length(markers) && general) prof <- c(prof, "Macrophage")
   # A destination can also be a genuine source member (the raw Macrophage
   # residual). All calculations must read its original count/z/distance,
   # including after the merged destination count has been written.
@@ -941,7 +948,11 @@ macrophage_collapse_comp <- function(comp, markers = character(0)) {
     out
   }
   keys <- macrophage_collapse(prof, markers)
-  drop <- character(0)
+  dropped_aliases <- setdiff(profiles, prof)
+  if (!general) dropped_aliases <- c(dropped_aliases, "Macrophage")
+  drop <- unlist(lapply(dropped_aliases, function(label) {
+    c(paste0("prop_", label), paste0(c("peri_prop_", "peri_count_", "enrich_z_", "min_dist_"), safe(label)))
+  }), use.names = FALSE)
   destinations <- character(0)
   for (k in unique(keys)) {
     mem <- prof[keys == k]
@@ -967,15 +978,23 @@ macrophage_collapse_comp <- function(comp, markers = character(0)) {
     drop <- c(drop, paste0("prop_", mem),
               paste0(c("peri_prop_", "peri_count_", "enrich_z_", "min_dist_"), rep(safe(mem), each = 4)))
   }
-  if (!length(markers)) drop <- c(drop, "prop_All macrophages", "peri_prop_All_macrophages")
+  if (!length(markers)) {
+    drop <- c(drop, "prop_All macrophages", "peri_prop_All_macrophages")
+  } else if (length(unique(keys)) + general > 1L || "prop_All macrophages" %in% names(comp)) {
+    # Include true macrophages with unmeasured Gal3 in the biological total only.
+    # A cached broad total may include derived aliases, so use the same source members as the split.
+    members <- c(prof, if (general) "Macrophage")
+    comp[["prop_All macrophages"]] <- total(paste0("prop_", members))
+    comp[["peri_prop_All_macrophages"]] <- total(paste0("peri_prop_", safe(members)))
+  }
   drop <- setdiff(drop, destinations)
   comp[, setdiff(names(comp), drop), drop = FALSE]
 }
 
-#' The Gal3 checkbox that separates the two macrophage states (shown under a Macrophage heading or in a tab's controls).
+#' Marker checkboxes that split macrophages under a Macrophage heading or in a tab's controls.
 macrophage_marker_checkboxes <- function(input_id, selected = character(0), label = "Separate by:") {
   shiny::tags$div(class = "pheno-mac-markers",
-    shiny::checkboxGroupInput(input_id, label, choices = MACROPHAGE_MARKERS, inline = TRUE,
+    shiny::checkboxGroupInput(input_id, label, choices = c(Gal3 = "LGALS3"), inline = TRUE,
                               selected = MACROPHAGE_MARKERS[MACROPHAGE_MARKERS %in% selected]))
 }
 
@@ -1003,7 +1022,7 @@ bind_macrophage_marker_inputs <- function(input, session, ids, setting) {
 #' After the macrophage categories change, keep a selection's other labels and select every new macrophage category
 #' when any old one was selected (none otherwise).
 remap_macrophage_selection <- function(prev, choices) {
-  prev <- as.character(prev %||% character(0))
+  prev <- macrophage_profile(prev %||% character(0))
   mac <- is_macrophage_label(choices)
   keep <- choices[choices %in% prev]
   if (!any(mac & choices %in% prev) && any(is_macrophage_label(prev))) keep <- c(keep, choices[mac])
@@ -1014,6 +1033,7 @@ remap_macrophage_selection <- function(prev, choices) {
 # e.g. T Cell CD4+", endocrine too, with "Cell" capitalized; "yes all superscripts" for every + and - of a label. The
 # data labels, input values and column names do not change; phenotype_text() gives the display name on every root.
 PHENOTYPE_DISPLAY_NAMES <- c(
+  "Macrophage_LGALS3+" = "Macrophage Gal3+", "Macrophage_LGALS3-" = "Macrophage Gal3-",
   "Beta cell" = "Endocrine Beta", "Alpha cell" = "Endocrine Alpha", "Delta cell" = "Endocrine Delta",
   "CHGA+ hormone-negative" = "Endocrine CHGA+ hormone-negative", "Endocrine" = "Endocrine",
   "CD8a Tcell" = "T Cell CD8a+", "CD4 Tcell" = "T Cell CD4+", "T cell" = "T Cell", "B cell" = "B Cell",
@@ -1028,17 +1048,15 @@ PHENOTYPE_DISPLAY_NAMES <- c(
   "Unclassified competing lineage or compartment signals" = "Unclassified \u2014 Competing lineage/compartment signals")
 
 #' The display text of phenotype labels (PHENOTYPE_DISPLAY_NAMES; a marker-profile macrophage label becomes
-#' "Macrophage CD68+CD163-LGALS3+CD4-"), every marker's + and - as superscripts (U+207A, U+207B): a + always, a - that
+#' "Macrophage Gal3+"), every marker's + and - as superscripts (U+207A, U+207B): a + always, a - that
 #' ends a marker (before the end, a space or the next marker's capital), so "hormone-negative" keeps its hyphen.
 #' Labels not listed pass unchanged apart from the superscripts. Vectorized; keeps names; NA stays NA.
 phenotype_text <- function(x) {
   if (is.null(x) || !length(x)) return(x)
-  out <- unclassified_collapse(x)
+  out <- unclassified_collapse(macrophage_profile(x))
   ok <- !is.na(out)
   named <- ok & out %in% names(PHENOTYPE_DISPLAY_NAMES)
   out[named] <- unname(PHENOTYPE_DISPLAY_NAMES[out[named]])
-  mac <- ok & grepl(MACROPHAGE_LABEL_PATTERN, out)
-  out[mac] <- vapply(out[mac], function(l) paste0("Macrophage Gal3", macrophage_signs(l)[["Gal3"]]), character(1))
   out[ok] <- gsub("+", "\u207A", out[ok], fixed = TRUE)
   out[ok] <- gsub("([A-Za-z0-9])-(?=$|[ A-Z])", "\\1\u207B", out[ok], perl = TRUE)
   names(out) <- names(x)
@@ -1167,7 +1185,7 @@ phenotype_groups_split <- function(labels, include_aggregates = TRUE) {
   if (any(is_macrophage_label(labels) & labels != "Macrophage")) labels <- setdiff(labels, "Macrophage")
   if ("Macrophage" %in% labels) labels <- setdiff(labels, "All macrophages")
   g <- phenotype_group(labels)
-  # A macrophage key's plus before its minus, marker by marker ("Macrophage CD163+CD4+" first).
+  # Show Gal3-positive before Gal3-negative macrophages.
   sign_order <- chartr("+-", "01", labels)
   out <- lapply(PHENOTYPE_GROUP_ORDER, function(k) {
     i <- which(g == k)
@@ -1192,8 +1210,8 @@ phenotype_grouped_choices <- function(labels, values = labels, prefix = "") {
   values <- values[keep]
   # Explicit metric values must already refer to projected object columns. Raw
   # labels used as values can safely follow their leaf projection here.
-  if (identical(as.character(values), labels)) values <- unclassified_collapse(values)
-  labels <- unclassified_collapse(labels)
+  if (identical(as.character(values), labels)) values <- unclassified_collapse(macrophage_profile(values))
+  labels <- unclassified_collapse(macrophage_profile(labels))
   values <- stats::setNames(as.character(values), labels)
   out <- list()
   for (k in names(groups <- phenotype_groups_split(labels))) {
@@ -1476,6 +1494,33 @@ phenotype_rules_table_df <- function() {
   do.call(rbind, rows)
 }
 
+# Historical protein-rule files have one row per marker combination. For each Gal3
+# state, keep the shared lineage restrictions and express CD68/CD163 as alternatives.
+macrophage_rule_rows <- function(rules) {
+  required <- c("label", "all_positive", "any_positive", "all_negative", "note")
+  if (!all(required %in% names(rules))) return(rules)
+  legacy <- grepl(MACROPHAGE_LABEL_PATTERN, rules$label) & !rules$label %in% MACROPHAGE_LABELS
+  if (!any(legacy)) return(rules)
+  revised <- rules[legacy, , drop = FALSE]
+  revised$label <- macrophage_profile(revised$label)
+  # An existing canonical rule takes precedence over its older forms.
+  revised <- revised[!duplicated(revised$label) & !revised$label %in% rules$label[!legacy], , drop = FALSE]
+  if (nrow(revised)) {
+    remove_profile_markers <- function(x) setdiff(strsplit(x, "|", fixed = TRUE)[[1]],
+      c("", "CD4", "CD68", "CD163", "LGALS3"))
+    positive <- revised$label == "Macrophage_LGALS3+"
+    for (i in seq_len(nrow(revised))) {
+      pos <- remove_profile_markers(revised$all_positive[i])
+      neg <- remove_profile_markers(revised$all_negative[i])
+      revised$all_positive[i] <- paste(c(pos, if (positive[i]) "LGALS3"), collapse = "|")
+      revised$all_negative[i] <- paste(c(neg, if (!positive[i]) "LGALS3"), collapse = "|")
+    }
+    revised$any_positive <- "CD68|CD163"
+    revised$note <- "CD68 or CD163 positivity identifies macrophages. Gal3 (LGALS3) determines the subtype."
+  }
+  rbind(rules[!legacy, , drop = FALSE], revised)
+}
+
 # Modal builder. Pure shiny — no DT dependency. Pass to showModal() from any tab's
 # Phenotype-Rules button handler.
 phenotype_rules_modal_ui <- function() {
@@ -1494,6 +1539,7 @@ phenotype_rules_modal_ui <- function() {
   if (file.exists(protein_path)) {
     rules <- utils::read.csv(protein_path, stringsAsFactors = FALSE, na.strings = "")
     rules[is.na(rules)] <- ""
+    rules <- macrophage_rule_rows(rules)
     if ("label" %in% names(rules)) rules <- rules[phenotype_is_kept(rules$label), , drop = FALSE]
     if ("label" %in% names(rules)) rules$label <- phenotype_text(rules$label)
     headings <- c("Parent", "Label", "All positive", "Any positive", "All negative", "Note")
@@ -1519,9 +1565,9 @@ phenotype_rules_modal_ui <- function() {
             else "the higher of the two on the cohort scale", ", at any level. A macrophage (",
             if (root_has_background_positivity()) "CD68 or CD163 positive, no CD3e, E-cadherin below the epithelial edge"
             else "CD68+ or CD163+, no CD3e or epithelial marker", ") is named ",
-            "by Gal3 alone: + ",
+            "by Gal3 (LGALS3) status, + ",
             if (root_has_background_positivity()) "when positive and \u2212 otherwise" else "at 0.10 or above and \u2212 below",
-            ", as in ", phenotype_text("Macrophage_Gal3+"), ". "),
+            ", as in ", phenotype_text("Macrophage_LGALS3+"), ". "),
           if (root_has_top_marker_labels()) paste0("Exocrine is a rule (",
             if (root_has_background_positivity()) "E-cadherin at the epithelial level" else "E-cadherin or panCK at 0.10 or above",
             "); ",
@@ -1634,9 +1680,9 @@ extract_phenotype_from_column <- function(col) {
     if (startsWith(col, pre)) {
       stem <- sub(paste0("^", pre), "", col)
       label <- gsub("_", " ", gsub("plus", "+", stem, fixed = TRUE), fixed = TRUE)
-      # a marker-profile macrophage label keeps its own underscore ("...Macrophage_LGALS3+")
-      if (grepl("^Macrophage Gal3[+-]$", label)) return(sub(" ", "_", label, fixed = TRUE))
-      return(sub("^(CD68[+-]CD163[+-]Macrophage) (LGALS3[+-](CD4[+-])?)$", "\\1_\\2", label))
+      # a marker-profile macrophage label keeps its own underscore ("...Macrophage_LGALS3+CD4-")
+      return(sub("^((CD68[+-]CD163[+-])?Macrophage) ((?:LGALS3|Gal3)[+-](CD4[+-])?)$",
+                 "\\1_\\3", label, perl = TRUE))
     }
   }
   col
@@ -1773,7 +1819,7 @@ CONTROL_PANEL_CSS <- paste0(
   ".pheno-mac-children { margin-top: 6px; } ",
   ".pheno-mac-markers .checkbox-inline { margin: 0 10px 0 0; padding-left: 18px; color: var(--islet-fg-muted); } ",
   ".pheno-mac-markers .checkbox-inline + .checkbox-inline { margin-left: 0; } ",
-  # The macrophage labels have no spaces (owner, 2026-10-27: "CD68+CD163+Macrophage_LGALS3+"), so a long label
+  # The macrophage labels have no spaces (owner, 2026-10-27: "Macrophage_LGALS3+"), so a long label
   # wraps inside its column instead of running under the next one.
   ".control-checkbox-grid .shiny-options-group .checkbox label { overflow-wrap: anywhere; } ",
   # The active tab's control panels stay under the frozen page header and tab bar (www/islet-theme.css) while the
@@ -1879,13 +1925,16 @@ root_identity_typing_manifest <- local({
     stamp <- paste(path, file.mtime(path), file.info(path)$size)
     if (!identical(cache$stamp, stamp)) {
       manifest <- tryCatch(jsonlite::fromJSON(path), error = function(e) NULL)
-      cache$manifest <- if (identical(manifest$cell_typing, "typing/identity (identity.py)")) manifest else NULL
+      cache$manifest <- if (identical(manifest$cell_typing, "typing/identity (identity.py)") ||
+          identical(manifest$review_schema, "uniform.terminal_typing/27")) manifest else NULL
       cache$stamp <- stamp
     }
     cache$manifest
   }
 })
 root_has_identity_typing <- function() !is.null(root_identity_typing_manifest())
+root_has_terminal_review <- function() identical(
+  root_identity_typing_manifest()$review_schema, "uniform.terminal_typing/27")
 root_has_selected_endocrine <- function() identical(
   root_identity_typing_manifest()$component_selection$schema, "uniform.component_selection/2")
 
@@ -1922,6 +1971,9 @@ IDENTITY_HORMONE_TEXT <- paste0(
   "cell type; current release checks require those unresolved definitions to be resolved.")
 
 identity_hormone_text <- function() {
+  if (root_has_terminal_review()) return(paste(
+    "Endocrine subtypes use INS, GCG, SST and CHGA within accepted endocrine objects.",
+    "Cells in clusters are evaluated for competing immune-lineage evidence."))
   if (!root_has_selected_endocrine()) return(IDENTITY_HORMONE_TEXT)
   paste0("Endocrine membership and subtype calls are preserved from the selected v19 endocrine cells, ",
     "with their original INS, GCG, SST and CHGA thresholds and independently checked hormone evidence. ",
@@ -1954,7 +2006,9 @@ identity_typing_help_ui <- function() shiny::tagList(
   shiny::tags$p(identity_structure_text()),
   shiny::tags$p("Canary evidence resolves competing compartments and lineages before their marker rules name ",
     "the cell. Conflict QC labels remain in the source audit and are hidden from app views and downloads. ",
-    if (root_has_selected_endocrine())
+    if (root_has_terminal_review())
+      "Cells with structural markers alone enter Stromal. Cells with no typing marker above threshold enter Panel undected. Competing markers without a supported identity are excluded. Cells that "
+    else if (root_has_selected_endocrine())
       "The Unclassified display family preserves the distinct raw Tissue, Unclassified, unresolved-lineage and Doublet suspected evidence. Cells are not named after a top marker. Cells that "
     else
       "Cells with insufficient evidence retain their starting object or Tissue class; they are not named after a top marker. Cells that ",
@@ -1969,7 +2023,7 @@ identity_phenotype_definitions_ui <- function() {
     "CD8a Tcell" = "T lineage with CD3e positive and CD8a positive; if CD4 is also positive, the higher fold over its own level names the subtype.",
     "CD4 Tcell" = "T lineage with CD3e positive and CD4 positive; if CD8a is also positive, the higher fold over its own level names the subtype.",
     "B cell" = "B lineage with CD20 and CD45 positive and a single detected hematopoietic lineage.",
-    "Macrophage" = "Myeloid lineage with CD68 or CD163 positive; its two subtypes record measured Gal3 positivity.",
+    "Macrophage" = "Myeloid lineage with CD68 or CD163 positive; Gal3 (LGALS3) positivity distinguishes Gal3-positive and Gal3-negative macrophages.",
     "Exocrine" = "Epithelial compartment assigned to the exocrine lineage by the registry's epithelial evidence.",
     "Stromal" = "Mesenchymal compartment assigned to the mural lineage with SMA positive.",
     "Structure-qualified cells" = identity_structure_text())
@@ -1980,13 +2034,17 @@ identity_phenotype_definitions_ui <- function() {
       "Selected v19 endocrine membership with SST the unique highest scaled positive hormone.",
       "Selected v19 endocrine membership, CHGA positive and no positive INS, GCG or SST.")
   }
+  if (root_has_terminal_review()) {
+    reviewed <- utils::read.csv(data_path("protein_phenotype_rules.csv"), stringsAsFactors = FALSE)
+    defs <- stats::setNames(reviewed$note, reviewed$label)
+  }
   defs <- defs[phenotype_is_kept(names(defs))]
   shiny::tagList(
     shiny::tags$h6(style = "margin-top: 12px; font-weight: 700;", "Phenotype definitions"),
     shiny::tags$p("These definitions follow compartment and lineage assignment; a positive marker alone does not imply its cell type."),
     shiny::tags$ul(style = "padding-left: 18px; margin-bottom: 6px;",
       lapply(names(defs), function(n) shiny::tags$li(shiny::tags$strong(phenotype_text(n)), ": ", defs[[n]]))),
-    unclassified_help_ui())
+    if (!root_has_terminal_review()) unclassified_help_ui())
 }
 
 #' The cell labels a uniform root assigns (uniform_release.json "labels"); NULL for other roots.
@@ -2101,7 +2159,8 @@ object_classes_help <- function() {
     "classes analyzed. An Islet has two or more whole cells and is at least ",
     "35 µm across (the mean of its largest and smallest caliper diameter); a Cluster has two or more cells ",
     "and is smaller. Rows and plots use only the selected classes. The Trajectory tab instead fits every object ",
-    "with ten or more core cells, whatever its class. A Single (one endocrine cell outside any islet or cluster) ",
+    sprintf("with %d or more total core cells, whatever its class. ", TRAJ_MIN_CELLS),
+    "A Single (one endocrine cell outside any islet or cluster) ",
     "is not an analysis object: it has no core or peri-islet band, and its cell is an ordinary tissue cell, which ",
     "may fall in a neighboring object's band. Singles are only counted (the Plot tab's Endocrine objects per ",
     "donor card) and drawn on the segmentation map.")
@@ -2118,8 +2177,8 @@ cell_typing_help <- function() {
   shiny::tags$p(shiny::tags$strong("Cell labels."),
     " Every cell of all 20 donors is typed by one workflow. The phenotypes listed are Endocrine Beta, Alpha and ",
     "Delta, Endocrine CHGA⁺ hormone-negative (an endocrine cell with no hormone), T Cell CD8a⁺ and CD4⁺, B Cell, ",
-    if (root_has_marker_profile_labels()) paste0("Macrophage named by its measured Gal3 status (e.g. ",
-      phenotype_text("Macrophage_Gal3-"), ")") else "Macrophage",
+    if (root_has_marker_profile_labels()) paste0("Macrophage named by Gal3 (LGALS3) status (e.g. ",
+      phenotype_text("Macrophage_LGALS3-"), ")") else "Macrophage",
     if (root_cd45_is_rule_label()) paste0(", ", phenotype_text(CD45_RULE_LABEL), " (the CD45 rule's other leukocytes)"),
     " and ",
     if (root_has_top_marker_labels()) paste0("Exocrine (",
@@ -2250,7 +2309,7 @@ phenotype_is_unclassified <- function(x) {
 }
 
 phenotype_selectable <- function(x) {
-  x <- as.character(x)
+  x <- macrophage_profile(x)
   unique(x[!is.na(x) & nzchar(x) & !phenotype_is_unclassified(x)])
 }
 
@@ -2299,6 +2358,7 @@ phenotype_marker_definitions <- function(path = data_path("protein_phenotype_rul
   }
   rules <- utils::read.csv(path, stringsAsFactors = FALSE, na.strings = "", check.names = FALSE)
   rules[is.na(rules)] <- ""
+  rules <- macrophage_rule_rows(rules)
   split_markers <- function(x) if (nzchar(x)) strsplit(x, "|", fixed = TRUE)[[1]] else character(0)
   by_label <- split(rules, rules$label)
   compose <- function(label) {
@@ -2341,7 +2401,8 @@ UNIFORM_PHENOTYPE_DEFINITIONS <- c(
   "CD4 Tcell" = "CD3e+, no epithelial marker, and CD4 higher than CD8a on the cohort scale, at any level",
   "B cell" = "CD20+ and CD45+, CD3e\u2212, CD68\u2212, no epithelial marker",
   "Macrophage" = "CD68+, CD3e\u2212, no epithelial marker",
-  "Macrophages" = "CD68 or CD163 positive, CD3e negative, epithelial markers below their thresholds. Measured Gal3 determines Gal3-positive or Gal3-negative subtype.",
+  "Macrophages" = paste("CD68 or CD163 positive (including both), CD3e\u2212, no epithelial marker.",
+                        "Gal3 (LGALS3) at or above 0.10 defines Gal3-positive macrophages. A value below 0.10 defines Gal3-negative macrophages."),
   "CD45+" = paste("CD45 positive, no epithelial marker, and no other immune rule names the cell (the CD45 rule's",
                   "class, listed instead of Immune from v16; owner, 2026-10-27)"),
   "Exocrine" = paste("the residual class: every other cell outside the endocrine objects (acinar, ductal, stromal,",
@@ -2362,7 +2423,8 @@ UNIFORM_PHENOTYPE_DEFINITIONS_V16 <- c(
   "CD4 Tcell" = paste("CD3e positive, E-cadherin below the epithelial edge, and CD4 further above its own level than",
                       "CD8a, at any level"),
   "B cell" = "CD20 and CD45 positive, CD3e\u2212, CD68\u2212, E-cadherin below the epithelial edge",
-  "Macrophages" = "CD68 or CD163 positive, CD3e negative and E-cadherin below the epithelial edge. Measured Gal3 determines the subtype.",
+  "Macrophages" = paste("CD68 or CD163 positive (including both), CD3e\u2212, E-cadherin below the epithelial edge.",
+                        "Gal3 (LGALS3) positivity defines the Gal3-positive and Gal3-negative subtypes."),
   "CD45+" = paste("CD45 positive, E-cadherin below the epithelial edge, and no other immune rule names the cell (the",
                   "CD45 rule's class, listed instead of Immune from v16; owner, 2026-10-27)"),
   "Exocrine (rule)" = paste0("E-cadherin at the epithelial level (", EPITHELIAL_EDGE_TEXT, ", or above), or, for a cell ",
@@ -2394,7 +2456,7 @@ UNIFORM_T_CELL_DEFINITIONS_BEFORE_V14 <- c(
 phenotype_marker_definitions_ui <- function() {
   if (root_has_identity_typing()) return(shiny::tagList(
     shiny::tags$p(identity_measurements_text()),
-    shiny::tags$p(IDENTITY_HORMONE_TEXT),
+    shiny::tags$p(identity_hormone_text()),
     identity_phenotype_definitions_ui()))
   if (is_uniform_root()) {
     defs <- UNIFORM_PHENOTYPE_DEFINITIONS

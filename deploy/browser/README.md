@@ -1,5 +1,32 @@
 # Browser acceptance
 
+## Spatial labels regression — November 5, 2026
+
+```bash
+node deploy/browser/check-spatial-labels.mjs \
+  --url http://127.0.0.1:3845/islet-explorer/ \
+  --output "$REVIEW_EVIDENCE/spatial-labels.json" --shots "$REVIEW_EVIDENCE/spatial-labels-shots"
+```
+
+Checks that every heatmap donor has a visible, non-overlapping label in all
+three region modes, and that composition rows have separate horizontal headings,
+distinct percentage ticks, and matching scales across statuses. Exercises both
+proportions and counts at 1200 and 1600 pixels. Bind the result to the separately
+inspected candidate container and inspect the screenshots before acceptance.
+
+The measure-comparison regression starts with individual points hidden, then
+opens Capillary against core/peri T-cell measures on each Plot card. It requires
+the object points to reappear, permits an explicit subsequent hide, and verifies
+that the hidden state is labeled. An optional `--reference` JSON containing
+`data` rows keyed by `Case ID` and `islet_key`, with x proportions expressed as
+percentages, independently checks every plotted x coordinate.
+
+```bash
+node deploy/browser/check-measure-points.mjs \
+  --url http://127.0.0.1:3845/islet-explorer/ \
+  --output "$REVIEW_EVIDENCE/measure-points.json"
+```
+
 ## Card controls review — November 3, 2026
 
 The focused card checks supplement `check-app.mjs --expanded true`. They require

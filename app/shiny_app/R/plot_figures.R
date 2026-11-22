@@ -363,7 +363,21 @@ plot_area_size_px <- function(v, range_mm) {
   plotly_point_px(range_mm[1] + sqrt(r) * diff(range_mm))
 }
 
-#' The Trajectory scatter: every fitted object's value against its pseudotime (jittered), colored by donor status,
+#' Spread tied positions using an interval inside the observed range. Sampling the
+#' interval directly avoids the endpoint pile-up produced by clipping jitter.
+traj_spread_ties <- function(values, width, keys, seed, limits = range(values[is.finite(values)])) {
+  tied <- is.finite(values) & (duplicated(values) | duplicated(values, fromLast = TRUE))
+  if (!any(tied) || width <= 0) return(values)
+  if (diff(limits) == 0) return(values)
+  at <- which(tied)
+  at <- at[order(keys[at])]
+  low <- pmax(limits[1], values[at] - width)
+  high <- pmin(limits[2], values[at] + width)
+  values[at] <- islet_with_seed(seed, stats::runif(length(at), low, high))
+  values
+}
+
+#' The Trajectory scatter: every fitted object's value against its pseudotime, colored by donor status,
 #' donor or Leiden cluster, sized uniformly or by diameter or cell count, with the LOESS trend (overall, or one per
 #' donor status) and its 95 % band, weighted by log1p(cells) as the ggplot layers were. `df`: traj_data_clean()
 #' rows with link_key; `o`: list(color_by, colors (named over the color column's values), color_label, size_by,
@@ -379,15 +393,15 @@ trajectory_scatter_figure <- function(df, o) {
   value <- as.numeric(df$value)
   vr <- suppressWarnings(range(value[is.finite(value)]))
   if (!all(is.finite(vr))) vr <- c(0, 1)
-  jy <- diff(vr) * 0.08
-  j <- islet_with_seed(42, {
-    x <- pt + stats::runif(n, -o$pt_ext$jitter, o$pt_ext$jitter)
-    y <- value + stats::runif(n, -jy, jy)
-    list(x = x, y = y)
-  })
+  y_span <- diff(vr)
+  if (y_span == 0) y_span <- max(1, abs(vr[1]))
+  keys <- plot_row_keys(df)
+  spread <- isTRUE(o$spread_ties)
+  x <- if (spread) traj_spread_ties(pt, o$pt_ext$jitter, keys, 42, o$pt_ext$dom) else pt
+  y <- if (spread) traj_spread_ties(value, diff(vr) * 0.045, keys, 43) else value
   hover <- paste0(o$colour_label %||% "Group", ": ", group,
                   "<br>Donor: ", df$case_id, "<br>Islet: ", df$islet_key,
-                  "<br>Pseudotime: ", signif(pt, 3), "<br>Value: ", signif(value, 3),
+                  "<br>Pseudotime: ", signif(pt, 7), "<br>Value: ", signif(value, 7),
                   "<br>Cells: ", df$total_cells)
   point_size <- o$point_size %||% 3
   size <- if (identical(o$size_by, "islet_diam_um") && "islet_diam_um" %in% names(df) &&
@@ -399,8 +413,8 @@ trajectory_scatter_figure <- function(df, o) {
   # One trace in a fixed interleaved order, so no donor status is painted over another (islet_umap_plotly()).
   ord <- islet_umap_order(n)
   p <- plotly::plot_ly()
-  p <- plotly::add_trace(p, type = "scatter", mode = "markers", x = signif(j$x[ord], 5), y = signif(j$y[ord], 5),
-                         key = plot_row_keys(df)[ord], text = hover[ord], hoverinfo = "text", showlegend = FALSE,
+  p <- plotly::add_trace(p, type = "scatter", mode = "markers", x = x[ord], y = y[ord],
+                         key = keys[ord], text = hover[ord], hoverinfo = "text", showlegend = FALSE,
                          marker = list(color = col[ord], size = if (length(size) > 1) size[ord] else size,
                                        opacity = o$alpha %||% 0.6, line = list(width = 0)))
   trend <- o$trend %||% "by_donor"
@@ -423,7 +437,7 @@ trajectory_scatter_figure <- function(df, o) {
     margin = list(l = 80, r = 20, t = 30, b = 70, pad = 5),
     xaxis = list(fixedrange = FALSE, automargin = TRUE, range = o$pt_ext$lim, autorange = FALSE,
                  title = list(text = o$x_label, font = fonts$axis_title), tickfont = fonts$axis_tick),
-    yaxis = list(fixedrange = FALSE, automargin = TRUE, range = vr + c(-0.05, 0.05) * diff(vr), autorange = FALSE,
+    yaxis = list(fixedrange = FALSE, automargin = TRUE, range = vr + c(-0.05, 0.05) * y_span, autorange = FALSE,
                  title = list(text = o$y_label, font = fonts$axis_title), tickfont = fonts$axis_tick))
   plotly_islet_config(p, "trajectory_scatter")
 }

@@ -27,6 +27,9 @@ names lineages, never markers; the markers come from these entries.
 Level method: `background_method` fixes a marker's level method where the owner decided it (2026-10-28: SMA
 negative_p99, CD20 negative_p999); `validation` names the check of such a level ('reported' = shown, not a gate);
 `requires` lists markers that must also be positive before the marker's lineage names a cell (CD20 needs CD45).
+`modifier` (yes/empty) marks a typing marker whose +/- joins every cell's modifier_profile beside the state-role
+markers (owner 2026-11-06: HLADR activation/antigen presentation, GAP43 axonal growth); it changes no detection,
+support or naming role.
 """
 from __future__ import annotations
 

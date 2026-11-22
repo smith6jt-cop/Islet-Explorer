@@ -20,6 +20,7 @@ case " $* " in
   *" .State.Health"*|*"{{if .State.Health}}"*) echo healthy ;;
   *" {{.State.Running}} "*) echo true ;;
   *" exec "*) : ;;
+  *" inspect "*) cat "${MOCK_INSPECTION}" ;;
   *) echo "unexpected Podman invocation: $*" >&2; exit 64 ;;
 esac
 MOCK
@@ -129,3 +130,35 @@ printf 'LISTEN 0 128 %s:3838 0.0.0.0:*\nLISTEN 0 128 127.0.0.1:3839 0.0.0.0:*\n'
 check 77 "${verifier[@]}" --url "http://${private}:3839/islet-explorer/" --publish-address "${private}"
 
 echo 'Deployment listener, image identity, and Range verifier tests passed.'
+
+# Split identity is checked against actual mount sources, read-only flags and
+# the app hash label, including nested overrides that could conceal app code.
+python3 - "${work_dir}" <<'PYFIXTURE'
+import json, pathlib, sys
+root = pathlib.Path(sys.argv[1])
+hash_value = "a" * 64
+mounts = [
+    {"Destination": "/srv/islet-explorer/app", "Source": "/project/apps/a/app", "RW": False},
+    {"Destination": "/srv/islet-explorer/scripts", "Source": "/project/apps/a/scripts", "RW": False},
+    {"Destination": "/srv/islet-explorer/data", "Source": "/project/releases/data/data", "RW": False},
+    {"Destination": "/srv/islet-explorer/app/shiny_app/www/local_images", "Source": "/project/releases/data/data/images", "RW": False},
+]
+base = {"Mounts": mounts, "Config": {"Labels": {"io.islet-explorer.app-manifest-sha256": hash_value}}}
+(root / "correct.json").write_text(json.dumps([base]))
+for name in ["wrong-app", "writable-app", "wrong-data", "wrong-hash", "hidden-app", "hidden-data"]:
+    item = json.loads(json.dumps(base))
+    if name == "wrong-app": item["Mounts"][0]["Source"] = "/project/apps/old/app"
+    if name == "writable-app": item["Mounts"][0]["RW"] = True
+    if name == "wrong-data": item["Mounts"][2]["Source"] = "/project/releases/old/data"
+    if name == "wrong-hash": item["Config"]["Labels"]["io.islet-explorer.app-manifest-sha256"] = "b" * 64
+    if name == "hidden-app": item["Mounts"].append({"Destination": "/srv/islet-explorer/app/shiny_app/R", "Source": "/old", "RW": False})
+    if name == "hidden-data": item["Mounts"].append({"Destination": "/srv/islet-explorer/data/cells", "Source": "/wrong/cells", "RW": True})
+    (root / (name + ".json")).write_text(json.dumps([item]))
+PYFIXTURE
+printf 'LISTEN 0 128 127.0.0.1:3838 0.0.0.0:*\n' > "${work_dir}/listeners"
+split_checks=(--expected-app /project/apps/a/app --expected-data /project/releases/data/data --expected-app-sha256 "${image_id#sha256:}")
+check 0 env MOCK_INSPECTION="${work_dir}/correct.json" "${verifier[@]}" --url "${url}" "${split_checks[@]}"
+for bad in wrong-app writable-app wrong-data wrong-hash hidden-app hidden-data; do
+  check 1 env MOCK_INSPECTION="${work_dir}/${bad}.json" "${verifier[@]}" --url "${url}" "${split_checks[@]}"
+done
+echo "Split running app/data mount and hash identity tests passed."

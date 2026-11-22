@@ -68,6 +68,12 @@ if [[ "${previous_local_data}" == /* && "${previous_local_data}" =~ ^[A-Za-z0-9.
   docroot_args+=(--local-data "${previous_local_data}")
 fi
 
+previous_descriptor="$(read_state DESCRIPTOR_SHA256)"
+if [[ -n "${previous_descriptor}" ]]; then
+  [[ "${previous_descriptor}" =~ ^[0-9a-f]{64}$ ]] || { echo "ERROR: malformed descriptor identity." >&2; exit 65; }
+  docroot_args+=(--expected-descriptor "${previous_descriptor}")
+fi
+
 echo "Rolling back ${instance} to release ${previous_release} on ${previous_address}:${previous_port}."
 exec "${script_dir}/activate-release.sh" \
   --project-root "${project_root}" --release "${previous_release}" \

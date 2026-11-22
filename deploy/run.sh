@@ -4,12 +4,13 @@
 set -euo pipefail
 
 project_root="${PROJECT_ROOT:?set PROJECT_ROOT to /pubapps/<project>/islet-explorer}"
-release="${RELEASE:?set RELEASE to a verified release identifier}"
+release="${RELEASE:-candidate-${APP_BUNDLE:-unset}}"
 port="${PORT:-3838}"
 container_name="${CONTAINER_NAME:-islet-explorer-smoke}"
 # A smoke container may run beside the production and staging instances, so
 # its default cap is the staging one.
 memory="${MEMORY:-4g}"
+[[ "${container_name}" =~ ^[a-z][a-z0-9-]{0,60}$ ]] || { echo "ERROR: invalid CONTAINER_NAME" >&2; exit 64; }
 [[ "${memory}" =~ ^[1-9][0-9]*[mg]$ ]] || {
   echo "ERROR: MEMORY must be a size such as 4g or 4096m." >&2
   exit 64
@@ -31,14 +32,28 @@ port="$((10#${port}))"
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 release_dir="${project_root}/releases/${release}"
-"${script_dir}/verify-release.sh" "${release_dir}"
-
-read_meta() {
-  local key="$1"
-  awk -F= -v key="${key}" '$1 == key {sub(/^[^=]*=/, ""); print; exit}' "${release_dir}/release.env"
-}
-image_ref="$(read_meta IMAGE_REF)"
-data_schema="$(read_meta DATA_SCHEMA)"
+app_mounts=()
+app_checks=()
+app_labels=()
+if [[ -n "${APP_BUNDLE:-}" || -f "${release_dir}/deployment.json" ]]; then
+  source "${script_dir}/release-layout.sh"
+  if [[ -n "${APP_BUNDLE:-}" ]]; then
+    load_split_layout resolve-candidate --project-root "${project_root}" \
+      --app "${APP_BUNDLE}" --data "${DATA_RELEASE:?set DATA_RELEASE}" --runtime "${RUNTIME:?set RUNTIME}"
+  else
+    load_split_layout resolve --release-dir "${release_dir}"
+  fi
+  check_split_runtime
+  app_labels=(--label "io.islet-explorer.app-manifest-sha256=${app_manifest_sha256}")
+else
+  "${script_dir}/verify-release.sh" "${release_dir}"
+  read_meta() {
+    awk -F= -v key="$1" '$1 == key {sub(/^[^=]*=/, ""); print; exit}' "${release_dir}/release.env"
+  }
+  image_ref="$(read_meta IMAGE_REF)"
+  data_schema="$(read_meta DATA_SCHEMA)"
+  data_dir="${release_dir}/data"
+fi
 [[ "${image_ref}" =~ ^sha256:[0-9a-f]{64}$ ||
    "${image_ref}" =~ ^[A-Za-z0-9._:/-]+@sha256:[0-9a-f]{64}$ ]] || {
   echo "ERROR: release image is not immutable." >&2
@@ -55,8 +70,8 @@ fi
 
 container_uid="$(podman run --rm --entrypoint /usr/bin/id "${image_ref}" -u shiny)"
 container_gid="$(podman run --rm --entrypoint /usr/bin/id "${image_ref}" -g shiny)"
-log_dir="${project_root}/runtime/logs-smoke"
-tmp_dir="${project_root}/runtime/tmp-smoke"
+log_dir="${project_root}/runtime/${container_name}/logs"
+tmp_dir="${project_root}/runtime/${container_name}/tmp"
 mkdir -p -- "${log_dir}" "${tmp_dir}"
 chmod 0750 "${log_dir}" "${tmp_dir}"
 
@@ -85,8 +100,9 @@ container_id="$(podman run --detach --rm \
   --health-cmd='curl --fail --silent --show-error --max-time 8 http://127.0.0.1:3838/islet-explorer/' \
   --health-interval=30s --health-timeout=10s \
   --health-start-period=180s --health-retries=5 \
-  --volume "${release_dir}/data:/srv/islet-explorer/data:ro" \
-  --volume "${release_dir}/data/images:/srv/islet-explorer/app/shiny_app/www/local_images:ro" \
+  "${app_mounts[@]}" "${app_labels[@]}" \
+  --volume "${data_dir}:/srv/islet-explorer/data:ro" \
+  --volume "${data_dir}/images:/srv/islet-explorer/app/shiny_app/www/local_images:ro" \
   --volume "${log_dir}:/var/log/shiny-server:rw" \
   --volume "${tmp_dir}:/tmp/islet-explorer:rw" \
   --tmpfs "/run:rw,size=16m,mode=0755,U" \
@@ -116,7 +132,7 @@ container_id="$(podman run --detach --rm \
 echo "Started ${container_name}: ${container_id}"
 if ! "${script_dir}/verify-deployment.sh" \
   --url "http://127.0.0.1:${port}/islet-explorer/" --container "${container_name}" \
-  --expected-image "${image_ref}"; then
+  --expected-image "${image_ref}" "${app_checks[@]}"; then
   podman stop "${container_name}" >/dev/null || true
   exit 70
 fi

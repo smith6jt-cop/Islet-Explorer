@@ -1,0 +1,36 @@
+{
+ "schema": "uniform.typing_code_transition/1",
+ "recorded_at_utc": "2026-11-16T21:40:00+00:00",
+ "reason": "Bridges the reviewed v19-era evidence (the raw and filtered augmentation renders and reviews under output/typing_resume_20261029, whose embedded ready_inputs snapshots record these old signatures) to the current modules. typing_code moved twice since that evidence was recorded: the 2026-11-05/06 revision plus 2026-11-06 geometry QC (737eeaa1... -> 5c223685..., Phase C commits 9590b60/31e0312, confirmed by the owner 2026-11-12), then the 2026-11-13 macrophage ruling (owner, docs/typing_rulings_ledger.md: CD68 or CD163 defines a macrophage; the two subtypes are Gal3-positive and Gal3-negative; CD4 removed as a macrophage type; commit d58ab39, delivered 2026-11-16: 5c223685... -> 13ab1efb...). The verifier's record is one hop from the evidence era to current, so old stays at the evidence-era signature; the intermediate state is in this file's git history (a5fc172 and earlier). The v21-generation REDSEA caches that had recorded 5c223685... were fully recomputed and re-certified under the current signature on 2026-11-16 (all 20 output parquets byte-identical to the sealed v21 reconciliation hashes), so no live cache consumes this transition; redsea_code and refresh_code are unchanged since the 2026-11-05/06 record and their entries stand; data inputs are unaffected.",
+ "modules": {
+  "redsea_code": {
+   "path": "/data/panc_CODEX/Islet-Explorer/scripts/uniform/typing/redsea_cells.py",
+   "old_sha256": "af1ae8577a19c9189e5672a997e6e8c84ad919bd4abb80670c8607d4e187eeef",
+   "new_sha256": "342d1938a563f7adb8daa4dd8be3c532255b01e9deea603662e6a9572c9138fb",
+   "old_size": 27200,
+   "new_size": 28375
+  },
+  "typing_code": {
+   "path": "/data/panc_CODEX/Islet-Explorer/scripts/uniform/typing/codex_typing.py",
+   "old_sha256": "737eeaa1ad6eadf1ae194d27acb5fa285acbf925c6ad7b360f4ff747acd8c07f",
+   "new_sha256": "13ab1efb7ec04c03f6eb68b3bf371cf75ac95b28390149735ae01c38d731be9f",
+   "old_size": 33030,
+   "new_size": 33392
+  },
+  "refresh_code": {
+   "path": "/data/panc_CODEX/Islet-Explorer/scripts/uniform/typing/refresh_ready_cells.py",
+   "old_sha256": "3986d2dd024e83c1d774e2d3c01b597eb05cbbc652b5a7113aedcb2fe6d10517",
+   "new_sha256": "6603bacf30f5f05006250ac3acdea3a32c36da37a1f5cbf6ebcb9f73b80b22b8",
+   "old_size": 16921,
+   "new_size": 17082
+  }
+ },
+ "additional_modules": {
+  "display_equality_checker": {
+   "path": "/data/panc_CODEX/Islet-Explorer/output/typing_resume_20261029/verify_display_source_pixels.py",
+   "old_sha256": "a1f22da81ce8b82429c489e57371e985d89b57c895921a386fa947f4778db1b7",
+   "new_sha256": "35400a1941d2c6ac26f0f8ee8d9193bed4b6e817bbd8adee5cc5e65376c2c5c2",
+   "reason": "2026-11-12: gained the recorded-transition equivalence branch for its certificate bindings and the dated display metadata-transition attestation; pixel reading and every bound metadata value are unchanged"
+  }
+ }
+}

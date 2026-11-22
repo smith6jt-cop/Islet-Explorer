@@ -140,7 +140,8 @@ def validate_outputs(run: Path, tag: str, directory: Path, inputs: dict) -> dict
     ids = pd.read_parquet(run / 'cells' / f'{tag}.parquet', columns=['Object ID'])['Object ID']
     frame = pd.read_parquet(directory / f'{tag}.parquet')
     names = inputs['channels']
-    required = {'object_id', 'qc_analysis_eligible', 'qc_spillover_context_eligible', 'qc_flags'}
+    required = {'object_id', 'qc_analysis_eligible', 'qc_estimation_eligible', 'qc_spillover_context_eligible',
+                'qc_reasons', 'qc_flags'}
     required.update(f'{comp}__{c}' for comp in RS.COMPARTMENTS for c in [*names, 'n_px'])
     if required - set(frame.columns):
         raise ValueError(f'{tag}: incomplete REDSEA columns: {sorted(required - set(frame.columns))}')
@@ -153,6 +154,7 @@ def validate_outputs(run: Path, tag: str, directory: Path, inputs: dict) -> dict
     if (record.get('image') != tag or record.get('n_cells') != len(ids) or record.get('channels') != names
             or record.get('image_path') != inputs['entry']['image_path'] or record.get('redsea') != CT.REDSEA
             or record.get('spillover_keeps_no_nucleus') != RS.SPILLOVER_KEEPS_NO_NUCLEUS
+            or record.get('spillover_keeps_degenerate_nucleus') != RS.SPILLOVER_KEEPS_DEGENERATE_NUCLEUS
             or any(record.get('despeckle', {}).get(k) != v for k, v in RS.DESPECKLE.items())
             or record.get('empty_area_null', {}).get('method') != RS.EMPTY):
         raise ValueError(f'{tag}: REDSEA metadata does not match current input/method')

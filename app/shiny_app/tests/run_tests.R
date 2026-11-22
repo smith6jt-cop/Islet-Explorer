@@ -16,4 +16,10 @@ if (length(test_path) == 0) {
   stop("Cannot find tests/testthat from wd = ", getwd())
 }
 
-testthat::test_dir(test_path[1], stop_on_failure = TRUE, reporter = "progress")
+# A published app bundle is read-only. Tests that draw with grid must never
+# create Rplots.pdf alongside app code.
+local({
+  grDevices::pdf(file = NULL)
+  on.exit(grDevices::dev.off(), add = TRUE)
+  testthat::test_dir(test_path[1], stop_on_failure = TRUE, reporter = "progress")
+})

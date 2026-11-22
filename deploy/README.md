@@ -1,14 +1,23 @@
 # Islet Explorer on UFRC PubApps
 
-**Current status, 2026-11-04:** production `pubapps-2026-11-ui-corrections-22bb011`
-and the separate strict-DuckDB dev release `pubapps-2026-11-dev-duckdb-v1` are
-active and healthy. Production uses image
+**Split-release workflow:** use the [independent app/runtime/data procedure](#independent-app-runtime-and-data-releases) for development migration and later app releases. Dated evidence identifies the descriptor actually running.
+
+**Recorded development status, 2026-11-05:** `islet-explorer-dev` completed split
+migration, an app-only update using the same runtime/data, and both legacy and
+split rollback checks. It now selects `split-dev-20261105-v1` (`app-v5`). Production
+and both sites' access settings were unchanged. See the
+[observed development acceptance](#observed-development-acceptance-2026-11-05)
+and [dated receipt](../docs/evidence/split_release_20261105.json).
+
+**Recorded live status, 2026-11-04:** production `pubapps-2026-11-ui-corrections-22bb011`
+and the separate strict-DuckDB dev release `pubapps-2026-11-dev-duckdb-v1` were
+active and healthy. Production used image
 `sha256:fd6c9a990028892d43f45af53756a81b6f6ac13acaf7e10a75f61c1725dd483b`,
 source `22bb011`, and a schema-5 20-donor bundle that passed 25/25 data-parity
 checks. Local and host full hashes passed, the TIFF tree was reused by hard link,
 and authenticated public-proxy access passed 15/15 checks. See the
 [live receipt](../docs/evidence/pubapps_live_20261104_ui_corrections.json).
-Dev was not changed. The dated production DuckDB direction remains recorded in
+That production update did not change dev. The dated production DuckDB direction remains recorded in
 the [remediation decision](../docs/duckdb_remediation_window_20261102.md).
 
 Use the [workflow guide](../docs/workflow_user_guide.md) for source-to-release
@@ -91,9 +100,8 @@ capacity figures are historical evidence only; see
 
 - Rootless Podman and a user Quadlet service; Apptainer is not a supported
   production path.
-- Code and dependencies baked into one immutable OCI image.
-- A clean Git commit, immutable image reference, and checksummed data/image release
-  are required before the service can start.
+- New split releases use a software-only immutable OCI image plus a versioned, read-only app bundle. Existing legacy releases keep their baked-in app until migrated.
+- App, runtime, and data each retain their own committed provenance and checksums. A deployment descriptor binds the exact compatible combination. Artifact builds export the selected committed revision; unrelated dirty research work is neither included nor changed. Legacy releases retain their original single-commit contract.
 - `data/` is mounted read-only at `/srv/islet-explorer/data`.
 - OME-TIFFs are mounted read-only directly at
   `/srv/islet-explorer/app/shiny_app/www/local_images`. This is deliberate:
@@ -137,7 +145,7 @@ must not be used for reviewer hosting.
 
 | File | Purpose |
 |---|---|
-| `Containerfile` | Data-free production OCI image |
+| `Containerfile` | Software-only production OCI runtime; app code and scientific data are separate read-only mounts |
 | `containerignore` | Whitelist build context; excludes data, images, Git history, credentials, and caches |
 | `requirements-python.lock` | Exact tested Python/PAGA environment |
 | `install-production-r-deps.R` | Mandatory, exact `destiny` and `duckdb` gates over the app's R manifest |
@@ -145,12 +153,15 @@ must not be used for reviewer hosting.
 | `tests/check-duckdb-brotli.R` | Optional future real release Parquet BROTLI round-trip and query compatibility check with read-only input |
 | `shiny-server.conf` | Sanitized `/islet-explorer/` Shiny service |
 | `islet-explorer.container.in` | Hardened Quadlet template |
-| `build-image.sh` / `scan-image.sh` | Clean build, dependency probes, SBOM, and High/Critical scan gate |
+| `build-image.sh` / `scan-image.sh` | Committed runtime export, dependency probes, SBOM, and High/Critical scan gate |
 | `export-image.sh` / `load-image.sh` | Checksummed OCI archive transfer through HPG and identity-checked local load |
 | `generate-release-manifest.sh` / `verify-release.sh` | Immutable release metadata, hashes, and full-verification stamp |
 | `activate-release.sh` / `rollback-release.sh` | Atomic activation with health rollback and explicit prior-release rollback |
 | `verify-deployment.sh` | Local health, UID, mount, dependency, network, and optional Range checks |
-| `run.sh` | Manual Podman smoke launcher; not the persistent production service |
+| `run.sh` | Manual Podman smoke launcher for a legacy release, split descriptor, or app/data/runtime candidate |
+| `release-artifacts.py` | Package app, register runtime/data, bind validation, assemble and verify split deployment descriptors |
+| `runtime-inputs.py` | Fingerprint the runtime build inputs independently of app code |
+| `prepare-local-data.py` | Verify a data-keyed local cache once and reuse it across app releases |
 
 Core R packages are resolved by `scripts/install_shiny_deps.R` against the
 base-image repository configuration. That inherited snapshot predates the tested
@@ -225,9 +236,12 @@ image alone does not establish scientific acceptance.
 
 ## 1. Project build, test, scan, and OCI export
 
-Start from a clean, committed release revision; tag it if the project's release
-practice calls for a tag. In particular, the PAGA R/Python files must be tracked;
-the build script refuses dirty or untracked source.
+Select a committed runtime revision with `--revision` (default `HEAD`); tag it
+if the project's release practice calls for a tag. The current build script
+exports only that revision, preserving unrelated dirty or untracked work. It
+builds a software-only image; app code is packaged and tested separately in the
+[split-release procedure](#independent-app-runtime-and-data-releases). Old
+baked-app images remain valid only for their existing legacy descriptors.
 
 Syft's `podman:` source reads images through the Podman API. In a dedicated build
 shell, start a private Unix socket for the same local rootless image store before
@@ -288,8 +302,8 @@ deploy/export-image.sh "${IMAGE_ID}" "${OCI_ARCHIVE}"
 
 Release builds require `podman`, `syft`, `grype`, and `python3`. The build performs Python
 dependency consistency checks and imports, verifies exact `destiny`/`duckdb`
-versions, runs the required Brotli binary/linkage gate, parses all application R
-files, creates the SBOM and resolved dependency manifests, and fails on a High
+versions, runs the required Brotli binary/linkage gate, verifies that no app
+fallback is embedded, creates the SBOM and resolved dependency manifests, and fails on a High
 or Critical vulnerability. `export-image.sh` creates an OCI archive, metadata,
 and a SHA-256 file covering both from the resolved immutable image ID. The
 mutable build tag is never placed in release metadata.
@@ -331,6 +345,12 @@ supports that alternative.
 
 ## 2. Build and stage an immutable data release
 
+The staging and hard-link safeguards in this section apply to both layouts.
+The single-commit `generate-release-manifest.sh` examples describe **legacy
+baked-app releases**. New split releases use the independent `seal-data` and
+`register-data` procedure below; never combine a new software-only image with
+these old activation assumptions.
+
 On the data-build host, generate the one authoritative runtime bundle. Its
 `images/` subtree is part of that bundle and its `manifest.json` binds the data
 schema, the source commit and the OME-TIFF count. The output directory must not
@@ -361,11 +381,12 @@ Rscript scripts/verify_release_parity.R \
 Use `--materialize copy` for the reviewer bundle so subsequent edits to canonical
 inputs cannot change the release through shared inodes. Hardlinks are only a
 space-saving option for disposable local tests.
-The builder and image must come from the same clean Git commit; activation
-compares the OCI revision label, generated data manifest, and release metadata
-and refuses a mismatch. The parity check also requires that commit to be the
-checked-out, clean one, so run the builder and the checks from a clean checkout
-or linked worktree of the release commit.
+For legacy baked-app releases, the builder and image share one clean Git
+commit; legacy activation compares the OCI revision, data manifest, and release
+metadata. Split releases retain separate app, runtime-build, and data-producer
+commits. The data parity check still needs its intended committed source, so run
+the builder and checks from an isolated clean checkout or worktree; do not clean
+or stash unrelated work in the shared checkout.
 
 The VM was provisioned on 2026-10-22: `pubmaigan1.ufhpc`, service account
 `maigan` (home `/pubapps/maigan` on the 1 TiB Qumulo share; RHEL 9.8; rootless
@@ -387,11 +408,14 @@ same Qumulo filesystem, hard-link it on the VM before transferring the other
 files. First compare the complete image subtree hash/manifest entries. Hard
 links share inodes, so treat both release trees as immutable and keep their
 container mounts read-only. If the tree is not identical, transfer the
-candidate images normally. After staging, run full release verification;
-activation repeats it immediately before replacing the service. A hard link
-does not change the viewer's path or read behavior. Copy the `deploy/` tooling of the
-new commit to `tooling/deploy/` before activating with a flag the VM's copy does
-not know yet, and record the commit in `tooling/DEPLOY_TOOLING_COMMIT`.
+candidate images normally. New data always receives full content verification
+after staging. Legacy activation repeats its full release hash pass; split
+activation reuses the registered data receipt and checks its metadata/inventory
+without a new TIFF content pass. A hard link does not change the viewer's path
+or read behavior. Stage split tooling in a fresh `tooling/releases/COMMIT/deploy`
+directory and invoke that exact version; preserve earlier tooling for rollback.
+The historical legacy procedure used `tooling/deploy/` and recorded its commit
+in `tooling/DEPLOY_TOOLING_COMMIT`.
 
 ```text
 /pubapps/maigan/islet-explorer/
@@ -433,12 +457,13 @@ rsync -a -e "${HOP}" /staging/islet-explorer-"${RELEASE}".oci.tar{,.metadata,.sh
   pubmaigan1:"${PROJECT_ROOT}/incoming/"
 ```
 
-Copy this `deploy/` tooling directory to the VM separately. On the VM, generate
-the release metadata with the exact immutable image reference and source commit, then
-perform the initial full verification. Hashing the TIFF store is intentionally slow:
-manifest generation hashes it once, this explicit verification rehashes it and writes
-the stamp, and activation rehashes it immediately before service replacement. Ordinary
-service restarts do not repeat the hash pass.
+For the legacy combined layout, copy the matching `deploy/` tooling to the VM
+separately, generate release metadata with the exact image reference and shared
+source commit, then perform full verification. That legacy workflow hashes TIFFs
+during manifest generation, explicit verification, and activation. Ordinary
+service restarts do not repeat the hash pass. For split releases, use `seal-data`
+and `register-data` for new data; app-only activation does not repeat these
+content passes or regenerate data metadata.
 
 ```bash
 deploy/load-image.sh \
@@ -473,9 +498,11 @@ were the retired all-donor experiments and never an accepted contract. The
 explicit image declaration here binds the selected cohort; omitting the count
 retains the generator's original default of 15.
 
-Verification reads that declaration automatically, checks every manifest hash,
-and writes `.verified` tied to the manifest hash. Activation, the manual launcher,
-and rollback all use the same verifier; they need no image-count override.
+Legacy verification reads that declaration automatically, checks every manifest
+hash, and writes `.verified` tied to the manifest hash. Legacy activation, the
+manual launcher, and rollback use that verifier without an image-count override.
+For a split descriptor those entrypoints instead resolve and verify its separate
+app, runtime, and registered data artifacts.
 Legacy `MANIFEST_VERSION=1` releases without `EXPECTED_IMAGES` retain their
 15-image contract, including the frozen original release. For an optional
 operator cross-check, `--expected-images N` must agree with the release metadata;
@@ -485,6 +512,9 @@ and actual image count, but does not rehash TIFF contents. If the bundle changes
 regenerate and fully verify it.
 
 ## 3. Activate the Quadlet service
+
+The full-rehash description here is the legacy release behavior. Split
+descriptors use the independent artifact checks and activation commands below.
 
 On the provisioned host, first verify that the available Podman version accepts
 `keep-id:uid=<shiny_uid>,gid=<shiny_gid>` and that login linger is enabled for
@@ -500,8 +530,10 @@ deploy/activate-release.sh \
   --release 'pubapps-2026-01'
 ```
 
-The command repeats the full content-hash gate immediately before replacement,
-renders `~/.config/containers/systemd/islet-explorer.container`, reloads user
+For a legacy release, the command repeats the full content-hash gate before
+replacement. For a split descriptor, it checks app contents, runtime evidence,
+and registered data metadata/inventory. Both paths render
+`~/.config/containers/systemd/islet-explorer.container`, reload user
 systemd, starts `islet-explorer.service`, and runs local verification. If the
 new service fails to start or become healthy, it restores the prior unit
 automatically. It records active/previous state only after a successful health
@@ -516,13 +548,14 @@ Since 2026-10-23 UFRC's proxy serves the three image aliases
 (§ 4). `--docroot DIR` makes those aliases follow the deployment: once the new
 service is verified, `DIR/islet-explorer/{local_images,images,img_data}` are
 replaced atomically by symlinks to the release's `data/images`; if a later
-step fails, they follow the restored release; an alias that is a real directory
-is refused (exit 65) before any service is touched. The DocumentRoot is
+step fails, their exact pre-attempt targets (including absent aliases) are
+restored, whether the prior service was active or stopped. An alias that is a real
+directory is refused (exit 65) before any service is touched. The DocumentRoot is
 recorded in the deployment state, so `rollback-release.sh` replays it. The
 proxy's NFS lookup cache can hand out the previous target for up to a minute
 after a swap.
 
-`--local-data DIR` (2026-10-24) copies the release's `data/geometry`, `data/cells`
+For legacy releases, `--local-data DIR` (2026-10-24) copies `data/geometry`, `data/cells`
 and `data/spatial` trees, about 880 MB whose many small reads are slow over NFS
 (a drill-down's GeoPackage window took 0.2 s there against 17 ms on local disk),
 to `DIR/<release>/data/` on the VM's local disk, checks every copied file
@@ -533,6 +566,10 @@ deployment state and replayed by `rollback-release.sh`; copies of earlier
 releases are kept so a restored unit still finds its data, and a retired
 release's copy is removed by hand. On `pubmaigan1` the directory is
 `/local/maigan/releases` (the 40 GB local disk that also holds the Podman store).
+Split descriptors use `DIR/datasets/DATA_ID/data/`: copies are fully verified
+once, then reused across app releases after checking their data-manifest identity
+and file-stat receipt. A changed published cache is rejected rather than updated
+in place. Account for this initial cache's disk requirements before migration.
 
 ```bash
 deploy/activate-release.sh \
@@ -789,3 +826,435 @@ workstation container step for step, so the hosting adds nothing measurable for 
 is the app's own payload (1.7 MB per Plot interaction, 3.6 MB for the first screen,
 which is rendered twice) over their link, plus two one-time costs per R process
 (the first Trajectory open, about 12 s, and the first PAGA layout, about 5 s).
+
+## Independent app, runtime, and data releases
+
+This is the **development-only migration and app-release procedure**. It
+describes commands and acceptance requirements; dated evidence records their
+actual completion. Keep production and both sites' authentication, network
+bindings, and proxy configuration unchanged. The earlier full-release
+instructions remain the legacy path and rollback reference.
+
+The ordinary app release packages all app code and assets, including cards,
+plots, controls, downloads, and client-side behavior. There is no palette or UI
+file allowlist. Installed software changes require a new runtime; data changes
+require a new data release. Scientific calculations or loaders may change in an
+app bundle without rebuilding the runtime or copying unchanged data, but require
+scientific/compatibility validation before deployment.
+
+```text
+PROJECT_ROOT/
+  apps/APP_ID/             # app/, scripts/, app.json, MANIFEST.sha256
+  runtimes/RUNTIME_ID/     # runtime.json, image scan evidence, manifest
+  datasets/DATA_ID/        # data.json verification receipt and manifest
+  releases/DATA_SOURCE/    # existing immutable data/, release.env, manifest
+  releases/DEPLOYMENT_ID/  # deployment.json, validation.json, manifest
+  runtime/                # existing instance logs/tmp/deployment state
+```
+
+The app mounts at `/srv/islet-explorer/app`, including `app/docs/logo.png` and
+its existing relative link. The app-coupled validator mounts at
+`/srv/islet-explorer/scripts`. Data stays at `/srv/islet-explorer/data`, with
+OME-TIFFs separately mounted at the existing nested `www/local_images` path.
+All are read-only. The three static aliases and byte-range delivery are preserved.
+The new image has no embedded app fallback.
+
+Each descriptor binds the app manifest and commit, immutable runtime and build
+commit, verified data receipt and producer commit, and combination-specific
+validation. Runtime-input fingerprints prevent selecting a runtime built from
+incompatible package/install/server inputs. A matching fingerprint does not
+replace app or scientific tests. App bundles also record the normalized,
+digest-pinned base image from their committed `deploy/base-image.lock`. Runtime
+registration binds the published base-image evidence, and launch verifies it
+against the actual image's `org.opencontainers.image.base.name` label. Changing
+only the base lock therefore refuses reuse of an incompatible runtime, even when
+its software-input fingerprint is unchanged. `build-image.sh --base-image` must
+match the selected source revision's lock.
+`change-kind` is an explicit operator statement:
+`app` requires app tests and smoke checks; `science`, `data`, and `runtime` also
+require passing scientific validation. `app` and `science` assembly require
+`--base-release` pointing to a prior split descriptor and must reuse its exact
+runtime manifest and data receipt. A runtime/data replacement cannot be labeled
+app-only. First migration uses `runtime` with scientific acceptance.
+Classification is based on effect, not
+which filenames changed. Validation JSON records completed checks; it is not a
+command that runs them or independently proves an operator's assertion.
+
+### Observed development acceptance, 2026-11-05
+
+The development PubApp completed initial split activation, rollback to the legacy
+release, reactivation, a subsequent app-only update, and rollback to the previous
+split descriptor. The final selected deployment is
+`split-dev-20261105-v1`, app `app-v5` at
+`b4867688c13a772a76527d8e547f1b0e11bdf4af`. The temporary component-change
+acceptance app was `app-v6` at `2f123ec3e2cacf5d5e9c8d53499fa0e2cb92c783`;
+its head metadata component was observed after update and absent after rollback.
+Both descriptors selected runtime artifact `split-runtime-20261105-v2`, image
+`sha256:e14329ba52d81dc85f65e6fd13023a8bb0ac47cbfd9ee37c04ad8681ea4068c2`,
+and data artifact `split-dev-data-20261105`, produced at
+`378843e06c0cd66d8dfff5e3b60664f8a45569ee`, with data manifest
+`e4b2dbd3bf709513bc6a1d5f8cfdb76ac856efacec25940e13c9975f03936b41`.
+Activation and rollback used release tooling
+`9f682a71943b56f242f9ae372b391d0843ea0fa4`.
+The [dated acceptance receipt](../docs/evidence/split_release_20261105.json)
+records complete artifact identities, evidence hashes, commands, and timings.
+
+| Development operation | Observed elapsed time |
+| --- | ---: |
+| First split activation | 63.05 s |
+| Rollback to the legacy combined release | 252.49 s |
+| Reactivation of the split release | 90.00 s |
+| App-only activation | 52.70 s |
+| Rollback to the previous split descriptor | 58.10 s |
+
+App-only descriptor assembly took 2.134 s; the full bounded verification and
+staging step took 5.069 s. Those timings exclude the separately recorded app tests and
+browser acceptance. The app-only update reused the exact runtime image and
+verified data, with no image build and no full TIFF-content hashing. Legacy
+rollback retains full legacy verification, which explains its different cost.
+These are observed timings for this change and VM, not an upper bound for every
+app change or cold start.
+
+Validation included 72 Python deployment/artifact/cache tests, 1,142 R unit
+expectations for each candidate bundle, and the complete 32-check scientific
+report. An initial Python 3.9 compatibility preflight failure occurred before
+service changes; corrected tooling passed nine compatibility checks on the VM.
+The full scientific run kept all data/image hashes and verified both the
+historical producer's raw summaries and the candidate's five served summaries.
+Each full browser acceptance stage passed 49 checks; authenticated public access
+passed 15 checks per stage. Backend and development-proxy image requests returned
+HTTP 206 with the expected range bytes, and unauthenticated public requests were
+rejected. The first final-rollback browser attempt retained a highlight after
+unhover and failed that check; its evidence is retained. An unchanged fresh-session
+rerun passed all 49 checks. The harness was then changed to wait up to six seconds
+for the actual rendered null highlight after each hover direction, preserving the
+strict assertion. A further confirmation passed all 49 browser and 15 access
+checks, with the update marker absent. This records an intermittent check failure;
+it does not establish a proven application defect.
+
+Production service/artifact state and both sites' access settings remained
+unchanged. Host-level protection of verified data against mutation, off-campus
+UFRC reachability, and service recovery after a VM reboot still need their
+separate operational confirmation. A metadata receipt and read-only container
+mounts do not themselves make host-owned files immutable.
+
+### First migration: build and stage
+
+On the workstation, commit only the intended deployment/app changes, leaving
+unrelated local work untouched. Choose the full committed revision containing the
+split tooling. Both commands export committed files in isolation; uncommitted
+changes are never silently released. Use fresh IDs and directories; artifacts
+cannot be overwritten.
+
+```bash
+REPO=/data/panc_CODEX/Islet-Explorer
+BUILD_PROJECT="$REPO/tmp/split-release-build"
+REVISION='<full-committed-split-revision>'
+RUNTIME=runtime-split-v1
+APP=app-split-v1
+EVIDENCE="$BUILD_PROJECT/evidence/$RUNTIME"
+mkdir -p "$EVIDENCE" "$BUILD_PROJECT/incoming"
+BASE_IMAGE=$(sed '/^#/d; /^$/d' "$REPO/deploy/base-image.lock")
+
+"$REPO/deploy/build-image.sh" --revision "$REVISION" \
+  --tag "localhost/islet-explorer-runtime:$RUNTIME" --version "$RUNTIME" \
+  --base-image "$BASE_IMAGE" --scan-dir "$EVIDENCE/scan"
+IMAGE_REF=$(sed -n 's/^LOCAL_IMAGE_ID=//p' "$EVIDENCE/scan/published-image.txt")
+RUNTIME_INPUTS=$(podman image inspect --format \
+  '{{ index .Labels "io.islet-explorer.runtime-inputs-sha256" }}' "$IMAGE_REF")
+python3 "$REPO/deploy/release-artifacts.py" register-runtime \
+  --project-root "$BUILD_PROJECT" --runtime "$RUNTIME" \
+  --scan-dir "$EVIDENCE/scan" --runtime-input-sha256 "$RUNTIME_INPUTS"
+python3 "$REPO/deploy/release-artifacts.py" package-app \
+  --project-root "$BUILD_PROJECT" --app "$APP" --revision "$REVISION" --repo "$REPO"
+"$REPO/deploy/export-image.sh" "$IMAGE_REF" "$BUILD_PROJECT/incoming/$RUNTIME.oci.tar"
+```
+
+Before transferring, inspect actual VM capacity. A read-only check on November 5
+found only 3.6 GB free on `/local` (the Podman store) and 29 GB on `/pubapps`.
+Measure the new image's additional layer requirements; do not delete active or
+rollback images/data to force it to fit. Resolve a capacity shortage before load.
+Stage the committed tooling into a new versioned directory, not over the tooling
+used by an existing deployment. The commands below use the established HPG hop:
+
+```bash
+VM_PROJECT=/pubapps/maigan/islet-explorer
+HOP='ssh hpg ssh'
+ssh hpg "ssh pubmaigan1 'df -h /local/maigan /pubapps/maigan; podman system df'"
+ssh hpg "ssh pubmaigan1 'mkdir -p $VM_PROJECT/apps $VM_PROJECT/runtimes $VM_PROJECT/incoming $VM_PROJECT/tooling/releases/$REVISION'"
+git -C "$REPO" archive "$REVISION" deploy | \
+  ssh hpg "ssh pubmaigan1 'tar -x -C $VM_PROJECT/tooling/releases/$REVISION'"
+rsync -a -e "$HOP" "$BUILD_PROJECT/apps/$APP" pubmaigan1:"$VM_PROJECT/apps/"
+rsync -a -e "$HOP" "$BUILD_PROJECT/runtimes/$RUNTIME" pubmaigan1:"$VM_PROJECT/runtimes/"
+rsync -a --partial -e "$HOP" "$BUILD_PROJECT/incoming/$RUNTIME.oci.tar"{,.metadata,.sha256} \
+  pubmaigan1:"$VM_PROJECT/incoming/"
+```
+
+On the VM as the existing service account, set the same `REVISION`, `RUNTIME`,
+and `APP`. Confirm the current dev state before selecting its data source. The
+November 5 read-only inspection found the following settings; these values are
+not permission to overwrite a newer deployment without checking it:
+
+```bash
+PROJECT_ROOT=/pubapps/maigan/islet-explorer
+TOOLING="$PROJECT_ROOT/tooling/releases/$REVISION/deploy"
+DATA=dev-data-split-v1
+DATA_SOURCE=pubapps-2026-11-dev-duckdb-v1
+RELEASE=dev-split-v1
+EVIDENCE="$PROJECT_ROOT/incoming/$RELEASE-evidence"
+mkdir "$EVIDENCE"
+systemctl --user status islet-explorer-dev.service --no-pager
+cat "$PROJECT_ROOT/runtime/deployments/islet-explorer-dev.active.state"
+cp -p "$HOME/.config/containers/systemd/islet-explorer-dev.container" "$EVIDENCE/prior-dev.container"
+cp -p "$PROJECT_ROOT/runtime/deployments/islet-explorer-dev.active.state" "$EVIDENCE/prior-dev.state"
+"$TOOLING/load-image.sh" "$PROJECT_ROOT/incoming/$RUNTIME.oci.tar"
+python3 "$TOOLING/release-artifacts.py" register-data \
+  --project-root "$PROJECT_ROOT" --data "$DATA" --source-release "$DATA_SOURCE"
+```
+
+`register-data` performs the initial complete content check, including TIFFs,
+and writes an independent data receipt. It does not rewrite the source release,
+copy its images, or inherit the old image's security decision. The selected
+runtime's own evidence is checked separately. Subsequent app deployments verify
+the receipt, source manifest, metadata, image count, and file inventory instead
+of rereading TIFF contents. Published data and hard-linked image trees must stay
+immutable: metadata/stat checks are not protection against an owner deliberately
+rewriting both data and receipts. Changed data requires a fresh ID and full
+registration. Preserve the existing hard-link staging procedure for new data
+releases, including its complete image-tree equivalence check.
+
+### Candidate checks and descriptor assembly
+
+Run these checks against the exact candidate artifacts before assembly. The
+manual launcher also works on a workstation project containing the registered
+artifacts and data; use an unused loopback port there. On the 15 GiB VM, stop
+only dev while testing a 4 GiB candidate: production plus the existing dev and a
+third 4 GiB container would exceed the planned memory caps. Keep the original dev
+unit/state available and restore that service if any candidate check fails.
+
+On the VM, in a dedicated shell:
+
+```bash
+set -euo pipefail
+export PROJECT_ROOT APP DATA RUNTIME RELEASE EVIDENCE TOOLING
+systemctl --user is-active --quiet islet-explorer-dev.service
+CANDIDATE=islet-explorer-split-smoke
+cleanup_candidate() {
+  podman stop "$CANDIDATE" >/dev/null 2>&1 || true
+  systemctl --user start islet-explorer-dev.service
+}
+trap cleanup_candidate EXIT
+systemctl --user stop islet-explorer-dev.service
+PROJECT_ROOT="$PROJECT_ROOT" APP_BUNDLE="$APP" DATA_RELEASE="$DATA" RUNTIME="$RUNTIME" \
+  CONTAINER_NAME="$CANDIDATE" PORT=3839 MEMORY=4g "$TOOLING/run.sh" \
+  > "$EVIDENCE/container-smoke.log" 2>&1
+podman exec --workdir /srv/islet-explorer/app/shiny_app "$CANDIDATE" \
+  Rscript tests/parse_check.R > "$EVIDENCE/parse.log" 2>&1
+python3 "$TOOLING/release-artifacts.py" resolve-candidate --project-root "$PROJECT_ROOT" \
+  --app "$APP" --data "$DATA" --runtime "$RUNTIME" > "$EVIDENCE/candidate.env"
+```
+
+Use `set -e` in a scripted run so a failed test exits through the cleanup trap.
+Inspect warnings/skips as well as exit codes. The runtime deliberately excludes
+`testthat`; run unit tests on the workstation's test environment against the
+packaged app, with runtime support sources exported from the selected runtime
+commit. These tests complement actual container parse/startup and browser checks;
+they are not evidence that the production image contains the test environment.
+
+```bash
+# Workstation: use the same fresh app bundle transferred to the VM.
+mkdir -p "$LOCAL_EVIDENCE/runtime-source"
+RUNTIME_REVISION=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["git_commit"])' \
+  "$BUILD_PROJECT/runtimes/$RUNTIME/runtime.json")
+git -C "$REPO" archive "$RUNTIME_REVISION" deploy | \
+  tar -x -C "$LOCAL_EVIDENCE/runtime-source"
+(
+  cd "$BUILD_PROJECT/apps/$APP/app/shiny_app"
+  ISLET_TEST_RUNTIME_SOURCE="$LOCAL_EVIDENCE/runtime-source" \
+    Rscript tests/run_tests.R
+) > "$LOCAL_EVIDENCE/app-tests.log" 2>&1
+rsync -a -e 'ssh hpg ssh' "$LOCAL_EVIDENCE/app-tests.log" \
+  pubmaigan1:"$EVIDENCE/app-tests.log"
+```
+
+Use an absolute `LOCAL_EVIDENCE` path. From the workstation, open an SSH tunnel
+using the configured HPG jump route, then run browser checks against it:
+
+```bash
+ssh -N -J hpg -L 3845:127.0.0.1:3839 maigan@pubmaigan1.ufhpc
+# In another workstation shell, with a fresh local evidence directory:
+node deploy/browser/check-app.mjs --url http://127.0.0.1:3845/islet-explorer/ \
+  --output "$LOCAL_EVIDENCE/browser.json" --chrome /usr/bin/google-chrome --expanded true
+rsync -a -e 'ssh hpg ssh' "$LOCAL_EVIDENCE/browser.json" \
+  pubmaigan1:"$EVIDENCE/browser.json"
+```
+
+Run the targeted checks for affected components as well. For first migration,
+scientific/loader changes, data changes, or runtime updates, run and retain the
+applicable full scientific/compatibility report against this exact combination.
+For full parity against an older data producer, run from a clean, isolated
+checkout of the candidate app commit on the scientific validation host. Supply
+both explicit commits; neither flag alone is accepted:
+
+```bash
+# In the clean, isolated candidate app checkout:
+test "$(git rev-parse HEAD)" = "$APP_COMMIT"
+test -z "$(git status --porcelain --untracked-files=all)"
+git cat-file -e "${DATA_COMMIT}^{commit}"
+Rscript scripts/verify_release_parity.R \
+  --source-root "$CANONICAL_SOURCE" --image-root "$CANONICAL_IMAGES" \
+  --release-root "$REGISTERED_DATA_DIR" --output-prefix "$PARITY_EVIDENCE/release-parity" \
+  --app-commit "$APP_COMMIT" --data-commit "$DATA_COMMIT"
+```
+
+`APP_COMMIT` must be that clean checkout's full commit; `DATA_COMMIT` must be
+the full clean producer recorded in the selected data manifest. The report keeps
+app, validator, and data-producer provenance separately. Raw stored summaries
+are checked against preparation by the exact producer's committed helpers,
+exported into a temporary directory. Separately, the candidate's actual shared
+loader is exercised on canonical source and production data, and all five served
+summary tables must agree. This tests both stored scientific values and current
+app behavior without hand-normalizing differences. All full hashes, source,
+spatial, and geometry comparisons still run. Missing producer source/factory
+fails closed. The exact `DATA_COMMIT` must exist in the validation checkout's
+local Git object store: a shallow clone that omits it cannot perform this check.
+Obtain the reviewed producer commit before validation rather than substituting
+another revision. The temporary export contains committed app/scripts inputs,
+not scientific data, and is removed on success or failure. Without the flags,
+the historical same-commit/verifier-only rule is retained.
+
+During November 5 migration preparation, the first independent-commit run
+(`parity-r2`) retained a failed result for two summary checks because it compared
+current preparation with older raw stored tables. The focused diagnostic showed
+that the producer's raw tables and the candidate's served outputs each agree at
+their own boundary. The corrected verifier now checks both boundaries, including
+all five raw and all five served summaries. The subsequent complete `parity-r3`
+run passed all 32 checks, including the full hashes, for the November 5 migration.
+The failed report and diagnostic remain part of the dated evidence; the final
+acceptance uses the completed corrected run.
+
+Set `CHANGE_KIND=runtime` for the first migration, and set `SCIENTIFIC_REPORT` to
+that passing report. For an ordinary non-scientific app change use
+`CHANGE_KIND=app`; no new scientific attestation is needed. The script below
+requires an explicit `SCIENTIFIC_RESULT=pass` for the other change kinds. Set it
+only after inspecting the completed scientific report, never to bypass a failed
+or missing check.
+
+Back in the VM candidate shell, after the checks have actually passed:
+
+```bash
+export CHANGE_KIND SCIENTIFIC_RESULT SCIENTIFIC_REPORT
+python3 - "$EVIDENCE" <<'PY'
+import hashlib, json, os, pathlib, sys
+root = pathlib.Path(sys.argv[1])
+values = dict(line.split('=', 1) for line in (root/'candidate.env').read_text().splitlines())
+kind = os.environ['CHANGE_KIND']
+assert json.loads((root/'browser.json').read_text()).get('passed') is True, 'Browser acceptance failed'
+checks = {'app_tests': 'pass', 'smoke': 'pass'}
+reports = [root/'container-smoke.log', root/'parse.log', root/'app-tests.log', root/'browser.json']
+if kind != 'app':
+    assert os.environ.get('SCIENTIFIC_RESULT') == 'pass', 'Scientific acceptance is required'
+    reports.append(pathlib.Path(os.environ['SCIENTIFIC_REPORT']))
+    checks['scientific'] = 'pass'
+validation = {
+    'app_manifest_sha256': values['APP_MANIFEST_SHA256'],
+    'image_ref': values['IMAGE_REF'],
+    'data_receipt_sha256': values['DATA_RECEIPT_SHA256'],
+    'change_kind': kind, 'checks': checks,
+    'evidence': {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in reports},
+}
+(root/'validation.json').write_text(json.dumps(validation, indent=2)+'\n')
+PY
+base_args=()
+if [[ "$CHANGE_KIND" == app || "$CHANGE_KIND" == science ]]; then
+  base_args=(--base-release "${BASE_RELEASE:?set the previous split deployment ID}")
+fi
+python3 "$TOOLING/release-artifacts.py" assemble --project-root "$PROJECT_ROOT" \
+  --release "$RELEASE" --app "$APP" --data "$DATA" --runtime "$RUNTIME" \
+  --change-kind "$CHANGE_KIND" --validation "$EVIDENCE/validation.json" "${base_args[@]}"
+python3 "$TOOLING/release-artifacts.py" verify --release-dir "$PROJECT_ROOT/releases/$RELEASE"
+cleanup_candidate
+trap - EXIT
+```
+
+The old dev service is running again before activation so normal failure recovery
+restores its previously active state. Activate only dev, using the checked VM
+settings, then exercise its authenticated public endpoint and viewer Range path:
+
+```bash
+"$TOOLING/activate-release.sh" --project-root "$PROJECT_ROOT" --release "$RELEASE" \
+  --instance islet-explorer-dev --port 3839 --memory 4g --publish-address 10.13.41.21 \
+  --docroot "$PROJECT_ROOT/dev/html" --local-data /local/maigan/releases
+# Read verified values as data; never source/eval an artifact metadata file.
+IMAGE_REF=$(sed -n 's/^IMAGE_REF=//p' "$EVIDENCE/candidate.env")
+APP_SHA=$(sed -n 's/^APP_MANIFEST_SHA256=//p' "$EVIDENCE/candidate.env")
+DATA_DIR=$(sed -n 's/^DATA_DIR=//p' "$EVIDENCE/candidate.env")
+"$TOOLING/verify-deployment.sh" --url http://10.13.41.21:3839/islet-explorer/ \
+  --container islet-explorer-dev --publish-address 10.13.41.21 \
+  --expected-image "$IMAGE_REF" --expected-app "$PROJECT_ROOT/apps/$APP/app" \
+  --expected-app-sha256 "$APP_SHA" --expected-data "$DATA_DIR" \
+  --expected-local-data "/local/maigan/releases/datasets/$DATA/data" \
+  --range-path 'local_images/<selected-image>.ome.tiff'
+```
+
+Use the existing external reviewer-access procedure for
+`https://devislet-explorer.rc.ufl.edu/islet-explorer/`; do not change credentials
+or proxy rules. Save actual container inspection, app/data mount identities,
+active state, backend/public Range results, and elapsed release timings. A new
+local cache under `/local/maigan/releases/datasets/DATA_ID` is copied and checked
+once; later app deployments reuse it. Missing or mutated published caches fail
+instead of being repaired under a running service.
+
+### Next app-only release and rollback
+
+Select another committed app revision and fresh `APP`/`RELEASE` IDs. Keep `DATA`
+and `RUNTIME` from the active descriptor. Package and transfer just the new app:
+
+```bash
+python3 "$REPO/deploy/release-artifacts.py" package-app --project-root "$BUILD_PROJECT" \
+  --app "$APP" --revision "$REVISION" --repo "$REPO"
+rsync -a -e 'ssh hpg ssh' "$BUILD_PROJECT/apps/$APP" pubmaigan1:"$VM_PROJECT/apps/"
+```
+
+Set `BASE_RELEASE` to the current split deployment ID, then repeat candidate
+checks and assembly above with `CHANGE_KIND=app`, or `science` when scientific
+behavior changed. The `--base-release` check pins both reused artifact identities;
+then activate dev. Do not rerun runtime build,
+image export/load, data registration, or data transfer for unchanged artifacts.
+If runtime inputs differ, resolution refuses the combination; follow the runtime
+build/scan path and validate the new combination. Never edit an existing app
+bundle, data receipt, descriptor, or image tag to change a running release.
+
+Explicit rollback selects the previously successful complete descriptor and its
+recorded instance settings. It supports old baked-image releases as well as
+split releases; legacy rollback retains its old full verification behavior:
+
+```bash
+"$TOOLING/rollback-release.sh" --project-root "$PROJECT_ROOT" --instance islet-explorer-dev
+```
+
+Demonstrate both same-runtime app rollback and rollback to the legacy dev release
+before considering migration complete. Keep referenced app bundles, runtime
+images, original data sources/receipts, descriptors, and local caches for active
+and rollback releases. Do not remove shared data merely because one app release
+is retired.
+
+### New data and runtime releases
+
+For new data, build into a fresh `releases/DATA_SOURCE/data` directory using the
+existing scientific workflow, stage it with the preserved TIFF hard-link rules,
+and retain full scientific acceptance. Seal its data-only metadata and register
+it on the target host:
+
+```bash
+python3 "$TOOLING/release-artifacts.py" seal-data --project-root "$PROJECT_ROOT" \
+  --source-release "$DATA_SOURCE" --data-schema 5 --expected-images 20
+python3 "$TOOLING/release-artifacts.py" register-data --project-root "$PROJECT_ROOT" \
+  --data "$DATA" --source-release "$DATA_SOURCE"
+```
+
+Use the approved schema/count for that data release, not an inferred file count.
+The producer commit comes from its data manifest. Select the new data ID with the
+compatible app/runtime and complete `CHANGE_KIND=data` validation. Runtime
+changes similarly use a new runtime ID and build/scan evidence, followed by
+`CHANGE_KIND=runtime` validation; they do not require copying unchanged data.

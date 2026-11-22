@@ -11,6 +11,10 @@ calls. Writes to typing/checks/:
                      labels (the plan: "each rate reported against the same marker's rate in unrelated classes")
   barlow.csv         image x label x Barlow label (cells), reported, never matched to
   transitions_v16.csv, transitions_v17.csv  label x earlier label (cells, all images)
+  qc_census.csv      image x geometry-QC flag: count and proportion of detections, eligibility counts, and
+                     cohort-range outlier flags against the original cohort (2026-11-06: the degenerate-nucleus
+                     class went unseen because its detector reached no record; every flag is now counted,
+                     classified as excluding or measured, and ranged on every run)
   assertions.json    every assertion with the cells that break it (must all be 0)
 
     python scripts/uniform/typing/acceptance_checks.py --run $OUT --workers 20
@@ -85,6 +89,42 @@ def named_markers(row_named_by: str) -> list[str]:
     return [m for m in str(row_named_by).split(';') if m and m not in ('compartment', 'established', 'canary')]
 
 
+def qc_census(run: Path, tag: str) -> tuple[dict, dict]:
+    """One image's geometry-QC census row and consistency assertions.
+
+    The parquet is the ground truth; the per-image record's counts must recount from it, every exclusion reason
+    must be a QC_EXCLUDES name, and every flag the record counts must be classified excluding (QC_EXCLUDES) or
+    measured (QC_MEASURED) -- so a geometry-QC class can never again exist without appearing here.
+    """
+    rs = pd.read_parquet(run / 'typing' / 'redsea' / f'{tag}.parquet',
+                         columns=['qc_analysis_eligible', 'qc_estimation_eligible',
+                                  'qc_spillover_context_eligible', 'qc_reasons', 'qc_flags'])
+    record = json.loads((run / 'typing' / 'redsea' / f'{tag}.json').read_text())['geometry_qc']
+    classified = set(CT.QC_EXCLUDES) | set(CT.QC_MEASURED)
+    flag_tokens = rs['qc_flags'].str.split(';')                   # token lists: raster_empty is a substring of
+    counts = {name: int(flag_tokens.map(lambda t: name in t).sum())   # nucleus_raster_empty, so never str.contains
+              for name in record.get('reasons', {})}
+    reason_tokens = rs['qc_reasons'].str.split(';')
+    asserts = {
+        'qc_summary_recount_mismatch': int(sum(record['reasons'][k] != counts[k] for k in counts)),
+        'qc_reason_token_not_excluding': int(reason_tokens.map(
+            lambda ts: any(t and t not in CT.QC_EXCLUDES for t in ts)).sum()),
+        'qc_analysis_vs_reasons_mismatch': int((rs['qc_analysis_eligible'] != (rs['qc_reasons'] == '')).sum()),
+        'qc_estimation_outside_analysis': int((rs['qc_estimation_eligible']
+                                               & ~rs['qc_analysis_eligible']).sum()),
+        'qc_flag_not_classified': len(set(record.get('reasons', {})) - classified),
+        'qc_exclude_name_never_a_flag': len(classified - set(record.get('reasons', {}))),
+    }
+    row = {'image': tag, 'detections': len(rs),
+           'analysis_eligible': int(rs['qc_analysis_eligible'].sum()),
+           'estimation_eligible': int(rs['qc_estimation_eligible'].sum()),
+           'spillover_context_eligible': int(rs['qc_spillover_context_eligible'].sum())}
+    for name in sorted(record.get('reasons', {})):
+        row[name] = counts[name]
+        row[f'{name}_proportion'] = round(counts[name] / max(len(rs), 1), 5)
+    return row, asserts
+
+
 def image_checks(run: Path, tag: str) -> dict:
     reg = RG.load()
     markers = ID.used_markers(run, reg)
@@ -151,6 +191,10 @@ def image_checks(run: Path, tag: str) -> dict:
     A['structure_compartment_without_structure_call'] = int((d['compartment'].isin(only).to_numpy() & (basis != 'structure')).sum())
     structure_labels = plan['labels'].loc[plan['labels']['kind'] == 'structure', 'label'].tolist()
     A['structure_label_without_structure_call'] = int((np.isin(lab, structure_labels) & (basis != 'structure')).sum())
+    # 6 geometry-QC census and consistency (2026-11-06)
+    qc_row, qc_asserts = qc_census(run, tag)
+    A.update(qc_asserts)
+    out['qc_census'] = qc_row
 
     # tables
     rows = []
@@ -237,6 +281,14 @@ def main() -> int:
                                                            + ld['level_log'].isna().sum())
     assertions = {'run': run_assert, 'images': {r['image']: r['assert'] for r in res}}
     (dest / 'assertions.json').write_text(json.dumps(assertions, indent=1))
+    census = pd.DataFrame([r['qc_census'] for r in res])
+    census['cohort'] = census['image'].map({r['image_name']: r['cohort']
+                                            for r in RG.csv.DictReader(RG.COHORT.open())})
+    prop_cols = [c for c in census.columns if c.endswith('_proportion')]
+    ref = census[census['cohort'] == 'original']
+    census['flags'] = census.apply(lambda x: ';'.join(
+        c for c in prop_cols if len(ref) and not ref[c].min() <= x[c] <= ref[c].max()), axis=1)
+    census.to_csv(dest / 'qc_census.csv', index=False)
     pd.DataFrame([x for r in res for x in r['per_label']]).to_csv(dest / 'per_label.csv', index=False)
     pd.DataFrame([x for r in res for x in r['confirmation']]).to_csv(dest / 'confirmation.csv', index=False)
     if any('barlow' in r for r in res):

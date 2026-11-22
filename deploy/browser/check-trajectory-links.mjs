@@ -236,9 +236,7 @@ try {
     await page.mouse.down(); await page.mouse.move(target.x + 40, target.y + 25, {steps: 5}); await page.mouse.up();
     assert.equal(await page.evaluate(() => window.linkInputs.filter(n => n === 'traj-linked_click').length), 1);
   });
-  // The cell-range slider and Recalculate button this step used to drive were removed on 2026-10-17 (the trajectory
-  // fits every object with ten or more core cells), so no control can filter a pin out of the fitted set any more.
-  // Instead: a selection made on the Spatial tab's linked UMAPs, which hold the same ten-cell objects, is pinned here.
+  // An object in the saved Spatial UMAP also belongs to the larger four-cell trajectory cohort.
   await check('a selection on the Spatial UMAPs is pinned on the Trajectory plots', async () => {
     await page.click('#traj-clear_link_selection'); await highlighted(null);
     await page.click('a[data-value="Spatial"]');

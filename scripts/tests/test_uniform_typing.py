@@ -48,6 +48,9 @@ def test_labels_file_names_registry_lineages_and_markers():
         if r.kind == 'structure':            # a structure object's cell type, named by the object's marker
             assert r.named_by in reg.typing_markers() and r.structure, r
             continue
+        if r.kind == 'pattern':              # a marker-pattern cell type (owner 2026-11-06): named_by lists its markers
+            assert r.named_by and all(m in reg.typing_markers() for m in RG.split(r.named_by)), r
+            continue
         assert r.lineage in lineages, r.lineage
         for m in RG.split(r.profile.replace('|', ';')):
             assert m in reg.table.index, m
@@ -72,52 +75,75 @@ def test_no_module_of_the_chain_names_a_marker():
         assert not found, f'{f} names markers in code: {found}'
 
 
-# -- the canary status (Xenium notebook 02 cell 22, margin between groups) ------------------------------------------------
+# -- the canary status (Xenium notebook 02 cell 22, margin between groups; tie assignment owner 2026-11-18) ----------------
 def test_group_status():
     det = np.array([[0, 0, 0], [1, 0, 0], [1, 1, 0], [1, 1, 0], [1, 1, 1], [1, 1, 0], [1, 1, 0], [1, 1, 0]], bool)
     depth = np.array([[0, 0, 0], [2, 0, 0], [3, 1, 0], [2, 2, 0], [3, 1, 1], [2, 2, 0], [2, 2, 0], [1, 1, 0]])
-    # equal depth: the group both brighter and covering more of the cell is placed (owner 2026-10-29)
+    # equal depth: more exclusive interior pixels assign the side; pixels beat brightness; depth-1 ties are assigned too
     bright = np.array([[0, 0, 0]] * 5 + [[1, 2, 0], [2, 1, 0], [1, 2, 0]], float)
     cover = np.array([[0, 0, 0]] * 5 + [[.2, .9, 0], [.2, .9, 0], [.2, .9, 0]], float)
-    status, top, runner, td, rd, ng, settled = ID.group_status(det, depth, np.zeros(det.shape), 1, 2, bright, cover, 0.15)
-    assert list(status) == ['none', 'single', 'resolved', 'lineage_ambiguous', 'doublet_suspected', 'resolved',
-                            'lineage_ambiguous', 'lineage_ambiguous']   # brighter and covers more / split / under depth 2
+    status, top, runner, td, rd, ng, settled, basis = ID.group_status(det, depth, np.zeros(det.shape), 1, 2,
+                                                                      bright, cover)
+    # r3: measured but every basis exactly tied -> the one remaining conflict; r4: three groups reduce to the top two
+    # and the depth margin resolves; r6: pixels (side 1) beat brightness (side 0); r7: a depth-1 tie is assigned
+    assert list(status) == ['none', 'single', 'resolved', 'lineage_ambiguous', 'resolved', 'resolved',
+                            'resolved', 'resolved']
     assert list(ng) == [0, 1, 2, 2, 3, 2, 2, 2] and top[2] == 0 and runner[2] == 1
-    assert top[5] == 1 and runner[5] == 0 and list(settled) == [False] * 5 + [True, False, False]
+    assert top[4] == 0 and runner[4] in (1, 2)
+    assert top[5] == 1 and top[6] == 1 and top[7] == 1
+    assert list(settled) == [False] * 5 + [True, True, True]
+    assert list(basis[5:]) == ['interior_pixels'] * 3 and basis[3] == ''
 
 
-@pytest.mark.parametrize('lead,brighter,has_interior,expected', [
-    (0.149999, True, True, False), (0.15, True, True, True), (0.150001, True, True, True),
-    (0.20, False, True, False), (0.20, True, False, False)])
-def test_interior_tie_boundary_and_required_evidence(lead, brighter, has_interior, expected):
-    bright = np.array([[2., 1.]]) if brighter else np.array([[1., 2.]])
-    result = ID.group_status(np.ones((1, 2), bool), np.full((1, 2), 2), np.zeros((1, 2)), 1, 2,
-                             bright, np.array([[0.20 + lead, 0.20]]), 0.15, np.array([has_interior]))
-    assert bool(result[-1][0]) is expected
-    assert result[0][0] == ('resolved' if expected else 'lineage_ambiguous')
+@pytest.mark.parametrize('cover_pair,bright_pair,score_pair,expected_top,expected_basis', [
+    ((0.21, 0.20), (1., 2.), (0., 0.), 0, 'interior_pixels'),      # pixels beat brightness, no minimum lead
+    ((0.20, 0.21), (2., 1.), (0., 0.), 1, 'interior_pixels'),
+    ((0.20, 0.20), (1., 2.), (0., 0.), 1, 'interior_brightness'),  # exact pixel tie: the brighter median
+    ((0.20, 0.20), (2., 2.), (3., 1.), 0, 'fold_ranking'),         # both tied: the fold ranking assigns
+    ((np.nan, np.nan), (np.nan, np.nan), (3., 1.), 0, 'fold_ranking'),  # no interior evidence at all
+])
+def test_interior_tie_assignment(cover_pair, bright_pair, score_pair, expected_top, expected_basis):
+    status, top, runner, *_, settled, basis = ID.group_status(
+        np.ones((1, 2), bool), np.full((1, 2), 2), np.array([list(score_pair)]), 1, 2,
+        np.array([list(bright_pair)]), np.array([list(cover_pair)]))
+    assert status[0] == 'resolved' and bool(settled[0]) and top[0] == expected_top and basis[0] == expected_basis
+
+
+def test_interior_tie_exact_tie_stays_conflict():
+    status, top, runner, *_, settled, basis = ID.group_status(
+        np.ones((1, 2), bool), np.full((1, 2), 2), np.zeros((1, 2)), 1, 2,
+        np.array([[1., 1.]]), np.array([[0.2, 0.2]]))
+    assert status[0] == 'lineage_ambiguous' and not settled[0] and basis[0] == ''
+
+
+def test_interior_invalid_falls_back_to_fold():
+    status, top, *_ , settled, basis = ID.group_status(
+        np.ones((1, 2), bool), np.full((1, 2), 2), np.array([[1., 3.]]), 1, 2,
+        np.array([[2., 1.]]), np.array([[0.9, 0.2]]), np.array([False]))
+    assert status[0] == 'resolved' and top[0] == 1 and basis[0] == 'fold_ranking'
 
 
 # -- identity on a synthetic image --------------------------------------------------------------------------------------
 LEVEL_RAW, CANARY_RAW, HIGH = 100.0, 1000.0, 2000.0
 CELLS = [  # (expected label, start class, {marker: raw value}, established endocrine call); every other marker 0
     ('CD8a Tcell', None, {'CD3e': HIGH, 'CD45': HIGH, 'CD8a': HIGH}, None),
-    ('CD4 Tcell', None, {'CD3e': HIGH, 'CD45': HIGH, 'CD8a': HIGH, 'CD4': 2 * HIGH}, None),   # both: the higher
-    ('T cell', None, {'CD3e': HIGH, 'CD45': HIGH}, None),                                     # neither: interim status
+    ('CD4 Tcell', None, {'CD3e': HIGH, 'CD45': HIGH, 'CD8a': HIGH, 'CD4': 2 * HIGH}, None),   # both: the higher (10-27; restored 11-06)
+    ('Hematopoietic CD45+', None, {'CD3e': HIGH, 'CD45': HIGH}, None),                        # DN: regular workflow (11-06)
     ('Hematopoietic CD45-', None, {'CD20': HIGH}, None),                                      # CD20 alone: never a B cell
     ('B cell', None, {'CD20': HIGH, 'CD45': HIGH}, None),
-    ('Macrophage_Gal3-', None, {'CD68': HIGH, 'CD45': HIGH}, None),
+    ('Macrophage_LGALS3-', None, {'CD68': HIGH, 'CD45': HIGH}, None),
     ('Hematopoietic CD45+', None, {'CD45': HIGH}, None),
-    ('Conflict T/Myeloid', None, {'CD163': HIGH, 'CD8a': 2 * HIGH}, None),                   # no CD8a+CD163+ cell type
-    ('Exocrine', None, {'ECAD': HIGH, 'panCK': HIGH}, None),
-    ('Exocrine', 'Islet', {'ECAD': HIGH}, None),                                              # exocrine inside the border (10-29)
+    ('Hematopoietic CD45-', None, {'CD163': HIGH, 'CD8a': 2 * HIGH}, None),                  # tie assigned to T by interior pixels (11-18); T without CD45 is not named
+    ('Acinar cell', None, {'ECAD': HIGH, 'panCK': HIGH}, None),                               # CK19- epithelial residual (11-06)
+    ('Acinar cell', 'Islet', {'ECAD': HIGH}, None),                                           # exocrine inside the border (10-29)
     ('Beta cell', 'Islet', {'INS': HIGH, 'ECAD': HIGH}, None),                                # hormone, whole cell
     ('Beta cell', 'Islet', {'INS': HIGH, 'GCG': 0.8 * HIGH}, None),                           # the highest scaled hormone
     ('CHGA+ hormone-negative', 'EndocrineCluster', {'CHGA': HIGH}, None),
-    ('EndocrineSingle', 'EndocrineSingle', {'CD31': HIGH}, None),                             # the object names the cell
+    ('Unclassified', 'EndocrineSingle', {'CD31': HIGH}, None),                                # unnamed in its object: explicit Unclassified (2026-11-05)
     ('Alpha cell', 'EndocrineSingle', {'GCG': HIGH, 'CD31': HIGH}, None),                     # a verified single stays
-    ('Exocrine', None, {'INS': HIGH, 'ECAD': HIGH}, None),                                    # no endocrine outside objects
+    ('Acinar cell', None, {'INS': HIGH, 'ECAD': HIGH}, None),                                 # no endocrine outside objects
     ('Beta cell', 'Islet', {'INS': HIGH}, None),                                              # hormone in an islet
-    ('T cell', 'Islet', {'CD3e': HIGH, 'CD45': HIGH}, ('Immune', '')),                        # a T cell inside an islet
+    ('Hematopoietic CD45+', 'Islet', {'CD3e': HIGH, 'CD45': HIGH}, ('Immune', '')),           # DN in an islet: regular workflow
     ('Tissue', None, {}, None),                                                               # no marker above background
     ('Tissue', None, {'ColIV': 1e6}, None),                                                   # ColIV is never read
     ('Tissue', None, {'CD31': HIGH}, None),                                                   # no vessel: CD31 names nothing (10-30)
@@ -125,12 +151,19 @@ CELLS = [  # (expected label, start class, {marker: raw value}, established endo
     ('Endothelium Blood Vessel', None, {'CD31': 2 * HIGH, 'SMA': HIGH}, None),                # in a vessel object
     ('Stromal', None, {'CD31': HIGH, 'SMA': 2 * HIGH}, None),                                 # CD31 not on top: passes through
     ('Tissue', None, {'CD31': HIGH}, None),                                                   # under half its area inside
-    ('Islet', 'Islet', {'INS': HIGH, 'GCG': HIGH}, None),                                     # exact tie: no subtype
+    ('Unclassified', 'Islet', {'INS': HIGH, 'GCG': HIGH}, None),                              # exact tie: no subtype, explicit Unclassified (2026-11-05)
     ('CD8a Tcell', None, {'CD3e': HIGH, 'CD45': HIGH, 'CD8a': HIGH, 'CD163': HIGH}, None),     # T leads Myeloid by one
-    ('T cell', None, {'CD3e': 2 * HIGH, 'CD45': HIGH, 'CD163': HIGH}, None),                  # tie: brighter, covers more
-    ('Conflict T/Myeloid', None, {'CD3e': 2 * HIGH, 'CD45': HIGH, 'CD163': HIGH}, None),      # tie: brighter, covers less
+    ('Hematopoietic CD45+', None, {'CD3e': 2 * HIGH, 'CD45': HIGH, 'CD163': HIGH}, None),     # tie won, DN: regular workflow
+    ('Hematopoietic CD45+', None, {'CD3e': 2 * HIGH, 'CD45': HIGH, 'CD163': HIGH}, None),     # tie assigned to T by median brightness at a 0-0 interior-pixel tie (11-18); DN T takes the pan label
     ('Hematopoietic CD45-', None, {'CD4': HIGH, 'CD8a': HIGH}, None),                         # no lineage, CD45 negative
-    ('Macrophage_Gal3-', None, {'CD68': HIGH, 'CD45': HIGH, 'CD4': HIGH}, None),
+    ('Macrophage_LGALS3-', None, {'CD68': HIGH, 'CD45': HIGH, 'CD4': HIGH}, None),
+    ('Macrophage_LGALS3+', None, {'CD163': HIGH, 'CD45': HIGH, 'LGALS3': HIGH}, None),
+    ('Macrophage_LGALS3+', None, {'CD163': HIGH, 'CD45': HIGH, 'LGALS3': HIGH, 'CD4': HIGH}, None),
+    ('Macrophage_LGALS3+', None, {'CD68': HIGH, 'CD163': HIGH, 'CD45': HIGH, 'LGALS3': HIGH}, None),
+    ('Macrophage_LGALS3-', None, {'CD68': HIGH, 'CD163': HIGH, 'CD45': HIGH}, None),
+    ('Hematopoietic CD45-', None, {'CD68': HIGH, 'LGALS3': HIGH}, None),
+    ('Hematopoietic CD45+', None, {'CD45': HIGH, 'LGALS3': HIGH}, None),
+    ('Hematopoietic CD45+', None, {'CD4': HIGH, 'CD45': HIGH}, None),
 ]
 # area coverage (area_coverage.py): a positive marker covers 0.8 of the cell unless given here; index -> {marker: coverage}
 COVERAGE = {27: {'CD3e': 0.9, 'CD163': 0.2}, 28: {'CD3e': 0.2, 'CD163': 0.9}}
@@ -252,8 +285,10 @@ def test_identity_rules(synthetic_run):
     got = out['label'].tolist()
     want = [c[0] for c in CELLS]
     assert got == want, [(i, g, w) for i, (g, w) in enumerate(zip(got, want)) if g != w]
-    assert out.iloc[2]['subtype_status'] == 'T_subtype_not_shown'
+    # owner 2026-11-06: a DN T-lineage cell is not named T cell; it takes the regular cascade (pan label)
+    assert out.iloc[2]['label'] == 'Hematopoietic CD45+' and out.iloc[2]['subtype_status'] == 'T_dn_regular_workflow'
     assert out.iloc[11]['named_by'] == 'INS' and out.iloc[25]['status'] == 'tied_highest_hormones'
+    assert out.iloc[5]['named_by'] == 'CD68;CD163'
     assert out.iloc[13]['status'] == 'no_endocrine_marker_above_level'
     assert out.iloc[10]['named_by'] == 'INS' and out.iloc[14]['named_by'] == 'GCG'
     assert 'endocrine_outside_object' in out.iloc[15]['tags']
@@ -263,6 +298,18 @@ def test_identity_rules(synthetic_run):
     assert out.iloc[3]['status'] == 'no_lineage_named' and out.iloc[21]['status'] == 'shared_marker_only'
     assert out.iloc[22]['named_by'] == 'CD31' and 'passed_through_Blood_vessel' in out.iloc[23]['tags']
     assert not any(str(x)[-1:] in '+-' and ' ' not in str(x) and 'Macrophage_' not in str(x) for x in got)
+
+
+def test_macrophage_with_missing_gal3_retains_broad_identity(synthetic_run):
+    run, tag = synthetic_run
+    path = run / 'typing' / 'redsea' / f'{tag}.parquet'
+    cells = pd.read_parquet(path)
+    cells.loc[5, 'Cell__LGALS3'] = np.nan
+    cells.to_parquet(path)
+    result, _ = ID.classify_image(run, tag)
+    assert result.iloc[5].label == 'Macrophage'
+    assert result.iloc[5].lineage == 'Myeloid'
+    assert result.iloc[5].named_by == 'CD68;CD163'
 
 
 @pytest.mark.parametrize('damage', ['missing_column', 'missing_id', 'extra_id', 'duplicate_id'])
@@ -306,18 +353,23 @@ def test_identity_rejects_missing_or_stale_coverage(synthetic_run, source):
         ID.classify_image(run, tag)
 
 
-def test_no_interior_is_explicit_and_cannot_settle_identity_tie(synthetic_run):
+def test_no_interior_is_explicit_and_falls_back_to_fold(synthetic_run):
     run, tag = synthetic_run
     path = run / 'typing' / 'coverage' / f'{tag}.parquet'
     frame = pd.read_parquet(path)
     before, _ = ID.classify_image(run, tag)
-    resolved = before['tags'].str.contains('tie_brightness_coverage')
+    resolved = before['tags'].str.contains('tie_interior_')
     assert resolved.any()
     frame.loc[resolved, AC.INTERIOR_COUNT] = 0
     frame.loc[resolved, frame.columns.str.startswith(AC.INTERIOR_PREFIX)] = np.nan
     AC.write_coverage(run, tag, frame)
     after, audit = ID.classify_image(run, tag)
-    assert not after.loc[resolved, 'tags'].str.contains('tie_brightness_coverage').any()
+    # without interior pixels a tie is still assigned by the fold ranking; an exact fold tie (cell 30: CD68 and
+    # CD4 both at HIGH) is the one case left as a conflict, and the absence stays audited
+    assert not after.loc[resolved, 'tags'].str.contains('tie_interior_').any()
+    fold = after.loc[resolved, 'tags'].str.contains('tie_fold_ranking')
+    conflict = after.loc[resolved, 'label'].str.startswith('Conflict ')
+    assert (fold | conflict).all() and fold.sum() == 3 and conflict.sum() == 1
     assert (after.loc[resolved, AC.INTERIOR_COUNT] == 0).all()
     assert audit['cells_without_interior'] == int(resolved.sum())
 
@@ -375,12 +427,14 @@ def test_blinded_review_hides_calls_and_keeps_separate_key(accuracy_tiles, tmp_p
     assert (tmp_path / 'blinded' / 'review_01.png').exists()
 
 
-def test_macrophage_state_uses_either_anchor_and_measured_gal3():
-    import codex_typing as ct
-    for cd68, cd163 in [(True, False), (False, True), (True, True), (True, None), (None, True)]:
-        for gal3, state in [(True, '+'), (False, '-')]:
-            calls = {'CD68': cd68, 'CD163': cd163, 'LGALS3': gal3}
-            assert ct.macrophage_label(calls) == 'Macrophage_Gal3' + state
-            assert ct.macrophage_label(dict(calls, CD4=True)) == 'Macrophage_Gal3' + state
-    assert ct.macrophage_label({'CD68': True, 'LGALS3': None}) == ''
-    assert ct.macrophage_label({'CD68': False, 'CD163': False, 'LGALS3': True}) == ''
+def test_review_revision_matches_frozen_replay(synthetic_run):
+    from review_revision import apply_decisions, reconsider
+    run, tag = synthetic_run
+    prior, _ = ID.classify_image(run, tag)
+    candidate, audit = ID.classify_image(run, tag, review_revision=True)
+    coverage = pd.read_parquet(run / 'typing' / 'coverage' / f'{tag}.parquet')
+    context = pd.read_parquet(run / 'typing' / 'context' / f'{tag}.parquet')
+    raw = pd.read_parquet(run / 'typing' / 'redsea' / f'{tag}.parquet').set_index('object_id')
+    decisions = reconsider(prior, coverage, context, np.isfinite(raw.Cell__LGALS3))
+    pd.testing.assert_frame_equal(candidate, apply_decisions(prior, decisions))
+    assert decisions.disposition.value_counts().to_dict() == audit['review_revision']

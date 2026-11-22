@@ -1,4 +1,104 @@
+# Current phenotype-specific 56-feature trajectory
+
+Each of the 14 retained count features has three additional inputs. Sum the nerve, lymphatic and blood-vessel cell-outline overlap fractions for that phenotype across its eligible regions. Apply log1p(sum / max(core endocrine count, 1)) to each total. Core endocrine, peri exocrine and combined-region counts follow the definitions below. Area and peri-islet protein expression are held out.
+
+Starting November 20, 2026, the size cutoff for DPT and PAGA is **at least four total core cells** per Islet or EndocrineCluster. All measured core cells count toward eligibility, including cells whose phenotype is excluded from the graph inputs. An object with only zero inputs has no diffusion position. The saved endocrine-composition UMAP and its Leiden labels require at least ten total core cells and a defined endocrine composition. Its panels show the number of fitted objects with saved coordinates. The trajectory CSV includes objects without saved coordinates and reports each object's total core count.
+
+### Diffusion pseudotime root
+
+The live app finds the two tissue profiles farthest apart in multiscale diffusion distance. At each end it examines the nearest 5% of distinct profiles and counts the ND donors represented there. The end with more ND donors supplies the starting neighborhood. A tie goes to the end nearer the ND donors, measured by the median of each donor’s nearest distance to that end. Within the chosen neighborhood each donor contributes one mean location. The ND islet nearest the average of those locations becomes the root. If neither neighborhood contains ND islets, the nearest ND islet to the selected end becomes the root.
+
+Baseline diffusion pseudotime is zero at the selected root. The main scatter and both PAGA panels use the same Scanpy fit. The arrow on each PAGA panel identifies the root in the two-dimensional layout, including when the age slider moves that donor’s islets. The endpoint rule uses donor status for ND eligibility and support. It requires no separate orientation by beta-cell abundance. Analyses saved on November 19 used the earlier ND-centroid root.
+
+The cell-type ratio display offers individual endocrine subtypes for Core only. All core endocrine cells supply the denominator, so the aggregate is omitted. Peri only and Core + Peri exclude endocrine subtypes because the released peri bands can contain cells belonging to neighboring endocrine Singles. The scatter spreads tied coordinates by default. A group at the minimum or maximum spreads inward, and a constant measurement stays at its measured height. Hover, trends, UMAP colors, and the CSV use the measured values. Clear **Spread tied points (display only)** to restore exact coordinates.
+
+The feature-colored UMAP scales each measure over the displayed objects. It uses an inverse hyperbolic sine transform with the median nonzero absolute value as its scale. This preserves zeros and the ordering of values while making differences among smaller values easier to see. The legend and hover labels give the original measure values. A constant measure has one color and one labeled value. The PNG uses the same scale.
+
+### Donor demographics and clinical history
+
+The donor annotation plot shows each donor’s median islet pseudotime and the middle 50% of that donor’s islets on the selected pseudotime scale. Both PAGA panels can color the fitted islets by the same donor fields. Donor measurements come from the released nPOD donor table, joined by case ID. The trajectory and PAGA CSV downloads include those fields and the C-peptide censor flag. Age, clinical history, and laboratory measurements are annotations on the fitted trajectory.
+
+### Donor age guidance in the PAGA panels
+
+The age slider ranges from 0 to 1. At 0, the panels show the original tissue-based layout and diffusion pseudotime. For positive weights, the app computes an age direction in the baseline layout from one age and one two-dimensional median position per donor. It projects islets onto that direction and finds each donor’s median projected position. The youngest and oldest donors receive targets at the ends of the range of donor medians; intermediate targets are linearly spaced by age in years.
+
+Each donor’s islets move together by the selected fraction of the distance from the original median to the target. At 0.5 the median is halfway there. These translations preserve within-donor spacing, while distances between donors can change. The PAGA score uses the same rule on the baseline diffusion pseudotimes and can extend outside 0–1. Its association with age is imposed by the slider. The underlying neighbor graph, root, Leiden clusters and baseline DPT remain available at every weight. Donors without recorded age keep their baseline values.
+
+## Historical count-only trajectory
+
+The accepted CODEX release uses four core endocrine classes, peri-islet Exocrine, and nine other classes each represented once by its summed core and peri raw counts. Macrophage source classes are pooled by Gal3 sign across both regions. Each count is normalized as log1p(count / max(core endocrine cells, 1)). The six structure overlap outcomes are held out. Different typing schemas retain their measured classes.
+
+## Historical region-separated analysis (superseded)
+
 # Trajectory / Pseudotime — Accuracy Reference
+
+## Current graph inputs — November 18, 2026
+
+Owner, 2026-11-18: "the trajectory/pseudotime needs to be updated to the current
+typing format. There should not be peri-islet features for the endocrine classes,
+core exocrine, or 12 macrophage subtypes. Also the qc classes should not be
+entered into the pseudotime pipeline."
+
+Each graph input is `log1p(cells of a class in a region / max(core endocrine cells, 1))`.
+Which class enters in which region is one rule, applied by both engines
+(`python/paga_pseudotime.py::trajectory_inputs()` for scanpy,
+`R/barlow_pseudotime.R::barlow_trajectory_inputs()` for the destiny fallback):
+
+| Class | Core | 20 µm peri-islet band |
+|---|---|---|
+| Endocrine Beta, Alpha, Delta, CHGA⁺ hormone-negative | input | not an input |
+| Exocrine (`Exocrine`; `Acinar cell` / `Ductal cell` on a root that splits it; the frozen typing's `Ductal`) | not an input | input |
+| Macrophage Gal3⁺, Macrophage Gal3⁻ | input | input |
+| T Cell CD8a⁺, T Cell CD4⁺, B Cell, Stromal (and Fibroblast), blood-vessel endothelium, Neural, lymphatic endothelium | input | input |
+| QC classes: every `Conflict …` label, `Doublet suspected`, `Tissue`, `Unclassified`, and the unresolved `Hematopoietic CD45+`, `Hematopoietic CD45-`, `T cell` | not an input | not an input |
+| Retired frozen-typing labels (`PHENOTYPE_RETIRED`) | not an input | not an input |
+
+The feature table (`barlow_islet_features.csv`) is not changed: it still carries
+every label's ratio and count, and the rule is applied when the graph is built, so
+it holds for immutable releases too. A root that still stores the twelve
+marker-profile macrophage labels gets its Gal3⁺ and Gal3⁻ inputs from the summed
+counts of the six labels of each Gal3 sign, `log1p(sum / endocrine cells)`; a class
+with a single stored column uses the stored ratio unchanged. An object with no cell
+of any input class would have no direction for the cosine metric; it gets no
+pseudotime and the status line reports the number (none on the accepted data). The
+fitted inputs are returned by the engine and written into the CSV provenance lines
+(`trajectory_inputs_text()`), no longer a fixed sentence.
+
+Unchanged: the ten-core-cell cohort (cells of every class still count toward the
+ten), the endocrine denominator, the 15-neighbor cosine graph, the ND-centroid root
+in diffusion components 1–3, the beta-ratio orientation convention, the PAGA
+layout's use of the same graph, and the Y-axis ratio selector (any selectable class
+in core, peri-islet band or both).
+
+Measured on the accepted public-app data
+(`uniform-20donor-20261102-component-app-v2`, 1,398 objects with ten or more core
+cells), before → after:
+
+| | 53 stored inputs | Current typing format |
+|---|---:|---:|
+| Graph inputs | 53 | 23 (13 core, 10 peri-islet band) |
+| Fitted objects / distinct profiles | 1,398 / 1,398 | 1,398 / 1,398 |
+| Root | `112_Islet_46` | `112_Islet_46` |
+| Direction flipped by the beta-ratio convention | no | no |
+| Spearman, pseudotime vs core beta-cell ratio | −0.575 | −0.570 |
+
+Spearman correlation of the two pseudotimes over the same objects: 0.935
+(ND 0.834, Aab+ 0.940, T1D 0.802); absolute change in rank-normalized pseudotime:
+median 0.049, 90th percentile 0.175, maximum 0.474. The stored columns left out
+are 40 QC-class columns (20 labels, both regions), four peri-islet endocrine
+columns and core Exocrine; 24 twelve-label macrophage columns become four inputs.
+The scanpy and destiny matrices agree to 5e-15 on this root, and the two engines'
+pseudotimes correlate at 0.980. Of the 1,398 fitted objects, 44 (30 islets, 14
+clusters) have fewer than ten core cells once QC-class cells are set aside; they
+remain fitted, and are listed in the research output. These are descriptive
+object-level measurements. Script and outputs:
+`scripts/research/trajectory_current_typing_20261118.py`,
+`output/trajectory_current_typing_20261118/`. Regression tests:
+`scripts/tests/test_live_trajectory_features.py` (including a Python-versus-R
+matrix comparison) and `tests/testthat/test-trajectory-helpers.R`.
+
+The "Retired-feature correction (2026-10-14)" below describes the selector this
+replaces (every retained phenotype in both regions).
 
 ## Current PAGA Presentation — November 3, 2026
 

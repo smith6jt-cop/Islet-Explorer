@@ -34,7 +34,8 @@ This module names compartments and lineages, never markers.
   and tagged endocrine_marker_positive (endocrine_outside_object outside the objects). Exocrine: an epithelial cell
   without another lineage; inside an endocrine object Excluded (exocrine_inside_islet_border). A lineage named by its broad marker (T, B, Myeloid)
   needs that marker positive; T subtypes by positivity, both positive -> the higher fold over level (owner), neither ->
-  the lineage label with t_subtype_status T_subtype_not_shown (interim, owner decision pending); B needs the registry's
+  not named by the lineage: the cell continues through the regular cascade as another population with subtype_status
+  T_dn_regular_workflow (owner 2026-11-06, superseding the 10-27 interim T_subtype_not_shown); B needs the registry's
   `requires` (CD45 positive, one hematopoietic lineage); Myeloid takes the profile label. A leukocyte without a named
   lineage is the pan label (Hematopoietic CD45+) when the pan marker is positive, else the pan-negative label
   (Hematopoietic CD45-; owner 2026-10-29). No cell is named by a marker (owner 2026-10-28: "Get
@@ -56,6 +57,23 @@ whose blood-vessel and lymphatic cells come from their objects) is reached only 
 structure call its markers place no cell (they still add depth where the registry has another compartment carry them);
 the overlap stays a feature (crossed_frac_*). A cell they would have placed is typed by its other evidence, else keeps
 its start class with status structure_marker_only; tag <compartment>_marker_outside_structure.
+2026-11-05 revision (owner: "stop defining in Other by CD31, B3TUBB, and GAP43"; "CD31 should not be used to identify
+hematopoietic cells"): CD31 carries no hematopoietic support (registry shared_by), a structure call's top-marker
+comparison skips defining siblings of its own structure-only compartment that name no structure themselves (GAP43 for
+the B3TUBB Nerve call), T and Macrophage naming require CD45 (registry `requires`, as B cells), and outside a component
+binding an endocrine-object cell the rules leave unnamed is exported as Unclassified (tag endocrine_object_unnamed),
+never under its object's name.
+2026-11-06 literature alignment (owner: "align the markers with the support in the scientific literature for their
+appropriate cell type for detecting and supporting"): a carried marker adds lineage depth only for its registry
+carrier_lineages (empty = every lineage of its shared compartments), the bound the canary nulls already used — HLA-DR
+and CD35 support B and Myeloid but not resting T, galectin-3 supports Myeloid and Exocrine only, PGP9.5 Neural and
+Endocrine. CD8a and CD4 were reviewed, not changed: T naming already runs through CD3e (named_by broad, requires CD45),
+so a CD3e- CD8a+ cell (an NK phenotype) is Hematopoietic CD45+, and CD4 detects no lineage and never names. The same
+direction ("produce the proper literature-supported cell types") splits the epithelial residual by CK19 — CK19+
+epithelium is Ductal cell, the CK19- residual Acinar cell (keratin 19 marks ductal/centroacinar cells only) — and
+names the canonical quiescent fibroblast/stellate pattern: a Tissue cell no compartment claimed, with VIM, CD34 or
+PDPN positive and every defining marker negative, is Fibroblast (labels kind 'pattern'; a defined combination rule,
+not top-marker naming; SMA detects only the activated/contractile mesenchymal subset).
 
 Writes typing/identity/<image>.parquet (one row per analysis-eligible cell) and <image>.json (counts).
 
@@ -150,13 +168,17 @@ def label_row(plan: dict, compartment: str, lineage: str) -> dict:
 
 # -- canary status (Xenium cell 22) --------------------------------------------------------------------------------------
 def group_status(detected: np.ndarray, depth: np.ndarray, score: np.ndarray, margin: float, min_depth: float,
-                 bright: np.ndarray, cover: np.ndarray, lead: float = 0.0,
+                 bright: np.ndarray, cover: np.ndarray,
                  interior_valid: np.ndarray | None = None):
-    """Per row: status, top group, runner-up group, their depths, the number of groups detected, and whether a tie in
-    depth was settled. Two groups of equal depth (at least min_depth): the group whose detecting markers are brighter
-    (median normalized interior signal) and win at least `lead` more of the cell's interior pixels is resolved.
-    Otherwise the cell stays lineage_ambiguous (owner 2026-10-29: "both are
-    brighter and cover more cell area"; later the same day "Interior coverage, clear lead", CANARY_TIE_INTERIOR_LEAD)."""
+    """Per row: status, top group, runner-up group, their depths, the number of groups detected, whether a tie in
+    depth was settled, and the evidence basis that settled it. Groups are ranked by depth then summed fold; three or
+    more detected groups reduce to the top two of that ranking (owner 2026-11-18: 'Doublet suspected' is retired,
+    "replace it with the top two classes and assign one of the conflicting calls"). Two groups of equal top depth are
+    assigned to one side by what a look at the image shows: the side whose exclusive detecting markers win more of the
+    cell's interior pixels; at an exact pixel tie the brighter median; with no interior evidence the fold ranking.
+    Only an exact tie through every basis stays lineage_ambiguous (owner 2026-11-18: "nearly all the 'conflict'
+    classes can easily be determined one or the other with a simple look"; supersedes the 2026-10-29
+    both-brighter-and-clear-coverage-lead rule, CANARY_TIE_INTERIOR_LEAD, which group ties no longer read)."""
     n = len(detected)
     rows = np.arange(n)
     ng = detected.sum(axis=1)
@@ -167,35 +189,49 @@ def group_status(detected: np.ndarray, depth: np.ndarray, score: np.ndarray, mar
     runner = comp2.argmax(axis=1)
     td = np.where(ng > 0, depth[rows, top], 0)
     rd = np.where(ng > 1, depth[rows, runner], 0)
-    tie = (ng == 2) & (td == rd) & (td >= min_depth)
-    if interior_valid is not None:
-        tie &= interior_valid
+    tie = (ng >= 2) & (td == rd)
     b_top, b_run, c_top, c_run = bright[rows, top], bright[rows, runner], cover[rows, top], cover[rows, runner]
-    # A subtraction such as 0.35 - 0.20 can round just below an exact 0.15 lead.
-    keep = tie & (b_top > b_run) & (c_top - c_run + 1e-12 >= lead) & (c_top > c_run)
-    swap = tie & (b_run > b_top) & (c_run - c_top + 1e-12 >= lead) & (c_run > c_top)
+    measured = tie & np.isfinite(c_top) & np.isfinite(c_run)
+    if interior_valid is not None:
+        measured &= interior_valid
+    keep = measured & ((c_top > c_run) | ((c_top == c_run) & (b_top > b_run)))
+    swap = measured & ((c_run > c_top) | ((c_top == c_run) & (b_run > b_top)))
+    basis = np.full(n, '', dtype=object)
+    basis[measured & (keep | swap) & (c_top != c_run)] = 'interior_pixels'
+    basis[measured & (keep | swap) & (c_top == c_run)] = 'interior_brightness'
+    # interior evidence absent or exactly tied: the fold ranking that ordered the pair assigns;
+    # an exact ranking tie stays a conflict
+    fold = tie & ~(keep | swap) & (comp[rows, top] > comp[rows, runner])
+    keep |= fold
+    basis[fold] = 'fold_ranking'
     top, runner = np.where(swap, runner, top), np.where(swap, top, runner)
     settled = keep | swap
-    status = np.select([ng == 0, ng == 1, ng >= 3, ((td - rd >= margin) & (td >= min_depth)) | settled],
-                       ['none', 'single', 'doublet_suspected', 'resolved'], 'lineage_ambiguous').astype(object)
-    return status, top, np.where(ng > 1, runner, -1), td, rd, ng, settled
+    status = np.select([ng == 0, ng == 1, ((td - rd >= margin) & (td >= min_depth)) | settled],
+                       ['none', 'single', 'resolved'], 'lineage_ambiguous').astype(object)
+    return status, top, np.where(ng > 1, runner, -1), td, rd, ng, settled, basis
 
 
-def placed(P, C, F, detect, count, margin, min_depth, lead, pixels, source_rows, stage):
-    """Use canary depth first, plain detection as fallback, and spatial evidence for eligible equal depths."""
+def placed(P, C, F, detect, count, margin, min_depth, pixels, source_rows, stage):
+    """Use canary depth first, plain detection as fallback, and spatial evidence for equal top-two depths."""
     def assess(active, allowed, basis):
         detected = np.column_stack([active[:, d].any(axis=1) for d in detect])
         depth = np.column_stack([active[:, c].sum(axis=1) for c in count]) * detected
         score = np.column_stack([np.where(active[:, c], F[:, c], 0.).sum(axis=1) for c in count]) * detected
-        top_depth = depth.max(axis=1)
-        eligible = (allowed & (detected.sum(axis=1) == 2) & (top_depth >= min_depth)
-                    & ((depth == top_depth[:, None]).sum(axis=1) == 2))
+        rows_ = np.arange(len(detected))
+        comp = np.where(detected, depth * 1000.0 + score, -np.inf)
+        tp = comp.argmax(axis=1)
+        comp2 = comp.copy()
+        comp2[rows_, tp] = -np.inf
+        rn = comp2.argmax(axis=1)
+        # every equal-depth top-two pair is measured, whatever the depth and however many groups detected
+        # (owner 2026-11-18; the 2026-10-29 rule measured only exactly-two-group ties of depth >= min_depth)
+        eligible = allowed & (detected.sum(axis=1) >= 2) & (depth[rows_, tp] == depth[rows_, rn])
         bright = np.full(score.shape, np.nan)
         cover = np.full(score.shape, np.nan)
         requests = []
         pair = {}
         for i in np.flatnonzero(eligible):
-            a, b = np.flatnonzero(detected[i])
+            a, b = tp[i], rn[i]
             row = source_rows[i]
             pair[row] = (i, a, b)
             requests.append((row, [m for m in detect[a] if active[i, m]],
@@ -204,17 +240,18 @@ def placed(P, C, F, detect, count, margin, min_depth, lead, pixels, source_rows,
             i, a, b = pair[row]
             bright[i, [a, b]] = ma, mb
             cover[i, [a, b]] = na / n, nb / n
-        return group_status(detected, depth, score, margin, min_depth, bright, cover, lead)
+        return group_status(detected, depth, score, margin, min_depth, bright, cover)
 
-    status, top, runner, td, rd, ng, settled = assess(C, np.ones(len(C), bool), 'canary')
-    statusp, topp, _, _, _, ngp, settledp = assess(P, ng == 0, 'plain')
+    status, top, runner, td, rd, ng, settled, sbasis = assess(C, np.ones(len(C), bool), 'canary')
+    statusp, topp, _, _, _, ngp, settledp, sbasisp = assess(P, ng == 0, 'plain')
     group = np.where(ng > 0, top, np.where(ngp > 0, topp, -1))
     basis = np.where(ng > 0, 'canary', np.where(ngp > 0, 'plain', '')).astype(object)
     # a cell placed below the canary level keeps its plain-level conflict visible (review 2026-10-28)
     status = np.where(ng > 0, status, np.where(ngp > 1, 'below_canary_' + statusp.astype(str), 'none')).astype(object)
     return {'group': group, 'basis': basis, 'status': status, 'n': ng, 'n_plain': ngp, 'depth': td,
             'runner': runner, 'runner_depth': rd, 'n_detected_at_basis': np.where(ng > 0, ng, ngp),
-            'settled': np.where(ng > 0, settled, settledp)}
+            'settled': np.where(ng > 0, settled, settledp),
+            'settled_basis': np.where(ng > 0, sbasis, sbasisp).astype(object)}
 
 
 # -- one image -------------------------------------------------------------------------------------------------------------
@@ -254,7 +291,7 @@ def established(path: Path, tag: str, object_id: pd.Series, reg: RG.Registry, pl
 
 
 def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED, *,
-                   _component_natural: bool = False) -> tuple[pd.DataFrame, dict]:
+                   _component_natural: bool = False, review_revision: bool = False) -> tuple[pd.DataFrame, dict]:
     import structure_update as SU
     reg = RG.load()
     markers = used_markers(run, reg)
@@ -282,6 +319,8 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED, *,
     # Component reconciliation is an explicit, independently validated scope.
     # It cannot also claim the unchanged-calibration structure-only contract.
     baseline = SU.baseline_identity(run, tag, d['object_id']) if component is None else None
+    if review_revision and (component is not None or baseline is not None):
+        raise ValueError('Review revision conflicts with a frozen component or structure-only identity binding')
     endocrine_labels = set(plan['labels'].loc[
         plan['labels']['lineage'].str.match(r'^Endocrine(?::|$)'), 'label'])
     protected_endocrine = (baseline['label'].isin(endocrine_labels).to_numpy()
@@ -356,7 +395,7 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED, *,
     # a structure-defined compartment is reached only through the structure step: its markers detect nothing here
     detect = [[] if plan['comp'][c]['structure_only'] else [ix[m] for m in plan['comp'][c]['defining']] for c in comps]
     count = [[ix[m] for m in plan['comp'][c]['defining'] + plan['comp'][c]['carried']] for c in comps]
-    cp = placed(P, C, F, detect, count, margin, min_depth, lead, pixels, np.arange(n), 'compartment')
+    cp = placed(P, C, F, detect, count, margin, min_depth, pixels, np.arange(n), 'compartment')
     compartment = np.where(cp['group'] >= 0, np.asarray(comps, dtype=object)[np.maximum(cp['group'], 0)], '')
     comp_status = cp['status'].astype(object)
 
@@ -367,17 +406,23 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED, *,
     lin_runner = np.full(n, '', dtype=object)
     lin_detected = np.zeros(n, int)
     lin_settled = np.zeros(n, bool)
+    lin_settled_basis = np.full(n, '', dtype=object)
     for c in comps:
         info = plan['comp'][c]
         lins = list(info['lineages'])
         rows = np.flatnonzero(compartment == c)
         if not lins or not len(rows):
             continue
-        extra = info['pan'] + info['carried']
+        # a carried marker supports only its carrier lineages (registry carrier_lineages; empty = every lineage of its
+        # shared compartments), the same bound the canary nulls use (literature alignment, owner 2026-11-06)
+        carrier_of = {m: set(RG.split(reg.table.loc[m, 'carrier_lineages'])) for m in info['carried']}
+        extra = {lin: info['pan'] + [m for m in info['carried'] if not carrier_of[m] or lin in carrier_of[m]]
+                 for lin in lins}
         det_cols = [[ix[m] for m in info['lineages'][lin]['specific']] for lin in lins]
-        cnt_cols = [[ix[m] for m in dict.fromkeys(info['lineages'][lin]['members'] + extra)] for lin in lins]
-        lp = placed(P[rows], C[rows], F[rows], det_cols, cnt_cols, margin, min_depth, lead, pixels, rows, 'lineage')
+        cnt_cols = [[ix[m] for m in dict.fromkeys(info['lineages'][lin]['members'] + extra[lin])] for lin in lins]
+        lp = placed(P[rows], C[rows], F[rows], det_cols, cnt_cols, margin, min_depth, pixels, rows, 'lineage')
         lin_settled[rows] = lp['settled']
+        lin_settled_basis[rows] = lp['settled_basis']
         has = lp['group'] >= 0
         lineage[rows[has]] = np.asarray(lins, dtype=object)[lp['group'][has]]
         lin_basis[rows] = lp['basis']
@@ -391,9 +436,14 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED, *,
     named_by = np.full(n, '', dtype=object)
     tags = [[] for _ in range(n)]
     for i in np.flatnonzero(cp['settled']):
-        tags[i].append('compartment_tie_brightness_coverage')
+        tags[i].append('compartment_tie_' + str(cp['settled_basis'][i]))
     for i in np.flatnonzero(lin_settled):
-        tags[i].append('lineage_tie_brightness_coverage')
+        tags[i].append('lineage_tie_' + str(lin_settled_basis[i]))
+    # three or more detected groups reduce to the ranking's top two (owner 2026-11-18); the reduction is tagged
+    for i in np.flatnonzero(cp['n_detected_at_basis'] >= 3):
+        tags[i].append(f"compartment_top_two_of_{cp['n_detected_at_basis'][i]}")
+    for i in np.flatnonzero(lin_detected >= 3):
+        tags[i].append(f'lineage_top_two_of_{lin_detected[i]}')
     t_status = np.full(n, '', dtype=object)
     status = np.full(n, '', dtype=object)
     done = np.zeros(n, bool)
@@ -433,7 +483,20 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED, *,
         j = ix.get(r.named_by)
         if j is None:
             raise SystemExit(f'{tag}: structure marker {r.named_by} has no level')
-        hit = inside & (np.nan_to_num(frac) > majority) & P[:, j] & (top_any == j) & ~by_object & ~protected_endocrine
+        # The top-marker comparison asks whether a marker of ANOTHER identity outranks the object's marker. A defining
+        # sibling of the same structure-only compartment that names no structure itself argues for the same identity
+        # and does not count against the call (owner 2026-11-05: CD31/B3TUBB/GAP43 "get brought in after the
+        # centroid-in-annotations check"): GAP43 no longer denies a B3TUBB Nerve call.
+        named_markers = set(lab.loc[lab['kind'] == 'structure', 'named_by'])
+        sib = [ix[m] for m in plan['comp'].get(r.compartment, {}).get('defining', [])
+               if m in ix and m != r.named_by and m not in named_markers]
+        if sib:
+            Fr = Fpos.copy()
+            Fr[:, sib] = -np.inf
+            top_r = np.where(np.isfinite(Fr).any(axis=1), Fr.argmax(axis=1), -1)
+        else:
+            top_r = top_any
+        hit = inside & (np.nan_to_num(frac) > majority) & P[:, j] & (top_r == j) & ~by_object & ~protected_endocrine
         label[hit], named_by[hit] = r.label, r.named_by
         compartment[hit], lineage[hit] = r.compartment, r.lineage
         comp_basis[hit] = lin_basis[hit] = 'structure'
@@ -453,18 +516,17 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED, *,
             struct_cols += cols_c
             for i in np.flatnonzero(P[:, cols_c].any(axis=1) & ~(structure_hit & (compartment == c))):
                 tags[i].append(f'{c.lower()}_marker_outside_structure')
-    # A canary-level conflict between mutually exclusive compartments, or lineages of one compartment, that the margin
-    # does not resolve names no cell type (owner 2026-10-28: "there is no such thing as a CD8+CD163+ cell"): the cell
-    # is kept with the conflict as its class, never named as either side. Below the canary level a second group is not
-    # a credible conflict (status below_canary_*). Cells their object places (clusters, singles) are left as placed.
+    # A canary-level conflict the evidence cannot order — an exact tie through depth, interior pixels, brightness and
+    # fold ranking — names no cell type (owner 2026-10-28: "there is no such thing as a CD8+CD163+ cell"); nearly all
+    # ties are assigned to one side by group_status (owner 2026-11-18), so this is the measured residue. Below the
+    # canary level a second group is not a credible conflict (status below_canary_*). Cells their object places
+    # (clusters, singles) are left as placed.
     comp_runner = np.where(cp['runner'] >= 0, np.asarray(comps, dtype=object)[np.maximum(cp['runner'], 0)], '')
-    unresolved = ('lineage_ambiguous', 'doublet_suspected')
-    clash = ~by_object & ~done & np.isin(comp_status, unresolved)
-    clash_lin = ~by_object & ~done & ~clash & np.isin(lin_status, unresolved)
-    for mask, top_, run_, st in ((clash, compartment, comp_runner, comp_status), (clash_lin, lineage, lin_runner, lin_status)):
+    clash = ~by_object & ~done & (comp_status == 'lineage_ambiguous')
+    clash_lin = ~by_object & ~done & ~clash & (lin_status == 'lineage_ambiguous')
+    for mask, top_, run_ in ((clash, compartment, comp_runner), (clash_lin, lineage, lin_runner)):
         rows = np.flatnonzero(mask)
-        label[rows] = np.where(st[rows] == 'doublet_suspected', 'Doublet suspected',
-                               'Conflict ' + top_[rows].astype(str) + '/' + run_[rows].astype(str))
+        label[rows] = 'Conflict ' + top_[rows].astype(str) + '/' + run_[rows].astype(str)
         named_by[rows] = 'canary'
         done[rows] = True
     for r in lab[lab['named_by'] == 'established'].itertuples():
@@ -556,28 +618,36 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED, *,
                 sel = rows[any_pos & (win == s)]
                 label[sel] = label_row(plan, c, f'{lin}:{s}')['label']
                 named_by[sel] = markers[subs[s]]
+            # owner 2026-11-06 ("the process can be iterated with leftover DN cells going through the regular
+            # workflow as another population"): the neither-positive case is not named by the lineage — it stays
+            # un-done and continues through the regular cascade (the compartment's pan step and the rest), with
+            # subtype_status recording it. Supersedes the 10-27 interim T_subtype_not_shown.
             none_ = rows[~any_pos]
-            label[none_] = rule['label']
-            named_by[none_] = ';'.join(L_['broad'])
-            t_status[none_] = f'{lin}_subtype_not_shown'
+            t_status[none_] = f'{lin}_dn_regular_workflow'
+            for i in none_:
+                tags[i].append(f'{lin.lower()}_dn_regular_workflow')
             both = rows[P[np.ix_(rows, cols)].sum(axis=1) > 1]
             t_status[both] = 'both_subtype_markers_higher_named'
-        elif srule == 'macrophage_gal3':
-            anchors, state = rule['profile'].split('|')
-            cols = [ix[m] for m in RG.split(anchors) if m in ix]
-            supported = P[np.ix_(rows, cols)].any(axis=1)
-            label[rows] = 'Macrophage'
-            if state in ix:
-                measured = np.isfinite(d[d.attrs['columns'][state]].to_numpy(float)[rows])
-                keep = rows[supported & measured]
-                label[keep] = np.where(P[keep, ix[state]], 'Macrophage_Gal3+', 'Macrophage_Gal3-')
-            named_by[rows] = anchors
+            rows = rows[any_pos]
         elif srule == 'profile':
             head, tail = (RG.split(x.replace(',', ';')) for x in rule['profile'].split('|'))
-            sign = lambda m: np.where(P[rows, ix[m]], f'{m}+', f'{m}-') if m in ix else np.full(len(rows), f'{m}?')
-            parts = [sign(m) for m in head] + [np.full(len(rows), f"{rule['label']}_")] + [sign(m) for m in tail]
-            label[rows] = np.asarray([''.join(p) for p in zip(*parts)], dtype=object)
-            named_by[rows] = ';'.join(head)
+            # A missing profile reading leaves the accepted broad identity intact.
+            label[rows] = rule['label']
+            measured = rows
+            for marker in head + tail:
+                if marker not in ix:
+                    measured = rows[:0]
+                    break
+                raw = d[d.attrs['columns'][marker]].to_numpy(float)
+                measured = measured[np.isfinite(raw[measured])]
+            if len(measured):
+                def sign(m):
+                    return np.where(P[measured, ix[m]], f'{m}+', f'{m}-')
+
+                mid = f"{rule['label']}_" if tail else rule['label']
+                parts = [sign(m) for m in head] + [np.full(len(measured), mid)] + [sign(m) for m in tail]
+                label[measured] = [''.join(p) for p in zip(*parts)]
+            named_by[rows] = ';'.join(L_['broad'])
         else:
             label[rows] = rule['label']
             named_by[rows] = ';'.join(L_['broad'])
@@ -628,6 +698,16 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED, *,
             excl = np.isin(start[rows], RG.split(rule.get('excluded_in', '')))
             label[rows[~excl]] = rule['label']
             named_by[rows[~excl]] = 'compartment'
+            # a residual member with a subtype names its literature type: CK19+ epithelium is Ductal cell, the
+            # CK19- residual Acinar cell (owner 2026-11-06: produce the proper literature-supported cell types)
+            for m in info['residual_members']:
+                sub = next((s for lin2, s in reg.lineage_entries(m) if lin2 == info['residual'] and s), '')
+                r2 = label_row(plan, c, f"{info['residual']}:{sub}") if sub else {}
+                if r2:
+                    hit = rows[~excl]
+                    hit = hit[P[hit, ix[m]]]
+                    label[hit] = r2['label']
+                    named_by[hit] = m
             label[rows[excl]] = 'Excluded'
             reason[rows[excl]] = f"{info['residual'].lower()}_inside_islet_border"
             done[rows] = True
@@ -652,6 +732,33 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED, *,
     status[left & structure_marker] = 'structure_marker_only'
     status[left & ~structure_marker & P.any(axis=1)] = 'shared_marker_only'
     status[left & ~P.any(axis=1)] = 'no_marker_above_background'
+    # Pattern cell types (labels kind 'pattern'; owner 2026-11-06, proper literature-supported cell types): a Tissue
+    # cell no compartment claimed, positive for one of the row's named_by markers with every defining marker negative.
+    # A defined combination rule from the labels table, not top-marker naming (current row: Fibroblast from
+    # VIM/CD34/PDPN — the canonical quiescent fibroblast/stellate pattern; SMA detects only the activated subset).
+    for pr in plan['labels'][plan['labels']['kind'] == 'pattern'].itertuples():
+        p_markers = [m for m in RG.split(pr.named_by) if m in ix]
+        if not p_markers:
+            continue
+        mes = left & (status == 'shared_marker_only') & (start == 'Tissue') \
+            & P[:, [ix[m] for m in p_markers]].any(axis=1)
+        rows_f = np.flatnonzero(mes)
+        label[rows_f] = pr.label
+        compartment[rows_f], lineage[rows_f] = pr.compartment, pr.lineage
+        status[rows_f] = ''
+        left[rows_f] = False
+        for i in rows_f:
+            named_by[i] = ';'.join(m for m in p_markers if P[i, ix[m]])
+            tags[i].append(f'{pr.lineage.lower()}_pattern')
+    # An endocrine-object cell the rules leave unnamed is exported as explicit Unclassified, never under its object's
+    # name (owner 2026-11-02: "If the typing is done properly, there should never be unnamed endocrine definitions";
+    # 2026-11-05 revision). Start class, status and tags keep the evidence. A component binding resolves these rows
+    # through its own contract instead.
+    if component is None:
+        unnamed_object = np.isin(label, ('Islet', 'EndocrineCluster', 'EndocrineSingle'))
+        label[unnamed_object] = 'Unclassified'
+        for i in np.flatnonzero(unnamed_object):
+            tags[i].append('endocrine_object_unnamed')
 
     # confirmation
     confirms = {m: RG.split(reg.table.loc[m, 'confirms']) for m in markers} if 'confirms' in reg.table.columns else {}
@@ -661,7 +768,13 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED, *,
     for c in comps:
         info = plan['comp'][c]
         if info['residual']:
-            lab_lineage[(compartment == c) & (label == label_row(plan, c, info['residual'])['label'])] = info['residual']
+            res_labels = {label_row(plan, c, info['residual'])['label']}
+            for m in info['residual_members']:
+                sub = next((s for lin2, s in reg.lineage_entries(m) if lin2 == info['residual'] and s), '')
+                r2 = label_row(plan, c, f"{info['residual']}:{sub}") if sub else {}
+                if r2:
+                    res_labels.add(r2['label'])
+            lab_lineage[(compartment == c) & np.isin(label, list(res_labels))] = info['residual']
     placed_ok = np.isin(comp_status, PLACED) & (np.isin(lin_status, PLACED) | (lin_status == ''))
     for lin in sorted(set(lab_lineage) - {''}):
         cand = [m for m, ls in confirms.items() if lin in ls]
@@ -697,6 +810,19 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED, *,
     for m in state:
         x = np.log1p(np.clip(np.nan_to_num(d[d.attrs['columns'][m]].to_numpy(float), nan=0.0), 0, None))
         out[f'{m}_pos'] = (x > lv.loc[m, 'level_log']).astype(np.int8)
+    # per-cell modifier permutation (owner 2026-11-06: use all markers for phenotyping or specifying state/process,
+    # consider all permutations, "especially consider important modifying markers such as hla-dr, cd44, gap43, and
+    # NaKATPase"): every state-role marker plus each typing marker the registry flags modifier=yes, in registry order
+    has_mod = 'modifier' in reg.table.columns
+    mods = [m for m in reg.table.index
+            if m in state or (has_mod and reg.table.loc[m, 'modifier'] == 'yes' and m in ix)]
+    if mods:
+        prof = None
+        for m in mods:
+            flag = out[f'{m}_pos'].to_numpy(bool) if m in state else P[:, ix[m]]
+            seg = np.where(flag, f'{m}+', f'{m}-').astype(object)
+            prof = seg if prof is None else prof + seg
+        out['modifier_profile'] = prof
     for j, m in enumerate(markers):
         out[f'pos__{m}'] = P[:, j].astype(np.int8)
         out[f'canary__{m}'] = C[:, j].astype(np.int8)
@@ -713,6 +839,12 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED, *,
     if component is not None and not _component_natural:
         out, component_report = CS.apply(run, tag, natural, SC, ix, component,
                                          resolved=out, resolution_target=resolution_target)
+    review_counts = None
+    if review_revision:
+        from review_revision import apply_decisions, reconsider_native
+        decisions = reconsider_native(out, cov, d)
+        out = apply_decisions(out, decisions)
+        review_counts = decisions.disposition.value_counts().to_dict()
     audit = {'image': tag, 'cells': n, 'markers': markers,
              'readings': {m: {'positivity': str(lv.loc[m, 'measurement']),
                               **({'differentiation': str(ld.loc[m, 'measurement'])} if m in diff else {})}
@@ -726,13 +858,15 @@ def classify_image(run: Path, tag: str, endocrine_from: str = ESTABLISHED, *,
              'no_marker_above_background': int((out.status == 'no_marker_above_background').sum()),
              'excluded': {str(k): int(v) for k, v in out.loc[out['label'] == 'Excluded', 'excluded_reason']
                           .value_counts().items()}}
+    if review_counts is not None:
+        audit['review_revision'] = review_counts
     if component_report is not None:
         audit['component_selection'] = component_report
     return out, audit
 
 
-def process(run: Path, tag: str, dest: Path, endocrine_from: str = ESTABLISHED) -> dict:
-    out, audit = classify_image(run, tag, endocrine_from)
+def process(run: Path, tag: str, dest: Path, endocrine_from: str = ESTABLISHED, review_revision: bool = False) -> dict:
+    out, audit = classify_image(run, tag, endocrine_from, review_revision=review_revision)
     out.to_parquet(dest / f'{tag}.parquet', index=False)
     (dest / f'{tag}.json').write_text(json.dumps(audit, indent=1))
     print(f"{tag}: {len(out)} cells, no marker above background {audit['no_marker_above_background']}", flush=True)
@@ -750,10 +884,14 @@ def main() -> int:
     ap.add_argument('--endocrine-from', default=ESTABLISHED, help='the established endocrine typing, under $RUN')
     ap.add_argument('--structure-audit', type=Path, default=None,
                     help='fresh audit directory outside input runs; required automatically for bound structure updates')
+    ap.add_argument('--review-revision', action='store_true',
+                    help='apply the November 20 cluster and fallback rules into a fresh review destination')
     a = ap.parse_args()
     run = a.run.resolve()
     tags = a.images or [r['image_name'] for r in RG.csv.DictReader(RG.COHORT.open())]
     dest = (a.dest or run / 'typing' / 'identity').resolve()
+    if a.review_revision and (dest == run / 'typing' / 'identity' or dest.exists()):
+        ap.error('--review-revision requires a fresh --dest outside the source identity directory')
     binding = SU.validate_calibration(run)
     component = CS.validate(run)
     if component is not None:
@@ -779,7 +917,8 @@ def main() -> int:
             ap.error('Use a fresh structure audit directory outside both input roots')
     dest.mkdir(parents=True, exist_ok=True)
     with ProcessPoolExecutor(min(a.workers, len(tags))) as ex:
-        audits = list(ex.map(process, [run] * len(tags), tags, [dest] * len(tags), [a.endocrine_from] * len(tags)))
+        audits = list(ex.map(process, [run] * len(tags), tags, [dest] * len(tags), [a.endocrine_from] * len(tags),
+                             [a.review_revision] * len(tags)))
     (dest / 'summary.json').write_text(json.dumps(audits, indent=1))
     if component is not None:
         CS.write_audit(run, [audit['component_selection'] for audit in audits])

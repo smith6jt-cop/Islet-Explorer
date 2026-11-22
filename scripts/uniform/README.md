@@ -1,5 +1,11 @@
 # CODEX uniform segmentation and islets
 
+The November 13 rule identifies macrophages by CD68 or CD163 positivity,
+including double-positive cells, within the established immune lineage gates.
+It assigns two types by LGALS3 positivity, Macrophage Gal3⁺ and Macrophage
+Gal3⁻. Historical macrophage labels pool by the same LGALS3 sign.
+See the [typing rulings](../../docs/typing_rulings_ledger.md).
+
 **Current selected-component v2 release:** production `pubapps-2026-11-components-v1`
 is live and verified as of 2026-11-03 02:42 UTC (November 2 local), with all
 15 authenticated-access and 49 browser checks passing. The separate strict-DuckDB
@@ -399,8 +405,16 @@ structures run only inside Tissue.
   T-cell rules (`resolved_by` 'tie_profile_*'; `immune_subtype.py` leaves Imm-T-cell out for it): 486 ties, 423 kept
   (310 -> CD8a Tcell, 112 -> CD4 Tcell, 1 kept another call), 63 retyped (39 Immune, 23 Exocrine, 1 Excluded). No
   "T cell" remains. Review table and profile heatmap: `output/tcell_tie_review_20261027/`.
-- **Macrophages by Gal3.** CD68 or CD163 establishes macrophage in the eligible lineage. Each macrophage with
-  measured Gal3 is Gal3-positive or Gal3-negative. Historical subdivisions pool into these two classes.
+- **Macrophages by marker profile** (owner: "We don't want to get into M1 and M2-like labels, but we can indicate
+  macrophages and LGALS3 as defined in the senior workflow. We can also define CD4+ macrophages", then "Use
+  CD68+CD163+Macrophage_LGALS3+CD4+ with each plus also able to be a minus", and a macrophage is CD68 or CD163). The
+  macrophage rule on this panel is `SUBSTITUTED_RULES['Imm-macrophage']`: CD68 or CD163 >= 0.10, CD3e, ECAD and panCK
+  absent (Senior's needs CD68 or Iba1, and Iba1 is not on this panel). No M1/M2 subtypes are resolved
+  (`IMMUNE_LEVEL3`); each macrophage takes `macrophage_profile` (`codex_typing.macrophage_label`, each marker + at
+  >= 0.10), which `assemble_uniform.py` uses as its label: 12 labels (CD68-CD163- cannot occur). In text the + and -
+  are superscripts. Macrophages 72,041 -> 109,589 (25,212 from Exocrine, 12,192 from Immune, 144 formerly Excluded,
+  all CD68-CD163+); `cd8_to_macro_ratio` counts all twelve. Classify onward reran (v13's calls, refine and immune in
+  `superseded/typing-v13-20261027/`); root `data/development/uniform-20donor-20261027-v14`.
 - **No default class** (owner: "I don't want any more misclassified cells falling through the cracks. The established
   cell typing should classify cells appropriately and there should be no default of any class such as exocrine or
   immune. If typing has 'left over' cells and a check of top markers can't place them, call them by their top marker
@@ -628,7 +642,10 @@ $PY scripts/uniform/assemble_uniform.py --run $OUT --donor-source data/developme
 
 The app reads `object_class` through an app-wide "Endocrine objects" selector (Islet / Cluster). The
 Trajectory tab does not use it: it fits every object with ten or more core cells (`total_cells_core` in
-`barlow_islet_features.csv`), whatever its class.
+`barlow_islet_features.csv`), whatever its class. `barlow_islet_features.csv` carries every label's ratio and count
+in both regions; which of them feed the pseudotime graph is decided when the app fits it (owner, 2026-11-18: the
+endocrine classes in the core only, exocrine in the peri-islet band only, macrophages by Gal3, no QC class;
+`app/shiny_app/docs/trajectory.md`, "Current graph inputs").
 
 ### Production release (data schema 5), 2026-10-22
 

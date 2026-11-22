@@ -214,6 +214,29 @@ def options(reg: RG.Registry, m: str) -> list[tuple[str, str]]:
 
 
 # -- per image --------------------------------------------------------------------------------------------------------
+def lineage_evidence_args() -> dict:
+    """The committed classifier-lineage evidence pins (scripts/uniform/typing/endocrine_lineage_evidence.json).
+
+    Endocrine objects come from the QuPath pixel classifier trained on INS, GCG, SST and CHGA, so their
+    identity is judged by original classifier lineage (the accepted v2 release proof), never by cell-level
+    hormone levels: members all below the level means the level under-calls those cells, not that the object
+    is negative (owner 2026-11-02 and 2026-11-13). The corrected-cell rule stays a recorded diagnostic.
+    Without the pin file the audit falls back to the corrected-cell gate."""
+    path = Path(__file__).resolve().parent / 'endocrine_lineage_evidence.json'
+    if not path.is_file():
+        return {}
+    e = json.loads(path.read_text())
+    if e.get('schema') != 'uniform.endocrine_lineage_evidence/1':
+        raise ValueError('Unsupported endocrine lineage evidence record')
+    root = Path(__file__).resolve().parents[3]
+    return {'classifier_run': root / e['classifier_run'],
+            'classifier_replay': root / e['classifier_replay'],
+            'classifier_replay_sha256': e['classifier_replay_sha256'],
+            'geometry_reference': root / e['geometry_reference'],
+            'geometry_provenance': root / e['geometry_provenance'],
+            'geometry_provenance_sha256': e['geometry_provenance_sha256']}
+
+
 def empty_nulls(out: Path) -> dict:
     """Empty-slide nulls of the markers most cells carry: the EMPTY_NULL_QUANTILE-th percentile of 7.2-um window means
     at least 20 um outside the Tissue outline (typing/empty_area_nulls.csv, written by redsea_cells.py from the same
@@ -546,12 +569,20 @@ def image_pass(out: Path, tag: str, reg_name: tuple, stage: str, chosen: dict, n
             c45 = rate(l, t, nmin)
             t_all, t_iso, _ = isolated_rate(t, mye_all, xy, cut, nmin)
             checks = {'leukocyte_among_t': c45, 't_among_myeloid_all': t_all, 't_among_myeloid': t_iso,
+                      'myeloid_reference_cells': int(mye_all.sum()),
                       'hormone_reference_cells': int(hormone_free.sum())}
             for m in core:
                 r_all, r_iso, _ = isolated_rate(pos[m], hormone_free, xy, cut, nmin)
                 checks[f'{m}_in_hormone_all'], checks[f'{m}_in_hormone'] = r_all, r_iso
+            # The T-among-myeloid cross-check needs a double-positive myeloid reference to measure leakage into;
+            # with fewer than MIN_CELLS_FOR_RATE such cells on an image the check is vacuous there (recorded via
+            # myeloid_reference_cells), and the hormone-leakage and sensitivity gates below still gate the levels.
+            # Levels that cannot be read keep failing (2026-10-28 review); measured 2026-11-13 on T1D_6550, where
+            # the membrane CD68/CD163 double-positive reference holds 5 cells under the revised spillover map
+            # (output/typing_20261112_v21/levels_stop_forensics.json).
+            t_gate = le(t_iso, reg.const('CD3E_AMONG_MYELOID_MAX')) if int(mye_all.sum()) >= nmin else True
             ok = [(c45 >= reg.const('CD45_AMONG_CD3E_MIN')) if np.isfinite(c45) else np.nan,
-                  le(t_iso, reg.const('CD3E_AMONG_MYELOID_MAX'))] + \
+                  t_gate] + \
                  [le(checks[f'{m}_in_hormone'], reg.const('CD45_AMONG_HORMONE_MAX')) for m in core]
             good = ok_all(ok) and all(np.isfinite(lv[m]['level_log']) for m in core)
             oop = np.nanmax([t_iso] + [checks[f'{m}_in_hormone'] for m in core])
@@ -573,7 +604,11 @@ def image_pass(out: Path, tag: str, reg_name: tuple, stage: str, chosen: dict, n
                     in_hormone_all=inh_all, in_hormone=inh)
     elif stage == 'epithelial':
         pops = populations(d, reg, '', fixed, xy, cut, R)
-        for m in [m for m in reg.measured_markers() if reg.positivity_class(m) == 'majority_epithelial']:
+        # State-role markers share the majority positivity_class (most cells carry them) but are modifier flags,
+        # not epithelial identity (owner 2026-11-06: BActin/CD44/KRT14/NaKATPase are state markers on every cell),
+        # so the epithelial in-immune gate does not apply to them; the state stage reads their levels.
+        for m in [m for m in reg.measured_markers() if reg.positivity_class(m) == 'majority_epithelial'
+                  and reg.table.loc[m, 'role'] != 'state']:
             check = reg.table.loc[m, 'check_reference'] or 'leukocyte'
             for meas, method in options(reg, m):
                 lv = level_for(d, reg, m, meas, method, k, nulls.get((tag, m), np.nan))
@@ -649,10 +684,16 @@ def image_pass(out: Path, tag: str, reg_name: tuple, stage: str, chosen: dict, n
                 row(m, meas, method, lv, out_of_place=r_iso, out_of_place_all=r_all, isolated_cells=n_iso,
                     passes=le(r_iso, reg.const('SHARED_OUT_OF_PLACE_MAX')))
     elif stage == 'state':
+        # State modifiers need a level on every image (owner 2026-11-06: +/- on every cell). The background peak
+        # first; where its width is unreadable on some image, the owner's 2026-10-29 direction for these markers
+        # ("just use the ecad methods") applies: the expressing population's lower edge, floored by the
+        # empty-slide null, which reads on every image. Selection keeps the first option that works everywhere.
         for m in reg.markers('state'):
             meas = reg.measurement(m)
             lv = level_for(d, reg, m, meas, 'peak_dense', k, np.nan)
             row(m, meas, 'peak_dense', lv, passes=True)
+            lv = level_for(d, reg, m, meas, 'edge', k, nulls.get((tag, m), np.nan))
+            row(m, meas, 'edge', lv, passes=True)
     elif stage == 'positivity':
         # whole-cell positivity of the markers compared on another measurement (owner 2026-10-30), against the reference
         # cells of the differentiation readings (fixed): gated by the marker's own background check; the checks between
@@ -745,8 +786,14 @@ def select(df: pd.DataFrame, select_on: list[str]) -> pd.DataFrame:
     s['sens_key'] = s['sensitivity'].fillna(-1)
     # whole cell first where it passes (owner 2026-10-28: "whole cell for everything"; "Check them both")
     s['not_whole'] = s['measurement'].astype(str).str.split('|').apply(lambda x: sum(m != 'whole_cell' for m in x))
-    s = s.sort_values(['marker', 'ok', 'not_whole', 'sens_key', 'out_of_place'], ascending=[True, False, True, False, True])
-    return s.drop(columns=['sens_key', 'not_whole'])
+    # final tiebreak: the order an image pass emits a marker's options (its preferred method first, e.g. the
+    # state stage's background peak before its edge fallback), so true ties select deterministically by
+    # preference rather than by the aggregation's alphabetical key order
+    emit = {k: i for i, k in enumerate(map(tuple, df[key].drop_duplicates().to_numpy()))}
+    s['emit_order'] = [emit.get(k, 0) for k in map(tuple, s[key].to_numpy())]
+    s = s.sort_values(['marker', 'ok', 'not_whole', 'sens_key', 'out_of_place', 'emit_order'],
+                      ascending=[True, False, True, False, True, True], kind='stable')
+    return s.drop(columns=['sens_key', 'not_whole', 'emit_order'])
 
 
 def main() -> int:
@@ -858,10 +905,13 @@ def main() -> int:
     lv = final[final['reading'] == 'positivity'][cols]
     lv.to_csv(dest / 'levels.csv', index=False)
     final[final['reading'] == 'differentiation'][cols].to_csv(dest / 'levels_differentiation.csv', index=False)
-    object_audit = audit_endocrine_objects(out, object_audit_dir, levels_path=dest / 'levels.csv', images=tags)
-    print('[endocrine object audit]', json.dumps(object_audit['totals']), flush=True)
+    object_audit = audit_endocrine_objects(out, object_audit_dir, levels_path=dest / 'levels.csv', images=tags,
+                                           **lineage_evidence_args())
+    print('[endocrine object audit]',
+          json.dumps({'mode': object_audit.get('audit_mode'), 'passes': object_audit['passes'],
+                      **object_audit['totals']}), flush=True)
     if not object_audit['passes']:
-        print(f'STOP: endocrine object positivity or membership is inconsistent; see {object_audit_dir}', flush=True)
+        print(f'STOP: endocrine object lineage or membership is inconsistent; see {object_audit_dir}', flush=True)
     wild = lv.iloc[0:0]
     pd.set_option('display.width', 250)
     print(dec.to_string(index=False))

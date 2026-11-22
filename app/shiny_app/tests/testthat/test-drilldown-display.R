@@ -3,7 +3,8 @@ test_that("drilldown projects unresolved leaves and removes conflicts without ch
   skip_if_not_installed("ggplot2")
   env <- new.env(parent = globalenv())
   defs <- c("PHENOTYPE_RETIRED", "phenotype_keep", "phenotype_retired", "phenotype_is_kept",
-            "phenotype_is_conflict", "UNCLASSIFIED_KEYS", "UNCLASSIFIED_RAW_TO_KEY", "unclassified_collapse")
+            "phenotype_is_conflict", "UNCLASSIFIED_KEYS", "UNCLASSIFIED_RAW_TO_KEY", "unclassified_collapse",
+            "MACROPHAGE_LABEL_PATTERN", "MACROPHAGE_KEY_PATTERN", "is_macrophage_label", "macrophage_profile")
   for (expr in parse(.find_source("R/00_globals.R"))) {
     if (is.call(expr) && identical(expr[[1]], as.name("<-")) && is.symbol(expr[[2]]) &&
         as.character(expr[[2]]) %in% defs) eval(expr, env)

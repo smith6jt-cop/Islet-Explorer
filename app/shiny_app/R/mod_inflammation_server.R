@@ -69,6 +69,7 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
       df <- load_cell_distance()
       shiny::validate(shiny::need(!is.null(df) && nrow(df) > 0,
                     "Cell-distance release artifact not found — rebuild the release data."))
+      df$phenotype <- macrophage_profile(df$phenotype)
       df$donor_status <- factor(as.character(df$donor_status), levels = status_levels)
       df[!is.na(df$donor_status), , drop = FALSE]
     })
@@ -268,7 +269,7 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
                 length(e$group), e$n_tested, if (e$n_tested == 1) "" else "s"),
         if (e$n_dropped > 0) sprintf(", %d dropped by filterByExpr%s",
                                      e$n_dropped, if (length(e$dropped))
-                                       paste0(" (visible classes: ", paste(e$dropped, collapse = ", "), ")") else "") else "",
+                                       paste0(" (visible classes: ", paste(phenotype_text(e$dropped), collapse = ", "), ")") else "") else "",
         sprintf(". Common dispersion %.3f (BCV %.2f).", e$dispersion, sqrt(e$dispersion)),
         tags$br(),
         tags$span(style = "color: #888;",
@@ -282,7 +283,7 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
       e <- edger_display()
       r <- e$res
       data.frame(
-        `Cell type` = r$cell_type,
+        `Cell type` = phenotype_text(r$cell_type),
         `log2FC` = sprintf("%.2f", r$logFC),
         `logCPM` = sprintf("%.1f", r$logCPM),
         `p` = format_p_value(r$PValue),
@@ -299,7 +300,7 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
       r$sig <- ifelse(r$FDR < 0.05,
                       ifelse(r$logFC > 0, "Up (FDR<0.05)", "Down (FDR<0.05)"), "NS")
       r$hover <- sprintf("%s<br>log2FC: %.2f<br>p: %s<br>FDR: %s",
-                         r$cell_type, r$logFC,
+                         phenotype_text(r$cell_type), r$logFC,
                          format_p_value(r$PValue), format_p_value(r$FDR))
       g <- ggplot(r, aes(x = logFC, y = neglog10, colour = sig, text = hover)) +
         geom_hline(yintercept = -log10(0.05), linetype = "dashed", colour = "#999") +
@@ -361,7 +362,7 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
       sel <- intersect(INFLAM_DEFAULT_PHENOTYPES, avail)
       if (!length(sel)) sel <- head(avail, 5)
       checkboxGroupInput(ns("infil_phenos"), "Phenotypes",
-                         choices = avail, selected = sel, inline = TRUE)
+                         choices = phenotype_choices_named(avail), selected = sel, inline = TRUE)
     })
 
     # Steenbuck et al.: score 1 inside the islet, 1/d outside, normalized by the
@@ -535,7 +536,7 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
       t <- infil_tests()
       fmt <- function(x) ifelse(is.na(x), "—", formatC(x, format = "g", digits = 3))
       data.frame(
-        Phenotype = paste0(t$phenotype, ifelse(t$in_family, "", " \u2021")),
+        Phenotype = paste0(phenotype_text(t$phenotype), ifelse(t$in_family, "", " \u2021")),
         ND = fmt(t$ND), `Aab+` = fmt(t$`Aab+`), T1D = fmt(t$T1D),
         `KW p` = format_p_value(t$p_kw),
         `KW q` = ifelse(is.na(t$q_kw), "n/a \u2021", format_p_value(t$q_kw)),
@@ -608,7 +609,7 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
       s <- infil_selected()
       s$phenotype <- factor(s$phenotype, levels = sort(unique(s$phenotype)))
       s$hover <- sprintf("%s<br>%s — donor %s<br>score: %.3g",
-                         s$phenotype, s$donor_status, s$case_id, s$infiltration_score)
+                         phenotype_text(s$phenotype), s$donor_status, s$case_id, s$infiltration_score)
       pal <- donor_colors()
       g <- ggplot(s, aes(x = phenotype, y = infiltration_score,
                          colour = donor_status, text = hover)) +
@@ -617,6 +618,7 @@ inflammation_server <- function(id, prepared, donor_colors = reactive(DONOR_COLO
                      position = position_dodge(width = 0.65), width = 0.5,
                      linewidth = 0.4, show.legend = FALSE) +
         scale_colour_manual(values = pal, name = NULL, drop = FALSE) +
+        scale_x_discrete(labels = phenotype_text) +
         labs(x = NULL, y = "Infiltration score (per donor)") +
         theme_islet() +
         theme(legend.position = "bottom",

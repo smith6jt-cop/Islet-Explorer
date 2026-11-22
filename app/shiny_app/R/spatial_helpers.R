@@ -64,7 +64,7 @@ canonical_phenotype_order <- function(extra = character(0)) {
   # Extras pass the same retired-label gate; otherwise a retired label observed
   # in the data (absent from `canon` because it was gated out) came back here.
   extra <- phenotype_keep(unique(as.character(extra[!is.na(extra) & nzchar(extra)])))
-  unique(unclassified_collapse(c(canon, sort(setdiff(extra, canon)))))
+  unique(unclassified_collapse(macrophage_profile(c(canon, sort(setdiff(extra, canon))))))
 }
 
 #' Load per-donor tissue cells with caching

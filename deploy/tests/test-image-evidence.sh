@@ -38,7 +38,10 @@ case "${1:-} ${2:-}" in
     case "${4:-}" in
       "{{.Id}}") printf '%s\n' "${MOCK_INSPECT_IMAGE_ID-${MOCK_IMAGE_ID:?}}" ;;
       *org.opencontainers.image.revision*) printf '%s\n' "${MOCK_GIT_COMMIT:?}" ;;
+      *org.opencontainers.image.version*) printf '%s\n' release ;;
       *org.opencontainers.image.base.name*) printf '%s\n' "${MOCK_BASE_IMAGE:?}" ;;
+      *io.islet-explorer.runtime-layout*) printf '%s\n' split-v1 ;;
+      *io.islet-explorer.runtime-inputs-sha256*) cat "${MOCK_LOG_DIR:?}/runtime-inputs" ;;
       *) echo "unexpected mock inspect format: ${4:-}" >&2; exit 70 ;;
     esac
     exit 0
@@ -46,13 +49,23 @@ case "${1:-} ${2:-}" in
 esac
 if [[ "${1:-}" == build ]]; then
   printf '%s\n' "$*" >> "${MOCK_LOG_DIR:?}/podman-build.log"
+  context="${!#}"
+  [[ ! -e "${context}/app" && -f "${context}/deploy/runtime-inputs.py" ]] || {
+    echo 'build must use a software-only isolated export' >&2; exit 70;
+  }
+  iidfile=""
   while (($#)); do
     if [[ "$1" == --iidfile ]]; then
-      printf '%s\n' "${MOCK_IMAGE_ID:?}" > "$2"
-      exit 0
+      iidfile="$2"
+    elif [[ "$1" == RUNTIME_INPUTS_SHA256=* ]]; then
+      printf '%s\n' "${1#*=}" > "${MOCK_LOG_DIR:?}/runtime-inputs"
     fi
     shift
   done
+  if [[ -n "${iidfile}" ]]; then
+    printf '%s\n' "${MOCK_IMAGE_ID:?}" > "${iidfile}"
+    exit 0
+  fi
   echo "mock build did not receive --iidfile" >&2
   exit 64
 fi
@@ -120,7 +133,11 @@ cat > "${mock_bin}/git" <<'MOCK'
 set -euo pipefail
 case " $* " in
   *" status --porcelain --untracked-files=all "*) exit 0 ;;
-  *" rev-parse HEAD "*) printf '%s\n' "${MOCK_GIT_COMMIT:?}"; exit 0 ;;
+  *" rev-parse --verify HEAD^{commit} "*) printf '%s\n' "${MOCK_GIT_COMMIT:?}"; exit 0 ;;
+  *" archive "*)
+    tar -C "${MOCK_ARCHIVE_ROOT:?}" --exclude=node_modules --exclude=__pycache__ \
+      -cf - deploy scripts/install_shiny_deps.R
+    exit 0 ;;
 esac
 echo "unexpected mock git invocation: $*" >&2
 exit 70
@@ -176,10 +193,10 @@ image_hex="$(printf 'a%.0s' {1..64})"
 image_id="sha256:${image_hex}"
 safe_name="sha256_${image_hex}"
 commit="$(printf 'b%.0s' {1..40})"
-base_digest="$(printf 'c%.0s' {1..64})"
-base_image="docker.io/rocker/shiny@sha256:${base_digest}"
+base_image="$(python3 "${repo_root}/deploy/runtime-inputs.py" --base-image "${repo_root}")"
 registry_digest="sha256:$(printf 'e%.0s' {1..64})"
 scan_dir="${work_dir}/scan-pass"
+export MOCK_ARCHIVE_ROOT="${repo_root}"
 
 env PATH="${mock_bin}:${PATH}" MOCK_LOG_DIR="${mock_log}" MOCK_IMAGE_ID="${image_id}" \
   "${repo_root}/deploy/scan-image.sh" "${image_id}" "${scan_dir}"
@@ -243,7 +260,23 @@ expect_status 64 "${repo_root}/deploy/build-image.sh" \
   --tag local/test:release --version release \
   --base-image "${base_image}"
 
-# A wrong or unusable base must fail before the expensive build and before any
+# A valid digest that disagrees with the committed base lock must fail before
+# any Podman probe/build, even when that other image is locally available.
+cp -- "${mock_log}/podman-run.log" "${work_dir}/runs-before-wrong-base.log"
+expect_status 65 env PATH="${mock_bin}:${PATH}" MOCK_LOG_DIR="${mock_log}" \
+  MOCK_IMAGE_ID="${image_id}" MOCK_GIT_COMMIT="${commit}" \
+  "${repo_root}/deploy/build-image.sh" \
+  --tag local/test:release --version release \
+  --base-image "example.invalid/different@sha256:$(printf 'f%.0s' {1..64})" \
+  --scan-dir "${work_dir}/wrong-locked-base-scan"
+grep -Fq "must match selected revision's deploy/base-image.lock" "${work_dir}/last-command.log" || \
+  fail 'wrong base digest was not rejected against its committed lock'
+cmp -s "${mock_log}/podman-run.log" "${work_dir}/runs-before-wrong-base.log" || \
+  fail 'wrong locked base reached a Podman probe'
+[[ ! -e "${mock_log}/podman-build.log" && ! -e "${work_dir}/wrong-locked-base-scan" ]] || \
+  fail 'wrong locked base reached the build or emitted scan evidence'
+
+# An unusable selected base must fail before the expensive build and before any
 # successful image evidence can be emitted.
 expect_status 65 env PATH="${mock_bin}:${PATH}" MOCK_LOG_DIR="${mock_log}" \
   MOCK_IMAGE_ID="${image_id}" MOCK_GIT_COMMIT="${commit}" MOCK_BASE_FAIL=1 \
@@ -268,6 +301,13 @@ grep -Fq -- "--entrypoint Rscript" "${mock_log}/podman-run.log" || \
   fail "build wrapper did not resolve Rscript through the image PATH"
 grep -Fqx "LOCAL_IMAGE_ID=${image_id}" "${build_scan_dir}/published-image.txt" || \
   fail "build wrapper did not publish immutable local-image evidence"
+grep -Fqx 'RUNTIME_LAYOUT=split-v1' "${build_scan_dir}/published-image.txt" || \
+  fail 'build wrapper did not publish the split runtime layout'
+grep -Eq '^RUNTIME_INPUTS_SHA256=[0-9a-f]{64}$' "${build_scan_dir}/published-image.txt" || \
+  fail 'build wrapper did not publish runtime compatibility inputs'
+if grep -Fq 'tests/parse_check.R' "${mock_log}/podman-run.log"; then
+  fail 'runtime build attempted to parse an embedded app'
+fi
 
 push_scan_dir="${work_dir}/build-push-scan"
 push_tag="registry.example/islet-explorer:release"

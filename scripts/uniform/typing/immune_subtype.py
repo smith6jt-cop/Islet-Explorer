@@ -151,15 +151,14 @@ def main() -> int:
         for name, hit in ((s8, both & (v8 > v4)), (s4, both & (v4 > v8))):
             out.loc[hit, 'immune_subtype'] = name
             out.loc[hit, 'immune_subtype_resolved_by'] = f'higher_of_{m8}_{m4}'
-        # the macrophage label (codex_typing.MACROPHAGE_PROFILE), on every Imm-macrophage cell
-        prof = [m for pair in CT.MACROPHAGE_PROFILE for m in pair]
-        measured = scaled.reindex(columns=prof)
-        out['macrophage_profile'] = ''
-        mac = out['immune_class'].eq('Imm-macrophage')
-        anchor = measured.loc[:, ['CD68','CD163']].gt(0).any(axis=1)
-        valid = mac & anchor & np.isfinite(measured.LGALS3)
-        out.loc[valid, 'macrophage_profile'] = np.where(measured.loc[valid, 'LGALS3'] > 0,
-                                                        'Macrophage_Gal3+', 'Macrophage_Gal3-')
+        # An identified macrophage retains its broad call when Gal3 is unmeasured.
+        mac = out['immune_class'].eq('Imm-macrophage').to_numpy()
+        out['macrophage_profile'] = np.where(mac, 'Macrophage', '')
+        if 'LGALS3' in scaled:
+            gal3 = scaled['LGALS3'].to_numpy()
+            for positive in (True, False):
+                rows = mac & np.isfinite(gal3) & ((gal3 > 0) == positive)
+                out.loc[rows, 'macrophage_profile'] = CT.macrophage_label({'LGALS3': positive})
         out.to_parquet(typ / 'immune' / f'{t}.parquet', index=False)
         summary[t] = {'n_immune': n,
                       'immune_class': {str(k): int(v) for k, v in out['immune_class'].fillna('(no rule fired)')

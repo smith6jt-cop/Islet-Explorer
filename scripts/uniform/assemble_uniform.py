@@ -87,6 +87,7 @@ MARKERS = ['CD31', 'CD8a', 'CD3e', 'SMA', 'CD4', 'CD34', 'HLADR', 'PDPN', 'panCK
 ENDOCRINE_STARTS = ('EndocrineCluster', 'EndocrineSingle')     # an unnamed cell of an object that is its endocrine cells
 NAMED_ENDOCRINE = ('Beta cell', 'Alpha cell', 'Delta cell', 'CHGA+ hormone-negative')
 RESOLVED_COMPONENT_SCHEMA = 'uniform.component_selection/2'
+OVERLAP_COLUMNS = ['crossed_frac_nerve', 'crossed_frac_lymphatic', 'crossed_frac_vessel']
 IDENTITY_COLUMNS = ['object_id', 'label', 'excluded_reason', 'compartment', 'lineage', 'status', 'named_by', 'tags']
 # Registry state flags (currently Ki67_pos) are cell attributes, not additional
 # phenotype labels or columns of the 31-marker embedding input.
@@ -278,6 +279,14 @@ def endocrine_object_metadata(run: Path, report_path: Path | None, rows: list[di
 
 
 # ------------------------------------------------------------------------------------------- the label
+def read_app_identity(run: Path, tag: str, columns: list[str] | None = None,
+                      identity_dir: Path | None = None) -> pd.DataFrame:
+    """Read the saved assignments using current macrophage subclass names."""
+    frame = pd.read_parquet((identity_dir or run / 'typing' / 'identity') / f'{tag}.parquet', columns=columns)
+    frame['label'] = frame['label'].astype(object).replace(CT.LEGACY_MACROPHAGE_LABELS)
+    return frame
+
+
 def endocrine_group(lab: pd.DataFrame, labels: list[str], comp: dict, schema: str | None) -> list[str]:
     """Use the explicit four-name contract for resolved components; preserve historical grouping otherwise."""
     if schema == RESOLVED_COMPONENT_SCHEMA:
@@ -290,15 +299,15 @@ def endocrine_group(lab: pd.DataFrame, labels: list[str], comp: dict, schema: st
     return [x for x in labels if any(lin == 'Endocrine' for _, lin in comp.get(x, ())) or x in ENDOCRINE_STARTS]
 
 
-def label_groups(run: Path, rows: list[dict]) -> dict:
+def label_groups(run: Path, rows: list[dict], identity_dir: Path | None = None) -> dict:
     """The cohort's labels (labels-file order first, then the rest sorted), their tissue-wide frequencies over every
     analysed cell (enrich_z's expectation) and the endocrine, immune and macrophage groups."""
     reg = RG.load()
     lab = ID.labels_table(reg)
     total, comp = pd.Series(dtype=float), {}
     for r in rows:
-        d = pd.read_parquet(run / 'typing' / 'identity' / f"{r['image_name']}.parquet",
-                            columns=['label', 'compartment', 'lineage', 'named_by', 'status'])
+        d = read_app_identity(run, r['image_name'], columns=['label', 'compartment', 'lineage', 'named_by', 'status'],
+                              identity_dir=identity_dir)
         d = d[d['label'] != 'Excluded']
         total = total.add(d['label'].value_counts(), fill_value=0)
         named = (d['status'] == '') & (d['named_by'] != '') & ~d['label'].str.startswith(('Conflict ', 'Doublet'))
@@ -344,7 +353,7 @@ def donor_fields(donors: pd.DataFrame, case: str) -> dict:
 
 
 def build_image(run: Path, out: Path, tag: str, case: str, donors: pd.DataFrame, groups: dict,
-                include_collagen_iv: bool = False) -> dict:
+                include_collagen_iv: bool = False, identity_dir: Path | None = None) -> dict:
     structure_classes = STRUCTURE_CLASSES + (('Collagen IV',) if include_collagen_iv else ())
     t0 = time.time()
     typ = CT.typing_dir(run)
@@ -353,8 +362,9 @@ def build_image(run: Path, out: Path, tag: str, case: str, donors: pd.DataFrame,
     LABELS, ENDOCRINE, IMMUNE, MACROPHAGES = groups['labels'], groups['endocrine'], groups['immune'], groups['macrophages']
     frequencies = groups['frequencies']
     reg = RG.load()
-    ident = pd.read_parquet(typ / 'identity' / f'{tag}.parquet')
-    context = pd.read_parquet(typ / 'context' / f'{tag}.parquet', columns=['object_id', 'qc_analysis_eligible', 'islet_num'])
+    ident = read_app_identity(run, tag, identity_dir=identity_dir)
+    context_fields = ['object_id', 'qc_analysis_eligible', 'islet_num'] + OVERLAP_COLUMNS
+    context = pd.read_parquet(typ / 'context' / f'{tag}.parquet', columns=context_fields)
     lv = pd.read_csv(typ / 'levels.csv')
     lv = lv[lv['image'] == tag].set_index('marker')
     shown = pd.read_csv(typ / 'display_levels.csv')
@@ -365,7 +375,7 @@ def build_image(run: Path, out: Path, tag: str, case: str, donors: pd.DataFrame,
     census = {'image': tag, 'case_id': cid, 'objects_detected': int(len(context)),
               'not_analysis_eligible': int((~context['qc_analysis_eligible']).sum())}
 
-    cells = ident[IDENTITY_COLUMNS].merge(context[['object_id', 'islet_num']], on='object_id', how='left',
+    cells = ident[IDENTITY_COLUMNS].merge(context[['object_id', 'islet_num'] + OVERLAP_COLUMNS], on='object_id', how='left',
                                           validate='one_to_one')
     cells['phenotype'] = cells['label']
     census['excluded'] = int((cells['phenotype'] == 'Excluded').sum())
@@ -375,6 +385,9 @@ def build_image(run: Path, out: Path, tag: str, case: str, donors: pd.DataFrame,
     census['excluded_reasons'] = {str(k): int(v) for k, v in
                                   cells.loc[cells.phenotype == 'Excluded', 'excluded_reason'].value_counts().items()}
     cells = cells[cells['phenotype'] != 'Excluded'].reset_index(drop=True)
+    overlap = cells[OVERLAP_COLUMNS].to_numpy(dtype=float)
+    if not (np.isfinite(overlap) & (overlap >= 0) & (overlap <= 1)).all():
+        raise ValueError(f'{tag}: missing or invalid structure overlap for a released cell')
     cells = cells.merge(raw.rename(columns={'Object ID': 'object_id'}), on='object_id', how='left', validate='one_to_one')
     # D4/D5: each marker on its measurement, above / scaled to the image's own level (display-only level for the
     # markers the typing does not read); the scale's top is the 99.9th percentile over the image's analysed cells
@@ -579,7 +592,7 @@ def build_image(run: Path, out: Path, tag: str, case: str, donors: pd.DataFrame,
                           'cell_region': np.r_[np.repeat('core', len(c)), np.repeat('peri', len(p))],
                           'Cell Area': cells['Cell: Area µm^2'].to_numpy()[ids],
                           'Nucleus Area': cells['Nucleus: Area µm^2'].to_numpy()[ids],
-                          **{flag: cells[flag].to_numpy()[ids] for flag in state_fields}})
+                          **{field: cells[field].to_numpy()[ids] for field in state_fields + OVERLAP_COLUMNS}})
         d = pd.concat([d, pd.DataFrame(X[ids], columns=MARKERS)], axis=1)
         d.to_csv(cell_dir / f'{identity}.csv', index=False)
 
@@ -598,7 +611,7 @@ def build_image(run: Path, out: Path, tag: str, case: str, donors: pd.DataFrame,
 
     tissue_tab = pd.DataFrame({'X_centroid': xy_um[:, 0], 'Y_centroid': xy_um[:, 1], 'phenotype': labels,
                                'cell_region': display_region, 'islet_name': display_name,
-                               **{flag: cells[flag].to_numpy() for flag in state_fields}})
+                               **{field: cells[field].to_numpy() for field in state_fields + OVERLAP_COLUMNS}})
     tissue_tab.to_csv(out / 'donors' / f'{cid}.csv', index=False)
     distance = pd.DataFrame({'case_id': int(cid), 'donor_status': meta['Donor Status'], 'cell_region': display_region,
                              'phenotype': labels, 'signed_dist': signed.astype(np.float32),
@@ -616,7 +629,7 @@ def build_image(run: Path, out: Path, tag: str, case: str, donors: pd.DataFrame,
     membership = pd.DataFrame({'object_id': cells['object_id'], 'case_id': cid, 'phenotype': labels,
                                **{c: cells[c].to_numpy() for c in IDENTITY_COLUMNS[3:]}, 'cell_region': display_region,
                                'islet_name': display_name, 'x_um': xy_um[:, 0], 'y_um': xy_um[:, 1],
-                               **{flag: cells[flag].to_numpy() for flag in state_fields}})
+                               **{field: cells[field].to_numpy() for field in state_fields + OVERLAP_COLUMNS}})
     membership.to_parquet(out / 'cell_types' / f'{cid}.parquet', index=False)
     in_single = cells['islet_num'].astype(str).str.startswith('Single_').to_numpy()
     census.update(objects=len(objs), objects_paired=len(obs), tissue_area_mm2=tissue.area * PX ** 2 / 1e6,
@@ -675,12 +688,45 @@ def main() -> int:
                     help='include current all-tissue Collagen IV geometry and independent structural endpoints')
     ap.add_argument('--endocrine-object-audit', type=Path,
                     help='passing classifier-lineage object proof; required for resolved component v2')
+    ap.add_argument('--review-identity-dir', type=Path, help='UUID-reconciled, review-only candidate identities')
     a = ap.parse_args()
     out, reports = a.output.resolve(), a.report_root.resolve()
     if out.exists() or reports.exists():
         raise FileExistsError('use fresh output and report roots')
     rows = CT.cohort_rows()
     component_selection = component_selection_metadata(a.run)
+    identity_dir = (a.review_identity_dir or CT.typing_dir(a.run) / 'identity').resolve()
+    typing_source = 'typing/identity (identity.py)'
+    terminal_policy = {}
+    if a.review_identity_dir:
+        if component_selection:
+            raise ValueError('Review identities require a run independent of component-selection bindings')
+        typing_source = f'review candidate from {identity_dir}'
+        for row in rows:
+            tag = row['image_name']
+            cols = ['object_id', 'start_class', 'excluded_reason', 'label']
+            base = pd.read_parquet(CT.typing_dir(a.run) / 'identity' / f'{tag}.parquet', columns=cols)
+            trial = pd.read_parquet(identity_dir / f'{tag}.parquet', columns=cols)
+            final_review = (identity_dir.parent / 'terminal_classes.json').is_file()
+            if final_review:
+                from resolve_tissue_calls import TERMINAL, REASON, CONFLICT
+                policy = json.loads((identity_dir.parent / 'terminal_classes.json').read_text())
+                terminal_policy = policy
+                allowed = TERMINAL - set(policy.get('retired_phenotypes', []))
+                if set(trial.label) - allowed:
+                    raise ValueError(f'{tag}: review contains unapproved terminal cell types')
+                issued = pd.read_parquet(identity_dir.parent / 'assignments.parquet',
+                                         columns=['object_id','destination'], filters=[('image','==',tag)])
+                newly_excluded = ~base.label.eq('Excluded') & trial.label.eq('Excluded')
+                expected = set(issued.loc[issued.destination.eq(CONFLICT), 'object_id'])
+                if (set(trial.loc[newly_excluded, 'object_id']) != expected or
+                        not trial.loc[newly_excluded, 'excluded_reason'].eq(REASON).all()):
+                    raise ValueError(f'{tag}: new review exclusions differ from the cell decisions')
+                trial = trial.copy()
+                trial.loc[newly_excluded, ['label','excluded_reason']] = base.loc[newly_excluded, ['label','excluded_reason']]
+            same_exclusions = base.pop('label').eq('Excluded').equals(trial.pop('label').eq('Excluded'))
+            if not same_exclusions or base.object_id.duplicated().any() or not base.equals(trial):
+                raise ValueError(f'{tag}: review UUIDs, start classes or exclusions differ from the run')
     object_audit = endocrine_object_metadata(a.run, a.endocrine_object_audit, rows, component_selection)
     generation = SG.provenance(a.run)
     if generation is not None:
@@ -707,12 +753,12 @@ def main() -> int:
     for d in ('cells', 'donors', 'gson', 'cell_types', 'images'):
         (out / d).mkdir(parents=True)
     reports.mkdir(parents=True)
-    groups = label_groups(a.run, rows)
+    groups = label_groups(a.run, rows, identity_dir)
     LABELS, ENDOCRINE, freqs = groups['labels'], groups['endocrine'], groups['frequencies']
     results = {}
     with ProcessPoolExecutor(a.workers) as pool:
         futs = {r['image_name']: pool.submit(build_image, a.run, out, r['image_name'], r['case_id'], donors, groups,
-                                             a.include_collagen_iv)
+                                             a.include_collagen_iv, identity_dir)
                 for r in rows}
         for t, f in futs.items():
             results[t] = f.result()
@@ -762,12 +808,14 @@ def main() -> int:
     head = subprocess.run(['git', '-C', str(REPO), 'rev-parse', 'HEAD'], capture_output=True, text=True).stdout.strip()
     combined.uns['data_provenance'] = {'builder': 'scripts/uniform/assemble_uniform.py', 'git_commit': head,
                                       'run': str(a.run.resolve()),
-                                      'cell_typing': 'final typing run (typing/identity, identity.py)',
+                                      'cell_typing': typing_source if a.review_identity_dir else 'final typing run (typing/identity, identity.py)',
                                       'donor_source': str(a.donor_source.resolve()),
                                       'donor_metadata': str(md_path.resolve())}
     combined.write_h5ad(out / 'islet_explorer.h5ad', compression='gzip')
     trajectory.write_h5ad(out / 'adata_ins_root.h5ad', compression='gzip')
-    pd.DataFrame([r for t in order for r in results[t]['features']]).to_csv(out / 'barlow_islet_features.csv', index=False)
+    from build_trajectory_overlap_inputs import augment
+    feature_table = pd.DataFrame([r for t in order for r in results[t]['features']])
+    augment(feature_table, out / 'cells').to_csv(out / 'barlow_islet_features.csv', index=False)
     pd.DataFrame([r for t in order for r in results[t]['lookup']]).to_csv(out / 'islet_spatial_lookup.csv', index=False)
     pd.concat([results[t]['distance'] for t in order]).to_csv(out / 'cell_distance.csv', index=False)
     pd.concat([results[t]['kde'] for t in order]).to_csv(out / 'signed_distance_kde.csv', index=False)
@@ -791,7 +839,11 @@ def main() -> int:
         (out / 'images' / img.name).symlink_to(target)
         images.append({'image': img.name, 'source': str(target), 'bytes': target.stat().st_size})
     (out / 'image_sources.json').write_text(json.dumps(images, indent=2) + '\n')
-    (out / 'protein_phenotype_rules.csv').write_text((HERE / 'app_phenotype_rules.csv').read_text())
+    reviewed_subtypes = 'T cell' in terminal_policy.get('retired_phenotypes', [])
+    rule_file = 'app_v27_phenotype_rules.csv' if reviewed_subtypes else 'app_phenotype_rules.csv'
+    if reviewed_subtypes and set(pd.read_csv(HERE / rule_file).label) != set(LABELS):
+        raise ValueError('Published v27 rules and final phenotype inventory differ')
+    shutil.copyfile(HERE / rule_file, out / 'protein_phenotype_rules.csv')
     if a.include_collagen_iv:
         # Recheck before publication as assembly can take long enough for inputs to change in another process.
         structure_metrics.validate_manifest(a.run, [r['image_name'] for r in rows])
@@ -822,7 +874,7 @@ def main() -> int:
                                   'Unclassified and object classes are not endocrine'
                                   if component_selection and component_selection['schema'] == RESOLVED_COMPONENT_SCHEMA
                                   else 'agent choice 2026-10-29 (module docstring); owner review pending'),
-           'cell_typing': 'typing/identity (identity.py)', 'positivity': 'per-image level, typing/levels.csv',
+           'cell_typing': typing_source, 'positivity': 'per-image level, typing/levels.csv',
            'cell_states': cell_state_metadata(results),
            'measurements': {m: str(v) for m, v in pd.read_csv(CT.typing_dir(a.run) / 'levels.csv')
                             .groupby('marker')['measurement'].agg(lambda x: '/'.join(sorted(set(x)))).items()},
@@ -837,11 +889,16 @@ def main() -> int:
            'embedding_objects': cdiag['objects'], 'donor_correction': 'none',
            'protein_embedding_donor_correction': 'harmony', 'scvi_required': False, 'git_commit': head,
            'run': str(a.run.resolve()), 'levels_sha256': sha256(CT.typing_dir(a.run) / 'levels.csv'),
-           'identity_sha256': {r['image_name']: sha256(CT.typing_dir(a.run) / 'identity' / f"{r['image_name']}.parquet")
+           'identity_sha256': {r['image_name']: sha256(identity_dir / f"{r['image_name']}.parquet")
                                for r in rows},
            'cells_analysed': int(census.analysed.sum()), 'cells_excluded': int(census.excluded.sum()),
            'cells_not_analysis_eligible': int(census.not_analysis_eligible.sum()),
            'donor_metadata': str(md_path.resolve()), 'donor_metadata_sha256': sha256(md_path)}
+    if reviewed_subtypes:
+        rel['review_schema'] = 'uniform.terminal_typing/27'
+        rel['terminal_classes'] = terminal_policy
+        rel['status'] = 'reviewed_terminal_typing'
+        rel['label_groups_basis'] = 'Reviewed terminal cell identities across the cohort'
     if component_selection is not None:
         rel['status'] = component_selection['status']
         rel['release_ready'] = False

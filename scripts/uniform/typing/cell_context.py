@@ -240,9 +240,16 @@ def main() -> int:
     if generation is not None:
         import calibration_context as CC
         import structure_update as SU
-        CC.validate(a.out, tags, require_bound=True)
-        if SU.validate_calibration(a.out) is None:
-            ap.error('Pin the explicit baseline with structure_update.py before changing Lymphatic context.')
+        if SU.generation_contract(a.out) is not None:
+            # A full-recalibration generation (2026-11-06): context may (re)generate only before identities
+            # exist; the run self-pins its fresh context afterward, so no pre-existing pin is required here.
+            if (a.out / 'typing' / 'identity').exists() and any((a.out / 'typing' / 'identity').iterdir()):
+                ap.error('A full-generation contract permits context regeneration only before identities exist.')
+            CC.validate(a.out, tags, require_bound=False)
+        else:
+            CC.validate(a.out, tags, require_bound=True)
+            if SU.validate_calibration(a.out) is None:
+                ap.error('Pin the explicit baseline with structure_update.py before changing Lymphatic context.')
     import_structures(a.out, rows)
     with ProcessPoolExecutor(a.workers) as pool:
         list(pool.map(process, [a.out] * len(tags), tags))

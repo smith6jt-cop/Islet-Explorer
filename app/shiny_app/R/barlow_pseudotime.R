@@ -20,10 +20,10 @@
 #                                         to precompute)
 #   "cosine distance and 15 nearest neighbors"  -> DiffusionMap(k = 15, distance = "cosine")
 #   "filtering out islets that had fewer than ten total cells"
-#                                      -> the app's cell-count range, which is
-#                                         why the trajectory is recomputed rather than filtered
+#                                      -> the app fits a new graph for its selected
+#                                         core-cell range (default four or more)
 #   "pseudotemporal distance from the centroid of non-T1D islets"
-#                                      -> see `root` below
+#                                      -> app adaptation uses a donor-supported ND peripheral root
 #
 # NOT ported: their step of "temporarily omitting 25 islets positioned in the
 # middle of the map" to isolate the inflamed path. That is a hand-picked,
@@ -41,12 +41,92 @@
 
 barlow_features_path <- function() data_path("barlow_islet_features.csv")
 
+# ---------------------------------------------------------------------------
+# Graph inputs: the current typing format (owner, 2026-11-18)
+# ---------------------------------------------------------------------------
+# "The trajectory/pseudotime needs to be updated to the current typing format.
+#  There should not be peri-islet features for the endocrine classes, core
+#  exocrine, or 12 macrophage subtypes. Also the qc classes should not be
+#  entered into the pseudotime pipeline."
+#
+#   endocrine classes   core only
+#   exocrine classes    peri-islet band only
+#   macrophages         the two Gal3 subclasses (macrophage_profile()); the twelve
+#                       marker-profile labels of an older root are summed by Gal3 sign
+#   QC classes          never: Conflict, Doublet suspected, Tissue, Unclassified and
+#                       the unresolved lineage residuals (names(UNCLASSIFIED_RAW_TO_KEY))
+#   every other named class   core and peri-islet band
+#
+# python/paga_pseudotime.py applies the same rules for the scanpy path; a pipeline
+# test compares its label sets with the ones used here.
+TRAJECTORY_INPUT_POLICY <- "phenotype-passthrough/2026-11-19"
+TRAJECTORY_ENDOCRINE_CLASSES <- c("Beta cell", "Alpha cell", "Delta cell", "CHGA+ hormone-negative")
+# The uniform roots' Exocrine, its Acinar / Ductal split in the November revision, the frozen typing's Ductal.
+TRAJECTORY_EXOCRINE_CLASSES <- c("Exocrine", "Acinar cell", "Ductal cell", "Ductal")
+
+#' The current-format class of a data label: a macrophage label becomes its Gal3 subclass.
+trajectory_class <- function(labels) macrophage_profile(as.character(labels))
+
+#' Whether a class counted in a region ("core" or "peri") is a graph input.
+trajectory_feature_allowed <- function(region, labels) {
+  cls <- trajectory_class(labels)
+  qc <- phenotype_is_conflict(cls) | cls %in% c(names(UNCLASSIFIED_RAW_TO_KEY),
+    "Panel undected", "Conflicting markers - excluded")
+  !qc & !(cls %in% PHENOTYPE_RETIRED) &
+    (!(cls %in% TRAJECTORY_ENDOCRINE_CLASSES) | region == "core") &
+    (!(cls %in% TRAJECTORY_EXOCRINE_CLASSES) | region == "peri")
+}
+
+#' The stored core_/peri_ ratio columns that feed the graph, in file order. Twelve-label macrophage columns
+#' are returned as stored; barlow_trajectory_inputs() sums them by Gal3 sign.
 barlow_trajectory_features <- function(columns) {
   features <- grep("^(core|peri)_", columns, value = TRUE)
-  labels <- sub("^(core|peri)_", "", features)
-  # Display consolidation must not add unresolved residuals to the fitted graph.
-  computational_retired <- c(PHENOTYPE_RETIRED, "T cell", "Hematopoietic CD45+", "Hematopoietic CD45-")
-  features[labels %in% phenotype_keep(labels) & !(labels %in% computational_retired)]
+  features[trajectory_feature_allowed(sub("_.*$", "", features), sub("^(core|peri)_", "", features))]
+}
+
+#' The graph-input matrix of a feature table, one named column per class and region.
+#'
+#' A class with one stored column is used as stored, so its values and the stored endocrine denominator are
+#' unchanged. A class with several source labels (the pooled macrophages) is log1p(summed count / endocrine
+#' cells) from the n_core_ / n_peri_ counts: the log of a sum is not the sum of the logs.
+barlow_phenotype_inputs <- function(d) {
+  columns <- barlow_trajectory_features(names(d))
+  cls <- trajectory_class(sub("^(core|peri)_", "", columns))
+  region <- sub("_.*$", "", columns)
+  region[!cls %in% c(TRAJECTORY_ENDOCRINE_CLASSES, TRAJECTORY_EXOCRINE_CLASSES)] <- "combined"
+  name <- paste0(region, "_", cls)
+  features <- unique(name)
+  num <- function(k) suppressWarnings(as.numeric(d[[k]]))
+  values <- lapply(features, function(f) {
+    src <- columns[name == f]
+    if (identical(src, f)) return(num(f))
+    if (startsWith(f, "combined_")) {
+      labels <- unique(sub("^(core|peri)_", "", src))
+      src <- c(paste0("core_", labels), paste0("peri_", labels))
+    }
+    counts <- paste0("n_", src)
+    missing <- setdiff(c(counts, "n_endocrine_core"), names(d))
+    if (length(missing)) {
+      stop(f, " pools ", length(src), " source labels and needs their counts; missing ",
+           paste(missing, collapse = ", "))
+    }
+    log1p(Reduce(`+`, lapply(counts, num)) / pmax(num("n_endocrine_core"), 1))
+  })
+  M <- if (length(values)) do.call(cbind, values) else matrix(numeric(0), nrow = nrow(d), ncol = 0)
+  colnames(M) <- features
+  M
+}
+
+barlow_trajectory_inputs <- function(d) {
+  counts <- barlow_phenotype_inputs(d)
+  keys <- unlist(lapply(colnames(counts), function(name)
+    paste0(name, "__", c("nerve", "lymphatic", "vessel"))), use.names = FALSE)
+  columns <- paste0("overlap__", keys)
+  if (!all(columns %in% names(d))) stop("Missing phenotype-specific passthrough measurements")
+  raw <- do.call(cbind, lapply(columns, function(k) as.numeric(d[[k]])))
+  if (any(!is.finite(raw) | raw < 0)) stop("Invalid phenotype-specific passthrough totals")
+  colnames(raw) <- keys
+  cbind(counts, log1p(raw / pmax(as.numeric(d[["n_endocrine_core"]]), 1)))
 }
 
 barlow_available <- function() {
@@ -63,13 +143,61 @@ barlow_features <- function() {
   f
 }
 
-#' Recompute Barlow-style pseudotime for a cell-count range.
-#'
-#' Returns a data.frame(islet_id, case_id, donor_status, pseudotime) covering
-#' ONLY the islets in range, or NULL when unavailable. Cached per range.
-BARLOW_FALLBACK_MAX_PROFILES <- 2000L
+BARLOW_ROOT_METHOD <- "Donor-supported ND root at a multiscale diffusion endpoint"
 
-compute_barlow_pseudotime <- function(min_cells = 1, max_cells = NA, object_classes = NULL) {
+barlow_root_distances <- function(ev, eigenvalues, root) {
+  # destiny's DPT[root, ] uses these multiscale distances. Direct evaluation
+  # avoids fitting the branch tree, which the trajectory tab never requests.
+  delta <- sweep(ev, 2, ev[root, ], "-")
+  sqrt(rowSums(sweep(delta, 2, eigenvalues / (1 - eigenvalues), "*")^2))
+}
+
+barlow_peripheral_root <- function(dm, eigenvalues, back, sub) {
+  keep <- is.finite(eigenvalues) & eigenvalues < 0.9994
+  coords <- sweep(dm[, keep, drop = FALSE], 2, eigenvalues[keep] / (1 - eigenvalues[keep]), "*")
+  if (!ncol(coords) || !all(is.finite(coords))) stop("No finite nonstationary diffusion coordinates")
+  nd <- which(sub$donor_status == "ND")
+  if (!length(nd)) stop("No ND objects for root selection")
+  # Search the diameter in blocks to bound memory when small objects are included.
+  n <- nrow(coords)
+  norm2 <- rowSums(coords^2)
+  best <- 0
+  ends <- NULL
+  for (start in seq.int(1L, n, by = 128L)) {
+    rows <- seq.int(start, min(n, start + 127L))
+    d2 <- outer(norm2, norm2[rows], "+") - 2 * tcrossprod(coords, coords[rows, , drop = FALSE])
+    pos <- arrayInd(which.max(d2), dim(d2))
+    if (d2[pos] > best) {
+      best <- d2[pos]
+      ends <- sort(c(pos[1L], rows[pos[2L]]))
+    }
+  }
+  if (is.null(ends) || ends[1L] == ends[2L]) stop("No distinct diffusion endpoints")
+  distances <- lapply(ends, function(e) sqrt(rowSums(sweep(coords, 2, coords[e, ], "-")^2)))
+  k <- max(1L, ceiling(0.05 * nrow(coords)))
+  nearby <- lapply(distances, function(d) head(order(d, seq_len(n)), k))
+  local_nd <- lapply(nearby, function(ids) nd[back[nd] %in% ids])
+  support <- vapply(local_nd, function(i) length(unique(sub$case_id[i])), integer(1))
+  proximity <- vapply(distances, function(d) {
+    stats::median(tapply(d[back[nd]], sub$case_id[nd], min))
+  }, numeric(1))
+  side <- order(-support, proximity, ends)[1]
+  idx <- local_nd[[side]]
+  if (!length(idx)) {
+    idx <- nd
+    center <- coords[ends[side], ]
+  } else {
+    local <- unique(data.frame(profile = back, donor = sub$case_id)[back %in% nearby[[side]], ])
+    donor_centers <- lapply(split(local$profile, local$donor), function(i) colMeans(coords[i, , drop = FALSE]))
+    center <- colMeans(do.call(rbind, donor_centers))
+  }
+  distance <- rowSums(sweep(coords[back[idx], , drop = FALSE], 2, center)^2)
+  row <- idx[order(distance, as.character(sub$islet_id[idx]), method = "radix")[1]]
+  list(profile = back[row], islet_id = as.character(sub$islet_id[row]), donor = as.character(sub$case_id[row]))
+}
+
+#' Refit the destiny fallback for the selected range and cache the object-level DPT.
+compute_barlow_pseudotime <- function(min_cells = TRAJ_MIN_CELLS, max_cells = NA, object_classes = NULL) {
   mc <- suppressWarnings(as.numeric(min_cells))
   if (!is.finite(mc) || mc < 1) mc <- 1
   xc <- suppressWarnings(as.numeric(max_cells))
@@ -87,11 +215,21 @@ compute_barlow_pseudotime <- function(min_cells = 1, max_cells = NA, object_clas
   # A diffusion map on a handful of points is meaningless; fail closed.
   if (nrow(sub) < 50) return(NULL)
 
-  # Use the same retained phenotype set as Scanpy and the app selectors.
-  # Stored ratios keep their original endocrine denominator, including the
-  # residual Endocrine category; only graph input columns are excluded here.
-  feat <- barlow_trajectory_features(names(sub))
-  M <- as.matrix(sub[, feat, with = FALSE])
+  # The same graph inputs as the scanpy path (current typing format, above). Stored ratios keep their
+  # endocrine denominator; only the choice and pooling of input columns is made here.
+  M <- tryCatch(barlow_trajectory_inputs(sub), error = function(e) NULL)
+  if (is.null(M)) {
+    islet_log_event("barlow_pseudotime_failed")
+    return(NULL)
+  }
+  # An object with no cell of any input class has no make-up to place; it gets no pseudotime.
+  placed <- rowSums(M != 0, na.rm = TRUE) > 0
+  n_without_inputs <- sum(!placed)
+  if (n_without_inputs) {
+    sub <- sub[placed, , drop = FALSE]
+    M <- M[placed, , drop = FALSE]
+    if (nrow(sub) < 50) return(NULL)
+  }
   keep_col <- apply(M, 2, function(v) is.finite(stats::sd(v)) && stats::sd(v) > 0)
   M <- M[, keep_col, drop = FALSE]
   if (ncol(M) < 3) return(NULL)
@@ -104,14 +242,6 @@ compute_barlow_pseudotime <- function(min_cells = 1, max_cells = NA, object_clas
   uniq <- !duplicated(dup_key)
   Mu <- M[uniq, , drop = FALSE]
   back <- match(dup_key, dup_key[uniq])
-  # destiny's DPT is dense in the number of profiles: on all 3,773 profiles of the uniform root's 9,496 objects
-  # it ran past ten minutes and, in the app, overflowed R's C stack (2026-10-17). The scanpy path handles any
-  # selection in seconds; this fallback declines a large one rather than hang or crash the session.
-  if (nrow(Mu) > BARLOW_FALLBACK_MAX_PROFILES) {
-    islet_log_event("barlow_fallback_too_large")
-    return(NULL)
-  }
-
   res <- tryCatch({
     set.seed(1)  # destiny's eigendecomposition is randomized; pin it so the
                  # axis does not move between two runs at the same threshold.
@@ -120,33 +250,11 @@ compute_barlow_pseudotime <- function(min_cells = 1, max_cells = NA, object_clas
     ev <- as.matrix(destiny::eigenvectors(dm))
     if (nrow(ev) != nrow(Mu)) stop("destiny returned ", nrow(ev),
                                    " eigenvector rows for ", nrow(Mu), " inputs")
-    su <- sub[uniq, , drop = FALSE]
-
-    # ROOT: "pseudotemporal distance from the centroid of non-T1D islets".
-    # The centroid itself is not an islet, and DPT needs an actual vertex, so the
-    # root is the ND islet NEAREST that centroid -- the medoid of the healthy
-    # cloud. Candidates are restricted to ND: taking the globally nearest islet
-    # let an Aab+ islet win at several thresholds, which anchors the axis in the
-    # wrong group. (`non-T1D` is read as their "no T1D" control group, i.e. our
-    # ND, not "every islet that is not from a T1D donor". Their groups are listed
-    # as "no T1D, AA+, T1D", so AA+ is its own stage.)
-    nd <- which(su$donor_status == "ND")
-    if (!length(nd)) stop("no ND islets above this threshold; no root available")
-    cen <- colMeans(ev[nd, 1:3, drop = FALSE])
-    root <- nd[which.min(sqrt(rowSums(sweep(ev[nd, 1:3, drop = FALSE], 2, cen)^2)))]
-
-    ptu <- destiny::DPT(dm, tips = root)[root, ]
+    root <- barlow_peripheral_root(ev, destiny::eigenvalues(dm), back, sub)
+    ptu <- barlow_root_distances(ev, destiny::eigenvalues(dm), root$profile)
     pt <- ptu[back]
-
-    # Retain the beta-ratio orientation convention. DPT is a root distance,
-    # invariant to eigenvector sign; this convention does not guarantee a
-    # monotonic insulin relationship or comparability between fitted ranges.
-    bc <- suppressWarnings(as.numeric(sub[["core_Beta cell"]]))
-    fin <- is.finite(pt) & is.finite(bc)
-    if (sum(fin) > 10 &&
-        stats::cor(pt[fin], bc[fin], method = "spearman") > 0) {
-      pt <- max(pt[is.finite(pt)], na.rm = TRUE) - pt
-    }
+    root_id <- root$islet_id
+    root_donor <- root$donor
 
     data.frame(
       islet_id     = as.character(sub$islet_id),
@@ -159,6 +267,13 @@ compute_barlow_pseudotime <- function(min_cells = 1, max_cells = NA, object_clas
     islet_log_event("barlow_pseudotime_failed")
     NULL
   })
+  if (!is.null(res)) {
+    attr(res, "root_method") <- BARLOW_ROOT_METHOD
+    attr(res, "root_donor") <- root_donor
+    attr(res, "root_islet_id") <- root_id
+    attr(res, "features") <- colnames(M)
+    attr(res, "n_without_inputs") <- n_without_inputs
+  }
 
   .barlow_cache[[key]] <- res
   res
@@ -191,8 +306,18 @@ compute_barlow_pseudotime <- function(min_cells = 1, max_cells = NA, object_clas
 
 BARLOW_RATIO_REGIONS <- c("Core + Peri" = "both", "Core only" = "core", "Peri only" = "peri")
 
+# Endocrine subtypes describe core composition. The all-endocrine core
+# numerator duplicates the denominator. Keep these display rules local to
+# trajectory ratios; the underlying compartment counts remain available.
+barlow_ratio_choices <- function(types, region) {
+  if (length(region) != 1L || !region %in% BARLOW_RATIO_REGIONS) return(character())
+  excluded <- "All endocrine cells"
+  if (region != "core") excluded <- c(excluded, TRAJECTORY_ENDOCRINE_CLASSES, "Endocrine")
+  setdiff(types, excluded)
+}
+
 #' Cell types available as ratio features, in a stable display order.
-barlow_ratio_types <- function(markers = character(0)) {
+barlow_ratio_types <- function(markers = character(0), region = "core") {
   d <- barlow_features()
   if (is.null(d)) return(character(0))
   all <- sub("^n_core_", "", grep("^n_core_", names(d), value = TRUE))
@@ -205,7 +330,8 @@ barlow_ratio_types <- function(markers = character(0)) {
   kept <- sort(unique(phenotype_collapse(phenotype_keep(all), markers)))
   # The group aggregates ("All macrophages"; owner, 2026-10-27), summed from all the members' counts, general
   # classes ("T cell", "Endocrine") included.
-  c(phenotype_aggregates_for(unique(phenotype_collapse(all, markers))), kept)
+  types <- c(phenotype_aggregates_for(unique(phenotype_collapse(all, markers))), kept)
+  barlow_ratio_choices(types, region)
 }
 
 #' log1p(cells of `type` / endocrine cells in the islet core), per islet.
@@ -215,7 +341,8 @@ barlow_ratio_types <- function(markers = character(0)) {
 #' the rarer types, plain log would drop most of the data off the plot.
 barlow_ratio_values <- function(type, region = "both") {
   d <- barlow_features()
-  if (is.null(d) || !nzchar(type %||% "")) return(NULL)
+  if (is.null(d) || length(type) != 1L || is.na(type) || !nzchar(type) ||
+      !length(barlow_ratio_choices(type, region))) return(NULL)
   # an aggregate or a merged macrophage category sums its data labels (phenotype_members())
   types <- intersect(phenotype_members(type), sub("^n_core_", "", grep("^n_core_", names(d), value = TRUE)))
   cc <- paste0("n_core_", types); pc <- paste0("n_peri_", types)
@@ -237,7 +364,7 @@ barlow_ratio_values <- function(type, region = "both") {
 }
 
 #' Fraction of islets (optionally above a min-cells threshold) at exactly zero.
-traj_ratio_zero_fraction <- function(type, region = "both", min_cells = 1, max_cells = NA) {
+traj_ratio_zero_fraction <- function(type, region = "both", min_cells = TRAJ_MIN_CELLS, max_cells = NA) {
   v <- barlow_ratio_values(type, region)
   if (is.null(v)) return(NA_real_)
   d <- barlow_features()

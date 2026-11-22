@@ -5,7 +5,9 @@ usage() {
   cat <<'EOF'
 Usage: deploy/verify-deployment.sh --url URL [--container NAME]
        [--range-path RELATIVE_OME_TIFF_PATH] [--expected-image IMMUTABLE_REF]
-       [--publish-address IPV4]
+       [--publish-address IPV4] [--expected-app ABS_PATH]
+       [--expected-data ABS_PATH] [--expected-app-sha256 SHA256]
+       [--expected-local-data ABS_PATH]
 
 Checks container health, exclusive publication on one address (the VM loopback
 by default, or the private VM address UFRC's proxy connects to), application
@@ -20,12 +22,20 @@ container_name="islet-explorer"
 range_path=""
 expected_image=""
 publish_address="127.0.0.1"
+expected_app=""
+expected_data=""
+expected_local_data=""
+expected_app_sha256=""
 while (($#)); do
   case "$1" in
     --url) url="${2:?missing value for --url}"; shift 2 ;;
     --container) container_name="${2:?missing value for --container}"; shift 2 ;;
     --range-path) range_path="${2:?missing value for --range-path}"; shift 2 ;;
     --expected-image) expected_image="${2:?missing value for --expected-image}"; shift 2 ;;
+    --expected-app) expected_app="${2:?missing value}"; shift 2 ;;
+    --expected-local-data) expected_local_data="${2:?missing value}"; shift 2 ;;
+    --expected-data) expected_data="${2:?missing value}"; shift 2 ;;
+    --expected-app-sha256) expected_app_sha256="${2:?missing value}"; shift 2 ;;
     --publish-address) publish_address="${2:?missing value for --publish-address}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "ERROR: unknown argument: $1" >&2; usage >&2; exit 64 ;;
@@ -98,6 +108,44 @@ if [[ -n "${expected_image}" ]]; then
   }
 fi
 
+# Inspect actual mounts and labels, not just caller-supplied provenance.
+if [[ -n "${expected_app}" ]]; then
+  [[ "${expected_app}" == /* && "${expected_data}" == /* && "${expected_app_sha256}" =~ ^[0-9a-f]{64}$ ]] || {
+    echo "ERROR: split verification requires app/data paths and app manifest hash." >&2; exit 64;
+  }
+  inspection="$(podman inspect "${container_name}")"
+  python3 -c '
+import json, pathlib, sys
+container = json.loads(sys.argv[1])[0]
+app, data, manifest, local_data = sys.argv[2:]
+expected = {
+  "/srv/islet-explorer/app": app,
+  "/srv/islet-explorer/scripts": str(pathlib.Path(app).parent / "scripts"),
+  "/srv/islet-explorer/data": data,
+  "/srv/islet-explorer/app/shiny_app/www/local_images": str(pathlib.Path(data) / "images"),
+}
+if local_data:
+    for tree in ("geometry", "cells", "spatial"):
+        expected["/srv/islet-explorer/data/" + tree] = str(pathlib.Path(local_data) / tree)
+mounts = {m["Destination"]: m for m in container["Mounts"]}
+for destination, source in expected.items():
+    mount = mounts.get(destination, {})
+    if mount.get("Source") != source or mount.get("RW") is not False:
+        raise SystemExit("ERROR: running mount differs from selected read-only artifact: " + destination)
+for destination in mounts:
+    if destination.startswith(("/srv/islet-explorer/app/", "/srv/islet-explorer/scripts/", "/srv/islet-explorer/data/")) and destination not in expected:
+        raise SystemExit("ERROR: unexpected mount hides app or data files: " + destination)
+if container.get("Config", {}).get("Labels", {}).get("io.islet-explorer.app-manifest-sha256") != manifest:
+    raise SystemExit("ERROR: running app manifest identity differs")
+' "${inspection}" "${expected_app}" "${expected_data}" "${expected_app_sha256}" "${expected_local_data}"
+  podman exec "${container_name}" /bin/sh -ceu '
+    test -r /srv/islet-explorer/app/shiny_app/app.R
+    test ! -w /srv/islet-explorer/app/shiny_app/app.R
+    test ! -w /srv/islet-explorer/app
+    test ! -w /srv/islet-explorer/scripts
+  '
+fi
+
 # Reject every other binding on this port, including a specific other IP or a
 # wildcard alongside the expected listener. Checking only wildcard addresses
 # misses that.
@@ -141,7 +189,7 @@ if [[ -n "${range_path}" ]]; then
   body="$(mktemp)"
   trap 'rm -f -- "${headers}" "${body}"' EXIT
   curl --silent --show-error --max-time 30 \
-    --range 0-15 --dump-header "${headers}" --output "${body}" "${range_url}"
+    --range 0-15 --max-filesize 16 --dump-header "${headers}" --output "${body}" "${range_url}"
   status="$(awk 'toupper($1) ~ /^HTTP\// {code=$2} END {print code}' "${headers}")"
   content_range="$(awk 'tolower($1) == "content-range:" {gsub("\r", ""); sub(/^[^:]+:[[:space:]]*/, ""); print; exit}' "${headers}")"
   bytes="$(wc -c < "${body}" | tr -d '[:space:]')"

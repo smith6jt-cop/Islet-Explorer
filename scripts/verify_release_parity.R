@@ -2,6 +2,7 @@
 # Real-data acceptance, without printing scientific rows, filenames or exceptions.
 # Rscript scripts/verify_release_parity.R --source-root data --image-root PATH \
 #   --release-root PATH --output-prefix /restricted/evidence/release-parity
+# Split release compatibility: also supply --app-commit FULL --data-commit FULL.
 # Omit --release-root for a source preparation report (never a parity pass).
 # Set RETICULATE_PYTHON to the approved interpreter before running this script.
 
@@ -183,6 +184,7 @@ parity_runtime <- function(repo, root) {
   policy_names <- c("PHENOTYPE_RETIRED", "phenotype_keep", "phenotype_is_kept", "phenotype_retired",
                     "phenotype_is_conflict", "phenotype_filter_conflict_columns", "phenotype_partition_labels",
                     "phenotype_filter_rows", "PIXEL_SIZE_UM",
+                    "ISLET_EXCLUDED_DONORS", "islet_canonical_donor_id", "islet_excluded_donors_in",
                     # Resolved 2026-11 component exports retain mutually exclusive Unclassified leaves.
                     # Load the same projection/metric-collapse definitions used by prep_data(), so parity
                     # compares the new canonical aggregate values instead of failing on an unknown helper.
@@ -262,7 +264,88 @@ parity_query_result <- function(expected, actual, kind) {
   result
 }
 
+# Explicit split identities permit any committed application revision to be
+# tested against an independently produced data release. They change provenance
+# checks only: all scientific comparisons and byte hashes below still run.
+parity_split_identity_requested <- function(options) {
+  app <- options$app_commit
+  data <- options$data_commit
+  if (xor(is.null(app), is.null(data))) parity_fail("split_commit_pair_required")
+  if (is.null(app)) return(FALSE)
+  valid <- function(value) is.character(value) && length(value) == 1L &&
+    !is.na(value) && grepl("^[0-9a-f]{40}$", value)
+  if (!valid(app) || !valid(data)) parity_fail("invalid_explicit_commit")
+  if (is.null(options$release_root)) parity_fail("split_release_root_required")
+  TRUE
+}
+
+parity_source_identity <- function(options, validator_commit, validator_dirty,
+                                   manifest, legacy_changed = character()) {
+  split <- parity_split_identity_requested(options)
+  if (split) {
+    if (!identical(options$app_commit, validator_commit)) parity_fail("app_commit_mismatch")
+    if (!identical(options$data_commit, manifest$git_commit)) parity_fail("data_commit_mismatch")
+  } else if (!identical(manifest$git_commit, validator_commit) &&
+             !identical(legacy_changed, "scripts/verify_release_parity.R")) {
+    # Preserve the historical verifier-only correction exception.
+    parity_fail("source_commit_mismatch")
+  }
+  if (!identical(manifest$git_dirty, FALSE) || isTRUE(validator_dirty) ||
+      (split && !identical(validator_dirty, FALSE))) {
+    parity_fail("uncommitted_source_changes")
+  }
+  list(identity_mode = if (split) "independent_app_data" else "legacy",
+       app_git_commit = validator_commit, validator_git_commit = validator_commit,
+       data_producer_git_commit = manifest$git_commit,
+       source_commit_matches = TRUE, source_worktree_clean = TRUE)
+}
+
+parity_producer_prepared <- function(repo, commit, source_root) {
+  if (!is.character(commit) || length(commit) != 1L || is.na(commit) ||
+      !grepl("^[0-9a-f]{40}$", commit)) parity_fail("invalid_producer_commit")
+  # Read the exact producer's committed factory: current policy definitions may
+  # require helpers that did not exist when these Parquets were produced.
+  # Neither the current dirty worktree nor the historical script's main runs.
+  stage <- tempfile("parity-producer-")
+  dir.create(stage)
+  on.exit(unlink(stage, recursive = TRUE, force = TRUE), add = TRUE)
+  archive <- file.path(stage, "source.tar")
+  status <- suppressWarnings(system2("git", c("-C", shQuote(repo), "archive", "--format=tar",
+    paste0("--output=", shQuote(archive)), commit, "app", "scripts"), stdout = FALSE, stderr = FALSE))
+  if (!identical(status, 0L)) parity_fail("producer_export_failed")
+  if (!identical(utils::untar(archive, exdir = stage), 0L)) parity_fail("producer_export_failed")
+  unlink(archive)
+  verifier <- file.path(stage, "scripts", "verify_release_parity.R")
+  if (!file.exists(verifier)) parity_fail("producer_factory_missing")
+  factory <- new.env(parent = globalenv())
+  sys.source(verifier, envir = factory)
+  if (!exists("parity_runtime", envir = factory, inherits = FALSE) ||
+      !is.function(factory$parity_runtime)) parity_fail("producer_factory_missing")
+  env <- factory$parity_runtime(stage, source_root)
+  required <- c("load_master_h5ad", "prep_data", "islet_disconnect_backend")
+  if (!is.environment(env) || !all(vapply(required, function(name) {
+      exists(name, envir = env, inherits = FALSE) && is.function(env[[name]])
+    }, logical(1)))) parity_fail("producer_factory_incompatible")
+  on.exit(env$islet_disconnect_backend(), add = TRUE, after = FALSE)
+  master <- env$load_master_h5ad(env$h5ad_path)
+  if (is.null(master)) parity_fail("producer_h5ad_preparation_failed")
+  list(prepared = env$prep_data(master), producer_commit = commit,
+       producer_factory_sha256 = parity_hash(verifier))
+}
+
+parity_served_prepared <- function(env, root, mode) {
+  if (!mode %in% c("development", "production")) parity_fail("invalid_runtime_mode")
+  previous <- Sys.getenv("ISLET_RUNTIME_MODE", unset = NA_character_)
+  on.exit(if (is.na(previous)) Sys.unsetenv("ISLET_RUNTIME_MODE") else
+    Sys.setenv(ISLET_RUNTIME_MODE = previous), add = TRUE)
+  Sys.setenv(ISLET_RUNTIME_MODE = mode)
+  # Exercise the application entrypoint, including its donor exclusions,
+  # presentation taxonomy, aggregates, and paired metric reconstruction.
+  env$load_shared_prepared_data(root)
+}
+
 parity_run <- function(options, repo) {
+  split_identity <- parity_split_identity_requested(options)
   source_root <- normalizePath(options$source_root %||% file.path(repo, "data"), mustWork = TRUE)
   release_root <- if (!is.null(options$release_root)) {
     normalizePath(options$release_root, mustWork = TRUE)
@@ -274,6 +357,7 @@ parity_run <- function(options, repo) {
                  numeric_absolute_tolerance = 1e-12, categorical_count_na_parity = "exact",
                  identity = list(), summaries = list(), checks = list())
   record <- function(name, expr) {
+    message("[parity] ", name, " started")
     result <- tryCatch(suppressWarnings(suppressMessages(force(expr))), error = identity)
     failed <- inherits(result, "error")
     report$checks[[length(report$checks) + 1L]] <<- list(
@@ -281,6 +365,7 @@ parity_run <- function(options, repo) {
       details = if (failed) list(error_code = if (inherits(result, "parity_failure")) {
         conditionMessage(result)
       } else "check_execution_failed") else result)
+    message("[parity] ", name, if (failed) " failed" else " passed")
     if (failed) NULL else result
   }
   report$identity$git_commit <- unname(system2("git", c("-C", shQuote(repo), "rev-parse", "HEAD"),
@@ -330,21 +415,28 @@ parity_run <- function(options, repo) {
       algo = "sha256", serialize = FALSE)
     record("release_source_identity", {
       validator_commit <- report$identity$git_commit
-      if (!identical(manifest$git_commit, validator_commit)) {
+      changed <- character()
+      if (!split_identity && !identical(manifest$git_commit, validator_commit)) {
         # A validator-only correction can be checked against the unchanged
         # producer release without rebuilding application/data artifacts. The
         # exception is intentionally limited to this verifier's own file.
         changed <- system2("git", c("-C", shQuote(repo), "diff", "--name-only",
                                    paste0(manifest$git_commit, "..", validator_commit)),
                           stdout = TRUE, stderr = FALSE)
-        if (!identical(changed, "scripts/verify_release_parity.R")) parity_fail("source_commit_mismatch")
       }
+      source_identity <- parity_source_identity(options, validator_commit,
+        report$identity$git_dirty, manifest, legacy_changed = changed)
       report$identity$validator_git_commit <- validator_commit
-      report$identity$git_commit <- manifest$git_commit
-      if (!identical(manifest$git_dirty, FALSE) || isTRUE(report$identity$git_dirty)) {
-        parity_fail("uncommitted_source_changes")
+      if (split_identity) {
+        report$identity$identity_mode <- source_identity$identity_mode
+        report$identity$app_git_commit <- source_identity$app_git_commit
+        report$identity$data_producer_git_commit <- source_identity$data_producer_git_commit
+      } else {
+        # Keep historical report consumers' source-commit semantics unchanged.
+        report$identity$git_commit <- manifest$git_commit
       }
-      list(source_commit_matches = TRUE, source_worktree_clean = TRUE)
+      if (split_identity) source_identity else
+        list(source_commit_matches = TRUE, source_worktree_clean = TRUE)
     })
     record("canonical_source_hashes", {
       for (item in manifest$canonical_sources) {
@@ -354,12 +446,43 @@ parity_run <- function(options, repo) {
       list(files = length(manifest$canonical_sources))
     })
   }
+  raw_prepared <- prepared
+  if (split_identity) {
+    producer <- record("producer_h5ad_preparation", {
+      if (is.null(manifest)) parity_fail("verified_manifest_required")
+      parity_producer_prepared(repo, manifest$git_commit, source_root)
+    })
+    if (is.null(producer)) {
+      raw_prepared <- NULL
+    } else {
+      # Never serialize prepared scientific frames into the evidence report.
+      report$checks[[length(report$checks)]]$details <- list(
+        tables = length(producer$prepared), producer_commit = producer$producer_commit,
+        producer_factory_sha256 = producer$producer_factory_sha256)
+      raw_prepared <- producer$prepared
+    }
+  }
   for (name in names(PARITY_SUMMARY_KEYS)) {
     record(paste0("summary_", name), {
+      if (is.null(raw_prepared)) parity_fail("producer_preparation_required")
       actual <- release_env$islet_read_parquet(file.path(release_root,
         release_env$ISLET_SUMMARY_ARTIFACTS[[name]]))
-      parity_compare_frames(prepared[[name]], actual, PARITY_SUMMARY_KEYS[[name]])
+      parity_compare_frames(raw_prepared[[name]], actual, PARITY_SUMMARY_KEYS[[name]])
     })
+  }
+  if (split_identity) {
+    served <- record("candidate_shared_preparation", {
+      list(source = parity_served_prepared(source_env, source_root, "development"),
+           release = parity_served_prepared(release_env, release_root, "production"))
+    })
+    if (!is.null(served)) report$checks[[length(report$checks)]]$details <- list(
+      source_tables = length(served$source), release_tables = length(served$release))
+    for (name in names(PARITY_SUMMARY_KEYS)) {
+      record(paste0("served_summary_", name), {
+        if (is.null(served)) parity_fail("candidate_preparation_required")
+        parity_compare_frames(served$source[[name]], served$release[[name]], PARITY_SUMMARY_KEYS[[name]])
+      })
+    }
   }
   builder <- parity_builder(repo)
   schema <- as.character(manifest$schema_version %||% "")
@@ -520,6 +643,10 @@ parity_write_report <- function(report, prefix) {
   jsonlite::write_json(report, paths[[1]], auto_unbox = TRUE, pretty = TRUE, null = "null", digits = 16)
   lines <- c("# Release data parity", "", paste("Status:", report$status), "",
              paste("Source commit:", report$identity$git_commit),
+             if (!is.null(report$identity$app_git_commit))
+               paste("App commit:", report$identity$app_git_commit),
+             if (!is.null(report$identity$data_producer_git_commit))
+               paste("Data producer commit:", report$identity$data_producer_git_commit),
              paste("Parity validator commit:", report$identity$validator_git_commit %||% report$identity$git_commit),
              paste("Source H5AD SHA-256:", report$identity$canonical_h5ad_sha256),
              paste("Release manifest SHA-256:", report$identity$release_manifest_sha256 %||% "not supplied"), "",
@@ -537,11 +664,13 @@ parity_main <- function(args = commandArgs(trailingOnly = TRUE)) {
   if (!length(args) || length(args) %% 2L != 0L) stop("Arguments require --name value pairs.", call. = FALSE)
   for (i in seq.int(1L, length(args), by = 2L)) {
     key <- sub("^--", "", args[[i]])
-    if (!(key %in% c("source-root", "image-root", "release-root", "output-prefix"))) {
+    if (!(key %in% c("source-root", "image-root", "release-root", "output-prefix",
+                     "app-commit", "data-commit"))) {
       stop("Unsupported parity argument.", call. = FALSE)
     }
     options[[gsub("-", "_", key, fixed = TRUE)]] <- args[[i + 1L]]
   }
+  parity_split_identity_requested(options)
   if (is.null(options$output_prefix)) stop("--output-prefix is required.", call. = FALSE)
   if (any(file.exists(paste0(options$output_prefix, c(".json", ".md"))))) {
     stop("Evidence outputs already exist; choose a new prefix.", call. = FALSE)

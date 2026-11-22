@@ -105,11 +105,17 @@ GEOMETRY_QC = {'min_cell_area_um2': 20.0, 'max_cell_area_median_multiple': 4.0, 
                'min_raster_area_ratio': 0.50, 'max_raster_area_ratio': 2.00, 'no_cytoplasm_nc_ratio': 0.999,
                'duplicate_radius_um': 1.0, 'duplicate_area_tolerance': 0.15, 'missing_geometry_policy': 'exclude'}
 # Which of Senior's QC flags EXCLUDE a cell here (owner, 2026-10-16: "Cell quality check should drop cells without
-# a nucleus, and that should take care of small cells, but do not drop irregular cells"). Size, solidity and the
-# raster/reported area ratio are measured and written in `qc_flags`, but they exclude nothing; what excludes is a
-# missing nucleus and the technical failures that leave a cell with no measurement at all.
-QC_EXCLUDES = ('missing_nucleus_geometry', 'nucleus_raster_empty', 'raster_empty', 'invalid_centroid',
-               'invalid_cell_area', 'duplicate_detection')
+# a nucleus, and that should take care of small cells, but do not drop irregular cells"). Owner, 2026-11-06: a
+# nucleus raster equal to its cell raster is "the same thing as no nucleus" -- nucleus_fills_cell excludes like a
+# missing nucleus and leaves the spillover map (redsea_cells.SPILLOVER_KEEPS_DEGENERATE_NUCLEUS) -- and the
+# 20 um^2 floor now excludes too, because InstanSeg emits nucleus==cell records instead of missing-nucleus ones,
+# so the nucleus rule alone did not take care of small cells. Solidity and the raster/reported area ratio remain
+# measured, never excluding ("do not drop irregular cells").
+QC_EXCLUDES = ('missing_nucleus_geometry', 'nucleus_raster_empty', 'nucleus_fills_cell', 'cell_area_below_min',
+               'raster_empty', 'invalid_centroid', 'invalid_cell_area', 'duplicate_detection')
+# The non-excluding flags: measured, written to qc_flags and counted per image, never a reason.
+# acceptance_checks asserts every geometry-QC flag is named here or in QC_EXCLUDES, so no flag can be invisible.
+QC_MEASURED = ('cell_area_above_max', 'invalid_solidity', 'low_solidity', 'raster_area_mismatch')
 
 # --- the classification (typing/subpanel.py, subpanel_io.py), in this panel's names --------------------------
 HORMONES = ('INS', 'GCG', 'SST')
@@ -314,24 +320,31 @@ ADDED_IMMUNE_RULES = {'Imm-CD45-leukocyte': (['CD45'], [], ['ECAD'])}
 # The rule table's hierarchy for immune_subtype.py.
 IMMUNE_LEVEL2 = ('Imm-B-cell', 'Imm-NK-cell', 'Imm-T-cell', 'Imm-dendritic-cell', 'Imm-macrophage',
                  'Imm-neutrophil', 'Imm-plasma-cell')
-# Owner, 2026-10-27: no M1/M2-like labels; a macrophage is described by its marker profile instead (MACROPHAGE_PROFILE).
+# Owner, 2026-10-27: no M1/M2-like labels; macrophages are described by marker positivity.
 IMMUNE_LEVEL3 = {'Imm-T-cell': ('T-regulatory', 'T-exhausted', 'T-progenitor-memory', 'T-CD8-cytotoxic',
                                 'T-CD8', 'T-CD4-helper')}
-# Either anchor establishes macrophage; Gal3 is its only subtype marker.
-MACROPHAGE_PROFILE = (('CD68', 'CD163'), ('LGALS3',))
-
-
 def macrophage_label(positive: dict) -> str:
-    """Name an anchor-positive macrophage only when Gal3 has been assessed."""
-    anchors, (gal3,) = MACROPHAGE_PROFILE
-    if not any(positive.get(marker) == True for marker in anchors) or positive.get(gal3) is None:
-        return ''
-    return 'Macrophage_Gal3' + ('+' if positive[gal3] else '-')
+    """Name an identified macrophage using its LGALS3 positivity."""
+    return 'Macrophage_LGALS3+' if positive['LGALS3'] else 'Macrophage_LGALS3-'
 
 
 def macrophage_labels() -> list[str]:
-    return ['Macrophage_Gal3+', 'Macrophage_Gal3-']
+    """Every reported macrophage subtype, in display order."""
+    return [macrophage_label({'LGALS3': positive}) for positive in (True, False)]
 
+
+# Saved identities can distinguish the CD68/CD163 combination, with or without a CD4 suffix.
+LEGACY_MACROPHAGE_LABELS = {
+    head + label + suffix: label
+    for head in ('CD68+CD163+', 'CD68+CD163-', 'CD68-CD163+')
+    for label in macrophage_labels()
+    for suffix in ('CD4+', 'CD4-', '')
+}
+# The other release producer used Gal3 as the raw key for the same measured state.
+LEGACY_MACROPHAGE_LABELS.update({
+    'Macrophage_Gal3+': 'Macrophage_LGALS3+',
+    'Macrophage_Gal3-': 'Macrophage_LGALS3-',
+})
 
 # Owner, 2026-10-27: Senior's T-CD8 forbids CD4 and T-CD4-helper forbids CD8, so a T cell positive for both kept
 # no subtype; and "once there is positivity for a broad defining marker, we do not need the 0.10 positivity level".

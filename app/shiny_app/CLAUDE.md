@@ -34,8 +34,7 @@ pending-decision language and service snapshots below are historical.
 > "Endocrine objects" checkbox group (`object_class_selector()`) sits in the Data controls of the Plot tab
 > (`object_classes`) and the Spatial tab (`spatial_object_classes`) since 2026-10-19; app.R keeps the two in step
 > and filters `prepared()` via `filter_prepared_by_object_class()`. The Trajectory tab gets the unfiltered
-> `prepared_all()`: it fits every object with `TRAJ_MIN_CELLS` = 10 or more core cells, of any class (owner,
-> 2026-10-18).
+> `prepared_all()`: it fits objects with `TRAJ_MIN_CELLS` = 4 or more total core cells and a nonzero profile, of either physical class.
 > `add_islet_key` and `trajectory_link_key` accept all three prefixes (`ISLET_KEY_PATTERN`). Endocrine, T cell
 > and Immune hold the cells left without a subtype there, but stay retired from every selector and legend, as
 > general classes beside their subtypes (owner, 2026-10-17); `Exocrine` is new. A root without `object_class` is
@@ -143,11 +142,13 @@ See [`docs/statistics.md`](docs/statistics.md) for full details — the Jul 2026
 
 ### Reviewer Trajectory (Aug 2026)
 
-There is one trajectory, fitted on every endocrine object with `TRAJ_MIN_CELLS` = 10 or more core cells,
-whatever its class (owner, 2026-10-18: "Use 10 or more cells as the cutoff instead of a category"). The
-user-set `cell_range` slider and Recalculate button were removed 2026-10-17; the app-wide Islet / Cluster /
-Single selector does not apply to this tab and is hidden on it. Fitted on all classes the axis barely tracked
-the beta-cell ratio (ρ −0.20 vs −0.70 at the cutoff). `traj_pseudotime_column()` uses scanpy DPT when available and
+The trajectory uses Islets and EndocrineClusters with at least four total core cells and a nonzero feature profile. `TRAJ_MIN_CELLS` controls the R fit, PAGA, cache warmup, status text and CSV provenance. The app-wide class selector remains hidden on this tab. The graph inputs follow the current typing format (owner, 2026-11-18): the endocrine classes in the core only,
+exocrine in the peri-islet band only, macrophages as Gal3⁺ / Gal3⁻ (an older root's twelve labels are summed by
+Gal3 sign), every other named class in both regions, and no QC class (Conflict, Doublet suspected, Tissue,
+Unclassified, the unresolved CD45 and T cell residuals). One rule in both engines: `trajectory_inputs()` in
+`python/paga_pseudotime.py` and `barlow_trajectory_inputs()` in `R/barlow_pseudotime.R`; change them together
+(`scripts/tests/test_live_trajectory_features.py` compares them). See `docs/trajectory.md`, "Current graph inputs".
+`traj_pseudotime_column()` uses scanpy DPT when available and
 falls back explicitly to destiny; `traj_with_pseudotime()` carries the actual engine
 and fitted-islet count into the UI and CSV provenance. PAGA/ForceAtlas2 is the separate
 two-dimensional graph card, not the name of the one-dimensional axis. Its two independent color selectors
@@ -485,7 +486,7 @@ vscode's current theme"); a "Light theme" button at the top right switches back,
 - **Large scatter plots (>50K points)**: Use `ggplot2::renderPlot()` NOT `plotlyOutput()` -- plotly cannot handle 100K+ points interactively. Use small `size` (0.3-0.5) and low `alpha` (0.3-0.6).
 - **Tissue scatter coordinate convention**: `coord_fixed() + scale_y_reverse()` matches microscopy convention (y increases downward, spatial proportions preserved)
 - **Leiden cluster mapping for cells**: Islet-level Leiden assignments map to single cells via `islet_name` column lookup. Tissue background cells without an islet get `cluster = "tissue"` (gray), and so do the cells of an object outside the embedding (under ten core cells on a composition root).
-- **Composition embedding (owner, 2026-10-19)**: on a uniform root from v6, `leiden_*`, `leiden_umap_1/2` and the trajectory H5AD's `X_umap` are the endocrine composition of the objects with ten or more core cells (the Beta, Alpha, Delta and CHGA+ hormone-negative shares of each core's endocrine cells; `scripts/uniform/composition_embedding.py`), NA for smaller objects. `prepared()$composition_embedding` (H5AD `uns`) drives the Spatial method text; the Leiden clusters card (composition and membership) drops NA clusters; the Trajectory tab's UMAPs show the same layout for its fitted objects, which are the same ten-cell set. The Harmony protein embedding stays in the H5AD as `X_umap_protein` / `protein_leiden_<r>` but is not shown. Why: `scripts/uniform/README.md` (App root). From v7 the layout uses min_dist 3, spread 3 (fitted on one thread), so points no longer pile up and the all-beta / all-alpha objects are the ends of the cloud rather than detached islands.
+- **Composition embedding (owner, 2026-10-19)**: on a uniform root from v6, `leiden_*`, `leiden_umap_1/2` and the trajectory H5AD's `X_umap` are the endocrine composition of the objects with ten or more core cells (the Beta, Alpha, Delta and CHGA+ hormone-negative shares of each core's endocrine cells; `scripts/uniform/composition_embedding.py`), NA for smaller objects. `prepared()$composition_embedding` (H5AD `uns`) drives the Spatial method text; the Leiden clusters card (composition and membership) drops NA clusters; the Trajectory tab's UMAPs report the subset of its four-or-more-cell cohort with saved UMAP coordinates. The Harmony protein embedding stays in the H5AD as `X_umap_protein` / `protein_leiden_<r>` but is not shown. Why: `scripts/uniform/README.md` (App root). From v7 the layout uses min_dist 3, spread 3 (fitted on one thread), so points no longer pile up and the all-beta / all-alpha objects are the ends of the cloud rather than detached islands.
 - **UMAP drawing (2026-10-19)**: the Spatial UMAPs and the Trajectory screen UMAPs are drawn by `islet_umap_plotly()` (`00_globals.R`): one marker trace in a fixed interleaved order (`islet_umap_order()`), outlined in the background color, with an empty trace per group for the legend (legend clicks off). Coloring by group in `plot_ly()` / `ggplotly()` made one trace per group drawn in turn, so T1D was painted over ND and Aab+ wherever they met. The Trajectory ggplot reactives stay as the PNG downloads, with the same row order; the white-background plotly export swaps the outline to white (`www/islet-theme.js`).
 - **Spatial UMAP colourings (owner, 2026-10-21)**: each Spatial UMAP has its own Color by (`umap_color_left`, default
   Leiden; `umap_color_right`, default band immune proportion), from `SPATIAL_UMAP_COLOR_CHOICES`

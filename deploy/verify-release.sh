@@ -23,6 +23,15 @@ while (($#)); do
   esac
 done
 
+if [[ -f "${release_dir}/deployment.json" ]]; then
+  args=(verify --release-dir "${release_dir}")
+  if [[ -n "${requested_images}" ]]; then
+    echo "ERROR: split releases bind the image count through their data receipt; verify that data artifact directly." >&2
+    exit 64
+  fi
+  exec python3 "$(dirname -- "${BASH_SOURCE[0]}")/release-artifacts.py" "${args[@]}"
+fi
+
 for required in data data/images data/manifest.json release.env MANIFEST.sha256; do
   [[ -e "${release_dir}/${required}" ]] || {
     echo "ERROR: release is missing ${required}." >&2

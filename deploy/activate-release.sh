@@ -7,8 +7,8 @@ Usage: deploy/activate-release.sh --project-root ABS_PATH --release RELEASE
          [--publish-address IPV4] [--instance NAME] [--port PORT] [--memory SIZE]
          [--docroot ABS_PATH] [--local-data ABS_PATH]
 
-Installs/updates the user Quadlet from a fully verified release. The immutable
-IMAGE_REF and DATA_SCHEMA are read from RELEASE_DIR/release.env. If startup or
+Installs/updates the user Quadlet from a fully verified split deployment
+descriptor or legacy release.env bundle. If startup or
 health verification fails, the prior unit and its active/inactive state are
 restored automatically. A previously stopped service is never restarted by
 failure recovery.
@@ -32,11 +32,12 @@ service is touched.
 /local/maigan/releases). The release's data/geometry, data/cells and
 data/spatial trees, whose many small reads are slow over NFS (a drill-down's
 GeoPackage window took 0.2 s there against 17 ms on local disk), are copied to
-LOCAL_DATA/RELEASE/data/, checked file by file against MANIFEST.sha256, and
-mounted over the same paths inside the container; the image tree stays on the
-shared filesystem. A mismatch stops the activation before any service is
-touched. Copies of earlier releases are kept so a restored or rolled-back unit
-still finds its data; remove a retired release's copy by hand.
+LOCAL_DATA/datasets/DATA_ID/data/ for split releases, or LOCAL_DATA/RELEASE/data/
+for legacy releases. New copies are checked against MANIFEST.sha256; split
+releases reuse an unchanged verified cache. These trees are mounted read-only
+over the same container paths; images stay on the shared filesystem. A mismatch
+stops activation before any service is touched. Keep caches referenced by active
+and rollback releases.
 EOF
 }
 
@@ -48,6 +49,7 @@ port="3838"
 memory="9g"
 docroot=""
 local_data=""
+expected_descriptor=""
 while (($#)); do
   case "$1" in
     --project-root) project_root="${2:?missing value for --project-root}"; shift 2 ;;
@@ -57,6 +59,7 @@ while (($#)); do
     --port) port="${2:?missing value for --port}"; shift 2 ;;
     --memory) memory="${2:?missing value for --memory}"; shift 2 ;;
     --docroot) docroot="${2:?missing value for --docroot}"; shift 2 ;;
+    --expected-descriptor) expected_descriptor="${2:?missing value}"; shift 2 ;;
     --local-data) local_data="${2:?missing value for --local-data}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "ERROR: unknown argument: $1" >&2; usage >&2; exit 64 ;;
@@ -104,27 +107,45 @@ done
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 release_dir="${project_root}/releases/${release}"
-# Re-hash immediately before service replacement. A stamp alone cannot prove
-# that a host-side file has not changed since the earlier staging check.
-"${script_dir}/verify-release.sh" "${release_dir}"
-
-read_meta() {
-  local key="$1"
-  awk -F= -v key="${key}" '$1 == key {sub(/^[^=]*=/, ""); print; exit}' "${release_dir}/release.env"
-}
-manifest_release="$(read_meta RELEASE)"
-image_ref="$(read_meta IMAGE_REF)"
-data_schema="$(read_meta DATA_SCHEMA)"
-git_commit="$(read_meta GIT_COMMIT)"
-[[ "${manifest_release}" == "${release}" ]] || {
-  echo "ERROR: requested release does not match release.env (${manifest_release})." >&2
-  exit 65
-}
+split_release=0
+app_mounts=()
+app_checks=()
+app_dir=""
+app_scripts_dir=""
+app_manifest_sha256=""
+descriptor_sha256=""
+if [[ -f "${release_dir}/deployment.json" ]]; then
+  split_release=1
+  source "${script_dir}/release-layout.sh"
+  load_split_layout resolve --release-dir "${release_dir}"
+else
+  # Legacy bundles retain their full verification and provenance contract.
+  "${script_dir}/verify-release.sh" "${release_dir}"
+  read_meta() {
+    awk -F= -v key="$1" '$1 == key {sub(/^[^=]*=/, ""); print; exit}' "${release_dir}/release.env"
+  }
+  [[ "$(read_meta RELEASE)" == "${release}" ]] || {
+    echo "ERROR: requested release does not match release.env." >&2; exit 65;
+  }
+  image_ref="$(read_meta IMAGE_REF)"
+  data_schema="$(read_meta DATA_SCHEMA)"
+  git_commit="$(read_meta GIT_COMMIT)"
+  runtime_commit="${git_commit}"
+  data_commit="${git_commit}"
+  data_id="${release}"
+  data_release_dir="${release_dir}"
+  data_dir="${release_dir}/data"
+fi
 [[ "${image_ref}" =~ ^sha256:[0-9a-f]{64}$ ||
    "${image_ref}" =~ ^[A-Za-z0-9._:/-]+@sha256:[0-9a-f]{64}$ ]] || {
   echo "ERROR: release image is not immutable: ${image_ref}" >&2
   exit 65
 }
+
+if [[ -n "${expected_descriptor}" && "${expected_descriptor}" != "${descriptor_sha256}" ]]; then
+  echo 'ERROR: rollback descriptor differs from the previously activated descriptor.' >&2
+  exit 65
+fi
 
 podman image exists "${image_ref}" || {
   if [[ "${image_ref}" == *@sha256:* ]]; then
@@ -143,8 +164,7 @@ container_gid="$(podman run --rm --entrypoint /usr/bin/id "${image_ref}" -g shin
   exit 70
 }
 
-data_dir="${release_dir}/data"
-image_dir="${release_dir}/data/images"
+image_dir="${data_dir}/images"
 runtime_dir="${project_root}/runtime"
 state_dir="${runtime_dir}/deployments"
 # The production instance keeps the original layout (runtime/logs, runtime/tmp,
@@ -180,6 +200,7 @@ done
 # names from the container). They must already be symlinks, or absent: nothing
 # here deletes a real directory.
 docroot_aliases=(local_images images img_data)
+declare -A docroot_original_targets=()
 if [[ -n "${docroot}" ]]; then
   [[ -d "${docroot}" && -w "${docroot}" && -x "${docroot}" ]] || {
     echo "ERROR: --docroot ${docroot} is not a writable directory." >&2
@@ -190,6 +211,10 @@ if [[ -n "${docroot}" ]]; then
     if [[ -e "${alias_path}" && ! -L "${alias_path}" ]]; then
       echo "ERROR: ${alias_path} exists and is not a symlink; the proxy's image aliases must be symlinks into releases/." >&2
       exit 65
+    fi
+    if [[ -L "${alias_path}" ]]; then
+      IFS= read -r -d '' original_target < <(readlink -z -- "${alias_path}")
+      docroot_original_targets["${alias}"]="${original_target}"
     fi
   done
 fi
@@ -211,10 +236,12 @@ fi
 
 image_revision="$(podman image inspect --format \
   '{{ index .Labels "org.opencontainers.image.revision" }}' "${image_ref}")"
-[[ "${image_revision}" == "${git_commit}" ]] || {
-  echo "ERROR: image revision ${image_revision} does not match release commit ${git_commit}." >&2
+[[ "${image_revision}" == "${runtime_commit}" ]] || {
+  echo "ERROR: image revision ${image_revision} does not match runtime commit ${runtime_commit}." >&2
   exit 65
 }
+
+if ((split_release)); then check_split_runtime; fi
 
 # Confirm the installed Podman supports the exact rootless keep-id mapping
 # before replacing a running service.
@@ -235,7 +262,7 @@ manifest_identity="$(podman run --rm \
   "${image_ref}" -c \
   'import json; m=json.load(open("/srv/islet-explorer/data/manifest.json", encoding="utf-8")); print(str(m.get("schema_version", ""))+"\t"+str(m.get("git_commit", "")))')"
 IFS=$'\t' read -r manifest_schema manifest_commit <<< "${manifest_identity}"
-[[ "${manifest_schema}" == "${data_schema}" && "${manifest_commit}" == "${git_commit}" ]] || {
+[[ "${manifest_schema}" == "${data_schema}" && "${manifest_commit}" == "${data_commit}" ]] || {
   echo "ERROR: data manifest identity does not match release.env." >&2
   echo "  schema=${manifest_schema} commit=${manifest_commit}" >&2
   exit 65
@@ -248,6 +275,7 @@ podman run --rm \
   --userns="keep-id:uid=${container_uid},gid=${container_gid}" \
   --user "${container_uid}:${container_gid}" \
   --entrypoint Rscript \
+  "${app_mounts[@]}" \
   --volume "${data_dir}:/srv/islet-explorer/data:ro" \
   --env "ISLET_DATA_SCHEMA=${data_schema}" \
   "${image_ref}" /srv/islet-explorer/scripts/verify_release_data.R \
@@ -265,7 +293,15 @@ podman run --rm \
 local_data_trees=(geometry cells spatial)
 local_data_volumes=""
 local_data_mount=""
-if [[ -n "${local_data}" ]]; then
+if [[ -n "${local_data}" && "${split_release}" == 1 ]]; then
+  local_release_data="${local_data}/datasets/${data_id}/data"
+  python3 "${script_dir}/prepare-local-data.py" "${data_release_dir}" "${local_data}/datasets/${data_id}"
+  app_checks+=(--expected-local-data "${local_release_data}")
+  for tree in "${local_data_trees[@]}"; do
+    local_data_volumes+="Volume=${local_release_data}/${tree}:/srv/islet-explorer/data/${tree}:ro"$'\n'
+  done
+  local_data_mount=" ${local_release_data}"
+elif [[ -n "${local_data}" ]]; then
   command -v rsync >/dev/null || { echo "ERROR: --local-data needs rsync." >&2; exit 69; }
   local_release_data="${local_data}/${release}/data"
   mkdir -p -- "${local_release_data}" || { echo "ERROR: cannot create ${local_release_data}." >&2; exit 73; }
@@ -304,14 +340,35 @@ else
   echo "NOTE: the cpu controller is not delegated to this user session; the container keeps the host's vCPU bound."
 fi
 
+app_volumes=""
+app_mount_requirement=""
+if ((split_release)); then
+  app_volumes="Volume=${app_dir}:/srv/islet-explorer/app:ro"$'\n'"Volume=${app_scripts_dir}:/srv/islet-explorer/scripts:ro"$'\n'
+  app_volumes+="Label=io.islet-explorer.app-manifest-sha256=${app_manifest_sha256}"$'\n'
+  app_mount_requirement=" ${app_dir} ${app_scripts_dir}"
+fi
 escape_sed() { printf '%s' "$1" | sed 's/[&|\\]/\\&/g'; }
 rendered="$(mktemp)"
 backup=""
+state_backup_dir=""
+state_tmp=""
 previous_active=false
 if systemctl --user is-active --quiet "${service_name}"; then
   previous_active=true
 fi
-trap 'rm -f -- "${rendered}" "${backup:-}"' EXIT
+trap 'rm -f -- "${rendered}" "${rendered}.sed" "${backup:-}" "${state_tmp:-}"; if [[ -n "${state_backup_dir:-}" ]]; then rm -rf -- "${state_backup_dir}"; fi' EXIT
+# Snapshot both state files before replacing a service. Publication failures
+# must not lose the previous rollback target or leave a new service unrecorded.
+state_backup_dir="$(mktemp -d)"
+for state_key in "${state_name}" "${previous_name}"; do
+  state_path="${state_dir}/${state_key}.state"
+  if [[ -e "${state_path}" || -L "${state_path}" ]]; then
+    [[ -f "${state_path}" && ! -L "${state_path}" ]] || {
+      echo "ERROR: deployment state must be a regular file: ${state_path}" >&2; exit 65;
+    }
+    cp -- "${state_path}" "${state_backup_dir}/${state_key}.state"
+  fi
+done
 
 sed \
   -e "s|@@RELEASE@@|$(escape_sed "${release}")|g" \
@@ -328,12 +385,13 @@ sed \
   -e "s|@@TMP_DIR@@|$(escape_sed "${tmp_dir}")|g" \
   -e "s|@@CONTAINER_UID@@|${container_uid}|g" \
   -e "s|@@CONTAINER_GID@@|${container_gid}|g" \
+  -e "s|@@APP_MOUNT_REQUIREMENT@@|$(escape_sed "${app_mount_requirement}")|g" \
   -e "s|@@LOCAL_DATA_MOUNT@@|$(escape_sed "${local_data_mount}")|g" \
   "${script_dir}/islet-explorer.container.in" > "${rendered}.sed"
 # The local-data placeholder line becomes one Volume line per copied tree, or
 # nothing at all when --local-data is not given.
-awk -v volumes="${local_data_volumes}" \
-  '$0 == "@@LOCAL_DATA_VOLUMES@@" { printf "%s", volumes; next } { print }' \
+awk -v volumes="${local_data_volumes}" -v app_volumes="${app_volumes}" \
+  '$0 == "@@APP_VOLUMES@@" { printf "%s", app_volumes; next } $0 == "@@LOCAL_DATA_VOLUMES@@" { printf "%s", volumes; next } { print }' \
   "${rendered}.sed" > "${rendered}"
 rm -f -- "${rendered}.sed"
 
@@ -342,8 +400,6 @@ if [[ -f "${unit_path}" ]]; then
   backup="$(mktemp)"
   cp -- "${unit_path}" "${backup}"
 fi
-install -m 0644 "${rendered}" "${unit_path}"
-
 # Point the proxy's image aliases at one release's images. Each alias is
 # replaced by rename(2), so the proxy never sees a missing or half-written link
 # (its NFS lookup cache may still hand out the old target for up to a minute).
@@ -352,11 +408,48 @@ publish_docroot_links() {
   mkdir -p -- "${docroot}/islet-explorer" || return 1
   for alias in "${docroot_aliases[@]}"; do
     link="${docroot}/islet-explorer/${alias}"
+    [[ -L "${link}" && "$(readlink -- "${link}")" == "${target}" ]] && continue
     tmp_link="${docroot}/islet-explorer/.${alias}.${instance}.tmp"
     ln -sfn -- "${target}" "${tmp_link}" || return 1
     mv -Tf -- "${tmp_link}" "${link}" || { rm -f -- "${tmp_link}"; return 1; }
   done
   echo "Proxy image aliases under ${docroot}/islet-explorer now point at ${target}."
+}
+
+restore_docroot_links() {
+  [[ -n "${docroot}" ]] || return 0
+  local alias link temporary target current_target
+  mkdir -p -- "${docroot}/islet-explorer" || return 1
+  for alias in "${docroot_aliases[@]}"; do
+    link="${docroot}/islet-explorer/${alias}"
+    [[ ! -e "${link}" || -L "${link}" ]] || return 1
+    if [[ -n "${docroot_original_targets[${alias}]+present}" ]]; then
+      target="${docroot_original_targets[${alias}]}"
+      if [[ -L "${link}" ]]; then
+        IFS= read -r -d '' current_target < <(readlink -z -- "${link}") || return 1
+        [[ "${current_target}" != "${target}" ]] || continue
+      fi
+      temporary="${docroot}/islet-explorer/.${alias}.${instance}.restore"
+      ln -sfn -- "${target}" "${temporary}" || return 1
+      mv -Tf -- "${temporary}" "${link}" || { rm -f -- "${temporary}"; return 1; }
+    else
+      rm -f -- "${link}" || return 1
+    fi
+  done
+}
+
+restore_state_files() {
+  local state_key destination temporary
+  for state_key in "${state_name}" "${previous_name}"; do
+    destination="${state_dir}/${state_key}.state"
+    if [[ -f "${state_backup_dir}/${state_key}.state" ]]; then
+      temporary="$(mktemp "${state_dir}/.restore.XXXXXX")" || return 1
+      cp -- "${state_backup_dir}/${state_key}.state" "${temporary}" || { rm -f -- "${temporary}"; return 1; }
+      mv -f -- "${temporary}" "${destination}" || { rm -f -- "${temporary}"; return 1; }
+    else
+      rm -f -- "${destination}" || return 1
+    fi
+  done
 }
 
 restore_previous_unit() {
@@ -387,23 +480,23 @@ restore_previous_unit() {
       echo "Prior unit restored and left stopped; release state is unchanged." >&2
       return 0
     fi
+    local previous_app previous_app_sha previous_data previous_local_data
+    local previous_app_checks=()
+    previous_app="$(sed -n 's|^Volume=\(.*\):/srv/islet-explorer/app:ro$|\1|p' "${backup}")"
+    previous_data="$(sed -n 's|^Volume=\(.*\):/srv/islet-explorer/data:ro$|\1|p' "${backup}")"
+    previous_app_sha="$(sed -n 's/^Label=io.islet-explorer.app-manifest-sha256=//p' "${backup}")"
+    previous_local_data="$(sed -n 's|^Volume=\(.*\)/geometry:/srv/islet-explorer/data/geometry:ro$|\1|p' "${backup}")"
+    if [[ -n "${previous_app}" ]]; then
+      python3 "${script_dir}/release-artifacts.py" verify-app --app-dir "${previous_app%/app}" --expected-manifest "${previous_app_sha}" || return 1
+      previous_app_checks=(--expected-app "${previous_app}" --expected-data "${previous_data}" --expected-app-sha256 "${previous_app_sha}")
+      [[ -z "${previous_local_data}" ]] || previous_app_checks+=(--expected-local-data "${previous_local_data}")
+    fi
     systemctl --user daemon-reload || return 1
     systemctl --user restart "${service_name}" || return 1
     "${script_dir}/verify-deployment.sh" --url \
       "http://${previous_address}:${previous_port}/islet-explorer/" --container "${instance}" \
       --publish-address "${previous_address}" \
-      --expected-image "${previous_image}" || return 1
-    if [[ -n "${docroot}" ]]; then
-      # The restored unit mounts its release's images on the container's
-      # local_images path; the proxy aliases follow it.
-      local previous_images
-      previous_images="$(awk '/^Volume=.*:\/srv\/islet-explorer\/app\/shiny_app\/www\/local_images:ro$/ {sub(/^Volume=/, ""); sub(/:\/srv\/islet-explorer\/app\/shiny_app\/www\/local_images:ro$/, ""); print; exit}' "${backup}")"
-      if [[ -n "${previous_images}" ]]; then
-        publish_docroot_links "${previous_images}" || return 1
-      else
-        echo "NOTE: the restored unit names no image directory; the proxy image aliases are unchanged." >&2
-      fi
-    fi
+      --expected-image "${previous_image}" "${previous_app_checks[@]}" || return 1
     echo "Prior release restored and verified healthy; release state is unchanged." >&2
   else
     echo "First activation failed; stopping and removing the candidate service." >&2
@@ -420,13 +513,22 @@ restore_previous_unit() {
 }
 
 activation_failed() {
-  if ! restore_previous_unit; then
+  local recovered=1
+  # Attempt every restoration even if one fails. Static TIFF routes remain
+  # served independently of whether a Shiny service was previously running.
+  restore_previous_unit || recovered=0
+  restore_docroot_links || recovered=0
+  restore_state_files || recovered=0
+  if (( ! recovered )); then
     echo "ERROR: activation and recovery failed; service availability is unverified. Inspect the user service before retrying." >&2
     exit 71
   fi
   exit 70
 }
 
+if ! install -m 0644 "${rendered}" "${unit_path}"; then
+  activation_failed
+fi
 if ! systemctl --user daemon-reload; then
   activation_failed
 fi
@@ -438,7 +540,7 @@ fi
 if ! "${script_dir}/verify-deployment.sh" --url \
   "http://${publish_address}:${port}/islet-explorer/" --container "${instance}" \
   --publish-address "${publish_address}" \
-  --expected-image "${image_ref}"; then
+  --expected-image "${image_ref}" "${app_checks[@]}"; then
   activation_failed
 fi
 if [[ -n "${docroot}" ]] && ! publish_docroot_links "${image_dir}"; then
@@ -446,25 +548,30 @@ if [[ -n "${docroot}" ]] && ! publish_docroot_links "${image_dir}"; then
   activation_failed
 fi
 
-if [[ -f "${state_dir}/${state_name}.state" ]]; then
-  cp -- "${state_dir}/${state_name}.state" "${state_dir}/${previous_name}.state"
+commit_state() {
+  local previous_tmp activated_at
+  if [[ -f "${state_backup_dir}/${state_name}.state" ]]; then
+    previous_tmp="$(mktemp "${state_dir}/.previous.XXXXXX")" || return 1
+    cp -- "${state_backup_dir}/${state_name}.state" "${previous_tmp}" || { rm -f -- "${previous_tmp}"; return 1; }
+    mv -f -- "${previous_tmp}" "${state_dir}/${previous_name}.state" || { rm -f -- "${previous_tmp}"; return 1; }
+  fi
+  state_tmp="$(mktemp "${state_dir}/.${state_name}.state.XXXXXX")" || return 1
+  activated_at="$(date -u +'%Y-%m-%dT%H:%M:%SZ')" || return 1
+  printf '%s\n' \
+    "RELEASE=${release}" "IMAGE_REF=${image_ref}" "APP_COMMIT=${git_commit}" \
+    "APP_MANIFEST_SHA256=${app_manifest_sha256}" "DESCRIPTOR_SHA256=${descriptor_sha256}" \
+    "DATA_ID=${data_id}" "INSTANCE=${instance}" "PUBLISH_ADDRESS=${publish_address}" \
+    "PORT=${port}" "MEMORY=${memory}" "DOCROOT=${docroot}" "LOCAL_DATA=${local_data}" \
+    "ACTIVATED_AT=${activated_at}" > "${state_tmp}" || return 1
+  mv -f -- "${state_tmp}" "${state_dir}/${state_name}.state" || return 1
+}
+if ! commit_state; then
+  echo "ERROR: could not commit deployment state; restoring the prior deployment." >&2
+  activation_failed
 fi
-state_tmp="$(mktemp "${state_dir}/.${state_name}.state.XXXXXX")"
-{
-  printf 'RELEASE=%s\n' "${release}"
-  printf 'IMAGE_REF=%s\n' "${image_ref}"
-  printf 'INSTANCE=%s\n' "${instance}"
-  printf 'PUBLISH_ADDRESS=%s\n' "${publish_address}"
-  printf 'PORT=%s\n' "${port}"
-  printf 'MEMORY=%s\n' "${memory}"
-  printf 'DOCROOT=%s\n' "${docroot}"
-  printf 'LOCAL_DATA=%s\n' "${local_data}"
-  printf 'ACTIVATED_AT=%s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-} > "${state_tmp}"
-mv -f -- "${state_tmp}" "${state_dir}/${state_name}.state"
 
 docroot_note=""
 [[ -n "${docroot}" ]] && docroot_note=", proxy image aliases in ${docroot}"
 local_data_note=""
-[[ -n "${local_data}" ]] && local_data_note=", local data copies in ${local_data}/${release}"
+[[ -n "${local_data}" ]] && local_data_note=", local data copies in ${local_release_data}"
 echo "Activated Islet Explorer release ${release} (${image_ref}) as ${instance} on ${publish_address}:${port} (memory ${memory})${docroot_note}${local_data_note}."

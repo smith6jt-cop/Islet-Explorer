@@ -2,7 +2,7 @@
   env <- new.env(parent = globalenv())
   wanted <- c("UNCLASSIFIED_KEYS", "UNCLASSIFIED_PARENT", "UNCLASSIFIED_RAW_TO_KEY",
               "unclassified_collapse", "ISLET_EXCLUDED_DONORS", "islet_canonical_donor_id",
-              "islet_excluded_donors_in", "PHENOTYPE_DISPLAY_NAMES", "MACROPHAGE_LABEL_PATTERN",
+              "islet_excluded_donors_in", "PHENOTYPE_DISPLAY_NAMES", "is_macrophage_label", "MACROPHAGE_KEY_PATTERN", "macrophage_profile", "MACROPHAGE_LABEL_PATTERN",
               "phenotype_text")
   for (expr in parse(.find_source("R/00_globals.R"))) {
     if (is.call(expr) && identical(expr[[1]], as.name("<-")) &&

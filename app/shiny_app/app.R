@@ -551,7 +551,7 @@ server <- function(input, output, session) {
   # interface without repeating I/O or prep_data() for each reviewer.
   # The app-wide endocrine-object selection (owner A5): Islet, EndocrineCluster (Singles are counted, not analyzed,
   # since 2026-10-18). Every tab but Trajectory reads prepared(), so filtering it here is the one place the
-  # selection applies; the Trajectory tab fits objects of ten or more core cells instead.
+  # selection applies; the Trajectory tab uses its own minimum total core cell count.
   # The selector sits in the Data controls of the Plot tab (object_classes) and the Spatial tab
   # (spatial_object_classes); either one sets the selection and the other follows it.
   object_classes <- reactiveVal(unname(OBJECT_CLASSES))
@@ -568,10 +568,10 @@ server <- function(input, output, session) {
                ignoreNULL = FALSE, ignoreInit = TRUE)
   # How macrophages are split (owner, 2026-10-27): the markers checked in any macrophage marker checkbox group
   # (Plot and Trajectory Data controls, every grouped phenotype list's Macrophage heading); one app-wide setting.
-  macrophage_markers <- reactiveVal(character(0))
+  macrophage_markers <- reactiveVal("LGALS3")
   prepared <- reactive(collapse_prepared_macrophages(
     filter_prepared_by_object_class(.shared_prepared_data, object_classes()), macrophage_markers()))
-  # The Trajectory tab fits every object with ten or more core cells whatever its class, so it reads the
+  # The Trajectory tab fits eligible objects of both classes, so it reads the
   # unfiltered data (its merge of diameters and Leiden clusters would otherwise lose the unselected class).
   prepared_all <- reactive(.shared_prepared_data)
 

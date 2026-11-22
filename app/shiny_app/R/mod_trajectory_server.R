@@ -1,8 +1,6 @@
 # Pseudotime x-axis extent, derived in ONE place so the scatter and the strip heatmap
-# stacked directly beneath it always share an x-extent. The scatter jitters points by
-# ±1.2% of the domain and widens its axis by that much rather than clamping (clamping
-# piled the outermost ~1.2% of points onto the endpoints), so the heatmap must be widened
-# by the same margin or the two panels no longer line up.
+# stacked directly beneath it always share an x-extent. Tied x positions can spread
+# within the domain by up to 1.2% of its width. Both panels reserve the same edge margin.
 #
 # Returns:
 #   dom    — the data domain, used for BINNING (bins must cover data, not padding)
@@ -11,8 +9,12 @@
 traj_pt_extent <- function(pt, jitter_frac = 0.012) {
   # suppressWarnings: an all-NA pt column makes range() emit "no non-missing arguments"
   # and return c(Inf, -Inf); the is.finite guard below is the intended handling.
-  dom <- suppressWarnings(range(pt, na.rm = TRUE))
-  if (!all(is.finite(dom)) || diff(dom) <= 0) dom <- c(0, 1)
+  dom <- suppressWarnings(range(pt[is.finite(pt)]))
+  if (!all(is.finite(dom))) dom <- c(0, 1)
+  if (diff(dom) == 0) {
+    half <- max(0.05, abs(dom[1]) * 0.05)
+    dom <- c(max(0, dom[1] - half), dom[2] + half)
+  }
   j <- diff(dom) * jitter_frac
   list(dom = dom, jitter = j, lim = c(dom[1] - j, dom[2] + j))
 }
@@ -68,7 +70,30 @@ traj_pseudotime_column <- function(obs, cell_range = c(TRAJ_MIN_CELLS, Inf)) {
   out <- bp$pseudotime[match(ids, bp$islet_id)]
   attr(out, "engine") <- engine
   attr(out, "n_islets") <- sum(is.finite(out))
+  attr(out, "features") <- attr(bp, "features")
+  attr(out, "root_islet_id") <- attr(bp, "root_islet_id")
+  attr(out, "root_method") <- attr(bp, "root_method")
+  attr(out, "n_without_inputs") <- attr(bp, "n_without_inputs")
   out
+}
+
+#' One provenance line naming the graph inputs a pseudotime was fitted on, by region, in display names.
+#' `features` are the fitted input names ("core_Beta cell", "peri_Exocrine", ...) the engine reports.
+trajectory_inputs_text <- function(features) {
+  features <- as.character(features %||% character(0))
+  features <- features[!is.na(features) & grepl("^(core|peri|combined)_", features)]
+  if (!length(features)) return("Trajectory inputs: not reported by the pseudotime engine")
+  region <- sub("_.*$", "", features)
+  label <- phenotype_text(sub("^(core|peri|combined)_", "", features))
+  part <- function(key, title) {
+    if (!any(region == key)) return(NULL)
+    sprintf("%s (%d): %s", title, sum(region == key), paste(label[region == key], collapse = ", "))
+  }
+  paste0("Trajectory inputs: log1p(count or summed overlap / core endocrine cells) per class | ",
+         paste(c(part("core", "core"), part("peri", "20 µm peri-islet band"), part("combined", "core + peri")), collapse = " | "),
+         " | endocrine classes in the core only, exocrine in the peri-islet band only,",
+         " macrophages by Gal3; Conflict, Doublet suspected, Tissue, Unclassified and",
+         " unresolved-lineage cells are not inputs")
 }
 
 apply_pt_scale <- function(df, pt_scale) {
@@ -91,12 +116,14 @@ PAGA_COLOR_CHOICES <- c("Pseudotime" = "pseudotime", "Donor Status" = "donor_sta
 
 # Join a selected feature by immutable object identity; coloring must never
 # refit, filter or reorder the PAGA cohort. Missing feature values stay missing.
-paga_display_data <- function(d, colour_by, feature_data = NULL) {
+paga_display_data <- function(d, colour_by, feature_data = NULL, clinical_fields = character()) {
   if (is.null(d) || !nrow(d)) return(NULL)
+  clinical_fields <- clinical_fields[clinical_fields %in% names(d)]
+  choices <- c(PAGA_COLOR_CHOICES, clinical_fields)
   if (!is.character(colour_by) || length(colour_by) != 1L ||
-      is.na(colour_by) || !(colour_by %in% unname(PAGA_COLOR_CHOICES))) colour_by <- "pseudotime"
+      is.na(colour_by) || !(colour_by %in% unname(choices))) colour_by <- "pseudotime"
   d$.key <- trajectory_link_key(d$case_id, sub("^[0-9]+_", "", d$islet_id))
-  title <- names(PAGA_COLOR_CHOICES)[match(colour_by, PAGA_COLOR_CHOICES)]
+  title <- names(choices)[match(colour_by, choices)]
   if (identical(colour_by, "feature")) {
     d$.colour <- rep(NA_real_, nrow(d))
     if (!is.null(feature_data) && all(c("combined_islet_id", "value") %in% names(feature_data))) {
@@ -108,14 +135,64 @@ paga_display_data <- function(d, colour_by, feature_data = NULL) {
   } else {
     d$.colour <- d[[colour_by]]
   }
+  guided <- isTRUE(attr(d, "layout_age_weight") > 0)
+  if (guided && identical(colour_by, "pseudotime")) {
+    d$.colour <- d$age_guided_pseudotime
+    title <- "Age-guided pseudotime"
+  }
   if (colour_by %in% c("donor_status", "leiden", "case_id")) d$.colour <- as.character(d$.colour)
   d$.hover <- paste0("Object: ", d$islet_id,
                      "<br>Donor: ", d$case_id, " (", d$donor_status, ")",
-                     "<br>Pseudotime: ", round(d$pseudotime, 4),
+                     if (guided) "<br>Baseline DPT: " else "<br>Pseudotime: ", round(d$pseudotime, 4),
+                     if (guided) paste0("<br>Age-guided pseudotime: ", round(d$age_guided_pseudotime, 4)) else "",
                      "<br>Leiden: ", d$leiden,
                      if (identical(colour_by, "feature")) paste0("<br>", title, ": ",
                        ifelse(is.finite(d$.colour), round(d$.colour, 4), "Unavailable")) else "")
+  root <- which(d$is_dpt_root %in% TRUE)
+  if (length(root)) d$.hover[root] <- paste0(d$.hover[root], "<br>DPT root")
+  if (colour_by %in% clinical_fields) {
+    shown <- trajectory_donor_display(d, colour_by)
+    d$.hover <- paste0(d$.hover, "<br>", htmltools::htmlEscape(title), ": ", htmltools::htmlEscape(shown))
+    if (is.numeric(d$.colour)) {
+      if (colour_by == "C_peptide_ng_mL" && "C_peptide_censored" %in% names(d))
+        d$.colour[d$C_peptide_censored %in% TRUE] <- NA_real_
+      if (length(unique(d$.colour[is.finite(d$.colour)])) <= 1L) d$.colour <- shown
+    } else {
+      d$.colour <- shown
+    }
+  }
   list(data = d, colour_by = colour_by, title = title)
+}
+
+# Map the selected measure on the displayed islets. The asinh scale keeps zero and
+# the full upper tail while resolving differences among small positive measurements.
+trajectory_umap_colour <- function(df) {
+  df <- df[is.finite(df$umap_1) & is.finite(df$umap_2) & is.finite(df$value), , drop = FALSE]
+  values <- sort(unique(df$value))
+  if (!length(values)) return(list(data = df))
+  if (length(values) == 1L) {
+    label <- format(values, digits = 5, trim = TRUE)
+    df$.colour <- factor(rep(label, nrow(df)))
+    return(list(data = df, palette = setNames("#8c7188", label)))
+  }
+  unit <- stats::median(abs(df$value[df$value != 0]))
+  df$.colour <- asinh(df$value / unit)
+  limits <- range(df$.colour)
+  ticks <- if (length(values) <= 5) asinh(values / unit) else seq(limits[1], limits[2], length.out = 5)
+  list(data = df, limits = limits, ticks = ticks,
+       labels = format(signif(unit * sinh(ticks), 4), trim = TRUE))
+}
+
+trajectory_donor_summary <- function(obs, pt_scale) {
+  axis <- if (identical(pt_scale, "raw")) obs$pseudotime else obs$pt_rank
+  keep <- is.finite(axis) & !is.na(obs$imageid)
+  if (!any(keep)) return(data.frame())
+  indices <- split(which(keep), as.character(obs$imageid[keep]))
+  do.call(rbind, lapply(indices, function(i) {
+    q <- unname(stats::quantile(axis[i], c(0.25, 0.5, 0.75)))
+    data.frame(case_id = as.character(obs$imageid[i[1]]), donor_status = as.character(obs$donor_status[i[1]]),
+               n_islets = length(i), first_quartile = q[1], median_pt = q[2], third_quartile = q[3])
+  }))
 }
 
 trajectory_server <- function(id, prepared, selected_islet, forced_image, active_tab = reactive("Trajectory"),
@@ -148,12 +225,11 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
 
     # ---------- Reactive state ----------
     traj <- reactiveVal(NULL)
+    donor_metadata <- reactive(trajectory_donor_metadata())
     traj_load_attempted <- reactiveVal(FALSE)
-    # The fitted cohort is every endocrine object with at least TRAJ_MIN_CELLS core cells, of any class
-    # (owner, 2026-10-18: "Use 10 or more cells as the cutoff instead of a category"). The app-wide
-    # Islet / Cluster / Single selection does not apply here, and is hidden on this tab.
+    # The fixed cohort includes eligible objects from both physical classes.
     applied_cell_range <- function() c(TRAJ_MIN_CELLS, Inf)
-    cohort_label <- function() sprintf("objects with %d or more core cells", TRAJ_MIN_CELLS)
+    cohort_label <- function() sprintf("objects with %d or more total core cells", TRAJ_MIN_CELLS)
 
     # ---------- Lazy H5AD loader ----------
     observe({
@@ -258,8 +334,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       obs <- tr$obs
       ad  <- tr$adata
 
-      # Only the applied range defines the fitted cohort. Slider drags alone
-      # must not invalidate the diffusion map or its downstream plots.
+      # Display choices do not change the cohort used to build the diffusion map.
       rng <- applied_cell_range()
       pt <- withProgress(
         # Seconds to tens of seconds depending on how many islets are in range.
@@ -270,6 +345,8 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         traj_pseudotime_column(obs, rng))
       pseudotime_engine <- attr(pt, "engine") %||% "unavailable"
       pseudotime_n <- as.integer(attr(pt, "n_islets") %||% 0L)
+      pseudotime_features <- attr(pt, "features")
+      pseudotime_without_inputs <- as.integer(attr(pt, "n_without_inputs") %||% 0L)
       obs$pseudotime <- as.numeric(pt)
 
       # Stable rank axis, computed ONCE over the full selected cell-range cohort.
@@ -295,7 +372,57 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
 
       list(obs = obs, obsm = tr$obsm, uns = tr$uns, var_names = tr$var_names,
            adata = ad, pseudotime_engine = pseudotime_engine,
-           pseudotime_n = pseudotime_n, cell_range = rng)
+           root_islet_id = attr(pt, "root_islet_id"), root_method = attr(pt, "root_method"),
+           pseudotime_n = pseudotime_n, pseudotime_features = pseudotime_features,
+           pseudotime_without_inputs = pseudotime_without_inputs, cell_range = rng)
+    })
+
+    output$donor_annotation_field <- renderUI({
+      choices <- TRAJ_DONOR_FIELDS[TRAJ_DONOR_FIELDS %in% names(donor_metadata())]
+      if (!length(choices)) return(NULL)
+      selectInput(ns("donor_annotation"), "Donor annotation", choices = choices,
+                  selected = if ("age" %in% choices) "age" else unname(choices[1]))
+    })
+    output$donor_annotation_plot <- renderPlotly({
+      field <- input$donor_annotation
+      if (!islet_valid_scalar_choice(field, TRAJ_DONOR_FIELDS, "trajectory_annotation_invalid"))
+        return(plotly_islet_empty("Donor annotations unavailable"))
+      scale <- input$pt_scale %||% "rank"
+      rows <- trajectory_donor_summary(traj_with_pseudotime()$obs, scale)
+      if (!nrow(rows)) return(plotly_islet_empty("No fitted islets"))
+      rows <- trajectory_join_donor_metadata(rows, donor_metadata())
+      if (!field %in% names(rows)) return(plotly_islet_empty("Donor annotation unavailable"))
+      label <- names(TRAJ_DONOR_FIELDS)[match(field, TRAJ_DONOR_FIELDS)]
+      display <- trajectory_donor_display(rows, field)
+      censored <- rep(FALSE, nrow(rows))
+      if (identical(field, "C_peptide_ng_mL") && "C_peptide_censored" %in% names(rows)) {
+        censored <- rows$C_peptide_censored %in% TRUE & is.finite(rows[[field]])
+        display[censored] <- paste("Below detection limit:", display[censored])
+      }
+      continuous <- is.numeric(rows[[field]]) && !startsWith(field, "AAb_")
+      rows$annotation <- if (continuous) rows[[field]] else display
+      rows$symbol <- ifelse(censored, "triangle-down-open", "circle")
+      rows$hover <- paste0("Donor: ", htmltools::htmlEscape(rows$case_id), " (", htmltools::htmlEscape(rows$donor_status), ")",
+                           "<br>", htmltools::htmlEscape(label), ": ", htmltools::htmlEscape(display),
+                           "<br>Median pseudotime: ", signif(rows$median_pt, 3),
+                           "<br>Islets: ", rows$n_islets)
+      if (continuous) rows <- rows[is.finite(rows$annotation), , drop = FALSE]
+      if (!nrow(rows)) return(plotly_islet_empty("No donors have this measurement"))
+      colours <- donor_colors_reactive()
+      p <- plotly::plot_ly()
+      for (status in intersect(names(colours), unique(rows$donor_status))) {
+        d <- rows[rows$donor_status == status, , drop = FALSE]
+        p <- plotly::add_markers(p, x = d$median_pt, y = d$annotation, name = status,
+                                 marker = list(color = unname(colours[status]), size = 10, symbol = d$symbol),
+                                 error_x = list(type = "data", symmetric = FALSE,
+                                                array = d$third_quartile - d$median_pt,
+                                                arrayminus = d$median_pt - d$first_quartile),
+                                 text = d$hover, hoverinfo = "text")
+      }
+      p <- plotly::layout(p, xaxis = list(title = if (scale == "raw") "Median raw DPT" else "Median pseudotime rank"),
+                         yaxis = list(title = label, type = if (continuous) "linear" else "category",
+                                      automargin = TRUE))
+      plotly_islet_config(p, "trajectory_donor_annotations")
     })
 
     selected_measure_label <- reactive({
@@ -312,14 +439,14 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
 
     trajectory_provenance <- reactive({
       tr <- tryCatch(traj_with_pseudotime(), error = function(e) NULL)
-      rng <- applied_cell_range()
       engine <- if (is.null(tr) || !is.null(tr$error)) "unavailable" else
         tr$pseudotime_engine %||% "unavailable"
       n <- if (is.null(tr) || !is.null(tr$error)) 0L else tr$pseudotime_n %||% 0L
       list(
-        method = sprintf("Pseudotime method: %s", engine),
-        features = paste("Trajectory features: listed core/peri phenotype ratios;",
-                         "general classes excluded; stored endocrine denominator preserved"),
+        method = paste0("Pseudotime method: ", engine,
+                        if (length(tr$root_islet_id)) paste0(" | Root: ", tr$root_islet_id, " | ", tr$root_method)),
+        features = trajectory_inputs_text(
+          if (is.null(tr) || !is.null(tr$error)) NULL else tr$pseudotime_features),
         scale = sprintf("Pseudotime scale: %s",
                         if (identical(input$pt_scale %||% "rank", "raw"))
                           "raw diffusion pseudotime" else "rank-normalized within fitted cohort"),
@@ -342,7 +469,8 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       # versa) -- the two namespaces do not overlap and a stale value would
       # silently plot nothing.
       if (identical(input$traj_y_mode %||% "ratio", "ratio")) {
-        types <- phenotype_selectable(barlow_ratio_types(macrophage_markers()))
+        region <- input$traj_ratio_region %||% "core"
+        types <- phenotype_selectable(barlow_ratio_types(macrophage_markers(), region))
         if (!length(types)) {
           return(selectInput(ns("traj_ratio_type"), "Select cell type:",
                              choices = c("Composition features unavailable" = ""),
@@ -421,11 +549,11 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       if (identical(y_mode, "ratio")) {
         ct <- input$traj_ratio_type
         if (is.null(ct)) return(NULL)
-        if (!islet_valid_scalar_choice(ct, barlow_ratio_types(macrophage_markers()),
-                                       "trajectory_ratio_invalid")) return(NULL)
         region <- input$traj_ratio_region %||% "core"
-        if (!islet_valid_scalar_choice(region, c("both", "core", "peri"),
+        if (!islet_valid_scalar_choice(region, BARLOW_RATIO_REGIONS,
                                        "trajectory_region_invalid")) return(NULL)
+        if (!islet_valid_scalar_choice(ct, barlow_ratio_types(macrophage_markers(), region),
+                                       "trajectory_ratio_invalid")) return(NULL)
         return(list(feature = ct, status = "ready", y_mode = "ratio",
                     ratio_region = region))
       }
@@ -518,7 +646,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         value = as.numeric(expression_vals),
         feature_name = selected_feature,
         total_cells = as.integer(obs_df$total_cells),
-        # The fit's cutoff counts core cells; `total_cells` (core + peri) only sizes and weights points.
+        # total_cells_core is the engine cutoff. Legacy core H5ADs store the count in total_cells.
         cells_core = as.integer(obs_df$total_cells_core %||% obs_df$total_cells),
         stringsAsFactors = FALSE
       )
@@ -642,20 +770,24 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
           sprintf("Trajectory load error: %s%s", tr$error, install_hint)))
       }
       nfit <- tr$pseudotime_n %||% 0L
+      nfeat <- length(tr$pseudotime_features %||% character(0))
+      nwithout <- tr$pseudotime_without_inputs %||% 0L
       src <- if (!is.null(traj_path) && file.exists(traj_path)) traj_path else cur
 
       tags$div(style = "color: var(--islet-fg-muted); font-size: 12px; margin-bottom: 10px;",
         title = paste("Source:", basename(src)),
-        sprintf("Endocrine objects: %s total | %s fitted (%d or more core cells, any class)",
-          format(nrow(tr$obs), big.mark = ","), format(nfit, big.mark = ","), TRAJ_MIN_CELLS)
+        sprintf("Endocrine objects: %s total | %s fitted (%d or more total core cells, any class)%s%s",
+          format(nrow(tr$obs), big.mark = ","), format(nfit, big.mark = ","), TRAJ_MIN_CELLS,
+          if (nfeat > 0) sprintf(" | %d composition inputs", nfeat) else "",
+          if (nwithout > 0) sprintf(" | %s with no cell of an input class, not fitted",
+                                    format(nwithout, big.mark = ",")) else "")
       )
     })
 
     # ---------- Trajectory scatter plot ----------
     # Built with plot_ly() directly (R/plot_figures.R, Plan A Level 2): the ggplot + ggplotly() path cost most of
-    # the step's server time. Colors, sizes, the jitter (seed 42, +/- 1.2 % of the pseudotime domain, +/- 8 % of
-    # the value range, never clamped: the axis is widened instead, see traj_pt_extent()) and the weighted LOESS
-    # trends (weight log1p(cells), span 0.75) with their 95 % bands are those of the ggplot layers it replaces.
+    # the step's server time. Optional tie spreading affects only marker positions.
+    # LOESS uses the original coordinates and log1p(cells) weights.
     output$traj_scatter <- renderPlotly({
       df <- traj_data_clean()
       if (is.null(df) || nrow(df) == 0) {
@@ -697,21 +829,25 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       if (identical(input$traj_y_mode %||% "ratio", "ratio")) {
         selected_feature <- phenotype_text(input$traj_ratio_type %||% "Selected cell type")
         reg <- input$traj_ratio_region %||% "core"
-        metric_label <- sprintf("\u2014 log(cells per endocrine cell, %s)",
+        metric_label <- sprintf("\u2014 log1p(cells per core endocrine cell, %s)",
                                 switch(reg, core = "core", peri = "peri", "core + 20 \u00b5m peri"))
       } else {
         selected_feature <- input$traj_feature %||% "Selected feature"
         metric_label <- "\u2014 normalized expression (mean per islet, 0\u20131)"
       }
       x_label <- if ((input$pt_scale %||% "rank") == "raw") "Pseudotime (raw DPT)" else "Pseudotime (rank-normalized)"
+      spread_ties <- isTRUE(input$traj_spread_ties %||% TRUE)
+      y_label <- paste(selected_feature, metric_label)
+      if (spread_ties) y_label <- paste0(y_label, "<br>(ties spread for display)")
 
       fig <- trajectory_scatter_figure(df, list(
         color_by = color_by, colours = colours, colour_label = colour_label,
+        spread_ties = spread_ties,
         size_by = input$traj_point_size %||% "uniform", point_size = input$traj_point_size_slider %||% 3.0,
         alpha = 1 - (input$traj_alpha %||% 0.4), trend = input$traj_show_trend %||% "by_donor",
         # 95% CI bands on the LOESS trends (Bodenmiller 2025 Fig 2D/5E convention).
         show_ci = isTRUE(input$traj_trend_ci %||% TRUE), status_cols = donor_colors_reactive(), ink = islet_ink(),
-        x_label = x_label, y_label = paste(selected_feature, metric_label),
+        x_label = x_label, y_label = y_label,
         # The pseudotime extent is shared with the strip heatmap below (traj_pt_extent()), so the two stay aligned.
         pt_ext = traj_pt_extent(df$pt)))
       trajectory_link_plot(fig, ns)
@@ -880,6 +1016,18 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       }
     })
 
+    output$traj_umap_coverage <- renderText({
+      df <- traj_data_clean()
+      if (is.null(df)) return("")
+      n <- sum(is.finite(df$umap_1) & is.finite(df$umap_2))
+      cutoff <- prepared()$composition_embedding$min_core_cells
+      paste0(sprintf("Saved UMAP coordinates for %s of %s displayed trajectory objects.",
+                     format(n, big.mark = ","), format(nrow(df), big.mark = ",")),
+             if (length(cutoff) == 1L && is.finite(as.numeric(cutoff)))
+               sprintf(" The composition UMAP requires at least %d total core cells and a defined endocrine composition.",
+                       as.integer(cutoff)))
+    })
+
     # ---------- UMAP: Donor Status ----------
     traj_umap_donor_plot <- reactive({
       df <- traj_data_clean()
@@ -909,8 +1057,8 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
     # The screen UMAPs are drawn by islet_umap_plotly() (one interleaved trace, outlined points) rather than
     # ggplotly(), which split the donor-status colors into traces drawn in turn so T1D covered the others. The
     # ggplot reactives above remain the PNG downloads.
-    interactive_umap <- function(g, source, colour, pal = NULL, legend_title) {
-      df <- traj_data_clean()
+    interactive_umap <- function(g, source, colour, pal = NULL, legend_title,
+                                 df = traj_data_clean(), colorbar_ticks = list()) {
       if (is.null(g) || is.null(df) || !nrow(df)) {
         return(trajectory_link_plot(plotly_islet_empty("No trajectory data available"), ns))
       }
@@ -927,7 +1075,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
                                    showgrid = FALSE, showticklabels = FALSE, ticks = "", showline = FALSE)
       p <- islet_umap_plotly(df, "umap_1", "umap_2", colour, pal, "link_hover", key = "link_key",
                              source = ns(source), colorbar_title = legend_title,
-                             size = 3.5) %>%  # these plots are smaller than the Spatial UMAPs
+                             size = 3.5, colorbar_ticks = colorbar_ticks) %>%  # these plots are smaller than the Spatial UMAPs
         layout(margin = list(l = 40, r = 15, t = 10, b = 40),
                font = fonts$global,
                xaxis = axis("UMAP 1"),
@@ -955,22 +1103,21 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
     output$traj_umap_feature_title <- renderText({
       card_heading_text(paste("UMAP:", selected_measure_label()))
     })
-    traj_umap_feature_plot <- reactive({
+    feature_colours <- reactive({
       df <- traj_data_clean()
+      if (!is.null(df)) trajectory_umap_colour(df)
+    })
+    traj_umap_feature_plot <- reactive({
+      scale <- feature_colours()
+      df <- scale$data
       if (is.null(df) || nrow(df) == 0) return(NULL)
-
-      if (all(is.na(df$umap_1)) || all(is.na(df$umap_2))) {
-        return(ggplot() +
-          annotate("text", x = 0.5, y = 0.5, label = "UMAP coordinates not available", size = ISLET_ANNOTATE_SIZE) +
-          theme_void())
-      }
 
       selected_feature <- selected_measure_label()
       color_label <- if (identical(input$traj_y_mode %||% "ratio", "ratio"))
         "Log cell ratio" else "Expression"
 
       df <- df[islet_umap_order(nrow(df)), , drop = FALSE]
-      g <- ggplot(df, aes(x = umap_1, y = umap_2, color = value)) +
+      g <- ggplot(df, aes(x = umap_1, y = umap_2, color = .colour)) +
         geom_point(alpha = 0.9, size = 1.0) +
         scale_x_continuous(expand = expansion(mult = 0.02)) +
         scale_y_continuous(expand = expansion(mult = 0.02)) +
@@ -982,17 +1129,18 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         theme(axis.text = element_blank(), axis.ticks = element_blank(),
               panel.grid = element_blank(), axis.line = element_blank())
 
-      # Continuous colormap scaled to data min/max
-      val_range <- range(df$value, na.rm = TRUE)
-      g <- g + scale_color_viridis_c(option = "inferno", limits = val_range,
-                                      na.value = "#bbbbbb")
-
-      g
+      if (!is.null(scale$palette)) return(g + scale_color_manual(values = scale$palette))
+      g + scale_color_gradientn(colours = substr(viridisLite::inferno(11), 1, 7),
+                                limits = scale$limits, breaks = scale$ticks, labels = scale$labels)
     })
     output$traj_umap_feature <- renderPlotly({
-      interactive_umap(traj_umap_feature_plot(), "traj_umap_feature", "value",
+      scale <- feature_colours()
+      ticks <- if (length(scale$ticks)) list(tickmode = "array", tickvals = scale$ticks,
+                                             ticktext = scale$labels) else list()
+      interactive_umap(traj_umap_feature_plot(), "traj_umap_feature", ".colour", scale$palette,
                        legend_title = if (identical(input$traj_y_mode %||% "ratio", "ratio"))
-                         "Log cell ratio" else "Expression")
+                         "Log cell ratio" else "Expression",
+                       df = scale$data, colorbar_ticks = ticks)
     })
     output$dl_umap_feature <- downloadHandler(
       filename = function() islet_png_filename("trajectory_umap_feature"),
@@ -1292,18 +1440,21 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         if (!is.null(td) && is.data.frame(td) && nrow(td) > 0) {
           want <- c("case_id", "islet_key", "combined_islet_id", "donor_status",
                     "umap_1", "umap_2", "pt", "pt_rank",
-                    "feature_name", "value", "total_cells", "islet_diam_um")
+                    "feature_name", "value", "cells_core", "total_cells", "islet_diam_um")
           keep <- intersect(want, colnames(td))
           if (length(keep) > 0) {
             out <- td[, keep, drop = FALSE]
+            out <- trajectory_join_donor_metadata(out, donor_metadata())
             # `pt` / `value` are opaque outside the app.
             names(out)[names(out) == "pt"]    <- "pseudotime"
             names(out)[names(out) == "value"] <- "feature_value"
+            names(out)[names(out) == "cells_core"] <- "total_cells_core"
           }
         }
         pr <- trajectory_provenance()
         write_islet_csv(file, out, islet_csv_header(
           "Trajectory — UMAP coordinates and per-islet trajectory values",
+          "Rows include the displayed pseudotime objects. Blank UMAP coordinates indicate no saved position.",
           pr$method,
           pr$features,
           pr$scale,
@@ -1318,6 +1469,11 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
     # =====================================================================
     # PAGA force-directed layout (Barlow et al. 2024, Fig 2B/2E)
     # =====================================================================
+    paga_age_weight <- debounce(reactive({
+      w <- input$paga_age_weight %||% 0
+      req(paga_valid_age_weight(w))
+      round(w, 2)
+    }), 250)
     paga_data <- reactive({
       req(isTRUE(input$paga_show_layout))
       cr <- applied_cell_range()
@@ -1326,7 +1482,24 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         message = "Computing PAGA layout",
         detail = sprintf("Leiden + ForceAtlas2, %s", cohort_label()),
         value = 0.4,
-        paga_result(cr[1], cr[2]))
+        paga_result(cr[1], cr[2], age_weight = paga_age_weight()))
+    })
+
+    paga_annotated <- reactive({
+      d <- paga_data()
+      if (!is.null(d)) trajectory_join_donor_metadata(d, donor_metadata())
+    })
+
+    observe({
+      fields <- TRAJ_DONOR_FIELDS[TRAJ_DONOR_FIELDS %in% names(donor_metadata())]
+      choices <- list("Trajectory" = PAGA_COLOR_CHOICES)
+      if (length(fields)) choices[["Donor demographics and clinical history"]] <- fields
+      for (id in c("paga_color_by", "paga_color_right")) {
+        current <- isolate(input[[id]])
+        default <- if (id == "paga_color_by") "pseudotime" else "donor_status"
+        updateSelectInput(session, id, choices = choices,
+                          selected = if (!is.null(current) && current %in% unlist(choices)) current else default)
+      }
     })
 
     output$paga_note <- renderUI({
@@ -1342,7 +1515,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       d <- paga_data()
       if (is.null(d)) {
         return(div(style = "font-size: 11px; color: var(--islet-fg-subtle); padding-top: 6px;",
-          "No layout for this cell-count range."))
+          if (paga_age_weight() > 0) "Age guidance unavailable for this cohort." else "No layout for this cell-count range."))
       }
       div(style = paste0("padding: 7px 9px; border-radius: 4px; font-size: 11px;",
                          " line-height: 1.45; color: var(--islet-info-fg); background: var(--islet-info-bg);",
@@ -1350,11 +1523,19 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         sprintf("%s islets, %d Leiden clusters (resolution 1), cosine 15-NN, %s layout. ",
                 format(nrow(d), big.mark = ","), attr(d, "n_clusters") %||% NA_integer_,
                 if (identical(attr(d, "layout_key"), "X_draw_graph_fa"))
-                  "ForceAtlas2" else sub("^X_draw_graph_", "", attr(d, "layout_key") %||% "")))
+                  "ForceAtlas2" else sub("^X_draw_graph_", "", attr(d, "layout_key") %||% "")),
+        sprintf("DPT root %s (ND). ", attr(d, "root_islet_id")),
+        if (isTRUE(attr(d, "layout_age_weight") > 0))
+          sprintf("Age guidance %.2f. The Pseudotime color shows the guided score.", attr(d, "layout_age_weight"))
+        else "Age guidance 0. The Pseudotime color shows baseline DPT.",
+        if (isTRUE(attr(d, "layout_age_weight") > 0) && isTRUE(attr(d, "age_direction_fallback")))
+          " Donor centers give no age direction; shifts use layout dimension 1.",
+        if (isTRUE(attr(d, "layout_age_weight") > 0) && isTRUE(attr(d, "n_missing_age_donors") > 0))
+          sprintf(" %d donors lack a recorded age and retain their original positions.", attr(d, "n_missing_age_donors")))
     })
 
     paga_figure <- function(colour_by, output_id) {
-      d <- paga_data()
+      d <- paga_annotated()
       if (is.null(d) || !nrow(d)) {
         return(plotly_islet_empty(
           if (paga_available()) "No PAGA layout for this cell-count range"
@@ -1362,7 +1543,7 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
       }
       feature_data <- if (identical(colour_by, "feature"))
         tryCatch(traj_data_clean(), error = function(e) NULL) else NULL
-      display <- paga_display_data(d, colour_by, feature_data)
+      display <- paga_display_data(d, colour_by, feature_data, TRAJ_DONOR_FIELDS)
       d <- display$data
       if (identical(display$colour_by, "feature") && !any(is.finite(d$.colour)))
         return(plotly_islet_empty("No values for the selected feature in the PAGA cohort"))
@@ -1374,9 +1555,20 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         }
       # The shared UMAP renderer gives both panels the same interleaved draw
       # order and stable point keys. Only the color vector differs.
-      p <- islet_umap_plotly(d, "fa_1", "fa_2", ".colour", pal, ".hover", key = ".key",
-                            source = ns(output_id), colorbar_title = display$title,
-                            size = plotly_point_px(input$paga_point_size %||% 1.6))
+      missing_colour <- if (numeric_colour && display$colour_by %in% TRAJ_DONOR_FIELDS)
+        !is.finite(d$.colour) else rep(FALSE, nrow(d))
+      point_size <- plotly_point_px(input$paga_point_size %||% 1.6)
+      p <- islet_umap_plotly(d[!missing_colour, , drop = FALSE], "fa_1", "fa_2", ".colour",
+                            pal, ".hover", key = ".key", source = ns(output_id),
+                            colorbar_title = display$title, size = point_size)
+      if (any(missing_colour)) {
+        # Keep every fitted islet selectable while reserving the gradient for measured values.
+        m <- d[missing_colour, , drop = FALSE]
+        p$x$data <- c(list(list(type = "scatter", mode = "markers", x = signif(m$fa_1, 5),
+                               y = signif(m$fa_2, 5), key = m$.key, text = m$.hover, hoverinfo = "text",
+                               showlegend = FALSE, marker = list(color = "#9d9d9d", size = point_size))),
+                      p$x$data)
+      }
       if (numeric_colour) {
         p <- plotly::plotly_build(p)
         p$x$data <- lapply(p$x$data, function(tr) {
@@ -1389,14 +1581,24 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         })
       }
       fonts <- plotly_islet_fonts()
+      limits <- attr(d, "paga_axis_limits")
+      root <- which(d$is_dpt_root %in% TRUE)
+      root_label <- if (length(root) == 1L) list(list(
+        text = "DPT root", x = signif(d$fa_1[root], 5), y = signif(d$fa_2[root], 5),
+        xref = "x", yref = "y", showarrow = TRUE, arrowhead = 2, arrowcolor = "#757575",
+        ax = if (d$fa_1[root] < median(d$fa_1)) 37 else -37,
+        ay = if (d$fa_2[root] < median(d$fa_2)) -24 else 24,
+        font = list(size = 13, color = "#212121"), bgcolor = "#ffffff",
+        bordercolor = "#757575", borderpad = 2, captureevents = FALSE))
       p <- p %>% layout(
+        uirevision = paste0("paga-cohort-", cohort_label()),
         font = fonts$global,
         title = list(text = display$title, font = fonts$title),
         margin = list(l = 30, r = 10, t = 45, b = 110, autoexpand = FALSE),
-        xaxis = list(title = list(text = "Layout Dimension 1", font = fonts$axis_title), domain = c(0, 1),
+        xaxis = list(range = limits$fa_1, title = list(text = "Layout Dimension 1", font = fonts$axis_title), domain = c(0, 1),
                      zeroline = FALSE, showgrid = FALSE, showticklabels = FALSE, ticks = "",
                      showline = FALSE, constrain = "domain"),
-        yaxis = list(title = list(text = "Layout Dimension 2", font = fonts$axis_title),
+        yaxis = list(range = limits$fa_2, title = list(text = "Layout Dimension 2", font = fonts$axis_title),
                      zeroline = FALSE, showgrid = FALSE, showticklabels = FALSE, ticks = "",
                      showline = FALSE, scaleanchor = "x", scaleratio = 1, constrain = "domain"),
         legend = list(title = list(text = display$title, font = fonts$legend_title, side = "top"),
@@ -1404,6 +1606,8 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
                       x = 0.5, xanchor = "center", y = -0.3, yanchor = "bottom",
                       itemsizing = "constant", tracegroupgap = 2)
       ) %>% plotly_islet_config(paste0("trajectory_", output_id))
+      # Keep the annotation's dark ink on its opaque white label in either plot theme.
+      p <- plotly::layout(p, annotations = root_label)
       p <- trajectory_link_plot(p, ns)
       paired_plotly_guides(p, c(ns("paga_layout"), ns("paga_layout_right")))
     }
@@ -1420,16 +1624,25 @@ trajectory_server <- function(id, prepared, selected_islet, forced_image, active
         sprintf("min%dcells", TRAJ_MIN_CELLS),
         format(Sys.time(), "%Y%m%d_%H%M%S")),
       content = function(file) {
-        d <- paga_data()
-        out <- if (is.null(d)) data.frame() else
-          d[, c("islet_id", "case_id", "donor_status", "leiden",
-                "fa_1", "fa_2", "pseudotime")]
+        d <- paga_annotated()
+        columns <- c("islet_id", "case_id", "donor_status", "total_cells_core", "is_dpt_root", "leiden", "fa_1", "fa_2",
+                     "base_fa_1", "base_fa_2", "pseudotime",
+                     "age_guided_pseudotime", "layout_age_weight", "age_guidance_method",
+                     unname(TRAJ_DONOR_FIELDS), "C_peptide_censored")
+        out <- if (is.null(d)) data.frame() else d[, intersect(columns, names(d)), drop = FALSE]
         write_islet_csv(file, out, islet_csv_header(
           "Trajectory — PAGA force-directed layout",
-          "Features: core + 20um peri cell-type counts / endocrine cells, log1p",
+          trajectory_inputs_text(attr(d, "features")),
+          sprintf("Age guidance weight: %.2f | method: %s", attr(d, "layout_age_weight") %||% 0,
+                  attr(d, "age_guidance_method") %||% "none"),
+          sprintf("Donors with age: %s | missing age: %s | age range (years): %s to %s | FA1 direction fallback: %s",
+                  attr(d, "n_age_donors") %||% NA, attr(d, "n_missing_age_donors") %||% NA,
+                  attr(d, "age_min_years") %||% NA, attr(d, "age_max_years") %||% NA,
+                  attr(d, "age_direction_fallback") %||% NA),
+          "pseudotime = baseline 56-feature DPT; age_guided_pseudotime = score shifted by donor, which may extend outside 0-1",
           sprintf("Neighbors: cosine, %d NN | Leiden resolution %g | layout %s",
                   15L, 1.0, attr(d, "layout_key") %||% "(n/a)"),
-          "Root: ND islet nearest the ND centroid in diffusion space",
+          paste("DPT root:", attr(d, "root_islet_id"), "|", attr(d, "root_method")),
           sprintf("Fitted cohort: %s, any object class", cohort_label()),
           paste("Color by — left:", input$paga_color_by %||% "pseudotime",
                 "| right:", input$paga_color_right %||% "donor_status"),

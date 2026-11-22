@@ -1,0 +1,11 @@
+{
+ "schema": "uniform.endocrine_lineage_evidence/1",
+ "reason": "Endocrine objects come from the QuPath pixel classifier trained on INS, GCG, SST and CHGA (owner 2026-11-02: the objects cannot be hormone-negative; owner 2026-11-13: members all below the cell-level hormone level means the level under-calls those cells, never that the object is negative). The endocrine-object audit therefore judges objects by original classifier lineage, the accepted v2 release proof, with the corrected-cell rule kept as a recorded diagnostic.",
+ "source": "output/component_candidate_build_20261102_v2/config.json (the accepted v2 classifier-lineage audit inputs; its audit passed with mode classifier_lineage on the same preserved final geometry)",
+ "classifier_run": "data/development/uniform-20donor-20261027",
+ "classifier_replay": "output/v20_classifier_support_20261102_r2/summary.json",
+ "classifier_replay_sha256": "476fc65e42bbd521a12f67e6ecb2c875726d3e8b8c0e0ab4f4cbc6db098ce877",
+ "geometry_reference": "data/development/uniform-20donor-20261027",
+ "geometry_provenance": "output/v20_classifier_trace_20261102/classifier-provenance.json",
+ "geometry_provenance_sha256": "597603c1db91bc92effc3f8ece6f745b7f80d4fb7ec7384e5b9ae6761bde6646"
+}

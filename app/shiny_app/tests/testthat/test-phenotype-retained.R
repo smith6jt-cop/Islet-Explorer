@@ -16,10 +16,10 @@
                             "Macrophage" = 1, "CD8a Tcell" = 1, "T cell" = 1,
                             "Immune" = 1, "Acinar" = 1)
   .load_defs("R/00_globals.R", c("UNCLASSIFIED_KEYS", "UNCLASSIFIED_PARENT", "UNCLASSIFIED_RAW_TO_KEY", "unclassified_collapse",
-                                 "PHENOTYPE_DISPLAY_NAMES", "phenotype_text", "MACROPHAGE_LABEL_PATTERN",
+                                 "PHENOTYPE_DISPLAY_NAMES", "phenotype_text", "is_macrophage_label", "MACROPHAGE_KEY_PATTERN", "macrophage_profile", "MACROPHAGE_LABEL_PATTERN",
                                  "PHENOTYPE_RETIRED", "phenotype_keep", "phenotype_retired",
                                  "phenotype_is_kept", "phenotype_is_conflict", "phenotype_filter_conflict_columns",
-                                 "phenotype_filter_rows", "phenotype_marker_definitions", "write_islet_csv"), env)
+                                 "phenotype_filter_rows", "phenotype_marker_definitions", "macrophage_rule_rows", "MACROPHAGE_LABELS", "write_islet_csv"), env)
   .load_defs("R/spatial_helpers.R", "canonical_phenotype_order", env)
 }
 
@@ -68,6 +68,7 @@ test_that("identity reference delegates the Unclassified family once to its shar
   env <- .retained_env()
   .load_defs("R/00_globals.R", "identity_phenotype_definitions_ui", env)
   env$root_has_selected_endocrine <- function() TRUE
+  env$root_has_terminal_review <- function() FALSE
   env$identity_structure_text <- function() "Structure-qualified cell rules."
   env$phenotype_text <- identity
   calls <- 0L
@@ -131,4 +132,22 @@ test_that("protein rules compose parent constraints for retained labels only", {
                "any of CD68+ / CD163+  —  CD20−, CD3e−, INS−, GCG−, SST−")
   expect_equal(defs[["CD8a Tcell"]],
                "CD8a+, CD3e+  —  CD4−, CD20−, CD68−, INS−, GCG−, SST−")
+})
+
+test_that("v27 help presents the reviewed subtype evidence and terminal labels", {
+  env <- .retained_env()
+  .load_defs("R/00_globals.R", "identity_phenotype_definitions_ui", env)
+  env$root_has_terminal_review <- function() TRUE
+  env$root_has_selected_endocrine <- function() FALSE
+  env$identity_structure_text <- function() "Structure-qualified cell rules."
+  env$phenotype_text <- identity
+  source <- tempfile(fileext = ".csv")
+  on.exit(unlink(source))
+  utils::write.csv(data.frame(label = c("CD4 Tcell", "CD8a Tcell", "Panel undected"),
+    note = c("CD4 direct or inferred", "CD8a direct or inferred", "No positive typing marker")), source, row.names = FALSE)
+  env$data_path <- function(...) source
+  html <- as.character(env$identity_phenotype_definitions_ui())
+  expect_match(html, "CD8a direct or inferred", fixed = TRUE)
+  expect_match(html, "Panel undected", fixed = TRUE)
+  expect_false(grepl("Unclassified", html, fixed = TRUE))
 })

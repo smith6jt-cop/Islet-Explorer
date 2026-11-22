@@ -685,6 +685,17 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
     output$left_title <- renderText(card_heading("left"))
     output$right_title <- renderText(card_heading("right"))
 
+    # A measure comparison opens on its actual object pairs. A point-hiding
+    # setting from a distribution plot otherwise leaves only donor medians,
+    # which can all be zero for sparse cell types despite nonzero object values.
+    # Reviewers can still hide the points explicitly after opening the comparison.
+    show_comparison_points <- function(type) {
+      if (identical(type, "xy") && !isTRUE(isolate(input$show_points)))
+        updateCheckboxInput(session, "show_points", value = TRUE)
+    }
+    observeEvent(input$left_type, show_comparison_points(input$left_type), ignoreInit = TRUE)
+    observeEvent(input$right_type, show_comparison_points(input$right_type), ignoreInit = TRUE)
+
     # A card's rows: flagged for outliers, binned by diameter, with link keys.
     card_rows <- function(card) {
       if (card == "left") {
@@ -766,7 +777,8 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         xy = {
           xs <- flat_choices(x_measure_choices())
           x_col <- card_choice(card, "x_measure", xs) %||% unname(xs[1])
-          plot_xy_figure(kept, plot_x_values(kept, prepared()$comp, x_col), names(xs)[match(x_col, xs)], ylab, name,
+          plot_xy_figure(kept, plot_x_values(kept, prepared()$comp, x_col, prepared()$combined_pairs),
+                         names(xs)[match(x_col, xs)], ylab, name,
                          status_cols, color_by, donor_id_palette(kept), log_y, input$pt_size %||% 3,
                          input$pt_alpha %||% 0.4, isTRUE(input$show_points), clip = axis_clip())
         },
@@ -829,7 +841,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
         xy = {
           xs <- flat_choices(x_measure_choices())
           x_col <- card_choice(card, "x_measure", xs) %||% unname(xs[1])
-          kept$x_value <- plot_x_values(kept, prepared()$comp, x_col)
+          kept$x_value <- plot_x_values(kept, prepared()$comp, x_col, prepared()$combined_pairs)
           list(df = per_object(kept, "x_value"), lines = paste0("x_value: ", names(xs)[match(x_col, xs)],
                                                                  "; value: the y measure"))
         },

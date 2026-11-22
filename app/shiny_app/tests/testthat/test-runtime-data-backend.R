@@ -12,7 +12,7 @@ make_backend_env <- function(root) {
                                        "phenotype_keep", "phenotype_is_kept", "phenotype_filter_rows",
                                        "phenotype_filter_conflict_columns", "phenotype_partition_labels",
                                        "is_phenotype_aggregate", "PHENOTYPE_GROUP_AGGREGATES",
-                                       "is_macrophage_label", "MACROPHAGE_LABEL_PATTERN",
+                                       "is_macrophage_label", "macrophage_profile", "MACROPHAGE_LABEL_PATTERN",
                                        "MACROPHAGE_KEY_PATTERN", "UNCLASSIFIED_KEYS", "UNCLASSIFIED_PARENT",
                                        "UNCLASSIFIED_RAW_TO_KEY", "unclassified_collapse",
                                        "phenotype_is_unclassified", "phenotype_selectable",

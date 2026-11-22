@@ -2,7 +2,7 @@
 Description=Islet Explorer @@INSTANCE@@ (@@RELEASE@@)
 Wants=network-online.target
 After=network-online.target
-RequiresMountsFor=@@DATA_DIR@@ @@IMAGE_DIR@@ @@LOG_DIR@@ @@TMP_DIR@@@@LOCAL_DATA_MOUNT@@
+RequiresMountsFor=@@DATA_DIR@@ @@IMAGE_DIR@@ @@LOG_DIR@@ @@TMP_DIR@@@@LOCAL_DATA_MOUNT@@@@APP_MOUNT_REQUIREMENT@@
 
 [Container]
 ContainerName=@@INSTANCE@@
@@ -20,6 +20,7 @@ User=@@CONTAINER_UID@@:@@CONTAINER_GID@@
 # --publish-address), which UFRC's network keeps from every other host.
 PublishPort=@@PUBLISH_ADDRESS@@:@@PORT@@:3838
 
+@@APP_VOLUMES@@
 Volume=@@DATA_DIR@@:/srv/islet-explorer/data:ro
 @@LOCAL_DATA_VOLUMES@@
 Volume=@@IMAGE_DIR@@:/srv/islet-explorer/app/shiny_app/www/local_images:ro

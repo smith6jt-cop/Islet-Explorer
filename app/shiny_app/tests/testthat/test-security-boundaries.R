@@ -98,7 +98,16 @@ test_that("path segments reject separators and dot traversal", {
 })
 
 .find_repo_file <- function(rel) {
+  # Runtime support lives outside a released app bundle. Point this test at
+  # the selected runtime's committed source when testing a mounted bundle.
+  runtime_source <- Sys.getenv("ISLET_TEST_RUNTIME_SOURCE", "")
+  installed_runtime <- c(
+    "deploy/container-entrypoint.sh" = "/usr/local/bin/islet-container-entrypoint",
+    "deploy/shiny-server.conf" = "/etc/shiny-server/shiny-server.conf"
+  )
   candidates <- c(
+    if (nzchar(runtime_source)) file.path(runtime_source, rel),
+    if (rel %in% names(installed_runtime)) unname(installed_runtime[[rel]]),
     rel,
     file.path("..", "..", rel),
     file.path("..", "..", "..", "..", rel),

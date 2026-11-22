@@ -35,6 +35,13 @@ readonly runtime_cache="${runtime_tmp}/cache"
 readonly runtime_matplotlib="${runtime_tmp}/matplotlib"
 readonly runtime_numba="${runtime_tmp}/numba"
 
+# A software-only image must never silently serve an embedded or missing app.
+# Activation verifies the complete bundle; this is also a direct-run guard.
+if [[ ! -r /srv/islet-explorer/app/shiny_app/app.R ]]; then
+  echo "ERROR: mount a verified app bundle read-only at /srv/islet-explorer/app." >&2
+  exit 66
+fi
+
 for required_dir in "${data_root}" "${image_root}" /var/log/shiny-server; do
   if [[ ! -d "${required_dir}" || ! -r "${required_dir}" ]]; then
     echo "ERROR: required runtime directory is not readable: ${required_dir}" >&2

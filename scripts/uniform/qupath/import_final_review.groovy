@@ -31,6 +31,7 @@ if (!csv.isFile()) throw new IllegalStateException("no assignments for '${imageN
 // Colors: immune types strong, endocrine types pale, exocrine and untyped faint; structures distinct.
 def colors = [
     "T Cell CD8a\u207a": "#E41A1C", "T Cell CD4\u207a": "#FF7F00", "T Cell": "#F781BF", "B Cell": "#FFFF33",
+    "Macrophage Gal3\u207a": "#0085FF", "Macrophage Gal3\u207b": "#76A7D1",
     "Immune": "#1B9E77", "Endocrine Beta": "#9ECAE1", "Endocrine Alpha": "#A1D99B", "Endocrine Delta": "#BCBDDC",
     "Endocrine CHGA\u207a hormone-negative": "#8D6E63", "Endocrine": "#BDBDBD", "Exocrine": "#E0E0E0",
     "Excluded - cell QC": "#555555", "Excluded - exocrine inside islet border": "#A0522D",
@@ -47,15 +48,6 @@ def colors = [
     // the CD45 rule's class (was "Immune"; owner, 2026-10-27)
     "CD45\u207a": "#1B9E77",
     "Capillary": "#FF2D2D", "Nerve": "#FFD700", "Lymphatic": "#E6994D", "Collagen IV": "#D82DBD"]
-// Class names are the display names (owner, 2026-10-27: broad name first, superscript plus and minus), e.g.
-// "Macrophage CD68\u207aCD163\u207bLGALS3\u207a"; the data label is kept in the metadata (phenotype_label).
-// Macrophages share a hue; a lighter shade marks Gal3-negative cells.
-String PLUS = "\u207a", MINUS = "\u207b"
-def macrophageColor = { String name ->
-    float hue = 0.58f
-    int negatives = name.contains("Gal3" + MINUS) ? 1 : 0
-    Color.getHSBColor(hue, (float) (1.0f - 0.3f * negatives), (float) (1.0f - 0.15f * negatives))
-}
 // colors written by write_assignments.py into the project's classes.json win (final typing run, 2026-10-28)
 def projectColors = [:]
 def cj = getProject() != null ? new File(getProject().getPath().getParent().toFile(), "classifiers/classes.json") : null
@@ -64,8 +56,8 @@ if (cj != null && cj.isFile()) {
         def o = e.getAsJsonObject(); projectColors[o.get("name").getAsString()] = o.get("color").getAsInt() }
 }
 def classOf = { String name ->
-    if (projectColors.containsKey(name) && !name.startsWith("Macrophage ")) return PathClass.fromString(name, projectColors[name])
-    def c = name.startsWith("Macrophage ") ? macrophageColor(name) : Color.decode(colors[name] ?: "#808080")
+    if (projectColors.containsKey(name)) return PathClass.fromString(name, projectColors[name])
+    def c = Color.decode(colors[name] ?: "#808080")
     PathClass.fromString(name, c.getRGB())
 }
 

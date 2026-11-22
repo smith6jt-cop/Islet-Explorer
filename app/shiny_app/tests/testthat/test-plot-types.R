@@ -4,7 +4,7 @@
   env <- new.env(parent = globalenv())
   defs <- c("PHENOTYPE_RETIRED", "phenotype_is_kept", "phenotype_keep", "phenotype_retired",
             "phenotype_is_conflict", "phenotype_partition_labels", "PHENOTYPE_GROUP_AGGREGATES",
-            "is_phenotype_aggregate", "MACROPHAGE_LABEL_PATTERN", "MACROPHAGE_KEY_PATTERN", "is_macrophage_label",
+            "is_phenotype_aggregate", "macrophage_profile", "MACROPHAGE_LABEL_PATTERN", "MACROPHAGE_KEY_PATTERN", "is_macrophage_label",
             "UNCLASSIFIED_KEYS", "UNCLASSIFIED_PARENT", "UNCLASSIFIED_RAW_TO_KEY", "unclassified_collapse",
             "phenotype_is_unclassified", "phenotype_selectable")
   for (expr in parse(.find_source("R/00_globals.R"))) {
@@ -22,7 +22,7 @@
 
 .composition_palette_env <- function() {
   env <- .plot_types_env()
-  globals <- c("MACROPHAGE_LABELS", "MACROPHAGE_MARKERS", "macrophage_signs", "macrophage_collapse",
+  globals <- c("MACROPHAGE_LABELS", "MACROPHAGE_LEGACY_LABELS", "MACROPHAGE_MARKERS", "macrophage_collapse",
                "TOP_MARKER_BASE", "TOP_MARKER_LABELS", "CD45_RULE_LABEL", "CD45_TOP_MARKER_LABEL")
   for (expr in parse(.find_source("R/00_globals.R"))) {
     if (is.call(expr) && identical(expr[[1]], as.name("<-")) && is.symbol(expr[[2]]) &&
@@ -31,7 +31,7 @@
   env$root_has_top_marker_labels <- function() FALSE
   env$root_cd45_is_rule_label <- function() FALSE
   palette_defs <- c("PHENOTYPE_COLORS", "PHENOTYPE_COLORS_HIGH_CONTRAST", "PHENOTYPE_COLORS_COLORBLIND",
-                    "PHENOTYPE_COLORS_MAX_DISTINCT", "macrophage_family", "macrophage_key_colors",
+                    "PHENOTYPE_COLORS_MAX_DISTINCT",
                     "with_macrophage_family", "top_marker_family", "with_top_marker_family",
                     "with_unclassified_family", "PHENOTYPE_PALETTES")
   for (expr in parse(.find_source("R/drilldown_helpers.R"))) {
@@ -92,6 +92,43 @@ test_that("x values are looked up per object and proportions given in %", {
   expect_equal(env$plot_x_values(rows, comp, "prop_Beta cell"), c(50, 25, NA))
 })
 
+test_that("core+peri x proportions pool counts and retain the available compartment", {
+  env <- .plot_types_env()
+  comp <- data.frame(`Case ID` = c(1, 1, 2, 2, 3, 3), islet_key = rep(c("Islet_1", "Islet_2"), 3),
+    total_cells_core = c(10, 10, 0, NA, 0, 10), total_cells_peri = c(90, 0, 20, 20, 0, NA),
+    `prop_CD8a Tcell` = c(0.2, 0.3, NA, NA, NA, 0.4),
+    peri_prop_CD8a_Tcell = c(0.1, NA, 0.25, 0.5, NA, NA), check.names = FALSE)
+  pairs <- data.frame(stem = "CD8a_Tcell", label = "CD8a Tcell",
+    core_col = "prop_CD8a Tcell", peri_col = "peri_prop_CD8a_Tcell")
+  rows <- comp[c(6:1, 1), c("Case ID", "islet_key")]
+  rows$`Case ID`[7] <- 99
+  expect_equal(env$plot_x_values(rows, comp, "combined_prop_CD8a_Tcell", pairs),
+               c(40, NA, 50, 25, 30, 11, NA))
+  # Unequal compartment sizes must not become an unweighted mean of 20% and 10%.
+  expect_equal(env$plot_x_values(comp, comp, "combined_prop_CD8a_Tcell", pairs)[1], 11)
+  expect_true(all(is.na(env$plot_x_values(rows, comp, "combined_prop_missing", pairs))))
+  expect_true(all(is.na(env$plot_x_values(rows, comp, "combined_prop_CD8a_Tcell"))))
+  comp$total_cells_peri <- NULL
+  expect_true(all(is.na(env$plot_x_values(rows, comp, "combined_prop_CD8a_Tcell", pairs))))
+})
+
+test_that("combined x choices use combined nonzero coverage and require cell totals", {
+  env <- .plot_types_env()
+  env$phenotype_text <- identity
+  sys.source(.find_source("R/plot_helpers.R"), envir = env)
+  comp <- data.frame(`prop_B cell` = c(0.2, rep(0, 149)),
+    peri_prop_B_cell = c(0, 0.1, rep(0, 148)), total_cells_core = 10, total_cells_peri = 90,
+    check.names = FALSE)
+  pairs <- data.frame(stem = "B_cell", label = "B cell", core_col = "prop_B cell", peri_col = "peri_prop_B_cell")
+  choices <- env$plot_x_measure_choices(names(comp), pairs, comp)
+  expect_null(choices[["Core proportion"]])
+  expect_null(choices[["Peri-islet proportion"]])
+  expect_equal(unname(choices[["Core+Peri proportion"]]), "combined_prop_B_cell")
+  expect_match(names(choices[["Core+Peri proportion"]]), "core\\+peri %")
+  comp$total_cells_core <- NULL
+  expect_null(env$plot_x_measure_choices(names(comp), pairs, comp)[["Core+Peri proportion"]])
+})
+
 test_that("donor composition pools cells over objects and closes each bar with No subtype", {
   env <- .plot_types_env()
   comp <- data.frame(`Case ID` = c(1, 1, 2), `Donor Status` = c("ND", "ND", "T1D"),
@@ -117,7 +154,7 @@ test_that("donor composition pools cells over objects and closes each bar with N
 test_that("donor categories count leaves once and never turn hidden QC cells into No subtype", {
   env <- .plot_types_env()
   labels <- c("Beta cell", "T cell", "CD4 Tcell", "Hematopoietic CD45+", "Hematopoietic CD45-",
-              "Macrophage CD68+CD163-", "Macrophage CD68-CD163+", "Macrophage", "Conflict B/T", "All T cells")
+              "Macrophage_LGALS3+", "Macrophage_LGALS3-", "Macrophage", "Conflict B/T", "All T cells")
   core <- c(30, 10, 20, 5, 5, 10, 10, 20, 10, 30)
   peri <- c(20, 20, 20, 30, 20, 20, 20, 40, 50, 40)
   comp <- data.frame(`Case ID` = "1", `Donor Status` = "ND", total_cells_core = 100,
@@ -242,8 +279,8 @@ test_that("deployed phenotypes have distinct stable colors across palettes and m
              "B cell", unname(env$UNCLASSIFIED_KEYS), "Endothelium Blood Vessel", "Endothelium Lymphatic",
              "Exocrine", "Neural", "Stromal")
   for (palette in env$PHENOTYPE_PALETTES) {
-    for (mask in 0:15) {
-      markers <- env$MACROPHAGE_MARKERS[as.logical(intToBits(mask)[1:4])]
+    for (mask in 0:1) {
+      markers <- env$MACROPHAGE_MARKERS[as.logical(mask)]
       labels <- c(fixed, unique(env$macrophage_collapse(env$MACROPHAGE_LABELS, markers)))
       colors <- env$phenotype_palette_for(labels, palette)
       expect_false(anyNA(palette[labels]))

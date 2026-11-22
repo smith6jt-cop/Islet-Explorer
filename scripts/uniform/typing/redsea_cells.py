@@ -65,6 +65,9 @@ ALIGN_MIN_R = 0.95
 # Owner 2026-10-29: test keeping the cells without a nucleus in REDSEA's cell map (spillover context) while they stay
 # out of analysis; Senior's config leaves them out of both, so their borders read as background to their neighbors.
 SPILLOVER_KEEPS_NO_NUCLEUS = False
+# Owner 2026-11-06: a nucleus raster that fills its whole cell is no distinct nucleus; those cells leave analysis
+# AND the spillover map, exactly like missing-nucleus cells (full equivalence). False = out of both.
+SPILLOVER_KEEPS_DEGENERATE_NUCLEUS = False
 DESPECKLE = {'filter': 'median', 'size': 3, 'implementation': 'cv2.medianBlur', 'channels': 'all'}
 
 
@@ -238,6 +241,10 @@ def geometry_qc(oids, has_nucleus, cells, sizes_px, nuc_px, cfg=CT.GEOMETRY_QC):
         nc_ratio = nuc_px / sizes_px
     valid_scale = np.isfinite(raster_ratio) & (raster_ratio >= cfg['min_raster_area_ratio']) \
         & (raster_ratio <= cfg['max_raster_area_ratio'])
+    # Owner 2026-11-06: a nucleus raster equal to its cell raster is no distinct nucleus (rasterize clips the
+    # nucleus to its own cell, so >= is ==); excluded like a missing nucleus, and out of the spillover map under
+    # SPILLOVER_KEEPS_DEGENERATE_NUCLEUS above.
+    nucleus_fills_cell = has_nucleus & valid_nuc_raster & valid_raster & (nuc_px >= sizes_px)
 
     # duplicates: centroids within 1 um and areas within 15 %; survivor = QC-viable, most raster pixels, id
     cand = np.flatnonzero(present & valid_area & valid_raster & valid_centroid)
@@ -262,7 +269,7 @@ def geometry_qc(oids, has_nucleus, cells, sizes_px, nuc_px, cfg=CT.GEOMETRY_QC):
         groups = {}
         for i in {int(v) for p in pairs for v in (cand[p[0]], cand[p[1]])}:
             groups.setdefault(find(i), []).append(i)
-        viable = (present & ~missing_nucleus & valid_nuc_raster & valid_centroid & valid_area
+        viable = (present & ~missing_nucleus & ~nucleus_fills_cell & valid_nuc_raster & valid_centroid & valid_area
                   & (area >= cfg['min_cell_area_um2']) & valid_raster & valid_scale & valid_solidity
                   & (solidity >= cfg['min_cell_solidity']))
         for members in groups.values():
@@ -274,7 +281,7 @@ def geometry_qc(oids, has_nucleus, cells, sizes_px, nuc_px, cfg=CT.GEOMETRY_QC):
     duplicate = np.zeros(len(oids), bool)
     duplicate[list(losers)] = True
 
-    provisional = present & ~missing_nucleus & valid_area & (area >= cfg['min_cell_area_um2']) \
+    provisional = present & ~missing_nucleus & ~nucleus_fills_cell & valid_area & (area >= cfg['min_cell_area_um2']) \
         & valid_solidity & (solidity >= cfg['min_cell_solidity']) & ~duplicate
     max_area = cfg['max_cell_area_median_multiple'] * float(np.median(area[provisional]))
     flags = {
@@ -288,6 +295,7 @@ def geometry_qc(oids, has_nucleus, cells, sizes_px, nuc_px, cfg=CT.GEOMETRY_QC):
         'raster_empty': ~valid_raster,
         'raster_area_mismatch': valid_area & valid_raster & ~valid_scale,
         'nucleus_raster_empty': has_nucleus & ~valid_nuc_raster,
+        'nucleus_fills_cell': nucleus_fills_cell,
         'duplicate_detection': duplicate,
     }
     reasons = np.full(len(oids), '', dtype=object)      # what excludes the cell (codex_typing.QC_EXCLUDES)
@@ -299,11 +307,13 @@ def geometry_qc(oids, has_nucleus, cells, sizes_px, nuc_px, cfg=CT.GEOMETRY_QC):
     analysis = reasons == ''
     no_cyto = analysis & np.isfinite(nc_ratio) & (nc_ratio >= cfg['no_cytoplasm_nc_ratio'])
     spill = (np.ones(len(oids), bool) if SPILLOVER_KEEPS_NO_NUCLEUS else ~missing_nucleus) \
+        & (np.ones(len(oids), bool) if SPILLOVER_KEEPS_DEGENERATE_NUCLEUS else ~nucleus_fills_cell) \
         & ~(has_nucleus & ~valid_nuc_raster) & valid_raster & ~duplicate
     frame = pd.DataFrame({'object_id': oids, 'qc_analysis_eligible': analysis,
                           'qc_estimation_eligible': analysis & ~no_cyto,
                           'qc_spillover_context_eligible': spill, 'qc_reasons': reasons, 'qc_flags': noted,
                           'cell_area_px': sizes_px, 'nucleus_area_px': nuc_px})
+    assert not (frame['qc_estimation_eligible'] & ~frame['qc_analysis_eligible']).any()  # estimation within analysis
     summary = {'n': len(oids), 'analysis_eligible': int(analysis.sum()),
                'estimation_eligible': int((analysis & ~no_cyto).sum()),
                'spillover_context_eligible': int(spill.sum()), 'duplicate_groups': n_groups,
@@ -377,8 +387,9 @@ def process(out: Path, tag: str, force: bool = False, dest_dir: Path | None = No
         keep_label[excluded] = False
         mask = np.where(keep_label[mask], mask, 0)
         nucm = np.where(keep_label[nucm], nucm, 0)
-    log(tag, f'QC: {qc_summary["analysis_eligible"]:,} analysis-eligible, {len(excluded):,} out of spillover '
-             f'context; {qc_summary["reasons"]}')
+    log(tag, f'QC: {qc_summary["analysis_eligible"]:,} analysis-eligible ({qc_summary["estimation_eligible"]:,} '
+             f'estimation-eligible, {qc_summary["reasons"]["nucleus_fills_cell"]:,} without a distinct nucleus), '
+             f'{len(excluded):,} out of spillover context; {qc_summary["reasons"]}')
 
     sizes = np.bincount(mask.ravel(), minlength=n + 1)[1:].astype(np.float64)
     inner = find_boundaries(mask, mode='inner', connectivity=2, background=0)
@@ -473,6 +484,7 @@ def process(out: Path, tag: str, force: bool = False, dest_dir: Path | None = No
            'empty_area_null': {'method': EMPTY, 'per_channel': empty},
            'uncorrected_channels': [c for c in names if c in CT.NO_SPILLOVER],
            'isolated_cells': n_isolated, 'spillover_keeps_no_nucleus': SPILLOVER_KEEPS_NO_NUCLEUS,
+           'spillover_keeps_degenerate_nucleus': SPILLOVER_KEEPS_DEGENERATE_NUCLEUS,
            'analysis_cells_touching_no_nucleus': touching_outside, 'contacts': int(M.nnz), 'geometry_qc': qc_summary,
            'alignment_check': {'min_r': min(v['r'] for v in align.values()), 'per_channel': align},
            'seconds': round(time.time() - t_all)}

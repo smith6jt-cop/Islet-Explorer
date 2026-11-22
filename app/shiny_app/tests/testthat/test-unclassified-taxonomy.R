@@ -2,8 +2,8 @@
 .unclassified_env <- function() {
   env <- new.env(parent = globalenv())
   wanted <- c("UNCLASSIFIED_KEYS", "UNCLASSIFIED_PARENT", "UNCLASSIFIED_RAW_TO_KEY", "unclassified_collapse",
-    "unclassified_collapse_comp", "phenotype_collapse", "phenotype_members", "MACROPHAGE_LABELS",
-    "MACROPHAGE_LABEL_PATTERN", "MACROPHAGE_KEY_PATTERN", "MACROPHAGE_MARKERS", "macrophage_signs",
+    "unclassified_collapse_comp", "phenotype_collapse", "phenotype_members", "MACROPHAGE_LABELS", "MACROPHAGE_LEGACY_LABELS",
+    "macrophage_profile", "MACROPHAGE_LABEL_PATTERN", "MACROPHAGE_KEY_PATTERN", "MACROPHAGE_MARKERS",
     "macrophage_collapse", "is_macrophage_label", "PHENOTYPE_DISPLAY_NAMES", "phenotype_text",
     "PHENOTYPE_GROUP_AGGREGATES", "PHENOTYPE_GROUP_ORDER", "phenotype_group", "is_phenotype_aggregate",
     "phenotype_aggregate_members", "phenotype_partition_labels", "phenotype_aggregates_for",

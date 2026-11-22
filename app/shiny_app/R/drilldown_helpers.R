@@ -125,36 +125,16 @@ PHENOTYPE_COLORS_MAX_DISTINCT <- c(
 )
 
 # ── Macrophage marker-profile labels (owner, 2026-10-27; MACROPHAGE_LABELS in 00_globals.R) ──
-# A dark and light shade distinguish the two Gal3 states.
-macrophage_family <- function(base) {
-  hsv0 <- grDevices::rgb2hsv(grDevices::col2rgb(base))[, 1]
-  mix <- function(col, t) {          # t < 0 toward black, t > 0 toward white
-    rgb <- grDevices::col2rgb(col)[, 1] / 255
-    rgb <- if (t < 0) rgb * (1 + t) else rgb + (1 - rgb) * t
-    grDevices::rgb(rgb[1], rgb[2], rgb[3])
-  }
-  cols <- vapply(c(-0.25, 0.35), function(t) mix(base, t), character(1))
-  stats::setNames(cols, MACROPHAGE_LABELS)
-}
-# The aggregate keeps its base color when Gal3 is collapsed.
-macrophage_key_colors <- function(base, family) {
-  out <- character(0)
-  for (k in seq_along(MACROPHAGE_MARKERS)) {
-    for (markers in utils::combn(MACROPHAGE_MARKERS, k, simplify = FALSE)) {
-      keys <- unique(macrophage_collapse(MACROPHAGE_LABELS, markers))
-      keys <- keys[order(chartr("+-", "01", keys))]
-      cols <- if (k == length(MACROPHAGE_MARKERS)) unname(family[match(keys, macrophage_collapse(names(family), markers))])
-              else grDevices::colorRampPalette(c(family[[1]], base, family[[length(family)]]))(max(length(keys), 2))[
-                     seq_along(keys)]
-      out <- c(out, stats::setNames(cols, keys))
-    }
-  }
-  out
-}
-with_macrophage_family <- function(pal) {
+# Use two shades of each palette's macrophage color for Gal3-positive and Gal3-negative cells.
+with_macrophage_family <- function(pal, shades = NULL) {
   i <- match("Macrophage", names(pal))
-  family <- macrophage_family(pal[["Macrophage"]])
-  c(pal[seq_len(i)], family, macrophage_key_colors(pal[["Macrophage"]], family), pal[-seq_len(i)])
+  if (is.null(shades)) {
+    base <- grDevices::col2rgb(pal[[i]])[, 1L] / 255
+    dark <- base * 0.65
+    light <- base + (1 - base) * 0.50
+    shades <- grDevices::rgb(c(dark[1], light[1]), c(dark[2], light[2]), c(dark[3], light[3]))
+  }
+  c(pal[seq_len(i)], stats::setNames(shades, MACROPHAGE_LABELS), pal[-seq_len(i)])
 }
 # Top-marker labels (root v15; TOP_MARKER_LABELS in 00_globals.R): a muted family -- low chroma, hues around the
 # wheel, two alternating lightnesses -- so they read apart from each other but not as the saturated endocrine,
@@ -176,7 +156,7 @@ with_top_marker_family <- function(pal) {
   pal[names(add)] <- add
   pal
 }
-PHENOTYPE_COLORS <- with_macrophage_family(PHENOTYPE_COLORS)
+PHENOTYPE_COLORS <- with_macrophage_family(PHENOTYPE_COLORS, c("#0085FF", "#76A7D1"))
 PHENOTYPE_COLORS_HIGH_CONTRAST <- with_macrophage_family(PHENOTYPE_COLORS_HIGH_CONTRAST)
 PHENOTYPE_COLORS_COLORBLIND <- with_macrophage_family(PHENOTYPE_COLORS_COLORBLIND)
 PHENOTYPE_COLORS_MAX_DISTINCT <- with_macrophage_family(PHENOTYPE_COLORS_MAX_DISTINCT)
@@ -309,7 +289,7 @@ render_islet_drilldown_plot <- function(info, cells, color_by = "phenotype", sho
   # Apply the presentation policy to points, not just the palette. Keep the
   # loaded scientific table intact for original-denominator counts elsewhere.
   if ("phenotype" %in% names(cells)) {
-    cells$phenotype <- unclassified_collapse(cells$phenotype)
+    cells$phenotype <- unclassified_collapse(macrophage_profile(cells$phenotype))
     visible <- if (color_by == "phenotype") phenotype_is_kept(cells$phenotype) else
       !phenotype_is_conflict(cells$phenotype)
     cells <- cells[visible, , drop = FALSE]
@@ -386,7 +366,7 @@ render_drilldown_summary <- function(cells, palette = PHENOTYPE_COLORS) {
     return(NULL)
   }
 
-  cells$phenotype <- unclassified_collapse(cells$phenotype)
+  cells$phenotype <- unclassified_collapse(macrophage_profile(cells$phenotype))
   # Display leaves are mutually exclusive; raw records in the loader stay intact.
   cells <- cells[phenotype_is_kept(cells$phenotype), , drop = FALSE]
   if (nrow(cells) == 0) return(NULL)

@@ -228,6 +228,67 @@ test_that("the trajectory scatter is one keyed trace with the trends and bands o
   expect_length(Filter(function(t) identical(t$mode, "lines"), b$x$data), 0)
 })
 
+test_that("exact position mode preserves each measured coordinate, including true zeros", {
+  skip_if_not_installed("plotly")
+  env <- .plot_figures_env()
+  df <- .traj_df()
+  df$value <- rep_len(log1p(c(0, 1 / 517, 11 / 517)), nrow(df))
+  opts <- .traj_opts(df, trend = "none", spread_ties = FALSE)
+  built <- plotly::plotly_build(env$trajectory_scatter_figure(df, opts))
+  points <- .keyed(built$x$data)[[1]]
+  expect_identical(as.numeric(points$y), df$value[match(.keys(points), df$link_key)])
+  expect_identical(as.numeric(points$x), df$pt[match(.keys(points), df$link_key)])
+  for (constant in c(0, log1p(1))) {
+    df$value <- constant
+    built <- plotly::plotly_build(env$trajectory_scatter_figure(df, opts))
+    expect_true(all(.keyed(built$x$data)[[1]]$y == constant))
+    expect_lt(built$x$layout$yaxis$range[1], constant)
+    expect_gt(built$x$layout$yaxis$range[2], constant)
+  }
+})
+
+test_that("tie spreading separates endpoints within bounds, without changing hover or trend", {
+  skip_if_not_installed("plotly")
+  env <- .plot_figures_env()
+  df <- .traj_df()
+  df$pt <- rep_len(c(0, 0.5, 1), nrow(df))
+  df$value <- rep_len(c(0, log1p(.5), log1p(1)), nrow(df))
+  df$value[17] <- 0.1234
+  build <- function(d, spread, size_by) {
+    opts <- .traj_opts(d, trend = "none", spread_ties = spread, size_by = size_by)
+    plotly::plotly_build(env$trajectory_scatter_figure(d, opts))$x
+  }
+  for (size in c("total_cells", "uniform", "islet_diam_um")) {
+    built <- build(df, TRUE, size)
+    points <- .keyed(built$data)[[1]]
+    idx <- match(.keys(points), df$link_key)
+    y <- as.numeric(points$y); x <- as.numeric(points$x)
+    expect_true(all(x > 0 & x < 1))
+    expect_true(all(y > 0 & y < log1p(1)))
+    expect_identical(y[idx == 17], df$value[17])
+    for (v in c(0, log1p(1))) {
+      heights <- y[df$value[idx] == v]
+      expect_length(unique(heights), length(heights))
+      expect_gt(diff(range(heights)), .02 * log1p(1))
+    }
+    expect_true(all(grepl("Value: 0<br>", points$text[df$value[idx] == 0], fixed = TRUE)))
+    expect_true(all(y > built$layout$yaxis$range[1] & y < built$layout$yaxis$range[2]))
+    reordered <- .keyed(build(df[rev(seq_len(nrow(df))), ], TRUE, size)$data)[[1]]
+    expect_identical(y, as.numeric(reordered$y)[match(.keys(points), .keys(reordered))])
+  }
+  df$value <- 0
+  points <- .keyed(build(df, TRUE, "uniform")$data)[[1]]
+  expect_true(all(points$y == 0))
+  expect_length(unique(points$x), nrow(df))
+  df <- .traj_df()
+  df$value[1:20] <- 0
+  curves <- function(spread) {
+    opts <- .traj_opts(df, spread_ties = spread)
+    Filter(function(t) identical(t$mode, "lines"), plotly::plotly_build(env$trajectory_scatter_figure(df, opts))$x$data)
+  }
+  expect_equal(lapply(curves(TRUE), "[[", "y"), lapply(curves(FALSE), "[[", "y"))
+})
+
 test_that("the trajectory scatter sizes points by cell count on ggplot2's area scale and is deterministic", {
   skip_if_not_installed("plotly")
   env <- .plot_figures_env()

@@ -34,7 +34,7 @@ done
 printf '%s\n' "${expected}" >> "${MOCK_CASE}/health-checks"
 [[ -n "${expected}" && "$(cat "${MOCK_CASE}/running-image")" == "${expected}" ]] || exit 70
 if [[ "${expected}" == "${MOCK_CANDIDATE_IMAGE}" ]]; then
-  [[ "${MOCK_SCENARIO}" == success ]] || exit 70
+  [[ "${MOCK_SCENARIO}" == success || "${MOCK_SCENARIO}" == fault_* ]] || exit 70
 elif [[ "${MOCK_SCENARIO}" == recovery_health_fail ]]; then
   exit 70
 fi
@@ -88,6 +88,24 @@ exit 64
 MOCK
 chmod 0755 "${mock_bin}/systemctl" "${mock_bin}/podman" \
   "${fixture_deploy}/verify-release.sh" "${fixture_deploy}/verify-deployment.sh"
+
+# Fail exactly one alias or active-state rename after the candidate is healthy.
+# Restoring the original files must still be attempted and is allowed to work.
+cat > "${mock_bin}/mv" <<'MOCK'
+#!/usr/bin/env bash
+set -euo pipefail
+last="${!#}"
+if [[ "${MOCK_SCENARIO:-}" == fault_* && ! -e "${MOCK_CASE}/fault-injected" ]]; then
+  if [[ ( "${MOCK_SCENARIO}" == fault_alias_* && "${last}" == */islet-explorer/images ) ||
+        ( "${MOCK_SCENARIO}" == fault_state_* && "${last}" == */deployments/active.state ) ]]; then
+    touch "${MOCK_CASE}/fault-injected"
+    echo "Injected publication failure: ${last}" >&2
+    exit 1
+  fi
+fi
+exec /usr/bin/mv "$@"
+MOCK
+chmod 0755 "${mock_bin}/mv"
 
 make_release() {
   local root="$1" release="$2" image="$3" count="$4" version="$5" index
@@ -197,6 +215,62 @@ for scenario in success reload_fail start_fail candidate_health_fail recovery_re
       fi
       ;;
   esac
+done
+
+# Static aliases are independently served even when Shiny was stopped. A
+# partial alias update or failed state commit must restore exact pre-attempt
+# aliases and both state files, including on a first activation.
+for fault in alias state; do
+  for prior in active stopped first; do
+    scenario="fault_${fault}_${prior}"
+    case_dir="${work_dir}/${scenario}"
+    project="${case_dir}/project"
+    config="${case_dir}/config"
+    unit="${config}/containers/systemd/islet-explorer.container"
+    state="${project}/runtime/deployments"
+    docroot="${project}/html"
+    mkdir -p "$(dirname "${unit}")" "${state}" "${docroot}/islet-explorer"
+    make_release "${project}" new "${candidate_image}" 21 2
+    make_release "${project}" old "${prior_image}" 15 1
+    if [[ "${prior}" != first ]]; then
+      printf '[Container]\nImage=%s\nPublishPort=127.0.0.1:3838:3838\n' "${prior_image}" > "${unit}"
+      cp "${unit}" "${case_dir}/original-unit"
+      printf 'RELEASE=old\nIMAGE_REF=%s\n' "${prior_image}" > "${state}/active.state"
+      printf 'RELEASE=even-older\n' > "${state}/previous.state"
+      cp "${state}/active.state" "${case_dir}/original-active"
+      cp "${state}/previous.state" "${case_dir}/original-previous"
+    fi
+    if [[ "${prior}" == active ]]; then
+      printf '%s\n' "${prior_image}" > "${case_dir}/running-image"
+    fi
+    ln -s "${project}/releases/old/data/images" "${docroot}/islet-explorer/local_images"
+    ln -s '../../retained-relative' "${docroot}/islet-explorer/images"
+    set +e
+    env PATH="${mock_bin}:${PATH}" XDG_CONFIG_HOME="${config}" \
+      MOCK_CASE="${case_dir}" MOCK_SCENARIO="${scenario}" \
+      MOCK_CANDIDATE_IMAGE="${candidate_image}" MOCK_COMMIT="${commit}" \
+      bash "${fixture_deploy}/activate-release.sh" --project-root "${project}" --release new \
+      --docroot "${docroot}" > "${case_dir}/output" 2>&1
+    status=$?
+    set -e
+    [[ "${status}" == 70 ]] || { cat "${case_dir}/output" >&2; fail "${scenario}: expected recovery exit 70, got ${status}"; }
+    [[ -f "${case_dir}/fault-injected" ]] || fail "${scenario}: fault was not reached"
+    [[ "$(readlink "${docroot}/islet-explorer/local_images")" == "${project}/releases/old/data/images" ]] || fail "${scenario}: first alias not restored"
+    [[ "$(readlink "${docroot}/islet-explorer/images")" == '../../retained-relative' ]] || fail "${scenario}: relative alias not restored"
+    [[ ! -e "${docroot}/islet-explorer/img_data" && ! -L "${docroot}/islet-explorer/img_data" ]] || fail "${scenario}: previously absent alias left behind"
+    if [[ "${prior}" == first ]]; then
+      [[ ! -e "${unit}" && ! -e "${state}/active.state" && ! -e "${state}/previous.state" ]] || fail "${scenario}: first activation configuration survived"
+    else
+      cmp -s "${unit}" "${case_dir}/original-unit" || fail "${scenario}: prior unit changed"
+      cmp -s "${state}/active.state" "${case_dir}/original-active" || fail "${scenario}: active state changed"
+      cmp -s "${state}/previous.state" "${case_dir}/original-previous" || fail "${scenario}: previous state changed"
+    fi
+    if [[ "${prior}" == active ]]; then
+      [[ "$(cat "${case_dir}/running-image")" == "${prior_image}" ]] || fail "${scenario}: wrong running image"
+    else
+      [[ ! -e "${case_dir}/running-image" ]] || fail "${scenario}: previously stopped service started"
+    fi
+  done
 done
 
 # A second instance (the staging service beside production, 2026-10-23) gets
@@ -332,7 +406,8 @@ cmp -s "${case_dir}/systemctl-calls" "${case_dir}/calls-before-refusal" || fail 
 rmdir "${docroot}/islet-explorer/images"
 ln -s "${project}/releases/new/data/images" "${docroot}/islet-explorer/images"
 # A failed activation of the old release (its image is the failing candidate
-# here) restores the new unit; aliases that had drifted follow the restored release.
+# here) restores the new unit and exact pre-attempt alias targets, even if
+# those targets had drifted before this deployment attempt.
 for alias in local_images images img_data; do ln -sfn "${project}/releases/old/data/images" "${docroot}/islet-explorer/${alias}"; done
 set +e
 run_docroot candidate_health_fail "${prior_image}" bash "${fixture_deploy}/activate-release.sh" --project-root "${project}" \
@@ -341,7 +416,7 @@ status=$?
 set -e
 [[ "${status}" == 70 ]] || { cat "${case_dir}/failed-output" >&2; fail "failed activation with a DocumentRoot: expected exit 70, got ${status}"; }
 grep -Fq 'restored and verified healthy' "${case_dir}/failed-output" || fail 'recovery outcome missing with a DocumentRoot'
-aliases_point_at "${project}/releases/new/data/images" || fail 'image aliases do not follow the restored release'
+aliases_point_at "${project}/releases/old/data/images" || fail 'image alias snapshots were not restored'
 grep -qx 'RELEASE=new' "${state}/active.state" || fail 'failed activation changed the active state'
 run_docroot success "${candidate_image}" bash "${fixture_deploy}/activate-release.sh" --project-root "${project}" \
   --release old --docroot "${docroot}" > "${case_dir}/output-old" 2>&1 || {

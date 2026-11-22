@@ -1355,7 +1355,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
             fluidRow(
               column(6, plotlyOutput(ns("enrichment_bars"), height = "500px")),
               column(6,
-                plotlyOutput(ns("enrichment_heatmap"), height = "500px"),
+                uiOutput(ns("enrichment_heatmap_plot")),
                 dl_csv("dl_enrichment_csv"))
             )
           )
@@ -1648,12 +1648,12 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
     GRADIENT_MIN_CELLS <- 20
     # The immune phenotypes in their groups (owner, 2026-10-27), each group's aggregate first where it has two or
     # more phenotypes. Unresolved lineage/subtype cells are in the Unclassified family. The macrophages are one label on the
-    # frozen root and twelve marker-profile labels from v14.
+    # frozen root and Gal3-positive/negative profiles on typed roots.
     # The macrophages merged for the checked markers (owner, 2026-10-27).
     gradient_phenotypes <- reactive({
       root <- root_phenotype_labels()
       listed <- c("CD8a Tcell", "CD4 Tcell", "B cell",
-                  unique(macrophage_collapse(if (length(root)) intersect(MACROPHAGE_LABELS, root) else character(0),
+                  unique(macrophage_collapse(if (length(root)) grep(MACROPHAGE_LABEL_PATTERN, root, value = TRUE) else character(0),
                                              macrophage_markers())))
       if (!any(is_macrophage_label(listed))) listed <- c(listed, "Macrophage")
       if (root_cd45_is_rule_label()) listed <- c(listed, CD45_RULE_LABEL)     # the CD45 rule's class (v16)
@@ -1868,6 +1868,10 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
     # ==== Card B-Right: donor heatmap (owner review, 2026-10-20) ====
     # One row per donor, grouped by status, so the spread between donors behind each bar of the left chart is
     # visible. It replaced a status heatmap that drew the same numbers as the bar chart.
+    output$enrichment_heatmap_plot <- renderUI({
+      n_donors <- length(unique(nbr_comp()$`Case ID`))
+      plotlyOutput(ns("enrichment_heatmap"), height = paste0(max(500, 22 * n_donors + 180), "px"))
+    })
     output$enrichment_heatmap <- renderPlotly({
       dv <- enrich_donor_values()
       req(dv)
@@ -1902,6 +1906,8 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                shapes = shapes,
                xaxis = list(title = list(text = ""), tickfont = fonts$axis_tick, tickangle = -30, automargin = TRUE),
                yaxis = list(title = list(text = ""), tickfont = list(size = ISLET_FONT_SIZES$dense_min),
+                            tickmode = "array", tickvals = row_lab, ticktext = row_lab,
+                            categoryorder = "array", categoryarray = row_lab,
                             autorange = "reversed", automargin = TRUE, type = "category")) %>%
         plotly_islet_config("spatial_enrichment_donor_heatmap")
     })
@@ -1953,11 +1959,13 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           pcols[is.na(pcols)] <- "#999999"; names(pcols) <- items
           y_lab <- if (identical(norm, "prop")) "proportion of the cells at that distance" else "cells"
           height <- cd_composition_height(length(items))
-          gap <- 30 / height
+          gap <- 34 / (height - 140)
           panels <- list()
           for (m in items) {
             row_max <- max(comp$val[comp$item == m], na.rm = TRUE)
             y_range <- c(0, if (is.finite(row_max) && row_max > 0) row_max * 1.08 else 1)
+            y_ticks <- pretty(y_range, n = 3)
+            y_ticks <- y_ticks[y_ticks >= y_range[1] & y_ticks <= y_range[2]]
             for (s in present) {
               sub <- comp[comp$item == m & comp$donor_status == s, , drop = FALSE]
               sub <- sub[order(sub$binx), , drop = FALSE]
@@ -1967,7 +1975,7 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                           hovertext = paste0(s, " · ", phenotype_text(m), "<br>dist ≈ ", round(sub$x), " µm<br>",
                                              formatC(sub$n, big.mark = ","), " of ",
                                              formatC(sub$total, big.mark = ","), " cells (",
-                                             sprintf("%.1f%%", 100 * sub$n / sub$total), ")")) %>%
+                                             scales::label_percent(accuracy = NULL)(sub$n / sub$total), ")")) %>%
                 add_trace(x = c(0, 0), y = y_range, type = "scatter", mode = "lines",
                           line = list(color = islet_ink(), width = 1.2, dash = "dash"),
                           showlegend = FALSE, hoverinfo = "none") %>%
@@ -1979,10 +1987,13 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                 layout(bargap = 0.1,
                        xaxis = list(title = "", tickfont = fonts$axis_tick, zeroline = FALSE,
                                     range = c(res$lo, CD_MAX_OUTSIDE_UM), dtick = 40),
-                       yaxis = list(title = list(text = if (identical(s, present[1])) phenotype_text(m) else "",
-                                                 font = fonts$legend_title),
+                       yaxis = list(title = list(text = ""),
                                     tickfont = list(size = ISLET_FONT_SIZES$dense_min), range = y_range,
-                                    tickformat = if (identical(norm, "prop")) ".1%" else NULL))
+                                    showticklabels = identical(s, present[1]),
+                                    tickmode = if (identical(norm, "prop")) "array" else "auto",
+                                    tickvals = if (identical(norm, "prop")) y_ticks else NULL,
+                                    ticktext = if (identical(norm, "prop"))
+                                      scales::label_percent(accuracy = NULL)(y_ticks) else NULL))
               panels[[length(panels) + 1L]] <- pp
             }
           }
@@ -1990,11 +2001,20 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                                  margin = c(0.025, 0.01, gap / 2, gap / 2))
           heads <- lapply(seq_along(present), function(j) list(
             text = paste0("<b>", present[j], "</b>"), x = (j - 0.5) / length(present), y = 1, xref = "paper",
-            yref = "paper", xanchor = "center", yanchor = "bottom", showarrow = FALSE, font = fonts$legend_title))
+            yref = "paper", yshift = 30, xanchor = "center", yanchor = "bottom", showarrow = FALSE,
+            font = fonts$legend_title))
+          # Horizontal row headings leave long phenotype names room to fit without touching adjacent rows.
+          row_tops <- sort(unique(vapply(fig$x$layout[grep("^yaxis[0-9]*$", names(fig$x$layout))],
+                                        function(axis) axis$domain[2], numeric(1))), decreasing = TRUE)
+          row_heads <- lapply(seq_along(items), function(i) {
+            list(text = phenotype_text(items[i]), x = 0, y = row_tops[i],
+                 xref = "paper", yref = "paper", yshift = 3, xanchor = "left", yanchor = "bottom",
+                 showarrow = FALSE, font = fonts$legend_title)
+          })
           fig %>% layout(
             font = fonts$global, showlegend = FALSE,
-            margin = list(t = 40, b = 70, l = 80),
-            annotations = c(heads, list(list(
+            margin = list(t = 70, b = 70, l = 80),
+            annotations = c(heads, row_heads, list(list(
               text = paste0("Signed distance to the ", dist_label, " (µm) — inside ← 0 → outside   ·   y = ", y_lab),
               x = 0.5, y = -48 / height, xref = "paper", yref = "paper",
               xanchor = "center", yanchor = "top", showarrow = FALSE,

@@ -1,0 +1,9 @@
+# V27 reviewed cell typing
+
+The approved 20-donor review covers 3,525,977 detections. Of these, 735,973 fall outside cell QC and 106,500 are excluded for conflicting markers. The analysis includes 2,683,504 cells. Structural-marker-only cells enter Stromal. The 369,979 cells with no qualifying typing marker are recorded as `Panel undected` and contribute to tissue totals. Trajectory fitting omits this panel result.
+
+The reviewed identities contain 12,668 CD4 and 26,207 CD8a T cells. In the last pass, 2,199 of the 3,766 generic T-cell assignments became CD4 and 1,567 became CD8a. One or both coreceptors exceeded the image threshold in 563 cells. When both were positive, the larger fold over threshold determined the subtype. In 3,203 cells both were below threshold. The recorded subtype for those cells was inferred using their marker profiles and reference subtypes from other donors, with a contribution from historical cluster votes. Of these, 404 had a winning vote below 60%.
+
+The final replay entry point is `scripts/uniform/recluster_residuals.py`. The per-cell assignment basis and scores are in the restricted `output/typing_tcell_v27` evidence directory. A replay from v24 reproduced the per-cell tables and subtype assignments exactly. `scripts/uniform/verify_tcell_review.py` checks the QuPath readbacks and reconciles the per-cell data.
+
+The versioned app assembly uses `scripts/uniform/assemble_uniform.py --review-identity-dir <v27-evidence>/identity` with the sealed v23 run, its donor source, donor metadata, and Collagen IV. The assembler checks the terminal class inventory, exclusions and UUIDs before rebuilding object compositions and phenotype-specific structure overlap inputs. The release manifest identifies this data as `uniform.terminal_typing/27`. Its phenotype reference ships with the data. Older release receipts and analysis results retain their original data versions.

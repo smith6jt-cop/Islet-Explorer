@@ -38,14 +38,14 @@ PLOT_CLINICAL_CHOICES <- c(
 
 PLOT_STATUS_LEVELS <- c("ND", "Aab+", "T1D")
 
-#' The x measures of "Against another measure": object measures, then each retained phenotype's core and peri-islet
-#' proportion (%). Values are prepared()$comp columns; `pairs` is prepared()$combined_pairs.
+#' The x measures of "Against another measure": object measures, then each retained phenotype's core, peri-islet
+#' and core+peri proportion (%). Combined values use the paired columns and their cell totals.
 plot_x_measure_choices <- function(comp_cols, pairs = NULL, comp = NULL) {
   object <- c("Diameter (\u00b5m)" = "islet_diam_um", "Core cells" = "total_cells_core",
               "Peri-islet cells" = "total_cells_peri", "Core immune proportion (%)" = "immune_frac_core",
               "Band immune proportion (%)" = "immune_frac_peri")
   object <- object[object %in% comp_cols]
-  core <- peri <- character(0)
+  core <- peri <- combined <- character(0)
   if (!is.null(pairs) && nrow(pairs)) {
     pairs <- pairs[phenotype_is_kept(pairs$label), , drop = FALSE]
     # As the measure list, without the near-empty proportions (plot_composition_selection_choices()).
@@ -55,6 +55,13 @@ plot_x_measure_choices <- function(comp_cols, pairs = NULL, comp = NULL) {
     has_peri <- pairs$peri_col %in% comp_cols & enough(pairs$peri_col)
     core <- list(values = pairs$core_col[has_core], labels = pairs$label[has_core])
     peri <- list(values = pairs$peri_col[has_peri], labels = pairs$label[has_peri])
+    has_combined <- pairs$core_col %in% comp_cols & pairs$peri_col %in% comp_cols &
+      all(c("total_cells_core", "total_cells_peri") %in% comp_cols)
+    if (!is.null(comp)) has_combined <- has_combined & vapply(seq_len(nrow(pairs)), function(i)
+      plot_nonzero_fraction(comp, c(pairs$core_col[i], pairs$peri_col[i])) >= PLOT_MIN_NONZERO_FRACTION,
+      logical(1))
+    combined <- list(values = if (any(has_combined)) paste0("combined_prop_", pairs$stem[has_combined]) else character(0),
+                     labels = pairs$label[has_combined])
   }
   # Each region's phenotypes in their groups (owner, 2026-10-27), as option groups "<region> — <group>".
   grouped <- get0("phenotype_grouped_choices", mode = "function", ifnotfound = NULL)
@@ -65,16 +72,34 @@ plot_x_measure_choices <- function(comp_cols, pairs = NULL, comp = NULL) {
            function(g) stats::setNames(g, paste0(names(g), suffix)))
   }
   out <- c(list("Object" = object), region(core, "Core proportion", " (core %)"),
-           region(peri, "Peri-islet proportion", " (peri-islet %)"))
+           region(peri, "Peri-islet proportion", " (peri-islet %)"),
+           region(combined, "Core+Peri proportion", " (core+peri %)"))
   out[lengths(out) > 0]
 }
 
 #' The x values of `col` for the rows of `rows`, looked up in `comp` by donor and object. Proportions are given in %.
-plot_x_values <- function(rows, comp, col) {
+plot_x_values <- function(rows, comp, col, pairs = NULL) {
   if (identical(col, "islet_diam_um") && "islet_diam_um" %in% names(rows)) return(as.numeric(rows$islet_diam_um))
   key <- paste(comp$`Case ID`, comp$islet_key)
-  v <- suppressWarnings(as.numeric(comp[[col]]))[match(paste(rows$`Case ID`, rows$islet_key), key)]
-  if (grepl("^(prop_|peri_prop_|immune_frac_)", col)) v <- 100 * v
+  if (startsWith(col, "combined_prop_")) {
+    pair <- if (is.null(pairs)) NULL else pairs[pairs$stem == sub("^combined_prop_", "", col), , drop = FALSE]
+    if (is.null(pair) || nrow(pair) != 1L ||
+        !all(c(pair$core_col, pair$peri_col, "total_cells_core", "total_cells_peri") %in% names(comp)))
+      return(rep(NA_real_, nrow(rows)))
+    core_prop <- suppressWarnings(as.numeric(comp[[pair$core_col]]))
+    peri_prop <- suppressWarnings(as.numeric(comp[[pair$peri_col]]))
+    core_total <- suppressWarnings(as.numeric(comp$total_cells_core))
+    peri_total <- suppressWarnings(as.numeric(comp$total_cells_peri))
+    # Match the main measure's core+peri calculation: pool cell counts, not percentages.
+    core_n <- ifelse(is.finite(core_prop) & is.finite(core_total), core_prop * core_total, 0)
+    peri_n <- ifelse(is.finite(peri_prop) & is.finite(peri_total), peri_prop * peri_total, 0)
+    total <- ifelse(is.finite(core_total), core_total, 0) + ifelse(is.finite(peri_total), peri_total, 0)
+    values <- ifelse(total > 0, (core_n + peri_n) / total, NA_real_)
+  } else {
+    values <- suppressWarnings(as.numeric(comp[[col]]))
+  }
+  v <- values[match(paste(rows$`Case ID`, rows$islet_key), key)]
+  if (grepl("^(combined_prop_|prop_|peri_prop_|immune_frac_)", col)) v <- 100 * v
   v
 }
 
@@ -407,7 +432,9 @@ plot_xy_figure <- function(rows, x, xlab, ylab, name, status_cols, color_by = "d
   if (!is.null(y_upper)) yaxis$range <- plot_axis_range(rows$value, y_upper * 1.02)
   xaxis <- list(title = list(text = xlab))
   if (!is.null(x_upper)) xaxis$range <- plot_axis_range(rows$x, x_upper * 1.02)
-  sub <- paste0(c(if (nzchar(sub)) sub, "diamonds are donor medians", plot_beyond_note(sum(beyond))), collapse = "; ")
+  points_note <- if (isTRUE(show_points)) "diamonds are donor medians" else
+    "individual points hidden; diamonds are donor medians"
+  sub <- paste0(c(if (nzchar(sub)) sub, points_note, plot_beyond_note(sum(beyond))), collapse = "; ")
   plot_type_layout(p, paste0(name, " against ", xlab), sub,
                    xaxis = xaxis, yaxis = yaxis, filename_root = "plot_against_measure")
 }

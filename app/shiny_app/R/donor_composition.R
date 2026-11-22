@@ -78,7 +78,7 @@ donor_composition_table <- function(comp, pairs, region = c("core", "peri", "bot
   cells <- matrix(cells, nrow = nrow(comp), dimnames = list(NULL, pairs$label))
   ids <- as.character(comp$`Case ID`)
   status <- as.character(comp$`Donor Status`)
-  display_labels <- unclassified_collapse(pairs$label)
+  display_labels <- unclassified_collapse(macrophage_profile(pairs$label))
   kept <- display_labels %in% phenotype_partition_labels(pairs$label)
   rows <- lapply(split(seq_len(nrow(comp)), ids), function(i) {
     tot <- sum(total[i])

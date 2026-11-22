@@ -24,17 +24,16 @@ trajectory_ui <- function(id) {
         tags$p("Data controls choose what is fitted and plotted. Click the panel's title to open or close it. The",
                " heatmap and PAGA cards keep their own selectors."),
         tags$p(tags$strong("Fitted objects."),
-               " Every endocrine object with ten or more core cells, whatever its class, as in Barlow et al. 2024,",
-               " who fitted islets of ten or more cells. The Endocrine objects selector of the other tabs does not",
-               " apply here and is hidden. Objects with fewer cells carry too little make-up to order: fitted on",
-               " every object, the pseudotime barely tracked the beta-cell ratio."),
+               sprintf(" Islets and clusters with at least %d total core cells are eligible.", TRAJ_MIN_CELLS),
+               " All measured core cell types count toward this cutoff. An object needs a nonzero trajectory input",
+               " to receive pseudotime. The class selector on the Plot and Spatial tabs applies only there."),
         tags$p(tags$strong("Y axis."),
                " Marker expression is the mean of the object's core cells on the cohort marker scale (0-1). Cell-type",
-               " ratio is log(1 + cells / endocrine cells) for the chosen phenotype in the chosen region."),
+               " ratio is log(1 + cells / core endocrine cells) for the chosen phenotype and region.",
+               " Select Core only to compare endocrine subtypes. All core endocrine cells form the denominator."),
         cell_typing_help(),
         unclassified_help_ui()),
-      # The fitted cohort is every object with TRAJ_MIN_CELLS or more core cells (since 2026-10-18); the
-      # status line reports how many objects were fitted.
+      # The status line reports how many eligible objects received pseudotime.
       uiOutput(ns("traj_status")),
       control_grid(columns = 4,
         control_group("Measure",
@@ -44,7 +43,7 @@ trajectory_ui <- function(id) {
           # confound that a raw count or proportion carries.
           selectInput(ns("traj_y_mode"), "Y axis",
                       choices = c("Marker expression" = "marker",
-                                  "Cell-type ratio (log cells / endocrine cell)" = "ratio"),
+                                  "Cell-type ratio (log1p per core endocrine cell)" = "ratio"),
                       selected = "ratio")
         ),
         control_group("Region",
@@ -84,6 +83,7 @@ trajectory_ui <- function(id) {
                           value = FALSE)
           ),
           control_group("Points",
+            checkboxInput(ns("traj_spread_ties"), "Spread tied points (display only)", value = TRUE),
             selectInput(ns("traj_point_size"), "Point size by",
                        choices = c("Cell Count" = "total_cells",
                                    "Islet Diameter" = "islet_diam_um",
@@ -122,14 +122,18 @@ trajectory_ui <- function(id) {
                    " Each row shows how that disease status's islets are distributed across pseudotime; hover for the",
                    " islet count and the status contribution within each bin."),
             tags$p(tags$strong("Pseudotime."),
-                   " Diffusion pseudotime (scanpy DPT) on each object's cell make-up, after Barlow et al. 2024: for",
-                   " each listed phenotype, log(1 + cells / endocrine cells) in the core and in the 20 \u00b5m",
-                   " peri-islet band. Features that do not vary are dropped (peri-islet endocrine values are always",
-                   " zero). Objects are linked to their 15 nearest neighbors by cosine distance. The root is the ND",
-                   " object nearest the center of the ND objects in diffusion components 1-3, and the direction is set",
-                   " so the beta-cell ratio falls along pseudotime. Objects with fewer than ten core cells get no",
-                   " pseudotime. Objects with the same make-up are fitted once and share a pseudotime."),
+                   " Diffusion pseudotime (scanpy DPT) on each object's cell make-up, after Barlow et al. 2024:",
+                   " log(1 + cells / endocrine cells) for each cell class. The endocrine classes are counted in the",
+                   " core only and exocrine cells in the 20 \u00b5m peri-islet band only; macrophages enter as Gal3\u207a",
+                   " and Gal3\u207b, and the T cell, B cell, stromal, endothelial and neural classes pooled across core and peri before normalization.",
+                   " Each retained phenotype additionally contributes its summed nerve, lymphatic and blood-vessel overlap fractions, normalized in the same way. Conflict, Doublet suspected, Tissue, Unclassified and unresolved-lineage cells are not inputs.",
+                   " Inputs that do not vary are dropped. Objects are linked to their 15 nearest neighbors by cosine",
+                   " distance. The fit finds the two most distant profiles in diffusion space and selects an ND",
+                   " islet near the end supported by more ND donors. Raw diffusion pseudotime starts at zero",
+                   " at this islet. Objects with the same make-up are fitted once and share a pseudotime."),
             tags$p(tags$strong("Reading it."),
+                   " Tied points are spread for visibility, including equal minima and maxima.",
+                   " Hover shows the measured values. Clear Spread tied points to see exact positions.",
                    " The orientation is a modeling choice, and an ordering of objects along it does not show",
                    " disease progression; donor differences can shape it."),
             linked_help,
@@ -144,12 +148,13 @@ trajectory_ui <- function(id) {
         div(class = "card trajectory-main-card", style = "padding: 15px;",
           card_title_help("UMAPs", help = list(
             tags$p(tags$strong("UMAPs and Leiden clusters."),
-                   " Built from each fitted object's endocrine composition (the Endocrine Beta, Alpha, Delta and CHGA⁺",
-                   " hormone-negative proportions of its core endocrine cells), with one neighbor graph for UMAP and",
-                   " Leiden and no donor correction; the same layout as the Spatial tab's UMAPs. The upper UMAP is",
-                   " colored by donor status, the lower by the feature chosen in the Data controls."),
+                   " These panels use the saved layout shown on the Spatial tab. The composition embedding uses",
+                   " each object's core endocrine proportions (Beta, Alpha, Delta and CHGA⁺ hormone-negative).",
+                   " Objects with a pseudotime and no saved coordinates still appear in the scatter and PAGA.",
+                   " The upper UMAP shows donor status and the lower UMAP shows the selected feature."),
             linked_help,
             unclassified_help_ui())),
+          tags$p(textOutput(ns("traj_umap_coverage"), inline = TRUE)),
           h5("UMAP: Donor Status", style = "font-size: 13px; margin-top: 8px;"),
           trajectory_linked_plotly(ns("traj_umap_donor"), height = 320),
           div(style = "text-align: right; margin-top: 6px;",
@@ -195,6 +200,19 @@ trajectory_ui <- function(id) {
         )
       )
     ),
+    fluidRow(
+      column(12,
+        div(class = "card", style = "padding: 15px; margin-bottom: 20px;",
+          card_title_help("Pseudotime by donor annotation",
+            help = list(tags$p("Each donor contributes one point at their median fitted-islet pseudotime.",
+                               " Horizontal bars span the middle 50% of that donor's islets.",
+                               " Numeric measurements with missing values are omitted.",
+                               " An open downward triangle marks a C-peptide upper limit."))),
+          uiOutput(ns("donor_annotation_field")),
+          plotlyOutput(ns("donor_annotation_plot"), height = 390)
+        )
+      )
+    ),
     # ---- PAGA force-directed layout (Barlow et al. Fig 2B/2E) ----------
     # The feature-vs-pseudotime scatter above cannot be de-overplotted by any
     # axis transform: the pile-up is at EXACT zero (95.6% of islets have no CD8a
@@ -209,6 +227,14 @@ trajectory_ui <- function(id) {
                                " 15 neighbors, Leiden resolution 1). Each point is an object; the axes are layout",
                                " coordinates with no units, so only relative position means anything. It is built on",
                                " request, on the same objects as the pseudotime. Both panels show that same fit, each with its own color choice."),
+                        tags$p("The DPT root arrow marks the ND islet where baseline diffusion pseudotime starts.",
+                               " The fit selects the root in diffusion space before drawing this two-dimensional layout."),
+                        tags$p("Choose a donor characteristic under Color by to see its recorded value across the layout. Each islet inherits its donor’s value. For numeric gradients, gray points have a missing, inapplicable, or censored value; hover for details."),
+                        tags$p("At zero, both panels use the original PAGA positions and diffusion pseudotime.",
+                               " Age guidance shifts each donor’s islets together along the direction of increasing age",
+                               " estimated from donor centers. At full strength the donor medians follow age in years",
+                               " while islets from the same donor retain their relative positions.",
+                               " The guided score shifts each donor’s pseudotimes together and may extend outside 0–1."),
                         tags$p("Hover over an object to highlight it in both PAGA panels and the other linked plots. Click to open its segmentation map."),
                         unclassified_help_ui())),
           checkboxInput(ns("paga_show_layout"), "Build and show PAGA layout",
@@ -216,11 +242,15 @@ trajectory_ui <- function(id) {
           conditionalPanel(
             condition = "input.paga_show_layout", ns = ns,
           fluidRow(
-            column(4,
+            column(3,
               sliderInput(ns("paga_point_size"), "Point size",
                           min = 0.3, max = 4.0, value = 1.6, step = 0.1)
             ),
-            column(8, uiOutput(ns("paga_note")))
+            column(4,
+              sliderInput(ns("paga_age_weight"), "Donor age guidance",
+                          min = 0, max = 1, value = 0, step = 0.05)
+            ),
+            column(5, uiOutput(ns("paga_note")))
           ),
           fluidRow(
             column(6,

@@ -2,7 +2,7 @@ inflammation_display_env <- function() {
   env <- new.env(parent = globalenv())
   wanted <- c("PHENOTYPE_RETIRED", "phenotype_retired", "phenotype_keep", "phenotype_is_kept",
               "phenotype_is_conflict", "phenotype_partition_labels", "PHENOTYPE_GROUP_AGGREGATES",
-              "is_phenotype_aggregate", "MACROPHAGE_LABEL_PATTERN", "MACROPHAGE_KEY_PATTERN",
+              "is_phenotype_aggregate", "macrophage_profile", "MACROPHAGE_LABEL_PATTERN", "MACROPHAGE_KEY_PATTERN",
               "is_macrophage_label", "inflammation_display_rows", "inflammation_fit_display",
               "UNCLASSIFIED_KEYS", "UNCLASSIFIED_PARENT", "UNCLASSIFIED_RAW_TO_KEY", "unclassified_collapse",
               "phenotype_is_unclassified", "phenotype_selectable")
@@ -17,7 +17,7 @@ inflammation_display_env <- function() {
 
 test_that("Inflammation presentation preserves fitted statistics and source totals", {
   env <- inflammation_display_env()
-  profile <- "CD68+CD163+Macrophage_LGALS3+CD4+"
+  profile <- "Macrophage_LGALS3+"
   fit <- list(
     res = data.frame(cell_type = c("B cell", "Conflict Myeloid", "Hematopoietic CD45+", profile),
                      PValue = c(0.003, 0.006, 0.04, 0.2), FDR = c(0.012, 0.012, 0.053333, 0.2)),

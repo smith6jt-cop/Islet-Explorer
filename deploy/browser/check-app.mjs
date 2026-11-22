@@ -416,18 +416,115 @@ try {
 
   if (options.expanded === 'true') {
     await page.click('#tabs a[data-value="Trajectory"]');
-    // The trajectory fits every object with ten or more core cells, of any class: the class selector is hidden
-    // on this tab and the status line names the cutoff.
-    await check('trajectory_fits_ten_cell_objects', async () => {
+    // The default core-beta scatter and the PAGA panel should contain every fitted object.
+    await check('trajectory_fits_objects_with_four_or_more_core_cells', async () => {
       await rendered(page, '#traj-traj_scatter', 'plotly');
       return page.evaluate(() => {
         const status = document.querySelector('#traj-traj_status')?.textContent.replace(/,/g, '') || '';
-        const m = status.match(/(\d+) total \| (\d+) fitted \(10 or more core cells/);
+        const m = status.match(/(\d+) total \| (\d+) fitted \(4 or more total core cells/);
+        const objectKeys = id => new Set((document.getElementById(id)?.data || [])
+          .filter(t => t.meta?.trajectory_role === 'islet').flatMap(t => Array.from(t.key)));
+        const scatter = objectKeys('traj-traj_scatter');
+        const paga = objectKeys('traj-paga_layout');
         const selector = document.querySelector('#object_classes');
         const hidden = !selector || selector.offsetParent === null;
-        return { passed: Boolean(m) && Number(m[2]) > 0 && Number(m[2]) < Number(m[1]) && hidden,
+        return { passed: Boolean(m) && Number(m[2]) > 0 && Number(m[2]) <= Number(m[1]) && hidden &&
+                   scatter.size === Number(m[2]) && paga.size === scatter.size && [...scatter].every(key => paga.has(key)),
                  total: m ? Number(m[1]) : null, fitted: m ? Number(m[2]) : null, selector_hidden: hidden };
       });
+    });
+    await check('paga_age_slider_moves_both_panels_and_restores_the_baseline', async () => {
+      const snapshot = () => page.evaluate(() => ['traj-paga_layout', 'traj-paga_layout_right'].map(id => {
+        const graph = document.getElementById(id);
+        return (graph?.data ?? []).filter(t => t.meta?.trajectory_role === 'islet')
+          .flatMap(t => Array.from(t.key, (key, i) => [key, t.x[i], t.y[i]]))
+          .sort((a, b) => a[0].localeCompare(b[0]));
+      }));
+      const markedRoot = () => page.evaluate(() => ['traj-paga_layout', 'traj-paga_layout_right'].map(id => {
+        const graph = document.getElementById(id);
+        const label = graph?.layout?.annotations?.find(a => a.text === 'DPT root' && a.showarrow);
+        const text = graph?.querySelector('.annotation-text');
+        if (!text || getComputedStyle(text).fill !== 'rgb(33, 33, 33)') return null;
+        for (const trace of graph?.data || []) {
+          if (!label || trace.meta?.trajectory_role !== 'islet') continue;
+          const i = trace.text.findIndex(text => text.includes('<br>DPT root'));
+          if (i >= 0 && trace.x[i] === label.x && trace.y[i] === label.y) return trace.key[i];
+        }
+        return null;
+      }));
+      const baseline = await snapshot();
+      if (!baseline[0].length || JSON.stringify(baseline[0]) !== JSON.stringify(baseline[1])) return false;
+      const root = await markedRoot();
+      if (!root[0] || root[0] !== root[1]) return false;
+      const setWeight = weight => page.$eval('#traj-paga_age_weight', (el, value) => {
+        const input = window.jQuery(el);
+        input.data('ionRangeSlider').update({from: value});
+        input.trigger('change');
+      }, weight);
+      // One changing object is sufficient for the render wait, then check all keyed coordinates.
+      await setWeight(1);
+      const position = await page.waitForFunction(original => {
+        return ['traj-paga_layout','traj-paga_layout_right'].every(id => {
+          const graph = document.getElementById(id);
+          const traces = graph?.data?.filter(t => t.meta?.trajectory_role === 'islet') || [];
+          return traces.some(t => t.key.some((key, i) => original[key] && t.x[i] !== original[key][0]));
+        });
+      }, {}, Object.fromEntries(baseline[0].map(([key, x, y]) => [key, [x, y]])));
+      await position.dispose();
+      const end = await snapshot();
+      const endRoot = await markedRoot();
+      await setWeight(0);
+      await page.waitForFunction(first => ['traj-paga_layout','traj-paga_layout_right'].every(id => {
+        const traces = document.getElementById(id)?.data?.filter(t => t.meta?.trajectory_role === 'islet') || [];
+        return traces.some(t => t.key.includes(first[0]) &&
+          t.x[t.key.indexOf(first[0])] === first[1] && t.y[t.key.indexOf(first[0])] === first[2]);
+      }), {}, baseline[0].find(([key,x,y], i) => end[0][i]?.[0] === key &&
+        (x !== end[0][i][1] || y !== end[0][i][2])));
+      const restored = await snapshot();
+      const restoredRoot = await markedRoot();
+      const moved = end[0].filter(([key,x,y], i) => baseline[0][i]?.[0] === key &&
+        (baseline[0][i][1] !== x || baseline[0][i][2] !== y)).length;
+      return { passed: moved > 0 && end[0].length === baseline[0].length &&
+        JSON.stringify(end[0]) === JSON.stringify(end[1]) && JSON.stringify(restored) === JSON.stringify(baseline) &&
+        [...endRoot, ...restoredRoot].every(key => key === root[0]),
+        objects: baseline[0].length, moved_at_full_weight: moved, dpt_root: root[0] };
+    });
+    await check('trajectory_ratio_regions_and_feature_gradient', async () => {
+      const endocrine = ['Beta cell', 'Alpha cell', 'Delta cell', 'CHGA+ hormone-negative'];
+      const observations = [];
+      for (const region of ['peri', 'both', 'core']) {
+        await page.$eval('#traj-traj_ratio_region', (el, r) => el.selectize.setValue(r), region);
+        await page.waitForFunction((region, endocrine) => {
+          const control = document.getElementById('traj-traj_ratio_type')?.selectize;
+          if (!control || !control.getValue() || !control.options[control.getValue()]) return false;
+          const choices = Object.keys(control.options);
+          return !choices.includes('All endocrine cells') &&
+            endocrine.every(type => choices.includes(type) === (region === 'core')) &&
+            choices.includes('CD8a Tcell') && choices.includes('Exocrine');
+        }, {}, region, endocrine);
+        observations.push(region);
+      }
+      await page.$eval('#traj-traj_ratio_type', el => el.selectize.setValue('Beta cell'));
+      const gradient = async mode => {
+        await page.waitForFunction(mode => {
+          const title = document.getElementById('traj-traj_umap_feature_title')?.textContent || '';
+          const graph = document.getElementById('traj-traj_umap_feature');
+          const distinct = new Set([...graph.querySelectorAll('.scatterlayer path.point')].map(
+            point => getComputedStyle(point).fill));
+          return title.toLowerCase().includes(mode) && distinct.size > 5 &&
+            !document.documentElement.classList.contains('shiny-busy') &&
+            !graph.classList.contains('recalculating');
+        }, {}, mode);
+        return page.$eval('#traj-traj_umap_feature', graph => new Set(
+          [...graph.querySelectorAll('.scatterlayer path.point')].map(point => getComputedStyle(point).fill)).size);
+      };
+      const ratioColors = await gradient('beta');
+      await page.$eval('#traj-traj_y_mode', el => el.selectize.setValue('marker'));
+      await page.waitForFunction(() => document.getElementById('traj-traj_feature')?.selectize?.options.INS);
+      await page.$eval('#traj-traj_feature', el => el.selectize.setValue('INS'));
+      const markerColors = await gradient('ins');
+      await page.$eval('#traj-traj_y_mode', el => el.selectize.setValue('ratio'));
+      return { passed: true, regions: observations, core_beta_colors: ratioColors, insulin_colors: markerColors };
     });
     // Singles are counted, not analyzed (owner, 2026-10-18): no Single choice in the object selector, and the
     // Plot tab's per-donor card shows them.
@@ -485,7 +582,7 @@ try {
           .filter(t => t.meta?.trajectory_role === 'islet').flatMap(t => t.key)));
         return [...sets[0]].find(k => sets[1].has(k)) || null;
       }, ids);
-      const result = { key, hovered: {} };
+      const result = { key, hovered: {}, unhovered: {} };
       // Returning to the tab redraws its plots: wait until Shiny has been idle for a second, so an unhover is not
       // sent to a widget that is about to be replaced.
       await page.waitForFunction(() => {
@@ -508,10 +605,19 @@ try {
           if (result.hovered[source].every(k => k === key)) break;
         }
         await page.evaluate(id => document.getElementById(id).emit('plotly_unhover', {}), source);
+        // Highlight removal runs on requestAnimationFrame. Wait for its actual
+        // rendered state before starting the opposite direction, using the
+        // same six-second bound as the hover retries above.
+        await page.waitForFunction(ids => ids.every(id => {
+          const graph = document.getElementById(id);
+          return graph && !graph.classList.contains('recalculating') &&
+            !graph.querySelector('.trajectory-link-highlight')?.getAttribute('data-linked-key');
+        }), { polling: 50, timeout: 6000 }, ids);
+        result.unhovered[source] = await rings();
       }
-      await new Promise(resolve => setTimeout(resolve, 300));
       result.after_unhover = await rings();
       result.passed = Boolean(key) && ids.every(source => result.hovered[source].every(k => k === key))
+        && ids.every(source => result.unhovered[source].every(k => k === null))
         && result.after_unhover.every(k => k === null);
       return result;
     });
