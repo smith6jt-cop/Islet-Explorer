@@ -992,9 +992,9 @@ macrophage_collapse_comp <- function(comp, markers = character(0)) {
 }
 
 #' Marker checkboxes that split macrophages under a Macrophage heading or in a tab's controls.
-macrophage_marker_checkboxes <- function(input_id, selected = character(0), label = "Separate by:") {
+macrophage_marker_checkboxes <- function(input_id, selected = character(0), label = "Macrophage filtering") {
   shiny::tags$div(class = "pheno-mac-markers",
-    shiny::checkboxGroupInput(input_id, label, choices = c(Gal3 = "LGALS3"), inline = TRUE,
+    shiny::checkboxGroupInput(input_id, label, choices = c("Split by Gal3 status" = "LGALS3"), inline = TRUE,
                               selected = MACROPHAGE_MARKERS[MACROPHAGE_MARKERS %in% selected]))
 }
 
@@ -1814,7 +1814,7 @@ CONTROL_PANEL_CSS <- paste0(
   ".pheno-mac-markers { margin: 5px 0 6px 18px; } ",
   ".pheno-mac-markers .form-group { margin: 0; width: auto; } ",
   ".pheno-mac-markers .control-label { display: block; margin: 0 0 4px; font-size: 13px; color: var(--islet-fg-muted); } ",
-  ".pheno-mac-markers .shiny-options-group { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 10px; } ",
+  ".pheno-mac-markers .shiny-options-group { display: grid; } ",
   ".pheno-mac-toggle { margin: 2px 0; } ",
   ".pheno-mac-children { margin-top: 6px; } ",
   ".pheno-mac-markers .checkbox-inline { margin: 0 10px 0 0; padding-left: 18px; color: var(--islet-fg-muted); } ",

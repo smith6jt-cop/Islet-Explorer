@@ -188,22 +188,23 @@ try {
     assert.equal(state.heading, 'Donor For Tissue And Immune Gradient'); return state;
   });
   if (scope === 'all') for (const width of [1200, 1600]) await check(`default_tissue_${width}`, () => captureTissue('default', width));
-  await check('four_marker_dense_selection', async () => {
+  await check('gal3_dense_selection', async () => {
     await dataPanel(true);
-    for (const marker of ['CD68', 'CD163', 'LGALS3', 'CD4']) {
-      report.phase = `select_marker_${marker}`; await save();
-      const selector = `input[name="spatial-mac_markers_filter"][value="${marker}"]`;
-      if (!await page.$eval(selector, el => el.checked)) await page.click(selector);
-      await page.waitForFunction(selector => document.querySelector(selector)?.checked, {}, selector);
-      await tissueReady();
-    }
+    const markerBox = 'input[name="spatial-mac_markers_filter"]';
+    assert.deepEqual(await page.$$eval(markerBox, boxes => boxes.map(box => box.value)), ['LGALS3']);
+    if (!await page.$eval(markerBox, el => el.checked)) await page.click(markerBox);
+    await page.waitForFunction(selector => document.querySelector(selector)?.checked, {}, markerBox);
+    await tissueReady();
     await page.click('#spatial-pheno_filter .pheno-groups-overall .pheno-select-all');
     await tissueReady();
     const state = await page.$$eval('input[name="spatial-pheno_filter"]', inputs => inputs.map(x => ({ value: x.value, checked: x.checked })));
     report.dense_selection_debug = { phenotypes: state,
       markers: await page.$$eval('input[name="spatial-mac_markers_filter"]', boxes => boxes.map(x => ({value: x.value, checked: x.checked}))) };
-    assert(state.length >= 20 && state.every(x => x.checked));
-    assert.equal(state.filter(x => x.value.startsWith('Unclassified ')).length, 4);
+    assert(state.every(x => x.checked));
+    assert.deepEqual(state.filter(x => x.value.startsWith('Macrophage')).map(x => x.value).sort(),
+      ['Macrophage_LGALS3+', 'Macrophage_LGALS3-']);
+    assert(state.some(x => x.value === 'CD4 Tcell'));
+    assert(!state.some(x => x.value.startsWith('Unclassified ')), 'Unclassified cells are excluded from the selector');
     assert(!state.some(x => /^(Conflict(?:\s|_|$)|All unclassified cells$|All macrophages$|No subtype$)/i.test(x.value)));
     await dataPanel(false); return state;
   });
@@ -302,8 +303,9 @@ try {
           return tokens;
         }) };
     });
-    assert(detail.label === 'Separate by:' && detail.markerCount === 4 && detail.below && detail.display === 'grid');
-    assert(detail.markerTokens.length >= 40 && detail.markerTokens.every(token => token.lineBoxes === 1), 'A marker token split across lines');
+    assert(detail.label === 'Macrophage filtering' && detail.markerCount === 1 && detail.below && detail.display === 'grid');
+    assert.deepEqual(detail.markerTokens.map(token => token.text).sort(), ['Gal3⁺', 'Gal3⁻'].sort());
+    assert(detail.markerTokens.every(token => token.lineBoxes === 1), 'A marker token split across lines');
     await screenshot(`distance-composition-controls-${width}`); return { width, ...detail };
   });
   assert(!report.page_errors.length && !report.application_http_errors.length && !report.external_requests_blocked);

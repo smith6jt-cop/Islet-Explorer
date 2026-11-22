@@ -285,13 +285,10 @@ to 100%. Details and methods are in the card's **?** help.
 
 ### Macrophage Selection
 
-The **Macrophage** checkbox is followed by **Separate by:** and four marker boxes:
-CD68, CD163, LGALS3 and CD4. No marker selected gives one macrophage category.
-Selecting markers shows the corresponding disjoint positive/negative profiles.
-The Macrophage checkbox selects or clears those children together; it is not an
-extra category in the plot. Individual profiles remain selectable. Marker choices
-stay synchronized across tabs. Single-measure dropdowns show the same **Separate
-by:** controls beneath the population selector.
+Under **Macrophage filtering**, check **Split by Gal3 status** to show Gal3-positive and
+Gal3-negative macrophages separately. Clear it to pool them into one macrophage category.
+The setting is shared across Plot, Trajectory, and Spatial. In grouped phenotype lists,
+the **Macrophage** checkbox selects or clears both subtypes together.
 
 ### Density terminology
 
@@ -495,7 +492,7 @@ card to that donor: other cohort summaries retain their own donor-status control
 Open **Data Controls** to choose endocrine object classes, donor statuses, Leiden
 resolution, tissue region and phenotype checkboxes. Open **View Controls** to set
 tissue coloring, background-cell coloring and the phenotype or donor-status palette.
-The macrophage **Separate by:** controls work as described above.
+The **Macrophage filtering** control works as described above.
 
 - **Tissue Scatter Plot** draws the selected donor's cells with equal physical
   scaling on x and y and the microscopy y-axis reversed. The map uses the available

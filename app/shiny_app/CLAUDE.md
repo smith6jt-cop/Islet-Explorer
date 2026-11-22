@@ -221,8 +221,8 @@ The plot has no subtitle and its y-axis is `Proportion of selected phenotypes`. 
 selected table, retaining original `proportion` and adding `proportion_selected` and `shown_cells`.
 Unclassified subclasses remain disjoint; parent aggregates and hidden Conflict rows do not enter the stack.
 
-The shared grouped phenotype helper places the Macrophage checkbox above **Separate by:** and the four
-marker choices. When profiles are split, the Macrophage checkbox is a UI-only group toggle with no phenotype
+The shared grouped phenotype helper places the Macrophage checkbox above **Macrophage filtering** and its
+**Split by Gal3 status** option. When profiles are split, the Macrophage checkbox is a UI-only group toggle with no phenotype
 value; JavaScript selects only the input's child phenotype values and leaves marker state intact. This prevents
 parent/subclass double counting. `card_heading_text()` capitalizes heading words while preserving acronym casing.
 

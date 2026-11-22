@@ -454,8 +454,7 @@ shared phenotype palette. Its plotted percentages normalize over included catego
 CSV also retains original-denominator percentages. The two PAGA plots share one fitted
 graph and have independent color menus. Spatial keeps the shared donor selection visible,
 sizes the tissue map to its card width, and uses a multicolumn legend. Distance profile
-controls separate view, grouping and axis choices. Macrophage **Separate by:** boxes sit
-below the Macrophage selection, and additive views contain disjoint leaf categories.
+controls separate view, grouping and axis choices. The **Macrophage filtering** control splits macrophages by Gal3 status, and additive views contain disjoint leaf categories.
 
 These controls do not alter source cell labels, the accepted v19 endocrine identities,
 marker values, object membership or saved embeddings. Follow the linked local runtime

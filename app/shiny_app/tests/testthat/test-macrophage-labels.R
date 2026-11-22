@@ -132,7 +132,15 @@ test_that("only Gal3 is selectable and old marker settings resolve to valid cate
   expect_match(html, 'class="pheno-group-toggle"', fixed = TRUE)
   expect_equal(lengths(regmatches(html, gregexpr('name="split_markers"', html))), 1L)
   expect_match(html, 'value="LGALS3" checked="checked"', fixed = TRUE)
-  expect_match(html, "Gal3", fixed = TRUE)
+  for (control in list(html, as.character(env$macrophage_marker_checkboxes("standalone")))) {
+    dom <- xml2::read_html(control)
+    group <- xml2::xml_find_first(dom, "//input[@value='LGALS3']/ancestor::*[@role='group'][1]")
+    labelled_by <- xml2::xml_attr(group, "aria-labelledby")
+    expect_equal(xml2::xml_text(xml2::xml_find_first(group, paste0(".//*[@id='", labelled_by, "']"))),
+                 "Macrophage filtering")
+    box <- xml2::xml_find_first(group, ".//input[@value='LGALS3']/ancestor::label[1]")
+    expect_equal(trimws(xml2::xml_text(box)), "Split by Gal3 status")
+  }
   expect_false(grepl("CD4|CD68|CD163", html))
   expect_identical(env$macrophage_collapse(L, c("CD4", "CD163")), rep("Macrophage", 2))
   expect_identical(env$macrophage_collapse(L, c("CD4", "LGALS3")), L)

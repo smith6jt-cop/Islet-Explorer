@@ -212,7 +212,7 @@ try {
     await waitBars();
     const state = await snapshot();
     const closed = await page.$eval(panel, element => !element.open);
-    return { passed: closed && normalized(state) && distinctPhenotypeColors(state), closed, ...state };
+    return { passed: state.markers.join() === 'LGALS3' && closed && normalized(state) && distinctPhenotypeColors(state), closed, ...state };
   });
   await check('include_groups_axis_and_no_subtitle', async () => {
     await setPanel(true);
@@ -228,15 +228,18 @@ try {
   await check('none_clears_plot_and_stays_empty_across_marker_rerender', async () => {
     await page.click(`${include} .pheno-groups-overall .pheno-select-none`);
     await waitEmpty();
-    await page.click(`${markerBoxes}[value="CD68"]`);
+    await page.click(`${markerBoxes}[value="LGALS3"]`);
+    await page.waitForSelector(`${macGroup} input[name="plot-composition_include"][value="Macrophage"]`);
+    await waitEmpty();
+    await page.click(`${markerBoxes}[value="LGALS3"]`);
     await page.waitForSelector(`${macGroup} .pheno-mac-children input`);
-    await page.waitForFunction(() => document.querySelector('input[name="plot-mac_markers_include"][value="CD68"]')?.checked);
+    await page.waitForFunction(() => document.querySelector('input[name="plot-mac_markers_include"][value="LGALS3"]')?.checked);
     await waitEmpty();
     await setPanel(false);
     await setPanel(true);
     await settled();
     const state = await snapshot();
-    return { passed: state.selected.length === 0 && state.barCount === 0 && state.markers.join() === 'CD68', ...state };
+    return { passed: state.selected.length === 0 && state.barCount === 0 && state.markers.join() === 'LGALS3', ...state };
   });
   await check('split_macrophage_master_selects_children_not_parent_or_markers', async () => {
     await page.click(`${macGroup} .pheno-group-toggle`);
@@ -256,10 +259,10 @@ try {
     await waitEmpty();
     const disabled = await snapshot();
     return { passed: normalized(enabled) && selectedChildren && enabled.selected.length === children.length &&
-      children.length >= 2 && !children.includes('Macrophage') && !masterName &&
-      enabled.markers.join() === 'CD68' && disabled.markers.join() === 'CD68' && disabled.selected.length === 0 &&
-      keyboardOff.selected.length === 0 && keyboardOff.markers.join() === 'CD68' &&
-      normalized(keyboardOn) && keyboardOn.selected.length === children.length && keyboardOn.markers.join() === 'CD68',
+      children.length === 2 && children.includes('Macrophage_LGALS3+') && children.includes('Macrophage_LGALS3-') && !masterName &&
+      enabled.markers.join() === 'LGALS3' && disabled.markers.join() === 'LGALS3' && disabled.selected.length === 0 &&
+      keyboardOff.selected.length === 0 && keyboardOff.markers.join() === 'LGALS3' &&
+      normalized(keyboardOn) && keyboardOn.selected.length === children.length && keyboardOn.markers.join() === 'LGALS3',
     childCount: children.length, masterHasName: Boolean(masterName), enabled, keyboardOff, keyboardOn, disabled };
   });
   await check('all_restores_disjoint_categories_and_complete_bars', async () => {
@@ -267,17 +270,18 @@ try {
     await waitBars();
     const state = await snapshot();
     const choiceCount = await page.$$eval(ownBoxes, boxes => boxes.length);
-    return { passed: normalized(state) && distinctPhenotypeColors(state) && state.selected.length === choiceCount && state.markers.join() === 'CD68' &&
+    return { passed: normalized(state) && distinctPhenotypeColors(state) && state.selected.length === choiceCount && state.markers.join() === 'LGALS3' &&
       !state.selected.includes('Macrophage') && !state.selected.includes('All unclassified cells') &&
       !state.selected.some(label => /^Conflict(?:\s|_|$)/i.test(label)), choiceCount, ...state };
   });
-  await check('macrophage_marker_boxes_are_below_master_with_separate_by_label', async () => {
+  await check('gal3_filter_is_labelled_for_macrophages_below_master', async () => {
     return page.$eval(macGroup, group => {
       const parent = group.querySelector('.pheno-group-toggle').closest('.checkbox').getBoundingClientRect();
       const markers = [...group.querySelectorAll('input[name="plot-mac_markers_include"]')];
       const label = group.querySelector('.pheno-mac-markers .control-label');
       const bounds = markers.map(box => box.closest('label').getBoundingClientRect());
-      return { passed: markers.length === 4 && label?.textContent.trim() === 'Separate by:' &&
+      return { passed: markers.map(box => box.value).join(',') === 'LGALS3' && markers[0].closest('label').textContent.trim() === 'Split by Gal3 status' &&
+        label?.textContent.trim() === 'Macrophage filtering' &&
         bounds.every(box => box.top >= parent.bottom - 1) && label.getBoundingClientRect().top >= parent.bottom - 1,
       markerCount: markers.length, label: label?.textContent.trim(),
       parentBottom: parent.bottom, markerTops: bounds.map(box => box.top) };
@@ -388,13 +392,13 @@ try {
   });
   await check('clear_marker_preserves_selected_population_without_duplicate_parent', async () => {
     await setPanel(true);
-    await page.click(`${markerBoxes}[value="CD68"]`);
+    await page.click(`${markerBoxes}[value="LGALS3"]`);
     await page.waitForSelector(`${macGroup} input[name="plot-composition_include"][value="Macrophage"]`);
-    await page.waitForFunction(() => !document.querySelector('input[name="plot-mac_markers_include"][value="CD68"]')?.checked);
+    await page.waitForFunction(() => !document.querySelector('input[name="plot-mac_markers_include"][value="LGALS3"]')?.checked);
     await waitBars();
     const state = await snapshot();
     return { passed: normalized(state) && state.markers.length === 0 && state.selected.includes('Macrophage') &&
-      !state.selected.some(value => /^Macrophage .*[+-]/.test(value) || /^CD68[+-]/.test(value)), ...state };
+      !state.selected.some(value => /^Macrophage[ _].*[+-]/.test(value) || /^CD68[+-]/.test(value)), ...state };
   });
   await setPanel(false);
   for (const width of [1200, 1600]) {

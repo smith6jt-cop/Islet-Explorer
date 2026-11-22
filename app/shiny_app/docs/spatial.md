@@ -12,8 +12,7 @@ their own donor-status controls. Tissue and Leiden cards retain their relative
 widths. The tissue map uses its card's full interior width; measured raster
 height accommodates title, axes and a responsive multicolumn legend. Cached
 render dimensions use the exact card width. Distance-To-Islet Profile uses
-separate titled control groups. The shared **Separate by:** marker controls sit
-below Macrophage, and parent toggles never add a duplicate population.
+separate titled control groups. The shared **Macrophage filtering** control offers **Split by Gal3 status**, and parent toggles never add a duplicate population.
 
 The label inventory comes from the accepted root and its presentation mapping.
 The Unclassified display family has four disjoint leaves; Conflict classes are
