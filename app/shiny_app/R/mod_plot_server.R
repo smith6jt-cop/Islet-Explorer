@@ -945,7 +945,7 @@ plot_server <- function(id, prepared, selected_islet, active_tab = reactive("Plo
           "cells: the donor's cells of the phenotype, pooled over its selected objects; total_cells: all its cells there",
           "proportion = 100 * cells / total_cells; proportion_selected = 100 * cells / shown_cells (the plotted percentage)",
           "shown_cells sums the included phenotypes per donor; only included categories are exported",
-          "Unclassified subclasses are mutually exclusive; the parent is not an extra population",
+          if (root_has_terminal_review()) "Panel undected cells count toward total_cells and are a displayed category" else "Unclassified subclasses are mutually exclusive; the parent is not an extra population",
           "Hidden QC-conflict cells remain in total_cells but are excluded from displayed categories; original proportions may sum to less than 100%"))
       }
     )

@@ -126,7 +126,7 @@ trajectory_ui <- function(id) {
                    " log(1 + cells / endocrine cells) for each cell class. The endocrine classes are counted in the",
                    " core only and exocrine cells in the 20 \u00b5m peri-islet band only; macrophages enter as Gal3\u207a",
                    " and Gal3\u207b, and the T cell, B cell, stromal, endothelial and neural classes pooled across core and peri before normalization.",
-                   " Each retained phenotype additionally contributes its summed nerve, lymphatic and blood-vessel overlap fractions, normalized in the same way. Conflict, Doublet suspected, Tissue, Unclassified and unresolved-lineage cells are not inputs.",
+                   " Each retained phenotype additionally contributes its summed nerve, lymphatic and blood-vessel overlap fractions, normalized in the same way. Panel undected cells are not inputs, and conflicting-marker and cell-QC exclusions never enter the app.",
                    " Inputs that do not vary are dropped. Objects are linked to their 15 nearest neighbors by cosine",
                    " distance. The fit finds the two most distant profiles in diffusion space and selects an ND",
                    " islet near the end supported by more ND donors. Raw diffusion pseudotime starts at zero",

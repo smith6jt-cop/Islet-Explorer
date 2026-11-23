@@ -1300,7 +1300,8 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                        " T Cell CD4⁺ cells in a bin are often only a few."),
                 tags$p("Dividing by each donor's own tissue separates gathering at islets from a donor having more",
                        " selected cells everywhere. The All immune cells option retains its original immune definition;",
-                       " Unclassified choices use their specified source populations. It reads per-cell data, so the Endocrine objects selector does",
+                       if (root_has_terminal_review()) " Panel undected counts as a cell of its own. It reads per-cell data, so the Endocrine objects selector does"
+                       else " Unclassified choices use their specified source populations. It reads per-cell data, so the Endocrine objects selector does",
                        " not apply.")),
               div(style = ctrl_row,
                 selectInput(ns("gradient_phenotype"), "Cells", choices = isolate(gradient_choices()), selected = "all",
@@ -1372,9 +1373,11 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                        " zero-anchored at the islet border), spanning islet interior to bulk tissue. Negative = inside",
                        " islet, positive = outside; the dashed line marks the border. Pooled per cell (descriptive)",
                        " \u2014 every cell counts once, so donors with more cells weigh more. For a donor-fair view see",
-                       " Cell distribution around islets."),
+                       " Cell distribution around islets. Download CSV exports the plotted table (density or",
+                       " composition) with its settings in a # header."),
                 tags$p(tags$strong("Group by"),
-                       " Phenotype lists retained cell types, including the Unclassified family (the endocrine",
+                       if (root_has_terminal_review()) " Phenotype lists retained cell types, including Panel undected (the endocrine"
+                       else " Phenotype lists retained cell types, including the Unclassified family (the endocrine",
                        " and exocrine classes are left out);",
                        " Marker+ lists every panel marker, all 31 being measured in every donor, a cell counting as",
                        if (root_has_background_positivity()) paste0(" positive when its log value exceeds the image's",
@@ -1451,7 +1454,8 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
                 tags$div(class = "cd-comp-cols", uiOutput(ns("dist_comp_items_ui")))
               )
             ),
-            uiOutput(ns("distance_profile_plot"))
+            uiOutput(ns("distance_profile_plot")),
+            dl_csv("dl_distance_profile_csv")
           )
         ))
       )
@@ -1923,19 +1927,83 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
     # (release Parquet/DuckDB; development CSV, symlog axis; ported from Senior.) Its donor-averaged KDE view was
     # removed in the owner review of 2026-10-20: that table holds only core and band cells, so it stopped at 20 um,
     # and the Immune gradient card now shows the donor-fair profile.
+    # The profile's query and the settings that define it, shared by the plot and its CSV so the export is
+    # exactly the plotted table.
+    dist_profile_data <- reactive({
+      ptype <- input$dist_ptype %||% "density"
+      # The distance used: the reviewer's choice when the root has the Islet-only column (v9), else the only one.
+      dist_col <- if (cell_distance_has_islet_distance() &&
+                      identical(input$dist_to %||% "signed_dist_islet", "signed_dist_islet")) "signed_dist_islet"
+                  else "signed_dist"
+      dist_label <- if (identical(dist_col, "signed_dist_islet")) "nearest Islet" else "nearest Islet or Cluster"
+      mode  <- input$dist_mode %||% "phenotype"
+      norm  <- input$dist_norm %||% "prop"
+      status_order <- c("ND", "Aab+", "T1D")
+      statuses <- intersect(status_order, input$dist_status %||% status_order)
+      req(length(statuses) > 0)
+      out <- list(ptype = ptype, dist_col = dist_col, dist_label = dist_label, mode = mode, norm = norm,
+                  statuses = statuses, status_order = status_order)
+      if (identical(ptype, "composition")) {
+        items <- intersect(input$dist_comp_items, dist_items())
+        if (!identical(mode, "marker")) items <- phenotype_partition_labels(items)
+        req(length(items) > 0)
+        res <- query_cell_distance_composition(mode, items, statuses, norm, dist_col)
+        req(res, nrow(res$comp) > 0)
+        out$items <- items
+      } else {
+        group <- input$dist_group %||% "__all__"
+        choices <- if (identical(mode, "marker")) dist_items() else
+          unlist(phenotype_grouped_choices(dist_items()), use.names = FALSE)
+        if (!(group %in% c("__all__", choices))) group <- "__all__"
+        res <- query_cell_distance_hist(mode, group, statuses, norm, dist_col = dist_col)
+        req(res, nrow(res$hist) > 0)
+        out$group <- group
+      }
+      out$res <- res
+      out
+    })
+
+    output$dl_distance_profile_csv <- downloadHandler(
+      filename = function() paste0("spatial_distance_profile_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".csv"),
+      content = function(file) {
+        d <- dist_profile_data()
+        composition <- identical(d$ptype, "composition")
+        tab <- if (composition) {
+          x <- d$res$comp
+          data.frame(donor_status = x$donor_status, item = x$item, distance_um = x$x,
+                     cells = x$n, cells_at_distance = x$total,
+                     value = x$val, stringsAsFactors = FALSE)
+        } else {
+          x <- d$res$hist
+          data.frame(donor_status = x$donor_status, distance_um = x$real_x, symlog_x = x$x,
+                     value = x$dens, stringsAsFactors = FALSE)
+        }
+        tab <- tab[order(match(tab$donor_status, d$status_order), tab[[if (composition) "item" else "distance_um"]],
+                         tab$distance_um), , drop = FALSE]
+        n_by <- if (!composition) unlist(d$res$n_by_status) else NULL
+        write_islet_csv(file, tab, islet_csv_header(
+          "Spatial — distance-to-islet profile",
+          paste("Plot:", if (composition) "Composition bars" else "Density curves"),
+          paste("Signed distance to the", d$dist_label, "(negative = inside the border)"),
+          paste("Group by:", if (identical(d$mode, "marker")) "Marker+" else "Phenotype"),
+          if (composition) paste("Items:", paste(d$items, collapse = ", "))
+          else paste("Show:", if (identical(d$group, "__all__")) "All cells" else d$group),
+          paste("Y-axis:", if (identical(d$norm, "prop")) "Proportion" else "Raw count"),
+          paste("Disease status:", paste(d$statuses, collapse = ", ")),
+          if (length(n_by)) paste("Cells per status:", paste(names(n_by), formatC(n_by, big.mark = ","),
+                                                             sep = " = ", collapse = "; ")),
+          "Pooled per cell: every cell counts once, so donors with more cells weigh more.",
+          if (composition) "value = proportion of the cells at that distance (or the cell count when Raw count) per 5 µm bin; distance_um is the bin position."
+          else "value = the plotted density per µm (proportion of the status's class cells, or cells per µm when Raw count); symlog_x is the plotted axis."
+        ))
+      }
+    )
+
     output$immune_distance_kde <- renderPlotly({
       {
-        ptype <- input$dist_ptype %||% "density"
-        # The distance used: the reviewer's choice when the root has the Islet-only column (v9), else the only one.
-        dist_col <- if (cell_distance_has_islet_distance() &&
-                        identical(input$dist_to %||% "signed_dist_islet", "signed_dist_islet")) "signed_dist_islet"
-                    else "signed_dist"
-        dist_label <- if (identical(dist_col, "signed_dist_islet")) "nearest Islet" else "nearest Islet or Cluster"
-        mode  <- input$dist_mode %||% "phenotype"
-        norm  <- input$dist_norm %||% "prop"
-        status_order <- c("ND", "Aab+", "T1D")
-        statuses <- intersect(status_order, input$dist_status %||% status_order)
-        req(length(statuses) > 0)
+        d <- dist_profile_data()
+        ptype <- d$ptype; dist_col <- d$dist_col; dist_label <- d$dist_label
+        mode <- d$mode; norm <- d$norm; status_order <- d$status_order; statuses <- d$statuses
         dcols <- donor_colors_reactive()
         fonts <- plotly_islet_fonts()
         item_colors <- if (identical(mode, "marker")) CELL_DIST_MARKER_COLORS else PHENOTYPE_COLORS
@@ -1944,11 +2012,8 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
           # ---- Composition: one row per phenotype or marker, one column per donor status ----
           # Owner, 2026-10-20: markers drawn side by side hid small proportions next to large ones, so each item has
           # its own row and y-axis, shared by the three statuses of that row (the same y scaling for each group).
-          items <- intersect(input$dist_comp_items, dist_items())
-          if (!identical(mode, "marker")) items <- phenotype_partition_labels(items)
-          req(length(items) > 0)
-          res <- query_cell_distance_composition(mode, items, statuses, norm, dist_col)
-          req(res, nrow(res$comp) > 0)
+          items <- d$items
+          res <- d$res
           comp <- res$comp
           present <- intersect(status_order, unique(comp$donor_status))
           items <- items[items %in% comp$item]
@@ -2023,12 +2088,8 @@ spatial_server <- function(id, prepared, palette = reactive(PHENOTYPE_COLORS),
 
         } else {
           # ---- Density: symlog filled curves per status (pooled per cell) ----
-          group <- input$dist_group %||% "__all__"
-          choices <- if (identical(mode, "marker")) dist_items() else
-            unlist(phenotype_grouped_choices(dist_items()), use.names = FALSE)
-          if (!(group %in% c("__all__", choices))) group <- "__all__"
-          res <- query_cell_distance_hist(mode, group, statuses, norm, dist_col = dist_col)
-          req(res, nrow(res$hist) > 0)
+          group <- d$group
+          res <- d$res
           hist <- res$hist
           present <- intersect(status_order, unique(hist$donor_status))
           y_max <- max(hist$dens)

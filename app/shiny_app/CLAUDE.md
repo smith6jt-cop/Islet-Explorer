@@ -668,7 +668,7 @@ Single source of truth in `R/00_globals.R`:
 
 ## CSV Downloads (Jul 2026)
 
-Nine CSV exports: Plot `dl_summary` + `dl_distribution_csv`; Spatial `download_spatial` + `dl_infiltration_csv` + `dl_enrichment_csv` + `dl_distance_csv`; Trajectory `dl_multi_heatmap_csv` + `dl_umap_csv`; Statistics `download_stats`. Two rules, both learned from bugs:
+Ten CSV exports: Plot `dl_summary` + `dl_distribution_csv`; Spatial `download_spatial` + `dl_infiltration_csv` + `dl_enrichment_csv` + `dl_distance_csv` + `dl_distance_profile_csv`; Trajectory `dl_multi_heatmap_csv` + `dl_umap_csv`; Statistics `download_stats`. Two rules, both learned from bugs:
 
 **1. A CSV must export the plot's own reactive, never a re-derivation.** `download_spatial` used to build its own subset from `prepared()$comp` instead of the shared `nbr_comp()` every card consumes — so it ignored `nbr_min_cells` and `pheno_filter`, applied a `total_cells_peri > 0` filter the cards do *not*, and carried no outlier flags. The result corresponded to **no plot on the page**. When a card's data is computed inline in `renderPlotly`, extract it into a reactive first and have the renderer consume it (`infiltration_data()`, `distance_data()`, `dist_data()`, `traj_multi_heatmap_matrix()` were all extracted for exactly this). Then the export cannot drift.
 

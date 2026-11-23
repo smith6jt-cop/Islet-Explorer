@@ -123,7 +123,7 @@ test_that("the provenance line names the fitted inputs by region", {
                         "peri_Macrophage_LGALS3+"))
   expect_match(text, "core (2): Endocrine Beta, Macrophage Gal3⁺", fixed = TRUE)
   expect_match(text, "peri-islet band (2): Exocrine, Macrophage Gal3⁺", fixed = TRUE)
-  expect_match(text, "Unclassified", fixed = TRUE)
+  expect_match(text, "Panel undected", fixed = TRUE)
   expect_match(inputs_text(NULL), "not reported", fixed = TRUE)
 })
 

@@ -92,8 +92,7 @@ trajectory_inputs_text <- function(features) {
   paste0("Trajectory inputs: log1p(count or summed overlap / core endocrine cells) per class | ",
          paste(c(part("core", "core"), part("peri", "20 µm peri-islet band"), part("combined", "core + peri")), collapse = " | "),
          " | endocrine classes in the core only, exocrine in the peri-islet band only,",
-         " macrophages by Gal3; Conflict, Doublet suspected, Tissue, Unclassified and",
-         " unresolved-lineage cells are not inputs")
+         " macrophages by Gal3; Panel undected and excluded cells are not inputs")
 }
 
 apply_pt_scale <- function(df, pt_scale) {

@@ -97,6 +97,15 @@ unclassified_census <- function(root = data_root) {
 #' Shared popover content. Safe to append to static or dynamically built card
 #' help: no session/output IDs, no writes, and no per-card filtered totals.
 unclassified_help_ui <- function(root = data_root) {
+  # The reviewed v27 typing has no Unclassified family: its place is the single Panel undected class.
+  if (exists("root_has_terminal_review", mode = "function") && root_has_terminal_review()) {
+    return(shiny::tagList(
+      shiny::tags$hr(),
+      shiny::tags$p(shiny::tags$strong("Panel undected."),
+        " A cell with no typing marker above its image's threshold is named Panel undected: its identity is not ",
+        "resolved by this marker panel. It counts toward tissue and region totals and is not a named cell type. ",
+        "Cells with competing markers and no supported identity, and cells that fail cell QC, are excluded from the app.")))
+  }
   census <- unclassified_census(root)
   table_ui <- if (isTRUE(census$available)) {
     headings <- c("Classification", "ND", "Aab+", "T1D", "Total")

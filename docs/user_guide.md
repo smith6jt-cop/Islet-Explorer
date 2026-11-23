@@ -53,14 +53,12 @@ A designated clean off-campus acceptance run and host reboot test remain pending
 The selected-component release uses exactly Beta, Alpha, Delta and CHGA+
 hormone-negative for endocrine cell totals. Islet, Cluster and Single are
 anatomical object classes, not additional cell identities. Unsupported cell
-assignments remain explicit in the scientific data. In the local display, the
-**Unclassified** family groups four disjoint subclasses: insufficient typing
-evidence, insufficient evidence after reassessment, unresolved lineage/subtype,
-and competing lineage/compartment signals. These describe why a specific identity
-was not assigned; they are not additional endocrine identities. Raw Tissue,
-Unclassified, general-class residual and Doublet suspected labels remain preserved
-in the source. The family and its leaf choices are never counted together in an
-additive plot.
+assignments remain explicit in the scientific data. In the reviewed v27 typing
+there is no Unclassified family: a cell with no typing marker above threshold is
+**Panel undected**, counted in every total and left out of the trajectory;
+cells with competing markers and no supported identity, and cells outside cell QC,
+are excluded from the app. Earlier data releases keep the four-subclass
+**Unclassified** family.
 An object with no named endocrine core cells still has a structural record,
 but no available endocrine composition or invented embedding value. Use the
 method help and loaded release manifest for the exact generation.
@@ -274,8 +272,9 @@ selection stays empty and gives an explicit empty plot.
 
 The y-axis is **Proportion of selected phenotypes**. Each bar totals 100% of the
 included cells; hover also reports the proportion of all original cells. The
-Unclassified family has four disjoint subclasses. Parent aggregates never appear
-beside their subclasses in the stack, and hidden Conflict classes are excluded.
+Panel undected is its own category (v27; earlier releases show the four-subclass
+Unclassified family). Parent aggregates never appear beside their subclasses in the
+stack, and hidden Conflict classes are excluded.
 
 The CSV contains the included categories and matches the plotted selection.
 `cells` and `total_cells` retain the original counts; `proportion` uses the original

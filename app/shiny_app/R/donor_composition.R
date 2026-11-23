@@ -179,8 +179,9 @@ donor_composition_card_ui <- function(ns) {
         tags$p("Each donor's cell make-up: the proportion of each phenotype among all the cells of the donor's",
                " selected endocrine objects, pooled over the objects (a large object counts for more cells), in the",
                " chosen region. The squares above the bars give each donor's status."),
-        tags$p("The Unclassified family has four mutually exclusive subclasses describing why a more specific",
-               " identity was not assigned. Hidden QC-conflict cells are excluded from these categories.",
+        tags$p(if (root_has_terminal_review()) "Panel undected cells have no typing marker above threshold; they count in every total."
+               else "The Unclassified family has four mutually exclusive subclasses describing why a more specific identity was not assigned.",
+               " Hidden QC-conflict cells are excluded from these categories.",
                " Each bar sums to 100% of the cells shown; hover also reports the proportion",
                " of all original cells."),
         tags$p(tags$strong("Include."), " Open Include Phenotypes and check the populations to compare. Each bar",
