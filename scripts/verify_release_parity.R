@@ -199,7 +199,7 @@ parity_runtime <- function(repo, root) {
                     "phenotype_aggregates_for", "add_phenotype_aggregate_columns",
                     # drilldown_helpers.R builds its palettes at load time with the macrophage-profile and
                     # top-marker families (app commits 82ce23e-270d000)
-                    "MACROPHAGE_LABELS", "MACROPHAGE_MARKERS", "macrophage_collapse", "macrophage_signs",
+                    "MACROPHAGE_LABELS", "MACROPHAGE_MARKERS", "macrophage_collapse",
                     "TOP_MARKER_LABELS")
   expressions <- parse(file.path(repo, "app", "shiny_app", "R", "00_globals.R"))
   for (expr in expressions) {
